@@ -1,118 +1,130 @@
-//! Vort: next-generation compression experiments and compatibility-oriented primitives.
+# Vort roadmap
 
-pub const checksum = @import("checksum.zig");
-pub const core = @import("core.zig");
-pub const store = @import("store.zig");
-pub const fuzz = @import("fuzz.zig");
-pub const deflate = @import("deflate.zig");
-pub const bitstream = @import("bitstream.zig");
-pub const huffman = @import("huffman.zig");
-pub const lz77 = @import("lz77.zig");
-pub const dictionary = @import("dictionary.zig");
-pub const long_distance = @import("long_distance.zig");
-pub const planner = @import("planner.zig");
+This roadmap is a living checklist toward the larger goal: outperform and
+out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
+architecture blindly.
 
-pub const Adler32 = checksum.Adler32;
-pub const Crc32 = checksum.Crc32;
-pub const Crc32C = checksum.Crc32C;
-pub const adler32 = checksum.adler32;
-pub const crc32 = checksum.crc32;
-pub const crc32Slice4 = checksum.crc32Slice4;
-pub const crc32Best = checksum.crc32Best;
-pub const checksumCpuFeatureReport = checksum.cpuFeatureReport;
-pub const crc32c = checksum.crc32c;
-pub const crc32cBest = checksum.crc32cBest;
+## Milestone 0: repository and validation spine
 
-pub const Error = core.Error;
-pub const FrameInfo = core.FrameInfo;
-pub const Progress = core.Progress;
-pub const StepResult = core.StepResult;
+- [x] Zig 0.16 package scaffold.
+- [x] Public root module and library artifact.
+- [x] Unit-test build step.
+- [x] Compile-only `check` step for tests, CLI, and benchmark entrypoints.
+- [x] CLI smoke surface for library APIs.
+- [x] Initial benchmark entrypoint.
 
-pub const storeEncode = store.encode;
-pub const storeDecode = store.decode;
-pub const storeEncodeAlloc = store.encodeAlloc;
-pub const storeEncodeDeflateAlloc = store.encodeDeflateAlloc;
-pub const storeEncodeRleAlloc = store.encodeRleAlloc;
-pub const storeDecodeAnyAlloc = store.decodeAnyAlloc;
-pub const storeDecodeAlloc = store.decodeAlloc;
-pub const storeDecodeConcatenatedAlloc = store.decodeConcatenatedAlloc;
-pub const storeEncodeSkippableAlloc = store.encodeSkippableAlloc;
-pub const storeBuildFrameIndexAlloc = store.buildFrameIndexAlloc;
-pub const storeEncodeFrameIndexAlloc = store.encodeFrameIndexAlloc;
-pub const storeDecodeFrameIndexAlloc = store.decodeFrameIndexAlloc;
-pub const storeFindFrameForOffset = store.findFrameForOffset;
-pub const storeDecodeRangeAlloc = store.decodeRangeAlloc;
-pub const storeEncodeIndexedStreamAlloc = store.encodeIndexedStreamAlloc;
-pub const storeEncodeIndexedDeflateStreamAlloc = store.encodeIndexedDeflateStreamAlloc;
-pub const storeEncodeBlockedDeflateStreamAlloc = store.encodeBlockedDeflateStreamAlloc;
-pub const storeEncodePlannedDeflateStreamAlloc = store.encodePlannedDeflateStreamAlloc;
-pub const storeEncodeParallelDeflateStreamAlloc = store.encodeParallelDeflateStreamAlloc;
-pub const storeEncodeThreadPoolDeflateStreamAlloc = store.encodeThreadPoolDeflateStreamAlloc;
-pub const storeDecodeIndexedRangeAlloc = store.decodeIndexedRangeAlloc;
+## Milestone 1: compatibility primitives
 
-pub const encodeRawStoredDeflate = deflate.encodeRawStored;
-pub const decodeRawStoredDeflate = deflate.decodeRawStored;
-pub const encodeRawFixedDeflateAlloc = deflate.encodeRawFixedAlloc;
-pub const encodeRawBestAlloc = deflate.encodeRawBestAlloc;
-pub const encodeRawDynamicLiteralAlloc = deflate.encodeRawDynamicLiteralAlloc;
-pub const encodeRawDynamicWithOptionsAlloc = deflate.encodeRawDynamicWithOptionsAlloc;
-pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAlloc;
-pub const CompressionOptions = deflate.CompressionOptions;
-pub const BlockSelection = deflate.BlockSelection;
-pub const CompressionLevel = deflate.CompressionLevel;
-pub const optionsForCompressionLevel = deflate.optionsForLevel;
-pub const ParserMode = deflate.ParserMode;
-pub const encodeRawStoredDeflateAlloc = deflate.encodeRawStoredAlloc;
-pub const decodeRawStoredDeflateAlloc = deflate.decodeRawStoredAlloc;
-pub const decodeRawFixed = deflate.decodeRawFixed;
-pub const decodeRawFixedAlloc = deflate.decodeRawFixedAllocStrict;
-pub const decodeRawDeflateAlloc = deflate.decodeRawAutoAlloc;
-pub const decodeRawDynamicAlloc = deflate.decodeRawDynamicAllocStrict;
-pub const encodeZlibStored = deflate.encodeZlibStored;
-pub const encodeZlibFixedAlloc = deflate.encodeZlibFixedAlloc;
-pub const encodeZlibBestAlloc = deflate.encodeZlibBestAlloc;
-pub const encodeZlibDynamicLiteralAlloc = deflate.encodeZlibDynamicLiteralAlloc;
-pub const encodeZlibDynamicWithOptionsAlloc = deflate.encodeZlibDynamicWithOptionsAlloc;
-pub const encodeZlibFixedWithOptionsAlloc = deflate.encodeZlibFixedWithOptionsAlloc;
-pub const decodeZlibStored = deflate.decodeZlibStored;
-pub const encodeZlibStoredAlloc = deflate.encodeZlibStoredAlloc;
-pub const decodeZlibStoredAlloc = deflate.decodeZlibStoredAlloc;
-pub const decodeZlibAlloc = deflate.decodeZlibAlloc;
-pub const encodeGzipStored = deflate.encodeGzipStored;
-pub const encodeGzipFixedAlloc = deflate.encodeGzipFixedAlloc;
-pub const encodeGzipBestAlloc = deflate.encodeGzipBestAlloc;
-pub const encodeGzipDynamicLiteralAlloc = deflate.encodeGzipDynamicLiteralAlloc;
-pub const encodeGzipDynamicWithOptionsAlloc = deflate.encodeGzipDynamicWithOptionsAlloc;
-pub const encodeGzipFixedWithOptionsAlloc = deflate.encodeGzipFixedWithOptionsAlloc;
-pub const decodeGzipStored = deflate.decodeGzipStored;
-pub const encodeGzipStoredAlloc = deflate.encodeGzipStoredAlloc;
-pub const decodeGzipStoredAlloc = deflate.decodeGzipStoredAlloc;
-pub const decodeGzipAlloc = deflate.decodeGzipAlloc;
-pub const decodeGzipConcatenatedAlloc = deflate.decodeGzipConcatenatedAlloc;
+- [x] Adler-32 with streaming state and zlib-known vectors.
+- [x] IEEE CRC-32 with streaming state and known vectors.
+- [x] CRC-32C for modern storage/network workloads.
+- [x] Portable CRC32 slice-by-4 fast variant with scalar reference checks.
+- [x] Runtime checksum dispatch API selecting portable fast path.
+- [x] CPU feature/dispatch report tool.
+- [x] x86 checksum CPU feature reporting with IEEE-vs-CRC32C safety distinction.
+- [x] x86 SSE4.2 CRC32C hardware path selected by dispatch.
+- [ ] Architecture-specific IEEE CRC32 implementation / dispatch.
+- [x] Differential checksum smoke against Zig std reference implementations.
+- [ ] Differential checksum tests against local/system zlib-family tools.
 
-pub const Lz77Token = lz77.Token;
-pub const hashGreedyLz77PlanAlloc = lz77.hashGreedyPlanAlloc;
-pub const greedyLz77PlanAlloc = lz77.greedyPlanAlloc;
-pub const lazyGreedyLz77PlanAlloc = lz77.lazyGreedyPlanAlloc;
-pub const optimalLz77PlanAlloc = lz77.optimalPlanAlloc;
+## Milestone 2: native frame plumbing
 
-pub const DictionaryId = dictionary.DictionaryId;
-pub const DictionaryMetadata = dictionary.Metadata;
-pub const trainDictionaryAlloc = dictionary.trainAlloc;
-pub const findLongDistanceCandidatesAlloc = long_distance.findCandidatesAlloc;
-pub const summarizeLongDistanceAlloc = long_distance.summarizeAlloc;
-pub const planBlocksAlloc = planner.planBlocksAlloc;
+- [x] Native `VORT` store frame for uncompressed payloads.
+- [x] Header parsing with explicit version, size, checksum, and corruption errors.
+- [x] One-shot encode/decode APIs.
+- [x] Allocator-returning convenience APIs.
+- [x] Bounded-output streaming encoder/decoder smoke coverage.
+- [x] Fully incremental input/output store-frame decoder.
+- [x] Concatenated store-frame iterator and decode helper.
+- [x] Deterministic malformed-header/frame smoke corpus.
+- [x] Skippable native frames.
+- [x] In-memory frame indexes for concatenated native store streams.
+- [x] Serialized/sidecar frame indexes.
+- [x] Extensible hex-sample fuzz corpus harness for headers and malformed frames.
+- [x] Coverage-guided fuzz integration plan and reusable corpus entrypoint.
+- [x] Raw-byte fuzz target function and smoke executable.
+- [x] libFuzzer-compatible exported entrypoint smoke.
+- [x] AFL-style file-input fuzz driver smoke.
+- [ ] CI fuzz runner wiring.
 
-test {
-    _ = checksum;
-    _ = core;
-    _ = store;
-    _ = fuzz;
-    _ = deflate;
-    _ = bitstream;
-    _ = huffman;
-    _ = lz77;
-    _ = dictionary;
-    _ = long_distance;
-    _ = planner;
-}
+## Milestone 3: deflate/zlib/gzip compatibility
+
+- [x] LSB-first bit reader primitive.
+- [x] Canonical Huffman decode table foundation for fixed-Huffman inflate.
+- [x] LSB-first bit writer primitive.
+- [x] Stored deflate blocks.
+- [x] Fixed-Huffman inflate for literals and back-references.
+- [x] Dynamic-Huffman header and code-length parser foundation.
+- [x] Dynamic-Huffman inflate for single final blocks.
+- [x] Multi-block raw/zlib/gzip inflate across stored/fixed/dynamic block types.
+- [x] zlib wrapper and Adler verification for stored blocks.
+- [x] zlib wrapper integration for fixed-Huffman blocks.
+- [x] zlib wrapper integration for single final dynamic-Huffman blocks.
+- [x] zlib wrapper integration for multi-block dynamic streams.
+- [x] gzip wrapper and CRC/ISIZE verification for stored blocks.
+- [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC validation.
+- [x] gzip wrapper integration for fixed-Huffman blocks.
+- [x] gzip wrapper integration for single final dynamic-Huffman blocks.
+- [x] gzip wrapper integration for multi-block dynamic streams.
+- [x] gzip concatenated member decode support.
+- [x] Stored-block vectors checked against Python/zlib level-0 output.
+- [x] Black-box differential smoke against Python zlib.
+- [x] Black-box differential smoke against system gzip CLI.
+- [x] Local external implementation/tool availability probe.
+- [x] Optional zlib-ng/zlib-rs differential harness with explicit skip reporting.
+- [x] Built zlib-ng minigzip differential test running in local validation.
+- [x] zlib-rs gzip corpus differential decode coverage.
+- [x] Built zlib-rs compress example differential test running in local validation.
+- [ ] CI zlib-rs binary differential test.
+- [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
+- [x] Dynamic Huffman encoder with LZ77 match support, verified by Python zlib.
+- [x] Dynamic Huffman encoder code-length RLE using symbols 16/17/18.
+- [x] Block cost selection across stored/fixed/dynamic encoders.
+- [ ] Production dynamic Huffman encoder with optimized block splitting.
+- [x] Compatibility benchmark smoke suite comparing Vort/gzip/zstd on sample files.
+- [x] Standard-corpus smoke benchmark comparing Vort/gzip/zlib-ng/zlib-rs/zstd.
+- [ ] Full compatibility benchmark suite against zlib-ng/zlib-rs/zstd on full standard corpora.
+
+## Milestone 4: compression performance foundation
+
+- [x] Match finder interfaces, scalar reference matcher, and hash-chain matcher.
+- [x] Greedy LZ77 parser experiment with deterministic options and replay tests.
+- [x] Lazy greedy LZ77 parser experiment with deterministic options.
+- [x] Optimal LZ77 parser prototype with deterministic options.
+- [x] Fixed encoder parser strategy config selecting greedy/lazy/optimal prototypes.
+- [x] Compression level presets for fast/default/best strategy configs.
+- [x] Fast preset skips dynamic block candidate generation.
+- [ ] Production optimal parser with full level/strategy configs.
+- [x] Huffman code generation, simple length building, and canonical-code validation.
+- [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.
+- [ ] Larger decompression hot-path benchmarks across real corpora.
+- [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
+- [x] zlib/gzip fixed-Huffman encoder wrappers.
+- [x] Built-in small-corpus compression ratio report.
+- [x] File-path compression ratio report for ad-hoc corpora.
+- [x] zstd CLI compressed-size comparison smoke for sample files.
+- [x] File-path compression/decompression throughput report for ad-hoc corpora.
+- [x] Silesia-sample standard corpus benchmark smoke.
+- [ ] Automated throughput dashboards across full standard real corpora.
+
+## Milestone 5: native Vort format research
+
+- [x] Initial design note for native block/frame layout.
+- [x] Dictionary IDs and training-plan metadata.
+- [x] Deterministic n-gram dictionary training prototype.
+- [ ] Production dictionary training with ratio/throughput validation.
+- [x] Splittable/seekable frame index range decode API.
+- [x] Embedded skippable index frame for seekable native store streams.
+- [x] Native VORT deflate-compressed frame flag and generic decode path.
+- [x] Native RLE compressed frame mode prototype beyond deflate.
+- [x] Embedded index range decode for native deflate-compressed frames.
+- [x] Blocked native deflate stream with embedded index and range decode.
+- [ ] Production seekable native format integration with native block modes.
+- [x] Long-distance matching scanner experiment.
+- [x] Long-distance matching summary integrated into compression reports.
+- [ ] Long-distance matching integration into native/block encoder.
+- [x] Deterministic block planning metadata for future multi-threaded encoding.
+- [x] Deterministic block-planned encoder execution API.
+- [x] Parallel multi-threaded encoder execution with deterministic output order.
+- [x] Fixed worker-count thread-pool encoder scheduling.
+- [ ] Production thread-pool encoder benchmarking and work stealing.
