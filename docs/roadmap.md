@@ -66,6 +66,7 @@ architecture blindly.
 - [x] Huffman code generation and canonical-code validation.
 - [ ] Decompression hot-path benchmarks.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
+- [x] zlib/gzip fixed-Huffman encoder wrappers.
 - [ ] Compression ratio/throughput dashboards across real corpora.
 
 ## Milestone 5: native Vort format research

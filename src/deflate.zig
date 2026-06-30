@@ -482,6 +482,18 @@ pub fn encodeZlibStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return out;
 }
 
+pub fn encodeZlibFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const raw = try encodeRawFixedAlloc(allocator, input);
+    defer allocator.free(raw);
+    const out = try allocator.alloc(u8, 2 + raw.len + 4);
+    errdefer allocator.free(out);
+    out[0] = 0x78;
+    out[1] = 0x01;
+    @memcpy(out[2..][0..raw.len], raw);
+    std.mem.writeInt(u32, out[2 + raw.len ..][0..4], checksum.adler32(input), .big);
+    return out;
+}
+
 pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
     if (input.len < 2) return error.TruncatedFrame;
     try validateZlibHeader(input[0], input[1]);
@@ -543,6 +555,19 @@ pub fn encodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     errdefer allocator.free(out);
     const written = try encodeGzipStored(input, out);
     std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn encodeGzipFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const raw = try encodeRawFixedAlloc(allocator, input);
+    defer allocator.free(raw);
+    const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
+    errdefer allocator.free(out);
+    @memcpy(out[0..gzip_header.len], &gzip_header);
+    @memcpy(out[gzip_header.len..][0..raw.len], raw);
+    const footer = gzip_header.len + raw.len;
+    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
     return out;
 }
 
@@ -921,4 +946,31 @@ test "raw fixed Huffman encoder emits zlib-compatible hello vector" {
     const encoded = try encodeRawFixedAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(encoded);
     try std.testing.expectEqualSlices(u8, &.{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 }, encoded);
+}
+
+test "zlib and gzip fixed encoders round trip through wrappers" {
+    const cases = [_][]const u8{ "hello", "abcabcabcabc", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" };
+    for (cases) |case| {
+        const zlib_frame = try encodeZlibFixedAlloc(std.testing.allocator, case);
+        defer std.testing.allocator.free(zlib_frame);
+        const zlib_decoded = try decodeZlibAlloc(std.testing.allocator, zlib_frame);
+        defer std.testing.allocator.free(zlib_decoded);
+        try std.testing.expectEqualSlices(u8, case, zlib_decoded);
+
+        const gzip_frame = try encodeGzipFixedAlloc(std.testing.allocator, case);
+        defer std.testing.allocator.free(gzip_frame);
+        const gzip_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
+        defer std.testing.allocator.free(gzip_decoded);
+        try std.testing.expectEqualSlices(u8, case, gzip_decoded);
+    }
+}
+
+test "zlib and gzip fixed encoders emit known hello frames" {
+    const zlib_frame = try encodeZlibFixedAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(zlib_frame);
+    try std.testing.expectEqualSlices(u8, &.{ 0x78, 0x01, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x06, 0x2c, 0x02, 0x15 }, zlib_frame);
+
+    const gzip_frame = try encodeGzipFixedAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(gzip_frame);
+    try std.testing.expectEqualSlices(u8, &.{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x86, 0xa6, 0x10, 0x36, 0x05, 0x00, 0x00, 0x00 }, gzip_frame);
 }

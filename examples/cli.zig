@@ -62,6 +62,30 @@ pub fn main(init: std.process.Init) !void {
             std.mem.eql(u8, payload, decoded),
             vort.crc32(decoded),
         });
+    } else if (std.mem.eql(u8, command, "zlib-fixed-roundtrip")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.encodeZlibFixedAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        const decoded = try vort.decodeZlibAlloc(init.gpa, encoded);
+        defer init.gpa.free(decoded);
+        try stdout.print("input_bytes={d} zlib_fixed_bytes={d} decoded_ok={} adler32={d}\n", .{
+            payload.len,
+            encoded.len,
+            std.mem.eql(u8, payload, decoded),
+            vort.adler32(decoded),
+        });
+    } else if (std.mem.eql(u8, command, "gzip-fixed-roundtrip")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.encodeGzipFixedAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        const decoded = try vort.decodeGzipAlloc(init.gpa, encoded);
+        defer init.gpa.free(decoded);
+        try stdout.print("input_bytes={d} gzip_fixed_bytes={d} decoded_ok={} crc32={d}\n", .{
+            payload.len,
+            encoded.len,
+            std.mem.eql(u8, payload, decoded),
+            vort.crc32(decoded),
+        });
     } else if (std.mem.eql(u8, command, "decode-raw-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const compressed = try hexToOwnedBytes(init.gpa, hex);
