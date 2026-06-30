@@ -104,6 +104,23 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeGzipFixedWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "store-range-demo")) {
+        const first = try vort.storeEncodeAlloc(init.gpa, "alpha");
+        defer init.gpa.free(first);
+        const second = try vort.storeEncodeAlloc(init.gpa, "beta");
+        defer init.gpa.free(second);
+        const third = try vort.storeEncodeAlloc(init.gpa, "gamma");
+        defer init.gpa.free(third);
+        var stream: std.ArrayList(u8) = .empty;
+        defer stream.deinit(init.gpa);
+        try stream.appendSlice(init.gpa, first);
+        try stream.appendSlice(init.gpa, second);
+        try stream.appendSlice(init.gpa, third);
+        const index = try vort.storeBuildFrameIndexAlloc(init.gpa, stream.items);
+        defer init.gpa.free(index);
+        const range = try vort.storeDecodeRangeAlloc(init.gpa, stream.items, index, 3, 8);
+        defer init.gpa.free(range);
+        try stdout.print("range={s} frames={d}\n", .{ range, index.len });
     } else if (std.mem.eql(u8, command, "decode-raw-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const compressed = try hexToOwnedBytes(init.gpa, hex);
