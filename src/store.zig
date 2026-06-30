@@ -155,6 +155,27 @@ pub fn encodeDeflateAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8
     return out;
 }
 
+pub fn encodeBestAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const store_frame = try encodeAlloc(allocator, input);
+    errdefer allocator.free(store_frame);
+    const deflate_frame = try encodeDeflateAlloc(allocator, input);
+    errdefer allocator.free(deflate_frame);
+    const rle_frame = try encodeRleAlloc(allocator, input);
+    errdefer allocator.free(rle_frame);
+    if (store_frame.len <= deflate_frame.len and store_frame.len <= rle_frame.len) {
+        allocator.free(deflate_frame);
+        allocator.free(rle_frame);
+        return store_frame;
+    }
+    allocator.free(store_frame);
+    if (deflate_frame.len <= rle_frame.len) {
+        allocator.free(rle_frame);
+        return deflate_frame;
+    }
+    allocator.free(deflate_frame);
+    return rle_frame;
+}
+
 pub fn decodeAnyAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const info = try parseHeader(input);
     const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
@@ -577,7 +598,7 @@ pub fn encodeIndexedDeflateStreamAlloc(allocator: std.mem.Allocator, frames: []c
     var stream: std.ArrayList(u8) = .empty;
     errdefer stream.deinit(allocator);
     for (frames) |payload| {
-        const frame = try encodeDeflateAlloc(allocator, payload);
+        const frame = try encodeBestAlloc(allocator, payload);
         defer allocator.free(frame);
         try stream.appendSlice(allocator, frame);
     }
@@ -598,13 +619,13 @@ pub fn encodeBlockedDeflateStreamAlloc(allocator: std.mem.Allocator, input: []co
     var offset: usize = 0;
     while (offset < input.len) {
         const n = @min(block_len, input.len - offset);
-        const frame = try encodeDeflateAlloc(allocator, input[offset..][0..n]);
+        const frame = try encodeBestAlloc(allocator, input[offset..][0..n]);
         defer allocator.free(frame);
         try stream.appendSlice(allocator, frame);
         offset += n;
     }
     if (input.len == 0) {
-        const frame = try encodeDeflateAlloc(allocator, "");
+        const frame = try encodeBestAlloc(allocator, "");
         defer allocator.free(frame);
         try stream.appendSlice(allocator, frame);
     }
@@ -624,12 +645,12 @@ pub fn encodePlannedDeflateStreamAlloc(allocator: std.mem.Allocator, input: []co
     var stream: std.ArrayList(u8) = .empty;
     errdefer stream.deinit(allocator);
     for (plan) |block| {
-        const frame = try encodeDeflateAlloc(allocator, input[block.input_offset..][0..block.input_len]);
+        const frame = try encodeBestAlloc(allocator, input[block.input_offset..][0..block.input_len]);
         defer allocator.free(frame);
         try stream.appendSlice(allocator, frame);
     }
     if (input.len == 0) {
-        const frame = try encodeDeflateAlloc(allocator, "");
+        const frame = try encodeBestAlloc(allocator, "");
         defer allocator.free(frame);
         try stream.appendSlice(allocator, frame);
     }
@@ -650,7 +671,7 @@ const ParallelBlockResult = struct {
     err: ?anyerror = null,
 
     fn run(self: *ParallelBlockResult) void {
-        self.frame = encodeDeflateAlloc(self.allocator, self.input) catch |err| {
+        self.frame = encodeBestAlloc(self.allocator, self.input) catch |err| {
             self.err = err;
             return;
         };
@@ -1196,6 +1217,17 @@ test "native RLE frame round trips repeated payloads" {
     const info = try parseHeader(frame);
     try std.testing.expectEqual(flags_rle, info.flags);
     try std.testing.expect(info.stored_size < info.uncompressed_size);
+    const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "native best frame selects RLE for repeated data" {
+    const input = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const frame = try encodeBestAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_rle, info.flags);
     const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);

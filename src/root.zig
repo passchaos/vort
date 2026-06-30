@@ -33,6 +33,7 @@ pub const storeDecode = store.decode;
 pub const storeEncodeAlloc = store.encodeAlloc;
 pub const storeEncodeDeflateAlloc = store.encodeDeflateAlloc;
 pub const storeEncodeRleAlloc = store.encodeRleAlloc;
+pub const storeEncodeBestAlloc = store.encodeBestAlloc;
 pub const storeDecodeAnyAlloc = store.decodeAnyAlloc;
 pub const storeDecodeAlloc = store.decodeAlloc;
 pub const storeDecodeConcatenatedAlloc = store.decodeConcatenatedAlloc;
