@@ -62,6 +62,27 @@ pub fn main(init: std.process.Init) !void {
             std.mem.eql(u8, payload, decoded),
             vort.crc32(decoded),
         });
+    } else if (std.mem.eql(u8, command, "decode-raw-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const decoded = try vort.decodeRawDeflateAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try printDecoded(stdout, "raw", compressed.len, decoded);
+    } else if (std.mem.eql(u8, command, "decode-zlib-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const decoded = try vort.decodeZlibAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try printDecoded(stdout, "zlib", compressed.len, decoded);
+    } else if (std.mem.eql(u8, command, "decode-gzip-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const decoded = try vort.decodeGzipAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try printDecoded(stdout, "gzip", compressed.len, decoded);
     } else {
         try stdout.print("unknown command: {s}\n\n", .{command});
         try printHelp(stdout);
@@ -80,8 +101,32 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  store-roundtrip [text]     Encode/decode the native store frame
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
+        \\  decode-raw-hex [hex]      Decode raw deflate hex to text
+        \\  decode-zlib-hex [hex]     Decode zlib-wrapped deflate hex to text
+        \\  decode-gzip-hex [hex]     Decode gzip-wrapped deflate hex to text
         \\
         \\This CLI is a smoke surface for the library-first Vort APIs.
         \\
     , .{});
+}
+
+fn hexToOwnedBytes(allocator: std.mem.Allocator, hex: []const u8) ![]u8 {
+    if ((hex.len & 1) != 0) return error.InvalidHexInput;
+    const bytes = try allocator.alloc(u8, hex.len / 2);
+    errdefer allocator.free(bytes);
+    var i: usize = 0;
+    while (i < bytes.len) : (i += 1) {
+        bytes[i] = try std.fmt.parseInt(u8, hex[i * 2 .. i * 2 + 2], 16);
+    }
+    return bytes;
+}
+
+fn printDecoded(stdout: *std.Io.Writer, label: []const u8, compressed_len: usize, decoded: []const u8) !void {
+    try stdout.print("{s}_compressed_bytes={d} decoded_bytes={d} crc32={d} text={s}\n", .{
+        label,
+        compressed_len,
+        decoded.len,
+        vort.crc32(decoded),
+        decoded,
+    });
 }

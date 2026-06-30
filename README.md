@@ -27,6 +27,9 @@ zig build run -- checksum "hello vort"
 zig build run -- store-roundtrip "hello vort"
 zig build run -- zlib-store-roundtrip "hello vort"
 zig build run -- gzip-store-roundtrip "hello vort"
+zig build run -- decode-raw-hex cb48cdc9c90700
+zig build run -- decode-zlib-hex 7801cb48cdc9c90700062c0215
+zig build run -- decode-gzip-hex 1f8b0800000000000403cb48cdc9c9070086a6103605000000
 zig build run-fuzz-smoke
 zig build run-checksum-diff
 zig build run-zlib-diff
