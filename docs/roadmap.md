@@ -18,7 +18,8 @@ architecture blindly.
 - [x] Adler-32 with streaming state and zlib-known vectors.
 - [x] IEEE CRC-32 with streaming state and known vectors.
 - [x] CRC-32C for modern storage/network workloads.
-- [ ] Faster checksum variants and CPU dispatch with scalar reference checks.
+- [x] Portable CRC32 slice-by-4 fast variant with scalar reference checks.
+- [ ] CPU-dispatched checksum variants.
 - [x] Differential checksum smoke against Zig std reference implementations.
 - [ ] Differential checksum tests against local/system zlib-family tools.
 

@@ -107,12 +107,53 @@ pub const Crc32C = struct {
     }
 };
 
+pub const Crc32Slice4 = struct {
+    value: u32 = 0xffff_ffff,
+
+    pub const tables = makeCrc32Slice4Tables(Crc32.polynomial_reflected);
+
+    pub fn init() Crc32Slice4 {
+        return .{};
+    }
+
+    pub fn update(self: *Crc32Slice4, input: []const u8) void {
+        var crc = self.value;
+        var index: usize = 0;
+        while (index + 4 <= input.len) : (index += 4) {
+            crc ^= std.mem.readInt(u32, input[index..][0..4], .little);
+            crc = tables[3][crc & 0xff] ^
+                tables[2][(crc >> 8) & 0xff] ^
+                tables[1][(crc >> 16) & 0xff] ^
+                tables[0][(crc >> 24) & 0xff];
+        }
+        while (index < input.len) : (index += 1) {
+            const table_index: u8 = @truncate(crc ^ input[index]);
+            crc = Crc32.table[table_index] ^ (crc >> 8);
+        }
+        self.value = crc;
+    }
+
+    pub fn digest(self: Crc32Slice4) u32 {
+        return ~self.value;
+    }
+
+    pub fn hash(input: []const u8) u32 {
+        var state = Crc32Slice4.init();
+        state.update(input);
+        return state.digest();
+    }
+};
+
 pub fn adler32(input: []const u8) u32 {
     return Adler32.hash(input);
 }
 
 pub fn crc32(input: []const u8) u32 {
     return Crc32.hash(input);
+}
+
+pub fn crc32Slice4(input: []const u8) u32 {
+    return Crc32Slice4.hash(input);
 }
 
 pub fn crc32c(input: []const u8) u32 {
@@ -130,6 +171,19 @@ fn makeCrc32Table(comptime polynomial: u32) [256]u32 {
         entry.* = crc;
     }
     return table;
+}
+
+fn makeCrc32Slice4Tables(comptime polynomial: u32) [4][256]u32 {
+    @setEvalBranchQuota(20000);
+    var tables: [4][256]u32 = undefined;
+    tables[0] = makeCrc32Table(polynomial);
+    for (1..4) |i| {
+        for (0..256) |j| {
+            const prev = tables[i - 1][j];
+            tables[i][j] = (prev >> 8) ^ tables[0][prev & 0xff];
+        }
+    }
+    return tables;
 }
 
 test "Adler-32 known zlib vectors" {
@@ -202,4 +256,15 @@ test "CRC implementations match Zig std catalog" {
         try std.testing.expectEqual(std.hash.crc.Crc32IsoHdlc.hash(case), crc32(case));
         try std.testing.expectEqual(std.hash.crc.Crc32Iscsi.hash(case), crc32c(case));
     }
+}
+
+test "CRC-32 slice-by-4 matches scalar" {
+    const cases = [_][]const u8{
+        "",
+        "a",
+        "abc",
+        "123456789",
+        "The quick brown fox jumps over the lazy dog" ** 97,
+    };
+    for (cases) |case| try std.testing.expectEqual(crc32(case), crc32Slice4(case));
 }
