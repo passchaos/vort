@@ -96,6 +96,7 @@ architecture blindly.
 - [x] Full local Silesia corpus benchmark mode.
 - [x] Per-file Silesia suite automation against gzip/zlib-ng/zlib-rs/zstd.
 - [x] External path/directory benchmark suite mode for additional corpora.
+- [x] External tar-archive benchmark suite mode for packed standard corpora.
 - [ ] Full compatibility benchmark suite automation across multiple standard corpora.
 
 ## Milestone 4: compression performance foundation
@@ -124,6 +125,7 @@ architecture blindly.
 - [x] Automated per-file Silesia throughput report.
 - [x] Markdown benchmark dashboard export for Silesia suite.
 - [x] External file/directory throughput dashboard input mode.
+- [x] External tar-archive throughput dashboard input mode.
 - [x] Full-size Silesia Markdown dashboard export.
 - [ ] Automated throughput dashboards across multiple full standard real corpora.
 

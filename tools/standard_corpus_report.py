@@ -153,6 +153,20 @@ def load_path_cases(paths: list[pathlib.Path], full: bool) -> list[tuple[str, by
                     data = data[:SMOKE_LIMIT]
                     label = f"{label}-128k"
                 cases.append((label, data))
+        elif tarfile.is_tarfile(path):
+            with tarfile.open(path, "r:*") as tar:
+                for member in tar.getmembers():
+                    if not member.isfile():
+                        continue
+                    extracted = tar.extractfile(member)
+                    if extracted is None:
+                        continue
+                    data = extracted.read()
+                    label = f"{path.name}:{member.name}"
+                    if not full:
+                        data = data[:SMOKE_LIMIT]
+                        label = f"{label}-128k"
+                    cases.append((label, data))
         else:
             data = path.read_bytes()
             label = path.name
