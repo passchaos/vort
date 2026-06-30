@@ -88,20 +88,20 @@ pub fn main(init: std.process.Init) !void {
         });
     } else if (std.mem.eql(u8, command, "encode-raw-fixed-hex")) {
         const payload = args.next() orelse "";
-        const mode = parseParserMode(args.next());
-        const encoded = try vort.encodeRawFixedWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawFixedWithOptionsAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-fixed-hex")) {
         const payload = args.next() orelse "";
-        const mode = parseParserMode(args.next());
-        const encoded = try vort.encodeZlibFixedWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibFixedWithOptionsAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-gzip-fixed-hex")) {
         const payload = args.next() orelse "";
-        const mode = parseParserMode(args.next());
-        const encoded = try vort.encodeGzipFixedWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeGzipFixedWithOptionsAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "vort-deflate-roundtrip")) {
@@ -132,46 +132,46 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("range={s} indexed_stream_bytes={d}\n", .{ range, stream.len });
     } else if (std.mem.eql(u8, command, "encode-raw-best-hex")) {
         const payload = args.next() orelse "";
-        const mode = parseParserMode(args.next());
-        const encoded = try vort.encodeRawBestAlloc(init.gpa, payload, .{ .parser = mode });
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawBestAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-best-hex")) {
         const payload = args.next() orelse "";
-        const mode = parseParserMode(args.next());
-        const encoded = try vort.encodeZlibBestAlloc(init.gpa, payload, .{ .parser = mode });
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibBestAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-gzip-best-hex")) {
         const payload = args.next() orelse "";
-        const mode = parseParserMode(args.next());
-        const encoded = try vort.encodeGzipBestAlloc(init.gpa, payload, .{ .parser = mode });
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeGzipBestAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-raw-dynamic-hex")) {
         const payload = args.next() orelse "";
-        const mode = parseParserMode(args.next());
-        const encoded = try vort.encodeRawDynamicWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawDynamicWithOptionsAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-dynamic-hex")) {
         const payload = args.next() orelse "";
-        const mode = parseParserMode(args.next());
-        const encoded = try vort.encodeZlibDynamicWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibDynamicWithOptionsAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-gzip-dynamic-hex")) {
         const payload = args.next() orelse "";
-        const mode = parseParserMode(args.next());
-        const encoded = try vort.encodeGzipDynamicWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeGzipDynamicWithOptionsAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-best-file-hex")) {
         const path = args.next() orelse return error.MissingCorpusPath;
         const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(data);
-        const mode = parseParserMode(args.next());
-        const encoded = try vort.encodeZlibBestAlloc(init.gpa, data, .{ .parser = mode });
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibBestAlloc(init.gpa, data, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "decode-raw-hex")) {
@@ -249,9 +249,16 @@ fn printHex(stdout: *std.Io.Writer, bytes: []const u8) !void {
 }
 
 fn parseParserMode(text: ?[]const u8) vort.ParserMode {
-    const value = text orelse return .greedy;
-    if (std.mem.eql(u8, value, "greedy")) return .greedy;
-    if (std.mem.eql(u8, value, "lazy")) return .lazy;
-    if (std.mem.eql(u8, value, "optimal")) return .optimal;
-    return .greedy;
+    return parseCompressionOptions(text).parser;
+}
+
+fn parseCompressionOptions(text: ?[]const u8) vort.CompressionOptions {
+    const value = text orelse return vort.optionsForCompressionLevel(.default);
+    if (std.mem.eql(u8, value, "fast")) return vort.optionsForCompressionLevel(.fast);
+    if (std.mem.eql(u8, value, "default")) return vort.optionsForCompressionLevel(.default);
+    if (std.mem.eql(u8, value, "best")) return vort.optionsForCompressionLevel(.best);
+    if (std.mem.eql(u8, value, "greedy")) return .{ .parser = .greedy };
+    if (std.mem.eql(u8, value, "lazy")) return .{ .parser = .lazy };
+    if (std.mem.eql(u8, value, "optimal")) return .{ .parser = .optimal };
+    return vort.optionsForCompressionLevel(.default);
 }

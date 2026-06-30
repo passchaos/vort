@@ -20,6 +20,16 @@ pub const CompressionOptions = struct {
     lz77_options: lz77.GreedyOptions = .{},
 };
 
+pub const CompressionLevel = enum { fast, default, best };
+
+pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
+    return switch (level) {
+        .fast => .{ .parser = .greedy, .lz77_options = .{ .max_chain = 32, .nice_len = 16 } },
+        .default => .{ .parser = .lazy, .lz77_options = .{ .max_chain = 128, .nice_len = 64 } },
+        .best => .{ .parser = .optimal, .lz77_options = .{ .max_chain = 512, .nice_len = 128 } },
+    };
+}
+
 pub const OwnedDecodeResult = struct {
     bytes: []u8,
     input_read: usize,
@@ -1410,5 +1420,16 @@ test "best encoder selects a valid smallest raw block" {
         const decoded = try decodeRawAutoAlloc(std.testing.allocator, best);
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, case, decoded);
+    }
+}
+
+test "compression level presets round trip" {
+    const input = "abcabcabcabc abcabcabcabc";
+    inline for (.{ CompressionLevel.fast, CompressionLevel.default, CompressionLevel.best }) |level| {
+        const encoded = try encodeRawBestAlloc(std.testing.allocator, input, optionsForLevel(level));
+        defer std.testing.allocator.free(encoded);
+        const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
     }
 }
