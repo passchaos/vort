@@ -33,7 +33,8 @@ architecture blindly.
 - [x] Concatenated store-frame iterator and decode helper.
 - [x] Deterministic malformed-header/frame smoke corpus.
 - [x] Skippable native frames.
-- [ ] Frame indexes.
+- [x] In-memory frame indexes for concatenated native store streams.
+- [ ] Serialized/sidecar frame indexes.
 - [ ] Coverage-guided fuzz harness for headers and malformed frames.
 
 ## Milestone 3: deflate/zlib/gzip compatibility

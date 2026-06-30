@@ -342,6 +342,32 @@ pub const ConcatIterator = struct {
     }
 };
 
+pub const FrameIndexEntry = struct {
+    frame_offset: usize,
+    frame_len: usize,
+    uncompressed_offset: u64,
+    uncompressed_len: u64,
+    checksum: u32,
+};
+
+pub fn buildFrameIndexAlloc(allocator: std.mem.Allocator, input: []const u8) ![]FrameIndexEntry {
+    var entries: std.ArrayList(FrameIndexEntry) = .empty;
+    errdefer entries.deinit(allocator);
+    var iterator = ConcatIterator.init(input);
+    var uncompressed_offset: u64 = 0;
+    while (try iterator.next()) |span| {
+        try entries.append(allocator, .{
+            .frame_offset = span.offset,
+            .frame_len = span.frame.len,
+            .uncompressed_offset = uncompressed_offset,
+            .uncompressed_len = span.info.uncompressed_size,
+            .checksum = span.info.checksum,
+        });
+        uncompressed_offset = std.math.add(u64, uncompressed_offset, span.info.uncompressed_size) catch return error.IntegerOverflow;
+    }
+    return entries.toOwnedSlice(allocator);
+}
+
 pub fn countConcatenatedFrames(input: []const u8) Error!usize {
     var iterator = ConcatIterator.init(input);
     var count: usize = 0;
@@ -579,4 +605,31 @@ test "skippable frames encode parse and are ignored by concat decoder" {
 
 test "skippable frame parser rejects truncation" {
     try std.testing.expectError(error.TruncatedFrame, parseSkippable(&.{ 'V', 'S', 'K', 'P', 4, 0, 0, 0, 'x' }));
+}
+
+test "frame index records offsets sizes and skips metadata" {
+    const first = try encodeAlloc(std.testing.allocator, "first");
+    defer std.testing.allocator.free(first);
+    const skip = try encodeSkippableAlloc(std.testing.allocator, "meta");
+    defer std.testing.allocator.free(skip);
+    const second = try encodeAlloc(std.testing.allocator, "second");
+    defer std.testing.allocator.free(second);
+
+    var combined: std.ArrayList(u8) = .empty;
+    defer combined.deinit(std.testing.allocator);
+    try combined.appendSlice(std.testing.allocator, first);
+    try combined.appendSlice(std.testing.allocator, skip);
+    try combined.appendSlice(std.testing.allocator, second);
+
+    const index = try buildFrameIndexAlloc(std.testing.allocator, combined.items);
+    defer std.testing.allocator.free(index);
+    try std.testing.expectEqual(@as(usize, 2), index.len);
+    try std.testing.expectEqual(@as(usize, 0), index[0].frame_offset);
+    try std.testing.expectEqual(first.len, index[0].frame_len);
+    try std.testing.expectEqual(@as(u64, 0), index[0].uncompressed_offset);
+    try std.testing.expectEqual(@as(u64, 5), index[0].uncompressed_len);
+    try std.testing.expectEqual(first.len + skip.len, index[1].frame_offset);
+    try std.testing.expectEqual(second.len, index[1].frame_len);
+    try std.testing.expectEqual(@as(u64, 5), index[1].uncompressed_offset);
+    try std.testing.expectEqual(@as(u64, 6), index[1].uncompressed_len);
 }
