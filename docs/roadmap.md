@@ -54,7 +54,7 @@ architecture blindly.
 - [x] LSB-first bit writer primitive.
 - [x] Stored deflate blocks.
 - [x] Fixed-Huffman inflate for literals and back-references.
-- [x] Fixed-Huffman fast lookup decode path.
+- [x] Fixed-Huffman fast lookup decode path for literals and distances.
 - [x] Dynamic-Huffman header and code-length parser foundation.
 - [x] Dynamic-Huffman inflate for single final blocks.
 - [x] Multi-block raw/zlib/gzip inflate across stored/fixed/dynamic block types.

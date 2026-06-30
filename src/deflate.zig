@@ -622,7 +622,6 @@ fn decodeStoredBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.
 }
 
 fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8)) !void {
-    const dist_table = try huffman.fixedDistanceTable();
     while (true) {
         const symbol = (try huffman.decodeFixedLiteralFast(reader)).value;
         if (symbol < 256) {
@@ -631,7 +630,7 @@ fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.B
             return;
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, reader);
-            const distance_symbol = (try dist_table.decode(reader)).value;
+            const distance_symbol = (try huffman.decodeFixedDistanceFast(reader)).value;
             const distance = try decodeDistance(distance_symbol, reader);
             try appendMatch(allocator, out, length, distance);
         } else {
