@@ -3,11 +3,12 @@
 Vort includes a dynamic Huffman encoder for raw, zlib, and gzip wrappers. It can emit LZ77 match tokens and is verified by Python zlib through `zig build run-python-zlib-diff`.
 
 The current dynamic encoder uses conservative frequency completion and RFC1951
-code-length RLE symbols 16/17/18. It also has a raw split-best encoder that
-plans each bounded block independently and chooses stored, fixed, or dynamic
+code-length RLE symbols 16/17/18. It also has raw/zlib/gzip split-best encoders
+that plan each bounded block independently and choose stored, fixed, or dynamic
 emission per block. For complex distance-code sets that are not yet proven safe,
 the dynamic encoder conservatively falls back to fixed-Huffman token emission so
-public outputs remain zlib-compatible.
+public outputs remain zlib-compatible. The split-best compatibility wrappers are
+covered by the Python zlib differential smoke harness.
 
 Remaining work for production dynamic encoding:
 

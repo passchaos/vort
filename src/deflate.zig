@@ -921,6 +921,18 @@ pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     return out;
 }
 
+pub fn encodeZlibBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawBestSplitAlloc(allocator, input, block_len, options);
+    defer allocator.free(raw);
+    const out = try allocator.alloc(u8, 2 + raw.len + 4);
+    errdefer allocator.free(out);
+    out[0] = 0x78;
+    out[1] = 0x01;
+    @memcpy(out[2..][0..raw.len], raw);
+    std.mem.writeInt(u32, out[2 + raw.len ..][0..4], checksum.adler32(input), .big);
+    return out;
+}
+
 pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
     if (input.len < 2) return error.TruncatedFrame;
     try validateZlibHeader(input[0], input[1]);
@@ -1021,6 +1033,19 @@ pub fn encodeGzipDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []
 
 pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const raw = try encodeRawBestAlloc(allocator, input, options);
+    defer allocator.free(raw);
+    const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
+    errdefer allocator.free(out);
+    @memcpy(out[0..gzip_header.len], &gzip_header);
+    @memcpy(out[gzip_header.len..][0..raw.len], raw);
+    const footer = gzip_header.len + raw.len;
+    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
+    return out;
+}
+
+pub fn encodeGzipBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawBestSplitAlloc(allocator, input, block_len, options);
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
     errdefer allocator.free(out);
@@ -1661,4 +1686,19 @@ test "split raw best encoder selects block modes independently" {
     defer std.testing.allocator.free(dynamic);
     try std.testing.expect(encoded.len <= fixed.len);
     try std.testing.expect(encoded.len <= dynamic.len);
+}
+
+test "zlib and gzip split-best wrappers round trip" {
+    const input = "abcdefghijklmnopqrstuvwxyz" ++ ("abcabcabcabc" ** 8);
+    const zlib_frame = try encodeZlibBestSplitAlloc(std.testing.allocator, input, 26, optionsForLevel(.default));
+    defer std.testing.allocator.free(zlib_frame);
+    const zlib_decoded = try decodeZlibAlloc(std.testing.allocator, zlib_frame);
+    defer std.testing.allocator.free(zlib_decoded);
+    try std.testing.expectEqualSlices(u8, input, zlib_decoded);
+
+    const gzip_frame = try encodeGzipBestSplitAlloc(std.testing.allocator, input, 26, optionsForLevel(.default));
+    defer std.testing.allocator.free(gzip_frame);
+    const gzip_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
+    defer std.testing.allocator.free(gzip_decoded);
+    try std.testing.expectEqualSlices(u8, input, gzip_decoded);
 }

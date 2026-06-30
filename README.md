@@ -39,6 +39,8 @@ zig build run -- decode-raw-hex cb48cdc9c90700
 zig build run -- decode-zlib-hex 7801cb48cdc9c90700062c0215
 zig build run -- decode-gzip-hex 1f8b0800000000000403cb48cdc9c9070086a6103605000000
 zig build run -- encode-raw-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 fast
+zig build run -- encode-zlib-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 default
+zig build run -- encode-gzip-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 default
 zig build run-fuzz-smoke
 zig build run-fuzz-corpus
 zig build run-fuzz-target

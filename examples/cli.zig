@@ -210,10 +210,24 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeZlibBestAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zlib-best-split-hex")) {
+        const payload = args.next() orelse "";
+        const block_len = try parseBlockLen(args.next(), 7);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibBestSplitAlloc(init.gpa, payload, block_len, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-gzip-best-hex")) {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());
         const encoded = try vort.encodeGzipBestAlloc(init.gpa, payload, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-gzip-best-split-hex")) {
+        const payload = args.next() orelse "";
+        const block_len = try parseBlockLen(args.next(), 7);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeGzipBestSplitAlloc(init.gpa, payload, block_len, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-raw-dynamic-split-hex")) {
