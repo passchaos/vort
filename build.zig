@@ -160,6 +160,22 @@ pub fn build(b: *std.Build) void {
     const libfuzzer_smoke_step = b.step("run-libfuzzer-smoke", "Run exported LLVMFuzzerTestOneInput smoke");
     libfuzzer_smoke_step.dependOn(&run_libfuzzer_smoke.step);
 
+    const afl_smoke_exe = b.addExecutable(.{
+        .name = "vort-afl-smoke",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/fuzz_afl.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_afl_smoke = b.addRunArtifact(afl_smoke_exe);
+    if (b.args) |args| run_afl_smoke.addArgs(args);
+    const afl_smoke_step = b.step("run-afl-smoke", "Run AFL-style file-input fuzz driver smoke");
+    afl_smoke_step.dependOn(&run_afl_smoke.step);
+
     const checksum_diff_exe = b.addExecutable(.{
         .name = "vort-checksum-diff",
         .root_module = b.createModule(.{
@@ -298,6 +314,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&fuzz_corpus_exe.step);
     check_step.dependOn(&fuzz_target_exe.step);
     check_step.dependOn(&libfuzzer_smoke_exe.step);
+    check_step.dependOn(&afl_smoke_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);
     check_step.dependOn(&zlib_diff_exe.step);
     check_step.dependOn(&gzip_diff_exe.step);

@@ -37,6 +37,7 @@ zig build run-fuzz-smoke
 zig build run-fuzz-corpus
 zig build run-fuzz-target
 zig build run-libfuzzer-smoke
+zig build run-afl-smoke
 zig build run-checksum-diff
 zig build run-zlib-diff
 zig build run-gzip-diff

@@ -44,7 +44,8 @@ architecture blindly.
 - [x] Coverage-guided fuzz integration plan and reusable corpus entrypoint.
 - [x] Raw-byte fuzz target function and smoke executable.
 - [x] libFuzzer-compatible exported entrypoint smoke.
-- [ ] AFL packaging and CI fuzz runner wiring.
+- [x] AFL-style file-input fuzz driver smoke.
+- [ ] CI fuzz runner wiring.
 
 ## Milestone 3: deflate/zlib/gzip compatibility
 
