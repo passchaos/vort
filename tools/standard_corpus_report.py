@@ -81,18 +81,41 @@ def main() -> int:
         zlib_rs_data, zlib_rs_s = time_call(zlib_rs_run)
         zstd_data, zstd_s = time_call(zstd_run)
         vort_decoded, vort_decode_s = time_call(vort_decode_run)
+
+        def gzip_decode_run():
+            if not gzip_data or not GZIP:
+                return b""
+            return subprocess.run([GZIP, "-dc"], input=gzip_data, check=True, stdout=subprocess.PIPE).stdout
+
+        def zlib_ng_decode_run():
+            return zlib.decompress(zlib_ng_data, 31) if zlib_ng_data else b""
+
+        def zlib_rs_decode_run():
+            return zlib.decompress(zlib_rs_data) if zlib_rs_data else b""
+
+        def zstd_decode_run():
+            if not zstd_data or not ZSTD:
+                return b""
+            return subprocess.run([ZSTD, "-q", "-dc"], input=zstd_data, check=True, stdout=subprocess.PIPE).stdout
+
+        gzip_decoded, gzip_decode_s = time_call(gzip_decode_run)
+        zlib_ng_decoded, zlib_ng_decode_s = time_call(zlib_ng_decode_run)
+        zlib_rs_decoded, zlib_rs_decode_s = time_call(zlib_rs_decode_run)
+        zstd_decoded, zstd_decode_s = time_call(zstd_decode_run)
         if vort_data:
             assert zlib.decompress(vort_data) == data
         if vort_decoded:
             assert vort_decoded == data
         if gzip_data:
-            assert zlib.decompress(gzip_data, 31) == data
+            assert gzip_decoded == data
         if zlib_ng_data:
-            assert zlib.decompress(zlib_ng_data, 31) == data
+            assert zlib_ng_decoded == data
         if zlib_rs_data:
-            assert zlib.decompress(zlib_rs_data) == data
-        print("corpus,input_bytes,vort_zlib_fastest_bytes,vort_ms,vort_decode_ms,gzip_bytes,gzip_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zstd_bytes,zstd_ms")
-        print(f"silesia-1m,{len(data)},{len(vort_data)},{vort_s*1000:.3f},{vort_decode_s*1000:.3f},{len(gzip_data)},{gzip_s*1000:.3f},{len(zlib_ng_data)},{zlib_ng_s*1000:.3f},{len(zlib_rs_data)},{zlib_rs_s*1000:.3f},{len(zstd_data)},{zstd_s*1000:.3f}")
+            assert zlib_rs_decoded == data
+        if zstd_data:
+            assert zstd_decoded == data
+        print("corpus,input_bytes,vort_zlib_fastest_bytes,vort_ms,vort_decode_ms,gzip_bytes,gzip_ms,gzip_decode_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_ng_decode_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zlib_rs_decode_ms,zstd_bytes,zstd_ms,zstd_decode_ms")
+        print(f"silesia-1m,{len(data)},{len(vort_data)},{vort_s*1000:.3f},{vort_decode_s*1000:.3f},{len(gzip_data)},{gzip_s*1000:.3f},{gzip_decode_s*1000:.3f},{len(zlib_ng_data)},{zlib_ng_s*1000:.3f},{zlib_ng_decode_s*1000:.3f},{len(zlib_rs_data)},{zlib_rs_s*1000:.3f},{zlib_rs_decode_s*1000:.3f},{len(zstd_data)},{zstd_s*1000:.3f},{zstd_decode_s*1000:.3f}")
     return 0
 
 
