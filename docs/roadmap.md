@@ -136,6 +136,7 @@ architecture blindly.
 - [x] Native frame mode summary for validating block-mode selection.
 - [x] Embedded index range decode for native deflate-compressed frames.
 - [x] Blocked native deflate stream with embedded index and range decode.
+- [x] Blocked native best-mode stream with embedded index and range decode.
 - [ ] Production seekable native format integration with native block modes.
 - [x] Long-distance matching scanner experiment.
 - [x] Long-distance matching summary integrated into compression reports.

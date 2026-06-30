@@ -178,6 +178,14 @@ pub fn main(init: std.process.Init) !void {
         const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, 5, 12);
         defer init.gpa.free(range);
         try stdout.print("range={s} blocked_stream_bytes={d}\n", .{ range, stream.len });
+    } else if (std.mem.eql(u8, command, "vort-blocked-best-range-demo")) {
+        const input = "abcdefghijklmnopqrstuvwxyz" ++ ("aaaaaaaaaaaaaaaa" ** 2) ++ ("abcabcabcabc" ** 2);
+        const stream = try vort.storeEncodeBlockedBestStreamAlloc(init.gpa, input, 16);
+        defer init.gpa.free(stream);
+        const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, 10, 32);
+        defer init.gpa.free(range);
+        const modes = try vort.storeSummarizeModes(stream);
+        try stdout.print("range={s} blocked_best_stream_bytes={d} modes={d}/{d}/{d}\n", .{ range, stream.len, modes.store, modes.deflate, modes.rle });
     } else if (std.mem.eql(u8, command, "store-range-demo")) {
         const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
         const stream = try vort.storeEncodeIndexedStreamAlloc(init.gpa, &payloads);

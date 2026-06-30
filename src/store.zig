@@ -639,6 +639,75 @@ pub fn encodeBlockedDeflateStreamAlloc(allocator: std.mem.Allocator, input: []co
     return stream.toOwnedSlice(allocator);
 }
 
+pub fn encodeBlockedBestStreamAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
+    return encodeBlockedBestStreamWithOptionsAlloc(allocator, input, block_len, .{});
+}
+
+pub fn encodeBlockedBestStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: deflate.CompressionOptions) ![]u8 {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const n = @min(block_len, input.len - offset);
+        const frame = try encodeBlockBestAlloc(allocator, input[offset..][0..n], options);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+        offset += n;
+    }
+    if (input.len == 0) {
+        const frame = try encodeBlockBestAlloc(allocator, "", options);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    const index = try buildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
+fn encodeBlockBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: deflate.CompressionOptions) ![]u8 {
+    const store_frame = try encodeAlloc(allocator, input);
+    errdefer allocator.free(store_frame);
+    const deflate_frame = try encodeDeflateSplitFrameAlloc(allocator, input, options);
+    errdefer allocator.free(deflate_frame);
+    const rle_frame = try encodeRleAlloc(allocator, input);
+    errdefer allocator.free(rle_frame);
+    if (store_frame.len <= deflate_frame.len and store_frame.len <= rle_frame.len) {
+        allocator.free(deflate_frame);
+        allocator.free(rle_frame);
+        return store_frame;
+    }
+    allocator.free(store_frame);
+    if (deflate_frame.len <= rle_frame.len) {
+        allocator.free(rle_frame);
+        return deflate_frame;
+    }
+    allocator.free(deflate_frame);
+    return rle_frame;
+}
+
+fn encodeDeflateSplitFrameAlloc(allocator: std.mem.Allocator, input: []const u8, options: deflate.CompressionOptions) ![]u8 {
+    const compressed = try deflate.encodeRawBestSplitAlloc(allocator, input, deflate.max_stored_block_len, options);
+    defer allocator.free(compressed);
+    const required = try encodedSize(compressed.len);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    writeHeader(out[0..header_len], .{
+        .version = current_version,
+        .flags = flags_deflate,
+        .uncompressed_size = @intCast(input.len),
+        .stored_size = @intCast(compressed.len),
+        .checksum = checksum.crc32(input),
+    });
+    @memcpy(out[header_len..], compressed);
+    return out;
+}
+
 pub fn encodePlannedDeflateStreamAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, worker_count: usize) ![]u8 {
     const plan = try @import("planner.zig").planBlocksAlloc(allocator, input.len, .{ .block_len = block_len, .worker_count = worker_count });
     defer allocator.free(plan);
@@ -1253,6 +1322,18 @@ test "blocked deflate stream splits input and supports range decode" {
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 5, 12);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, "fghijklmnopq", range);
+}
+
+test "blocked best stream selects native modes and supports range decode" {
+    const input = "abcdefghijklmnopqrstuvwxyz" ++ ("aaaaaaaaaaaaaaaa" ** 2) ++ ("abcabcabcabc" ** 2);
+    const stream = try encodeBlockedBestStreamAlloc(std.testing.allocator, input, 16);
+    defer std.testing.allocator.free(stream);
+    const summary = try summarizeModes(stream);
+    try std.testing.expect(summary.store + summary.deflate + summary.rle >= 2);
+    try std.testing.expect(summary.rle >= 1);
+    const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 10, 32);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, input[10..42], range);
 }
 
 test "planned deflate stream is deterministic across worker counts" {

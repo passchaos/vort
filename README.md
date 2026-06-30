@@ -31,6 +31,7 @@ zig build run -- checksum "hello vort"
 zig build run -- store-roundtrip "hello vort"
 zig build run -- vort-deflate-roundtrip "hello vort"
 zig build run -- vort-blocked-range-demo
+zig build run -- vort-blocked-best-range-demo
 zig build run -- store-range-demo
 zig build run -- zlib-store-roundtrip "hello vort"
 zig build run -- gzip-store-roundtrip "hello vort"

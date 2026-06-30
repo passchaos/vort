@@ -5,9 +5,12 @@ formats (`raw deflate`, `zlib`, `gzip`) are constrained by RFC behavior; the
 native format is where Vort can exceed `zlib`, `zlib-ng`, `zlib-rs`, and `zstd`
 without inheriting all historical wire-format tradeoffs.
 
-The current implemented native frame is only a store/no-compression bootstrap
-frame. Future native versions should preserve the same engineering constraints:
-explicit sizes, bounded memory, deterministic decoding, independent corruption
+The current implemented native v0 frame supports store/no-compression,
+deflate-compressed, and RLE-compressed payload modes. Concatenated v0 streams can
+embed a skippable serialized index, and the blocked best-mode stream encoder can
+select store/deflate/RLE per block while preserving indexed range decode. Future
+native versions should preserve the same engineering constraints: explicit
+sizes, bounded memory, deterministic decoding, independent corruption
 localization, and simple parser states that can be fuzzed aggressively.
 
 ## Goals
