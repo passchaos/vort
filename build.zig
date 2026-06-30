@@ -268,6 +268,11 @@ pub fn build(b: *std.Build) void {
     const compat_benchmark_step = b.step("run-compat-benchmark", "Run smoke benchmark comparing Vort, gzip, and zstd on sample files");
     compat_benchmark_step.dependOn(&compat_benchmark.step);
 
+    const standard_corpus_report = b.addSystemCommand(&.{ "python3", "tools/standard_corpus_report.py" });
+    standard_corpus_report.addArtifactArg(cli_exe);
+    const standard_corpus_report_step = b.step("run-standard-corpus-report", "Run Silesia-sample Vort/gzip/zstd benchmark smoke");
+    standard_corpus_report_step.dependOn(&standard_corpus_report.step);
+
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);
     check_step.dependOn(&cli_exe.step);

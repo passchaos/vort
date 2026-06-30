@@ -46,6 +46,7 @@ zig build run-external-probe
 zig build run-cpu-features
 zig build run-zstd-compare
 zig build run-compat-benchmark
+zig build run-standard-corpus-report
 zig build run-compression-report
 zig build run-file-corpus-report -- README.md docs/roadmap.md
 zig build bench-checksum -Doptimize=ReleaseFast

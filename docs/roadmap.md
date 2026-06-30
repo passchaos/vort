@@ -97,7 +97,8 @@ architecture blindly.
 - [x] File-path compression ratio report for ad-hoc corpora.
 - [x] zstd CLI compressed-size comparison smoke for sample files.
 - [x] File-path compression/decompression throughput report for ad-hoc corpora.
-- [ ] Automated throughput dashboards across standard real corpora.
+- [x] Silesia-sample standard corpus benchmark smoke.
+- [ ] Automated throughput dashboards across full standard real corpora.
 
 ## Milestone 5: native Vort format research
 

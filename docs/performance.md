@@ -12,6 +12,7 @@ zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build bench-deflate-encode -Doptimize=ReleaseFast
 zig build run-file-corpus-report -- README.md docs/roadmap.md
 zig build run-zstd-compare
+zig build run-standard-corpus-report
 ```
 
 The checksum smoke benchmark processes a deterministic 1 MiB buffer repeatedly
