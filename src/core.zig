@@ -16,6 +16,7 @@ pub const Error = error{
     BadZlibHeader,
     BadGzipHeader,
     InvalidHuffmanCode,
+    UnsupportedDeflateFeature,
     TrailingData,
 };
 

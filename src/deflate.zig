@@ -1,5 +1,7 @@
 const std = @import("std");
 const checksum = @import("checksum.zig");
+const bitstream = @import("bitstream.zig");
+const huffman = @import("huffman.zig");
 const core = @import("core.zig");
 
 pub const Error = core.Error;
@@ -18,6 +20,59 @@ pub const OwnedDecodeResult = struct {
         allocator.free(self.bytes);
     }
 };
+
+pub fn decodeRawFixedLiteralOnly(input: []const u8, output: []u8) Error!DecodeResult {
+    var reader = bitstream.BitReader.init(input);
+    const final = try reader.readBits(u1, 1);
+    const block_type = try reader.readBits(u2, 2);
+    if (block_type != 0b01) return error.InvalidDeflateBlockType;
+
+    const table = try huffman.fixedLiteralTable();
+    var out_offset: usize = 0;
+    while (true) {
+        const symbol = (try table.decode(&reader)).value;
+        if (symbol < 256) {
+            if (out_offset == output.len) return error.OutputTooSmall;
+            output[out_offset] = @intCast(symbol);
+            out_offset += 1;
+        } else if (symbol == 256) {
+            if (final == 0) return error.UnsupportedDeflateFeature;
+            return .{ .input_read = reader.byteOffset(), .output_written = out_offset };
+        } else {
+            return error.UnsupportedDeflateFeature;
+        }
+    }
+}
+
+pub fn decodeRawFixedLiteralOnlyAlloc(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+
+    var reader = bitstream.BitReader.init(input);
+    const final = try reader.readBits(u1, 1);
+    const block_type = try reader.readBits(u2, 2);
+    if (block_type != 0b01) return error.InvalidDeflateBlockType;
+
+    const table = try huffman.fixedLiteralTable();
+    while (true) {
+        const symbol = (try table.decode(&reader)).value;
+        if (symbol < 256) {
+            try out.append(allocator, @intCast(symbol));
+        } else if (symbol == 256) {
+            if (final == 0) return error.UnsupportedDeflateFeature;
+            return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
+        } else {
+            return error.UnsupportedDeflateFeature;
+        }
+    }
+}
+
+pub fn decodeRawFixedLiteralOnlyAllocStrict(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const result = try decodeRawFixedLiteralOnlyAlloc(allocator, input);
+    errdefer result.deinit(allocator);
+    if (result.input_read != input.len) return error.TrailingData;
+    return result.bytes;
+}
 
 pub fn rawStoredEncodedSize(input_len: usize) Error!usize {
     const blocks: usize = if (input_len == 0) 1 else ((input_len - 1) / max_stored_block_len) + 1;
@@ -356,4 +411,30 @@ test "gzip stored wrapper validates crc size header and trailing data" {
     @memcpy(with_trailing[0..encoded.len], encoded);
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeGzipStored(with_trailing[0 .. encoded.len + 1], &out));
+}
+
+test "raw fixed Huffman literal-only inflate matches zlib fixed vectors" {
+    const cases = [_]struct { compressed: []const u8, plain: []const u8 }{
+        .{ .compressed = &.{ 0x03, 0x00 }, .plain = "" },
+        .{ .compressed = &.{ 0x4b, 0x04, 0x00 }, .plain = "a" },
+        .{ .compressed = &.{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 }, .plain = "hello" },
+        .{ .compressed = &.{ 0x4b, 0x4c, 0x4a, 0x4e, 0x49, 0x4d, 0x03, 0x00 }, .plain = "abcdef" },
+    };
+    for (cases) |case| {
+        var out: [64]u8 = undefined;
+        const decoded = try decodeRawFixedLiteralOnly(case.compressed, &out);
+        try std.testing.expectEqualSlices(u8, case.plain, out[0..decoded.output_written]);
+        const owned = try decodeRawFixedLiteralOnlyAllocStrict(std.testing.allocator, case.compressed);
+        defer std.testing.allocator.free(owned);
+        try std.testing.expectEqualSlices(u8, case.plain, owned);
+    }
+}
+
+test "raw fixed Huffman literal-only inflate rejects matches and wrong block types" {
+    const fixed_with_match = &.{ 0x73, 0x74, 0xa4, 0x3d, 0x00 }; // zlib fixed output for "aaaaaa" uses a match.
+    try std.testing.expectError(error.UnsupportedDeflateFeature, decodeRawFixedLiteralOnlyAllocStrict(std.testing.allocator, fixed_with_match));
+
+    var out: [8]u8 = undefined;
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeRawFixedLiteralOnly(&.{ 0x01, 0x00, 0x00, 0xff, 0xff }, &out));
+    try std.testing.expectError(error.OutputTooSmall, decodeRawFixedLiteralOnly(&.{ 0x4b, 0x04, 0x00 }, out[0..0]));
 }
