@@ -46,6 +46,52 @@ pub fn encodeRawDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []c
     return encodeRawDynamicTokensAlloc(allocator, plan.tokens);
 }
 
+const CodeLengthOp = struct {
+    symbol: u8,
+    extra_bits: u6 = 0,
+    extra_value: u8 = 0,
+};
+
+fn buildCodeLengthOpsAlloc(allocator: std.mem.Allocator, lit_lengths: []const u4, dist_lengths: []const u4) ![]CodeLengthOp {
+    var ops: std.ArrayList(CodeLengthOp) = .empty;
+    errdefer ops.deinit(allocator);
+    try appendCodeLengthOps(allocator, &ops, lit_lengths);
+    try appendCodeLengthOps(allocator, &ops, dist_lengths);
+    return ops.toOwnedSlice(allocator);
+}
+
+fn appendCodeLengthOps(allocator: std.mem.Allocator, ops: *std.ArrayList(CodeLengthOp), lengths: []const u4) !void {
+    var i: usize = 0;
+    while (i < lengths.len) {
+        const value = lengths[i];
+        var run: usize = 1;
+        while (i + run < lengths.len and lengths[i + run] == value) run += 1;
+        if (value == 0) {
+            var remaining = run;
+            while (remaining >= 11) {
+                const count = @min(remaining, 138);
+                try ops.append(allocator, .{ .symbol = 18, .extra_bits = 7, .extra_value = @intCast(count - 11) });
+                remaining -= count;
+            }
+            if (remaining >= 3) {
+                try ops.append(allocator, .{ .symbol = 17, .extra_bits = 3, .extra_value = @intCast(remaining - 3) });
+                remaining = 0;
+            }
+            while (remaining > 0) : (remaining -= 1) try ops.append(allocator, .{ .symbol = 0 });
+        } else {
+            try ops.append(allocator, .{ .symbol = value });
+            var remaining = run - 1;
+            while (remaining >= 3) {
+                const count = @min(remaining, 6);
+                try ops.append(allocator, .{ .symbol = 16, .extra_bits = 2, .extra_value = @intCast(count - 3) });
+                remaining -= count;
+            }
+            while (remaining > 0) : (remaining -= 1) try ops.append(allocator, .{ .symbol = value });
+        }
+        i += run;
+    }
+}
+
 pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
     var lit_freqs: [286]u32 = @splat(0);
     var dist_freqs: [30]u32 = @splat(0);
@@ -67,9 +113,10 @@ pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const
     const hlit: usize = trimCodeLengthCount(286, 257, &lit_lengths_full);
     const hdist: usize = trimCodeLengthCount(30, 1, &dist_lengths_full);
 
+    const code_len_ops = try buildCodeLengthOpsAlloc(allocator, lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
+    defer allocator.free(code_len_ops);
     var code_len_freqs: [19]u32 = @splat(0);
-    for (lit_lengths_full[0..hlit]) |bits| code_len_freqs[bits] += 1;
-    for (dist_lengths_full[0..hdist]) |bits| code_len_freqs[bits] += 1;
+    for (code_len_ops) |op| code_len_freqs[op.symbol] += 1;
     completeCodeLengthFrequencySet(&code_len_freqs);
     var code_len_lengths = huffman.simpleCodeLengths(19, &code_len_freqs, 7);
     var hclen: usize = 4;
@@ -89,8 +136,10 @@ pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const
     try writer.writeBits(allocator, @intCast(hdist - 1), 5);
     try writer.writeBits(allocator, @intCast(hclen - 4), 4);
     for (huffman.code_length_order[0..hclen]) |symbol| try writer.writeBits(allocator, code_len_lengths[symbol], 3);
-    for (lit_lengths_full[0..hlit]) |bits| try code_len_encoder.writeSymbol(&writer, allocator, bits);
-    for (dist_lengths_full[0..hdist]) |bits| try code_len_encoder.writeSymbol(&writer, allocator, bits);
+    for (code_len_ops) |op| {
+        try code_len_encoder.writeSymbol(&writer, allocator, op.symbol);
+        if (op.extra_bits != 0) try writer.writeBits(allocator, op.extra_value, op.extra_bits);
+    }
     for (tokens) |token| switch (token) {
         .literal => |byte| try lit_encoder.writeSymbol(&writer, allocator, byte),
         .match => |m| {
@@ -1265,4 +1314,19 @@ test "dynamic literal encoder round trips through raw zlib and gzip decoders" {
         defer std.testing.allocator.free(gzip_decoded);
         try std.testing.expectEqualSlices(u8, case, gzip_decoded);
     }
+}
+
+test "dynamic code length RLE emits repeat symbols" {
+    const lit_lengths = [_]u4{0} ** 20 ++ [_]u4{5} ** 7;
+    const dist_lengths = [_]u4{5} ** 4;
+    const ops = try buildCodeLengthOpsAlloc(std.testing.allocator, &lit_lengths, &dist_lengths);
+    defer std.testing.allocator.free(ops);
+    var saw_zero_repeat = false;
+    var saw_prev_repeat = false;
+    for (ops) |op| {
+        if (op.symbol == 18 or op.symbol == 17) saw_zero_repeat = true;
+        if (op.symbol == 16) saw_prev_repeat = true;
+    }
+    try std.testing.expect(saw_zero_repeat);
+    try std.testing.expect(saw_prev_repeat);
 }
