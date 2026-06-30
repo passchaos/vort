@@ -165,6 +165,7 @@ architecture blindly.
 - [x] Native best frame selection across store/deflate/RLE.
 - [x] Native frame mode summary for validating block-mode selection.
 - [x] Embedded index range decode for native deflate-compressed frames.
+- [x] Embedded index range decode for native LDM reference frames.
 - [x] Blocked native deflate stream with embedded index and range decode.
 - [x] Blocked native best-mode stream with embedded index and range decode.
 - [ ] Production seekable native format integration with native block modes.

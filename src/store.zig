@@ -773,6 +773,24 @@ pub fn encodeIndexedDeflateStreamAlloc(allocator: std.mem.Allocator, frames: []c
     return stream.toOwnedSlice(allocator);
 }
 
+pub fn encodeIndexedLongDistanceStreamAlloc(allocator: std.mem.Allocator, frames: []const []const u8, options: long_distance.Options) ![]u8 {
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    for (frames) |payload| {
+        const frame = try encodeBestWithLongDistanceAlloc(allocator, payload, options);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    const index = try buildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
 pub fn encodeBlockedDeflateStreamAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     var stream: std.ArrayList(u8) = .empty;
@@ -1580,6 +1598,21 @@ test "indexed deflate stream supports embedded range decode" {
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 6, 10);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, "alphabeta ", range);
+}
+
+test "indexed long-distance stream supports embedded range decode" {
+    const prefix = deterministicLdmPrefix();
+    const payloads = [_][]const u8{
+        prefix ++ "----" ++ prefix[0..1024].*,
+        "tail",
+    };
+    const stream = try encodeIndexedLongDistanceStreamAlloc(std.testing.allocator, &payloads, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(stream);
+    const summary = try summarizeModes(stream);
+    try std.testing.expect(summary.ldm > 0);
+    const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, prefix.len + 4, 16);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, prefix[0..16], range);
 }
 
 test "blocked deflate stream splits input and supports range decode" {

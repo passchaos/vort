@@ -52,6 +52,7 @@ pub const storeFindFrameForOffset = store.findFrameForOffset;
 pub const storeDecodeRangeAlloc = store.decodeRangeAlloc;
 pub const storeEncodeIndexedStreamAlloc = store.encodeIndexedStreamAlloc;
 pub const storeEncodeIndexedDeflateStreamAlloc = store.encodeIndexedDeflateStreamAlloc;
+pub const storeEncodeIndexedLongDistanceStreamAlloc = store.encodeIndexedLongDistanceStreamAlloc;
 pub const storeEncodeBlockedDeflateStreamAlloc = store.encodeBlockedDeflateStreamAlloc;
 pub const storeEncodeBlockedBestStreamAlloc = store.encodeBlockedBestStreamAlloc;
 pub const storeEncodeBlockedBestStreamWithOptionsAlloc = store.encodeBlockedBestStreamWithOptionsAlloc;
