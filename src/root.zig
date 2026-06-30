@@ -10,6 +10,7 @@ pub const huffman = @import("huffman.zig");
 pub const lz77 = @import("lz77.zig");
 pub const dictionary = @import("dictionary.zig");
 pub const long_distance = @import("long_distance.zig");
+pub const planner = @import("planner.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -62,6 +63,7 @@ pub const lazyGreedyLz77PlanAlloc = lz77.lazyGreedyPlanAlloc;
 pub const DictionaryId = dictionary.DictionaryId;
 pub const DictionaryMetadata = dictionary.Metadata;
 pub const findLongDistanceCandidatesAlloc = long_distance.findCandidatesAlloc;
+pub const planBlocksAlloc = planner.planBlocksAlloc;
 
 test {
     _ = checksum;
@@ -74,4 +76,5 @@ test {
     _ = lz77;
     _ = dictionary;
     _ = long_distance;
+    _ = planner;
 }

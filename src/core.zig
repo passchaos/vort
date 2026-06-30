@@ -19,6 +19,7 @@ pub const Error = error{
     UnsupportedDeflateFeature,
     InvalidMatch,
     InvalidDynamicBlockHeader,
+    InvalidBlockPlan,
     TrailingData,
 };
 

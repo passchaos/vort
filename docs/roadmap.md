@@ -84,4 +84,5 @@ architecture blindly.
 - [ ] Splittable/seekable frame index design.
 - [x] Long-distance matching scanner experiment.
 - [ ] Long-distance matching integration into native/block encoder.
-- [ ] Multi-threaded block planning with deterministic output mode.
+- [x] Deterministic block planning metadata for future multi-threaded encoding.
+- [ ] Multi-threaded encoder execution with deterministic output mode.
