@@ -35,6 +35,8 @@ pub const storeEncodeSkippableAlloc = store.encodeSkippableAlloc;
 pub const storeBuildFrameIndexAlloc = store.buildFrameIndexAlloc;
 pub const storeEncodeFrameIndexAlloc = store.encodeFrameIndexAlloc;
 pub const storeDecodeFrameIndexAlloc = store.decodeFrameIndexAlloc;
+pub const storeFindFrameForOffset = store.findFrameForOffset;
+pub const storeDecodeRangeAlloc = store.decodeRangeAlloc;
 
 pub const encodeRawStoredDeflate = deflate.encodeRawStored;
 pub const decodeRawStoredDeflate = deflate.decodeRawStored;

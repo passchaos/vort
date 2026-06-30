@@ -21,6 +21,7 @@ pub const Error = error{
     InvalidDynamicBlockHeader,
     InvalidBlockPlan,
     InvalidDictionaryTraining,
+    RangeOutOfBounds,
     TrailingData,
 };
 

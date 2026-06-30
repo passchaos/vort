@@ -92,7 +92,8 @@ architecture blindly.
 - [x] Dictionary IDs and training-plan metadata.
 - [x] Deterministic n-gram dictionary training prototype.
 - [ ] Production dictionary training with ratio/throughput validation.
-- [ ] Splittable/seekable frame index design.
+- [x] Splittable/seekable frame index range decode API.
+- [ ] Production seekable native format integration.
 - [x] Long-distance matching scanner experiment.
 - [ ] Long-distance matching integration into native/block encoder.
 - [x] Deterministic block planning metadata for future multi-threaded encoding.

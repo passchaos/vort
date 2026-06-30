@@ -427,6 +427,38 @@ pub fn decodeFrameIndexAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return entries;
 }
 
+pub fn findFrameForOffset(index: []const FrameIndexEntry, uncompressed_offset: u64) ?usize {
+    for (index, 0..) |entry, i| {
+        if (uncompressed_offset >= entry.uncompressed_offset and uncompressed_offset < entry.uncompressed_offset + entry.uncompressed_len) return i;
+    }
+    return null;
+}
+
+pub fn decodeRangeAlloc(allocator: std.mem.Allocator, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    if (length == 0) return out.toOwnedSlice(allocator);
+    const end = std.math.add(u64, offset, length) catch return error.IntegerOverflow;
+    const start_i = findFrameForOffset(index, offset) orelse return error.RangeOutOfBounds;
+    var i = start_i;
+    while (i < index.len and out.items.len < length) : (i += 1) {
+        const entry = index[i];
+        if (entry.uncompressed_offset >= end) break;
+        if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
+        const frame = input[entry.frame_offset..][0..entry.frame_len];
+        const decoded = try decodeAlloc(allocator, frame);
+        defer allocator.free(decoded);
+        const frame_start = entry.uncompressed_offset;
+        const frame_end = entry.uncompressed_offset + entry.uncompressed_len;
+        const copy_start = if (offset > frame_start) offset - frame_start else 0;
+        const copy_end_global = @min(end, frame_end);
+        const copy_end = copy_end_global - frame_start;
+        if (copy_end > copy_start) try out.appendSlice(allocator, decoded[@intCast(copy_start)..@intCast(copy_end)]);
+    }
+    if (out.items.len != length) return error.RangeOutOfBounds;
+    return out.toOwnedSlice(allocator);
+}
+
 pub fn countConcatenatedFrames(input: []const u8) Error!usize {
     var iterator = ConcatIterator.init(input);
     var count: usize = 0;
@@ -716,4 +748,33 @@ test "frame index serializes and decodes as sidecar" {
         try std.testing.expectEqual(expected.uncompressed_offset, actual.uncompressed_offset);
         try std.testing.expectEqual(expected.uncompressed_len, actual.uncompressed_len);
     }
+}
+
+test "frame index supports seek and range decode" {
+    const parts = [_][]const u8{ "alpha", "beta", "gamma" };
+    var combined: std.ArrayList(u8) = .empty;
+    defer combined.deinit(std.testing.allocator);
+    for (parts) |part| {
+        const frame = try encodeAlloc(std.testing.allocator, part);
+        defer std.testing.allocator.free(frame);
+        try combined.appendSlice(std.testing.allocator, frame);
+    }
+    const index = try buildFrameIndexAlloc(std.testing.allocator, combined.items);
+    defer std.testing.allocator.free(index);
+    try std.testing.expectEqual(@as(?usize, 0), findFrameForOffset(index, 0));
+    try std.testing.expectEqual(@as(?usize, 1), findFrameForOffset(index, 5));
+    try std.testing.expectEqual(@as(?usize, 2), findFrameForOffset(index, 9));
+    try std.testing.expectEqual(@as(?usize, null), findFrameForOffset(index, 14));
+
+    const range = try decodeRangeAlloc(std.testing.allocator, combined.items, index, 3, 8);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, "habetaga", range);
+}
+
+test "range decode rejects out of bounds" {
+    const frame = try encodeAlloc(std.testing.allocator, "short");
+    defer std.testing.allocator.free(frame);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+    try std.testing.expectError(error.RangeOutOfBounds, decodeRangeAlloc(std.testing.allocator, frame, index, 4, 4));
 }
