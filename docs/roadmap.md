@@ -74,7 +74,8 @@ architecture blindly.
 - [x] Greedy LZ77 parser experiment with deterministic options and replay tests.
 - [x] Lazy greedy LZ77 parser experiment with deterministic options.
 - [x] Optimal LZ77 parser prototype with deterministic options.
-- [ ] Production optimal parser with level/strategy configs.
+- [x] Fixed encoder parser strategy config selecting greedy/lazy/optimal prototypes.
+- [ ] Production optimal parser with full level/strategy configs.
 - [x] Huffman code generation and canonical-code validation.
 - [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.
 - [ ] Larger decompression hot-path benchmarks across real corpora.

@@ -13,6 +13,13 @@ pub const DecodeResult = struct {
     output_written: usize,
 };
 
+pub const ParserMode = enum { greedy, lazy, optimal };
+
+pub const CompressionOptions = struct {
+    parser: ParserMode = .greedy,
+    lz77_options: lz77.GreedyOptions = .{},
+};
+
 pub const OwnedDecodeResult = struct {
     bytes: []u8,
     input_read: usize,
@@ -23,7 +30,15 @@ pub const OwnedDecodeResult = struct {
 };
 
 pub fn encodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    const plan = try lz77.greedyPlanAlloc(allocator, input, .{});
+    return encodeRawFixedWithOptionsAlloc(allocator, input, .{});
+}
+
+pub fn encodeRawFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    const plan = switch (options.parser) {
+        .greedy => try lz77.greedyPlanAlloc(allocator, input, options.lz77_options),
+        .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, options.lz77_options),
+        .optimal => try lz77.optimalPlanAlloc(allocator, input, options.lz77_options),
+    };
     defer plan.deinit(allocator);
     return encodeRawFixedTokensAlloc(allocator, plan.tokens);
 }
@@ -483,7 +498,11 @@ pub fn encodeZlibStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
 }
 
 pub fn encodeZlibFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    const raw = try encodeRawFixedAlloc(allocator, input);
+    return encodeZlibFixedWithOptionsAlloc(allocator, input, .{});
+}
+
+pub fn encodeZlibFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawFixedWithOptionsAlloc(allocator, input, options);
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, 2 + raw.len + 4);
     errdefer allocator.free(out);
@@ -559,7 +578,11 @@ pub fn encodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
 }
 
 pub fn encodeGzipFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    const raw = try encodeRawFixedAlloc(allocator, input);
+    return encodeGzipFixedWithOptionsAlloc(allocator, input, .{});
+}
+
+pub fn encodeGzipFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawFixedWithOptionsAlloc(allocator, input, options);
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
     errdefer allocator.free(out);
@@ -1041,4 +1064,15 @@ test "zlib header rejects bad method window check and dictionary flag" {
 test "gzip header rejects reserved flags and bad method" {
     try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x08, 0xe0, 0, 0, 0, 0, 0, 3 }));
     try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x00, 0x00, 0, 0, 0, 0, 0, 3 }));
+}
+
+test "fixed encoder supports parser strategy options" {
+    const input = "abcabcabcabc xyz xyz xyz";
+    inline for (.{ ParserMode.greedy, ParserMode.lazy, ParserMode.optimal }) |mode| {
+        const encoded = try encodeRawFixedWithOptionsAlloc(std.testing.allocator, input, .{ .parser = mode });
+        defer std.testing.allocator.free(encoded);
+        const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
 }
