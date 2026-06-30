@@ -48,12 +48,12 @@ architecture blindly.
 - [x] zlib wrapper and Adler verification for stored blocks.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
-- [ ] zlib wrapper integration for multi-block dynamic streams.
+- [x] zlib wrapper integration for multi-block dynamic streams.
 - [x] gzip wrapper and CRC/ISIZE verification for stored blocks.
 - [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC skip/parse support.
 - [x] gzip wrapper integration for fixed-Huffman blocks.
 - [x] gzip wrapper integration for single final dynamic-Huffman blocks.
-- [ ] gzip wrapper integration for multi-block dynamic streams.
+- [x] gzip wrapper integration for multi-block dynamic streams.
 - [x] Stored-block vectors checked against Python/zlib level-0 output.
 - [ ] Differential tests against zlib, zlib-ng, and zlib-rs.
 - [ ] Compatibility benchmark suite.
