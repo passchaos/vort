@@ -107,6 +107,60 @@ pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, 
     return writer.toOwnedSlice(allocator);
 }
 
+pub const AdaptiveSplitOptions = struct {
+    min_block_len: usize = 16 * 1024,
+    max_block_len: usize = max_stored_block_len,
+    sample_len: usize = 4096,
+};
+
+pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
+    const max_block_len = @min(split_options.max_block_len, max_stored_block_len);
+    const min_block_len = @min(split_options.min_block_len, max_block_len);
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    if (input.len == 0) {
+        const plan = try planTokensAlloc(allocator, "", options);
+        defer plan.deinit(allocator);
+        try writeBestTokensBlock(allocator, &writer, "", plan.tokens, true, options);
+        return writer.toOwnedSlice(allocator);
+    }
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const remaining = input.len - offset;
+        const n = chooseAdaptiveBlockLen(input[offset..], min_block_len, max_block_len, split_options.sample_len);
+        const chunk_len = @min(n, remaining);
+        const chunk = input[offset..][0..chunk_len];
+        const final = offset + chunk_len == input.len;
+        const plan = try planTokensAlloc(allocator, chunk, options);
+        defer plan.deinit(allocator);
+        try writeBestTokensBlock(allocator, &writer, chunk, plan.tokens, final, options);
+        offset += chunk_len;
+    }
+    return writer.toOwnedSlice(allocator);
+}
+
+fn chooseAdaptiveBlockLen(input: []const u8, min_block_len: usize, max_block_len: usize, sample_len: usize) usize {
+    if (input.len <= min_block_len) return input.len;
+    const sample = input[0..@min(input.len, @max(sample_len, 1))];
+    const unique = uniqueByteCount(sample);
+    if (unique <= 4 and input.len >= min_block_len) return min_block_len;
+    if (unique <= 32) return @min(input.len, @max(min_block_len, max_block_len / 2));
+    return @min(input.len, max_block_len);
+}
+
+fn uniqueByteCount(input: []const u8) usize {
+    var seen: [256]bool = @splat(false);
+    var count: usize = 0;
+    for (input) |byte| {
+        if (!seen[byte]) {
+            seen[byte] = true;
+            count += 1;
+        }
+    }
+    return count;
+}
+
 fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions) !void {
     const stored_len = storedBlockEncodedSizeFromState(writer.*, plain.len);
     const fixed = try encodeRawFixedTokensFinalAlloc(allocator, tokens, final);
@@ -933,6 +987,18 @@ pub fn encodeZlibBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8,
     return out;
 }
 
+pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    const raw = try encodeRawBestAdaptiveSplitAlloc(allocator, input, options, split_options);
+    defer allocator.free(raw);
+    const out = try allocator.alloc(u8, 2 + raw.len + 4);
+    errdefer allocator.free(out);
+    out[0] = 0x78;
+    out[1] = 0x01;
+    @memcpy(out[2..][0..raw.len], raw);
+    std.mem.writeInt(u32, out[2 + raw.len ..][0..4], checksum.adler32(input), .big);
+    return out;
+}
+
 pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
     if (input.len < 2) return error.TruncatedFrame;
     try validateZlibHeader(input[0], input[1]);
@@ -1046,6 +1112,19 @@ pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 
 pub fn encodeGzipBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     const raw = try encodeRawBestSplitAlloc(allocator, input, block_len, options);
+    defer allocator.free(raw);
+    const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
+    errdefer allocator.free(out);
+    @memcpy(out[0..gzip_header.len], &gzip_header);
+    @memcpy(out[gzip_header.len..][0..raw.len], raw);
+    const footer = gzip_header.len + raw.len;
+    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
+    return out;
+}
+
+pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    const raw = try encodeRawBestAdaptiveSplitAlloc(allocator, input, options, split_options);
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
     errdefer allocator.free(out);
@@ -1697,6 +1776,27 @@ test "zlib and gzip split-best wrappers round trip" {
     try std.testing.expectEqualSlices(u8, input, zlib_decoded);
 
     const gzip_frame = try encodeGzipBestSplitAlloc(std.testing.allocator, input, 26, optionsForLevel(.default));
+    defer std.testing.allocator.free(gzip_frame);
+    const gzip_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
+    defer std.testing.allocator.free(gzip_decoded);
+    try std.testing.expectEqualSlices(u8, input, gzip_decoded);
+}
+
+test "adaptive split best wrappers round trip" {
+    const input = ("aaaaaaaaaaaaaaaa" ** 4) ++ "abcdefghijklmnopqrstuvwxyz" ++ ("abcabcabcabc" ** 8);
+    const raw = try encodeRawBestAdaptiveSplitAlloc(std.testing.allocator, input, optionsForLevel(.default), .{ .min_block_len = 16, .max_block_len = 64, .sample_len = 8 });
+    defer std.testing.allocator.free(raw);
+    const raw_decoded = try decodeRawAutoAlloc(std.testing.allocator, raw);
+    defer std.testing.allocator.free(raw_decoded);
+    try std.testing.expectEqualSlices(u8, input, raw_decoded);
+
+    const zlib_frame = try encodeZlibBestAdaptiveSplitAlloc(std.testing.allocator, input, optionsForLevel(.default), .{ .min_block_len = 16, .max_block_len = 64, .sample_len = 8 });
+    defer std.testing.allocator.free(zlib_frame);
+    const zlib_decoded = try decodeZlibAlloc(std.testing.allocator, zlib_frame);
+    defer std.testing.allocator.free(zlib_decoded);
+    try std.testing.expectEqualSlices(u8, input, zlib_decoded);
+
+    const gzip_frame = try encodeGzipBestAdaptiveSplitAlloc(std.testing.allocator, input, optionsForLevel(.default), .{ .min_block_len = 16, .max_block_len = 64, .sample_len = 8 });
     defer std.testing.allocator.free(gzip_frame);
     const gzip_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
     defer std.testing.allocator.free(gzip_decoded);

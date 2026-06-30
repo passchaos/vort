@@ -7,8 +7,9 @@ code-length RLE symbols 16/17/18. It also has raw/zlib/gzip split-best encoders
 that plan each bounded block independently and choose stored, fixed, or dynamic
 emission per block. For complex distance-code sets that are not yet proven safe,
 the dynamic encoder conservatively falls back to fixed-Huffman token emission so
-public outputs remain zlib-compatible. The split-best compatibility wrappers are
-covered by the Python zlib differential smoke harness.
+public outputs remain zlib-compatible. The split-best and adaptive-split
+compatibility wrappers are covered by the Python zlib differential smoke
+harness.
 
 Remaining work for production dynamic encoding:
 
