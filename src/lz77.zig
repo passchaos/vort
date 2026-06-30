@@ -34,6 +34,7 @@ pub const GreedyOptions = struct {
     max_candidates: usize = 1,
     lazy_min_gain: usize = 2,
     min_match: usize = min_match_len,
+    max_match: usize = max_match_len,
     min_savings_bits: usize = 0,
 };
 
@@ -187,7 +188,7 @@ fn findMatchCandidates(input: []const u8, pos: usize, options: GreedyOptions) Ma
     if (input.len - pos < minimum) return out;
     const window_len = @min(options.window_len, default_window_len);
     const start = pos -| window_len;
-    const max_len = @min(max_match_len, input.len - pos);
+    const max_len = @min(maxMatch(options), input.len - pos);
     const candidate_limit = normalizedMaxCandidates(options);
     var checked: usize = 0;
     var candidate = pos;
@@ -212,7 +213,11 @@ fn normalizedMaxCandidates(options: GreedyOptions) usize {
 }
 
 fn minMatch(options: GreedyOptions) usize {
-    return @max(min_match_len, @min(options.min_match, max_match_len));
+    return @max(min_match_len, @min(options.min_match, maxMatch(options)));
+}
+
+fn maxMatch(options: GreedyOptions) usize {
+    return @max(min_match_len, @min(options.max_match, max_match_len));
 }
 
 fn acceptMatch(input: []const u8, pos: usize, length: usize, distance: usize, options: GreedyOptions) bool {
@@ -295,7 +300,7 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
             const h = hash3(input[pos..][0..3]) & (table_size - 1);
             var candidate_i = head[h];
             var checked: usize = 0;
-            const max_len = @min(max_match_len, input.len - pos);
+            const max_len = @min(maxMatch(options), input.len - pos);
             while (candidate_i >= 0 and checked < options.max_chain) : (checked += 1) {
                 const candidate: usize = @intCast(candidate_i);
                 const distance = pos - candidate;
@@ -382,7 +387,7 @@ fn findBestMatch(input: []const u8, pos: usize, options: GreedyOptions) MatchCan
     if (input.len - pos < minimum) return .{};
     const window_len = @min(options.window_len, default_window_len);
     const start = pos -| window_len;
-    const max_len = @min(max_match_len, input.len - pos);
+    const max_len = @min(maxMatch(options), input.len - pos);
     var best = MatchCandidate{};
     var checked: usize = 0;
     var candidate = pos;
@@ -468,6 +473,16 @@ test "parser honors minimum savings threshold" {
     defer strict.deinit(std.testing.allocator);
     try std.testing.expect(permissive.stats.matches > 0);
     try std.testing.expectEqual(@as(usize, 0), strict.stats.matches);
+}
+
+test "parser honors configurable maximum match length" {
+    const input = "aaaaaaaaaaaaaaaa";
+    const capped = try greedyPlanAlloc(std.testing.allocator, input, .{ .max_match = 4 });
+    defer capped.deinit(std.testing.allocator);
+    for (capped.tokens) |token| switch (token) {
+        .match => |m| try std.testing.expect(m.length <= 4),
+        else => {},
+    };
 }
 
 test "optimal LZ77 prototype round trips and is no worse by fixed bit cost" {
