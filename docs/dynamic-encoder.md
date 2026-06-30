@@ -1,18 +1,12 @@
 # Dynamic Huffman encoder status
 
-Vort currently includes a minimal literal-only dynamic Huffman encoder for raw,
-zlib, and gzip wrappers. Its output is verified by Python zlib through
-`zig build run-python-zlib-diff`.
+Vort includes a dynamic Huffman encoder for raw, zlib, and gzip wrappers. It can emit LZ77 match tokens and is verified by Python zlib through `zig build run-python-zlib-diff`.
 
-The encoder deliberately does **not** yet emit LZ77 match tokens in dynamic
-blocks. A first token-capable attempt showed how easy it is to generate invalid
-code-length alphabets; the current implementation stays conservative and routes
-match-capable compression through fixed-Huffman blocks until production-quality
-canonical length generation and dynamic header/RLE optimization are implemented.
+The current dynamic encoder is still intentionally simple: it uses conservative frequency completion and direct code-length emission instead of optimized code-length RLE or block-cost selection.
 
-Remaining work for full dynamic encoding:
+Remaining work for production dynamic encoding:
 
-- build optimal or package-merge code lengths from literal/length and distance
+- build production-quality optimal or package-merge code lengths from literal/length and distance
   frequencies;
 - RLE encode dynamic code lengths using symbols 16/17/18;
 - choose HLIT/HDIST/HCLEN trimming safely;

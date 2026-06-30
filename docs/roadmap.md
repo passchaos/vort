@@ -67,7 +67,8 @@ architecture blindly.
 - [x] Optional zlib-ng/zlib-rs differential harness with explicit skip reporting.
 - [ ] Built zlib-ng/zlib-rs differential tests running in CI/local validation.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
-- [ ] Full dynamic Huffman encoder with match support.
+- [x] Dynamic Huffman encoder with LZ77 match support, verified by Python zlib.
+- [ ] Production dynamic Huffman encoder with optimized code-length RLE and block selection.
 - [ ] Compatibility benchmark suite.
 
 ## Milestone 4: compression performance foundation

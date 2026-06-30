@@ -30,7 +30,7 @@ def main() -> int:
     if not CLI.exists():
         raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
 
-    payloads = ["", "hello", "hello vort", "abcabcabcabc", "aaaaaaaaaaaaaaaaaaaaaaaa"]
+    payloads = ["", "hello", "hello vort", "abcabcabcabc", "aaaaaaaaaaaaaaaaaaaaaaaa", "the quick brown fox " * 8]
 
     # Python -> Vort decode for raw/zlib/gzip fixed and zlib default streams.
     for text in payloads:

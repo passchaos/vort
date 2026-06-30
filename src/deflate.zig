@@ -37,11 +37,13 @@ pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const
 }
 
 pub fn encodeRawDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
-    // Full dynamic token emission is intentionally conservative until canonical
-    // length generation is production-ready. Literal-only dynamic encoding is
-    // exposed separately and verified against Python zlib.
-    _ = options;
-    return encodeRawDynamicLiteralAlloc(allocator, input);
+    const plan = switch (options.parser) {
+        .greedy => try lz77.greedyPlanAlloc(allocator, input, options.lz77_options),
+        .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, options.lz77_options),
+        .optimal => try lz77.optimalPlanAlloc(allocator, input, options.lz77_options),
+    };
+    defer plan.deinit(allocator);
+    return encodeRawDynamicTokensAlloc(allocator, plan.tokens);
 }
 
 pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
