@@ -21,9 +21,9 @@ CANDIDATES = {
         pathlib.Path.home() / "Work" / "zlib-ng" / "build" / "minigzip64",
         pathlib.Path.home() / "Work" / "zlib-ng" / "build" / "test" / "minigzip",
     ],
-    "zlib-rs-minigzip": [
-        pathlib.Path.home() / "Work" / "zlib-rs" / "target" / "release" / "minigzip",
-        pathlib.Path.home() / "Work" / "zlib-rs" / "target" / "debug" / "minigzip",
+    "zlib-rs-compress-example": [
+        pathlib.Path.home() / "Work" / "zlib-rs" / "target" / "release" / "examples" / "compress",
+        pathlib.Path.home() / "Work" / "zlib-rs" / "target" / "debug" / "examples" / "compress",
     ],
 }
 
@@ -35,10 +35,18 @@ def find_candidate(paths):
     return None
 
 
-def run_vort_decode_gzip(frame: bytes) -> int:
-    out = subprocess.run([str(CLI), "decode-gzip-hex", frame.hex()], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout
+def run_vort_decode(command: str, frame: bytes) -> int:
+    out = subprocess.run([str(CLI), command, frame.hex()], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout
     marker = "decoded_bytes="
     return int(out.split(marker, 1)[1].split(" ", 1)[0])
+
+
+def run_vort_decode_gzip(frame: bytes) -> int:
+    return run_vort_decode("decode-gzip-hex", frame)
+
+
+def run_vort_decode_zlib(frame: bytes) -> int:
+    return run_vort_decode("decode-zlib-hex", frame)
 
 
 def run_zlib_rs_corpus() -> tuple[int, int]:
@@ -67,10 +75,17 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as td:
             src = pathlib.Path(td) / "payload.bin"
             src.write_bytes(payload)
-            subprocess.run([str(exe), str(src)], check=True)
-            gz = pathlib.Path(str(src) + ".gz").read_bytes()
-            assert zlib.decompress(gz, wbits=31) == payload
-            assert run_vort_decode_gzip(gz) == len(payload)
+            if name == "zlib-rs-compress-example":
+                subprocess.run([str(exe), "1", "rs", str(src)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                frame = pathlib.Path(tempfile.gettempdir()) / "rs.txt"
+                zdata = frame.read_bytes()
+                assert zlib.decompress(zdata) == payload
+                assert run_vort_decode_zlib(zdata) == len(payload)
+            else:
+                subprocess.run([str(exe), str(src)], check=True)
+                gz = pathlib.Path(str(src) + ".gz").read_bytes()
+                assert zlib.decompress(gz, wbits=31) == payload
+                assert run_vort_decode_gzip(gz) == len(payload)
         print(f"- {name}: ok ({exe})")
     corpus_used, _ = run_zlib_rs_corpus()
     if corpus_used:

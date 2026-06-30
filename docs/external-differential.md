@@ -24,6 +24,6 @@ zlib family differential harness:
 zlib family differential summary: used=1 skipped=1
 ```
 
-To turn this into real coverage, build compatible `minigzip`-style binaries in
+To turn this into real coverage, build compatible `minigzip`-style binaries or the zlib-rs `compress` example in
 one of the paths listed in `tools/zlib_family_diff.py`, then rerun the build
 step. Skip output must not be counted as compatibility evidence for that implementation.
