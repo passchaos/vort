@@ -368,6 +368,65 @@ pub fn buildFrameIndexAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
     return entries.toOwnedSlice(allocator);
 }
 
+pub const serialized_index_magic = [_]u8{ 'V', 'I', 'D', 'X' };
+pub const serialized_index_header_len: usize = 8;
+pub const serialized_index_entry_len: usize = 32;
+
+pub fn serializedFrameIndexSize(entry_count: usize) Error!usize {
+    const entries_len = std.math.mul(usize, entry_count, serialized_index_entry_len) catch return error.IntegerOverflow;
+    return std.math.add(usize, serialized_index_header_len, entries_len) catch error.IntegerOverflow;
+}
+
+pub fn encodeFrameIndex(entries: []const FrameIndexEntry, output: []u8) Error!usize {
+    const required = try serializedFrameIndexSize(entries.len);
+    if (output.len < required) return error.OutputTooSmall;
+    @memcpy(output[0..4], &serialized_index_magic);
+    std.mem.writeInt(u32, output[4..8], @intCast(entries.len), .little);
+    var offset: usize = serialized_index_header_len;
+    for (entries) |entry| {
+        std.mem.writeInt(u64, output[offset..][0..8], @intCast(entry.frame_offset), .little);
+        std.mem.writeInt(u64, output[offset + 8 ..][0..8], @intCast(entry.frame_len), .little);
+        std.mem.writeInt(u64, output[offset + 16 ..][0..8], entry.uncompressed_offset, .little);
+        std.mem.writeInt(u64, output[offset + 24 ..][0..8], entry.uncompressed_len, .little);
+        offset += serialized_index_entry_len;
+    }
+    return required;
+}
+
+pub fn encodeFrameIndexAlloc(allocator: std.mem.Allocator, entries: []const FrameIndexEntry) ![]u8 {
+    const required = try serializedFrameIndexSize(entries.len);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeFrameIndex(entries, out);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn decodeFrameIndexAlloc(allocator: std.mem.Allocator, input: []const u8) ![]FrameIndexEntry {
+    if (input.len < serialized_index_header_len) return error.TruncatedFrame;
+    if (!std.mem.eql(u8, input[0..4], &serialized_index_magic)) return error.InvalidMagic;
+    const count: usize = std.mem.readInt(u32, input[4..8], .little);
+    const required = try serializedFrameIndexSize(count);
+    if (input.len < required) return error.TruncatedFrame;
+    if (input.len != required) return error.TrailingData;
+    const entries = try allocator.alloc(FrameIndexEntry, count);
+    errdefer allocator.free(entries);
+    var offset: usize = serialized_index_header_len;
+    for (entries) |*entry| {
+        const frame_offset = std.mem.readInt(u64, input[offset..][0..8], .little);
+        const frame_len = std.mem.readInt(u64, input[offset + 8 ..][0..8], .little);
+        entry.* = .{
+            .frame_offset = std.math.cast(usize, frame_offset) orelse return error.IntegerOverflow,
+            .frame_len = std.math.cast(usize, frame_len) orelse return error.IntegerOverflow,
+            .uncompressed_offset = std.mem.readInt(u64, input[offset + 16 ..][0..8], .little),
+            .uncompressed_len = std.mem.readInt(u64, input[offset + 24 ..][0..8], .little),
+            .checksum = 0,
+        };
+        offset += serialized_index_entry_len;
+    }
+    return entries;
+}
+
 pub fn countConcatenatedFrames(input: []const u8) Error!usize {
     var iterator = ConcatIterator.init(input);
     var count: usize = 0;
@@ -632,4 +691,29 @@ test "frame index records offsets sizes and skips metadata" {
     try std.testing.expectEqual(second.len, index[1].frame_len);
     try std.testing.expectEqual(@as(u64, 5), index[1].uncompressed_offset);
     try std.testing.expectEqual(@as(u64, 6), index[1].uncompressed_len);
+}
+
+test "frame index serializes and decodes as sidecar" {
+    const first = try encodeAlloc(std.testing.allocator, "first");
+    defer std.testing.allocator.free(first);
+    const second = try encodeAlloc(std.testing.allocator, "second");
+    defer std.testing.allocator.free(second);
+    var combined: std.ArrayList(u8) = .empty;
+    defer combined.deinit(std.testing.allocator);
+    try combined.appendSlice(std.testing.allocator, first);
+    try combined.appendSlice(std.testing.allocator, second);
+
+    const index = try buildFrameIndexAlloc(std.testing.allocator, combined.items);
+    defer std.testing.allocator.free(index);
+    const encoded = try encodeFrameIndexAlloc(std.testing.allocator, index);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeFrameIndexAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqual(index.len, decoded.len);
+    for (index, decoded) |expected, actual| {
+        try std.testing.expectEqual(expected.frame_offset, actual.frame_offset);
+        try std.testing.expectEqual(expected.frame_len, actual.frame_len);
+        try std.testing.expectEqual(expected.uncompressed_offset, actual.uncompressed_offset);
+        try std.testing.expectEqual(expected.uncompressed_len, actual.uncompressed_len);
+    }
 }

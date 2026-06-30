@@ -34,7 +34,7 @@ architecture blindly.
 - [x] Deterministic malformed-header/frame smoke corpus.
 - [x] Skippable native frames.
 - [x] In-memory frame indexes for concatenated native store streams.
-- [ ] Serialized/sidecar frame indexes.
+- [x] Serialized/sidecar frame indexes.
 - [x] Extensible hex-sample fuzz corpus harness for headers and malformed frames.
 - [ ] Coverage-guided fuzz integration.
 
