@@ -74,7 +74,8 @@ architecture blindly.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
 - [x] Built-in small-corpus compression ratio report.
-- [ ] Compression ratio/throughput dashboards across real corpora.
+- [x] File-path compression ratio report for ad-hoc corpora.
+- [ ] Compression throughput dashboards across real corpora.
 
 ## Milestone 5: native Vort format research
 
