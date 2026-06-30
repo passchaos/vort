@@ -20,6 +20,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 ```sh
 zig build test
 zig build check
+zig build -Doptimize=ReleaseFast ci-smoke
 zig build run -- --help
 zig build run -- checksum "hello vort"
 zig build run -- store-roundtrip "hello vort"

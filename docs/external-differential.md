@@ -6,7 +6,12 @@ and the system `gzip` CLI.
 ```sh
 zig build run-python-zlib-diff
 zig build run-gzip-cli-diff
+zig build -Doptimize=ReleaseFast ci-smoke
 ```
+
+The `ci-smoke` aggregate includes the Python zlib, gzip CLI, optional
+zlib-ng/zlib-rs family harness, external-tool probe, fuzz smoke entrypoints, and
+bounded benchmark reports.
 
 The optional zlib-family harness detects locally built zlib-ng/zlib-rs minigzip
 binaries and reports explicit skip status when they are not available:

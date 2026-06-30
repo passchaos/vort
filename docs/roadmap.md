@@ -10,6 +10,7 @@ architecture blindly.
 - [x] Public root module and library artifact.
 - [x] Unit-test build step.
 - [x] Compile-only `check` step for tests, CLI, and benchmark entrypoints.
+- [x] Local CI smoke aggregate step covering tests, fuzz, differential checks, and reports.
 - [x] CLI smoke surface for library APIs.
 - [x] Initial benchmark entrypoint.
 
@@ -45,7 +46,8 @@ architecture blindly.
 - [x] Raw-byte fuzz target function and smoke executable.
 - [x] libFuzzer-compatible exported entrypoint smoke.
 - [x] AFL-style file-input fuzz driver smoke.
-- [ ] CI fuzz runner wiring.
+- [x] Local CI smoke runner wiring for fuzz entrypoints.
+- [ ] Hosted CI fuzz runner wiring.
 
 ## Milestone 3: deflate/zlib/gzip compatibility
 

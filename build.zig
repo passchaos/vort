@@ -353,4 +353,26 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&dictionary_report_exe.step);
     check_step.dependOn(&file_corpus_report_exe.step);
     check_step.dependOn(&cpu_features_exe.step);
+
+    const ci_smoke_step = b.step("ci-smoke", "Run local CI smoke validation across tests, fuzz, differential, and benchmark reports");
+    ci_smoke_step.dependOn(test_step);
+    ci_smoke_step.dependOn(check_step);
+    ci_smoke_step.dependOn(fuzz_smoke_step);
+    ci_smoke_step.dependOn(fuzz_corpus_step);
+    ci_smoke_step.dependOn(fuzz_target_step);
+    ci_smoke_step.dependOn(libfuzzer_smoke_step);
+    ci_smoke_step.dependOn(afl_smoke_step);
+    ci_smoke_step.dependOn(checksum_diff_step);
+    ci_smoke_step.dependOn(zlib_diff_step);
+    ci_smoke_step.dependOn(gzip_diff_step);
+    ci_smoke_step.dependOn(python_zlib_diff_step);
+    ci_smoke_step.dependOn(gzip_cli_diff_step);
+    ci_smoke_step.dependOn(zlib_family_diff_step);
+    ci_smoke_step.dependOn(external_probe_step);
+    ci_smoke_step.dependOn(cpu_features_step);
+    ci_smoke_step.dependOn(zstd_compare_step);
+    ci_smoke_step.dependOn(compression_report_step);
+    ci_smoke_step.dependOn(dictionary_report_step);
+    ci_smoke_step.dependOn(compat_benchmark_step);
+    ci_smoke_step.dependOn(standard_corpus_report_step);
 }
