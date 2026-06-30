@@ -385,6 +385,21 @@ pub fn build(b: *std.Build) void {
     const split_policy_corpus_report_step = b.step("run-split-policy-corpus-report", "Report adaptive split policy deltas across Silesia files");
     split_policy_corpus_report_step.dependOn(&split_policy_corpus_report.step);
 
+    const native_range_report_exe = b.addExecutable(.{
+        .name = "vort-native-range-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/native_range_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_native_range_report = b.addRunArtifact(native_range_report_exe);
+    const native_range_report_step = b.step("run-native-range-report", "Report indexed range decode across native modes");
+    native_range_report_step.dependOn(&run_native_range_report.step);
+
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
         .root_module = b.createModule(.{
@@ -451,6 +466,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&dictionary_report_exe.step);
     check_step.dependOn(&level_report_exe.step);
     check_step.dependOn(&split_policy_report_exe.step);
+    check_step.dependOn(&native_range_report_exe.step);
     check_step.dependOn(&file_corpus_report_exe.step);
     check_step.dependOn(&cpu_features_exe.step);
 
@@ -476,6 +492,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(level_report_step);
     ci_smoke_step.dependOn(split_policy_report_step);
+    ci_smoke_step.dependOn(native_range_report_step);
     ci_smoke_step.dependOn(compat_benchmark_step);
     ci_smoke_step.dependOn(standard_corpus_report_step);
 }
