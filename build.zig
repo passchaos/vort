@@ -365,6 +365,7 @@ pub fn build(b: *std.Build) void {
     const standard_corpus_dashboard = b.addSystemCommand(&.{ "python3", "tools/standard_corpus_report.py" });
     standard_corpus_dashboard.addArtifactArg(cli_exe);
     standard_corpus_dashboard.addArgs(&.{ "--suite", "--markdown", "zig-out/vort-standard-corpus-dashboard.md" });
+    if (b.args) |args| standard_corpus_dashboard.addArgs(args);
     const standard_corpus_dashboard_step = b.step("run-standard-corpus-dashboard", "Write a Markdown Silesia benchmark dashboard to zig-out");
     standard_corpus_dashboard_step.dependOn(&standard_corpus_dashboard.step);
 
