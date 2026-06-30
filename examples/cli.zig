@@ -20,10 +20,11 @@ pub fn main(init: std.process.Init) !void {
         try printHelp(stdout);
     } else if (std.mem.eql(u8, command, "checksum")) {
         const payload = args.next() orelse "";
-        try stdout.print("input_bytes={d} adler32={d} crc32={d}\n", .{
+        try stdout.print("input_bytes={d} adler32={d} crc32={d} crc32c={d}\n", .{
             payload.len,
             vort.adler32(payload),
             vort.crc32(payload),
+            vort.crc32c(payload),
         });
     } else if (std.mem.eql(u8, command, "store-roundtrip")) {
         const payload = args.next() orelse "";
@@ -51,7 +52,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\
         \\commands:
         \\  help | --help              Show this message
-        \\  checksum [text]            Print Adler-32 and CRC-32 for text
+        \\  checksum [text]            Print Adler-32, CRC-32, and CRC-32C for text
         \\  store-roundtrip [text]     Encode/decode the native store frame
         \\
         \\This CLI is a smoke surface for the library-first Vort APIs.

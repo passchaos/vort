@@ -7,8 +7,10 @@ pub const fuzz = @import("fuzz.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
+pub const Crc32C = checksum.Crc32C;
 pub const adler32 = checksum.adler32;
 pub const crc32 = checksum.crc32;
+pub const crc32c = checksum.crc32c;
 
 pub const Error = core.Error;
 pub const FrameInfo = core.FrameInfo;

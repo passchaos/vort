@@ -9,6 +9,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 
 - zlib-compatible Adler-32;
 - gzip/zip-compatible IEEE CRC-32;
+- storage/network-oriented CRC-32C/Castagnoli;
 - shared progress/error/frame metadata types;
 - a native `VORT` store frame that performs no compression yet, but validates
   frame layout, size accounting, CRC verification, one-shot APIs, allocator APIs,
@@ -24,6 +25,7 @@ zig build run -- --help
 zig build run -- checksum "hello vort"
 zig build run -- store-roundtrip "hello vort"
 zig build run-fuzz-smoke
+zig build run-checksum-diff
 zig build bench-checksum -Doptimize=ReleaseFast
 ```
 

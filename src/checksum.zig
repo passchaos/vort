@@ -75,12 +75,48 @@ pub const Crc32 = struct {
     }
 };
 
+/// Table-driven CRC-32C/Castagnoli state used by iSCSI, SCTP, SSE4.2 CRC
+/// instructions, filesystems, and modern storage/network formats.
+pub const Crc32C = struct {
+    value: u32 = 0xffff_ffff,
+
+    pub const polynomial_reflected: u32 = 0x82f6_3b78;
+    pub const table = makeCrc32Table(polynomial_reflected);
+
+    pub fn init() Crc32C {
+        return .{};
+    }
+
+    pub fn update(self: *Crc32C, input: []const u8) void {
+        var crc = self.value;
+        for (input) |byte| {
+            const index: u8 = @truncate(crc ^ byte);
+            crc = table[index] ^ (crc >> 8);
+        }
+        self.value = crc;
+    }
+
+    pub fn digest(self: Crc32C) u32 {
+        return ~self.value;
+    }
+
+    pub fn hash(input: []const u8) u32 {
+        var state = Crc32C.init();
+        state.update(input);
+        return state.digest();
+    }
+};
+
 pub fn adler32(input: []const u8) u32 {
     return Adler32.hash(input);
 }
 
 pub fn crc32(input: []const u8) u32 {
     return Crc32.hash(input);
+}
+
+pub fn crc32c(input: []const u8) u32 {
+    return Crc32C.hash(input);
 }
 
 fn makeCrc32Table(comptime polynomial: u32) [256]u32 {
@@ -135,4 +171,35 @@ test "CRC-32 streaming matches one-shot" {
     state.update(input[7..511]);
     state.update(input[511..]);
     try std.testing.expectEqual(crc32(input), state.digest());
+}
+
+test "CRC-32C known Castagnoli vectors" {
+    try std.testing.expectEqual(@as(u32, 0x0000_0000), crc32c(""));
+    try std.testing.expectEqual(@as(u32, 0xc1d0_4330), crc32c("a"));
+    try std.testing.expectEqual(@as(u32, 0x364b_3fb7), crc32c("abc"));
+    try std.testing.expectEqual(@as(u32, 0x81d9_0e1b), crc32c("Hello"));
+    try std.testing.expectEqual(@as(u32, 0xe306_9283), crc32c("123456789"));
+    try std.testing.expectEqual(@as(u32, 0x2262_0404), crc32c("The quick brown fox jumps over the lazy dog"));
+}
+
+test "CRC-32C streaming matches one-shot" {
+    const input = "storage-network-castagnoli" ** 211;
+    var state = Crc32C.init();
+    state.update(input[0..13]);
+    state.update(input[13..1024]);
+    state.update(input[1024..]);
+    try std.testing.expectEqual(crc32c(input), state.digest());
+}
+
+test "CRC implementations match Zig std catalog" {
+    const cases = [_][]const u8{
+        "",
+        "abc",
+        "123456789",
+        "The quick brown fox jumps over the lazy dog",
+    };
+    for (cases) |case| {
+        try std.testing.expectEqual(std.hash.crc.Crc32IsoHdlc.hash(case), crc32(case));
+        try std.testing.expectEqual(std.hash.crc.Crc32Iscsi.hash(case), crc32c(case));
+    }
 }

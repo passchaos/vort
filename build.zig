@@ -79,9 +79,26 @@ pub fn build(b: *std.Build) void {
     const fuzz_smoke_step = b.step("run-fuzz-smoke", "Run deterministic malformed-frame smoke corpus");
     fuzz_smoke_step.dependOn(&run_fuzz_smoke.step);
 
-    const check_step = b.step("check", "Compile library tests, CLI, benchmark, and fuzz-smoke entrypoints");
+    const checksum_diff_exe = b.addExecutable(.{
+        .name = "vort-checksum-diff",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/checksum_diff.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+
+    const run_checksum_diff = b.addRunArtifact(checksum_diff_exe);
+    const checksum_diff_step = b.step("run-checksum-diff", "Run checksum differential smoke against Zig std reference hashes");
+    checksum_diff_step.dependOn(&run_checksum_diff.step);
+
+    const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);
     check_step.dependOn(&cli_exe.step);
     check_step.dependOn(&bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);
+    check_step.dependOn(&checksum_diff_exe.step);
 }
