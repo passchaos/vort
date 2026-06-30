@@ -174,6 +174,19 @@ pub fn encodeDictionaryPatchAlloc(allocator: std.mem.Allocator, dict: []const u8
     return out;
 }
 
+pub fn encodeBestWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, min_match_len: usize) ![]u8 {
+    const native_best = try encodeBestAlloc(allocator, input);
+    errdefer allocator.free(native_best);
+    const dict_frame = try encodeDictionaryPatchAlloc(allocator, dict, input, min_match_len);
+    errdefer allocator.free(dict_frame);
+    if (dict_frame.len < native_best.len) {
+        allocator.free(native_best);
+        return dict_frame;
+    }
+    allocator.free(dict_frame);
+    return native_best;
+}
+
 pub fn encodeBestAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const store_frame = try encodeAlloc(allocator, input);
     errdefer allocator.free(store_frame);
@@ -1438,6 +1451,23 @@ test "native dictionary patch frame decodes with caller dictionary" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
     try std.testing.expectError(error.InvalidDictionaryTraining, decodeAnyAlloc(std.testing.allocator, frame));
+}
+
+test "native dictionary best encoder chooses patch only when smaller" {
+    const dict = "dictionary-only phrase with enough length to beat stored framing";
+    const input = dict ++ "!";
+    const frame = try encodeBestWithDictionaryAlloc(std.testing.allocator, dict, input, 8);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_dictionary_patch, info.flags);
+    const decoded = try decodeDictionaryPatchAlloc(std.testing.allocator, dict, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+
+    const fallback = try encodeBestWithDictionaryAlloc(std.testing.allocator, dict, "no useful match", 8);
+    defer std.testing.allocator.free(fallback);
+    const fallback_info = try parseHeader(fallback);
+    try std.testing.expect(fallback_info.flags != flags_dictionary_patch);
 }
 
 test "work-stealing deflate stream matches planned deterministic output" {
