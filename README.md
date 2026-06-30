@@ -11,11 +11,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - gzip/zip-compatible IEEE CRC-32;
 - storage/network-oriented CRC-32C/Castagnoli;
 - shared progress/error/frame metadata types;
-- raw deflate stored-block encode/decode plus zlib/gzip-wrapped stored modes;
-- a native `VORT` store frame that performs no compression yet, but validates
-  frame layout, size accounting, CRC verification, one-shot APIs, allocator APIs,
-  and bounded-output streaming APIs;
-- a small CLI smoke surface, deterministic malformed-frame smoke corpus, and checksum benchmark entrypoint.
+- raw deflate stored/fixed encode and stored/fixed/dynamic decode, with zlib/gzip wrappers;
+- a native `VORT` store frame with skippable frames, concatenated streams, in-memory and serialized frame indexes, and bounded streaming APIs;
+- LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training prototype, long-distance match scanner, block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
 
 ## Commands
 
