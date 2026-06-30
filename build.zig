@@ -183,6 +183,11 @@ pub fn build(b: *std.Build) void {
     const python_zlib_diff_step = b.step("run-python-zlib-diff", "Run black-box differential smoke against Python zlib");
     python_zlib_diff_step.dependOn(&python_zlib_diff.step);
 
+    const gzip_cli_diff = b.addSystemCommand(&.{ "python3", "tools/gzip_cli_diff.py" });
+    gzip_cli_diff.addArtifactArg(cli_exe);
+    const gzip_cli_diff_step = b.step("run-gzip-cli-diff", "Run black-box differential smoke against system gzip CLI");
+    gzip_cli_diff_step.dependOn(&gzip_cli_diff.step);
+
     const external_probe = b.addSystemCommand(&.{ "python3", "tools/external_probe.py" });
     const external_probe_step = b.step("run-external-probe", "Report available local compression competitors/tools");
     external_probe_step.dependOn(&external_probe.step);
