@@ -11,6 +11,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 CLI = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 and pathlib.Path(sys.argv[1]).exists() else None
 GZIP = shutil.which("gzip")
 ZSTD = shutil.which("zstd")
+ZLIB_NG_MINIGZIP = pathlib.Path.home() / "Work" / "zlib-ng" / "build" / "minigzip"
+ZLIB_RS_COMPRESS = pathlib.Path.home() / "Work" / "zlib-rs" / "target" / "debug" / "examples" / "compress"
 SILESIA = pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"
 LIMIT = 128 * 1024
 
@@ -41,6 +43,23 @@ def main() -> int:
                 return b""
             return subprocess.run([GZIP, "-n", "-1", "-c", str(sample)], check=True, stdout=subprocess.PIPE).stdout
 
+
+        def zlib_ng_run():
+            if not ZLIB_NG_MINIGZIP.exists():
+                return b""
+            work = pathlib.Path(td) / "zlib-ng"
+            work.mkdir()
+            src = work / "sample.bin"
+            src.write_bytes(data)
+            subprocess.run([str(ZLIB_NG_MINIGZIP), str(src)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return pathlib.Path(str(src) + ".gz").read_bytes()
+
+        def zlib_rs_run():
+            if not ZLIB_RS_COMPRESS.exists():
+                return b""
+            subprocess.run([str(ZLIB_RS_COMPRESS), "1", "rs", str(sample)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return (pathlib.Path(tempfile.gettempdir()) / "rs.txt").read_bytes()
+
         def zstd_run():
             if not ZSTD:
                 return b""
@@ -50,13 +69,19 @@ def main() -> int:
 
         vort_data, vort_s = time_call(vort_run)
         gzip_data, gzip_s = time_call(gzip_run)
+        zlib_ng_data, zlib_ng_s = time_call(zlib_ng_run)
+        zlib_rs_data, zlib_rs_s = time_call(zlib_rs_run)
         zstd_data, zstd_s = time_call(zstd_run)
         if vort_data:
             assert zlib.decompress(vort_data) == data
         if gzip_data:
             assert zlib.decompress(gzip_data, 31) == data
-        print("corpus,input_bytes,vort_zlib_best_bytes,vort_ms,gzip_bytes,gzip_ms,zstd_bytes,zstd_ms")
-        print(f"silesia-1m,{len(data)},{len(vort_data)},{vort_s*1000:.3f},{len(gzip_data)},{gzip_s*1000:.3f},{len(zstd_data)},{zstd_s*1000:.3f}")
+        if zlib_ng_data:
+            assert zlib.decompress(zlib_ng_data, 31) == data
+        if zlib_rs_data:
+            assert zlib.decompress(zlib_rs_data) == data
+        print("corpus,input_bytes,vort_zlib_best_bytes,vort_ms,gzip_bytes,gzip_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zstd_bytes,zstd_ms")
+        print(f"silesia-1m,{len(data)},{len(vort_data)},{vort_s*1000:.3f},{len(gzip_data)},{gzip_s*1000:.3f},{len(zlib_ng_data)},{zlib_ng_s*1000:.3f},{len(zlib_rs_data)},{zlib_rs_s*1000:.3f},{len(zstd_data)},{zstd_s*1000:.3f}")
     return 0
 
 

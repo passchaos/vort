@@ -80,7 +80,8 @@ architecture blindly.
 - [x] Block cost selection across stored/fixed/dynamic encoders.
 - [ ] Production dynamic Huffman encoder with optimized block splitting.
 - [x] Compatibility benchmark smoke suite comparing Vort/gzip/zstd on sample files.
-- [ ] Full compatibility benchmark suite against zlib-ng/zlib-rs/zstd on standard corpora.
+- [x] Standard-corpus smoke benchmark comparing Vort/gzip/zlib-ng/zlib-rs/zstd.
+- [ ] Full compatibility benchmark suite against zlib-ng/zlib-rs/zstd on full standard corpora.
 
 ## Milestone 4: compression performance foundation
 
