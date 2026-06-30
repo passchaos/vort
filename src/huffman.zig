@@ -72,6 +72,89 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
     };
 }
 
+pub const code_length_order = [_]u8{ 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
+pub const CodeLengthTable = HuffmanTable(19);
+
+pub const DynamicHeader = struct {
+    final: bool,
+    hlit: u16,
+    hdist: u16,
+    hclen: u8,
+    code_length_lengths: [19]u4,
+};
+
+pub const DynamicLengths = struct {
+    header: DynamicHeader,
+    literal_lengths: [286]u4 = @splat(0),
+    distance_lengths: [30]u4 = @splat(0),
+};
+
+pub fn parseDynamicHeader(reader: *bitstream.BitReader) Error!DynamicHeader {
+    const final = (try reader.readBits(u1, 1)) != 0;
+    const block_type = try reader.readBits(u2, 2);
+    if (block_type != 0b10) return error.InvalidDeflateBlockType;
+
+    const hlit: u16 = @as(u16, try reader.readBits(u5, 5)) + 257;
+    const hdist: u16 = @as(u16, try reader.readBits(u5, 5)) + 1;
+    const hclen: u8 = @as(u8, try reader.readBits(u4, 4)) + 4;
+    if (hlit > 286 or hdist > 30 or hclen > code_length_order.len) return error.InvalidDynamicBlockHeader;
+
+    var lengths: [19]u4 = @splat(0);
+    for (code_length_order[0..hclen]) |symbol| {
+        lengths[symbol] = try reader.readBits(u4, 3);
+    }
+
+    return .{
+        .final = final,
+        .hlit = hlit,
+        .hdist = hdist,
+        .hclen = hclen,
+        .code_length_lengths = lengths,
+    };
+}
+
+pub fn parseDynamicLengths(reader: *bitstream.BitReader) Error!DynamicLengths {
+    const header = try parseDynamicHeader(reader);
+    const code_lengths = try CodeLengthTable.init(&header.code_length_lengths);
+    var combined: [286 + 30]u4 = @splat(0);
+    const total = header.hlit + header.hdist;
+    var pos: usize = 0;
+    while (pos < total) {
+        const symbol = (try code_lengths.decode(reader)).value;
+        switch (symbol) {
+            0...15 => {
+                combined[pos] = @intCast(symbol);
+                pos += 1;
+            },
+            16 => {
+                if (pos == 0) return error.InvalidDynamicBlockHeader;
+                const count: usize = @as(usize, try reader.readBits(u2, 2)) + 3;
+                if (pos + count > total) return error.InvalidDynamicBlockHeader;
+                @memset(combined[pos..][0..count], combined[pos - 1]);
+                pos += count;
+            },
+            17 => {
+                const count: usize = @as(usize, try reader.readBits(u3, 3)) + 3;
+                if (pos + count > total) return error.InvalidDynamicBlockHeader;
+                @memset(combined[pos..][0..count], 0);
+                pos += count;
+            },
+            18 => {
+                const count: usize = @as(usize, try reader.readBits(u7, 7)) + 11;
+                if (pos + count > total) return error.InvalidDynamicBlockHeader;
+                @memset(combined[pos..][0..count], 0);
+                pos += count;
+            },
+            else => return error.InvalidDynamicBlockHeader,
+        }
+    }
+
+    var parsed = DynamicLengths{ .header = header };
+    @memcpy(parsed.literal_lengths[0..header.hlit], combined[0..header.hlit]);
+    @memcpy(parsed.distance_lengths[0..header.hdist], combined[header.hlit..][0..header.hdist]);
+    return parsed;
+}
+
 pub const FixedLiteralTable = HuffmanTable(fixed_literal_count);
 pub const FixedDistanceTable = HuffmanTable(fixed_distance_count);
 
@@ -143,4 +226,34 @@ test "fixed literal table decodes end-of-block code" {
     const sym = try table.decode(&reader);
     try std.testing.expectEqual(@as(u16, 256), sym.value);
     try std.testing.expectEqual(@as(u4, 7), sym.bits);
+}
+
+test "dynamic header parser reads RFC1951 fields" {
+    // BFINAL=1, BTYPE=dynamic, HLIT raw=0, HDIST raw=0, HCLEN raw=0, then four 3-bit code-length lengths.
+    var reader = bitstream.BitReader.init(&.{ 0x05, 0x00, 0x48, 0x02 });
+    const header = try parseDynamicHeader(&reader);
+    try std.testing.expect(header.final);
+    try std.testing.expectEqual(@as(u16, 257), header.hlit);
+    try std.testing.expectEqual(@as(u16, 1), header.hdist);
+    try std.testing.expectEqual(@as(u8, 4), header.hclen);
+    try std.testing.expectEqual(@as(u4, 4), header.code_length_lengths[16]);
+    try std.testing.expectEqual(@as(u4, 4), header.code_length_lengths[17]);
+    try std.testing.expectEqual(@as(u4, 4), header.code_length_lengths[18]);
+    try std.testing.expectEqual(@as(u4, 0), header.code_length_lengths[0]);
+}
+
+test "dynamic length parser expands repeat symbols" {
+    // Synthetic dynamic block header:
+    // - final dynamic block, HLIT=257, HDIST=1, HCLEN=18
+    // - code-length alphabet uses symbols 1, 3, 17, 18, all 3 bits wide
+    // - length stream expands to: one literal length 3, 255 zeros, one length 1, one distance length 1.
+    const bytes = [_]u8{ 0x05, 0xc0, 0x01, 0x01, 0x00, 0x00, 0x00, 0x02, 0x20, 0xfb, 0xa7, 0x06 };
+    var reader = bitstream.BitReader.init(&bytes);
+    const parsed = try parseDynamicLengths(&reader);
+    try std.testing.expectEqual(@as(u16, 257), parsed.header.hlit);
+    try std.testing.expectEqual(@as(u16, 1), parsed.header.hdist);
+    try std.testing.expectEqual(@as(u4, 3), parsed.literal_lengths[0]);
+    for (parsed.literal_lengths[1..256]) |bits| try std.testing.expectEqual(@as(u4, 0), bits);
+    try std.testing.expectEqual(@as(u4, 1), parsed.literal_lengths[256]);
+    try std.testing.expectEqual(@as(u4, 1), parsed.distance_lengths[0]);
 }

@@ -18,6 +18,7 @@ pub const Error = error{
     InvalidHuffmanCode,
     UnsupportedDeflateFeature,
     InvalidMatch,
+    InvalidDynamicBlockHeader,
     TrailingData,
 };
 

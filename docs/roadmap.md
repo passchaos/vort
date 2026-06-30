@@ -42,6 +42,7 @@ architecture blindly.
 - [ ] Bit writer primitives.
 - [x] Stored deflate blocks.
 - [x] Fixed-Huffman inflate for literals and back-references.
+- [x] Dynamic-Huffman header and code-length parser foundation.
 - [ ] Dynamic-Huffman inflate.
 - [x] zlib wrapper and Adler verification for stored blocks.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
