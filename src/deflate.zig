@@ -163,7 +163,7 @@ fn uniqueByteCount(input: []const u8) usize {
 
 fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions) !void {
     const stored_len = storedBlockEncodedSizeFromState(writer.*, plain.len);
-    const fixed_len = (lz77.fixedBitCost(tokens) + 7) / 8;
+    const fixed_len = encodedBytesForBitsFromState(writer.*, lz77.fixedBitCost(tokens));
 
     if (options.block_selection == .stored_fixed) {
         if (stored_len <= fixed_len) {
@@ -172,15 +172,18 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
         return writeFixedTokens(allocator, writer, tokens, final);
     }
 
-    const dynamic = try encodeRawDynamicTokensFinalAlloc(allocator, tokens, final);
-    defer allocator.free(dynamic);
-    if (stored_len <= fixed_len and stored_len <= dynamic.len) {
+    const dynamic_len = encodedBytesForBitsFromState(writer.*, try dynamicTokenBitCostAlloc(allocator, tokens));
+    if (stored_len <= fixed_len and stored_len <= dynamic_len) {
         return writeStoredBlock(allocator, writer, plain, final);
     }
-    if (fixed_len <= dynamic.len) {
+    if (fixed_len <= dynamic_len) {
         return writeFixedTokens(allocator, writer, tokens, final);
     }
     return writeDynamicTokens(allocator, writer, tokens, final);
+}
+
+fn encodedBytesForBitsFromState(writer: bitstream.BitWriter, bit_count: usize) usize {
+    return (@as(usize, writer.bit_index) + bit_count + 7) / 8;
 }
 
 fn storedBlockEncodedSizeFromState(writer: bitstream.BitWriter, input_len: usize) usize {
@@ -291,6 +294,56 @@ fn encodeRawDynamicTokensFinalAlloc(allocator: std.mem.Allocator, tokens: []cons
     errdefer writer.deinit(allocator);
     try writeDynamicTokens(allocator, &writer, tokens, final);
     return writer.toOwnedSlice(allocator);
+}
+
+fn dynamicTokenBitCostAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) !usize {
+    var lit_freqs: [286]u32 = @splat(0);
+    var dist_freqs: [30]u32 = @splat(0);
+    for (tokens) |token| switch (token) {
+        .literal => |byte| lit_freqs[byte] += 1,
+        .match => |m| {
+            const len_code = lengthCode(m.length);
+            const dist_code = distanceCode(m.distance);
+            lit_freqs[len_code.symbol] += 1;
+            dist_freqs[dist_code.symbol] += 1;
+        },
+    };
+    lit_freqs[256] = 1;
+    completeLiteralFrequencySet(&lit_freqs);
+    if (!dynamicDistanceSafe(&dist_freqs)) return lz77.fixedBitCost(tokens);
+    completeDistanceFrequencySet(&dist_freqs);
+
+    var lit_lengths_full = huffman.simpleCodeLengths(286, &lit_freqs, 15);
+    var dist_lengths_full = huffman.simpleCodeLengths(30, &dist_freqs, 15);
+    const hlit: usize = trimCodeLengthCount(286, 257, &lit_lengths_full);
+    const hdist: usize = trimCodeLengthCount(30, 1, &dist_lengths_full);
+
+    const code_len_ops = try buildCodeLengthOpsAlloc(allocator, lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
+    defer allocator.free(code_len_ops);
+    var code_len_freqs: [19]u32 = @splat(0);
+    for (code_len_ops) |op| code_len_freqs[op.symbol] += 1;
+    completeCodeLengthFrequencySet(&code_len_freqs);
+    const code_len_lengths = huffman.simpleCodeLengths(19, &code_len_freqs, 7);
+    var hclen: usize = 4;
+    for (huffman.code_length_order, 0..) |symbol, i| {
+        if (code_len_lengths[symbol] != 0) hclen = @max(hclen, i + 1);
+    }
+
+    var bits: usize = 3 + 5 + 5 + 4 + hclen * 3;
+    for (code_len_ops) |op| {
+        bits += code_len_lengths[op.symbol] + op.extra_bits;
+    }
+    for (tokens) |token| switch (token) {
+        .literal => |byte| bits += lit_lengths_full[byte],
+        .match => |m| {
+            const len_code = lengthCode(m.length);
+            const dist_code = distanceCode(m.distance);
+            bits += lit_lengths_full[len_code.symbol] + len_code.extra_bits;
+            bits += dist_lengths_full[dist_code.symbol] + dist_code.extra_bits;
+        },
+    };
+    bits += lit_lengths_full[256];
+    return bits;
 }
 
 fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, tokens: []const lz77.Token, final: bool) !void {
@@ -1778,6 +1831,15 @@ test "fixed bit cost model predicts fixed token byte length" {
     const fixed = try encodeRawFixedTokensFinalAlloc(std.testing.allocator, plan.tokens, true);
     defer std.testing.allocator.free(fixed);
     try std.testing.expectEqual((lz77.fixedBitCost(plan.tokens) + 7) / 8, fixed.len);
+}
+
+test "dynamic bit cost model predicts dynamic token byte length" {
+    const input = "abcabcabcabcabcabc";
+    const plan = try planTokensAlloc(std.testing.allocator, input, optionsForLevel(.default));
+    defer plan.deinit(std.testing.allocator);
+    const dynamic = try encodeRawDynamicTokensFinalAlloc(std.testing.allocator, plan.tokens, true);
+    defer std.testing.allocator.free(dynamic);
+    try std.testing.expectEqual((try dynamicTokenBitCostAlloc(std.testing.allocator, plan.tokens) + 7) / 8, dynamic.len);
 }
 
 test "split raw best encoder can emit stored block after compressed block" {
