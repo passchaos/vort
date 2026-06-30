@@ -128,6 +128,7 @@ pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const
     };
     lit_freqs[256] = 1;
     completeLiteralFrequencySet(&lit_freqs);
+    if (!dynamicDistanceSafe(&dist_freqs)) return encodeRawFixedTokensAlloc(allocator, tokens);
     completeDistanceFrequencySet(&dist_freqs);
 
     var lit_lengths_full = huffman.simpleCodeLengths(286, &lit_freqs, 15);
@@ -207,15 +208,29 @@ fn completeDistanceFrequencySet(freqs: *[30]u32) void {
     if (active == 0) {
         freqs[0] = 1;
         freqs[1] = 1;
-    } else if (active == 1) {
-        for (freqs, 0..) |*freq, i| {
-            if (freq.* == 0) {
-                freq.* = 1;
-                _ = i;
-                break;
-            }
+        active = 2;
+    }
+    var target: usize = 2;
+    while (target < active) target <<= 1;
+    var symbol: usize = 0;
+    while (active < target and symbol < freqs.len) : (symbol += 1) {
+        if (freqs[symbol] == 0) {
+            freqs[symbol] = 1;
+            active += 1;
         }
     }
+}
+
+fn dynamicDistanceSafe(freqs: *const [30]u32) bool {
+    var active: usize = 0;
+    var max_symbol: usize = 0;
+    for (freqs, 0..) |freq, i| {
+        if (freq != 0) {
+            active += 1;
+            max_symbol = i;
+        }
+    }
+    return active <= 8 and max_symbol <= 7;
 }
 
 fn completeCodeLengthFrequencySet(freqs: *[19]u32) void {

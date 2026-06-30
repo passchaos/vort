@@ -233,6 +233,11 @@ pub fn build(b: *std.Build) void {
     const file_corpus_report_step = b.step("run-file-corpus-report", "Report fixed-encoder compression sizes for provided file paths");
     file_corpus_report_step.dependOn(&run_file_corpus_report.step);
 
+    const compat_benchmark = b.addSystemCommand(&.{ "python3", "tools/compat_benchmark.py" });
+    compat_benchmark.addArtifactArg(cli_exe);
+    const compat_benchmark_step = b.step("run-compat-benchmark", "Run smoke benchmark comparing Vort, gzip, and zstd on sample files");
+    compat_benchmark_step.dependOn(&compat_benchmark.step);
+
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);
     check_step.dependOn(&cli_exe.step);

@@ -31,6 +31,10 @@ def main() -> int:
         raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
 
     payloads = ["", "hello", "hello vort", "abcabcabcabc", "aaaaaaaaaaaaaaaaaaaaaaaa", "the quick brown fox " * 8]
+    payloads.extend([
+        (ROOT / "README.md").read_text(),
+        (ROOT / "docs" / "roadmap.md").read_text(),
+    ])
 
     # Python -> Vort decode for raw/zlib/gzip fixed and zlib default streams.
     for text in payloads:

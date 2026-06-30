@@ -71,7 +71,8 @@ architecture blindly.
 - [x] Dynamic Huffman encoder code-length RLE using symbols 16/17/18.
 - [x] Block cost selection across stored/fixed/dynamic encoders.
 - [ ] Production dynamic Huffman encoder with optimized block splitting.
-- [ ] Compatibility benchmark suite.
+- [x] Compatibility benchmark smoke suite comparing Vort/gzip/zstd on sample files.
+- [ ] Full compatibility benchmark suite against zlib-ng/zlib-rs/zstd on standard corpora.
 
 ## Milestone 4: compression performance foundation
 
