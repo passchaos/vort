@@ -69,7 +69,8 @@ architecture blindly.
 - [x] Lazy greedy LZ77 parser experiment with deterministic options.
 - [ ] Optimal LZ77 parser experiments with deterministic level/strategy configs.
 - [x] Huffman code generation and canonical-code validation.
-- [ ] Decompression hot-path benchmarks.
+- [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.
+- [ ] Larger decompression hot-path benchmarks across real corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
 - [x] Built-in small-corpus compression ratio report.
