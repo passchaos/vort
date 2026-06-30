@@ -63,8 +63,25 @@ pub fn build(b: *std.Build) void {
     const bench_step = b.step("bench-checksum", "Run Adler-32/CRC-32 checksum throughput smoke benchmark");
     bench_step.dependOn(&run_bench.step);
 
-    const check_step = b.step("check", "Compile library tests, CLI, and benchmark entrypoints");
+    const fuzz_smoke_exe = b.addExecutable(.{
+        .name = "vort-fuzz-smoke",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/fuzz_smoke.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+
+    const run_fuzz_smoke = b.addRunArtifact(fuzz_smoke_exe);
+    const fuzz_smoke_step = b.step("run-fuzz-smoke", "Run deterministic malformed-frame smoke corpus");
+    fuzz_smoke_step.dependOn(&run_fuzz_smoke.step);
+
+    const check_step = b.step("check", "Compile library tests, CLI, benchmark, and fuzz-smoke entrypoints");
     check_step.dependOn(&tests.step);
     check_step.dependOn(&cli_exe.step);
     check_step.dependOn(&bench_exe.step);
+    check_step.dependOn(&fuzz_smoke_exe.step);
 }

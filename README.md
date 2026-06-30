@@ -13,7 +13,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - a native `VORT` store frame that performs no compression yet, but validates
   frame layout, size accounting, CRC verification, one-shot APIs, allocator APIs,
   and bounded-output streaming APIs;
-- a small CLI smoke surface and checksum benchmark entrypoint.
+- a small CLI smoke surface, deterministic malformed-frame smoke corpus, and checksum benchmark entrypoint.
 
 ## Commands
 
@@ -23,6 +23,7 @@ zig build check
 zig build run -- --help
 zig build run -- checksum "hello vort"
 zig build run -- store-roundtrip "hello vort"
+zig build run-fuzz-smoke
 zig build bench-checksum -Doptimize=ReleaseFast
 ```
 

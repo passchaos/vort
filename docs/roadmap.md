@@ -28,9 +28,11 @@ architecture blindly.
 - [x] One-shot encode/decode APIs.
 - [x] Allocator-returning convenience APIs.
 - [x] Bounded-output streaming encoder/decoder smoke coverage.
-- [ ] Fully incremental input streaming decoder.
-- [ ] Concatenated frames, skippable frames, and frame indexes.
-- [ ] Fuzz/corpus harness for headers and malformed frames.
+- [x] Fully incremental input/output store-frame decoder.
+- [x] Concatenated store-frame iterator and decode helper.
+- [x] Deterministic malformed-header/frame smoke corpus.
+- [ ] Skippable frames and frame indexes.
+- [ ] Coverage-guided fuzz harness for headers and malformed frames.
 
 ## Milestone 3: deflate/zlib/gzip compatibility
 

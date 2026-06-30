@@ -50,8 +50,7 @@ pub fn encodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
 
 pub fn decode(input: []const u8, output: []u8) Error!usize {
     const info = try parseHeader(input);
-    if (info.uncompressed_size != info.stored_size) return error.CorruptFrame;
-    const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
+    const payload_len = try payloadLenFromInfo(info);
     const total_len = try encodedSize(payload_len);
     if (input.len < total_len) return error.TruncatedFrame;
     if (output.len < payload_len) return error.OutputTooSmall;
@@ -81,6 +80,7 @@ pub fn parseHeader(input: []const u8) Error!FrameInfo {
     const flags = input[5];
     if (flags != flags_none) return error.CorruptFrame;
     if (input[6] != 0 or input[7] != 0) return error.CorruptFrame;
+    if (std.mem.readInt(u32, input[28..32], .little) != 0) return error.CorruptFrame;
 
     return .{
         .version = version,
@@ -89,6 +89,11 @@ pub fn parseHeader(input: []const u8) Error!FrameInfo {
         .stored_size = std.mem.readInt(u64, input[16..24], .little),
         .checksum = std.mem.readInt(u32, input[24..28], .little),
     };
+}
+
+fn payloadLenFromInfo(info: FrameInfo) Error!usize {
+    if (info.uncompressed_size != info.stored_size) return error.CorruptFrame;
+    return std.math.cast(usize, info.stored_size) orelse error.IntegerOverflow;
 }
 
 fn writeHeader(header: []u8, info: FrameInfo) void {
@@ -165,6 +170,153 @@ pub const Encoder = struct {
     }
 };
 
+/// Incremental input/output store-frame decoder.
+///
+/// Unlike `Decoder`, this type accepts the frame bytes in arbitrary chunks and
+/// emits payload bytes into caller-provided output chunks. Checksum validation
+/// happens when the final payload byte is consumed; callers should treat output
+/// from a frame that later reports `ChecksumMismatch` as untrusted.
+pub const IncrementalDecoder = struct {
+    phase: Phase = .header,
+    header: [header_len]u8 = undefined,
+    header_received: usize = 0,
+    info: FrameInfo = undefined,
+    payload_remaining: usize = 0,
+    crc: checksum.Crc32 = .{},
+
+    const Phase = enum { header, payload, done };
+
+    pub fn init() IncrementalDecoder {
+        return .{ .crc = checksum.Crc32.init() };
+    }
+
+    pub fn step(self: *IncrementalDecoder, input: []const u8, output: []u8) Error!StepResult {
+        if (self.phase == .done) return .{ .status = .done };
+
+        var read: usize = 0;
+        var written: usize = 0;
+
+        while (true) {
+            switch (self.phase) {
+                .header => {
+                    if (read == input.len) {
+                        return .{
+                            .progress = .{ .input_read = read, .output_written = written },
+                            .status = .need_input,
+                        };
+                    }
+                    const needed = header_len - self.header_received;
+                    const n = @min(needed, input.len - read);
+                    @memcpy(self.header[self.header_received..][0..n], input[read..][0..n]);
+                    self.header_received += n;
+                    read += n;
+                    if (self.header_received != header_len) continue;
+
+                    self.info = try parseHeader(&self.header);
+                    self.payload_remaining = try payloadLenFromInfo(self.info);
+                    self.crc = checksum.Crc32.init();
+                    self.phase = .payload;
+                },
+                .payload => {
+                    if (self.payload_remaining == 0) {
+                        if (self.crc.digest() != self.info.checksum) return error.ChecksumMismatch;
+                        self.phase = .done;
+                        return .{
+                            .progress = .{ .input_read = read, .output_written = written },
+                            .status = .done,
+                        };
+                    }
+                    if (written == output.len) {
+                        return .{
+                            .progress = .{ .input_read = read, .output_written = written },
+                            .status = .need_output,
+                        };
+                    }
+                    if (read == input.len) {
+                        return .{
+                            .progress = .{ .input_read = read, .output_written = written },
+                            .status = .need_input,
+                        };
+                    }
+
+                    const n = @min(self.payload_remaining, @min(input.len - read, output.len - written));
+                    const source = input[read..][0..n];
+                    @memcpy(output[written..][0..n], source);
+                    self.crc.update(source);
+                    self.payload_remaining -= n;
+                    read += n;
+                    written += n;
+                },
+                .done => {
+                    return .{
+                        .progress = .{ .input_read = read, .output_written = written },
+                        .status = .done,
+                    };
+                },
+            }
+        }
+    }
+};
+
+pub const FrameSpan = struct {
+    offset: usize,
+    frame: []const u8,
+    payload: []const u8,
+    info: FrameInfo,
+};
+
+/// Iterator over concatenated native store frames.
+pub const ConcatIterator = struct {
+    input: []const u8,
+    offset: usize = 0,
+
+    pub fn init(input: []const u8) ConcatIterator {
+        return .{ .input = input };
+    }
+
+    pub fn next(self: *ConcatIterator) Error!?FrameSpan {
+        if (self.offset == self.input.len) return null;
+        const tail = self.input[self.offset..];
+        const info = try parseHeader(tail);
+        const payload_len = try payloadLenFromInfo(info);
+        const total_len = try encodedSize(payload_len);
+        if (tail.len < total_len) return error.TruncatedFrame;
+
+        const start = self.offset;
+        const frame = tail[0..total_len];
+        self.offset += total_len;
+        return .{
+            .offset = start,
+            .frame = frame,
+            .payload = frame[header_len..total_len],
+            .info = info,
+        };
+    }
+};
+
+pub fn countConcatenatedFrames(input: []const u8) Error!usize {
+    var iterator = ConcatIterator.init(input);
+    var count: usize = 0;
+    while (try iterator.next()) |_| {
+        count = std.math.add(usize, count, 1) catch return error.IntegerOverflow;
+    }
+    return count;
+}
+
+/// Decode all concatenated store frames into one owned buffer.
+pub fn decodeConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+
+    var iterator = ConcatIterator.init(input);
+    while (try iterator.next()) |span| {
+        if (checksum.crc32(span.payload) != span.info.checksum) return error.ChecksumMismatch;
+        try out.appendSlice(allocator, span.payload);
+    }
+
+    return out.toOwnedSlice(allocator);
+}
+
 /// Bounded-buffer streaming decoder for one complete input frame. The input is
 /// provided up-front while output may be drained across multiple calls.
 pub const Decoder = struct {
@@ -176,8 +328,7 @@ pub const Decoder = struct {
 
     pub fn init(frame: []const u8) Error!Decoder {
         const info = try parseHeader(frame);
-        if (info.uncompressed_size != info.stored_size) return error.CorruptFrame;
-        const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
+        const payload_len = try payloadLenFromInfo(info);
         const total_len = try encodedSize(payload_len);
         if (frame.len < total_len) return error.TruncatedFrame;
         return .{
@@ -286,4 +437,72 @@ test "streaming encoder and decoder handle tiny output buffers" {
         try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
     }
     try std.testing.expectEqualSlices(u8, input, decoded[0..decoded_len]);
+}
+
+test "incremental decoder accepts single-byte input and tiny output" {
+    const input = "incremental input and output streaming";
+    var encoded: [128]u8 = undefined;
+    const encoded_len = try encode(input, &encoded);
+
+    var decoder = IncrementalDecoder.init();
+    var decoded: [input.len]u8 = undefined;
+    var decoded_len: usize = 0;
+    var input_offset: usize = 0;
+    var guard: usize = 0;
+    while (guard < 512) : (guard += 1) {
+        var scratch: [3]u8 = undefined;
+        const chunk_end = @min(encoded_len, input_offset + 1);
+        const step_result = try decoder.step(encoded[input_offset..chunk_end], &scratch);
+        input_offset += step_result.progress.input_read;
+        @memcpy(decoded[decoded_len..][0..step_result.progress.output_written], scratch[0..step_result.progress.output_written]);
+        decoded_len += step_result.progress.output_written;
+        if (step_result.status == .done) break;
+        if (step_result.status == .need_input) {
+            try std.testing.expect(input_offset < encoded_len);
+        }
+    } else return error.TestUnexpectedResult;
+
+    try std.testing.expectEqual(encoded_len, input_offset);
+    try std.testing.expectEqualSlices(u8, input, decoded[0..decoded_len]);
+}
+
+test "incremental decoder reports checksum mismatch after corrupt payload" {
+    var encoded: [128]u8 = undefined;
+    const encoded_len = try encode("payload", &encoded);
+    encoded[encoded_len - 1] ^= 0x55;
+
+    var decoder = IncrementalDecoder.init();
+    var out: [32]u8 = undefined;
+    try std.testing.expectError(error.ChecksumMismatch, decoder.step(encoded[0..encoded_len], &out));
+}
+
+test "concatenated frame iterator and decode helper" {
+    const first = "first";
+    const second = "second frame";
+    var buffer: [128]u8 = undefined;
+    const first_len = try encode(first, &buffer);
+    const second_len = try encode(second, buffer[first_len..]);
+    const concatenated = buffer[0 .. first_len + second_len];
+
+    try std.testing.expectEqual(@as(usize, 2), try countConcatenatedFrames(concatenated));
+
+    var iterator = ConcatIterator.init(concatenated);
+    const one = (try iterator.next()).?;
+    try std.testing.expectEqual(@as(usize, 0), one.offset);
+    try std.testing.expectEqualSlices(u8, first, one.payload);
+    const two = (try iterator.next()).?;
+    try std.testing.expectEqual(first_len, two.offset);
+    try std.testing.expectEqualSlices(u8, second, two.payload);
+    try std.testing.expectEqual(@as(?FrameSpan, null), try iterator.next());
+
+    const decoded = try decodeConcatenatedAlloc(std.testing.allocator, concatenated);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+}
+
+test "concat iterator rejects trailing partial frame" {
+    var buffer: [128]u8 = undefined;
+    const first_len = try encode("ok", &buffer);
+    @memcpy(buffer[first_len..][0..3], "VOR");
+    try std.testing.expectError(error.TruncatedFrame, countConcatenatedFrames(buffer[0 .. first_len + 3]));
 }
