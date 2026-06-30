@@ -115,7 +115,8 @@ architecture blindly.
 - [x] Dictionary IDs and training-plan metadata.
 - [x] Deterministic n-gram dictionary training prototype.
 - [x] Dictionary training metadata/report validation.
-- [ ] Production dictionary training with ratio/throughput validation.
+- [x] Dictionary training coverage and baseline ratio validation report.
+- [ ] Production dictionary training integrated into encoder with ratio/throughput gains.
 - [x] Splittable/seekable frame index range decode API.
 - [x] Embedded skippable index frame for seekable native store streams.
 - [x] Native VORT deflate-compressed frame flag and generic decode path.
