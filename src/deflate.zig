@@ -119,13 +119,15 @@ pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []co
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
     const max_block_len = @min(split_options.max_block_len, max_stored_block_len);
     const min_block_len = @min(split_options.min_block_len, max_block_len);
+    const one_shot = try encodeRawBestAlloc(allocator, input, options);
+    errdefer allocator.free(one_shot);
     var writer = bitstream.BitWriter{};
-    errdefer writer.deinit(allocator);
+    defer writer.deinit(allocator);
     if (input.len == 0) {
         const plan = try planTokensAlloc(allocator, "", options);
         defer plan.deinit(allocator);
         try writeBestTokensBlock(allocator, &writer, "", plan.tokens, true, options);
-        return writer.toOwnedSlice(allocator);
+        return smallerAdaptiveOrOneShot(allocator, &writer, one_shot);
     }
     var offset: usize = 0;
     while (offset < input.len) {
@@ -139,7 +141,18 @@ pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []co
         try writeBestTokensBlock(allocator, &writer, chunk, plan.tokens, final, options);
         offset += chunk_len;
     }
-    return writer.toOwnedSlice(allocator);
+    return smallerAdaptiveOrOneShot(allocator, &writer, one_shot);
+}
+
+fn smallerAdaptiveOrOneShot(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, one_shot: []u8) ![]u8 {
+    const adaptive = try writer.toOwnedSlice(allocator);
+    errdefer allocator.free(adaptive);
+    if (adaptive.len < one_shot.len) {
+        allocator.free(one_shot);
+        return adaptive;
+    }
+    allocator.free(adaptive);
+    return one_shot;
 }
 
 fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8, min_block_len: usize, max_block_len: usize, sample_len: usize, search_step: usize, options: CompressionOptions) !usize {
@@ -1931,6 +1944,19 @@ test "adaptive split search uses costed candidate lengths" {
     const encoded = try encodeRawBestAdaptiveSplitAlloc(std.testing.allocator, input, optionsForLevel(.default), .{ .min_block_len = 16, .max_block_len = 64, .sample_len = 8, .search_step = 16 });
     defer std.testing.allocator.free(encoded);
     const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "adaptive split falls back to one-shot when smaller" {
+    const input = "the quick brown fox jumps over the lazy dog\n" ** 128;
+    const options = optionsForLevel(.best);
+    const one_shot = try encodeRawBestAlloc(std.testing.allocator, input, options);
+    defer std.testing.allocator.free(one_shot);
+    const adaptive = try encodeRawBestAdaptiveSplitAlloc(std.testing.allocator, input, options, .{ .min_block_len = 16, .max_block_len = 64, .sample_len = 8, .search_step = 16 });
+    defer std.testing.allocator.free(adaptive);
+    try std.testing.expect(adaptive.len <= one_shot.len);
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, adaptive);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
 }

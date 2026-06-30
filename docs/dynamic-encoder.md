@@ -10,11 +10,12 @@ Stored/fixed/dynamic choices use bit-cost models for stored, fixed-Huffman, and
 dynamic-Huffman candidates, avoiding candidate materialization just to compare
 block modes. Adaptive split encoding now searches candidate block lengths using
 that cost model instead of relying only on byte-uniqueness heuristics, with
-level-specific split windows and search steps. For complex distance-code sets
-that are not yet proven safe, the dynamic encoder conservatively falls back to
-fixed-Huffman token emission so public outputs remain zlib-compatible. The
-split-best and adaptive-split compatibility wrappers are covered by the Python
-zlib differential smoke harness.
+level-specific split windows and search steps, then falls back to the one-shot
+best block whenever that is smaller. For complex distance-code sets that are not
+yet proven safe, the dynamic encoder conservatively falls back to fixed-Huffman
+token emission so public outputs remain zlib-compatible. The split-best and
+adaptive-split compatibility wrappers are covered by the Python zlib
+differential smoke harness.
 
 Remaining work for production dynamic encoding:
 
