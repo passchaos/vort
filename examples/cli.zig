@@ -91,6 +91,16 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeRawFixedDeflateAlloc(init.gpa, payload);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zlib-fixed-hex")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.encodeZlibFixedAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-gzip-fixed-hex")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.encodeGzipFixedAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "decode-raw-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const compressed = try hexToOwnedBytes(init.gpa, hex);
