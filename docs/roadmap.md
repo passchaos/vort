@@ -62,7 +62,8 @@ architecture blindly.
 - [x] Black-box differential smoke against Python zlib.
 - [x] Black-box differential smoke against system gzip CLI.
 - [x] Local external implementation/tool availability probe.
-- [ ] Differential tests against zlib-ng and zlib-rs.
+- [x] Optional zlib-ng/zlib-rs differential harness with explicit skip reporting.
+- [ ] Built zlib-ng/zlib-rs differential tests running in CI/local validation.
 - [ ] Compatibility benchmark suite.
 
 ## Milestone 4: compression performance foundation
