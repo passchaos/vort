@@ -35,8 +35,9 @@ def main() -> int:
         def vort_run():
             if not CLI:
                 return b""
-            hex_out = subprocess.run([str(CLI), "encode-zlib-best-file-hex", str(sample), "optimal"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
-            return bytes.fromhex(hex_out)
+            out = pathlib.Path(td) / "sample.vort.zlib"
+            subprocess.run([str(CLI), "encode-zlib-best-file", str(sample), str(out), "optimal"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE)
+            return out.read_bytes()
 
         def gzip_run():
             if not GZIP:
