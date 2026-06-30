@@ -1,5 +1,6 @@
 const std = @import("std");
 const checksum = @import("checksum.zig");
+const deflate = @import("deflate.zig");
 const core = @import("core.zig");
 
 pub const Error = core.Error;
@@ -15,6 +16,7 @@ pub const skippable_magic = [_]u8{ 'V', 'S', 'K', 'P' };
 pub const skippable_header_len: usize = 8;
 
 const flags_none: u8 = 0;
+const flags_deflate: u8 = 1;
 
 pub fn skippableEncodedSize(payload_len: usize) Error!usize {
     if (payload_len > std.math.maxInt(u32)) return error.IntegerOverflow;
@@ -88,6 +90,44 @@ pub fn encodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return out;
 }
 
+pub fn encodeDeflateAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const compressed = try deflate.encodeRawBestAlloc(allocator, input, .{});
+    defer allocator.free(compressed);
+    const required = try encodedSize(compressed.len);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    writeHeader(out[0..header_len], .{
+        .version = current_version,
+        .flags = flags_deflate,
+        .uncompressed_size = @intCast(input.len),
+        .stored_size = @intCast(compressed.len),
+        .checksum = checksum.crc32(input),
+    });
+    @memcpy(out[header_len..], compressed);
+    return out;
+}
+
+pub fn decodeAnyAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const info = try parseHeader(input);
+    const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
+    const total_len = try encodedSize(payload_len);
+    if (input.len < total_len) return error.TruncatedFrame;
+    const payload = input[header_len..total_len];
+    const decoded = switch (info.flags) {
+        flags_none => blk: {
+            if (info.uncompressed_size != info.stored_size) return error.CorruptFrame;
+            const out = try allocator.dupe(u8, payload);
+            break :blk out;
+        },
+        flags_deflate => try deflate.decodeRawAutoAlloc(allocator, payload),
+        else => return error.CorruptFrame,
+    };
+    errdefer allocator.free(decoded);
+    if (decoded.len != info.uncompressed_size) return error.SizeMismatch;
+    if (checksum.crc32(decoded) != info.checksum) return error.ChecksumMismatch;
+    return decoded;
+}
+
 pub fn decode(input: []const u8, output: []u8) Error!usize {
     const info = try parseHeader(input);
     const payload_len = try payloadLenFromInfo(info);
@@ -118,7 +158,7 @@ pub fn parseHeader(input: []const u8) Error!FrameInfo {
     const version = input[4];
     if (version != current_version) return error.UnsupportedVersion;
     const flags = input[5];
-    if (flags != flags_none) return error.CorruptFrame;
+    if (flags != flags_none and flags != flags_deflate) return error.CorruptFrame;
     if (input[6] != 0 or input[7] != 0) return error.CorruptFrame;
     if (std.mem.readInt(u32, input[28..32], .little) != 0) return error.CorruptFrame;
 
@@ -848,4 +888,24 @@ test "indexed stream embeds sidecar index as skippable frame" {
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 3, 8);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, "habetaga", range);
+}
+
+test "native deflate frame round trips and records compressed flag" {
+    const input = "hello hello hello hello";
+    const frame = try encodeDeflateAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_deflate, info.flags);
+    try std.testing.expect(info.stored_size < info.uncompressed_size);
+    const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "decodeAnyAlloc preserves old store frames" {
+    const frame = try encodeAlloc(std.testing.allocator, "store");
+    defer std.testing.allocator.free(frame);
+    const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "store", decoded);
 }

@@ -107,6 +107,7 @@ architecture blindly.
 - [ ] Production dictionary training with ratio/throughput validation.
 - [x] Splittable/seekable frame index range decode API.
 - [x] Embedded skippable index frame for seekable native store streams.
+- [x] Native VORT deflate-compressed frame flag and generic decode path.
 - [ ] Production seekable native format integration for compressed blocks.
 - [x] Long-distance matching scanner experiment.
 - [ ] Long-distance matching integration into native/block encoder.
