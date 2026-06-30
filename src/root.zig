@@ -26,6 +26,7 @@ pub const storeDecode = store.decode;
 pub const storeEncodeAlloc = store.encodeAlloc;
 pub const storeDecodeAlloc = store.decodeAlloc;
 pub const storeDecodeConcatenatedAlloc = store.decodeConcatenatedAlloc;
+pub const storeEncodeSkippableAlloc = store.encodeSkippableAlloc;
 
 pub const encodeRawStoredDeflate = deflate.encodeRawStored;
 pub const decodeRawStoredDeflate = deflate.decodeRawStored;

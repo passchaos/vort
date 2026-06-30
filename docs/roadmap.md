@@ -32,7 +32,8 @@ architecture blindly.
 - [x] Fully incremental input/output store-frame decoder.
 - [x] Concatenated store-frame iterator and decode helper.
 - [x] Deterministic malformed-header/frame smoke corpus.
-- [ ] Skippable frames and frame indexes.
+- [x] Skippable native frames.
+- [ ] Frame indexes.
 - [ ] Coverage-guided fuzz harness for headers and malformed frames.
 
 ## Milestone 3: deflate/zlib/gzip compatibility

@@ -11,8 +11,48 @@ pub const magic = [_]u8{ 'V', 'O', 'R', 'T' };
 pub const current_version: u8 = 0;
 pub const header_len: usize = 32;
 pub const max_chunk_len: usize = std.math.maxInt(u32);
+pub const skippable_magic = [_]u8{ 'V', 'S', 'K', 'P' };
+pub const skippable_header_len: usize = 8;
 
 const flags_none: u8 = 0;
+
+pub fn skippableEncodedSize(payload_len: usize) Error!usize {
+    if (payload_len > std.math.maxInt(u32)) return error.IntegerOverflow;
+    return std.math.add(usize, skippable_header_len, payload_len) catch error.IntegerOverflow;
+}
+
+pub fn encodeSkippable(payload: []const u8, output: []u8) Error!usize {
+    const required = try skippableEncodedSize(payload.len);
+    if (output.len < required) return error.OutputTooSmall;
+    @memcpy(output[0..4], &skippable_magic);
+    std.mem.writeInt(u32, output[4..8], @intCast(payload.len), .little);
+    @memcpy(output[8..required], payload);
+    return required;
+}
+
+pub fn encodeSkippableAlloc(allocator: std.mem.Allocator, payload: []const u8) ![]u8 {
+    const required = try skippableEncodedSize(payload.len);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeSkippable(payload, out);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn parseSkippable(input: []const u8) Error![]const u8 {
+    if (input.len < skippable_header_len) return error.TruncatedFrame;
+    if (!std.mem.eql(u8, input[0..4], &skippable_magic)) return error.InvalidMagic;
+    const payload_len: usize = std.mem.readInt(u32, input[4..8], .little);
+    if (input.len - skippable_header_len < payload_len) return error.TruncatedFrame;
+    return input[skippable_header_len..][0..payload_len];
+}
+
+fn skippableTotalLen(input: []const u8) Error!usize {
+    if (input.len < skippable_header_len) return error.TruncatedFrame;
+    if (!std.mem.eql(u8, input[0..4], &skippable_magic)) return error.InvalidMagic;
+    const payload_len: usize = std.mem.readInt(u32, input[4..8], .little);
+    return skippableEncodedSize(payload_len);
+}
 
 /// Header-only capacity calculation for the bootstrap store frame.
 pub fn encodedSize(input_len: usize) Error!usize {
@@ -275,22 +315,30 @@ pub const ConcatIterator = struct {
     }
 
     pub fn next(self: *ConcatIterator) Error!?FrameSpan {
-        if (self.offset == self.input.len) return null;
-        const tail = self.input[self.offset..];
-        const info = try parseHeader(tail);
-        const payload_len = try payloadLenFromInfo(info);
-        const total_len = try encodedSize(payload_len);
-        if (tail.len < total_len) return error.TruncatedFrame;
+        while (true) {
+            if (self.offset == self.input.len) return null;
+            const tail = self.input[self.offset..];
+            if (tail.len >= 4 and std.mem.eql(u8, tail[0..4], &skippable_magic)) {
+                const total = try skippableTotalLen(tail);
+                if (tail.len < total) return error.TruncatedFrame;
+                self.offset += total;
+                continue;
+            }
+            const info = try parseHeader(tail);
+            const payload_len = try payloadLenFromInfo(info);
+            const total_len = try encodedSize(payload_len);
+            if (tail.len < total_len) return error.TruncatedFrame;
 
-        const start = self.offset;
-        const frame = tail[0..total_len];
-        self.offset += total_len;
-        return .{
-            .offset = start,
-            .frame = frame,
-            .payload = frame[header_len..total_len],
-            .info = info,
-        };
+            const start = self.offset;
+            const frame = tail[0..total_len];
+            self.offset += total_len;
+            return .{
+                .offset = start,
+                .frame = frame,
+                .payload = frame[header_len..total_len],
+                .info = info,
+            };
+        }
     }
 };
 
@@ -505,4 +553,30 @@ test "concat iterator rejects trailing partial frame" {
     const first_len = try encode("ok", &buffer);
     @memcpy(buffer[first_len..][0..3], "VOR");
     try std.testing.expectError(error.TruncatedFrame, countConcatenatedFrames(buffer[0 .. first_len + 3]));
+}
+
+test "skippable frames encode parse and are ignored by concat decoder" {
+    const skip = try encodeSkippableAlloc(std.testing.allocator, "metadata");
+    defer std.testing.allocator.free(skip);
+    try std.testing.expectEqualSlices(u8, "metadata", try parseSkippable(skip));
+
+    const first = try encodeAlloc(std.testing.allocator, "first");
+    defer std.testing.allocator.free(first);
+    const second = try encodeAlloc(std.testing.allocator, "second");
+    defer std.testing.allocator.free(second);
+
+    var combined: std.ArrayList(u8) = .empty;
+    defer combined.deinit(std.testing.allocator);
+    try combined.appendSlice(std.testing.allocator, first);
+    try combined.appendSlice(std.testing.allocator, skip);
+    try combined.appendSlice(std.testing.allocator, second);
+
+    try std.testing.expectEqual(@as(usize, 2), try countConcatenatedFrames(combined.items));
+    const decoded = try decodeConcatenatedAlloc(std.testing.allocator, combined.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "firstsecond", decoded);
+}
+
+test "skippable frame parser rejects truncation" {
+    try std.testing.expectError(error.TruncatedFrame, parseSkippable(&.{ 'V', 'S', 'K', 'P', 4, 0, 0, 0, 'x' }));
 }
