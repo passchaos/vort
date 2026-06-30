@@ -111,6 +111,7 @@ pub const AdaptiveSplitOptions = struct {
     min_block_len: usize = 16 * 1024,
     max_block_len: usize = max_stored_block_len,
     sample_len: usize = 4096,
+    search_step: usize = 4096,
 };
 
 pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
@@ -128,7 +129,7 @@ pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []co
     var offset: usize = 0;
     while (offset < input.len) {
         const remaining = input.len - offset;
-        const n = chooseAdaptiveBlockLen(input[offset..], min_block_len, max_block_len, split_options.sample_len);
+        const n = try chooseCostedAdaptiveBlockLen(allocator, input[offset..], min_block_len, max_block_len, split_options.sample_len, split_options.search_step, options);
         const chunk_len = @min(n, remaining);
         const chunk = input[offset..][0..chunk_len];
         const final = offset + chunk_len == input.len;
@@ -138,6 +139,40 @@ pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []co
         offset += chunk_len;
     }
     return writer.toOwnedSlice(allocator);
+}
+
+fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8, min_block_len: usize, max_block_len: usize, sample_len: usize, search_step: usize, options: CompressionOptions) !usize {
+    const heuristic = chooseAdaptiveBlockLen(input, min_block_len, max_block_len, sample_len);
+    if (input.len <= min_block_len) return heuristic;
+    const limit = @min(input.len, max_block_len);
+    const step = @max(search_step, 1);
+    var best_len = heuristic;
+    var best_score = try scoreSplitCandidate(allocator, input, best_len, options);
+    var candidate = min_block_len;
+    while (candidate <= limit) : (candidate += step) {
+        const score = try scoreSplitCandidate(allocator, input, candidate, options);
+        if (score < best_score) {
+            best_score = score;
+            best_len = candidate;
+        }
+        if (limit - candidate < step) break;
+    }
+    if (best_len != limit) {
+        const score = try scoreSplitCandidate(allocator, input, limit, options);
+        if (score < best_score) best_len = limit;
+    }
+    return best_len;
+}
+
+fn scoreSplitCandidate(allocator: std.mem.Allocator, input: []const u8, candidate_len: usize, options: CompressionOptions) !usize {
+    const len = @min(candidate_len, input.len);
+    const plan = try planTokensAlloc(allocator, input[0..len], options);
+    defer plan.deinit(allocator);
+    const stored = len + 5;
+    const fixed = (lz77.fixedBitCost(plan.tokens) + 7) / 8;
+    if (options.block_selection == .stored_fixed) return @min(stored, fixed);
+    const dynamic = (try dynamicTokenBitCostAlloc(allocator, plan.tokens) + 7) / 8;
+    return @min(@min(stored, fixed), dynamic);
 }
 
 fn chooseAdaptiveBlockLen(input: []const u8, min_block_len: usize, max_block_len: usize, sample_len: usize) usize {
@@ -1885,4 +1920,16 @@ test "adaptive split best wrappers round trip" {
     const gzip_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
     defer std.testing.allocator.free(gzip_decoded);
     try std.testing.expectEqualSlices(u8, input, gzip_decoded);
+}
+
+test "adaptive split search uses costed candidate lengths" {
+    const input = ("aaaaaaaaaaaaaaaa" ** 4) ++ "abcdefghijklmnopqrstuvwxyz" ++ ("abcabcabcabc" ** 8);
+    const chosen = try chooseCostedAdaptiveBlockLen(std.testing.allocator, input, 16, 64, 8, 16, optionsForLevel(.default));
+    try std.testing.expect(chosen >= 16);
+    try std.testing.expect(chosen <= 64);
+    const encoded = try encodeRawBestAdaptiveSplitAlloc(std.testing.allocator, input, optionsForLevel(.default), .{ .min_block_len = 16, .max_block_len = 64, .sample_len = 8, .search_step = 16 });
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
