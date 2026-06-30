@@ -569,6 +569,31 @@ pub fn encodeBlockedDeflateStreamAlloc(allocator: std.mem.Allocator, input: []co
     return stream.toOwnedSlice(allocator);
 }
 
+pub fn encodePlannedDeflateStreamAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, worker_count: usize) ![]u8 {
+    const plan = try @import("planner.zig").planBlocksAlloc(allocator, input.len, .{ .block_len = block_len, .worker_count = worker_count });
+    defer allocator.free(plan);
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    for (plan) |block| {
+        const frame = try encodeDeflateAlloc(allocator, input[block.input_offset..][0..block.input_len]);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    if (input.len == 0) {
+        const frame = try encodeDeflateAlloc(allocator, "");
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    const index = try buildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
 pub const EmbeddedIndex = struct {
     entries: []FrameIndexEntry,
     payload_offset: usize,
@@ -978,6 +1003,18 @@ test "blocked deflate stream splits input and supports range decode" {
     defer embedded.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 4), embedded.entries.len);
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 5, 12);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, "fghijklmnopq", range);
+}
+
+test "planned deflate stream is deterministic across worker counts" {
+    const input = "abcdefghijklmnopqrstuvwxyz";
+    const one = try encodePlannedDeflateStreamAlloc(std.testing.allocator, input, 7, 1);
+    defer std.testing.allocator.free(one);
+    const three = try encodePlannedDeflateStreamAlloc(std.testing.allocator, input, 7, 3);
+    defer std.testing.allocator.free(three);
+    try std.testing.expectEqualSlices(u8, one, three);
+    const range = try decodeIndexedRangeAlloc(std.testing.allocator, three, 5, 12);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, "fghijklmnopq", range);
 }
