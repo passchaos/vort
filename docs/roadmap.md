@@ -68,7 +68,8 @@ architecture blindly.
 - [x] Match finder interfaces and scalar reference matchers.
 - [x] Greedy LZ77 parser experiment with deterministic options and replay tests.
 - [x] Lazy greedy LZ77 parser experiment with deterministic options.
-- [ ] Optimal LZ77 parser experiments with deterministic level/strategy configs.
+- [x] Optimal LZ77 parser prototype with deterministic options.
+- [ ] Production optimal parser with level/strategy configs.
 - [x] Huffman code generation and canonical-code validation.
 - [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.
 - [ ] Larger decompression hot-path benchmarks across real corpora.

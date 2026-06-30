@@ -99,6 +99,53 @@ pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
 }
 
+pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    const n = input.len;
+    const costs = try allocator.alloc(usize, n + 1);
+    defer allocator.free(costs);
+    const steps = try allocator.alloc(Token, n);
+    defer allocator.free(steps);
+    costs[n] = 0;
+    var rev_i: usize = n;
+    while (rev_i > 0) {
+        rev_i -= 1;
+        costs[rev_i] = 1 + costs[rev_i + 1];
+        steps[rev_i] = .{ .literal = input[rev_i] };
+        const best = findBestMatch(input, rev_i, options);
+        if (best.length >= min_match_len) {
+            var len = min_match_len;
+            while (len <= best.length) : (len += 1) {
+                const cost = 1 + costs[rev_i + len];
+                if (cost < costs[rev_i]) {
+                    costs[rev_i] = cost;
+                    steps[rev_i] = .{ .match = .{ .length = @intCast(len), .distance = @intCast(best.distance) } };
+                }
+            }
+        }
+    }
+
+    var tokens: std.ArrayList(Token) = .empty;
+    errdefer tokens.deinit(allocator);
+    var stats = PlanStats{};
+    var pos: usize = 0;
+    while (pos < n) {
+        const token = steps[pos];
+        try tokens.append(allocator, token);
+        switch (token) {
+            .literal => {
+                stats.literals += 1;
+                pos += 1;
+            },
+            .match => |m| {
+                stats.matches += 1;
+                stats.matched_bytes += m.length;
+                pos += m.length;
+            },
+        }
+    }
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
 pub fn replayAlloc(allocator: std.mem.Allocator, tokens: []const Token) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -182,4 +229,16 @@ test "lazy LZ77 planner round trips and keeps token count bounded" {
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
     try std.testing.expect(lazy.stats.tokenCount() <= greedy.stats.tokenCount() + 1);
+}
+
+test "optimal LZ77 prototype round trips and is no worse by token count" {
+    const input = "abcabcxabcdabcabcxabcdabcabcx";
+    const greedy = try greedyPlanAlloc(std.testing.allocator, input, .{});
+    defer greedy.deinit(std.testing.allocator);
+    const optimal = try optimalPlanAlloc(std.testing.allocator, input, .{});
+    defer optimal.deinit(std.testing.allocator);
+    const replayed = try replayAlloc(std.testing.allocator, optimal.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+    try std.testing.expect(optimal.stats.tokenCount() <= greedy.stats.tokenCount());
 }

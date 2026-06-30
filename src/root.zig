@@ -59,6 +59,7 @@ pub const decodeGzipAlloc = deflate.decodeGzipAlloc;
 pub const Lz77Token = lz77.Token;
 pub const greedyLz77PlanAlloc = lz77.greedyPlanAlloc;
 pub const lazyGreedyLz77PlanAlloc = lz77.lazyGreedyPlanAlloc;
+pub const optimalLz77PlanAlloc = lz77.optimalPlanAlloc;
 
 pub const DictionaryId = dictionary.DictionaryId;
 pub const DictionaryMetadata = dictionary.Metadata;
