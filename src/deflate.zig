@@ -640,6 +640,9 @@ fn parseGzipHeader(input: []const u8) Error!usize {
     if ((flags & 0x10) != 0) offset = try skipGzipZeroTerminated(input, offset);
     if ((flags & 0x02) != 0) {
         if (input.len - offset < 2) return error.TruncatedFrame;
+        const expected = std.mem.readInt(u16, input[offset..][0..2], .little);
+        const actual: u16 = @truncate(checksum.crc32(input[0..offset]));
+        if (actual != expected) return error.BadGzipHeader;
         offset += 2;
     }
     return offset;
@@ -912,8 +915,8 @@ test "gzip decoder accepts optional extra name comment and header crc fields" {
     const with_options = &.{
         0x1f, 0x8b, 0x08, 0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
         0x04, 0x00, 'a',  'b',  'c',  'd',  'n',  'a',  'm',  'e',
-        0x00, 'c',  'o',  'm',  'm',  'e',  'n',  't',  0x00, 0x00,
-        0x00, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x86, 0xa6,
+        0x00, 'c',  'o',  'm',  'm',  'e',  'n',  't',  0x00, 0xe2,
+        0x48, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x86, 0xa6,
         0x10, 0x36, 0x05, 0x00, 0x00, 0x00,
     };
     const decoded = try decodeGzipAlloc(std.testing.allocator, with_options);
@@ -1011,4 +1014,19 @@ test "zlib and gzip wrappers decode multi-block stream ending in dynamic block" 
     const gzip_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
     defer std.testing.allocator.free(gzip_decoded);
     try std.testing.expectEqualSlices(u8, plain, gzip_decoded);
+}
+
+test "gzip FHCRC is validated when present" {
+    const valid = &.{
+        0x1f, 0x8b, 0x08, 0x02, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03,
+        0xa3, 0xb2, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x86,
+        0xa6, 0x10, 0x36, 0x05, 0x00, 0x00, 0x00,
+    };
+    const decoded = try decodeGzipAlloc(std.testing.allocator, valid);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "hello", decoded);
+
+    var invalid: [valid.len]u8 = valid.*;
+    invalid[10] ^= 1;
+    try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(std.testing.allocator, &invalid));
 }

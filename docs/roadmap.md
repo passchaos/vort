@@ -56,7 +56,7 @@ architecture blindly.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
 - [x] zlib wrapper integration for multi-block dynamic streams.
 - [x] gzip wrapper and CRC/ISIZE verification for stored blocks.
-- [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC skip/parse support.
+- [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC validation.
 - [x] gzip wrapper integration for fixed-Huffman blocks.
 - [x] gzip wrapper integration for single final dynamic-Huffman blocks.
 - [x] gzip wrapper integration for multi-block dynamic streams.
