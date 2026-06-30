@@ -81,5 +81,6 @@ architecture blindly.
 - [x] Dictionary IDs and training-plan metadata.
 - [ ] Dictionary training implementation.
 - [ ] Splittable/seekable frame index design.
-- [ ] Long-distance matching experiments.
+- [x] Long-distance matching scanner experiment.
+- [ ] Long-distance matching integration into native/block encoder.
 - [ ] Multi-threaded block planning with deterministic output mode.
