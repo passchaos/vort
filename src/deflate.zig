@@ -15,16 +15,19 @@ pub const DecodeResult = struct {
 
 pub const ParserMode = enum { hash, greedy, lazy, optimal };
 
+pub const BlockSelection = enum { stored_fixed, stored_fixed_dynamic };
+
 pub const CompressionOptions = struct {
     parser: ParserMode = .greedy,
     lz77_options: lz77.GreedyOptions = .{},
+    block_selection: BlockSelection = .stored_fixed_dynamic,
 };
 
 pub const CompressionLevel = enum { fast, default, best };
 
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
-        .fast => .{ .parser = .hash, .lz77_options = .{ .max_chain = 32, .nice_len = 16 } },
+        .fast => .{ .parser = .hash, .lz77_options = .{ .max_chain = 32, .nice_len = 16 }, .block_selection = .stored_fixed },
         .default => .{ .parser = .lazy, .lz77_options = .{ .max_chain = 128, .nice_len = 64 } },
         .best => .{ .parser = .optimal, .lz77_options = .{ .max_chain = 512, .nice_len = 128 } },
     };
@@ -44,9 +47,18 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
     errdefer allocator.free(stored);
     const fixed = try encodeRawFixedWithOptionsAlloc(allocator, input, options);
     errdefer allocator.free(fixed);
+
+    if (options.block_selection == .stored_fixed) {
+        if (stored.len <= fixed.len) {
+            allocator.free(fixed);
+            return stored;
+        }
+        allocator.free(stored);
+        return fixed;
+    }
+
     const dynamic = try encodeRawDynamicWithOptionsAlloc(allocator, input, options);
     errdefer allocator.free(dynamic);
-
     if (stored.len <= fixed.len and stored.len <= dynamic.len) {
         allocator.free(fixed);
         allocator.free(dynamic);
@@ -1468,4 +1480,15 @@ test "gzip concatenated members decode in sequence" {
     const decoded = try decodeGzipConcatenatedAlloc(std.testing.allocator, cat.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "helloworld", decoded);
+}
+
+test "fast level skips dynamic block candidate" {
+    const input = "abcabcabcabc";
+    const fast = try encodeRawBestAlloc(std.testing.allocator, input, optionsForLevel(.fast));
+    defer std.testing.allocator.free(fast);
+    const stored = try encodeRawStoredAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(stored);
+    const fixed = try encodeRawFixedWithOptionsAlloc(std.testing.allocator, input, optionsForLevel(.fast));
+    defer std.testing.allocator.free(fixed);
+    try std.testing.expect(fast.len == @min(stored.len, fixed.len));
 }

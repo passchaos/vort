@@ -57,6 +57,7 @@ pub const encodeRawDynamicLiteralAlloc = deflate.encodeRawDynamicLiteralAlloc;
 pub const encodeRawDynamicWithOptionsAlloc = deflate.encodeRawDynamicWithOptionsAlloc;
 pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAlloc;
 pub const CompressionOptions = deflate.CompressionOptions;
+pub const BlockSelection = deflate.BlockSelection;
 pub const CompressionLevel = deflate.CompressionLevel;
 pub const optionsForCompressionLevel = deflate.optionsForLevel;
 pub const ParserMode = deflate.ParserMode;

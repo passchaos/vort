@@ -93,6 +93,7 @@ architecture blindly.
 - [x] Optimal LZ77 parser prototype with deterministic options.
 - [x] Fixed encoder parser strategy config selecting greedy/lazy/optimal prototypes.
 - [x] Compression level presets for fast/default/best strategy configs.
+- [x] Fast preset skips dynamic block candidate generation.
 - [ ] Production optimal parser with full level/strategy configs.
 - [x] Huffman code generation, simple length building, and canonical-code validation.
 - [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.
