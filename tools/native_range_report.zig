@@ -2,11 +2,30 @@ const std = @import("std");
 const vort = @import("vort");
 
 pub fn main(init: std.process.Init) !void {
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
+    defer args.deinit();
+    _ = args.next();
+
     const dict = "dictionary-only phrase with enough length to beat stored framing";
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("case,input_bytes,stream_bytes,frames,modes_store,modes_deflate,modes_rle,modes_dict,modes_ldm,range_offset,range_len,range_crc32\n", .{});
+
+    var any = false;
+    while (args.next()) |path| {
+        any = true;
+        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(input);
+        const stream = try vort.storeEncodeBlockedBestStreamAlloc(init.gpa, input, 8192);
+        defer init.gpa.free(stream);
+        try reportCase(init, stdout, path, input, stream, null);
+    }
+    if (any) {
+        try stdout.flush();
+        return;
+    }
+
     const store_input = "alphabetagamma";
     const store_stream = try makeStoreStream(init.gpa);
     defer init.gpa.free(store_stream);

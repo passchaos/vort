@@ -78,6 +78,7 @@ zig build run-split-policy-report
 zig build run-split-policy-report -- README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-split-policy-corpus-report
 zig build run-native-range-report
+zig build run-native-range-report -- README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-file-corpus-report -- README.md docs/roadmap.md
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast

@@ -397,6 +397,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_native_range_report = b.addRunArtifact(native_range_report_exe);
+    if (b.args) |args| run_native_range_report.addArgs(args);
     const native_range_report_step = b.step("run-native-range-report", "Report indexed range decode across native modes");
     native_range_report_step.dependOn(&run_native_range_report.step);
 
