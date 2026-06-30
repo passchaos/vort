@@ -351,8 +351,15 @@ pub fn build(b: *std.Build) void {
 
     const standard_corpus_report = b.addSystemCommand(&.{ "python3", "tools/standard_corpus_report.py" });
     standard_corpus_report.addArtifactArg(cli_exe);
+    if (b.args) |args| standard_corpus_report.addArgs(args);
     const standard_corpus_report_step = b.step("run-standard-corpus-report", "Run Silesia-sample Vort/gzip/zstd benchmark smoke");
     standard_corpus_report_step.dependOn(&standard_corpus_report.step);
+
+    const standard_corpus_suite = b.addSystemCommand(&.{ "python3", "tools/standard_corpus_report.py" });
+    standard_corpus_suite.addArtifactArg(cli_exe);
+    standard_corpus_suite.addArg("--suite");
+    const standard_corpus_suite_step = b.step("run-standard-corpus-suite", "Run per-file Silesia Vort/gzip/zlib-ng/zlib-rs/zstd benchmark suite");
+    standard_corpus_suite_step.dependOn(&standard_corpus_suite.step);
 
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);

@@ -92,7 +92,8 @@ architecture blindly.
 - [x] Compatibility benchmark smoke suite comparing Vort/gzip/zstd on sample files.
 - [x] Standard-corpus smoke benchmark comparing Vort/gzip/zlib-ng/zlib-rs/zstd.
 - [x] Full local Silesia corpus benchmark mode.
-- [ ] Full compatibility benchmark suite automation against zlib-ng/zlib-rs/zstd on standard corpora.
+- [x] Per-file Silesia suite automation against gzip/zlib-ng/zlib-rs/zstd.
+- [ ] Full compatibility benchmark suite automation across multiple standard corpora.
 
 ## Milestone 4: compression performance foundation
 
@@ -115,7 +116,8 @@ architecture blindly.
 - [x] zstd CLI compressed-size comparison smoke for sample files.
 - [x] File-path compression/decompression throughput report for ad-hoc corpora.
 - [x] Silesia-sample standard corpus benchmark smoke.
-- [ ] Automated throughput dashboards across full standard real corpora.
+- [x] Automated per-file Silesia throughput report.
+- [ ] Automated throughput dashboards across multiple full standard real corpora.
 
 ## Milestone 5: native Vort format research
 
