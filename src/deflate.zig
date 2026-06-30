@@ -485,11 +485,10 @@ pub fn encodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
 }
 
 pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
-    if (input.len < 10) return error.TruncatedFrame;
-    try validateGzipHeader(input[0..10]);
+    const data_offset = try parseGzipHeader(input);
 
-    const raw = try decodeRawStored(input[10..], output);
-    const footer_offset = 10 + raw.input_read;
+    const raw = try decodeRawStored(input[data_offset..], output);
+    const footer_offset = data_offset + raw.input_read;
     if (input.len - footer_offset < 8) return error.TruncatedFrame;
     const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
     const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
@@ -511,12 +510,11 @@ pub fn decodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
 }
 
 pub fn decodeGzipAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    if (input.len < 10) return error.TruncatedFrame;
-    try validateGzipHeader(input[0..10]);
+    const data_offset = try parseGzipHeader(input);
 
-    const raw = try decodeRawAutoAllocPartial(allocator, input[10..]);
+    const raw = try decodeRawAutoAllocPartial(allocator, input[data_offset..]);
     errdefer raw.deinit(allocator);
-    const footer_offset = 10 + raw.input_read;
+    const footer_offset = data_offset + raw.input_read;
     if (input.len - footer_offset < 8) return error.TruncatedFrame;
     const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
     const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
@@ -536,11 +534,36 @@ fn validateZlibHeader(cmf: u8, flg: u8) Error!void {
 
 const gzip_header = [_]u8{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03 };
 
-fn validateGzipHeader(header: []const u8) Error!void {
-    if (header.len < 10) return error.TruncatedFrame;
-    if (!std.mem.eql(u8, header[0..2], &.{ 0x1f, 0x8b })) return error.BadGzipHeader;
-    if (header[2] != 8) return error.BadGzipHeader;
-    if (header[3] != 0) return error.BadGzipHeader;
+fn parseGzipHeader(input: []const u8) Error!usize {
+    if (input.len < 10) return error.TruncatedFrame;
+    if (!std.mem.eql(u8, input[0..2], &.{ 0x1f, 0x8b })) return error.BadGzipHeader;
+    if (input[2] != 8) return error.BadGzipHeader;
+    const flags = input[3];
+    if ((flags & 0xe0) != 0) return error.BadGzipHeader;
+
+    var offset: usize = 10;
+    if ((flags & 0x04) != 0) {
+        if (input.len - offset < 2) return error.TruncatedFrame;
+        const xlen: usize = std.mem.readInt(u16, input[offset..][0..2], .little);
+        offset += 2;
+        if (input.len - offset < xlen) return error.TruncatedFrame;
+        offset += xlen;
+    }
+    if ((flags & 0x08) != 0) offset = try skipGzipZeroTerminated(input, offset);
+    if ((flags & 0x10) != 0) offset = try skipGzipZeroTerminated(input, offset);
+    if ((flags & 0x02) != 0) {
+        if (input.len - offset < 2) return error.TruncatedFrame;
+        offset += 2;
+    }
+    return offset;
+}
+
+fn skipGzipZeroTerminated(input: []const u8, offset: usize) Error!usize {
+    var index = offset;
+    while (index < input.len) : (index += 1) {
+        if (input[index] == 0) return index + 1;
+    }
+    return error.TruncatedFrame;
 }
 
 fn writeStoredHeader(final: bool, len: u16, output: []u8) void {
@@ -796,4 +819,22 @@ test "raw zlib and gzip decoders handle multi-block streams" {
     const gzip_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
     defer std.testing.allocator.free(gzip_decoded);
     try std.testing.expectEqualSlices(u8, plain, gzip_decoded);
+}
+
+test "gzip decoder accepts optional extra name comment and header crc fields" {
+    const with_options = &.{
+        0x1f, 0x8b, 0x08, 0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+        0x04, 0x00, 'a',  'b',  'c',  'd',  'n',  'a',  'm',  'e',
+        0x00, 'c',  'o',  'm',  'm',  'e',  'n',  't',  0x00, 0x00,
+        0x00, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x86, 0xa6,
+        0x10, 0x36, 0x05, 0x00, 0x00, 0x00,
+    };
+    const decoded = try decodeGzipAlloc(std.testing.allocator, with_options);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "hello", decoded);
+}
+
+test "gzip decoder rejects truncated optional headers" {
+    try std.testing.expectError(error.TruncatedFrame, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x08, 0x04, 0, 0, 0, 0, 0, 3, 4, 0, 'a' }));
+    try std.testing.expectError(error.TruncatedFrame, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x08, 0x08, 0, 0, 0, 0, 0, 3, 'n', 'o' }));
 }
