@@ -459,6 +459,64 @@ pub fn decodeRangeAlloc(allocator: std.mem.Allocator, input: []const u8, index: 
     return out.toOwnedSlice(allocator);
 }
 
+pub fn encodeIndexedStreamAlloc(allocator: std.mem.Allocator, frames: []const []const u8) ![]u8 {
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    for (frames) |payload| {
+        const frame = try encodeAlloc(allocator, payload);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    const index = try buildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
+pub const EmbeddedIndex = struct {
+    entries: []FrameIndexEntry,
+    payload_offset: usize,
+
+    pub fn deinit(self: EmbeddedIndex, allocator: std.mem.Allocator) void {
+        allocator.free(self.entries);
+    }
+};
+
+pub fn parseEmbeddedIndexAlloc(allocator: std.mem.Allocator, input: []const u8) !EmbeddedIndex {
+    var offset: usize = 0;
+    var last_payload: ?[]const u8 = null;
+    var last_payload_offset: usize = 0;
+    while (offset < input.len) {
+        const tail = input[offset..];
+        if (tail.len >= 4 and std.mem.eql(u8, tail[0..4], &skippable_magic)) {
+            const payload = try parseSkippable(tail);
+            last_payload = payload;
+            last_payload_offset = offset + skippable_header_len;
+            const total = try skippableTotalLen(tail);
+            if (tail.len < total) return error.TruncatedFrame;
+            offset += total;
+        } else {
+            const info = try parseHeader(tail);
+            const payload_len = try payloadLenFromInfo(info);
+            const total = try encodedSize(payload_len);
+            if (tail.len < total) return error.TruncatedFrame;
+            offset += total;
+        }
+    }
+    const payload = last_payload orelse return error.InvalidMagic;
+    return .{ .entries = try decodeFrameIndexAlloc(allocator, payload), .payload_offset = last_payload_offset };
+}
+
+pub fn decodeIndexedRangeAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
+    const embedded = try parseEmbeddedIndexAlloc(allocator, input);
+    defer embedded.deinit(allocator);
+    return decodeRangeAlloc(allocator, input, embedded.entries, offset, length);
+}
+
 pub fn countConcatenatedFrames(input: []const u8) Error!usize {
     var iterator = ConcatIterator.init(input);
     var count: usize = 0;
@@ -777,4 +835,17 @@ test "range decode rejects out of bounds" {
     const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(index);
     try std.testing.expectError(error.RangeOutOfBounds, decodeRangeAlloc(std.testing.allocator, frame, index, 4, 4));
+}
+
+test "indexed stream embeds sidecar index as skippable frame" {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const stream = try encodeIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer std.testing.allocator.free(stream);
+    const embedded = try parseEmbeddedIndexAlloc(std.testing.allocator, stream);
+    defer embedded.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 3), embedded.entries.len);
+    try std.testing.expect(embedded.payload_offset > 0);
+    const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 3, 8);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, "habetaga", range);
 }
