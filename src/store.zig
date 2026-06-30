@@ -176,6 +176,14 @@ fn payloadLenFromInfo(info: FrameInfo) Error!usize {
     return std.math.cast(usize, info.stored_size) orelse error.IntegerOverflow;
 }
 
+fn storedPayloadLenFromInfo(info: FrameInfo) Error!usize {
+    return std.math.cast(usize, info.stored_size) orelse error.IntegerOverflow;
+}
+
+fn frameLenFromInfo(info: FrameInfo) Error!usize {
+    return encodedSize(try storedPayloadLenFromInfo(info));
+}
+
 fn writeHeader(header: []u8, info: FrameInfo) void {
     std.debug.assert(header.len >= header_len);
     @memcpy(header[0..4], &magic);
@@ -365,8 +373,7 @@ pub const ConcatIterator = struct {
                 continue;
             }
             const info = try parseHeader(tail);
-            const payload_len = try payloadLenFromInfo(info);
-            const total_len = try encodedSize(payload_len);
+            const total_len = try frameLenFromInfo(info);
             if (tail.len < total_len) return error.TruncatedFrame;
 
             const start = self.offset;
@@ -486,7 +493,7 @@ pub fn decodeRangeAlloc(allocator: std.mem.Allocator, input: []const u8, index: 
         if (entry.uncompressed_offset >= end) break;
         if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
         const frame = input[entry.frame_offset..][0..entry.frame_len];
-        const decoded = try decodeAlloc(allocator, frame);
+        const decoded = try decodeAnyAlloc(allocator, frame);
         defer allocator.free(decoded);
         const frame_start = entry.uncompressed_offset;
         const frame_end = entry.uncompressed_offset + entry.uncompressed_len;
@@ -504,6 +511,24 @@ pub fn encodeIndexedStreamAlloc(allocator: std.mem.Allocator, frames: []const []
     errdefer stream.deinit(allocator);
     for (frames) |payload| {
         const frame = try encodeAlloc(allocator, payload);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    const index = try buildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
+pub fn encodeIndexedDeflateStreamAlloc(allocator: std.mem.Allocator, frames: []const []const u8) ![]u8 {
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    for (frames) |payload| {
+        const frame = try encodeDeflateAlloc(allocator, payload);
         defer allocator.free(frame);
         try stream.appendSlice(allocator, frame);
     }
@@ -541,8 +566,7 @@ pub fn parseEmbeddedIndexAlloc(allocator: std.mem.Allocator, input: []const u8) 
             offset += total;
         } else {
             const info = try parseHeader(tail);
-            const payload_len = try payloadLenFromInfo(info);
-            const total = try encodedSize(payload_len);
+            const total = try frameLenFromInfo(info);
             if (tail.len < total) return error.TruncatedFrame;
             offset += total;
         }
@@ -908,4 +932,13 @@ test "decodeAnyAlloc preserves old store frames" {
     const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "store", decoded);
+}
+
+test "indexed deflate stream supports embedded range decode" {
+    const payloads = [_][]const u8{ "alpha alpha", "beta beta", "gamma gamma" };
+    const stream = try encodeIndexedDeflateStreamAlloc(std.testing.allocator, &payloads);
+    defer std.testing.allocator.free(stream);
+    const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 6, 10);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, "alphabeta ", range);
 }
