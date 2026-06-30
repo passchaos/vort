@@ -112,6 +112,7 @@ pub const decodeGzipAlloc = deflate.decodeGzipAlloc;
 pub const decodeGzipConcatenatedAlloc = deflate.decodeGzipConcatenatedAlloc;
 
 pub const Lz77Token = lz77.Token;
+pub const fixedLz77BitCost = lz77.fixedBitCost;
 pub const hashGreedyLz77PlanAlloc = lz77.hashGreedyPlanAlloc;
 pub const greedyLz77PlanAlloc = lz77.greedyPlanAlloc;
 pub const lazyGreedyLz77PlanAlloc = lz77.lazyGreedyPlanAlloc;

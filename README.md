@@ -69,6 +69,7 @@ zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --paths README.md
 zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --full
 zig build run-compression-report
 zig build run-dictionary-report
+zig build run-level-report
 zig build -Doptimize=ReleaseFast run-file-corpus-report -- README.md docs/roadmap.md
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast

@@ -329,6 +329,21 @@ pub fn build(b: *std.Build) void {
     const dictionary_report_step = b.step("run-dictionary-report", "Report deterministic dictionary training metadata");
     dictionary_report_step.dependOn(&run_dictionary_report.step);
 
+    const level_report_exe = b.addExecutable(.{
+        .name = "vort-level-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/level_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_level_report = b.addRunArtifact(level_report_exe);
+    const level_report_step = b.step("run-level-report", "Report compression level parser and cost-model behavior");
+    level_report_step.dependOn(&run_level_report.step);
+
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
         .root_module = b.createModule(.{
@@ -387,6 +402,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&gzip_diff_exe.step);
     check_step.dependOn(&compression_report_exe.step);
     check_step.dependOn(&dictionary_report_exe.step);
+    check_step.dependOn(&level_report_exe.step);
     check_step.dependOn(&file_corpus_report_exe.step);
     check_step.dependOn(&cpu_features_exe.step);
 
@@ -410,6 +426,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zstd_compare_step);
     ci_smoke_step.dependOn(compression_report_step);
     ci_smoke_step.dependOn(dictionary_report_step);
+    ci_smoke_step.dependOn(level_report_step);
     ci_smoke_step.dependOn(compat_benchmark_step);
     ci_smoke_step.dependOn(standard_corpus_report_step);
 }
