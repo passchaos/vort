@@ -190,6 +190,51 @@ pub fn crc32Slice4(input: []const u8) u32 {
     return Crc32Slice4.hash(input);
 }
 
+pub fn crc32cHardwareX86(input: []const u8) u32 {
+    if (!(builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86)) return crc32c(input);
+    if (!cpuFeatureReport().crc32c_hardware_candidate) return crc32c(input);
+    var crc: u64 = 0xffff_ffff;
+    var index: usize = 0;
+    if (builtin.cpu.arch == .x86_64) {
+        while (index + 8 <= input.len) : (index += 8) {
+            const value = std.mem.readInt(u64, input[index..][0..8], .little);
+            crc = crc32cAsm64(crc, value);
+        }
+    }
+    var crc32_acc: u32 = @truncate(crc);
+    while (index + 4 <= input.len) : (index += 4) {
+        const value = std.mem.readInt(u32, input[index..][0..4], .little);
+        crc32_acc = crc32cAsm32(crc32_acc, value);
+    }
+    while (index < input.len) : (index += 1) {
+        const table_index: u8 = @truncate(crc32_acc ^ input[index]);
+        crc32_acc = Crc32C.table[table_index] ^ (crc32_acc >> 8);
+    }
+    return ~crc32_acc;
+}
+
+fn crc32cAsm64(acc_in: u64, value: u64) u64 {
+    var acc = acc_in;
+    asm volatile ("crc32q %[value], %[acc]"
+        : [acc] "+r" (acc),
+        : [value] "r" (value),
+    );
+    return acc;
+}
+
+fn crc32cAsm32(acc_in: u32, value: u32) u32 {
+    var acc = acc_in;
+    asm volatile ("crc32l %[value], %[acc]"
+        : [acc] "+r" (acc),
+        : [value] "r" (value),
+    );
+    return acc;
+}
+
+pub fn crc32cBest(input: []const u8) u32 {
+    return if (cpuFeatureReport().crc32c_hardware_candidate) crc32cHardwareX86(input) else crc32c(input);
+}
+
 pub fn crc32c(input: []const u8) u32 {
     return Crc32C.hash(input);
 }
@@ -313,4 +358,12 @@ test "CPU feature report keeps IEEE CRC32 dispatch conservative" {
     const report = cpuFeatureReport();
     try std.testing.expect(!report.ieee_crc32_uses_hardware);
     if (report.crc32c_hardware_candidate) try std.testing.expect(report.x86_sse42);
+}
+
+test "CRC-32C hardware path matches table path" {
+    const cases = [_][]const u8{ "", "a", "abc", "123456789", "The quick brown fox jumps over the lazy dog" ** 33 };
+    for (cases) |case| {
+        try std.testing.expectEqual(crc32c(case), crc32cBest(case));
+        try std.testing.expectEqual(crc32c(case), crc32cHardwareX86(case));
+    }
 }

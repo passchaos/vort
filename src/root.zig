@@ -21,6 +21,7 @@ pub const crc32Slice4 = checksum.crc32Slice4;
 pub const crc32Best = checksum.crc32Best;
 pub const checksumCpuFeatureReport = checksum.cpuFeatureReport;
 pub const crc32c = checksum.crc32c;
+pub const crc32cBest = checksum.crc32cBest;
 
 pub const Error = core.Error;
 pub const FrameInfo = core.FrameInfo;
