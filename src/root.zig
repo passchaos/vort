@@ -7,6 +7,7 @@ pub const fuzz = @import("fuzz.zig");
 pub const deflate = @import("deflate.zig");
 pub const bitstream = @import("bitstream.zig");
 pub const huffman = @import("huffman.zig");
+pub const lz77 = @import("lz77.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -45,6 +46,9 @@ pub const encodeGzipStoredAlloc = deflate.encodeGzipStoredAlloc;
 pub const decodeGzipStoredAlloc = deflate.decodeGzipStoredAlloc;
 pub const decodeGzipAlloc = deflate.decodeGzipAlloc;
 
+pub const Lz77Token = lz77.Token;
+pub const greedyLz77PlanAlloc = lz77.greedyPlanAlloc;
+
 test {
     _ = checksum;
     _ = core;
@@ -53,4 +57,5 @@ test {
     _ = deflate;
     _ = bitstream;
     _ = huffman;
+    _ = lz77;
 }

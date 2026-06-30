@@ -60,8 +60,9 @@ architecture blindly.
 
 ## Milestone 4: compression performance foundation
 
-- [ ] Match finder interfaces and scalar reference matchers.
-- [ ] LZ77 parser experiments with deterministic level/strategy configs.
+- [x] Match finder interfaces and scalar reference matchers.
+- [x] Greedy LZ77 parser experiment with deterministic options and replay tests.
+- [ ] Lazy/optimal LZ77 parser experiments with deterministic level/strategy configs.
 - [ ] Huffman code generation and canonical-code validation.
 - [ ] Decompression hot-path benchmarks.
 - [ ] Compression ratio/throughput dashboards across real corpora.
