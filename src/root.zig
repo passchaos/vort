@@ -1,0 +1,26 @@
+//! Vort: next-generation compression experiments and compatibility-oriented primitives.
+
+pub const checksum = @import("checksum.zig");
+pub const core = @import("core.zig");
+pub const store = @import("store.zig");
+
+pub const Adler32 = checksum.Adler32;
+pub const Crc32 = checksum.Crc32;
+pub const adler32 = checksum.adler32;
+pub const crc32 = checksum.crc32;
+
+pub const Error = core.Error;
+pub const FrameInfo = core.FrameInfo;
+pub const Progress = core.Progress;
+pub const StepResult = core.StepResult;
+
+pub const storeEncode = store.encode;
+pub const storeDecode = store.decode;
+pub const storeEncodeAlloc = store.encodeAlloc;
+pub const storeDecodeAlloc = store.decodeAlloc;
+
+test {
+    _ = checksum;
+    _ = core;
+    _ = store;
+}

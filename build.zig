@@ -1,0 +1,70 @@
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const vort_mod = b.addModule("vort", .{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const lib = b.addLibrary(.{
+        .name = "vort",
+        .root_module = vort_mod,
+    });
+    b.installArtifact(lib);
+
+    const tests = b.addTest(.{
+        .name = "vort-tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/root.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_tests = b.addRunArtifact(tests);
+
+    const test_step = b.step("test", "Run vort unit tests");
+    test_step.dependOn(&run_tests.step);
+
+    const cli_exe = b.addExecutable(.{
+        .name = "vort",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/cli.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+
+    const run_cli = b.addRunArtifact(cli_exe);
+    if (b.args) |args| run_cli.addArgs(args);
+    const run_step = b.step("run", "Run the vort CLI smoke example");
+    run_step.dependOn(&run_cli.step);
+
+    const bench_exe = b.addExecutable(.{
+        .name = "vort-bench-checksum",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("bench/checksum.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+
+    const run_bench = b.addRunArtifact(bench_exe);
+    if (b.args) |args| run_bench.addArgs(args);
+    const bench_step = b.step("bench-checksum", "Run Adler-32/CRC-32 checksum throughput smoke benchmark");
+    bench_step.dependOn(&run_bench.step);
+
+    const check_step = b.step("check", "Compile library tests, CLI, and benchmark entrypoints");
+    check_step.dependOn(&tests.step);
+    check_step.dependOn(&cli_exe.step);
+    check_step.dependOn(&bench_exe.step);
+}
