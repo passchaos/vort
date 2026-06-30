@@ -26,3 +26,6 @@ runners and also has a smoke-test main. `tools/fuzz_libfuzzer.zig` exports `LLVM
 The `ci-smoke` aggregate build step runs the deterministic fuzz entrypoints
 alongside unit tests, compile checks, differential harnesses, and benchmark
 smoke reports so local changes can use one command before commit.
+The hosted GitHub Actions workflow in `.github/workflows/ci.yml` also reruns
+the focused fuzz smoke entrypoints explicitly after `ci-smoke`, keeping the
+local and hosted parser-validation surfaces aligned.

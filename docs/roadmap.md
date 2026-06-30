@@ -47,7 +47,7 @@ architecture blindly.
 - [x] libFuzzer-compatible exported entrypoint smoke.
 - [x] AFL-style file-input fuzz driver smoke.
 - [x] Local CI smoke runner wiring for fuzz entrypoints.
-- [ ] Hosted CI fuzz runner wiring.
+- [x] Hosted CI fuzz runner wiring.
 
 ## Milestone 3: deflate/zlib/gzip compatibility
 

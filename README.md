@@ -15,6 +15,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - a native `VORT` store frame with skippable frames, concatenated streams, in-memory and serialized frame indexes, and bounded streaming APIs;
 - LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training prototype, long-distance match scanner, block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
 
+Hosted CI runs on `main` pushes and pull requests through
+`.github/workflows/ci.yml`, which installs Zig 0.16, checks formatting, runs
+`ci-smoke`, and repeats the focused fuzz smoke entrypoints.
+
 ## Commands
 
 ```sh

@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Zig 0.16 local smoke spine
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Install optional CLI competitors
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gzip zstd
+
+      - name: Check formatting
+        run: zig fmt --check build.zig build.zig.zon src examples bench tools
+
+      - name: Run CI smoke aggregate
+        run: zig build -Doptimize=ReleaseFast ci-smoke
+
+      - name: Run focused fuzz smoke entrypoints
+        run: |
+          zig build run-fuzz-smoke
+          zig build run-fuzz-corpus
+          zig build run-fuzz-target
+          zig build run-libfuzzer-smoke
+          zig build run-afl-smoke
