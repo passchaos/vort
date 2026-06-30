@@ -80,6 +80,7 @@ architecture blindly.
 - [x] Dynamic Huffman encoder with LZ77 match support, verified by Python zlib.
 - [x] Dynamic Huffman encoder code-length RLE using symbols 16/17/18.
 - [x] Block cost selection across stored/fixed/dynamic encoders.
+- [x] Raw fixed multi-block encoder with final/non-final block splitting.
 - [ ] Production dynamic Huffman encoder with optimized block splitting.
 - [x] Compatibility benchmark smoke suite comparing Vort/gzip/zstd on sample files.
 - [x] Standard-corpus smoke benchmark comparing Vort/gzip/zlib-ng/zlib-rs/zstd.

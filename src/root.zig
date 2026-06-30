@@ -55,6 +55,7 @@ pub const storeDecodeIndexedRangeAlloc = store.decodeIndexedRangeAlloc;
 pub const encodeRawStoredDeflate = deflate.encodeRawStored;
 pub const decodeRawStoredDeflate = deflate.decodeRawStored;
 pub const encodeRawFixedDeflateAlloc = deflate.encodeRawFixedAlloc;
+pub const encodeRawFixedSplitAlloc = deflate.encodeRawFixedSplitAlloc;
 pub const encodeRawBestAlloc = deflate.encodeRawBestAlloc;
 pub const encodeRawDynamicLiteralAlloc = deflate.encodeRawDynamicLiteralAlloc;
 pub const encodeRawDynamicWithOptionsAlloc = deflate.encodeRawDynamicWithOptionsAlloc;

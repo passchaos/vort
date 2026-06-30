@@ -73,6 +73,33 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
     return dynamic;
 }
 
+pub fn encodeRawFixedSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    var offset: usize = 0;
+    if (input.len == 0) {
+        const plan = try lz77.hashGreedyPlanAlloc(allocator, "", options.lz77_options);
+        defer plan.deinit(allocator);
+        try writeFixedTokens(allocator, &writer, plan.tokens, true);
+        return writer.toOwnedSlice(allocator);
+    }
+    while (offset < input.len) {
+        const n = @min(block_len, input.len - offset);
+        const final = offset + n == input.len;
+        const plan = switch (options.parser) {
+            .hash => try lz77.hashGreedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
+            .greedy => try lz77.greedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
+            .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
+            .optimal => try lz77.optimalPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
+        };
+        defer plan.deinit(allocator);
+        try writeFixedTokens(allocator, &writer, plan.tokens, final);
+        offset += n;
+    }
+    return writer.toOwnedSlice(allocator);
+}
+
 pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     var tokens: std.ArrayList(lz77.Token) = .empty;
     defer tokens.deinit(allocator);
@@ -287,32 +314,37 @@ pub fn encodeRawFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []con
     return encodeRawFixedTokensAlloc(allocator, plan.tokens);
 }
 
-pub fn encodeRawFixedTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
+fn writeFixedTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, tokens: []const lz77.Token, final: bool) !void {
     const lit_lengths = huffman.fixedLiteralLengths();
     const lit_encoder = try huffman.FixedLiteralTable.Encoder.init(&lit_lengths);
     const dist_lengths = huffman.fixedDistanceLengths();
     const dist_encoder = try huffman.FixedDistanceTable.Encoder.init(&dist_lengths);
-
-    var writer = bitstream.BitWriter{};
-    errdefer writer.deinit(allocator);
-    try writer.writeBits(allocator, 0b1, 1); // final block
-    try writer.writeBits(allocator, 0b01, 2); // fixed Huffman block
-
+    try writer.writeBits(allocator, @intFromBool(final), 1);
+    try writer.writeBits(allocator, 0b01, 2);
     for (tokens) |token| {
         switch (token) {
-            .literal => |byte| try lit_encoder.writeSymbol(&writer, allocator, byte),
+            .literal => |byte| try lit_encoder.writeSymbol(writer, allocator, byte),
             .match => |m| {
                 const len_code = lengthCode(m.length);
-                try lit_encoder.writeSymbol(&writer, allocator, len_code.symbol);
+                try lit_encoder.writeSymbol(writer, allocator, len_code.symbol);
                 if (len_code.extra_bits != 0) try writer.writeBits(allocator, len_code.extra_value, len_code.extra_bits);
-
                 const dist_code = distanceCode(m.distance);
-                try dist_encoder.writeSymbol(&writer, allocator, dist_code.symbol);
+                try dist_encoder.writeSymbol(writer, allocator, dist_code.symbol);
                 if (dist_code.extra_bits != 0) try writer.writeBits(allocator, dist_code.extra_value, dist_code.extra_bits);
             },
         }
     }
-    try lit_encoder.writeSymbol(&writer, allocator, 256);
+    try lit_encoder.writeSymbol(writer, allocator, 256);
+}
+
+pub fn encodeRawFixedTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
+    return encodeRawFixedTokensFinalAlloc(allocator, tokens, true);
+}
+
+fn encodeRawFixedTokensFinalAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token, final: bool) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeFixedTokens(allocator, &writer, tokens, final);
     return writer.toOwnedSlice(allocator);
 }
 
@@ -1491,4 +1523,13 @@ test "fast level skips dynamic block candidate" {
     const fixed = try encodeRawFixedWithOptionsAlloc(std.testing.allocator, input, optionsForLevel(.fast));
     defer std.testing.allocator.free(fixed);
     try std.testing.expect(fast.len == @min(stored.len, fixed.len));
+}
+
+test "split raw fixed encoder emits multi-block deflate stream" {
+    const input = "abcdefghijklmnopqrstuvwxyz";
+    const encoded = try encodeRawFixedSplitAlloc(std.testing.allocator, input, 7, optionsForLevel(.fast));
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }

@@ -175,6 +175,11 @@ pub fn main(init: std.process.Init) !void {
         const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, 3, 8);
         defer init.gpa.free(range);
         try stdout.print("range={s} indexed_stream_bytes={d}\n", .{ range, stream.len });
+    } else if (std.mem.eql(u8, command, "encode-raw-fixed-split-hex")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.encodeRawFixedSplitAlloc(init.gpa, payload, 7, vort.optionsForCompressionLevel(.fast));
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-raw-best-hex")) {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());
