@@ -113,17 +113,20 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("range={s} indexed_stream_bytes={d}\n", .{ range, stream.len });
     } else if (std.mem.eql(u8, command, "encode-raw-dynamic-hex")) {
         const payload = args.next() orelse "";
-        const encoded = try vort.encodeRawDynamicLiteralAlloc(init.gpa, payload);
+        const mode = parseParserMode(args.next());
+        const encoded = try vort.encodeRawDynamicWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-dynamic-hex")) {
         const payload = args.next() orelse "";
-        const encoded = try vort.encodeZlibDynamicLiteralAlloc(init.gpa, payload);
+        const mode = parseParserMode(args.next());
+        const encoded = try vort.encodeZlibDynamicWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-gzip-dynamic-hex")) {
         const payload = args.next() orelse "";
-        const encoded = try vort.encodeGzipDynamicLiteralAlloc(init.gpa, payload);
+        const mode = parseParserMode(args.next());
+        const encoded = try vort.encodeGzipDynamicWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "decode-raw-hex")) {

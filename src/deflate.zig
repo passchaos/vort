@@ -648,7 +648,11 @@ pub fn encodeZlibFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []co
 }
 
 pub fn encodeZlibDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, .{});
+    return encodeZlibDynamicWithOptionsAlloc(allocator, input, .{});
+}
+
+pub fn encodeZlibDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, options);
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, 2 + raw.len + 4);
     errdefer allocator.free(out);
@@ -741,7 +745,11 @@ pub fn encodeGzipFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []co
 }
 
 pub fn encodeGzipDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, .{});
+    return encodeGzipDynamicWithOptionsAlloc(allocator, input, .{});
+}
+
+pub fn encodeGzipDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, options);
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
     errdefer allocator.free(out);
