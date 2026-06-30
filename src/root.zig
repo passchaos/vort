@@ -51,6 +51,7 @@ pub const storeEncodeParallelDeflateStreamAlloc = store.encodeParallelDeflateStr
 pub const storeEncodeThreadPoolDeflateStreamAlloc = store.encodeThreadPoolDeflateStreamAlloc;
 pub const storeEncodeWorkStealingDeflateStreamAlloc = store.encodeWorkStealingDeflateStreamAlloc;
 pub const storeDecodeIndexedRangeAlloc = store.decodeIndexedRangeAlloc;
+pub const storeSummarizeModes = store.summarizeModes;
 
 pub const encodeRawStoredDeflate = deflate.encodeRawStored;
 pub const decodeRawStoredDeflate = deflate.decodeRawStored;

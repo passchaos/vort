@@ -850,6 +850,37 @@ pub fn decodeIndexedRangeAlloc(allocator: std.mem.Allocator, input: []const u8, 
     return decodeRangeAlloc(allocator, input, embedded.entries, offset, length);
 }
 
+pub const ModeSummary = struct {
+    store: usize = 0,
+    deflate: usize = 0,
+    rle: usize = 0,
+};
+
+pub fn summarizeModes(input: []const u8) Error!ModeSummary {
+    var summary = ModeSummary{};
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const tail = input[offset..];
+        if (tail.len >= 4 and std.mem.eql(u8, tail[0..4], &skippable_magic)) {
+            const total = try skippableTotalLen(tail);
+            if (tail.len < total) return error.TruncatedFrame;
+            offset += total;
+            continue;
+        }
+        const info = try parseHeader(tail);
+        switch (info.flags) {
+            flags_none => summary.store += 1,
+            flags_deflate => summary.deflate += 1,
+            flags_rle => summary.rle += 1,
+            else => return error.CorruptFrame,
+        }
+        const total = try frameLenFromInfo(info);
+        if (tail.len < total) return error.TruncatedFrame;
+        offset += total;
+    }
+    return summary;
+}
+
 pub fn countConcatenatedFrames(input: []const u8) Error!usize {
     var iterator = ConcatIterator.init(input);
     var count: usize = 0;
@@ -1287,4 +1318,13 @@ test "work-stealing deflate stream matches planned deterministic output" {
     const stolen = try encodeWorkStealingDeflateStreamAlloc(std.testing.allocator, input, 13, 3);
     defer std.testing.allocator.free(stolen);
     try std.testing.expectEqualSlices(u8, planned, stolen);
+}
+
+test "mode summary counts native best frames" {
+    const payloads = [_][]const u8{ "plain", "aaaaaaaaaaaaaaaa", "abcabcabcabc" };
+    const stream = try encodeIndexedDeflateStreamAlloc(std.testing.allocator, &payloads);
+    defer std.testing.allocator.free(stream);
+    const summary = try summarizeModes(stream);
+    try std.testing.expectEqual(@as(usize, 3), summary.store + summary.deflate + summary.rle);
+    try std.testing.expect(summary.rle >= 1);
 }
