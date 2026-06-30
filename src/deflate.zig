@@ -33,8 +33,9 @@ pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const
     var lit_freqs: [286]u32 = @splat(0);
     for (input) |byte| lit_freqs[byte] += 1;
     lit_freqs[256] = 1; // end of block
+    completeLiteralFrequencySet(&lit_freqs);
     var lit_lengths_full = huffman.simpleCodeLengths(286, &lit_freqs, 15);
-    const hlit: usize = 257;
+    const hlit: usize = 286;
     const hdist: usize = 1;
     var dist_lengths = [_]u4{0};
 
@@ -73,6 +74,22 @@ pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const
     for (input) |byte| try lit_encoder.writeSymbol(&writer, allocator, byte);
     try lit_encoder.writeSymbol(&writer, allocator, 256);
     return writer.toOwnedSlice(allocator);
+}
+
+fn completeLiteralFrequencySet(freqs: *[286]u32) void {
+    var active: usize = 0;
+    for (freqs.*) |freq| {
+        if (freq != 0) active += 1;
+    }
+    var target: usize = 2;
+    while (target < active) target <<= 1;
+    var symbol: usize = 0;
+    while (active < target and symbol < freqs.len) : (symbol += 1) {
+        if (freqs[symbol] == 0) {
+            freqs[symbol] = 1;
+            active += 1;
+        }
+    }
 }
 
 pub fn encodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
