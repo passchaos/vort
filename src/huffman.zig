@@ -114,7 +114,30 @@ pub fn parseDynamicHeader(reader: *bitstream.BitReader) Error!DynamicHeader {
 }
 
 pub fn parseDynamicLengths(reader: *bitstream.BitReader) Error!DynamicLengths {
-    const header = try parseDynamicHeader(reader);
+    return parseDynamicLengthsBody(try parseDynamicHeader(reader), reader);
+}
+
+pub fn parseDynamicLengthsAfterHeader(final: bool, reader: *bitstream.BitReader) Error!DynamicLengths {
+    const hlit: u16 = @as(u16, try reader.readBits(u5, 5)) + 257;
+    const hdist: u16 = @as(u16, try reader.readBits(u5, 5)) + 1;
+    const hclen: u8 = @as(u8, try reader.readBits(u4, 4)) + 4;
+    if (hlit > 286 or hdist > 30 or hclen > code_length_order.len) return error.InvalidDynamicBlockHeader;
+
+    var lengths: [19]u4 = @splat(0);
+    for (code_length_order[0..hclen]) |symbol| {
+        lengths[symbol] = try reader.readBits(u4, 3);
+    }
+
+    return parseDynamicLengthsBody(.{
+        .final = final,
+        .hlit = hlit,
+        .hdist = hdist,
+        .hclen = hclen,
+        .code_length_lengths = lengths,
+    }, reader);
+}
+
+fn parseDynamicLengthsBody(header: DynamicHeader, reader: *bitstream.BitReader) Error!DynamicLengths {
     const code_lengths = try CodeLengthTable.init(&header.code_length_lengths);
     var combined: [286 + 30]u4 = @splat(0);
     const total = header.hlit + header.hdist;

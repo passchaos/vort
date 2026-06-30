@@ -44,7 +44,7 @@ architecture blindly.
 - [x] Fixed-Huffman inflate for literals and back-references.
 - [x] Dynamic-Huffman header and code-length parser foundation.
 - [x] Dynamic-Huffman inflate for single final blocks.
-- [ ] Multi-block dynamic/stored/fixed raw inflate.
+- [x] Multi-block raw/zlib/gzip inflate across stored/fixed/dynamic block types.
 - [x] zlib wrapper and Adler verification for stored blocks.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
