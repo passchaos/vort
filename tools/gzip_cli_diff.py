@@ -61,7 +61,17 @@ def main() -> int:
     vort_hello = bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a6103605000000")
     assert gzip_decompress(vort_hello) == b"hello"
 
-    print(f"gzip cli differential smoke: payloads={len(payloads)} gzip={GZIP} cli={CLI}")
+    split_payloads = [
+        b"",
+        b"abcdefghijklmnopqrstuvwxyz",
+        (b"abcabcabcabc" * 8) + b"----" + (b"the quick brown fox\n" * 4),
+    ]
+    for data in split_payloads:
+        text = data.decode("ascii")
+        frame = bytes.fromhex(run_cli("encode-gzip-best-split-hex", text, "17", "default"))
+        assert gzip_decompress(frame) == data
+
+    print(f"gzip cli differential smoke: payloads={len(payloads)} split_payloads={len(split_payloads)} gzip={GZIP} cli={CLI}")
     return 0
 
 
