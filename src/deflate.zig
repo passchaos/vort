@@ -43,6 +43,15 @@ pub const OwnedDecodeResult = struct {
     }
 };
 
+fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !lz77.GreedyPlan {
+    return switch (options.parser) {
+        .hash => try lz77.hashGreedyPlanAlloc(allocator, input, options.lz77_options),
+        .greedy => try lz77.greedyPlanAlloc(allocator, input, options.lz77_options),
+        .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, options.lz77_options),
+        .optimal => try lz77.optimalPlanAlloc(allocator, input, options.lz77_options),
+    };
+}
+
 pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const stored = try encodeRawStoredAlloc(allocator, input);
     errdefer allocator.free(stored);
@@ -74,6 +83,66 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
     return dynamic;
 }
 
+pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    const effective_block_len = @min(block_len, max_stored_block_len);
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    if (input.len == 0) {
+        const plan = try planTokensAlloc(allocator, "", options);
+        defer plan.deinit(allocator);
+        try writeBestTokensBlock(allocator, &writer, "", plan.tokens, true, options);
+        return writer.toOwnedSlice(allocator);
+    }
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const n = @min(effective_block_len, input.len - offset);
+        const chunk = input[offset..][0..n];
+        const final = offset + n == input.len;
+        const plan = try planTokensAlloc(allocator, chunk, options);
+        defer plan.deinit(allocator);
+        try writeBestTokensBlock(allocator, &writer, chunk, plan.tokens, final, options);
+        offset += n;
+    }
+    return writer.toOwnedSlice(allocator);
+}
+
+fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions) !void {
+    const stored_len = storedBlockEncodedSizeFromState(writer.*, plain.len);
+    const fixed = try encodeRawFixedTokensFinalAlloc(allocator, tokens, final);
+    defer allocator.free(fixed);
+
+    if (options.block_selection == .stored_fixed) {
+        if (stored_len <= fixed.len) {
+            return writeStoredBlock(allocator, writer, plain, final);
+        }
+        return writeFixedTokens(allocator, writer, tokens, final);
+    }
+
+    const dynamic = try encodeRawDynamicTokensFinalAlloc(allocator, tokens, final);
+    defer allocator.free(dynamic);
+    if (stored_len <= fixed.len and stored_len <= dynamic.len) {
+        return writeStoredBlock(allocator, writer, plain, final);
+    }
+    if (fixed.len <= dynamic.len) {
+        return writeFixedTokens(allocator, writer, tokens, final);
+    }
+    return writeDynamicTokens(allocator, writer, tokens, final);
+}
+
+fn storedBlockEncodedSizeFromState(writer: bitstream.BitWriter, input_len: usize) usize {
+    return input_len + 5 + @intFromBool(writer.bit_index != 0);
+}
+
+fn writeStoredBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8, final: bool) !void {
+    if (input.len > max_stored_block_len) return error.InvalidBlockPlan;
+    try writer.alignToByte(allocator);
+    var header: [5]u8 = undefined;
+    writeStoredHeader(final, @intCast(input.len), &header);
+    try writer.bytes.appendSlice(allocator, &header);
+    try writer.bytes.appendSlice(allocator, input);
+}
+
 pub fn encodeRawFixedSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     var writer = bitstream.BitWriter{};
@@ -88,12 +157,7 @@ pub fn encodeRawFixedSplitAlloc(allocator: std.mem.Allocator, input: []const u8,
     while (offset < input.len) {
         const n = @min(block_len, input.len - offset);
         const final = offset + n == input.len;
-        const plan = switch (options.parser) {
-            .hash => try lz77.hashGreedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
-            .greedy => try lz77.greedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
-            .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
-            .optimal => try lz77.optimalPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
-        };
+        const plan = try planTokensAlloc(allocator, input[offset..][0..n], options);
         defer plan.deinit(allocator);
         try writeFixedTokens(allocator, &writer, plan.tokens, final);
         offset += n;
@@ -109,12 +173,7 @@ pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const
 }
 
 pub fn encodeRawDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
-    const plan = switch (options.parser) {
-        .hash => try lz77.hashGreedyPlanAlloc(allocator, input, options.lz77_options),
-        .greedy => try lz77.greedyPlanAlloc(allocator, input, options.lz77_options),
-        .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, options.lz77_options),
-        .optimal => try lz77.optimalPlanAlloc(allocator, input, options.lz77_options),
-    };
+    const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     return encodeRawDynamicTokensAlloc(allocator, plan.tokens);
 }
@@ -166,9 +225,13 @@ fn appendCodeLengthOps(allocator: std.mem.Allocator, ops: *std.ArrayList(CodeLen
 }
 
 pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
+    return encodeRawDynamicTokensFinalAlloc(allocator, tokens, true);
+}
+
+fn encodeRawDynamicTokensFinalAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token, final: bool) ![]u8 {
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
-    try writeDynamicTokens(allocator, &writer, tokens, true);
+    try writeDynamicTokens(allocator, &writer, tokens, final);
     return writer.toOwnedSlice(allocator);
 }
 
@@ -247,12 +310,7 @@ pub fn encodeRawDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u
     while (offset < input.len) {
         const n = @min(block_len, input.len - offset);
         const final = offset + n == input.len;
-        const plan = switch (options.parser) {
-            .hash => try lz77.hashGreedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
-            .greedy => try lz77.greedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
-            .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
-            .optimal => try lz77.optimalPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
-        };
+        const plan = try planTokensAlloc(allocator, input[offset..][0..n], options);
         defer plan.deinit(allocator);
         try writeDynamicTokens(allocator, &writer, plan.tokens, final);
         offset += n;
@@ -336,12 +394,7 @@ pub fn encodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u
 }
 
 pub fn encodeRawFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
-    const plan = switch (options.parser) {
-        .hash => try lz77.hashGreedyPlanAlloc(allocator, input, options.lz77_options),
-        .greedy => try lz77.greedyPlanAlloc(allocator, input, options.lz77_options),
-        .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, options.lz77_options),
-        .optimal => try lz77.optimalPlanAlloc(allocator, input, options.lz77_options),
-    };
+    const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     return encodeRawFixedTokensAlloc(allocator, plan.tokens);
 }
@@ -1592,4 +1645,20 @@ test "split raw dynamic encoder emits multi-block deflate stream" {
     const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "split raw best encoder selects block modes independently" {
+    const input = "abcdefghijklmnopqrstuvwxyz" ++ ("abcabcabcabc" ** 8);
+    const encoded = try encodeRawBestSplitAlloc(std.testing.allocator, input, 26, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+
+    const fixed = try encodeRawFixedSplitAlloc(std.testing.allocator, input, 26, optionsForLevel(.default));
+    defer std.testing.allocator.free(fixed);
+    const dynamic = try encodeRawDynamicSplitAlloc(std.testing.allocator, input, 26, optionsForLevel(.default));
+    defer std.testing.allocator.free(dynamic);
+    try std.testing.expect(encoded.len <= fixed.len);
+    try std.testing.expect(encoded.len <= dynamic.len);
 }

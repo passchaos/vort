@@ -85,6 +85,7 @@ architecture blindly.
 - [x] Block cost selection across stored/fixed/dynamic encoders.
 - [x] Raw fixed multi-block encoder with final/non-final block splitting.
 - [x] Raw dynamic multi-block encoder with final/non-final block splitting.
+- [x] Raw split-best encoder selecting stored/fixed/dynamic per bounded block.
 - [ ] Production dynamic Huffman encoder with optimized block splitting and block-type decisions.
 - [x] Compatibility benchmark smoke suite comparing Vort/gzip/zstd on sample files.
 - [x] Standard-corpus smoke benchmark comparing Vort/gzip/zlib-ng/zlib-rs/zstd.

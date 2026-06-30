@@ -197,6 +197,13 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeRawBestAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-raw-best-split-hex")) {
+        const payload = args.next() orelse "";
+        const block_len = try parseBlockLen(args.next(), 7);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawBestSplitAlloc(init.gpa, payload, block_len, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-best-hex")) {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());
@@ -336,6 +343,13 @@ fn printHex(stdout: *std.Io.Writer, bytes: []const u8) !void {
 
 fn parseParserMode(text: ?[]const u8) vort.ParserMode {
     return parseCompressionOptions(text).parser;
+}
+
+fn parseBlockLen(text: ?[]const u8, default: usize) !usize {
+    const value = text orelse return default;
+    const parsed = try std.fmt.parseInt(usize, value, 10);
+    if (parsed == 0) return error.InvalidBlockPlan;
+    return parsed;
 }
 
 fn parseCompressionOptions(text: ?[]const u8) vort.CompressionOptions {
