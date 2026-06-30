@@ -198,9 +198,12 @@ pub fn encodeLongDistanceAlloc(allocator: std.mem.Allocator, input: []const u8, 
 fn encodeLongDistancePayloadAlloc(allocator: std.mem.Allocator, input: []const u8, options: long_distance.Options) ![]u8 {
     const candidates = try long_distance.findCandidatesAlloc(allocator, input, options);
     defer allocator.free(candidates);
-    if (candidates.len == 0) return allocator.dupe(u8, input);
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
+    if (candidates.len == 0) {
+        try appendLiteralOp(allocator, &out, input);
+        return out.toOwnedSlice(allocator);
+    }
     var offset: usize = 0;
     for (candidates) |candidate| {
         if (candidate.position < offset) continue;
