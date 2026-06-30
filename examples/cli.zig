@@ -104,6 +104,18 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeGzipFixedWithOptionsAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "vort-rle-roundtrip")) {
+        const payload = args.next() orelse "";
+        const frame = try vort.storeEncodeRleAlloc(init.gpa, payload);
+        defer init.gpa.free(frame);
+        const decoded = try vort.storeDecodeAnyAlloc(init.gpa, frame);
+        defer init.gpa.free(decoded);
+        try stdout.print("input_bytes={d} frame_bytes={d} decoded_ok={} crc32={d}\n", .{
+            payload.len,
+            frame.len,
+            std.mem.eql(u8, payload, decoded),
+            vort.crc32(decoded),
+        });
     } else if (std.mem.eql(u8, command, "vort-deflate-roundtrip")) {
         const payload = args.next() orelse "";
         const frame = try vort.storeEncodeDeflateAlloc(init.gpa, payload);

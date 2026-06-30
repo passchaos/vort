@@ -17,6 +17,7 @@ pub const skippable_header_len: usize = 8;
 
 const flags_none: u8 = 0;
 const flags_deflate: u8 = 1;
+const flags_rle: u8 = 2;
 
 pub fn skippableEncodedSize(payload_len: usize) Error!usize {
     if (payload_len > std.math.maxInt(u32)) return error.IntegerOverflow;
@@ -90,6 +91,53 @@ pub fn encodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return out;
 }
 
+fn encodeRlePayloadAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var i: usize = 0;
+    while (i < input.len) {
+        const byte = input[i];
+        var run: usize = 1;
+        while (i + run < input.len and input[i + run] == byte and run < 255) run += 1;
+        try out.append(allocator, @intCast(run));
+        try out.append(allocator, byte);
+        i += run;
+    }
+    return out.toOwnedSlice(allocator);
+}
+
+fn decodeRlePayloadAlloc(allocator: std.mem.Allocator, payload: []const u8) ![]u8 {
+    if ((payload.len & 1) != 0) return error.CorruptFrame;
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var i: usize = 0;
+    while (i < payload.len) : (i += 2) {
+        const run = payload[i];
+        const byte = payload[i + 1];
+        if (run == 0) return error.CorruptFrame;
+        try out.ensureUnusedCapacity(allocator, run);
+        for (0..run) |_| out.appendAssumeCapacity(byte);
+    }
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn encodeRleAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const compressed = try encodeRlePayloadAlloc(allocator, input);
+    defer allocator.free(compressed);
+    const required = try encodedSize(compressed.len);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    writeHeader(out[0..header_len], .{
+        .version = current_version,
+        .flags = flags_rle,
+        .uncompressed_size = @intCast(input.len),
+        .stored_size = @intCast(compressed.len),
+        .checksum = checksum.crc32(input),
+    });
+    @memcpy(out[header_len..], compressed);
+    return out;
+}
+
 pub fn encodeDeflateAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const compressed = try deflate.encodeRawBestAlloc(allocator, input, .{});
     defer allocator.free(compressed);
@@ -120,6 +168,7 @@ pub fn decodeAnyAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
             break :blk out;
         },
         flags_deflate => try deflate.decodeRawAutoAlloc(allocator, payload),
+        flags_rle => try decodeRlePayloadAlloc(allocator, payload),
         else => return error.CorruptFrame,
     };
     errdefer allocator.free(decoded);
@@ -158,7 +207,7 @@ pub fn parseHeader(input: []const u8) Error!FrameInfo {
     const version = input[4];
     if (version != current_version) return error.UnsupportedVersion;
     const flags = input[5];
-    if (flags != flags_none and flags != flags_deflate) return error.CorruptFrame;
+    if (flags != flags_none and flags != flags_deflate and flags != flags_rle) return error.CorruptFrame;
     if (input[6] != 0 or input[7] != 0) return error.CorruptFrame;
     if (std.mem.readInt(u32, input[28..32], .little) != 0) return error.CorruptFrame;
 
@@ -1138,4 +1187,16 @@ test "thread-pool deflate stream matches planned deterministic output" {
     const pooled = try encodeThreadPoolDeflateStreamAlloc(std.testing.allocator, input, 13, 3);
     defer std.testing.allocator.free(pooled);
     try std.testing.expectEqualSlices(u8, planned, pooled);
+}
+
+test "native RLE frame round trips repeated payloads" {
+    const input = "aaaaabbbbbbbbbbbbbcccccccccccccccc";
+    const frame = try encodeRleAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_rle, info.flags);
+    try std.testing.expect(info.stored_size < info.uncompressed_size);
+    const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
