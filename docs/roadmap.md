@@ -65,6 +65,7 @@ architecture blindly.
 - [ ] Lazy/optimal LZ77 parser experiments with deterministic level/strategy configs.
 - [x] Huffman code generation and canonical-code validation.
 - [ ] Decompression hot-path benchmarks.
+- [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [ ] Compression ratio/throughput dashboards across real corpora.
 
 ## Milestone 5: native Vort format research

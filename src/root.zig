@@ -29,6 +29,7 @@ pub const storeDecodeConcatenatedAlloc = store.decodeConcatenatedAlloc;
 
 pub const encodeRawStoredDeflate = deflate.encodeRawStored;
 pub const decodeRawStoredDeflate = deflate.decodeRawStored;
+pub const encodeRawFixedDeflateAlloc = deflate.encodeRawFixedAlloc;
 pub const encodeRawStoredDeflateAlloc = deflate.encodeRawStoredAlloc;
 pub const decodeRawStoredDeflateAlloc = deflate.decodeRawStoredAlloc;
 pub const decodeRawFixed = deflate.decodeRawFixed;

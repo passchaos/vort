@@ -2,6 +2,7 @@ const std = @import("std");
 const checksum = @import("checksum.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
+const lz77 = @import("lz77.zig");
 const core = @import("core.zig");
 
 pub const Error = core.Error;
@@ -20,6 +21,67 @@ pub const OwnedDecodeResult = struct {
         allocator.free(self.bytes);
     }
 };
+
+pub fn encodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const plan = try lz77.greedyPlanAlloc(allocator, input, .{});
+    defer plan.deinit(allocator);
+    return encodeRawFixedTokensAlloc(allocator, plan.tokens);
+}
+
+pub fn encodeRawFixedTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
+    const lit_lengths = huffman.fixedLiteralLengths();
+    const lit_encoder = try huffman.FixedLiteralTable.Encoder.init(&lit_lengths);
+    const dist_lengths = huffman.fixedDistanceLengths();
+    const dist_encoder = try huffman.FixedDistanceTable.Encoder.init(&dist_lengths);
+
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writer.writeBits(allocator, 0b1, 1); // final block
+    try writer.writeBits(allocator, 0b01, 2); // fixed Huffman block
+
+    for (tokens) |token| {
+        switch (token) {
+            .literal => |byte| try lit_encoder.writeSymbol(&writer, allocator, byte),
+            .match => |m| {
+                const len_code = lengthCode(m.length);
+                try lit_encoder.writeSymbol(&writer, allocator, len_code.symbol);
+                if (len_code.extra_bits != 0) try writer.writeBits(allocator, len_code.extra_value, len_code.extra_bits);
+
+                const dist_code = distanceCode(m.distance);
+                try dist_encoder.writeSymbol(&writer, allocator, dist_code.symbol);
+                if (dist_code.extra_bits != 0) try writer.writeBits(allocator, dist_code.extra_value, dist_code.extra_bits);
+            },
+        }
+    }
+    try lit_encoder.writeSymbol(&writer, allocator, 256);
+    return writer.toOwnedSlice(allocator);
+}
+
+const CodeExtra = struct {
+    symbol: u16,
+    extra_bits: u6,
+    extra_value: u16,
+};
+
+fn lengthCode(length: u16) CodeExtra {
+    for (length_table, 0..) |entry, i| {
+        const span: u16 = if (entry.extra_bits == 0) 1 else @as(u16, 1) << @intCast(entry.extra_bits);
+        if (length >= entry.base and length < entry.base + span) {
+            return .{ .symbol = @intCast(257 + i), .extra_bits = entry.extra_bits, .extra_value = length - entry.base };
+        }
+    }
+    unreachable;
+}
+
+fn distanceCode(distance: u16) CodeExtra {
+    for (distance_table, 0..) |entry, i| {
+        const span: u16 = if (entry.extra_bits == 0) 1 else @as(u16, 1) << @intCast(entry.extra_bits);
+        if (distance >= entry.base and distance < entry.base + span) {
+            return .{ .symbol = @intCast(i), .extra_bits = entry.extra_bits, .extra_value = distance - entry.base };
+        }
+    }
+    unreachable;
+}
 
 pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {
     var reader = bitstream.BitReader.init(input);
@@ -837,4 +899,26 @@ test "gzip decoder accepts optional extra name comment and header crc fields" {
 test "gzip decoder rejects truncated optional headers" {
     try std.testing.expectError(error.TruncatedFrame, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x08, 0x04, 0, 0, 0, 0, 0, 3, 4, 0, 'a' }));
     try std.testing.expectError(error.TruncatedFrame, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x08, 0x08, 0, 0, 0, 0, 0, 3, 'n', 'o' }));
+}
+
+test "raw fixed Huffman encoder round trips through decoder" {
+    const cases = [_][]const u8{
+        "",
+        "hello",
+        "abcabcabcabc",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    };
+    for (cases) |case| {
+        const encoded = try encodeRawFixedAlloc(std.testing.allocator, case);
+        defer std.testing.allocator.free(encoded);
+        const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, case, decoded);
+    }
+}
+
+test "raw fixed Huffman encoder emits zlib-compatible hello vector" {
+    const encoded = try encodeRawFixedAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqualSlices(u8, &.{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 }, encoded);
 }
