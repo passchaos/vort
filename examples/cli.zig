@@ -199,6 +199,11 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeGzipBestAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-raw-dynamic-split-hex")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.encodeRawDynamicSplitAlloc(init.gpa, payload, 7, vort.optionsForCompressionLevel(.fast));
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-raw-dynamic-hex")) {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());

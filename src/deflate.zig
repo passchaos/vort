@@ -166,6 +166,13 @@ fn appendCodeLengthOps(allocator: std.mem.Allocator, ops: *std.ArrayList(CodeLen
 }
 
 pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeDynamicTokens(allocator, &writer, tokens, true);
+    return writer.toOwnedSlice(allocator);
+}
+
+fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, tokens: []const lz77.Token, final: bool) !void {
     var lit_freqs: [286]u32 = @splat(0);
     var dist_freqs: [30]u32 = @splat(0);
     for (tokens) |token| switch (token) {
@@ -179,7 +186,7 @@ pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const
     };
     lit_freqs[256] = 1;
     completeLiteralFrequencySet(&lit_freqs);
-    if (!dynamicDistanceSafe(&dist_freqs)) return encodeRawFixedTokensAlloc(allocator, tokens);
+    if (!dynamicDistanceSafe(&dist_freqs)) return writeFixedTokens(allocator, writer, tokens, final);
     completeDistanceFrequencySet(&dist_freqs);
 
     var lit_lengths_full = huffman.simpleCodeLengths(286, &lit_freqs, 15);
@@ -202,30 +209,54 @@ pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const
     const dist_encoder = try huffman.HuffmanTable(30).Encoder.init(dist_lengths_full[0..hdist]);
     const code_len_encoder = try huffman.CodeLengthTable.Encoder.init(&code_len_lengths);
 
-    var writer = bitstream.BitWriter{};
-    errdefer writer.deinit(allocator);
-    try writer.writeBits(allocator, 1, 1);
+    try writer.writeBits(allocator, @intFromBool(final), 1);
     try writer.writeBits(allocator, 0b10, 2);
     try writer.writeBits(allocator, @intCast(hlit - 257), 5);
     try writer.writeBits(allocator, @intCast(hdist - 1), 5);
     try writer.writeBits(allocator, @intCast(hclen - 4), 4);
     for (huffman.code_length_order[0..hclen]) |symbol| try writer.writeBits(allocator, code_len_lengths[symbol], 3);
     for (code_len_ops) |op| {
-        try code_len_encoder.writeSymbol(&writer, allocator, op.symbol);
+        try code_len_encoder.writeSymbol(writer, allocator, op.symbol);
         if (op.extra_bits != 0) try writer.writeBits(allocator, op.extra_value, op.extra_bits);
     }
     for (tokens) |token| switch (token) {
-        .literal => |byte| try lit_encoder.writeSymbol(&writer, allocator, byte),
+        .literal => |byte| try lit_encoder.writeSymbol(writer, allocator, byte),
         .match => |m| {
             const len_code = lengthCode(m.length);
-            try lit_encoder.writeSymbol(&writer, allocator, len_code.symbol);
+            try lit_encoder.writeSymbol(writer, allocator, len_code.symbol);
             if (len_code.extra_bits != 0) try writer.writeBits(allocator, len_code.extra_value, len_code.extra_bits);
             const dist_code = distanceCode(m.distance);
-            try dist_encoder.writeSymbol(&writer, allocator, dist_code.symbol);
+            try dist_encoder.writeSymbol(writer, allocator, dist_code.symbol);
             if (dist_code.extra_bits != 0) try writer.writeBits(allocator, dist_code.extra_value, dist_code.extra_bits);
         },
     };
-    try lit_encoder.writeSymbol(&writer, allocator, 256);
+    try lit_encoder.writeSymbol(writer, allocator, 256);
+}
+
+pub fn encodeRawDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    var offset: usize = 0;
+    if (input.len == 0) {
+        const plan = try lz77.hashGreedyPlanAlloc(allocator, "", options.lz77_options);
+        defer plan.deinit(allocator);
+        try writeDynamicTokens(allocator, &writer, plan.tokens, true);
+        return writer.toOwnedSlice(allocator);
+    }
+    while (offset < input.len) {
+        const n = @min(block_len, input.len - offset);
+        const final = offset + n == input.len;
+        const plan = switch (options.parser) {
+            .hash => try lz77.hashGreedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
+            .greedy => try lz77.greedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
+            .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
+            .optimal => try lz77.optimalPlanAlloc(allocator, input[offset..][0..n], options.lz77_options),
+        };
+        defer plan.deinit(allocator);
+        try writeDynamicTokens(allocator, &writer, plan.tokens, final);
+        offset += n;
+    }
     return writer.toOwnedSlice(allocator);
 }
 
@@ -1548,6 +1579,15 @@ test "fast level skips dynamic block candidate" {
 test "split raw fixed encoder emits multi-block deflate stream" {
     const input = "abcdefghijklmnopqrstuvwxyz";
     const encoded = try encodeRawFixedSplitAlloc(std.testing.allocator, input, 7, optionsForLevel(.fast));
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "split raw dynamic encoder emits multi-block deflate stream" {
+    const input = "abcdefghijklmnopqrstuvwxyz";
+    const encoded = try encodeRawDynamicSplitAlloc(std.testing.allocator, input, 7, optionsForLevel(.fast));
     defer std.testing.allocator.free(encoded);
     const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);

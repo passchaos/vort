@@ -60,6 +60,7 @@ pub const encodeRawFixedSplitAlloc = deflate.encodeRawFixedSplitAlloc;
 pub const encodeRawBestAlloc = deflate.encodeRawBestAlloc;
 pub const encodeRawDynamicLiteralAlloc = deflate.encodeRawDynamicLiteralAlloc;
 pub const encodeRawDynamicWithOptionsAlloc = deflate.encodeRawDynamicWithOptionsAlloc;
+pub const encodeRawDynamicSplitAlloc = deflate.encodeRawDynamicSplitAlloc;
 pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAlloc;
 pub const CompressionOptions = deflate.CompressionOptions;
 pub const BlockSelection = deflate.BlockSelection;
