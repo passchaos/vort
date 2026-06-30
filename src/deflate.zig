@@ -408,6 +408,7 @@ pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {
 pub fn decodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
+    try out.ensureTotalCapacity(allocator, @min(input.len * 4, 1 << 20));
 
     var reader = bitstream.BitReader.init(input);
     const final = try reader.readBits(u1, 1);
