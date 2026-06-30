@@ -128,6 +128,12 @@ pub fn build(b: *std.Build) void {
     const native_parallel_bench_step = b.step("bench-native-parallel", "Compare native planned/parallel/thread-pool/work-queue encoders");
     native_parallel_bench_step.dependOn(&run_native_parallel_bench.step);
 
+    const native_parallel_corpus_report = b.addSystemCommand(&.{ "python3", "tools/native_parallel_corpus_report.py" });
+    native_parallel_corpus_report.addArtifactArg(native_parallel_bench_exe);
+    if (b.args) |args| native_parallel_corpus_report.addArgs(args);
+    const native_parallel_corpus_report_step = b.step("run-native-parallel-corpus-report", "Run native parallel/thread-pool benchmark across Silesia files");
+    native_parallel_corpus_report_step.dependOn(&native_parallel_corpus_report.step);
+
     const fuzz_smoke_exe = b.addExecutable(.{
         .name = "vort-fuzz-smoke",
         .root_module = b.createModule(.{

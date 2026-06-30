@@ -79,6 +79,7 @@ zig build bench-corpus-decode -Doptimize=ReleaseFast
 zig build bench-deflate-encode -Doptimize=ReleaseFast
 zig build bench-native-parallel -Doptimize=ReleaseFast
 zig build bench-native-parallel -Doptimize=ReleaseFast -- README.md 4096
+zig build -Doptimize=ReleaseFast run-native-parallel-corpus-report
 ```
 
 ## Current API sketch
