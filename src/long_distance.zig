@@ -35,6 +35,23 @@ pub fn findCandidatesAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     return out.toOwnedSlice(allocator);
 }
 
+pub const Summary = struct {
+    candidates: usize = 0,
+    longest: usize = 0,
+    max_distance: usize = 0,
+};
+
+pub fn summarizeAlloc(allocator: std.mem.Allocator, input: []const u8, options: Options) !Summary {
+    const candidates = try findCandidatesAlloc(allocator, input, options);
+    defer allocator.free(candidates);
+    var summary = Summary{ .candidates = candidates.len };
+    for (candidates) |candidate| {
+        summary.longest = @max(summary.longest, candidate.length);
+        summary.max_distance = @max(summary.max_distance, candidate.distance);
+    }
+    return summary;
+}
+
 test "long-distance scanner finds beyond-window repetitions" {
     const prefix = "abcd" ** 9000;
     const input = prefix ++ "----" ++ prefix[0..64].*;
@@ -43,4 +60,13 @@ test "long-distance scanner finds beyond-window repetitions" {
     try std.testing.expect(candidates.len > 0);
     try std.testing.expect(candidates[0].distance >= 32769);
     try std.testing.expect(candidates[0].length >= 16);
+}
+
+test "long-distance summary reports aggregate candidates" {
+    const prefix = "abcd" ** 9000;
+    const input = prefix ++ "----" ++ prefix[0..64].*;
+    const summary = try summarizeAlloc(std.testing.allocator, input, .{ .min_distance = 32769, .min_length = 16 });
+    try std.testing.expect(summary.candidates > 0);
+    try std.testing.expect(summary.longest >= 16);
+    try std.testing.expect(summary.max_distance >= 32769);
 }
