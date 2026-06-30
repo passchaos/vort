@@ -17,6 +17,7 @@ ZLIB_RS_COMPRESS = pathlib.Path.home() / "Work" / "zlib-rs" / "target" / "debug"
 SILESIA = pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"
 SMOKE_LIMIT = 128 * 1024
 HEADER = "corpus,input_bytes,vort_zlib_fastest_bytes,vort_ms,vort_decode_ms,gzip_bytes,gzip_ms,gzip_decode_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_ng_decode_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zlib_rs_decode_ms,zstd_bytes,zstd_ms,zstd_decode_ms"
+COLUMNS = HEADER.split(",")
 
 
 def time_call(fn):
@@ -141,18 +142,57 @@ def load_cases(full: bool, suite: bool) -> list[tuple[str, bytes]]:
     return [(label, data)]
 
 
+def row_to_dict(row: str) -> dict[str, str]:
+    values = row.split(",")
+    return dict(zip(COLUMNS, values))
+
+
+def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool) -> None:
+    records = [row_to_dict(row) for row in rows]
+    title = "Silesia per-file benchmark suite" if suite else "Silesia benchmark smoke"
+    mode = "full" if full else "bounded-128KiB"
+    lines = [
+        f"# {title}",
+        "",
+        f"- mode: `{mode}`",
+        f"- rows: {len(records)}",
+        f"- gzip: `{GZIP or 'missing'}`",
+        f"- zstd: `{ZSTD or 'missing'}`",
+        f"- zlib-ng minigzip: `{ZLIB_NG_MINIGZIP if ZLIB_NG_MINIGZIP.exists() else 'missing'}`",
+        f"- zlib-rs compress: `{ZLIB_RS_COMPRESS if ZLIB_RS_COMPRESS.exists() else 'missing'}`",
+        "",
+        "| corpus | input | Vort bytes | Vort ms | Vort dec ms | gzip bytes | gzip ms | zlib-ng bytes | zlib-rs bytes | zstd bytes |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for rec in records:
+        lines.append(
+            "| {corpus} | {input_bytes} | {vort_zlib_fastest_bytes} | {vort_ms} | {vort_decode_ms} | {gzip_bytes} | {gzip_ms} | {zlib_ng_gzip_bytes} | {zlib_rs_zlib_bytes} | {zstd_bytes} |".format(**rec)
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+
+
 def main() -> int:
     if not SILESIA.exists():
         print("standard corpus report: missing silesia-small.tar")
         return 0
     full = "--full" in sys.argv[1:]
     suite = "--suite" in sys.argv[1:]
+    markdown_path = None
+    for index, arg in enumerate(sys.argv):
+        if arg == "--markdown" and index + 1 < len(sys.argv):
+            markdown_path = pathlib.Path(sys.argv[index + 1])
     cases = load_cases(full, suite)
+    rows: list[str] = []
     with tempfile.TemporaryDirectory() as td:
         root = pathlib.Path(td)
         print(HEADER)
         for index, (label, data) in enumerate(cases):
-            print(run_case(label, data, root, index))
+            row = run_case(label, data, root, index)
+            rows.append(row)
+            print(row)
+    if markdown_path is not None:
+        write_markdown(rows, markdown_path, suite, full)
     return 0
 
 

@@ -63,6 +63,7 @@ zig build -Doptimize=ReleaseFast run-compat-benchmark
 zig build -Doptimize=ReleaseFast run-standard-corpus-report
 zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --suite
 zig build -Doptimize=ReleaseFast run-standard-corpus-suite
+zig build -Doptimize=ReleaseFast run-standard-corpus-dashboard
 zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --full
 zig build run-compression-report
 zig build run-dictionary-report

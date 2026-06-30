@@ -120,6 +120,7 @@ architecture blindly.
 - [x] File-path compression/decompression throughput report for ad-hoc corpora.
 - [x] Silesia-sample standard corpus benchmark smoke.
 - [x] Automated per-file Silesia throughput report.
+- [x] Markdown benchmark dashboard export for Silesia suite.
 - [ ] Automated throughput dashboards across multiple full standard real corpora.
 
 ## Milestone 5: native Vort format research

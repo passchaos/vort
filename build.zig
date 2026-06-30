@@ -362,6 +362,12 @@ pub fn build(b: *std.Build) void {
     const standard_corpus_suite_step = b.step("run-standard-corpus-suite", "Run per-file Silesia Vort/gzip/zlib-ng/zlib-rs/zstd benchmark suite");
     standard_corpus_suite_step.dependOn(&standard_corpus_suite.step);
 
+    const standard_corpus_dashboard = b.addSystemCommand(&.{ "python3", "tools/standard_corpus_report.py" });
+    standard_corpus_dashboard.addArtifactArg(cli_exe);
+    standard_corpus_dashboard.addArgs(&.{ "--suite", "--markdown", "zig-out/vort-standard-corpus-dashboard.md" });
+    const standard_corpus_dashboard_step = b.step("run-standard-corpus-dashboard", "Write a Markdown Silesia benchmark dashboard to zig-out");
+    standard_corpus_dashboard_step.dependOn(&standard_corpus_dashboard.step);
+
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);
     check_step.dependOn(&cli_exe.step);
