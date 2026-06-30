@@ -131,6 +131,7 @@ pub const findLongDistanceCandidatesAlloc = long_distance.findCandidatesAlloc;
 pub const summarizeLongDistanceAlloc = long_distance.summarizeAlloc;
 pub const planBlocksAlloc = planner.planBlocksAlloc;
 pub const planBlocksWithLongDistanceAlloc = planner.planBlocksWithLongDistanceAlloc;
+pub const planBlocksAligningLongDistanceAlloc = planner.planBlocksAligningLongDistanceAlloc;
 
 test {
     _ = checksum;

@@ -730,9 +730,25 @@ pub fn encodeBlockedBestStreamWithOptionsAlloc(allocator: std.mem.Allocator, inp
 pub fn encodeBlockedBestStreamWithLdmSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: deflate.CompressionOptions, ldm_options: long_distance.Options) ![]u8 {
     var stream = try std.ArrayList(u8).initCapacity(allocator, 0);
     errdefer stream.deinit(allocator);
-    const body = try encodeBlockedBestStreamWithOptionsAlloc(allocator, input, block_len, options);
-    defer allocator.free(body);
-    try stream.appendSlice(allocator, body);
+    const plan = try @import("planner.zig").planBlocksAligningLongDistanceAlloc(allocator, input, .{ .block_len = block_len, .worker_count = 1 }, ldm_options);
+    defer allocator.free(plan);
+    for (plan) |block| {
+        const frame = try encodeBlockBestAlloc(allocator, input[block.input_offset..][0..block.input_len], options);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    if (input.len == 0) {
+        const frame = try encodeBlockBestAlloc(allocator, "", options);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    const index = try buildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    try stream.appendSlice(allocator, index_frame);
     const summary = try long_distance.summarizeAlloc(allocator, input, ldm_options);
     const summary_bytes = encodeLdmSummaryBytes(summary);
     const summary_frame = try encodeSkippableAlloc(allocator, &summary_bytes);

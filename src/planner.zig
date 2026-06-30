@@ -36,13 +36,51 @@ pub fn planBlocksWithLongDistanceAlloc(allocator: std.mem.Allocator, input: []co
     errdefer allocator.free(blocks);
     const candidates = try long_distance.findCandidatesAlloc(allocator, input, ldm_options);
     defer allocator.free(candidates);
+    annotateBlocksWithCandidates(blocks, candidates);
+    return blocks;
+}
+
+pub fn planBlocksAligningLongDistanceAlloc(allocator: std.mem.Allocator, input: []const u8, options: Options, ldm_options: long_distance.Options) ![]Block {
+    if (options.block_len == 0 or options.worker_count == 0) return error.InvalidBlockPlan;
+    if (input.len == 0) return allocator.alloc(Block, 0);
+    const candidates = try long_distance.findCandidatesAlloc(allocator, input, ldm_options);
+    defer allocator.free(candidates);
+    var blocks_list: std.ArrayList(Block) = .empty;
+    errdefer blocks_list.deinit(allocator);
+    var offset: usize = 0;
+    var block_index: usize = 0;
+    while (offset < input.len) : (block_index += 1) {
+        const remaining = input.len - offset;
+        var len = @min(options.block_len, remaining);
+        if (nextCandidateInRange(candidates, offset, offset + len)) |candidate| {
+            if (candidate.position > offset) len = candidate.position - offset;
+        }
+        try blocks_list.append(allocator, .{
+            .input_offset = offset,
+            .input_len = len,
+            .worker_index = block_index % options.worker_count,
+        });
+        offset += len;
+    }
+    const blocks = try blocks_list.toOwnedSlice(allocator);
+    annotateBlocksWithCandidates(blocks, candidates);
+    return blocks;
+}
+
+fn nextCandidateInRange(candidates: []const long_distance.Candidate, start: usize, end: usize) ?long_distance.Candidate {
+    for (candidates) |candidate| {
+        if (candidate.position > start and candidate.position < end) return candidate;
+    }
+    return null;
+}
+
+fn annotateBlocksWithCandidates(blocks: []Block, candidates: []const long_distance.Candidate) void {
     for (candidates) |candidate| {
         const block_i = findBlockForOffset(blocks, candidate.position) orelse continue;
         blocks[block_i].ldm_candidates += 1;
         blocks[block_i].ldm_longest = @max(blocks[block_i].ldm_longest, candidate.length);
         blocks[block_i].ldm_max_distance = @max(blocks[block_i].ldm_max_distance, candidate.distance);
     }
-    return blocks;
 }
 
 fn findBlockForOffset(blocks: []const Block, offset: usize) ?usize {
@@ -80,4 +118,14 @@ test "long-distance-aware block planner annotates candidate blocks" {
         }
     }
     try std.testing.expect(annotated > 0);
+}
+
+test "long-distance-aligning block planner starts block at candidate" {
+    const prefix = "abcd" ** 9000;
+    const input = prefix ++ "----" ++ prefix[0..64].*;
+    const blocks = try planBlocksAligningLongDistanceAlloc(std.testing.allocator, input, .{ .block_len = input.len, .worker_count = 1 }, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(blocks);
+    try std.testing.expect(blocks.len >= 2);
+    try std.testing.expect(blocks[1].ldm_candidates > 0);
+    try std.testing.expectEqual(blocks[0].input_offset + blocks[0].input_len, blocks[1].input_offset);
 }
