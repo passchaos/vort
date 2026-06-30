@@ -47,12 +47,12 @@ zig build run-zlib-family-diff
 zig build run-external-probe
 zig build run-cpu-features
 zig build run-zstd-compare
-zig build run-compat-benchmark
-zig build run-standard-corpus-report
-zig build run-standard-corpus-report -- --full
+zig build -Doptimize=ReleaseFast run-compat-benchmark
+zig build -Doptimize=ReleaseFast run-standard-corpus-report
+zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --full
 zig build run-compression-report
 zig build run-dictionary-report
-zig build run-file-corpus-report -- README.md docs/roadmap.md
+zig build -Doptimize=ReleaseFast run-file-corpus-report -- README.md docs/roadmap.md
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build bench-deflate-encode -Doptimize=ReleaseFast
