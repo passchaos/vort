@@ -13,11 +13,13 @@ HEADER = "corpus,mode,input_bytes,stream_bytes,elapsed_ms,range_offset,range_len
 COLS = HEADER.split(",")
 
 
-def load_cases(full: bool) -> list[tuple[str, bytes]]:
-    if not SILESIA.exists():
-        return []
+def load_default_cases(full: bool) -> list[tuple[str, bytes]]:
+    return load_archive_cases(SILESIA, full) if SILESIA.exists() else []
+
+
+def load_archive_cases(path: pathlib.Path, full: bool) -> list[tuple[str, bytes]]:
     cases: list[tuple[str, bytes]] = []
-    with tarfile.open(SILESIA, "r:*") as tar:
+    with tarfile.open(path, "r:*") as tar:
         for member in tar.getmembers():
             if not member.isfile():
                 continue
@@ -26,6 +28,31 @@ def load_cases(full: bool) -> list[tuple[str, bytes]]:
                 continue
             data = extracted.read()
             label = member.name.removeprefix("silesia-small/")
+            if label == member.name:
+                label = f"{path.name}:{member.name}"
+            if not full:
+                data = data[:SMOKE_LIMIT]
+                label = f"{label}-128k"
+            cases.append((label, data))
+    return cases
+
+
+def load_path_cases(paths: list[pathlib.Path], full: bool) -> list[tuple[str, bytes]]:
+    cases: list[tuple[str, bytes]] = []
+    for path in paths:
+        if path.is_dir():
+            for child in sorted(p for p in path.rglob("*") if p.is_file()):
+                data = child.read_bytes()
+                label = str(child.relative_to(path.parent))
+                if not full:
+                    data = data[:SMOKE_LIMIT]
+                    label = f"{label}-128k"
+                cases.append((label, data))
+        elif tarfile.is_tarfile(path):
+            cases.extend(load_archive_cases(path, full))
+        else:
+            data = path.read_bytes()
+            label = path.name
             if not full:
                 data = data[:SMOKE_LIMIT]
                 label = f"{label}-128k"
@@ -37,10 +64,10 @@ def row_to_dict(row: str) -> dict[str, str]:
     return dict(zip(COLS, row.split(",")))
 
 
-def write_markdown(rows: list[str], path: pathlib.Path, full: bool) -> None:
+def write_markdown(rows: list[str], path: pathlib.Path, full: bool, external_paths: bool = False) -> None:
     records = [row_to_dict(row) for row in rows]
     lines = [
-        "# Native parallel Silesia benchmark",
+        "# Native parallel external corpus benchmark" if external_paths else "# Native parallel Silesia benchmark",
         "",
         f"- mode: `{'full' if full else 'bounded-128KiB'}`",
         f"- rows: {len(records)}",
@@ -59,11 +86,17 @@ def main() -> int:
         raise SystemExit(f"missing native parallel bench executable at {EXE}; run zig build first")
     full = "--full" in sys.argv[1:]
     markdown_path = None
+    corpus_paths: list[pathlib.Path] = []
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
             markdown_path = pathlib.Path(sys.argv[index + 1])
+        if arg == "--paths":
+            for value in sys.argv[index + 1 :]:
+                if value.startswith("--"):
+                    break
+                corpus_paths.append(pathlib.Path(value))
     block_len = "65536" if full else "8192"
-    cases = load_cases(full)
+    cases = load_path_cases(corpus_paths, full) if corpus_paths else load_default_cases(full)
     if not cases:
         print("native parallel corpus report: missing silesia-small.tar")
         return 0
@@ -81,7 +114,7 @@ def main() -> int:
                 rows.append(row)
                 print(row)
     if markdown_path is not None:
-        write_markdown(rows, markdown_path, full)
+        write_markdown(rows, markdown_path, full, len(corpus_paths) != 0)
     return 0
 
 
