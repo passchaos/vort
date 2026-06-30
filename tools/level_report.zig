@@ -27,7 +27,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("case,level,parser,block_selection,max_chain,nice_len,tokens,fixed_bits,raw_best_bytes,roundtrip_crc32\n", .{});
+    try stdout.print("case,level,parser,block_selection,max_chain,nice_len,split_min,split_max,split_step,tokens,fixed_bits,raw_best_bytes,adaptive_bytes,roundtrip_crc32\n", .{});
 
     for (cases) |case| {
         for (levels) |level_case| {
@@ -46,16 +46,26 @@ pub fn main(init: std.process.Init) !void {
             defer init.gpa.free(decoded);
             if (!std.mem.eql(u8, case.input, decoded)) return error.RoundTripMismatch;
 
-            try stdout.print("{s},{s},{s},{s},{d},{d},{d},{d},{d},{d}\n", .{
+            const adaptive = try vort.encodeRawBestAdaptiveSplitAlloc(init.gpa, case.input, options, options.split_options);
+            defer init.gpa.free(adaptive);
+            const adaptive_decoded = try vort.decodeRawDeflateAlloc(init.gpa, adaptive);
+            defer init.gpa.free(adaptive_decoded);
+            if (!std.mem.eql(u8, case.input, adaptive_decoded)) return error.RoundTripMismatch;
+
+            try stdout.print("{s},{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
                 case.name,
                 level_case.name,
                 @tagName(options.parser),
                 @tagName(options.block_selection),
                 options.lz77_options.max_chain,
                 options.lz77_options.nice_len,
+                options.split_options.min_block_len,
+                options.split_options.max_block_len,
+                options.split_options.search_step,
                 plan.stats.tokenCount(),
                 vort.fixedLz77BitCost(plan.tokens),
                 encoded.len,
+                adaptive.len,
                 vort.crc32(decoded),
             });
         }

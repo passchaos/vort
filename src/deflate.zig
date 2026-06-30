@@ -21,16 +21,17 @@ pub const CompressionOptions = struct {
     parser: ParserMode = .greedy,
     lz77_options: lz77.GreedyOptions = .{},
     block_selection: BlockSelection = .stored_fixed_dynamic,
+    split_options: AdaptiveSplitOptions = .{},
 };
 
 pub const CompressionLevel = enum { fastest, fast, default, best };
 
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
-        .fastest => .{ .parser = .hash, .lz77_options = .{ .max_chain = 4, .nice_len = 8 }, .block_selection = .stored_fixed },
-        .fast => .{ .parser = .hash, .lz77_options = .{ .max_chain = 32, .nice_len = 16 }, .block_selection = .stored_fixed },
-        .default => .{ .parser = .lazy, .lz77_options = .{ .max_chain = 128, .nice_len = 64 } },
-        .best => .{ .parser = .optimal, .lz77_options = .{ .max_chain = 512, .nice_len = 128 } },
+        .fastest => .{ .parser = .hash, .lz77_options = .{ .max_chain = 4, .nice_len = 8 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
+        .fast => .{ .parser = .hash, .lz77_options = .{ .max_chain = 32, .nice_len = 16 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 16 * 1024, .max_block_len = max_stored_block_len, .sample_len = 2048, .search_step = 16 * 1024 } },
+        .default => .{ .parser = .lazy, .lz77_options = .{ .max_chain = 128, .nice_len = 64 }, .split_options = .{ .min_block_len = 8 * 1024, .max_block_len = max_stored_block_len, .sample_len = 4096, .search_step = 8 * 1024 } },
+        .best => .{ .parser = .optimal, .lz77_options = .{ .max_chain = 512, .nice_len = 128 }, .split_options = .{ .min_block_len = 4 * 1024, .max_block_len = max_stored_block_len, .sample_len = 8192, .search_step = 4 * 1024 } },
     };
 }
 
