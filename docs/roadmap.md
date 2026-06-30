@@ -39,6 +39,7 @@ architecture blindly.
 - [x] Serialized/sidecar frame indexes.
 - [x] Extensible hex-sample fuzz corpus harness for headers and malformed frames.
 - [x] Coverage-guided fuzz integration plan and reusable corpus entrypoint.
+- [x] Raw-byte fuzz target function and smoke executable.
 - [ ] libFuzzer/AFL runner wiring.
 
 ## Milestone 3: deflate/zlib/gzip compatibility
