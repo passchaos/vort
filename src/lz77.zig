@@ -34,6 +34,7 @@ pub const GreedyOptions = struct {
     max_candidates: usize = 1,
     lazy_min_gain: usize = 2,
     min_match: usize = min_match_len,
+    min_savings_bits: usize = 0,
 };
 
 pub const GreedyPlan = struct {
@@ -55,7 +56,7 @@ pub fn greedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options:
     var pos: usize = 0;
     while (pos < input.len) {
         const best = findBestMatch(input, pos, options);
-        if (best.length >= minMatch(options)) {
+        if (acceptMatch(input, pos, best.length, best.distance, options)) {
             try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
             stats.matches += 1;
             stats.matched_bytes += best.length;
@@ -78,7 +79,7 @@ pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     var pos: usize = 0;
     while (pos < input.len) {
         const best = findBestMatch(input, pos, options);
-        if (best.length < minMatch(options)) {
+        if (!acceptMatch(input, pos, best.length, best.distance, options)) {
             try tokens.append(allocator, .{ .literal = input[pos] });
             stats.literals += 1;
             pos += 1;
@@ -87,7 +88,7 @@ pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 
         if (pos + 1 < input.len) {
             const next = findBestMatch(input, pos + 1, options);
-            if (next.length >= best.length + options.lazy_min_gain) {
+            if (next.length >= best.length + options.lazy_min_gain and acceptMatch(input, pos + 1, next.length, next.distance, options)) {
                 try tokens.append(allocator, .{ .literal = input[pos] });
                 stats.literals += 1;
                 pos += 1;
@@ -120,6 +121,7 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
         for (candidates.items[0..candidates.len]) |best| {
             var len = minMatch(options);
             while (len <= best.length) : (len += 1) {
+                if (!acceptMatch(input, rev_i, len, best.distance, options)) continue;
                 const cost = fixedMatchCost(len, best.distance) + costs[rev_i + len];
                 if (cost < costs[rev_i]) {
                     costs[rev_i] = cost;
@@ -213,6 +215,15 @@ fn minMatch(options: GreedyOptions) usize {
     return @max(min_match_len, @min(options.min_match, max_match_len));
 }
 
+fn acceptMatch(input: []const u8, pos: usize, length: usize, distance: usize, options: GreedyOptions) bool {
+    if (length < minMatch(options) or distance == 0) return false;
+    if (pos + length > input.len) return false;
+    var literal_cost: usize = 0;
+    for (input[pos..][0..length]) |byte| literal_cost += fixedLiteralCost(byte);
+    const match_cost = fixedMatchCost(length, distance);
+    return literal_cost >= match_cost + options.min_savings_bits;
+}
+
 pub fn fixedBitCost(tokens: []const Token) usize {
     var cost: usize = 3;
     for (tokens) |token| {
@@ -298,7 +309,7 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
             }
         }
 
-        if (best.length >= minimum) {
+        if (acceptMatch(input, pos, best.length, best.distance, options)) {
             try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
             stats.matches += 1;
             stats.matched_bytes += best.length;
@@ -447,6 +458,16 @@ test "parser honors configurable minimum match length" {
     defer min4.deinit(std.testing.allocator);
     try std.testing.expect(min3.stats.matches > 0);
     try std.testing.expectEqual(@as(usize, 0), min4.stats.matches);
+}
+
+test "parser honors minimum savings threshold" {
+    const input = "abcabc";
+    const permissive = try greedyPlanAlloc(std.testing.allocator, input, .{ .min_savings_bits = 0 });
+    defer permissive.deinit(std.testing.allocator);
+    const strict = try greedyPlanAlloc(std.testing.allocator, input, .{ .min_savings_bits = 64 });
+    defer strict.deinit(std.testing.allocator);
+    try std.testing.expect(permissive.stats.matches > 0);
+    try std.testing.expectEqual(@as(usize, 0), strict.stats.matches);
 }
 
 test "optimal LZ77 prototype round trips and is no worse by fixed bit cost" {

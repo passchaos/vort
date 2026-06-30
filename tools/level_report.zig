@@ -27,7 +27,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("case,level,parser,block_selection,max_chain,nice_len,max_candidates,lazy_min_gain,min_match,split_min,split_max,split_step,tokens,fixed_bits,raw_best_bytes,adaptive_bytes,roundtrip_crc32\n", .{});
+    try stdout.print("case,level,parser,block_selection,max_chain,nice_len,max_candidates,lazy_min_gain,min_match,min_savings_bits,split_min,split_max,split_step,tokens,fixed_bits,raw_best_bytes,adaptive_bytes,roundtrip_crc32\n", .{});
 
     for (cases) |case| {
         for (levels) |level_case| {
@@ -52,7 +52,7 @@ pub fn main(init: std.process.Init) !void {
             defer init.gpa.free(adaptive_decoded);
             if (!std.mem.eql(u8, case.input, adaptive_decoded)) return error.RoundTripMismatch;
 
-            try stdout.print("{s},{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
+            try stdout.print("{s},{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
                 case.name,
                 level_case.name,
                 @tagName(options.parser),
@@ -62,6 +62,7 @@ pub fn main(init: std.process.Init) !void {
                 options.lz77_options.max_candidates,
                 options.lz77_options.lazy_min_gain,
                 options.lz77_options.min_match,
+                options.lz77_options.min_savings_bits,
                 options.split_options.min_block_len,
                 options.split_options.max_block_len,
                 options.split_options.search_step,

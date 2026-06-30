@@ -125,6 +125,7 @@ architecture blindly.
 - [x] Level-specific optimal parser match-candidate limits.
 - [x] Level-specific lazy parser gain thresholds.
 - [x] Level-specific minimum match length parser setting.
+- [x] Level-specific minimum match savings parser setting.
 - [ ] Production optimal parser with full level/strategy configs.
 - [x] Huffman code generation, simple length building, and canonical-code validation.
 - [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.
