@@ -202,6 +202,18 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(stream);
         const summary = try vort.storeParseEmbeddedLdmSummary(stream);
         try stdout.print("ldm_stream_bytes={d} candidates={d} longest={d} max_distance={d}\n", .{ stream.len, summary.candidates, summary.longest, summary.max_distance });
+    } else if (std.mem.eql(u8, command, "vort-ldm-indexed-range-demo")) {
+        const prefix = makeDemoLdmPrefix();
+        const payloads = [_][]const u8{
+            prefix ++ "----" ++ prefix[0..1024].*,
+            "tail",
+        };
+        const stream = try vort.storeEncodeIndexedLongDistanceStreamAlloc(init.gpa, &payloads, .{ .min_distance = 32769, .min_length = 16 });
+        defer init.gpa.free(stream);
+        const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, prefix.len + 4, 24);
+        defer init.gpa.free(range);
+        const modes = try vort.storeSummarizeModes(stream);
+        try stdout.print("range_crc32={d} ldm_indexed_stream_bytes={d} modes={d}/{d}/{d}/{d}/{d}\n", .{ vort.crc32(range), stream.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch, modes.ldm });
     } else if (std.mem.eql(u8, command, "store-range-demo")) {
         const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
         const stream = try vort.storeEncodeIndexedStreamAlloc(init.gpa, &payloads);
@@ -399,6 +411,16 @@ fn printHex(stdout: *std.Io.Writer, bytes: []const u8) !void {
 
 fn parseParserMode(text: ?[]const u8) vort.ParserMode {
     return parseCompressionOptions(text).parser;
+}
+
+fn makeDemoLdmPrefix() [33_000]u8 {
+    var out: [33_000]u8 = undefined;
+    var x: u32 = 0x1234_5678;
+    for (&out) |*byte| {
+        x = x *% 1664525 +% 1013904223;
+        byte.* = @truncate(x >> 24);
+    }
+    return out;
 }
 
 fn parseBlockLen(text: ?[]const u8, default: usize) !usize {
