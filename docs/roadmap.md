@@ -123,4 +123,5 @@ architecture blindly.
 - [x] Deterministic block planning metadata for future multi-threaded encoding.
 - [x] Deterministic block-planned encoder execution API.
 - [x] Parallel multi-threaded encoder execution with deterministic output order.
-- [ ] Production thread-pool encoder scheduling and benchmarking.
+- [x] Fixed worker-count thread-pool encoder scheduling.
+- [ ] Production thread-pool encoder benchmarking and work stealing.
