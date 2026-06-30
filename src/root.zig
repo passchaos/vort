@@ -83,6 +83,7 @@ pub const decodeGzipStored = deflate.decodeGzipStored;
 pub const encodeGzipStoredAlloc = deflate.encodeGzipStoredAlloc;
 pub const decodeGzipStoredAlloc = deflate.decodeGzipStoredAlloc;
 pub const decodeGzipAlloc = deflate.decodeGzipAlloc;
+pub const decodeGzipConcatenatedAlloc = deflate.decodeGzipConcatenatedAlloc;
 
 pub const Lz77Token = lz77.Token;
 pub const greedyLz77PlanAlloc = lz77.greedyPlanAlloc;

@@ -907,6 +907,26 @@ pub fn decodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return out;
 }
 
+pub fn decodeGzipConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const data_offset = try parseGzipHeader(input[offset..]);
+        const raw = try decodeRawAutoAllocPartial(allocator, input[offset + data_offset ..]);
+        defer raw.deinit(allocator);
+        const footer_offset = offset + data_offset + raw.input_read;
+        if (input.len - footer_offset < 8) return error.TruncatedFrame;
+        const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
+        const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
+        if (checksum.crc32(raw.bytes) != expected_crc) return error.ChecksumMismatch;
+        if (@as(u32, @truncate(raw.bytes.len)) != expected_size) return error.SizeMismatch;
+        try out.appendSlice(allocator, raw.bytes);
+        offset = footer_offset + 8;
+    }
+    return out.toOwnedSlice(allocator);
+}
+
 pub fn decodeGzipAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const data_offset = try parseGzipHeader(input);
 
@@ -1432,4 +1452,18 @@ test "compression level presets round trip" {
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, input, decoded);
     }
+}
+
+test "gzip concatenated members decode in sequence" {
+    const a = try encodeGzipFixedAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(a);
+    const b = try encodeGzipFixedAlloc(std.testing.allocator, "world");
+    defer std.testing.allocator.free(b);
+    var cat: std.ArrayList(u8) = .empty;
+    defer cat.deinit(std.testing.allocator);
+    try cat.appendSlice(std.testing.allocator, a);
+    try cat.appendSlice(std.testing.allocator, b);
+    const decoded = try decodeGzipConcatenatedAlloc(std.testing.allocator, cat.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "helloworld", decoded);
 }

@@ -192,7 +192,7 @@ pub fn main(init: std.process.Init) !void {
         const hex = args.next() orelse return error.MissingHexInput;
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
-        const decoded = try vort.decodeGzipAlloc(init.gpa, compressed);
+        const decoded = try vort.decodeGzipConcatenatedAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "gzip", compressed.len, decoded);
     } else {
