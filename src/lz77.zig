@@ -32,6 +32,7 @@ pub const GreedyOptions = struct {
     max_chain: usize = 128,
     nice_len: usize = 64,
     max_candidates: usize = 1,
+    lazy_min_gain: usize = 2,
 };
 
 pub const GreedyPlan = struct {
@@ -85,7 +86,7 @@ pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 
         if (pos + 1 < input.len) {
             const next = findBestMatch(input, pos + 1, options);
-            if (next.length > best.length + 1) {
+            if (next.length >= best.length + options.lazy_min_gain) {
                 try tokens.append(allocator, .{ .literal = input[pos] });
                 stats.literals += 1;
                 pos += 1;
@@ -416,6 +417,18 @@ test "lazy LZ77 planner round trips and keeps token count bounded" {
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
     try std.testing.expect(lazy.stats.tokenCount() <= greedy.stats.tokenCount() + 1);
+}
+
+test "lazy parser honors minimum gain threshold" {
+    const input = "aabcabc";
+    const permissive = try lazyGreedyPlanAlloc(std.testing.allocator, input, .{ .lazy_min_gain = 1 });
+    defer permissive.deinit(std.testing.allocator);
+    const conservative = try lazyGreedyPlanAlloc(std.testing.allocator, input, .{ .lazy_min_gain = 3 });
+    defer conservative.deinit(std.testing.allocator);
+    try std.testing.expect(permissive.stats.literals >= conservative.stats.literals);
+    const replayed = try replayAlloc(std.testing.allocator, permissive.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
 }
 
 test "optimal LZ77 prototype round trips and is no worse by fixed bit cost" {
