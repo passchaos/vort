@@ -31,6 +31,7 @@ pub const GreedyOptions = struct {
     window_len: usize = default_window_len,
     max_chain: usize = 128,
     nice_len: usize = 64,
+    max_candidates: usize = 1,
 };
 
 pub const GreedyPlan = struct {
@@ -42,7 +43,7 @@ pub const GreedyPlan = struct {
     }
 };
 
-const max_optimal_candidates = 16;
+pub const max_optimal_candidates = 16;
 
 pub fn greedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
     var tokens: std.ArrayList(Token) = .empty;
@@ -152,12 +153,13 @@ const MatchCandidates = struct {
     items: [max_optimal_candidates]MatchCandidate = undefined,
     len: usize = 0,
 
-    fn add(self: *MatchCandidates, candidate: MatchCandidate) void {
+    fn add(self: *MatchCandidates, candidate: MatchCandidate, limit: usize) void {
         if (candidate.length < min_match_len) return;
         for (self.items[0..self.len]) |existing| {
             if (existing.distance == candidate.distance) return;
         }
-        if (self.len < self.items.len) {
+        const capped_limit = @max(1, @min(limit, self.items.len));
+        if (self.len < capped_limit) {
             self.items[self.len] = candidate;
             self.len += 1;
             return;
@@ -181,6 +183,7 @@ fn findMatchCandidates(input: []const u8, pos: usize, options: GreedyOptions) Ma
     const window_len = @min(options.window_len, default_window_len);
     const start = pos -| window_len;
     const max_len = @min(max_match_len, input.len - pos);
+    const candidate_limit = normalizedMaxCandidates(options);
     var checked: usize = 0;
     var candidate = pos;
     while (candidate > start and checked < options.max_chain) {
@@ -192,11 +195,15 @@ fn findMatchCandidates(input: []const u8, pos: usize, options: GreedyOptions) Ma
             length += 1;
         }
         if (length >= min_match_len) {
-            out.add(.{ .length = length, .distance = pos - candidate });
-            if (length >= options.nice_len and out.len >= max_optimal_candidates) break;
+            out.add(.{ .length = length, .distance = pos - candidate }, candidate_limit);
+            if (length >= options.nice_len and out.len >= candidate_limit) break;
         }
     }
     return out;
+}
+
+fn normalizedMaxCandidates(options: GreedyOptions) usize {
+    return @max(1, @min(options.max_candidates, max_optimal_candidates));
 }
 
 pub fn fixedBitCost(tokens: []const Token) usize {
@@ -425,13 +432,21 @@ test "optimal LZ77 prototype round trips and is no worse by fixed bit cost" {
 
 test "optimal LZ77 considers multiple match distances" {
     const input = "abcxxxxabcabcxxxxabcabc";
-    const candidates = findMatchCandidates(input, 10, .{ .max_chain = 64, .nice_len = 258 });
+    const candidates = findMatchCandidates(input, 10, .{ .max_chain = 64, .nice_len = 258, .max_candidates = 4 });
     try std.testing.expect(candidates.len >= 2);
-    const plan = try optimalPlanAlloc(std.testing.allocator, input, .{ .max_chain = 64, .nice_len = 258 });
+    const plan = try optimalPlanAlloc(std.testing.allocator, input, .{ .max_chain = 64, .nice_len = 258, .max_candidates = 4 });
     defer plan.deinit(std.testing.allocator);
     const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
+test "match candidate enumeration honors configured limit" {
+    const input = "abcxxxxabcabcxxxxabcabc";
+    const one = findMatchCandidates(input, 10, .{ .max_chain = 64, .nice_len = 258, .max_candidates = 1 });
+    const many = findMatchCandidates(input, 10, .{ .max_chain = 64, .nice_len = 258, .max_candidates = 4 });
+    try std.testing.expectEqual(@as(usize, 1), one.len);
+    try std.testing.expect(many.len > one.len);
 }
 
 test "fixed bit cost accounts for literals matches and end marker" {

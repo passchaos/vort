@@ -122,6 +122,7 @@ architecture blindly.
 - [x] Fast preset skips dynamic block candidate generation.
 - [x] Fastest preset with shallow hash-chain search for speed.
 - [x] Compression-level report validating parser/cost-model settings and round trips.
+- [x] Level-specific optimal parser match-candidate limits.
 - [ ] Production optimal parser with full level/strategy configs.
 - [x] Huffman code generation, simple length building, and canonical-code validation.
 - [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.
