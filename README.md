@@ -74,6 +74,7 @@ zig build run-compression-report
 zig build run-dictionary-report
 zig build run-level-report
 zig build run-split-policy-report
+zig build run-split-policy-report -- README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-file-corpus-report -- README.md docs/roadmap.md
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast

@@ -12,7 +12,11 @@ const LevelCase = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
-    const cases = [_]Case{
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
+    defer args.deinit();
+    _ = args.next();
+
+    const builtins = [_]Case{
         .{ .name = "text", .input = "the quick brown fox jumps over the lazy dog\n" ** 128 },
         .{ .name = "structured", .input = "abcabcabcabc xyz xyz xyz lorem ipsum lorem ipsum\n" ** 128 },
         .{ .name = "repeated", .input = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ** 128 },
@@ -30,28 +34,40 @@ pub fn main(init: std.process.Init) !void {
     const stdout = &stdout_writer.interface;
     try stdout.print("case,level,input_bytes,one_shot_bytes,adaptive_bytes,delta_bytes,adaptive_ratio,roundtrip_crc32\n", .{});
 
-    for (cases) |case| {
-        for (levels) |level_case| {
-            const options = vort.optionsForCompressionLevel(level_case.level);
-            const one_shot = try vort.encodeRawBestAlloc(init.gpa, case.input, options);
-            defer init.gpa.free(one_shot);
-            const adaptive = try vort.encodeRawBestAdaptiveSplitAlloc(init.gpa, case.input, options, options.split_options);
-            defer init.gpa.free(adaptive);
-            const decoded = try vort.decodeRawDeflateAlloc(init.gpa, adaptive);
-            defer init.gpa.free(decoded);
-            if (!std.mem.eql(u8, case.input, decoded)) return error.RoundTripMismatch;
-            const ratio = if (case.input.len == 0) 0.0 else @as(f64, @floatFromInt(adaptive.len)) / @as(f64, @floatFromInt(case.input.len));
-            try stdout.print("{s},{s},{d},{d},{d},{d},{d:.4},{d}\n", .{
-                case.name,
-                level_case.name,
-                case.input.len,
-                one_shot.len,
-                adaptive.len,
-                @as(isize, @intCast(adaptive.len)) - @as(isize, @intCast(one_shot.len)),
-                ratio,
-                vort.crc32(decoded),
-            });
-        }
+    var any = false;
+    while (args.next()) |path| {
+        any = true;
+        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(input);
+        try reportCase(init.gpa, stdout, path, input, &levels);
+    }
+
+    if (!any) {
+        for (builtins) |case| try reportCase(init.gpa, stdout, case.name, case.input, &levels);
     }
     try stdout.flush();
+}
+
+fn reportCase(allocator: std.mem.Allocator, stdout: *std.Io.Writer, name: []const u8, input: []const u8, levels: []const LevelCase) !void {
+    for (levels) |level_case| {
+        const options = vort.optionsForCompressionLevel(level_case.level);
+        const one_shot = try vort.encodeRawBestAlloc(allocator, input, options);
+        defer allocator.free(one_shot);
+        const adaptive = try vort.encodeRawBestAdaptiveSplitAlloc(allocator, input, options, options.split_options);
+        defer allocator.free(adaptive);
+        const decoded = try vort.decodeRawDeflateAlloc(allocator, adaptive);
+        defer allocator.free(decoded);
+        if (!std.mem.eql(u8, input, decoded)) return error.RoundTripMismatch;
+        const ratio = if (input.len == 0) 0.0 else @as(f64, @floatFromInt(adaptive.len)) / @as(f64, @floatFromInt(input.len));
+        try stdout.print("{s},{s},{d},{d},{d},{d},{d:.4},{d}\n", .{
+            name,
+            level_case.name,
+            input.len,
+            one_shot.len,
+            adaptive.len,
+            @as(isize, @intCast(adaptive.len)) - @as(isize, @intCast(one_shot.len)),
+            ratio,
+            vort.crc32(decoded),
+        });
+    }
 }

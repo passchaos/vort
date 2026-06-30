@@ -375,6 +375,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_split_policy_report = b.addRunArtifact(split_policy_report_exe);
+    if (b.args) |args| run_split_policy_report.addArgs(args);
     const split_policy_report_step = b.step("run-split-policy-report", "Report adaptive split policy size deltas by level");
     split_policy_report_step.dependOn(&run_split_policy_report.step);
 

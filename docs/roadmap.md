@@ -97,6 +97,7 @@ architecture blindly.
 - [x] Adaptive split search using stored/fixed/dynamic bit-cost candidates.
 - [x] Level-specific adaptive split policy config and report coverage.
 - [x] Adaptive split policy size-delta report across built-in corpora.
+- [x] Adaptive split policy report accepts ad-hoc file corpora.
 - [ ] Production dynamic Huffman encoder with optimized block splitting and block-type decisions.
 - [x] Compatibility benchmark smoke suite comparing Vort/gzip/zstd on sample files.
 - [x] Standard-corpus smoke benchmark comparing Vort/gzip/zlib-ng/zlib-rs/zstd.
