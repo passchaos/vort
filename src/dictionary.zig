@@ -1,6 +1,12 @@
 const std = @import("std");
 const checksum = @import("checksum.zig");
 
+const patch_magic = [_]u8{ 'V', 'D', 'C', 'T' };
+const patch_version: u8 = 0;
+const patch_header_len: usize = 17;
+const op_literal: u8 = 0;
+const op_match: u8 = 1;
+
 pub const DictionaryId = packed struct(u64) {
     crc32: u32,
     length: u32,
@@ -148,6 +154,84 @@ pub fn summarizeMatchesAlloc(allocator: std.mem.Allocator, dict: []const u8, sam
     return summary;
 }
 
+pub fn encodePatchAlloc(allocator: std.mem.Allocator, dict: []const u8, sample: []const u8, min_match_len: usize) ![]u8 {
+    if (min_match_len == 0) return error.InvalidDictionaryTraining;
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try out.appendSlice(allocator, &patch_magic);
+    try out.append(allocator, patch_version);
+    try appendInt(u32, allocator, &out, @intCast(min_match_len));
+    try appendInt(u64, allocator, &out, @intCast(sample.len));
+    var i: usize = 0;
+    while (i < sample.len) {
+        const best = findBestDictionaryMatch(dict, sample[i..], min_match_len);
+        if (best.length >= min_match_len) {
+            try out.append(allocator, op_match);
+            try appendInt(u32, allocator, &out, @intCast(best.offset));
+            try appendInt(u32, allocator, &out, @intCast(best.length));
+            i += best.length;
+        } else {
+            const literal_start = i;
+            i += 1;
+            while (i < sample.len) : (i += 1) {
+                const next = findBestDictionaryMatch(dict, sample[i..], min_match_len);
+                if (next.length >= min_match_len) break;
+            }
+            try out.append(allocator, op_literal);
+            try appendInt(u32, allocator, &out, @intCast(i - literal_start));
+            try out.appendSlice(allocator, sample[literal_start..i]);
+        }
+    }
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn decodePatchAlloc(allocator: std.mem.Allocator, dict: []const u8, patch: []const u8) ![]u8 {
+    if (patch.len < patch_header_len) return error.TruncatedFrame;
+    if (!std.mem.eql(u8, patch[0..4], &patch_magic)) return error.InvalidMagic;
+    if (patch[4] != patch_version) return error.UnsupportedVersion;
+    const min_match_len = std.mem.readInt(u32, patch[5..9], .little);
+    if (min_match_len == 0) return error.InvalidDictionaryTraining;
+    const expected_len = std.mem.readInt(u64, patch[9..17], .little);
+    const expected_usize = std.math.cast(usize, expected_len) orelse return error.IntegerOverflow;
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try out.ensureTotalCapacity(allocator, expected_usize);
+    var offset: usize = patch_header_len;
+    while (offset < patch.len) {
+        const tag = patch[offset];
+        offset += 1;
+        switch (tag) {
+            op_literal => {
+                if (patch.len - offset < 4) return error.TruncatedFrame;
+                const len: usize = std.mem.readInt(u32, patch[offset..][0..4], .little);
+                offset += 4;
+                if (patch.len - offset < len) return error.TruncatedFrame;
+                try out.appendSlice(allocator, patch[offset..][0..len]);
+                offset += len;
+            },
+            op_match => {
+                if (patch.len - offset < 8) return error.TruncatedFrame;
+                const dict_offset: usize = std.mem.readInt(u32, patch[offset..][0..4], .little);
+                const len: usize = std.mem.readInt(u32, patch[offset + 4 ..][0..4], .little);
+                offset += 8;
+                if (len < min_match_len) return error.CorruptFrame;
+                if (dict_offset > dict.len or dict.len - dict_offset < len) return error.TruncatedFrame;
+                try out.appendSlice(allocator, dict[dict_offset..][0..len]);
+            },
+            else => return error.CorruptFrame,
+        }
+        if (out.items.len > expected_usize) return error.SizeMismatch;
+    }
+    if (out.items.len != expected_usize) return error.SizeMismatch;
+    return out.toOwnedSlice(allocator);
+}
+
+fn appendInt(comptime T: type, allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: T) !void {
+    var buf: [@sizeOf(T)]u8 = undefined;
+    std.mem.writeInt(T, &buf, value, .little);
+    try out.appendSlice(allocator, &buf);
+}
+
 const DictionaryMatchCandidate = struct {
     offset: usize = 0,
     length: usize = 0,
@@ -219,4 +303,15 @@ test "dictionary match scanner summarizes coverage" {
     try std.testing.expectEqual(matches.len, summary.matches);
     try std.testing.expect(summary.covered_bytes >= "alpha beta".len + "gamma".len);
     try std.testing.expect(summary.coverageRatio(sample.len) > 0.0);
+}
+
+test "dictionary patch codec round trips matched and literal bytes" {
+    const dict = "alpha beta gamma";
+    const sample = "zz alpha beta yy gamma";
+    const patch = try encodePatchAlloc(std.testing.allocator, dict, sample, 5);
+    defer std.testing.allocator.free(patch);
+    const decoded = try decodePatchAlloc(std.testing.allocator, dict, patch);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, sample, decoded);
+    try std.testing.expect(patch.len < sample.len + patch_header_len + 16);
 }

@@ -17,22 +17,30 @@ pub fn main(init: std.process.Init) !void {
     var dictionary_matches: usize = 0;
     var dictionary_longest: usize = 0;
     var compressed_total: usize = 0;
+    var patch_total: usize = 0;
     for (samples) |sample| {
         const summary = try vort.summarizeDictionaryMatchesAlloc(init.gpa, dict, sample, 5);
         covered += summary.covered_bytes;
         dictionary_matches += summary.matches;
         dictionary_longest = @max(dictionary_longest, summary.longest);
+        const patch = try vort.encodeDictionaryPatchAlloc(init.gpa, dict, sample, 5);
+        defer init.gpa.free(patch);
+        const patched = try vort.decodeDictionaryPatchAlloc(init.gpa, dict, patch);
+        defer init.gpa.free(patched);
+        if (!std.mem.eql(u8, sample, patched)) return error.RoundTripMismatch;
+        patch_total += patch.len;
         const encoded = try vort.encodeRawBestAlloc(init.gpa, sample, vort.optionsForCompressionLevel(.fastest));
         defer init.gpa.free(encoded);
         compressed_total += encoded.len;
     }
     const coverage = if (plan.total_sample_bytes == 0) 0.0 else @as(f64, @floatFromInt(covered)) / @as(f64, @floatFromInt(plan.total_sample_bytes));
     const ratio = if (plan.total_sample_bytes == 0) 0.0 else @as(f64, @floatFromInt(compressed_total)) / @as(f64, @floatFromInt(plan.total_sample_bytes));
+    const patch_ratio = if (plan.total_sample_bytes == 0) 0.0 else @as(f64, @floatFromInt(patch_total)) / @as(f64, @floatFromInt(plan.total_sample_bytes));
 
     var stdout_buffer: [768]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("dictionary report: samples={d} sample_bytes={d} target={d} dict_bytes={d} id={x} window={d} matches={d} covered_bytes={d} longest={d} coverage={d:.4} baseline_deflate_bytes={d} baseline_ratio={d:.4}\n", .{
+    try stdout.print("dictionary report: samples={d} sample_bytes={d} target={d} dict_bytes={d} id={x} window={d} matches={d} covered_bytes={d} longest={d} coverage={d:.4} patch_bytes={d} patch_ratio={d:.4} baseline_deflate_bytes={d} baseline_ratio={d:.4}\n", .{
         plan.sample_count,
         plan.total_sample_bytes,
         plan.target_size,
@@ -43,6 +51,8 @@ pub fn main(init: std.process.Init) !void {
         covered,
         dictionary_longest,
         coverage,
+        patch_total,
+        patch_ratio,
         compressed_total,
         ratio,
     });
