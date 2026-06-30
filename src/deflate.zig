@@ -1037,3 +1037,8 @@ test "zlib header rejects bad method window check and dictionary flag" {
     try std.testing.expectError(error.BadZlibHeader, decodeZlibStored(&.{ 0x88, 0x98, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01 }, &out));
     try std.testing.expectError(error.BadZlibHeader, decodeZlibStored(&.{ 0x78, 0x20, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01 }, &out));
 }
+
+test "gzip header rejects reserved flags and bad method" {
+    try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x08, 0xe0, 0, 0, 0, 0, 0, 3 }));
+    try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x00, 0x00, 0, 0, 0, 0, 0, 3 }));
+}
