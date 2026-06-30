@@ -186,6 +186,15 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(range);
         const modes = try vort.storeSummarizeModes(stream);
         try stdout.print("range={s} blocked_best_stream_bytes={d} modes={d}/{d}/{d}\n", .{ range, stream.len, modes.store, modes.deflate, modes.rle });
+    } else if (std.mem.eql(u8, command, "vort-dict-blocked-range-demo")) {
+        const dict = "dictionary-only phrase with enough length to beat stored framing";
+        const input = (dict ++ "!") ** 3;
+        const stream = try vort.storeEncodeBlockedBestWithDictionaryStreamAlloc(init.gpa, dict, input, dict.len + 1, 8);
+        defer init.gpa.free(stream);
+        const range = try vort.storeDecodeIndexedRangeWithDictionaryAlloc(init.gpa, dict, stream, 5, 40);
+        defer init.gpa.free(range);
+        const modes = try vort.storeSummarizeModes(stream);
+        try stdout.print("range={s} dict_blocked_stream_bytes={d} modes={d}/{d}/{d}/{d}\n", .{ range, stream.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch });
     } else if (std.mem.eql(u8, command, "store-range-demo")) {
         const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
         const stream = try vort.storeEncodeIndexedStreamAlloc(init.gpa, &payloads);

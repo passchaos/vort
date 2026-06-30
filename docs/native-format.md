@@ -9,10 +9,11 @@ The current implemented native v0 frame supports store/no-compression,
 deflate-compressed, RLE-compressed, and caller-supplied dictionary-patch payload
 modes. Concatenated v0 streams can embed a skippable serialized index, and the
 blocked best-mode stream encoder can select store/deflate/RLE per block while
-preserving indexed range decode. Future native versions should preserve the same
-engineering constraints: explicit sizes, bounded memory, deterministic decoding,
-independent corruption localization, and simple parser states that can be fuzzed
-aggressively.
+preserving indexed range decode. Dictionary-aware blocked streams can also range
+decode when the caller supplies the same dictionary. Future native versions
+should preserve the same engineering constraints: explicit sizes, bounded
+memory, deterministic decoding, independent corruption localization, and simple
+parser states that can be fuzzed aggressively.
 
 ## Goals
 

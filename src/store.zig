@@ -598,6 +598,10 @@ pub fn findFrameForOffset(index: []const FrameIndexEntry, uncompressed_offset: u
 }
 
 pub fn decodeRangeAlloc(allocator: std.mem.Allocator, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize) ![]u8 {
+    return decodeRangeWithDictionaryAlloc(allocator, null, input, index, offset, length);
+}
+
+pub fn decodeRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     if (length == 0) return out.toOwnedSlice(allocator);
@@ -609,7 +613,11 @@ pub fn decodeRangeAlloc(allocator: std.mem.Allocator, input: []const u8, index: 
         if (entry.uncompressed_offset >= end) break;
         if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
         const frame = input[entry.frame_offset..][0..entry.frame_len];
-        const decoded = try decodeAnyAlloc(allocator, frame);
+        const frame_info = try parseHeader(frame);
+        const decoded = if (frame_info.flags == flags_dictionary_patch) blk: {
+            const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
+            break :blk try decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame);
+        } else try decodeAnyAlloc(allocator, frame);
         defer allocator.free(decoded);
         const frame_start = entry.uncompressed_offset;
         const frame_end = entry.uncompressed_offset + entry.uncompressed_len;
@@ -703,6 +711,33 @@ pub fn encodeBlockedBestStreamWithOptionsAlloc(allocator: std.mem.Allocator, inp
     }
     if (input.len == 0) {
         const frame = try encodeBlockBestAlloc(allocator, "", options);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    const index = try buildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
+pub fn encodeBlockedBestWithDictionaryStreamAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, block_len: usize, min_match_len: usize) ![]u8 {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const n = @min(block_len, input.len - offset);
+        const frame = try encodeBestWithDictionaryAlloc(allocator, dict, input[offset..][0..n], min_match_len);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+        offset += n;
+    }
+    if (input.len == 0) {
+        const frame = try encodeBestWithDictionaryAlloc(allocator, dict, "", min_match_len);
         defer allocator.free(frame);
         try stream.appendSlice(allocator, frame);
     }
@@ -963,6 +998,12 @@ pub fn decodeIndexedRangeAlloc(allocator: std.mem.Allocator, input: []const u8, 
     const embedded = try parseEmbeddedIndexAlloc(allocator, input);
     defer embedded.deinit(allocator);
     return decodeRangeAlloc(allocator, input, embedded.entries, offset, length);
+}
+
+pub fn decodeIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, offset: u64, length: usize) ![]u8 {
+    const embedded = try parseEmbeddedIndexAlloc(allocator, input);
+    defer embedded.deinit(allocator);
+    return decodeRangeWithDictionaryAlloc(allocator, dict, input, embedded.entries, offset, length);
 }
 
 pub const ModeSummary = struct {
@@ -1468,6 +1509,19 @@ test "native dictionary best encoder chooses patch only when smaller" {
     defer std.testing.allocator.free(fallback);
     const fallback_info = try parseHeader(fallback);
     try std.testing.expect(fallback_info.flags != flags_dictionary_patch);
+}
+
+test "blocked dictionary best stream supports dictionary range decode" {
+    const dict = "dictionary-only phrase with enough length to beat stored framing";
+    const input = (dict ++ "!") ** 3;
+    const stream = try encodeBlockedBestWithDictionaryStreamAlloc(std.testing.allocator, dict, input, dict.len + 1, 8);
+    defer std.testing.allocator.free(stream);
+    const summary = try summarizeModes(stream);
+    try std.testing.expect(summary.dictionary_patch > 0);
+    const range = try decodeIndexedRangeWithDictionaryAlloc(std.testing.allocator, dict, stream, 5, 40);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, input[5..45], range);
+    try std.testing.expectError(error.InvalidDictionaryTraining, decodeIndexedRangeAlloc(std.testing.allocator, stream, 5, 40));
 }
 
 test "work-stealing deflate stream matches planned deterministic output" {

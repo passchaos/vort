@@ -136,6 +136,7 @@ architecture blindly.
 - [x] Dictionary patch codec prototype with round-trip validation and ratio report.
 - [x] Native dictionary-patch frame prototype requiring caller dictionary on decode.
 - [x] Dictionary-aware native best-frame selection with fallback to non-dictionary modes.
+- [x] Dictionary-aware blocked native stream with indexed range decode.
 - [ ] Production dictionary training integrated into encoder with ratio/throughput gains.
 - [x] Splittable/seekable frame index range decode API.
 - [x] Embedded skippable index frame for seekable native store streams.
