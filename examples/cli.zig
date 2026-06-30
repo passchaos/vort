@@ -88,17 +88,20 @@ pub fn main(init: std.process.Init) !void {
         });
     } else if (std.mem.eql(u8, command, "encode-raw-fixed-hex")) {
         const payload = args.next() orelse "";
-        const encoded = try vort.encodeRawFixedDeflateAlloc(init.gpa, payload);
+        const mode = parseParserMode(args.next());
+        const encoded = try vort.encodeRawFixedWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-fixed-hex")) {
         const payload = args.next() orelse "";
-        const encoded = try vort.encodeZlibFixedAlloc(init.gpa, payload);
+        const mode = parseParserMode(args.next());
+        const encoded = try vort.encodeZlibFixedWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-gzip-fixed-hex")) {
         const payload = args.next() orelse "";
-        const encoded = try vort.encodeGzipFixedAlloc(init.gpa, payload);
+        const mode = parseParserMode(args.next());
+        const encoded = try vort.encodeGzipFixedWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "decode-raw-hex")) {
@@ -173,4 +176,12 @@ fn printDecoded(stdout: *std.Io.Writer, label: []const u8, compressed_len: usize
 fn printHex(stdout: *std.Io.Writer, bytes: []const u8) !void {
     for (bytes) |byte| try stdout.print("{x:0>2}", .{byte});
     try stdout.print("\n", .{});
+}
+
+fn parseParserMode(text: ?[]const u8) vort.ParserMode {
+    const value = text orelse return .greedy;
+    if (std.mem.eql(u8, value, "greedy")) return .greedy;
+    if (std.mem.eql(u8, value, "lazy")) return .lazy;
+    if (std.mem.eql(u8, value, "optimal")) return .optimal;
+    return .greedy;
 }
