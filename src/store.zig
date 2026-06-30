@@ -542,6 +542,33 @@ pub fn encodeIndexedDeflateStreamAlloc(allocator: std.mem.Allocator, frames: []c
     return stream.toOwnedSlice(allocator);
 }
 
+pub fn encodeBlockedDeflateStreamAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const n = @min(block_len, input.len - offset);
+        const frame = try encodeDeflateAlloc(allocator, input[offset..][0..n]);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+        offset += n;
+    }
+    if (input.len == 0) {
+        const frame = try encodeDeflateAlloc(allocator, "");
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    const index = try buildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
 pub const EmbeddedIndex = struct {
     entries: []FrameIndexEntry,
     payload_offset: usize,
@@ -941,4 +968,16 @@ test "indexed deflate stream supports embedded range decode" {
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 6, 10);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, "alphabeta ", range);
+}
+
+test "blocked deflate stream splits input and supports range decode" {
+    const input = "abcdefghijklmnopqrstuvwxyz";
+    const stream = try encodeBlockedDeflateStreamAlloc(std.testing.allocator, input, 7);
+    defer std.testing.allocator.free(stream);
+    const embedded = try parseEmbeddedIndexAlloc(std.testing.allocator, stream);
+    defer embedded.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 4), embedded.entries.len);
+    const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 5, 12);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, "fghijklmnopq", range);
 }

@@ -116,6 +116,13 @@ pub fn main(init: std.process.Init) !void {
             std.mem.eql(u8, payload, decoded),
             vort.crc32(decoded),
         });
+    } else if (std.mem.eql(u8, command, "vort-blocked-range-demo")) {
+        const input = "abcdefghijklmnopqrstuvwxyz";
+        const stream = try vort.storeEncodeBlockedDeflateStreamAlloc(init.gpa, input, 7);
+        defer init.gpa.free(stream);
+        const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, 5, 12);
+        defer init.gpa.free(range);
+        try stdout.print("range={s} blocked_stream_bytes={d}\n", .{ range, stream.len });
     } else if (std.mem.eql(u8, command, "store-range-demo")) {
         const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
         const stream = try vort.storeEncodeIndexedStreamAlloc(init.gpa, &payloads);

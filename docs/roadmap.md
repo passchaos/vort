@@ -109,7 +109,8 @@ architecture blindly.
 - [x] Embedded skippable index frame for seekable native store streams.
 - [x] Native VORT deflate-compressed frame flag and generic decode path.
 - [x] Embedded index range decode for native deflate-compressed frames.
-- [ ] Production seekable native format integration for multi-block compressed streams.
+- [x] Blocked native deflate stream with embedded index and range decode.
+- [ ] Production seekable native format integration with native block modes.
 - [x] Long-distance matching scanner experiment.
 - [ ] Long-distance matching integration into native/block encoder.
 - [x] Deterministic block planning metadata for future multi-threaded encoding.
