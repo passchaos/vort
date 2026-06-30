@@ -84,6 +84,7 @@ architecture blindly.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
 - [x] Dynamic Huffman encoder with LZ77 match support, verified by Python zlib.
 - [x] Dynamic Huffman encoder code-length RLE using symbols 16/17/18.
+- [x] Frequency-weighted tree Huffman length builder used by dynamic encoder.
 - [x] Block cost selection across stored/fixed/dynamic encoders.
 - [x] Raw fixed multi-block encoder with final/non-final block splitting.
 - [x] Raw dynamic multi-block encoder with final/non-final block splitting.

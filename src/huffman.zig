@@ -257,6 +257,79 @@ pub fn weightedCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4
     return lengths;
 }
 
+pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n]u4 {
+    var lengths: [n]u4 = @splat(0);
+    var nodes: [2 * n]TreeNode = undefined;
+    var node_count: usize = 0;
+    for (freqs, 0..) |freq, symbol| {
+        if (freq == 0) continue;
+        nodes[node_count] = .{ .freq = freq, .symbol = @intCast(symbol) };
+        node_count += 1;
+    }
+    if (node_count == 0) return lengths;
+    if (node_count == 1) {
+        lengths[nodes[0].symbol.?] = 1;
+        return lengths;
+    }
+
+    var active = node_count;
+    while (active > 1) {
+        const pair = twoSmallestNodes(&nodes, node_count);
+        nodes[pair.a].used = true;
+        nodes[pair.b].used = true;
+        nodes[node_count] = .{
+            .freq = nodes[pair.a].freq + nodes[pair.b].freq,
+            .left = pair.a,
+            .right = pair.b,
+        };
+        node_count += 1;
+        active -= 1;
+    }
+    assignLengths(n, &nodes, node_count - 1, 0, max_bits, &lengths);
+    return lengths;
+}
+
+const TreeNode = struct {
+    freq: u32,
+    symbol: ?usize = null,
+    left: ?usize = null,
+    right: ?usize = null,
+    used: bool = false,
+};
+
+const NodePair = struct { a: usize, b: usize };
+
+fn twoSmallestNodes(nodes: []const TreeNode, node_count: usize) NodePair {
+    var first: ?usize = null;
+    var second: ?usize = null;
+    for (nodes[0..node_count], 0..) |node, i| {
+        if (node.used) continue;
+        if (first == null or nodeLess(node, nodes[first.?])) {
+            second = first;
+            first = i;
+        } else if (second == null or nodeLess(node, nodes[second.?])) {
+            second = i;
+        }
+    }
+    return .{ .a = first.?, .b = second.? };
+}
+
+fn nodeLess(lhs: TreeNode, rhs: TreeNode) bool {
+    if (lhs.freq != rhs.freq) return lhs.freq < rhs.freq;
+    return (lhs.symbol orelse std.math.maxInt(usize)) < (rhs.symbol orelse std.math.maxInt(usize));
+}
+
+fn assignLengths(comptime n: usize, nodes: []const TreeNode, node_index: usize, depth: u4, max_bits: u4, lengths: *[n]u4) void {
+    const node = nodes[node_index];
+    if (node.symbol) |symbol| {
+        lengths[symbol] = @max(@as(u4, 1), @min(depth, max_bits));
+        return;
+    }
+    const next_depth = @min(depth + 1, max_bits);
+    if (node.left) |left| assignLengths(n, nodes, left, next_depth, max_bits, lengths);
+    if (node.right) |right| assignLengths(n, nodes, right, next_depth, max_bits, lengths);
+}
+
 pub const FixedLookupEntry = struct { symbol: u16, bits: u4 };
 
 pub const fixed_literal_lookup = blk: {
@@ -445,6 +518,17 @@ test "weighted Huffman length builder favors frequent symbols" {
     try std.testing.expect(lengths[0] <= lengths[1]);
     try std.testing.expect(lengths[1] <= lengths[2]);
     try std.testing.expect(lengths[2] <= lengths[3]);
+    const Table = HuffmanTable(freqs.len);
+    const table = try Table.init(&lengths);
+    try std.testing.expectEqual(@as(usize, 4), table.len);
+}
+
+test "tree Huffman length builder favors frequent symbols and decodes" {
+    const freqs = [_]u32{ 100, 50, 25, 1, 0 };
+    const lengths = treeCodeLengths(freqs.len, &freqs, 7);
+    try std.testing.expect(lengths[0] <= lengths[1]);
+    try std.testing.expect(lengths[1] <= lengths[2]);
+    try std.testing.expect(lengths[4] == 0);
     const Table = HuffmanTable(freqs.len);
     const table = try Table.init(&lengths);
     try std.testing.expectEqual(@as(usize, 4), table.len);

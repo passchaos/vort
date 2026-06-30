@@ -348,8 +348,8 @@ fn dynamicTokenBitCostAlloc(allocator: std.mem.Allocator, tokens: []const lz77.T
     if (!dynamicDistanceSafe(&dist_freqs)) return lz77.fixedBitCost(tokens);
     completeDistanceFrequencySet(&dist_freqs);
 
-    var lit_lengths_full = huffman.simpleCodeLengths(286, &lit_freqs, 15);
-    var dist_lengths_full = huffman.simpleCodeLengths(30, &dist_freqs, 15);
+    var lit_lengths_full = huffman.treeCodeLengths(286, &lit_freqs, 15);
+    var dist_lengths_full = huffman.treeCodeLengths(30, &dist_freqs, 15);
     const hlit: usize = trimCodeLengthCount(286, 257, &lit_lengths_full);
     const hdist: usize = trimCodeLengthCount(30, 1, &dist_lengths_full);
 
@@ -398,8 +398,8 @@ fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter
     if (!dynamicDistanceSafe(&dist_freqs)) return writeFixedTokens(allocator, writer, tokens, final);
     completeDistanceFrequencySet(&dist_freqs);
 
-    var lit_lengths_full = huffman.simpleCodeLengths(286, &lit_freqs, 15);
-    var dist_lengths_full = huffman.simpleCodeLengths(30, &dist_freqs, 15);
+    var lit_lengths_full = huffman.treeCodeLengths(286, &lit_freqs, 15);
+    var dist_lengths_full = huffman.treeCodeLengths(30, &dist_freqs, 15);
     const hlit: usize = trimCodeLengthCount(286, 257, &lit_lengths_full);
     const hdist: usize = trimCodeLengthCount(30, 1, &dist_lengths_full);
 
