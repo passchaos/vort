@@ -68,7 +68,8 @@ architecture blindly.
 - [x] Local external implementation/tool availability probe.
 - [x] Optional zlib-ng/zlib-rs differential harness with explicit skip reporting.
 - [x] Built zlib-ng minigzip differential test running in local validation.
-- [ ] Built zlib-rs differential test running in CI/local validation.
+- [x] zlib-rs gzip corpus differential decode coverage.
+- [ ] Built zlib-rs binary differential test running in CI/local validation.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
 - [x] Dynamic Huffman encoder with LZ77 match support, verified by Python zlib.
 - [x] Dynamic Huffman encoder code-length RLE using symbols 16/17/18.

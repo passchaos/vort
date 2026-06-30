@@ -41,6 +41,19 @@ def run_vort_decode_gzip(frame: bytes) -> int:
     return int(out.split(marker, 1)[1].split(" ", 1)[0])
 
 
+def run_zlib_rs_corpus() -> tuple[int, int]:
+    corpus_dir = pathlib.Path.home() / "Work" / "zlib-rs" / "test-libz-rs-sys" / "src" / "test-data" / "compression-corpus"
+    if not corpus_dir.exists():
+        return (0, 0)
+    used = 0
+    for gz in sorted(corpus_dir.glob("*.gz"))[:8]:
+        frame = gz.read_bytes()
+        expected = zlib.decompress(frame, wbits=31)
+        assert run_vort_decode_gzip(frame) == len(expected)
+        used += 1
+    return (used, 0)
+
+
 def main() -> int:
     payload = b"zlib family differential payload" * 4
     print("zlib family differential harness:")
@@ -59,7 +72,13 @@ def main() -> int:
             assert zlib.decompress(gz, wbits=31) == payload
             assert run_vort_decode_gzip(gz) == len(payload)
         print(f"- {name}: ok ({exe})")
-    print(f"zlib family differential summary: used={used} skipped={len(CANDIDATES)-used}")
+    corpus_used, _ = run_zlib_rs_corpus()
+    if corpus_used:
+        print(f"- zlib-rs-gzip-corpus: ok ({corpus_used} files)")
+        used += 1
+    else:
+        print("- zlib-rs-gzip-corpus: skipped (corpus missing)")
+    print(f"zlib family differential summary: used={used} skipped={len(CANDIDATES)+1-used}")
     return 0
 
 
