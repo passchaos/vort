@@ -119,4 +119,5 @@ architecture blindly.
 - [ ] Long-distance matching integration into native/block encoder.
 - [x] Deterministic block planning metadata for future multi-threaded encoding.
 - [x] Deterministic block-planned encoder execution API.
-- [ ] Parallel multi-threaded encoder execution with deterministic output mode.
+- [x] Parallel multi-threaded encoder execution with deterministic output order.
+- [ ] Production thread-pool encoder scheduling and benchmarking.

@@ -44,6 +44,7 @@ pub const storeEncodeIndexedStreamAlloc = store.encodeIndexedStreamAlloc;
 pub const storeEncodeIndexedDeflateStreamAlloc = store.encodeIndexedDeflateStreamAlloc;
 pub const storeEncodeBlockedDeflateStreamAlloc = store.encodeBlockedDeflateStreamAlloc;
 pub const storeEncodePlannedDeflateStreamAlloc = store.encodePlannedDeflateStreamAlloc;
+pub const storeEncodeParallelDeflateStreamAlloc = store.encodeParallelDeflateStreamAlloc;
 pub const storeDecodeIndexedRangeAlloc = store.decodeIndexedRangeAlloc;
 
 pub const encodeRawStoredDeflate = deflate.encodeRawStored;

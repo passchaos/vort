@@ -594,6 +594,56 @@ pub fn encodePlannedDeflateStreamAlloc(allocator: std.mem.Allocator, input: []co
     return stream.toOwnedSlice(allocator);
 }
 
+const ParallelBlockResult = struct {
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    frame: ?[]u8 = null,
+    err: ?anyerror = null,
+
+    fn run(self: *ParallelBlockResult) void {
+        self.frame = encodeDeflateAlloc(self.allocator, self.input) catch |err| {
+            self.err = err;
+            return;
+        };
+    }
+};
+
+pub fn encodeParallelDeflateStreamAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, worker_count: usize) ![]u8 {
+    const plan = try @import("planner.zig").planBlocksAlloc(allocator, input.len, .{ .block_len = block_len, .worker_count = worker_count });
+    defer allocator.free(plan);
+    if (plan.len == 0) return encodePlannedDeflateStreamAlloc(allocator, input, block_len, worker_count);
+
+    const results = try allocator.alloc(ParallelBlockResult, plan.len);
+    defer allocator.free(results);
+    for (plan, 0..) |block, i| {
+        results[i] = .{ .allocator = allocator, .input = input[block.input_offset..][0..block.input_len] };
+    }
+
+    const threads = try allocator.alloc(std.Thread, plan.len);
+    defer allocator.free(threads);
+    for (threads, 0..) |*thread, i| {
+        thread.* = try std.Thread.spawn(.{}, ParallelBlockResult.run, .{&results[i]});
+    }
+    for (threads) |thread| thread.join();
+    for (results) |result| if (result.err) |err| return err;
+
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    for (results) |*result| {
+        const frame = result.frame.?;
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    const index = try buildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
 pub const EmbeddedIndex = struct {
     entries: []FrameIndexEntry,
     payload_offset: usize,
@@ -1017,4 +1067,16 @@ test "planned deflate stream is deterministic across worker counts" {
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, three, 5, 12);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, "fghijklmnopq", range);
+}
+
+test "parallel deflate stream matches planned deterministic output" {
+    const input = "abcdefghijklmnopqrstuvwxyz" ** 4;
+    const planned = try encodePlannedDeflateStreamAlloc(std.testing.allocator, input, 13, 3);
+    defer std.testing.allocator.free(planned);
+    const parallel = try encodeParallelDeflateStreamAlloc(std.testing.allocator, input, 13, 3);
+    defer std.testing.allocator.free(parallel);
+    try std.testing.expectEqualSlices(u8, planned, parallel);
+    const range = try decodeIndexedRangeAlloc(std.testing.allocator, parallel, 10, 20);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, input[10..30], range);
 }
