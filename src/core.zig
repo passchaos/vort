@@ -20,6 +20,7 @@ pub const Error = error{
     InvalidMatch,
     InvalidDynamicBlockHeader,
     InvalidBlockPlan,
+    InvalidDictionaryTraining,
     TrailingData,
 };
 

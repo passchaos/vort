@@ -24,6 +24,72 @@ pub const Metadata = struct {
     }
 };
 
+pub const TrainOptions = struct {
+    target_size: usize,
+    min_phrase_len: usize = 4,
+    max_phrase_len: usize = 16,
+    max_phrases: usize = 256,
+};
+
+const Phrase = struct {
+    bytes: []const u8,
+    score: usize,
+};
+
+pub fn trainAlloc(allocator: std.mem.Allocator, samples: []const []const u8, options: TrainOptions) ![]u8 {
+    if (options.target_size == 0) return allocator.alloc(u8, 0);
+    if (options.min_phrase_len == 0 or options.min_phrase_len > options.max_phrase_len) return error.InvalidDictionaryTraining;
+
+    var phrases: std.ArrayList(Phrase) = .empty;
+    defer phrases.deinit(allocator);
+
+    for (samples) |sample| {
+        if (sample.len < options.min_phrase_len) continue;
+        var start: usize = 0;
+        while (start + options.min_phrase_len <= sample.len) : (start += 1) {
+            const max_len = @min(options.max_phrase_len, sample.len - start);
+            var len = options.min_phrase_len;
+            while (len <= max_len) : (len += 1) {
+                const phrase = sample[start..][0..len];
+                if (findPhrase(phrases.items, phrase)) |idx| {
+                    phrases.items[idx].score += len;
+                } else if (phrases.items.len < options.max_phrases) {
+                    try phrases.append(allocator, .{ .bytes = phrase, .score = len });
+                }
+            }
+        }
+    }
+
+    std.sort.heap(Phrase, phrases.items, {}, phraseBetter);
+
+    var dict: std.ArrayList(u8) = .empty;
+    errdefer dict.deinit(allocator);
+    for (phrases.items) |phrase| {
+        if (dict.items.len >= options.target_size) break;
+        if (containsSlice(dict.items, phrase.bytes)) continue;
+        const remaining = options.target_size - dict.items.len;
+        try dict.appendSlice(allocator, phrase.bytes[0..@min(remaining, phrase.bytes.len)]);
+    }
+    return dict.toOwnedSlice(allocator);
+}
+
+fn findPhrase(phrases: []const Phrase, bytes: []const u8) ?usize {
+    for (phrases, 0..) |phrase, i| {
+        if (std.mem.eql(u8, phrase.bytes, bytes)) return i;
+    }
+    return null;
+}
+
+fn phraseBetter(_: void, lhs: Phrase, rhs: Phrase) bool {
+    if (lhs.score != rhs.score) return lhs.score > rhs.score;
+    if (lhs.bytes.len != rhs.bytes.len) return lhs.bytes.len > rhs.bytes.len;
+    return std.mem.lessThan(u8, lhs.bytes, rhs.bytes);
+}
+
+fn containsSlice(haystack: []const u8, needle: []const u8) bool {
+    return std.mem.indexOf(u8, haystack, needle) != null;
+}
+
 pub const TrainingPlan = struct {
     target_size: usize,
     sample_count: usize,
@@ -50,4 +116,27 @@ test "training plan summarizes sample corpus" {
     try std.testing.expectEqual(@as(usize, 1024), plan.target_size);
     try std.testing.expectEqual(@as(usize, 3), plan.sample_count);
     try std.testing.expectEqual(@as(usize, 14), plan.total_sample_bytes);
+}
+
+test "dictionary trainer is deterministic and extracts repeated phrases" {
+    const samples = [_][]const u8{
+        "alpha beta alpha beta alpha beta",
+        "gamma alpha beta gamma alpha beta",
+    };
+    const dict1 = try trainAlloc(std.testing.allocator, &samples, .{ .target_size = 32, .min_phrase_len = 5, .max_phrase_len = 10 });
+    defer std.testing.allocator.free(dict1);
+    const dict2 = try trainAlloc(std.testing.allocator, &samples, .{ .target_size = 32, .min_phrase_len = 5, .max_phrase_len = 10 });
+    defer std.testing.allocator.free(dict2);
+    try std.testing.expectEqualSlices(u8, dict1, dict2);
+    try std.testing.expect(std.mem.indexOf(u8, dict1, "alpha") != null);
+    try std.testing.expect(dict1.len <= 32);
+    const meta = Metadata.fromBytes(dict1, 32 * 1024);
+    try std.testing.expectEqual(dict1.len, meta.content_len);
+}
+
+test "dictionary trainer handles empty target" {
+    const samples = [_][]const u8{"sample"};
+    const dict = try trainAlloc(std.testing.allocator, &samples, .{ .target_size = 0 });
+    defer std.testing.allocator.free(dict);
+    try std.testing.expectEqual(@as(usize, 0), dict.len);
 }

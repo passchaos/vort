@@ -82,7 +82,8 @@ architecture blindly.
 
 - [x] Initial design note for native block/frame layout.
 - [x] Dictionary IDs and training-plan metadata.
-- [ ] Dictionary training implementation.
+- [x] Deterministic n-gram dictionary training prototype.
+- [ ] Production dictionary training with ratio/throughput validation.
 - [ ] Splittable/seekable frame index design.
 - [x] Long-distance matching scanner experiment.
 - [ ] Long-distance matching integration into native/block encoder.

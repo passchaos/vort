@@ -62,6 +62,7 @@ pub const lazyGreedyLz77PlanAlloc = lz77.lazyGreedyPlanAlloc;
 
 pub const DictionaryId = dictionary.DictionaryId;
 pub const DictionaryMetadata = dictionary.Metadata;
+pub const trainDictionaryAlloc = dictionary.trainAlloc;
 pub const findLongDistanceCandidatesAlloc = long_distance.findCandidatesAlloc;
 pub const planBlocksAlloc = planner.planBlocksAlloc;
 
