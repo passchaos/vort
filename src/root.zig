@@ -30,16 +30,19 @@ pub const encodeRawStoredDeflate = deflate.encodeRawStored;
 pub const decodeRawStoredDeflate = deflate.decodeRawStored;
 pub const encodeRawStoredDeflateAlloc = deflate.encodeRawStoredAlloc;
 pub const decodeRawStoredDeflateAlloc = deflate.decodeRawStoredAlloc;
-pub const decodeRawFixedLiteralOnly = deflate.decodeRawFixedLiteralOnly;
-pub const decodeRawFixedLiteralOnlyAlloc = deflate.decodeRawFixedLiteralOnlyAllocStrict;
+pub const decodeRawFixed = deflate.decodeRawFixed;
+pub const decodeRawFixedAlloc = deflate.decodeRawFixedAllocStrict;
+pub const decodeRawDeflateAlloc = deflate.decodeRawAutoAlloc;
 pub const encodeZlibStored = deflate.encodeZlibStored;
 pub const decodeZlibStored = deflate.decodeZlibStored;
 pub const encodeZlibStoredAlloc = deflate.encodeZlibStoredAlloc;
 pub const decodeZlibStoredAlloc = deflate.decodeZlibStoredAlloc;
+pub const decodeZlibAlloc = deflate.decodeZlibAlloc;
 pub const encodeGzipStored = deflate.encodeGzipStored;
 pub const decodeGzipStored = deflate.decodeGzipStored;
 pub const encodeGzipStoredAlloc = deflate.encodeGzipStoredAlloc;
 pub const decodeGzipStoredAlloc = deflate.decodeGzipStoredAlloc;
+pub const decodeGzipAlloc = deflate.decodeGzipAlloc;
 
 test {
     _ = checksum;

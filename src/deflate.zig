@@ -87,6 +87,24 @@ pub fn decodeRawFixedAllocStrict(allocator: std.mem.Allocator, input: []const u8
     return result.bytes;
 }
 
+pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
+    if (input.len == 0) return error.TruncatedFrame;
+    const block_type = (input[0] >> 1) & 0b11;
+    return switch (block_type) {
+        0 => decodeRawStoredAllocPartial(allocator, input),
+        1 => decodeRawFixedAlloc(allocator, input),
+        2 => error.UnsupportedDeflateFeature,
+        else => error.InvalidDeflateBlockType,
+    };
+}
+
+pub fn decodeRawAutoAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const result = try decodeRawAutoAllocPartial(allocator, input);
+    errdefer result.deinit(allocator);
+    if (result.input_read != input.len) return error.TrailingData;
+    return result.bytes;
+}
+
 pub fn rawStoredEncodedSize(input_len: usize) Error!usize {
     const blocks: usize = if (input_len == 0) 1 else ((input_len - 1) / max_stored_block_len) + 1;
     const header_bytes = std.math.mul(usize, blocks, 5) catch return error.IntegerOverflow;
@@ -341,6 +359,20 @@ pub fn decodeZlibStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return out;
 }
 
+pub fn decodeZlibAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    if (input.len < 2) return error.TruncatedFrame;
+    try validateZlibHeader(input[0], input[1]);
+
+    const raw = try decodeRawAutoAllocPartial(allocator, input[2..]);
+    errdefer raw.deinit(allocator);
+    const footer_offset = 2 + raw.input_read;
+    if (input.len - footer_offset < 4) return error.TruncatedFrame;
+    const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
+    if (checksum.adler32(raw.bytes) != expected) return error.ChecksumMismatch;
+    if (footer_offset + 4 != input.len) return error.TrailingData;
+    return raw.bytes;
+}
+
 pub fn gzipStoredEncodedSize(input_len: usize) Error!usize {
     const raw_len = try rawStoredEncodedSize(input_len);
     const with_header = std.math.add(usize, 10, raw_len) catch return error.IntegerOverflow;
@@ -392,6 +424,22 @@ pub fn decodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     errdefer allocator.free(out);
     @memcpy(out, scratch[0..written]);
     return out;
+}
+
+pub fn decodeGzipAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    if (input.len < 10) return error.TruncatedFrame;
+    try validateGzipHeader(input[0..10]);
+
+    const raw = try decodeRawAutoAllocPartial(allocator, input[10..]);
+    errdefer raw.deinit(allocator);
+    const footer_offset = 10 + raw.input_read;
+    if (input.len - footer_offset < 8) return error.TruncatedFrame;
+    const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
+    const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
+    if (checksum.crc32(raw.bytes) != expected_crc) return error.ChecksumMismatch;
+    if (@as(u32, @truncate(raw.bytes.len)) != expected_size) return error.SizeMismatch;
+    if (footer_offset + 8 != input.len) return error.TrailingData;
+    return raw.bytes;
 }
 
 fn validateZlibHeader(cmf: u8, flg: u8) Error!void {
@@ -561,4 +609,40 @@ test "raw fixed Huffman inflate decodes back references and rejects wrong block 
     var out: [8]u8 = undefined;
     try std.testing.expectError(error.InvalidDeflateBlockType, decodeRawFixed(&.{ 0x01, 0x00, 0x00, 0xff, 0xff }, &out));
     try std.testing.expectError(error.OutputTooSmall, decodeRawFixed(&.{ 0x4b, 0x04, 0x00 }, out[0..0]));
+}
+
+test "zlib and gzip fixed Huffman wrappers decode zlib fixed vectors" {
+    const zlib_cases = [_]struct { compressed: []const u8, plain: []const u8 }{
+        .{ .compressed = &.{ 0x78, 0x01, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x06, 0x2c, 0x02, 0x15 }, .plain = "hello" },
+        .{ .compressed = &.{ 0x78, 0x01, 0x4b, 0x4c, 0x04, 0x01, 0x00, 0x07, 0xfb, 0x02, 0x47 }, .plain = "aaaaaa" },
+        .{ .compressed = &.{ 0x78, 0x01, 0x4b, 0x4c, 0x4a, 0x4e, 0x84, 0x21, 0x00, 0x1d, 0xe0, 0x04, 0x99 }, .plain = "abcabcabcabc" },
+    };
+    for (zlib_cases) |case| {
+        const decoded = try decodeZlibAlloc(std.testing.allocator, case.compressed);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, case.plain, decoded);
+    }
+
+    const gzip_cases = [_]struct { compressed: []const u8, plain: []const u8 }{
+        .{ .compressed = &.{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x86, 0xa6, 0x10, 0x36, 0x05, 0x00, 0x00, 0x00 }, .plain = "hello" },
+        .{ .compressed = &.{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03, 0x4b, 0x4c, 0x04, 0x01, 0x00, 0xf8, 0x19, 0xe4, 0x5a, 0x06, 0x00, 0x00, 0x00 }, .plain = "aaaaaa" },
+        .{ .compressed = &.{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03, 0x4b, 0x4c, 0x4a, 0x4e, 0x84, 0x21, 0x00, 0x34, 0x2a, 0x6e, 0x5a, 0x0c, 0x00, 0x00, 0x00 }, .plain = "abcabcabcabc" },
+    };
+    for (gzip_cases) |case| {
+        const decoded = try decodeGzipAlloc(std.testing.allocator, case.compressed);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, case.plain, decoded);
+    }
+}
+
+test "auto raw decoder dispatches stored and fixed blocks" {
+    const stored = try encodeRawStoredAlloc(std.testing.allocator, "stored");
+    defer std.testing.allocator.free(stored);
+    const stored_decoded = try decodeRawAutoAlloc(std.testing.allocator, stored);
+    defer std.testing.allocator.free(stored_decoded);
+    try std.testing.expectEqualSlices(u8, "stored", stored_decoded);
+
+    const fixed = try decodeRawAutoAlloc(std.testing.allocator, &.{ 0x4b, 0x4c, 0x04, 0x01, 0x00 });
+    defer std.testing.allocator.free(fixed);
+    try std.testing.expectEqualSlices(u8, "aaaaaa", fixed);
 }
