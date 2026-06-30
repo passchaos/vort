@@ -1030,3 +1030,10 @@ test "gzip FHCRC is validated when present" {
     invalid[10] ^= 1;
     try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(std.testing.allocator, &invalid));
 }
+
+test "zlib header rejects bad method window check and dictionary flag" {
+    var out: [32]u8 = undefined;
+    try std.testing.expectError(error.BadZlibHeader, decodeZlibStored(&.{ 0x77, 0x85, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01 }, &out));
+    try std.testing.expectError(error.BadZlibHeader, decodeZlibStored(&.{ 0x88, 0x98, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01 }, &out));
+    try std.testing.expectError(error.BadZlibHeader, decodeZlibStored(&.{ 0x78, 0x20, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01 }, &out));
+}
