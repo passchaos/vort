@@ -111,6 +111,21 @@ pub fn main(init: std.process.Init) !void {
         const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, 3, 8);
         defer init.gpa.free(range);
         try stdout.print("range={s} indexed_stream_bytes={d}\n", .{ range, stream.len });
+    } else if (std.mem.eql(u8, command, "encode-raw-dynamic-hex")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.encodeRawDynamicLiteralAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zlib-dynamic-hex")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.encodeZlibDynamicLiteralAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-gzip-dynamic-hex")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.encodeGzipDynamicLiteralAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "decode-raw-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const compressed = try hexToOwnedBytes(init.gpa, hex);
