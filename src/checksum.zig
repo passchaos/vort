@@ -152,6 +152,19 @@ pub fn crc32(input: []const u8) u32 {
     return Crc32.hash(input);
 }
 
+pub const Crc32Dispatch = enum { scalar, slice4 };
+
+pub fn bestCrc32Dispatch() Crc32Dispatch {
+    return .slice4;
+}
+
+pub fn crc32Best(input: []const u8) u32 {
+    return switch (bestCrc32Dispatch()) {
+        .scalar => crc32(input),
+        .slice4 => crc32Slice4(input),
+    };
+}
+
 pub fn crc32Slice4(input: []const u8) u32 {
     return Crc32Slice4.hash(input);
 }
@@ -267,4 +280,10 @@ test "CRC-32 slice-by-4 matches scalar" {
         "The quick brown fox jumps over the lazy dog" ** 97,
     };
     for (cases) |case| try std.testing.expectEqual(crc32(case), crc32Slice4(case));
+}
+
+test "CRC-32 best dispatch matches scalar" {
+    const input = "dispatch checksum" ** 31;
+    try std.testing.expectEqual(crc32(input), crc32Best(input));
+    try std.testing.expectEqual(Crc32Dispatch.slice4, bestCrc32Dispatch());
 }
