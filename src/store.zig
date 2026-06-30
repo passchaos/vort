@@ -2,6 +2,7 @@ const std = @import("std");
 const checksum = @import("checksum.zig");
 const deflate = @import("deflate.zig");
 const dictionary = @import("dictionary.zig");
+const long_distance = @import("long_distance.zig");
 const core = @import("core.zig");
 
 pub const Error = core.Error;
@@ -15,6 +16,8 @@ pub const header_len: usize = 32;
 pub const max_chunk_len: usize = std.math.maxInt(u32);
 pub const skippable_magic = [_]u8{ 'V', 'S', 'K', 'P' };
 pub const skippable_header_len: usize = 8;
+const ldm_summary_magic = [_]u8{ 'V', 'L', 'D', 'M' };
+const ldm_summary_len: usize = 28;
 
 const flags_none: u8 = 0;
 const flags_deflate: u8 = 1;
@@ -724,6 +727,60 @@ pub fn encodeBlockedBestStreamWithOptionsAlloc(allocator: std.mem.Allocator, inp
     return stream.toOwnedSlice(allocator);
 }
 
+pub fn encodeBlockedBestStreamWithLdmSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: deflate.CompressionOptions, ldm_options: long_distance.Options) ![]u8 {
+    var stream = try std.ArrayList(u8).initCapacity(allocator, 0);
+    errdefer stream.deinit(allocator);
+    const body = try encodeBlockedBestStreamWithOptionsAlloc(allocator, input, block_len, options);
+    defer allocator.free(body);
+    try stream.appendSlice(allocator, body);
+    const summary = try long_distance.summarizeAlloc(allocator, input, ldm_options);
+    const summary_bytes = encodeLdmSummaryBytes(summary);
+    const summary_frame = try encodeSkippableAlloc(allocator, &summary_bytes);
+    defer allocator.free(summary_frame);
+    try stream.appendSlice(allocator, summary_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
+fn encodeLdmSummaryBytes(summary: long_distance.Summary) [ldm_summary_len]u8 {
+    var out: [ldm_summary_len]u8 = undefined;
+    @memcpy(out[0..4], &ldm_summary_magic);
+    std.mem.writeInt(u64, out[4..12], @intCast(summary.candidates), .little);
+    std.mem.writeInt(u64, out[12..20], @intCast(summary.longest), .little);
+    std.mem.writeInt(u64, out[20..28], @intCast(summary.max_distance), .little);
+    return out;
+}
+
+pub fn parseLdmSummary(input: []const u8) Error!long_distance.Summary {
+    if (input.len != ldm_summary_len) return error.TruncatedFrame;
+    if (!std.mem.eql(u8, input[0..4], &ldm_summary_magic)) return error.InvalidMagic;
+    return .{
+        .candidates = std.math.cast(usize, std.mem.readInt(u64, input[4..12], .little)) orelse return error.IntegerOverflow,
+        .longest = std.math.cast(usize, std.mem.readInt(u64, input[12..20], .little)) orelse return error.IntegerOverflow,
+        .max_distance = std.math.cast(usize, std.mem.readInt(u64, input[20..28], .little)) orelse return error.IntegerOverflow,
+    };
+}
+
+pub fn parseEmbeddedLdmSummary(input: []const u8) Error!long_distance.Summary {
+    var offset: usize = 0;
+    var found: ?long_distance.Summary = null;
+    while (offset < input.len) {
+        const tail = input[offset..];
+        if (tail.len >= 4 and std.mem.eql(u8, tail[0..4], &skippable_magic)) {
+            const payload = try parseSkippable(tail);
+            if (payload.len >= 4 and std.mem.eql(u8, payload[0..4], &ldm_summary_magic)) found = try parseLdmSummary(payload);
+            const total = try skippableTotalLen(tail);
+            if (tail.len < total) return error.TruncatedFrame;
+            offset += total;
+        } else {
+            const info = try parseHeader(tail);
+            const total = try frameLenFromInfo(info);
+            if (tail.len < total) return error.TruncatedFrame;
+            offset += total;
+        }
+    }
+    return found orelse error.InvalidMagic;
+}
+
 pub fn encodeBlockedBestWithDictionaryStreamAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, block_len: usize, min_match_len: usize) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     var stream: std.ArrayList(u8) = .empty;
@@ -978,8 +1035,10 @@ pub fn parseEmbeddedIndexAlloc(allocator: std.mem.Allocator, input: []const u8) 
         const tail = input[offset..];
         if (tail.len >= 4 and std.mem.eql(u8, tail[0..4], &skippable_magic)) {
             const payload = try parseSkippable(tail);
-            last_payload = payload;
-            last_payload_offset = offset + skippable_header_len;
+            if (payload.len >= 4 and std.mem.eql(u8, payload[0..4], &serialized_index_magic)) {
+                last_payload = payload;
+                last_payload_offset = offset + skippable_header_len;
+            }
             const total = try skippableTotalLen(tail);
             if (tail.len < total) return error.TruncatedFrame;
             offset += total;
@@ -1423,6 +1482,20 @@ test "blocked best stream selects native modes and supports range decode" {
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 10, 32);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[10..42], range);
+}
+
+test "blocked best stream can embed long-distance summary metadata" {
+    const prefix = "abcd" ** 9000;
+    const input = prefix ++ "----" ++ prefix[0..64].*;
+    const stream = try encodeBlockedBestStreamWithLdmSummaryAlloc(std.testing.allocator, input, 8192, .{}, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(stream);
+    const summary = try parseEmbeddedLdmSummary(stream);
+    try std.testing.expect(summary.candidates > 0);
+    try std.testing.expect(summary.longest >= 16);
+    try std.testing.expect(summary.max_distance >= 32769);
+    const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 5, 12);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, input[5..17], range);
 }
 
 test "planned deflate stream is deterministic across worker counts" {

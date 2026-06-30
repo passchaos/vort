@@ -10,10 +10,12 @@ deflate-compressed, RLE-compressed, and caller-supplied dictionary-patch payload
 modes. Concatenated v0 streams can embed a skippable serialized index, and the
 blocked best-mode stream encoder can select store/deflate/RLE per block while
 preserving indexed range decode. Dictionary-aware blocked streams can also range
-decode when the caller supplies the same dictionary. Future native versions
-should preserve the same engineering constraints: explicit sizes, bounded
-memory, deterministic decoding, independent corruption localization, and simple
-parser states that can be fuzzed aggressively.
+decode when the caller supplies the same dictionary. Blocked streams can carry a
+skippable long-distance-match summary payload for encoder/planner feedback
+without changing frame decoding. Future native versions should preserve the same
+engineering constraints: explicit sizes, bounded memory, deterministic decoding,
+independent corruption localization, and simple parser states that can be fuzzed
+aggressively.
 
 ## Goals
 

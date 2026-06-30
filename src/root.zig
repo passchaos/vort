@@ -53,6 +53,7 @@ pub const storeEncodeIndexedDeflateStreamAlloc = store.encodeIndexedDeflateStrea
 pub const storeEncodeBlockedDeflateStreamAlloc = store.encodeBlockedDeflateStreamAlloc;
 pub const storeEncodeBlockedBestStreamAlloc = store.encodeBlockedBestStreamAlloc;
 pub const storeEncodeBlockedBestStreamWithOptionsAlloc = store.encodeBlockedBestStreamWithOptionsAlloc;
+pub const storeEncodeBlockedBestStreamWithLdmSummaryAlloc = store.encodeBlockedBestStreamWithLdmSummaryAlloc;
 pub const storeEncodeBlockedBestWithDictionaryStreamAlloc = store.encodeBlockedBestWithDictionaryStreamAlloc;
 pub const storeEncodePlannedDeflateStreamAlloc = store.encodePlannedDeflateStreamAlloc;
 pub const storeEncodeParallelDeflateStreamAlloc = store.encodeParallelDeflateStreamAlloc;
@@ -61,6 +62,7 @@ pub const storeEncodeWorkStealingDeflateStreamAlloc = store.encodeWorkStealingDe
 pub const storeDecodeIndexedRangeAlloc = store.decodeIndexedRangeAlloc;
 pub const storeDecodeIndexedRangeWithDictionaryAlloc = store.decodeIndexedRangeWithDictionaryAlloc;
 pub const storeSummarizeModes = store.summarizeModes;
+pub const storeParseEmbeddedLdmSummary = store.parseEmbeddedLdmSummary;
 
 pub const encodeRawStoredDeflate = deflate.encodeRawStored;
 pub const decodeRawStoredDeflate = deflate.decodeRawStored;
