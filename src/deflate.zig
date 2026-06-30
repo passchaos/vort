@@ -185,15 +185,20 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
 }
 
 fn storedBlockEncodedSizeFromState(writer: bitstream.BitWriter, input_len: usize) usize {
-    return input_len + 5 + @intFromBool(writer.bit_index != 0);
+    const header_bytes: usize = (@as(usize, writer.bit_index) + 3 + 7) / 8;
+    return input_len + 4 + header_bytes;
 }
 
 fn writeStoredBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8, final: bool) !void {
     if (input.len > max_stored_block_len) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, @intFromBool(final), 1);
+    try writer.writeBits(allocator, 0b00, 2);
     try writer.alignToByte(allocator);
-    var header: [5]u8 = undefined;
-    writeStoredHeader(final, @intCast(input.len), &header);
-    try writer.bytes.appendSlice(allocator, &header);
+    var lengths: [4]u8 = undefined;
+    const len: u16 = @intCast(input.len);
+    std.mem.writeInt(u16, lengths[0..2], len, .little);
+    std.mem.writeInt(u16, lengths[2..4], ~len, .little);
+    try writer.bytes.appendSlice(allocator, &lengths);
     try writer.bytes.appendSlice(allocator, input);
 }
 
@@ -1765,6 +1770,15 @@ test "split raw best encoder selects block modes independently" {
     defer std.testing.allocator.free(dynamic);
     try std.testing.expect(encoded.len <= fixed.len);
     try std.testing.expect(encoded.len <= dynamic.len);
+}
+
+test "split raw best encoder can emit stored block after compressed block" {
+    const input = ("aaaaaaaaaaaaaaaa" ** 8) ++ "abcdefghijklmnopqrstuvwxyz";
+    const encoded = try encodeRawBestSplitAlloc(std.testing.allocator, input, 128, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "zlib and gzip split-best wrappers round trip" {
