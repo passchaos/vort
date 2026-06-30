@@ -41,6 +41,7 @@ zig build run-python-zlib-diff
 zig build run-gzip-cli-diff
 zig build run-zlib-family-diff
 zig build run-external-probe
+zig build run-cpu-features
 zig build run-zstd-compare
 zig build run-compat-benchmark
 zig build run-compression-report

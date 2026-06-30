@@ -212,6 +212,21 @@ pub fn build(b: *std.Build) void {
     const external_probe_step = b.step("run-external-probe", "Report available local compression competitors/tools");
     external_probe_step.dependOn(&external_probe.step);
 
+    const cpu_features_exe = b.addExecutable(.{
+        .name = "vort-cpu-features",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/cpu_features.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_cpu_features = b.addRunArtifact(cpu_features_exe);
+    const cpu_features_step = b.step("run-cpu-features", "Report CPU target and Vort dispatch choices");
+    cpu_features_step.dependOn(&run_cpu_features.step);
+
     const zstd_compare = b.addSystemCommand(&.{ "python3", "tools/zstd_compare.py" });
     zstd_compare.addArtifactArg(cli_exe);
     const zstd_compare_step = b.step("run-zstd-compare", "Report zstd CLI and Vort fixed compressed sizes for sample files");
@@ -267,4 +282,5 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&gzip_diff_exe.step);
     check_step.dependOn(&compression_report_exe.step);
     check_step.dependOn(&file_corpus_report_exe.step);
+    check_step.dependOn(&cpu_features_exe.step);
 }
