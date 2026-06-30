@@ -111,6 +111,24 @@ pub fn main(init: std.process.Init) !void {
         const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, 3, 8);
         defer init.gpa.free(range);
         try stdout.print("range={s} indexed_stream_bytes={d}\n", .{ range, stream.len });
+    } else if (std.mem.eql(u8, command, "encode-raw-best-hex")) {
+        const payload = args.next() orelse "";
+        const mode = parseParserMode(args.next());
+        const encoded = try vort.encodeRawBestAlloc(init.gpa, payload, .{ .parser = mode });
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zlib-best-hex")) {
+        const payload = args.next() orelse "";
+        const mode = parseParserMode(args.next());
+        const encoded = try vort.encodeZlibBestAlloc(init.gpa, payload, .{ .parser = mode });
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-gzip-best-hex")) {
+        const payload = args.next() orelse "";
+        const mode = parseParserMode(args.next());
+        const encoded = try vort.encodeGzipBestAlloc(init.gpa, payload, .{ .parser = mode });
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-raw-dynamic-hex")) {
         const payload = args.next() orelse "";
         const mode = parseParserMode(args.next());

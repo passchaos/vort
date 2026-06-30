@@ -29,6 +29,28 @@ pub const OwnedDecodeResult = struct {
     }
 };
 
+pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    const stored = try encodeRawStoredAlloc(allocator, input);
+    errdefer allocator.free(stored);
+    const fixed = try encodeRawFixedWithOptionsAlloc(allocator, input, options);
+    errdefer allocator.free(fixed);
+    const dynamic = try encodeRawDynamicWithOptionsAlloc(allocator, input, options);
+    errdefer allocator.free(dynamic);
+
+    if (stored.len <= fixed.len and stored.len <= dynamic.len) {
+        allocator.free(fixed);
+        allocator.free(dynamic);
+        return stored;
+    }
+    allocator.free(stored);
+    if (fixed.len <= dynamic.len) {
+        allocator.free(dynamic);
+        return fixed;
+    }
+    allocator.free(fixed);
+    return dynamic;
+}
+
 pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     var tokens: std.ArrayList(lz77.Token) = .empty;
     defer tokens.deinit(allocator);
@@ -712,6 +734,18 @@ pub fn encodeZlibDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []
     return out;
 }
 
+pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawBestAlloc(allocator, input, options);
+    defer allocator.free(raw);
+    const out = try allocator.alloc(u8, 2 + raw.len + 4);
+    errdefer allocator.free(out);
+    out[0] = 0x78;
+    out[1] = 0x01;
+    @memcpy(out[2..][0..raw.len], raw);
+    std.mem.writeInt(u32, out[2 + raw.len ..][0..4], checksum.adler32(input), .big);
+    return out;
+}
+
 pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
     if (input.len < 2) return error.TruncatedFrame;
     try validateZlibHeader(input[0], input[1]);
@@ -799,6 +833,19 @@ pub fn encodeGzipDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []cons
 
 pub fn encodeGzipDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, options);
+    defer allocator.free(raw);
+    const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
+    errdefer allocator.free(out);
+    @memcpy(out[0..gzip_header.len], &gzip_header);
+    @memcpy(out[gzip_header.len..][0..raw.len], raw);
+    const footer = gzip_header.len + raw.len;
+    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
+    return out;
+}
+
+pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawBestAlloc(allocator, input, options);
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
     errdefer allocator.free(out);
@@ -1329,4 +1376,24 @@ test "dynamic code length RLE emits repeat symbols" {
     }
     try std.testing.expect(saw_zero_repeat);
     try std.testing.expect(saw_prev_repeat);
+}
+
+test "best encoder selects a valid smallest raw block" {
+    const cases = [_][]const u8{ "", "hello", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "abcabcabcabc" };
+    for (cases) |case| {
+        const best = try encodeRawBestAlloc(std.testing.allocator, case, .{});
+        defer std.testing.allocator.free(best);
+        const stored = try encodeRawStoredAlloc(std.testing.allocator, case);
+        defer std.testing.allocator.free(stored);
+        const fixed = try encodeRawFixedAlloc(std.testing.allocator, case);
+        defer std.testing.allocator.free(fixed);
+        const dynamic = try encodeRawDynamicWithOptionsAlloc(std.testing.allocator, case, .{});
+        defer std.testing.allocator.free(dynamic);
+        try std.testing.expect(best.len <= stored.len);
+        try std.testing.expect(best.len <= fixed.len);
+        try std.testing.expect(best.len <= dynamic.len);
+        const decoded = try decodeRawAutoAlloc(std.testing.allocator, best);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, case, decoded);
+    }
 }

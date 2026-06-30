@@ -69,7 +69,8 @@ architecture blindly.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
 - [x] Dynamic Huffman encoder with LZ77 match support, verified by Python zlib.
 - [x] Dynamic Huffman encoder code-length RLE using symbols 16/17/18.
-- [ ] Production dynamic Huffman encoder with block cost selection.
+- [x] Block cost selection across stored/fixed/dynamic encoders.
+- [ ] Production dynamic Huffman encoder with optimized block splitting.
 - [ ] Compatibility benchmark suite.
 
 ## Milestone 4: compression performance foundation
