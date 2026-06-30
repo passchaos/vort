@@ -63,7 +63,7 @@ defer allocator.free(decoded);
 
 ## Direction
 
-See `docs/native-format.md` for the initial native Vort frame direction, `docs/fuzzing.md` for parser fuzzing entrypoints, `docs/external-differential.md` for competitor differential validation, and `docs/zstd-gap.md` for current zstd comparison limitations.
+See `docs/native-format.md` for the initial native Vort frame direction, `docs/fuzzing.md` for parser fuzzing entrypoints, `docs/external-differential.md` for competitor differential validation, and `docs/zstd-gap.md` for current zstd comparison limitations, and `docs/dynamic-encoder.md` for dynamic encoder status.
 
 Compatibility formats (`raw deflate`, `zlib`, `gzip`, and selected zstd-facing
 workflows) should be behavior-compatible where claimed. Native Vort formats may
