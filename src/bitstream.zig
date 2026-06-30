@@ -51,6 +51,44 @@ pub const BitReader = struct {
     }
 };
 
+pub const BitWriter = struct {
+    bytes: std.ArrayList(u8) = .empty,
+    scratch: u8 = 0,
+    bit_index: u3 = 0,
+
+    pub fn deinit(self: *BitWriter, allocator: std.mem.Allocator) void {
+        self.bytes.deinit(allocator);
+        self.* = undefined;
+    }
+
+    pub fn writeBits(self: *BitWriter, allocator: std.mem.Allocator, bits: u64, count: u6) !void {
+        if (count > 56) return error.CorruptFrame;
+        var i: u6 = 0;
+        while (i < count) : (i += 1) {
+            const bit: u8 = @intCast((bits >> @intCast(i)) & 1);
+            self.scratch |= bit << self.bit_index;
+            self.bit_index +%= 1;
+            if (self.bit_index == 0) {
+                try self.bytes.append(allocator, self.scratch);
+                self.scratch = 0;
+            }
+        }
+    }
+
+    pub fn alignToByte(self: *BitWriter, allocator: std.mem.Allocator) !void {
+        if (self.bit_index != 0) {
+            try self.bytes.append(allocator, self.scratch);
+            self.scratch = 0;
+            self.bit_index = 0;
+        }
+    }
+
+    pub fn toOwnedSlice(self: *BitWriter, allocator: std.mem.Allocator) ![]u8 {
+        try self.alignToByte(allocator);
+        return self.bytes.toOwnedSlice(allocator);
+    }
+};
+
 test "BitReader consumes LSB-first deflate bits" {
     var reader = BitReader.init(&.{ 0b1010_1101, 0b0000_0011 });
     try std.testing.expectEqual(@as(u3, 0b101), try reader.readBits(u3, 3));
@@ -59,4 +97,15 @@ test "BitReader consumes LSB-first deflate bits" {
     try std.testing.expectEqual(@as(usize, 10), reader.bitPosition());
     reader.alignToByte();
     try std.testing.expectEqual(@as(usize, 2), reader.byteOffset());
+}
+
+test "BitWriter emits LSB-first bytes readable by BitReader" {
+    var writer = BitWriter{};
+    defer writer.deinit(std.testing.allocator);
+    try writer.writeBits(std.testing.allocator, 0b101, 3);
+    try writer.writeBits(std.testing.allocator, 0b10101, 5);
+    try writer.writeBits(std.testing.allocator, 0b11, 2);
+    const bytes = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqualSlices(u8, &.{ 0b1010_1101, 0b0000_0011 }, bytes);
 }

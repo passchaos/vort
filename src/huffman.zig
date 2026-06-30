@@ -25,6 +25,26 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             bits: u4,
         };
 
+        pub const Encoder = struct {
+            codes: [max_symbols]u16 = @splat(0),
+            bits: [max_symbols]u4 = @splat(0),
+
+            pub fn init(lengths: []const u4) Error!Encoder {
+                const table = try Self.init(lengths);
+                var encoder = Encoder{};
+                for (table.entries[0..table.len]) |entry| {
+                    encoder.codes[entry.symbol] = entry.code;
+                    encoder.bits[entry.symbol] = entry.bits;
+                }
+                return encoder;
+            }
+
+            pub fn writeSymbol(self: Encoder, writer: *bitstream.BitWriter, allocator: std.mem.Allocator, symbol: usize) !void {
+                if (symbol >= max_symbols or self.bits[symbol] == 0) return error.InvalidHuffmanCode;
+                try writer.writeBits(allocator, self.codes[symbol], self.bits[symbol]);
+            }
+        };
+
         pub fn init(lengths: []const u4) Error!Self {
             if (lengths.len > max_symbols) return error.CorruptFrame;
             var counts: [max_code_bits + 1]u16 = @splat(0);
@@ -279,4 +299,22 @@ test "dynamic length parser expands repeat symbols" {
     for (parsed.literal_lengths[1..256]) |bits| try std.testing.expectEqual(@as(u4, 0), bits);
     try std.testing.expectEqual(@as(u4, 1), parsed.literal_lengths[256]);
     try std.testing.expectEqual(@as(u4, 1), parsed.distance_lengths[0]);
+}
+
+test "fixed Huffman encoder writes symbols decoded by fixed table" {
+    const lengths = fixedLiteralLengths();
+    const encoder = try FixedLiteralTable.Encoder.init(&lengths);
+    const decoder = try fixedLiteralTable();
+    var writer = bitstream.BitWriter{};
+    defer writer.deinit(std.testing.allocator);
+    try encoder.writeSymbol(&writer, std.testing.allocator, 'h');
+    try encoder.writeSymbol(&writer, std.testing.allocator, 'i');
+    try encoder.writeSymbol(&writer, std.testing.allocator, 256);
+    const bytes = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(bytes);
+
+    var reader = bitstream.BitReader.init(bytes);
+    try std.testing.expectEqual(@as(u16, 'h'), (try decoder.decode(&reader)).value);
+    try std.testing.expectEqual(@as(u16, 'i'), (try decoder.decode(&reader)).value);
+    try std.testing.expectEqual(@as(u16, 256), (try decoder.decode(&reader)).value);
 }
