@@ -14,6 +14,7 @@ pub const Error = error{
     InvalidDeflateBlockType,
     StoredLengthMismatch,
     BadZlibHeader,
+    BadGzipHeader,
     TrailingData,
 };
 

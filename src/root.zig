@@ -32,6 +32,10 @@ pub const encodeZlibStored = deflate.encodeZlibStored;
 pub const decodeZlibStored = deflate.decodeZlibStored;
 pub const encodeZlibStoredAlloc = deflate.encodeZlibStoredAlloc;
 pub const decodeZlibStoredAlloc = deflate.decodeZlibStoredAlloc;
+pub const encodeGzipStored = deflate.encodeGzipStored;
+pub const decodeGzipStored = deflate.decodeGzipStored;
+pub const encodeGzipStoredAlloc = deflate.encodeGzipStoredAlloc;
+pub const decodeGzipStoredAlloc = deflate.decodeGzipStoredAlloc;
 
 test {
     _ = checksum;

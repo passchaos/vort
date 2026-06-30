@@ -171,12 +171,74 @@ pub fn decodeZlibStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return out;
 }
 
+pub fn gzipStoredEncodedSize(input_len: usize) Error!usize {
+    const raw_len = try rawStoredEncodedSize(input_len);
+    const with_header = std.math.add(usize, 10, raw_len) catch return error.IntegerOverflow;
+    return std.math.add(usize, with_header, 8) catch error.IntegerOverflow;
+}
+
+pub fn encodeGzipStored(input: []const u8, output: []u8) Error!usize {
+    const required = try gzipStoredEncodedSize(input.len);
+    if (output.len < required) return error.OutputTooSmall;
+
+    @memcpy(output[0..10], &gzip_header);
+    const raw_written = try encodeRawStored(input, output[10 .. required - 8]);
+    const footer_offset = 10 + raw_written;
+    std.mem.writeInt(u32, output[footer_offset..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, output[footer_offset + 4 ..][0..4], @truncate(input.len), .little);
+    return footer_offset + 8;
+}
+
+pub fn encodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const required = try gzipStoredEncodedSize(input.len);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeGzipStored(input, out);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
+    if (input.len < 10) return error.TruncatedFrame;
+    try validateGzipHeader(input[0..10]);
+
+    const raw = try decodeRawStored(input[10..], output);
+    const footer_offset = 10 + raw.input_read;
+    if (input.len - footer_offset < 8) return error.TruncatedFrame;
+    const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
+    const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
+    const payload = output[0..raw.output_written];
+    if (checksum.crc32(payload) != expected_crc) return error.ChecksumMismatch;
+    if (@as(u32, @truncate(raw.output_written)) != expected_size) return error.SizeMismatch;
+    if (footer_offset + 8 != input.len) return error.TrailingData;
+    return raw.output_written;
+}
+
+pub fn decodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const scratch = try allocator.alloc(u8, input.len);
+    defer allocator.free(scratch);
+    const written = try decodeGzipStored(input, scratch);
+    const out = try allocator.alloc(u8, written);
+    errdefer allocator.free(out);
+    @memcpy(out, scratch[0..written]);
+    return out;
+}
+
 fn validateZlibHeader(cmf: u8, flg: u8) Error!void {
     if ((cmf & 0x0f) != 8) return error.BadZlibHeader;
     if ((cmf >> 4) > 7) return error.BadZlibHeader;
     const combined: u16 = (@as(u16, cmf) << 8) | flg;
     if (combined % 31 != 0) return error.BadZlibHeader;
     if ((flg & 0x20) != 0) return error.BadZlibHeader;
+}
+
+const gzip_header = [_]u8{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03 };
+
+fn validateGzipHeader(header: []const u8) Error!void {
+    if (header.len < 10) return error.TruncatedFrame;
+    if (!std.mem.eql(u8, header[0..2], &.{ 0x1f, 0x8b })) return error.BadGzipHeader;
+    if (header[2] != 8) return error.BadGzipHeader;
+    if (header[3] != 0) return error.BadGzipHeader;
 }
 
 fn writeStoredHeader(final: bool, len: u16, output: []u8) void {
@@ -255,4 +317,43 @@ test "zlib stored wrapper validates checksum header and trailing data" {
     @memcpy(with_trailing[0..encoded.len], encoded);
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeZlibStored(with_trailing[0 .. encoded.len + 1], &out));
+}
+
+test "gzip stored wrapper matches level-0 vectors" {
+    const empty = try encodeGzipStoredAlloc(std.testing.allocator, "");
+    defer std.testing.allocator.free(empty);
+    try std.testing.expectEqualSlices(u8, &.{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, empty);
+
+    const hello = try encodeGzipStoredAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(hello);
+    try std.testing.expectEqualSlices(u8, &.{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03, 0x01, 0x05, 0x00, 0xfa, 0xff, 'h', 'e', 'l', 'l', 'o', 0x86, 0xa6, 0x10, 0x36, 0x05, 0x00, 0x00, 0x00 }, hello);
+}
+
+test "gzip stored wrapper validates crc size header and trailing data" {
+    const encoded = try encodeGzipStoredAlloc(std.testing.allocator, "payload");
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeGzipStoredAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "payload", decoded);
+
+    var bad_header = try encodeGzipStoredAlloc(std.testing.allocator, "payload");
+    defer std.testing.allocator.free(bad_header);
+    bad_header[0] = 0;
+    var out: [32]u8 = undefined;
+    try std.testing.expectError(error.BadGzipHeader, decodeGzipStored(bad_header, &out));
+
+    var bad_crc = try encodeGzipStoredAlloc(std.testing.allocator, "payload");
+    defer std.testing.allocator.free(bad_crc);
+    bad_crc[bad_crc.len - 8] ^= 1;
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzipStored(bad_crc, &out));
+
+    var bad_size = try encodeGzipStoredAlloc(std.testing.allocator, "payload");
+    defer std.testing.allocator.free(bad_size);
+    bad_size[bad_size.len - 4] ^= 1;
+    try std.testing.expectError(error.SizeMismatch, decodeGzipStored(bad_size, &out));
+
+    var with_trailing: [64]u8 = undefined;
+    @memcpy(with_trailing[0..encoded.len], encoded);
+    with_trailing[encoded.len] = 0;
+    try std.testing.expectError(error.TrailingData, decodeGzipStored(with_trailing[0 .. encoded.len + 1], &out));
 }

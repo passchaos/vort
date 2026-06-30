@@ -50,6 +50,18 @@ pub fn main(init: std.process.Init) !void {
             std.mem.eql(u8, payload, decoded),
             vort.adler32(decoded),
         });
+    } else if (std.mem.eql(u8, command, "gzip-store-roundtrip")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.encodeGzipStoredAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        const decoded = try vort.decodeGzipStoredAlloc(init.gpa, encoded);
+        defer init.gpa.free(decoded);
+        try stdout.print("input_bytes={d} gzip_bytes={d} decoded_ok={} crc32={d}\n", .{
+            payload.len,
+            encoded.len,
+            std.mem.eql(u8, payload, decoded),
+            vort.crc32(decoded),
+        });
     } else {
         try stdout.print("unknown command: {s}\n\n", .{command});
         try printHelp(stdout);
@@ -67,6 +79,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  checksum [text]            Print Adler-32, CRC-32, and CRC-32C for text
         \\  store-roundtrip [text]     Encode/decode the native store frame
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
+        \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
         \\
         \\This CLI is a smoke surface for the library-first Vort APIs.
         \\

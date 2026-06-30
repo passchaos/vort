@@ -111,6 +111,22 @@ pub fn build(b: *std.Build) void {
     const zlib_diff_step = b.step("run-zlib-diff", "Run zlib stored-deflate wrapper smoke");
     zlib_diff_step.dependOn(&run_zlib_diff.step);
 
+    const gzip_diff_exe = b.addExecutable(.{
+        .name = "vort-gzip-diff",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/gzip_diff.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+
+    const run_gzip_diff = b.addRunArtifact(gzip_diff_exe);
+    const gzip_diff_step = b.step("run-gzip-diff", "Run gzip stored-deflate wrapper smoke");
+    gzip_diff_step.dependOn(&run_gzip_diff.step);
+
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);
     check_step.dependOn(&cli_exe.step);
@@ -118,4 +134,5 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);
     check_step.dependOn(&zlib_diff_exe.step);
+    check_step.dependOn(&gzip_diff_exe.step);
 }

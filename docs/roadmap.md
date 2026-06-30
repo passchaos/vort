@@ -43,7 +43,8 @@ architecture blindly.
 - [ ] Dynamic-Huffman inflate.
 - [x] zlib wrapper and Adler verification for stored blocks.
 - [ ] zlib wrapper integration for fixed/dynamic Huffman blocks.
-- [ ] gzip wrapper and CRC/ISIZE verification.
+- [x] gzip wrapper and CRC/ISIZE verification for stored blocks.
+- [ ] gzip wrapper integration for fixed/dynamic Huffman blocks.
 - [x] Stored-block vectors checked against Python/zlib level-0 output.
 - [ ] Differential tests against zlib, zlib-ng, and zlib-rs.
 - [ ] Compatibility benchmark suite.
