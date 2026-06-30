@@ -102,6 +102,7 @@ architecture blindly.
 - [x] Greedy LZ77 parser experiment with deterministic options and replay tests.
 - [x] Lazy greedy LZ77 parser experiment with deterministic options.
 - [x] Optimal LZ77 parser prototype with deterministic options.
+- [x] Fixed-Huffman bit-cost model for optimal LZ77 parser decisions.
 - [x] Fixed encoder parser strategy config selecting greedy/lazy/optimal prototypes.
 - [x] Compression level presets for fast/default/best strategy configs.
 - [x] Fast preset skips dynamic block candidate generation.

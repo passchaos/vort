@@ -109,13 +109,13 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
     var rev_i: usize = n;
     while (rev_i > 0) {
         rev_i -= 1;
-        costs[rev_i] = 1 + costs[rev_i + 1];
+        costs[rev_i] = fixedLiteralCost(input[rev_i]) + costs[rev_i + 1];
         steps[rev_i] = .{ .literal = input[rev_i] };
         const best = findBestMatch(input, rev_i, options);
         if (best.length >= min_match_len) {
             var len = min_match_len;
             while (len <= best.length) : (len += 1) {
-                const cost = 1 + costs[rev_i + len];
+                const cost = fixedMatchCost(len, best.distance) + costs[rev_i + len];
                 if (cost < costs[rev_i]) {
                     costs[rev_i] = cost;
                     steps[rev_i] = .{ .match = .{ .length = @intCast(len), .distance = @intCast(best.distance) } };
@@ -144,6 +144,56 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
         }
     }
     return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+pub fn fixedBitCost(tokens: []const Token) usize {
+    var cost: usize = 7;
+    for (tokens) |token| {
+        cost += switch (token) {
+            .literal => |byte| fixedLiteralCost(byte),
+            .match => |m| fixedMatchCost(m.length, m.distance),
+        };
+    }
+    cost += 7; // fixed-Huffman end-of-block symbol 256.
+    return cost;
+}
+
+fn fixedLiteralCost(byte: u8) usize {
+    return if (byte <= 143) 8 else 9;
+}
+
+fn fixedMatchCost(length: usize, distance: usize) usize {
+    return fixedLengthSymbolCost(length) + fixedDistanceSymbolCost(distance);
+}
+
+fn fixedLengthSymbolCost(length: usize) usize {
+    std.debug.assert(length >= min_match_len and length <= max_match_len);
+    return if (length == max_match_len) 8 else 7 + lengthExtraBits(length);
+}
+
+fn fixedDistanceSymbolCost(distance: usize) usize {
+    std.debug.assert(distance >= 1 and distance <= default_window_len);
+    return 5 + distanceExtraBits(distance);
+}
+
+fn lengthExtraBits(length: usize) usize {
+    const bases = [_]usize{ 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258 };
+    const extras = [_]usize{ 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0 };
+    for (bases, 0..) |base, i| {
+        const span: usize = if (extras[i] == 0) 1 else @as(usize, 1) << @intCast(extras[i]);
+        if (length >= base and length < base + span) return extras[i];
+    }
+    unreachable;
+}
+
+fn distanceExtraBits(distance: usize) usize {
+    const bases = [_]usize{ 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577 };
+    const extras = [_]usize{ 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13 };
+    for (bases, 0..) |base, i| {
+        const span: usize = if (extras[i] == 0) 1 else @as(usize, 1) << @intCast(extras[i]);
+        if (distance >= base and distance < base + span) return extras[i];
+    }
+    unreachable;
 }
 
 pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
@@ -308,7 +358,7 @@ test "lazy LZ77 planner round trips and keeps token count bounded" {
     try std.testing.expect(lazy.stats.tokenCount() <= greedy.stats.tokenCount() + 1);
 }
 
-test "optimal LZ77 prototype round trips and is no worse by token count" {
+test "optimal LZ77 prototype round trips and is no worse by fixed bit cost" {
     const input = "abcabcxabcdabcabcxabcdabcabcx";
     const greedy = try greedyPlanAlloc(std.testing.allocator, input, .{});
     defer greedy.deinit(std.testing.allocator);
@@ -317,7 +367,16 @@ test "optimal LZ77 prototype round trips and is no worse by token count" {
     const replayed = try replayAlloc(std.testing.allocator, optimal.tokens);
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
-    try std.testing.expect(optimal.stats.tokenCount() <= greedy.stats.tokenCount());
+    try std.testing.expect(fixedBitCost(optimal.tokens) <= fixedBitCost(greedy.tokens));
+}
+
+test "fixed bit cost accounts for literals matches and end marker" {
+    const tokens = [_]Token{
+        .{ .literal = 'a' },
+        .{ .literal = 200 },
+        .{ .match = .{ .length = 3, .distance = 1 } },
+    };
+    try std.testing.expectEqual(@as(usize, 7 + 8 + 9 + 7 + 5 + 7), fixedBitCost(&tokens));
 }
 
 test "hash greedy planner round trips repeated data" {
