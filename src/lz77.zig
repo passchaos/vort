@@ -171,8 +171,7 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
                 const candidate: usize = @intCast(candidate_i);
                 const distance = pos - candidate;
                 if (distance == 0 or distance > options.window_len) break;
-                var len: usize = 0;
-                while (len < max_len and input[candidate + len] == input[pos + len]) len += 1;
+                const len = matchLength(input, candidate, pos, max_len);
                 if (len >= min_match_len and len > best.length) {
                     best = .{ .length = len, .distance = distance };
                     if (len >= options.nice_len) break;
@@ -195,6 +194,21 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
         }
     }
     return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
+    var len: usize = 0;
+    while (len + 8 <= max_len) : (len += 8) {
+        const left = std.mem.readInt(u64, input[a + len ..][0..8], .little);
+        const right = std.mem.readInt(u64, input[b + len ..][0..8], .little);
+        if (left != right) {
+            var inner: usize = 0;
+            while (inner < 8 and input[a + len + inner] == input[b + len + inner]) inner += 1;
+            return len + inner;
+        }
+    }
+    while (len < max_len and input[a + len] == input[b + len]) len += 1;
+    return len;
 }
 
 fn insertHash(input: []const u8, pos: usize, head: []isize, prev: []isize) void {
@@ -314,4 +328,10 @@ test "hash greedy planner round trips repeated data" {
     const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
+test "matchLength compares word chunks and tails" {
+    const input = "abcdefghijklmnopABCabcdefghijklmnopXYZ";
+    try std.testing.expectEqual(@as(usize, 16), matchLength(input, 0, 19, 16));
+    try std.testing.expectEqual(@as(usize, 3), matchLength(input, 0, 19, 3));
 }
