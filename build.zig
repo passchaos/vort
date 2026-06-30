@@ -161,6 +161,11 @@ pub fn build(b: *std.Build) void {
     const gzip_diff_step = b.step("run-gzip-diff", "Run gzip stored-deflate wrapper smoke");
     gzip_diff_step.dependOn(&run_gzip_diff.step);
 
+    const python_zlib_diff = b.addSystemCommand(&.{ "python3", "tools/python_zlib_diff.py" });
+    python_zlib_diff.addArtifactArg(cli_exe);
+    const python_zlib_diff_step = b.step("run-python-zlib-diff", "Run black-box differential smoke against Python zlib");
+    python_zlib_diff_step.dependOn(&python_zlib_diff.step);
+
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);
     check_step.dependOn(&cli_exe.step);
