@@ -36,7 +36,7 @@ def main() -> int:
             if not CLI:
                 return b""
             out = pathlib.Path(td) / "sample.vort.zlib"
-            subprocess.run([str(CLI), "encode-zlib-best-file", str(sample), str(out), "optimal"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE)
+            subprocess.run([str(CLI), "encode-zlib-best-file", str(sample), str(out), "fast"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE)
             return out.read_bytes()
 
         def gzip_run():
@@ -81,7 +81,7 @@ def main() -> int:
             assert zlib.decompress(zlib_ng_data, 31) == data
         if zlib_rs_data:
             assert zlib.decompress(zlib_rs_data) == data
-        print("corpus,input_bytes,vort_zlib_best_bytes,vort_ms,gzip_bytes,gzip_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zstd_bytes,zstd_ms")
+        print("corpus,input_bytes,vort_zlib_fast_bytes,vort_ms,gzip_bytes,gzip_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zstd_bytes,zstd_ms")
         print(f"silesia-1m,{len(data)},{len(vort_data)},{vort_s*1000:.3f},{len(gzip_data)},{gzip_s*1000:.3f},{len(zlib_ng_data)},{zlib_ng_s*1000:.3f},{len(zlib_rs_data)},{zlib_rs_s*1000:.3f},{len(zstd_data)},{zstd_s*1000:.3f}")
     return 0
 
