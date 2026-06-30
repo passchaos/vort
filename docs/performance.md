@@ -15,7 +15,7 @@ zig build run-zstd-compare
 ```
 
 The checksum smoke benchmark processes a deterministic 1 MiB buffer repeatedly
-through Adler-32, CRC-32, and CRC-32C and reports aggregate MiB/s. The deflate decode smoke benchmark repeatedly decodes representative raw/zlib/gzip fixed and dynamic samples. The fixed encode smoke benchmark runs greedy-LZ77-backed raw fixed deflate encoding and verifies round trips. The file corpus report emits per-file ratio plus encode/decode MiB/s for Vort fixed deflate; `run-zstd-compare` emits zstd size beside Vort fixed size. These are still smoke reports and not a final competitor benchmark claim.
+through Adler-32, CRC-32, and CRC-32C and reports aggregate MiB/s. The deflate decode smoke benchmark repeatedly decodes representative raw/zlib/gzip fixed and dynamic samples. The fixed encode smoke benchmark runs greedy-LZ77-backed raw fixed deflate encoding and verifies round trips. The file corpus report emits per-file ratio plus encode/decode MiB/s for Vort best deflate; `run-zstd-compare` emits zstd size beside Vort best/fixed size. These are still smoke reports and not a final competitor benchmark claim.
 
 ## Required evidence before performance claims
 

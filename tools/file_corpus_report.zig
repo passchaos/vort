@@ -9,7 +9,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("path,input_bytes,raw_fixed_bytes,raw_ratio,encode_mib_s,decode_mib_s\n", .{});
+    try stdout.print("path,input_bytes,best_deflate_bytes,best_ratio,encode_mib_s,decode_mib_s\n", .{});
 
     var any = false;
     while (args.next()) |path| {
@@ -18,7 +18,7 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(data);
 
         const encode_start = std.Io.Clock.awake.now(init.io);
-        const encoded = try vort.encodeRawFixedDeflateAlloc(init.gpa, data);
+        const encoded = try vort.encodeRawBestAlloc(init.gpa, data, .{});
         const encode_elapsed = encode_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
         defer init.gpa.free(encoded);
 

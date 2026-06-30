@@ -15,9 +15,9 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("name,input_bytes,raw_fixed_bytes,zlib_fixed_bytes,gzip_fixed_bytes,raw_ratio\n", .{});
+    try stdout.print("name,input_bytes,best_deflate_bytes,zlib_fixed_bytes,gzip_fixed_bytes,best_ratio\n", .{});
     for (cases) |case| {
-        const raw = try vort.encodeRawFixedDeflateAlloc(init.gpa, case.input);
+        const raw = try vort.encodeRawBestAlloc(init.gpa, case.input, .{});
         defer init.gpa.free(raw);
         const zlib_frame = try vort.encodeZlibFixedAlloc(init.gpa, case.input);
         defer init.gpa.free(zlib_frame);
