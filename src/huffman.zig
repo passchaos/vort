@@ -286,7 +286,35 @@ pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n
         active -= 1;
     }
     assignLengths(n, &nodes, node_count - 1, 0, max_bits, &lengths);
+    repairLengthLimit(n, freqs, &lengths, max_bits);
     return lengths;
+}
+
+fn repairLengthLimit(comptime n: usize, freqs: *const [n]u32, lengths: *[n]u4, max_bits: u4) void {
+    while (kraftCost(n, lengths, max_bits) > (@as(usize, 1) << max_bits)) {
+        var best_i: ?usize = null;
+        for (lengths.*, 0..) |bits, i| {
+            if (bits == 0 or bits >= max_bits) continue;
+            if (best_i == null or repairLess(n, freqs, lengths.*, i, best_i.?)) best_i = i;
+        }
+        const i = best_i orelse break;
+        lengths[i] += 1;
+    }
+}
+
+fn repairLess(comptime n: usize, freqs: *const [n]u32, lengths: [n]u4, lhs: usize, rhs: usize) bool {
+    if (lengths[lhs] != lengths[rhs]) return lengths[lhs] < lengths[rhs];
+    if (freqs[lhs] != freqs[rhs]) return freqs[lhs] < freqs[rhs];
+    return lhs > rhs;
+}
+
+fn kraftCost(comptime n: usize, lengths: *const [n]u4, max_bits: u4) usize {
+    var cost: usize = 0;
+    for (lengths.*) |bits| {
+        if (bits == 0) continue;
+        cost += @as(usize, 1) << @intCast(max_bits - bits);
+    }
+    return cost;
 }
 
 const TreeNode = struct {
@@ -532,6 +560,16 @@ test "tree Huffman length builder favors frequent symbols and decodes" {
     const Table = HuffmanTable(freqs.len);
     const table = try Table.init(&lengths);
     try std.testing.expectEqual(@as(usize, 4), table.len);
+}
+
+test "tree Huffman length repair preserves canonical code space" {
+    var freqs: [32]u32 = undefined;
+    for (&freqs, 0..) |*freq, i| freq.* = @intCast(i + 1);
+    const lengths = treeCodeLengths(freqs.len, &freqs, 5);
+    try std.testing.expect(kraftCost(freqs.len, &lengths, 5) <= (@as(usize, 1) << 5));
+    const Table = HuffmanTable(freqs.len);
+    const table = try Table.init(&lengths);
+    try std.testing.expectEqual(@as(usize, 32), table.len);
 }
 
 test "fixed literal fast lookup matches table decoder" {
