@@ -147,7 +147,7 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
 }
 
 pub fn fixedBitCost(tokens: []const Token) usize {
-    var cost: usize = 7;
+    var cost: usize = 3;
     for (tokens) |token| {
         cost += switch (token) {
             .literal => |byte| fixedLiteralCost(byte),
@@ -376,7 +376,7 @@ test "fixed bit cost accounts for literals matches and end marker" {
         .{ .literal = 200 },
         .{ .match = .{ .length = 3, .distance = 1 } },
     };
-    try std.testing.expectEqual(@as(usize, 7 + 8 + 9 + 7 + 5 + 7), fixedBitCost(&tokens));
+    try std.testing.expectEqual(@as(usize, 3 + 8 + 9 + 7 + 5 + 7), fixedBitCost(&tokens));
 }
 
 test "hash greedy planner round trips repeated data" {

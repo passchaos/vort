@@ -90,6 +90,7 @@ architecture blindly.
 - [x] Raw split-best encoder selecting stored/fixed/dynamic per bounded block.
 - [x] zlib/gzip split-best wrappers verified by Python zlib.
 - [x] Adaptive split-best raw/zlib/gzip wrappers verified by Python zlib.
+- [x] Fixed-Huffman bit-cost selector for stored-vs-fixed block decisions.
 - [ ] Production dynamic Huffman encoder with optimized block splitting and block-type decisions.
 - [x] Compatibility benchmark smoke suite comparing Vort/gzip/zstd on sample files.
 - [x] Standard-corpus smoke benchmark comparing Vort/gzip/zlib-ng/zlib-rs/zstd.

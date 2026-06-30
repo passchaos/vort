@@ -163,11 +163,10 @@ fn uniqueByteCount(input: []const u8) usize {
 
 fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions) !void {
     const stored_len = storedBlockEncodedSizeFromState(writer.*, plain.len);
-    const fixed = try encodeRawFixedTokensFinalAlloc(allocator, tokens, final);
-    defer allocator.free(fixed);
+    const fixed_len = (lz77.fixedBitCost(tokens) + 7) / 8;
 
     if (options.block_selection == .stored_fixed) {
-        if (stored_len <= fixed.len) {
+        if (stored_len <= fixed_len) {
             return writeStoredBlock(allocator, writer, plain, final);
         }
         return writeFixedTokens(allocator, writer, tokens, final);
@@ -175,10 +174,10 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
 
     const dynamic = try encodeRawDynamicTokensFinalAlloc(allocator, tokens, final);
     defer allocator.free(dynamic);
-    if (stored_len <= fixed.len and stored_len <= dynamic.len) {
+    if (stored_len <= fixed_len and stored_len <= dynamic.len) {
         return writeStoredBlock(allocator, writer, plain, final);
     }
-    if (fixed.len <= dynamic.len) {
+    if (fixed_len <= dynamic.len) {
         return writeFixedTokens(allocator, writer, tokens, final);
     }
     return writeDynamicTokens(allocator, writer, tokens, final);
@@ -1770,6 +1769,15 @@ test "split raw best encoder selects block modes independently" {
     defer std.testing.allocator.free(dynamic);
     try std.testing.expect(encoded.len <= fixed.len);
     try std.testing.expect(encoded.len <= dynamic.len);
+}
+
+test "fixed bit cost model predicts fixed token byte length" {
+    const input = "abcabcabcabc xyz xyz xyz";
+    const plan = try planTokensAlloc(std.testing.allocator, input, optionsForLevel(.default));
+    defer plan.deinit(std.testing.allocator);
+    const fixed = try encodeRawFixedTokensFinalAlloc(std.testing.allocator, plan.tokens, true);
+    defer std.testing.allocator.free(fixed);
+    try std.testing.expectEqual((lz77.fixedBitCost(plan.tokens) + 7) / 8, fixed.len);
 }
 
 test "split raw best encoder can emit stored block after compressed block" {
