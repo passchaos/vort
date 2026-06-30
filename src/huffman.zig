@@ -318,3 +318,10 @@ test "fixed Huffman encoder writes symbols decoded by fixed table" {
     try std.testing.expectEqual(@as(u16, 'i'), (try decoder.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 256), (try decoder.decode(&reader)).value);
 }
+
+test "dynamic parser rejects non-dynamic block type and truncated header" {
+    var stored_reader = bitstream.BitReader.init(&.{0x01});
+    try std.testing.expectError(error.InvalidDeflateBlockType, parseDynamicHeader(&stored_reader));
+    var truncated_reader = bitstream.BitReader.init(&.{0x05});
+    try std.testing.expectError(error.TruncatedFrame, parseDynamicHeader(&truncated_reader));
+}
