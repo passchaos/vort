@@ -46,6 +46,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
         };
 
         pub fn init(lengths: []const u4) Error!Self {
+            @setEvalBranchQuota(200000);
             if (lengths.len > max_symbols) return error.CorruptFrame;
             var counts: [max_code_bits + 1]u16 = @splat(0);
             for (lengths) |bits| {
@@ -65,17 +66,18 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 if (bits == 0) continue;
                 const canonical = next_code[bits];
                 next_code[bits] += 1;
-                table.entries[table.len] = .{
+                const entry = Entry{
                     .symbol = @intCast(symbol),
                     .code = reverseBits(canonical, bits),
                     .bits = bits,
                 };
+                table.entries[table.len] = entry;
                 table.len += 1;
             }
             return table;
         }
 
-        pub fn decode(self: Self, reader: *bitstream.BitReader) Error!Symbol {
+        pub fn decode(self: *const Self, reader: *bitstream.BitReader) Error!Symbol {
             var code: u16 = 0;
             var bits: u4 = 1;
             while (bits <= max_code_bits) {

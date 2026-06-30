@@ -490,7 +490,7 @@ pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                try decodeCompressedBlockFromReader(allocator, &reader, &out, lit_table, dist_table);
+                try decodeCompressedBlockFromReader(allocator, &reader, &out, &lit_table, &dist_table);
             },
             else => return error.InvalidDeflateBlockType,
         }
