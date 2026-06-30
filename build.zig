@@ -193,7 +193,8 @@ pub fn build(b: *std.Build) void {
     external_probe_step.dependOn(&external_probe.step);
 
     const zstd_compare = b.addSystemCommand(&.{ "python3", "tools/zstd_compare.py" });
-    const zstd_compare_step = b.step("run-zstd-compare", "Report zstd CLI compressed sizes for sample files");
+    zstd_compare.addArtifactArg(cli_exe);
+    const zstd_compare_step = b.step("run-zstd-compare", "Report zstd CLI and Vort fixed compressed sizes for sample files");
     zstd_compare_step.dependOn(&zstd_compare.step);
 
     const compression_report_exe = b.addExecutable(.{

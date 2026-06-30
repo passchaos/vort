@@ -86,6 +86,11 @@ pub fn main(init: std.process.Init) !void {
             std.mem.eql(u8, payload, decoded),
             vort.crc32(decoded),
         });
+    } else if (std.mem.eql(u8, command, "encode-raw-fixed-hex")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.encodeRawFixedDeflateAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "decode-raw-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const compressed = try hexToOwnedBytes(init.gpa, hex);
@@ -153,4 +158,9 @@ fn printDecoded(stdout: *std.Io.Writer, label: []const u8, compressed_len: usize
         vort.crc32(decoded),
         decoded,
     });
+}
+
+fn printHex(stdout: *std.Io.Writer, bytes: []const u8) !void {
+    for (bytes) |byte| try stdout.print("{x:0>2}", .{byte});
+    try stdout.print("\n", .{});
 }
