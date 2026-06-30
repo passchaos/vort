@@ -6,17 +6,19 @@ native format is where Vort can exceed `zlib`, `zlib-ng`, `zlib-rs`, and `zstd`
 without inheriting all historical wire-format tradeoffs.
 
 The current implemented native v0 frame supports store/no-compression,
-deflate-compressed, RLE-compressed, and caller-supplied dictionary-patch payload
-modes. Concatenated v0 streams can embed a skippable serialized index, and the
-blocked best-mode stream encoder can select store/deflate/RLE per block while
-preserving indexed range decode. Dictionary-aware blocked streams can also range
-decode when the caller supplies the same dictionary. Blocked streams can carry a
-skippable long-distance-match summary payload for encoder/planner feedback, and
-the LDM-summary encoder aligns block boundaries to detected long-distance match
-starts before appending the metadata. Future native versions should preserve the
-same engineering constraints: explicit sizes, bounded memory, deterministic
-decoding, independent corruption localization, and simple parser states that can
-be fuzzed aggressively.
+deflate-compressed, RLE-compressed, caller-supplied dictionary-patch, and
+long-distance-reference payload modes. Concatenated v0 streams can embed a
+skippable serialized index, and the blocked best-mode stream encoder can select
+store/deflate/RLE per block while preserving indexed range decode. Opt-in
+dictionary-aware and LDM-aware best-frame encoders can select dictionary-patch or
+LDM reference frames when the caller supplies the required context. Blocked
+streams can carry a skippable long-distance-match summary payload for
+encoder/planner feedback, and the LDM-summary encoder aligns block boundaries to
+detected long-distance match starts before appending the metadata. Future native
+versions should preserve the same engineering
+constraints: explicit sizes, bounded memory, deterministic decoding, independent
+corruption localization, and simple parser states that can be fuzzed
+aggressively.
 
 ## Goals
 

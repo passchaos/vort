@@ -163,7 +163,8 @@ architecture blindly.
 - [x] Long-distance-match-aware block planner annotations.
 - [x] Skippable long-distance summary metadata embedded in native blocked streams.
 - [x] Native blocked stream planning aligns blocks to long-distance match starts.
-- [ ] Long-distance matching integration into native/block encoder.
+- [x] Prototype native LDM reference frame with opt-in best-frame selection.
+- [ ] Production long-distance matching integration into native/block encoder.
 - [x] Deterministic block planning metadata for future multi-threaded encoding.
 - [x] Deterministic block-planned encoder execution API.
 - [x] Parallel multi-threaded encoder execution with deterministic output order.

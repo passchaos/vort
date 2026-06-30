@@ -23,6 +23,7 @@ const flags_none: u8 = 0;
 const flags_deflate: u8 = 1;
 const flags_rle: u8 = 2;
 const flags_dictionary_patch: u8 = 3;
+const flags_ldm: u8 = 4;
 
 pub fn skippableEncodedSize(payload_len: usize) Error!usize {
     if (payload_len > std.math.maxInt(u32)) return error.IntegerOverflow;
@@ -177,6 +178,55 @@ pub fn encodeDictionaryPatchAlloc(allocator: std.mem.Allocator, dict: []const u8
     return out;
 }
 
+pub fn encodeLongDistanceAlloc(allocator: std.mem.Allocator, input: []const u8, options: long_distance.Options) ![]u8 {
+    const payload = try encodeLongDistancePayloadAlloc(allocator, input, options);
+    defer allocator.free(payload);
+    const required = try encodedSize(payload.len);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    writeHeader(out[0..header_len], .{
+        .version = current_version,
+        .flags = flags_ldm,
+        .uncompressed_size = @intCast(input.len),
+        .stored_size = @intCast(payload.len),
+        .checksum = checksum.crc32(input),
+    });
+    @memcpy(out[header_len..], payload);
+    return out;
+}
+
+fn encodeLongDistancePayloadAlloc(allocator: std.mem.Allocator, input: []const u8, options: long_distance.Options) ![]u8 {
+    const candidates = try long_distance.findCandidatesAlloc(allocator, input, options);
+    defer allocator.free(candidates);
+    if (candidates.len == 0) return allocator.dupe(u8, input);
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var offset: usize = 0;
+    for (candidates) |candidate| {
+        if (candidate.position < offset) continue;
+        try appendLiteralOp(allocator, &out, input[offset..candidate.position]);
+        try out.append(allocator, 1);
+        appendIntLE(u32, allocator, &out, @intCast(candidate.distance)) catch |err| return err;
+        appendIntLE(u32, allocator, &out, @intCast(candidate.length)) catch |err| return err;
+        offset = candidate.position + candidate.length;
+    }
+    try appendLiteralOp(allocator, &out, input[offset..]);
+    return out.toOwnedSlice(allocator);
+}
+
+fn appendLiteralOp(allocator: std.mem.Allocator, out: *std.ArrayList(u8), literal: []const u8) !void {
+    if (literal.len == 0) return;
+    try out.append(allocator, 0);
+    try appendIntLE(u32, allocator, out, @intCast(literal.len));
+    try out.appendSlice(allocator, literal);
+}
+
+fn appendIntLE(comptime T: type, allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: T) !void {
+    var buf: [@sizeOf(T)]u8 = undefined;
+    std.mem.writeInt(T, &buf, value, .little);
+    try out.appendSlice(allocator, &buf);
+}
+
 pub fn encodeBestWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, min_match_len: usize) ![]u8 {
     const native_best = try encodeBestAlloc(allocator, input);
     errdefer allocator.free(native_best);
@@ -187,6 +237,19 @@ pub fn encodeBestWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const
         return dict_frame;
     }
     allocator.free(dict_frame);
+    return native_best;
+}
+
+pub fn encodeBestWithLongDistanceAlloc(allocator: std.mem.Allocator, input: []const u8, options: long_distance.Options) ![]u8 {
+    const native_best = try encodeBestAlloc(allocator, input);
+    errdefer allocator.free(native_best);
+    const ldm_frame = try encodeLongDistanceAlloc(allocator, input, options);
+    errdefer allocator.free(ldm_frame);
+    if (ldm_frame.len < native_best.len) {
+        allocator.free(native_best);
+        return ldm_frame;
+    }
+    allocator.free(ldm_frame);
     return native_best;
 }
 
@@ -226,12 +289,50 @@ pub fn decodeAnyAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
         flags_deflate => try deflate.decodeRawAutoAlloc(allocator, payload),
         flags_rle => try decodeRlePayloadAlloc(allocator, payload),
         flags_dictionary_patch => return error.InvalidDictionaryTraining,
+        flags_ldm => try decodeLongDistancePayloadAlloc(allocator, payload, @intCast(info.uncompressed_size)),
         else => return error.CorruptFrame,
     };
     errdefer allocator.free(decoded);
     if (decoded.len != info.uncompressed_size) return error.SizeMismatch;
     if (checksum.crc32(decoded) != info.checksum) return error.ChecksumMismatch;
     return decoded;
+}
+
+fn decodeLongDistancePayloadAlloc(allocator: std.mem.Allocator, payload: []const u8, expected_len: usize) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try out.ensureTotalCapacity(allocator, expected_len);
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const tag = payload[offset];
+        offset += 1;
+        switch (tag) {
+            0 => {
+                if (payload.len - offset < 4) return error.TruncatedFrame;
+                const len: usize = std.mem.readInt(u32, payload[offset..][0..4], .little);
+                offset += 4;
+                if (payload.len - offset < len) return error.TruncatedFrame;
+                try out.appendSlice(allocator, payload[offset..][0..len]);
+                offset += len;
+            },
+            1 => {
+                if (payload.len - offset < 8) return error.TruncatedFrame;
+                const distance: usize = std.mem.readInt(u32, payload[offset..][0..4], .little);
+                const len: usize = std.mem.readInt(u32, payload[offset + 4 ..][0..4], .little);
+                offset += 8;
+                if (distance == 0 or distance > out.items.len) return error.InvalidMatch;
+                try out.ensureUnusedCapacity(allocator, len);
+                for (0..len) |_| {
+                    const index = out.items.len - distance;
+                    out.appendAssumeCapacity(out.items[index]);
+                }
+            },
+            else => return error.CorruptFrame,
+        }
+        if (out.items.len > expected_len) return error.SizeMismatch;
+    }
+    if (out.items.len != expected_len) return error.SizeMismatch;
+    return out.toOwnedSlice(allocator);
 }
 
 pub fn decodeDictionaryPatchAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8) ![]u8 {
@@ -277,7 +378,7 @@ pub fn parseHeader(input: []const u8) Error!FrameInfo {
     const version = input[4];
     if (version != current_version) return error.UnsupportedVersion;
     const flags = input[5];
-    if (flags != flags_none and flags != flags_deflate and flags != flags_rle and flags != flags_dictionary_patch) return error.CorruptFrame;
+    if (flags != flags_none and flags != flags_deflate and flags != flags_rle and flags != flags_dictionary_patch and flags != flags_ldm) return error.CorruptFrame;
     if (input[6] != 0 or input[7] != 0) return error.CorruptFrame;
     if (std.mem.readInt(u32, input[28..32], .little) != 0) return error.CorruptFrame;
 
@@ -1086,6 +1187,7 @@ pub const ModeSummary = struct {
     deflate: usize = 0,
     rle: usize = 0,
     dictionary_patch: usize = 0,
+    ldm: usize = 0,
 };
 
 pub fn summarizeModes(input: []const u8) Error!ModeSummary {
@@ -1105,6 +1207,7 @@ pub fn summarizeModes(input: []const u8) Error!ModeSummary {
             flags_deflate => summary.deflate += 1,
             flags_rle => summary.rle += 1,
             flags_dictionary_patch => summary.dictionary_patch += 1,
+            flags_ldm => summary.ldm += 1,
             else => return error.CorruptFrame,
         }
         const total = try frameLenFromInfo(info);
@@ -1559,6 +1662,19 @@ test "native RLE frame round trips repeated payloads" {
     try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
+test "native long-distance frame round trips beyond-window repetitions" {
+    const prefix = deterministicLdmPrefix();
+    const input = prefix ++ "----" ++ prefix[0..64].*;
+    const frame = try encodeLongDistanceAlloc(std.testing.allocator, input, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_ldm, info.flags);
+    try std.testing.expect(info.stored_size < info.uncompressed_size);
+    const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
 test "native best frame selects RLE for repeated data" {
     const input = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const frame = try encodeBestAlloc(std.testing.allocator, input);
@@ -1568,6 +1684,28 @@ test "native best frame selects RLE for repeated data" {
     const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "native best frame can select LDM for long-distance repetitions" {
+    const prefix = deterministicLdmPrefix();
+    const input = prefix ++ "----" ++ prefix[0..1024].*;
+    const frame = try encodeBestWithLongDistanceAlloc(std.testing.allocator, input, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_ldm, info.flags);
+    const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+fn deterministicLdmPrefix() [33_000]u8 {
+    var out: [33_000]u8 = undefined;
+    var x: u32 = 0x1234_5678;
+    for (&out) |*byte| {
+        x = x *% 1664525 +% 1013904223;
+        byte.* = @truncate(x >> 24);
+    }
+    return out;
 }
 
 test "native dictionary patch frame decodes with caller dictionary" {
