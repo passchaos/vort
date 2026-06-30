@@ -96,10 +96,75 @@ pub const TrainingPlan = struct {
     total_sample_bytes: usize,
 };
 
+pub const Match = struct {
+    sample_offset: usize,
+    dictionary_offset: usize,
+    length: usize,
+};
+
+pub const MatchSummary = struct {
+    matches: usize = 0,
+    covered_bytes: usize = 0,
+    longest: usize = 0,
+
+    pub fn coverageRatio(self: MatchSummary, sample_len: usize) f64 {
+        if (sample_len == 0) return 0.0;
+        return @as(f64, @floatFromInt(self.covered_bytes)) / @as(f64, @floatFromInt(sample_len));
+    }
+};
+
 pub fn planTraining(samples: []const []const u8, target_size: usize) TrainingPlan {
     var total: usize = 0;
     for (samples) |sample| total += sample.len;
     return .{ .target_size = target_size, .sample_count = samples.len, .total_sample_bytes = total };
+}
+
+pub fn findMatchesAlloc(allocator: std.mem.Allocator, dict: []const u8, sample: []const u8, min_match_len: usize) ![]Match {
+    if (min_match_len == 0) return error.InvalidDictionaryTraining;
+    var matches: std.ArrayList(Match) = .empty;
+    errdefer matches.deinit(allocator);
+    var i: usize = 0;
+    while (i + min_match_len <= sample.len) {
+        const best = findBestDictionaryMatch(dict, sample[i..], min_match_len);
+        if (best.length >= min_match_len) {
+            try matches.append(allocator, .{ .sample_offset = i, .dictionary_offset = best.offset, .length = best.length });
+            i += best.length;
+        } else {
+            i += 1;
+        }
+    }
+    return matches.toOwnedSlice(allocator);
+}
+
+pub fn summarizeMatchesAlloc(allocator: std.mem.Allocator, dict: []const u8, sample: []const u8, min_match_len: usize) !MatchSummary {
+    const matches = try findMatchesAlloc(allocator, dict, sample, min_match_len);
+    defer allocator.free(matches);
+    var summary = MatchSummary{};
+    summary.matches = matches.len;
+    for (matches) |match| {
+        summary.covered_bytes += match.length;
+        summary.longest = @max(summary.longest, match.length);
+    }
+    return summary;
+}
+
+const DictionaryMatchCandidate = struct {
+    offset: usize = 0,
+    length: usize = 0,
+};
+
+fn findBestDictionaryMatch(dict: []const u8, sample: []const u8, min_match_len: usize) DictionaryMatchCandidate {
+    var best = DictionaryMatchCandidate{};
+    if (dict.len < min_match_len or sample.len < min_match_len) return best;
+    var offset: usize = 0;
+    while (offset + min_match_len <= dict.len) : (offset += 1) {
+        if (!std.mem.eql(u8, dict[offset..][0..min_match_len], sample[0..min_match_len])) continue;
+        const max_len = @min(dict.len - offset, sample.len);
+        var len = min_match_len;
+        while (len < max_len and dict[offset + len] == sample[len]) len += 1;
+        if (len > best.length) best = .{ .offset = offset, .length = len };
+    }
+    return best;
 }
 
 test "dictionary IDs are stable and content sensitive" {
@@ -139,4 +204,19 @@ test "dictionary trainer handles empty target" {
     const dict = try trainAlloc(std.testing.allocator, &samples, .{ .target_size = 0 });
     defer std.testing.allocator.free(dict);
     try std.testing.expectEqual(@as(usize, 0), dict.len);
+}
+
+test "dictionary match scanner summarizes coverage" {
+    const dict = "alpha beta gamma";
+    const sample = "zz alpha beta yy gamma";
+    const matches = try findMatchesAlloc(std.testing.allocator, dict, sample, 5);
+    defer std.testing.allocator.free(matches);
+    try std.testing.expectEqual(@as(usize, 2), matches.len);
+    try std.testing.expectEqual(@as(usize, 3), matches[0].sample_offset);
+    try std.testing.expect(matches[0].length >= "alpha beta".len);
+
+    const summary = try summarizeMatchesAlloc(std.testing.allocator, dict, sample, 5);
+    try std.testing.expectEqual(matches.len, summary.matches);
+    try std.testing.expect(summary.covered_bytes >= "alpha beta".len + "gamma".len);
+    try std.testing.expect(summary.coverageRatio(sample.len) > 0.0);
 }

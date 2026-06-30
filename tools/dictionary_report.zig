@@ -14,9 +14,14 @@ pub fn main(init: std.process.Init) !void {
     const meta = vort.DictionaryMetadata.fromBytes(dict, 32 * 1024);
 
     var covered: usize = 0;
+    var dictionary_matches: usize = 0;
+    var dictionary_longest: usize = 0;
     var compressed_total: usize = 0;
     for (samples) |sample| {
-        covered += dictionaryCoveredBytes(dict, sample, 5);
+        const summary = try vort.summarizeDictionaryMatchesAlloc(init.gpa, dict, sample, 5);
+        covered += summary.covered_bytes;
+        dictionary_matches += summary.matches;
+        dictionary_longest = @max(dictionary_longest, summary.longest);
         const encoded = try vort.encodeRawBestAlloc(init.gpa, sample, vort.optionsForCompressionLevel(.fastest));
         defer init.gpa.free(encoded);
         compressed_total += encoded.len;
@@ -27,36 +32,19 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [768]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("dictionary report: samples={d} sample_bytes={d} target={d} dict_bytes={d} id={x} window={d} covered_bytes={d} coverage={d:.4} baseline_deflate_bytes={d} baseline_ratio={d:.4}\n", .{
+    try stdout.print("dictionary report: samples={d} sample_bytes={d} target={d} dict_bytes={d} id={x} window={d} matches={d} covered_bytes={d} longest={d} coverage={d:.4} baseline_deflate_bytes={d} baseline_ratio={d:.4}\n", .{
         plan.sample_count,
         plan.total_sample_bytes,
         plan.target_size,
         dict.len,
         meta.id.asInt(),
         meta.window_len,
+        dictionary_matches,
         covered,
+        dictionary_longest,
         coverage,
         compressed_total,
         ratio,
     });
     try stdout.flush();
-}
-
-fn dictionaryCoveredBytes(dict: []const u8, sample: []const u8, min_phrase_len: usize) usize {
-    var covered: usize = 0;
-    var i: usize = 0;
-    while (i + min_phrase_len <= sample.len) {
-        var best: usize = 0;
-        var len: usize = min_phrase_len;
-        while (i + len <= sample.len) : (len += 1) {
-            if (std.mem.indexOf(u8, dict, sample[i..][0..len]) != null) best = len;
-        }
-        if (best != 0) {
-            covered += best;
-            i += best;
-        } else {
-            i += 1;
-        }
-    }
-    return covered;
 }
