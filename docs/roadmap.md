@@ -112,6 +112,7 @@ architecture blindly.
 - [x] Initial design note for native block/frame layout.
 - [x] Dictionary IDs and training-plan metadata.
 - [x] Deterministic n-gram dictionary training prototype.
+- [x] Dictionary training metadata/report validation.
 - [ ] Production dictionary training with ratio/throughput validation.
 - [x] Splittable/seekable frame index range decode API.
 - [x] Embedded skippable index frame for seekable native store streams.

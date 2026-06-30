@@ -278,6 +278,21 @@ pub fn build(b: *std.Build) void {
     const compression_report_step = b.step("run-compression-report", "Report fixed-encoder compression sizes on small built-in corpus");
     compression_report_step.dependOn(&run_compression_report.step);
 
+    const dictionary_report_exe = b.addExecutable(.{
+        .name = "vort-dictionary-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/dictionary_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_dictionary_report = b.addRunArtifact(dictionary_report_exe);
+    const dictionary_report_step = b.step("run-dictionary-report", "Report deterministic dictionary training metadata");
+    dictionary_report_step.dependOn(&run_dictionary_report.step);
+
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
         .root_module = b.createModule(.{
@@ -319,6 +334,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zlib_diff_exe.step);
     check_step.dependOn(&gzip_diff_exe.step);
     check_step.dependOn(&compression_report_exe.step);
+    check_step.dependOn(&dictionary_report_exe.step);
     check_step.dependOn(&file_corpus_report_exe.step);
     check_step.dependOn(&cpu_features_exe.step);
 }
