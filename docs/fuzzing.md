@@ -7,6 +7,7 @@ zig build run-fuzz-smoke
 zig build run-fuzz-corpus
 zig build run-fuzz-corpus -- <hex-sample> [...]
 zig build run-fuzz-target
+zig build run-libfuzzer-smoke
 ```
 
 Coverage-guided fuzzing should target these parser surfaces first:
@@ -19,6 +20,4 @@ Coverage-guided fuzzing should target these parser surfaces first:
 The `tools/fuzz_corpus.zig` command is intentionally hex-sample based so corpus
 reducers can feed minimized byte strings without inventing a file format.
 `tools/fuzz_target.zig` exposes `fuzzOne(allocator, data)` for raw-byte fuzz
-runners and also has a smoke-test main. Future libFuzzer/AFL wiring should call
-that function directly and preserve crashing inputs as hex samples in regression
-tests.
+runners and also has a smoke-test main. `tools/fuzz_libfuzzer.zig` exports `LLVMFuzzerTestOneInput` and is smoke-tested by `run-libfuzzer-smoke`. AFL/libFuzzer packaging should preserve crashing inputs as hex samples in regression tests.

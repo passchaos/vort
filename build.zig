@@ -145,6 +145,21 @@ pub fn build(b: *std.Build) void {
     const fuzz_target_step = b.step("run-fuzz-target", "Run raw-byte parser fuzz target smoke");
     fuzz_target_step.dependOn(&run_fuzz_target.step);
 
+    const libfuzzer_smoke_exe = b.addExecutable(.{
+        .name = "vort-libfuzzer-smoke",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/fuzz_libfuzzer.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_libfuzzer_smoke = b.addRunArtifact(libfuzzer_smoke_exe);
+    const libfuzzer_smoke_step = b.step("run-libfuzzer-smoke", "Run exported LLVMFuzzerTestOneInput smoke");
+    libfuzzer_smoke_step.dependOn(&run_libfuzzer_smoke.step);
+
     const checksum_diff_exe = b.addExecutable(.{
         .name = "vort-checksum-diff",
         .root_module = b.createModule(.{
@@ -282,6 +297,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&fuzz_corpus_exe.step);
     check_step.dependOn(&fuzz_target_exe.step);
+    check_step.dependOn(&libfuzzer_smoke_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);
     check_step.dependOn(&zlib_diff_exe.step);
     check_step.dependOn(&gzip_diff_exe.step);
