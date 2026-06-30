@@ -146,6 +146,69 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
     return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
 }
 
+pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    const table_size = 1 << 15;
+    const head = try allocator.alloc(isize, table_size);
+    defer allocator.free(head);
+    @memset(head, -1);
+    const prev = try allocator.alloc(isize, input.len);
+    defer allocator.free(prev);
+    @memset(prev, -1);
+
+    var tokens: std.ArrayList(Token) = .empty;
+    errdefer tokens.deinit(allocator);
+    var stats = PlanStats{};
+
+    var pos: usize = 0;
+    while (pos < input.len) {
+        var best = MatchCandidate{};
+        if (pos + min_match_len <= input.len) {
+            const h = hash3(input[pos..][0..3]) & (table_size - 1);
+            var candidate_i = head[h];
+            var checked: usize = 0;
+            const max_len = @min(max_match_len, input.len - pos);
+            while (candidate_i >= 0 and checked < options.max_chain) : (checked += 1) {
+                const candidate: usize = @intCast(candidate_i);
+                const distance = pos - candidate;
+                if (distance == 0 or distance > options.window_len) break;
+                var len: usize = 0;
+                while (len < max_len and input[candidate + len] == input[pos + len]) len += 1;
+                if (len >= min_match_len and len > best.length) {
+                    best = .{ .length = len, .distance = distance };
+                    if (len >= options.nice_len) break;
+                }
+                candidate_i = prev[candidate];
+            }
+        }
+
+        if (best.length >= min_match_len) {
+            try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+            stats.matches += 1;
+            stats.matched_bytes += best.length;
+            const end = @min(input.len, pos + best.length);
+            while (pos < end) : (pos += 1) insertHash(input, pos, head, prev);
+        } else {
+            try tokens.append(allocator, .{ .literal = input[pos] });
+            stats.literals += 1;
+            insertHash(input, pos, head, prev);
+            pos += 1;
+        }
+    }
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+fn insertHash(input: []const u8, pos: usize, head: []isize, prev: []isize) void {
+    if (pos + min_match_len > input.len) return;
+    const h = hash3(input[pos..][0..3]) & (head.len - 1);
+    prev[pos] = head[h];
+    head[h] = @intCast(pos);
+}
+
+fn hash3(bytes: *const [3]u8) usize {
+    const v: usize = (@as(usize, bytes[0]) << 16) | (@as(usize, bytes[1]) << 8) | bytes[2];
+    return (v *% 2654435761) >> 16;
+}
+
 pub fn replayAlloc(allocator: std.mem.Allocator, tokens: []const Token) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -241,4 +304,14 @@ test "optimal LZ77 prototype round trips and is no worse by token count" {
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
     try std.testing.expect(optimal.stats.tokenCount() <= greedy.stats.tokenCount());
+}
+
+test "hash greedy planner round trips repeated data" {
+    const input = "abcabcabcabc xyz xyz xyz aaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const plan = try hashGreedyPlanAlloc(std.testing.allocator, input, .{});
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expect(plan.stats.matches > 0);
+    const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
 }

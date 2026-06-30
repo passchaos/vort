@@ -13,7 +13,7 @@ pub const DecodeResult = struct {
     output_written: usize,
 };
 
-pub const ParserMode = enum { greedy, lazy, optimal };
+pub const ParserMode = enum { hash, greedy, lazy, optimal };
 
 pub const CompressionOptions = struct {
     parser: ParserMode = .greedy,
@@ -24,7 +24,7 @@ pub const CompressionLevel = enum { fast, default, best };
 
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
-        .fast => .{ .parser = .greedy, .lz77_options = .{ .max_chain = 32, .nice_len = 16 } },
+        .fast => .{ .parser = .hash, .lz77_options = .{ .max_chain = 32, .nice_len = 16 } },
         .default => .{ .parser = .lazy, .lz77_options = .{ .max_chain = 128, .nice_len = 64 } },
         .best => .{ .parser = .optimal, .lz77_options = .{ .max_chain = 512, .nice_len = 128 } },
     };
@@ -70,6 +70,7 @@ pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const
 
 pub fn encodeRawDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const plan = switch (options.parser) {
+        .hash => try lz77.hashGreedyPlanAlloc(allocator, input, options.lz77_options),
         .greedy => try lz77.greedyPlanAlloc(allocator, input, options.lz77_options),
         .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, options.lz77_options),
         .optimal => try lz77.optimalPlanAlloc(allocator, input, options.lz77_options),
@@ -265,6 +266,7 @@ pub fn encodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u
 
 pub fn encodeRawFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const plan = switch (options.parser) {
+        .hash => try lz77.hashGreedyPlanAlloc(allocator, input, options.lz77_options),
         .greedy => try lz77.greedyPlanAlloc(allocator, input, options.lz77_options),
         .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, options.lz77_options),
         .optimal => try lz77.optimalPlanAlloc(allocator, input, options.lz77_options),

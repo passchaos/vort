@@ -85,7 +85,7 @@ architecture blindly.
 
 ## Milestone 4: compression performance foundation
 
-- [x] Match finder interfaces and scalar reference matchers.
+- [x] Match finder interfaces, scalar reference matcher, and hash-chain matcher.
 - [x] Greedy LZ77 parser experiment with deterministic options and replay tests.
 - [x] Lazy greedy LZ77 parser experiment with deterministic options.
 - [x] Optimal LZ77 parser prototype with deterministic options.
