@@ -170,4 +170,5 @@ architecture blindly.
 - [x] Native parallel/thread-pool/work-queue encoder benchmark smoke.
 - [x] Native parallel/thread-pool/work-queue benchmark accepts real file corpora.
 - [x] Native parallel/thread-pool/work-queue benchmark across bounded Silesia files.
+- [x] Native parallel/thread-pool/work-queue Markdown dashboards for bounded/full Silesia.
 - [ ] Production thread-pool encoder benchmarking across full standard real corpora.

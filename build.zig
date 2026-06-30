@@ -134,6 +134,18 @@ pub fn build(b: *std.Build) void {
     const native_parallel_corpus_report_step = b.step("run-native-parallel-corpus-report", "Run native parallel/thread-pool benchmark across Silesia files");
     native_parallel_corpus_report_step.dependOn(&native_parallel_corpus_report.step);
 
+    const native_parallel_dashboard = b.addSystemCommand(&.{ "python3", "tools/native_parallel_corpus_report.py" });
+    native_parallel_dashboard.addArtifactArg(native_parallel_bench_exe);
+    native_parallel_dashboard.addArgs(&.{ "--markdown", "zig-out/vort-native-parallel-dashboard.md" });
+    const native_parallel_dashboard_step = b.step("run-native-parallel-dashboard", "Write native parallel Silesia benchmark dashboard to zig-out");
+    native_parallel_dashboard_step.dependOn(&native_parallel_dashboard.step);
+
+    const native_parallel_full_dashboard = b.addSystemCommand(&.{ "python3", "tools/native_parallel_corpus_report.py" });
+    native_parallel_full_dashboard.addArtifactArg(native_parallel_bench_exe);
+    native_parallel_full_dashboard.addArgs(&.{ "--full", "--markdown", "zig-out/vort-native-parallel-full-dashboard.md" });
+    const native_parallel_full_dashboard_step = b.step("run-native-parallel-full-dashboard", "Write full native parallel Silesia benchmark dashboard to zig-out");
+    native_parallel_full_dashboard_step.dependOn(&native_parallel_full_dashboard.step);
+
     const fuzz_smoke_exe = b.addExecutable(.{
         .name = "vort-fuzz-smoke",
         .root_module = b.createModule(.{

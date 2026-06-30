@@ -80,6 +80,8 @@ zig build bench-deflate-encode -Doptimize=ReleaseFast
 zig build bench-native-parallel -Doptimize=ReleaseFast
 zig build bench-native-parallel -Doptimize=ReleaseFast -- README.md 4096
 zig build -Doptimize=ReleaseFast run-native-parallel-corpus-report
+zig build -Doptimize=ReleaseFast run-native-parallel-dashboard
+zig build -Doptimize=ReleaseFast run-native-parallel-full-dashboard
 ```
 
 ## Current API sketch
