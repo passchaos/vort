@@ -28,10 +28,10 @@ pub const CompressionLevel = enum { fastest, fast, default, best };
 
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
-        .fastest => .{ .parser = .hash, .lz77_options = .{ .max_chain = 4, .nice_len = 8, .max_candidates = 1, .lazy_min_gain = 3 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
-        .fast => .{ .parser = .hash, .lz77_options = .{ .max_chain = 32, .nice_len = 16, .max_candidates = 2, .lazy_min_gain = 3 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 16 * 1024, .max_block_len = max_stored_block_len, .sample_len = 2048, .search_step = 16 * 1024 } },
-        .default => .{ .parser = .lazy, .lz77_options = .{ .max_chain = 128, .nice_len = 64, .max_candidates = 4, .lazy_min_gain = 2 }, .split_options = .{ .min_block_len = 8 * 1024, .max_block_len = max_stored_block_len, .sample_len = 4096, .search_step = 8 * 1024 } },
-        .best => .{ .parser = .optimal, .lz77_options = .{ .max_chain = 512, .nice_len = 128, .max_candidates = lz77.max_optimal_candidates, .lazy_min_gain = 1 }, .split_options = .{ .min_block_len = 4 * 1024, .max_block_len = max_stored_block_len, .sample_len = 8192, .search_step = 4 * 1024 } },
+        .fastest => .{ .parser = .hash, .lz77_options = .{ .max_chain = 4, .nice_len = 8, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
+        .fast => .{ .parser = .hash, .lz77_options = .{ .max_chain = 32, .nice_len = 16, .max_candidates = 2, .lazy_min_gain = 3, .min_match = 4 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 16 * 1024, .max_block_len = max_stored_block_len, .sample_len = 2048, .search_step = 16 * 1024 } },
+        .default => .{ .parser = .lazy, .lz77_options = .{ .max_chain = 128, .nice_len = 64, .max_candidates = 4, .lazy_min_gain = 2, .min_match = 3 }, .split_options = .{ .min_block_len = 8 * 1024, .max_block_len = max_stored_block_len, .sample_len = 4096, .search_step = 8 * 1024 } },
+        .best => .{ .parser = .optimal, .lz77_options = .{ .max_chain = 512, .nice_len = 128, .max_candidates = lz77.max_optimal_candidates, .lazy_min_gain = 1, .min_match = 3 }, .split_options = .{ .min_block_len = 4 * 1024, .max_block_len = max_stored_block_len, .sample_len = 8192, .search_step = 4 * 1024 } },
     };
 }
 
