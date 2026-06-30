@@ -38,11 +38,13 @@ architecture blindly.
 ## Milestone 3: deflate/zlib/gzip compatibility
 
 - [ ] Bit reader/writer primitives.
-- [ ] Stored deflate blocks.
+- [x] Stored deflate blocks.
 - [ ] Fixed-Huffman inflate.
 - [ ] Dynamic-Huffman inflate.
-- [ ] zlib wrapper and Adler verification.
+- [x] zlib wrapper and Adler verification for stored blocks.
+- [ ] zlib wrapper integration for fixed/dynamic Huffman blocks.
 - [ ] gzip wrapper and CRC/ISIZE verification.
+- [x] Stored-block vectors checked against Python/zlib level-0 output.
 - [ ] Differential tests against zlib, zlib-ng, and zlib-rs.
 - [ ] Compatibility benchmark suite.
 

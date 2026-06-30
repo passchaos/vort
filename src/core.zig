@@ -11,6 +11,10 @@ pub const Error = error{
     ChecksumMismatch,
     SizeMismatch,
     IntegerOverflow,
+    InvalidDeflateBlockType,
+    StoredLengthMismatch,
+    BadZlibHeader,
+    TrailingData,
 };
 
 /// Input/output accounting for resumable streaming APIs.

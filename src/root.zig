@@ -4,6 +4,7 @@ pub const checksum = @import("checksum.zig");
 pub const core = @import("core.zig");
 pub const store = @import("store.zig");
 pub const fuzz = @import("fuzz.zig");
+pub const deflate = @import("deflate.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -23,9 +24,19 @@ pub const storeEncodeAlloc = store.encodeAlloc;
 pub const storeDecodeAlloc = store.decodeAlloc;
 pub const storeDecodeConcatenatedAlloc = store.decodeConcatenatedAlloc;
 
+pub const encodeRawStoredDeflate = deflate.encodeRawStored;
+pub const decodeRawStoredDeflate = deflate.decodeRawStored;
+pub const encodeRawStoredDeflateAlloc = deflate.encodeRawStoredAlloc;
+pub const decodeRawStoredDeflateAlloc = deflate.decodeRawStoredAlloc;
+pub const encodeZlibStored = deflate.encodeZlibStored;
+pub const decodeZlibStored = deflate.decodeZlibStored;
+pub const encodeZlibStoredAlloc = deflate.encodeZlibStoredAlloc;
+pub const decodeZlibStoredAlloc = deflate.decodeZlibStoredAlloc;
+
 test {
     _ = checksum;
     _ = core;
     _ = store;
     _ = fuzz;
+    _ = deflate;
 }
