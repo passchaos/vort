@@ -65,6 +65,40 @@ pub fn greedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options:
     return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
 }
 
+pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    var tokens: std.ArrayList(Token) = .empty;
+    errdefer tokens.deinit(allocator);
+    var stats = PlanStats{};
+
+    var pos: usize = 0;
+    while (pos < input.len) {
+        const best = findBestMatch(input, pos, options);
+        if (best.length < min_match_len) {
+            try tokens.append(allocator, .{ .literal = input[pos] });
+            stats.literals += 1;
+            pos += 1;
+            continue;
+        }
+
+        if (pos + 1 < input.len) {
+            const next = findBestMatch(input, pos + 1, options);
+            if (next.length > best.length + 1) {
+                try tokens.append(allocator, .{ .literal = input[pos] });
+                stats.literals += 1;
+                pos += 1;
+                continue;
+            }
+        }
+
+        try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+        stats.matches += 1;
+        stats.matched_bytes += best.length;
+        pos += best.length;
+    }
+
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
 pub fn replayAlloc(allocator: std.mem.Allocator, tokens: []const Token) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -136,4 +170,16 @@ test "greedy LZ77 planner respects incompressible input" {
 test "replay rejects invalid match distance" {
     const tokens = [_]Token{.{ .match = .{ .length = 3, .distance = 1 } }};
     try std.testing.expectError(error.InvalidMatch, replayAlloc(std.testing.allocator, &tokens));
+}
+
+test "lazy LZ77 planner round trips and keeps token count bounded" {
+    const input = "abcabcxabcdabcabcxabcdabcabcx";
+    const greedy = try greedyPlanAlloc(std.testing.allocator, input, .{});
+    defer greedy.deinit(std.testing.allocator);
+    const lazy = try lazyGreedyPlanAlloc(std.testing.allocator, input, .{});
+    defer lazy.deinit(std.testing.allocator);
+    const replayed = try replayAlloc(std.testing.allocator, lazy.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+    try std.testing.expect(lazy.stats.tokenCount() <= greedy.stats.tokenCount() + 1);
 }
