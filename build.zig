@@ -183,6 +183,21 @@ pub fn build(b: *std.Build) void {
     const python_zlib_diff_step = b.step("run-python-zlib-diff", "Run black-box differential smoke against Python zlib");
     python_zlib_diff_step.dependOn(&python_zlib_diff.step);
 
+    const compression_report_exe = b.addExecutable(.{
+        .name = "vort-compression-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/compression_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_compression_report = b.addRunArtifact(compression_report_exe);
+    const compression_report_step = b.step("run-compression-report", "Report fixed-encoder compression sizes on small built-in corpus");
+    compression_report_step.dependOn(&run_compression_report.step);
+
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);
     check_step.dependOn(&cli_exe.step);
@@ -194,4 +209,5 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&checksum_diff_exe.step);
     check_step.dependOn(&zlib_diff_exe.step);
     check_step.dependOn(&gzip_diff_exe.step);
+    check_step.dependOn(&compression_report_exe.step);
 }
