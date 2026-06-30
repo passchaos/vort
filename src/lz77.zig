@@ -42,6 +42,8 @@ pub const GreedyPlan = struct {
     }
 };
 
+const max_optimal_candidates = 16;
+
 pub fn greedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
     var tokens: std.ArrayList(Token) = .empty;
     errdefer tokens.deinit(allocator);
@@ -111,8 +113,8 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
         rev_i -= 1;
         costs[rev_i] = fixedLiteralCost(input[rev_i]) + costs[rev_i + 1];
         steps[rev_i] = .{ .literal = input[rev_i] };
-        const best = findBestMatch(input, rev_i, options);
-        if (best.length >= min_match_len) {
+        const candidates = findMatchCandidates(input, rev_i, options);
+        for (candidates.items[0..candidates.len]) |best| {
             var len = min_match_len;
             while (len <= best.length) : (len += 1) {
                 const cost = fixedMatchCost(len, best.distance) + costs[rev_i + len];
@@ -144,6 +146,57 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
         }
     }
     return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+const MatchCandidates = struct {
+    items: [max_optimal_candidates]MatchCandidate = undefined,
+    len: usize = 0,
+
+    fn add(self: *MatchCandidates, candidate: MatchCandidate) void {
+        if (candidate.length < min_match_len) return;
+        for (self.items[0..self.len]) |existing| {
+            if (existing.distance == candidate.distance) return;
+        }
+        if (self.len < self.items.len) {
+            self.items[self.len] = candidate;
+            self.len += 1;
+            return;
+        }
+        var worst_i: usize = 0;
+        for (self.items[1..], 1..) |existing, i| {
+            if (candidateBetter(self.items[worst_i], existing)) worst_i = i;
+        }
+        if (candidateBetter(candidate, self.items[worst_i])) self.items[worst_i] = candidate;
+    }
+};
+
+fn candidateBetter(lhs: MatchCandidate, rhs: MatchCandidate) bool {
+    if (lhs.length != rhs.length) return lhs.length > rhs.length;
+    return lhs.distance < rhs.distance;
+}
+
+fn findMatchCandidates(input: []const u8, pos: usize, options: GreedyOptions) MatchCandidates {
+    var out = MatchCandidates{};
+    if (input.len - pos < min_match_len) return out;
+    const window_len = @min(options.window_len, default_window_len);
+    const start = pos -| window_len;
+    const max_len = @min(max_match_len, input.len - pos);
+    var checked: usize = 0;
+    var candidate = pos;
+    while (candidate > start and checked < options.max_chain) {
+        candidate -= 1;
+        if (input[candidate] != input[pos]) continue;
+        checked += 1;
+        var length: usize = 1;
+        while (length < max_len and input[candidate + length] == input[pos + length]) {
+            length += 1;
+        }
+        if (length >= min_match_len) {
+            out.add(.{ .length = length, .distance = pos - candidate });
+            if (length >= options.nice_len and out.len >= max_optimal_candidates) break;
+        }
+    }
+    return out;
 }
 
 pub fn fixedBitCost(tokens: []const Token) usize {
@@ -368,6 +421,17 @@ test "optimal LZ77 prototype round trips and is no worse by fixed bit cost" {
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
     try std.testing.expect(fixedBitCost(optimal.tokens) <= fixedBitCost(greedy.tokens));
+}
+
+test "optimal LZ77 considers multiple match distances" {
+    const input = "abcxxxxabcabcxxxxabcabc";
+    const candidates = findMatchCandidates(input, 10, .{ .max_chain = 64, .nice_len = 258 });
+    try std.testing.expect(candidates.len >= 2);
+    const plan = try optimalPlanAlloc(std.testing.allocator, input, .{ .max_chain = 64, .nice_len = 258 });
+    defer plan.deinit(std.testing.allocator);
+    const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
 }
 
 test "fixed bit cost accounts for literals matches and end marker" {
