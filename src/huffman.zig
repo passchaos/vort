@@ -198,6 +198,22 @@ fn parseDynamicLengthsBody(header: DynamicHeader, reader: *bitstream.BitReader) 
     return parsed;
 }
 
+pub fn simpleCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n]u4 {
+    var lengths: [n]u4 = @splat(0);
+    var active: usize = 0;
+    for (freqs) |freq| {
+        if (freq != 0) active += 1;
+    }
+    if (active == 0) return lengths;
+    var bits: u4 = 1;
+    var capacity: usize = 2;
+    while (capacity < active and bits < max_bits) : (bits += 1) capacity <<= 1;
+    for (freqs, 0..) |freq, i| {
+        if (freq != 0) lengths[i] = bits;
+    }
+    return lengths;
+}
+
 pub const FixedLiteralTable = HuffmanTable(fixed_literal_count);
 pub const FixedDistanceTable = HuffmanTable(fixed_distance_count);
 
@@ -324,4 +340,14 @@ test "dynamic parser rejects non-dynamic block type and truncated header" {
     try std.testing.expectError(error.InvalidDeflateBlockType, parseDynamicHeader(&stored_reader));
     var truncated_reader = bitstream.BitReader.init(&.{0x05});
     try std.testing.expectError(error.TruncatedFrame, parseDynamicHeader(&truncated_reader));
+}
+
+test "simple Huffman length builder creates decodable table" {
+    const freqs = [_]u32{ 5, 7, 1, 0, 3 };
+    const lengths = simpleCodeLengths(freqs.len, &freqs, 7);
+    try std.testing.expect(lengths[0] != 0);
+    try std.testing.expect(lengths[3] == 0);
+    const Table = HuffmanTable(freqs.len);
+    const table = try Table.init(&lengths);
+    try std.testing.expect(table.len == 4);
 }
