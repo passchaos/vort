@@ -363,6 +363,21 @@ pub fn build(b: *std.Build) void {
     const level_report_step = b.step("run-level-report", "Report compression level parser and cost-model behavior");
     level_report_step.dependOn(&run_level_report.step);
 
+    const split_policy_report_exe = b.addExecutable(.{
+        .name = "vort-split-policy-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/split_policy_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_split_policy_report = b.addRunArtifact(split_policy_report_exe);
+    const split_policy_report_step = b.step("run-split-policy-report", "Report adaptive split policy size deltas by level");
+    split_policy_report_step.dependOn(&run_split_policy_report.step);
+
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
         .root_module = b.createModule(.{
@@ -428,6 +443,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&compression_report_exe.step);
     check_step.dependOn(&dictionary_report_exe.step);
     check_step.dependOn(&level_report_exe.step);
+    check_step.dependOn(&split_policy_report_exe.step);
     check_step.dependOn(&file_corpus_report_exe.step);
     check_step.dependOn(&cpu_features_exe.step);
 
@@ -452,6 +468,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(compression_report_step);
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(level_report_step);
+    ci_smoke_step.dependOn(split_policy_report_step);
     ci_smoke_step.dependOn(compat_benchmark_step);
     ci_smoke_step.dependOn(standard_corpus_report_step);
 }
