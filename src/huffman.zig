@@ -216,6 +216,45 @@ pub fn simpleCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) 
     return lengths;
 }
 
+pub fn weightedCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n]u4 {
+    var lengths: [n]u4 = @splat(0);
+    var active: usize = 0;
+    for (freqs) |freq| {
+        if (freq != 0) active += 1;
+    }
+    if (active == 0) return lengths;
+    if (active == 1) {
+        for (freqs, 0..) |freq, i| {
+            if (freq != 0) lengths[i] = 1;
+        }
+        return lengths;
+    }
+
+    var remaining = active;
+    var current_bits: u4 = 1;
+    while (remaining > 0) : (current_bits += 1) {
+        var best_i: ?usize = null;
+        var best_freq: u32 = 0;
+        for (freqs, 0..) |freq, i| {
+            if (freq == 0 or lengths[i] != 0) continue;
+            if (best_i == null or freq > best_freq) {
+                best_i = i;
+                best_freq = freq;
+            }
+        }
+        const i = best_i orelse break;
+        lengths[i] = @min(current_bits, max_bits);
+        remaining -= 1;
+        if (current_bits == max_bits) {
+            for (freqs, 0..) |freq, j| {
+                if (freq != 0 and lengths[j] == 0) lengths[j] = max_bits;
+            }
+            break;
+        }
+    }
+    return lengths;
+}
+
 pub const FixedLiteralTable = HuffmanTable(fixed_literal_count);
 pub const FixedDistanceTable = HuffmanTable(fixed_distance_count);
 
@@ -352,4 +391,15 @@ test "simple Huffman length builder creates decodable table" {
     const Table = HuffmanTable(freqs.len);
     const table = try Table.init(&lengths);
     try std.testing.expect(table.len == 4);
+}
+
+test "weighted Huffman length builder favors frequent symbols" {
+    const freqs = [_]u32{ 100, 50, 25, 1 };
+    const lengths = weightedCodeLengths(freqs.len, &freqs, 7);
+    try std.testing.expect(lengths[0] <= lengths[1]);
+    try std.testing.expect(lengths[1] <= lengths[2]);
+    try std.testing.expect(lengths[2] <= lengths[3]);
+    const Table = HuffmanTable(freqs.len);
+    const table = try Table.init(&lengths);
+    try std.testing.expectEqual(@as(usize, 4), table.len);
 }
