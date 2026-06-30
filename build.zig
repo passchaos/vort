@@ -187,6 +187,10 @@ pub fn build(b: *std.Build) void {
     const external_probe_step = b.step("run-external-probe", "Report available local compression competitors/tools");
     external_probe_step.dependOn(&external_probe.step);
 
+    const zstd_compare = b.addSystemCommand(&.{ "python3", "tools/zstd_compare.py" });
+    const zstd_compare_step = b.step("run-zstd-compare", "Report zstd CLI compressed sizes for sample files");
+    zstd_compare_step.dependOn(&zstd_compare.step);
+
     const compression_report_exe = b.addExecutable(.{
         .name = "vort-compression-report",
         .root_module = b.createModule(.{
