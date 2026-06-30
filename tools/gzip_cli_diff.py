@@ -65,6 +65,8 @@ def main() -> int:
         b"",
         b"abcdefghijklmnopqrstuvwxyz",
         (b"abcabcabcabc" * 8) + b"----" + (b"the quick brown fox\n" * 4),
+        (b"abcabcabcabc" * 64) + b"----" + (b"abcabcabcabc" * 16),
+        (b"0123456789abcdef" * 128) + b"tail" + (b"0123456789abcdef" * 16),
     ]
     for data in split_payloads:
         text = data.decode("ascii")

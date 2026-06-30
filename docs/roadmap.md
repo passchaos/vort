@@ -75,6 +75,7 @@ architecture blindly.
 - [x] Stored-block vectors checked against Python/zlib level-0 output.
 - [x] Black-box differential smoke against Python zlib.
 - [x] Black-box differential smoke against system gzip CLI.
+- [x] Match-heavy dynamic/split/adaptive differential vectors.
 - [x] Local external implementation/tool availability probe.
 - [x] Optional zlib-ng/zlib-rs differential harness with explicit skip reporting.
 - [x] Built zlib-ng minigzip differential test running in local validation.

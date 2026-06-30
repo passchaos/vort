@@ -13,9 +13,10 @@ zig build -Doptimize=ReleaseFast ci-smoke
 The checksum zlib-family smoke checks Vort's CLI checksum output against Python
 zlib, then verifies Python zlib Adler-32 trailers and system gzip CRC-32
 trailers. The `ci-smoke` aggregate includes that checksum harness, the Python
-zlib and gzip CLI deflate/gzip harnesses, split-best gzip output checks against
-system `gzip -dc`, optional zlib-ng/zlib-rs family coverage, the external-tool
-probe, fuzz smoke entrypoints, and bounded benchmark reports.
+zlib and gzip CLI deflate/gzip harnesses, match-heavy dynamic/split/adaptive
+payloads, split-best gzip output checks against system `gzip -dc`, optional
+zlib-ng/zlib-rs family coverage, the external-tool probe, fuzz smoke entrypoints,
+and bounded benchmark reports.
 
 The optional zlib-family harness detects locally built zlib-ng/zlib-rs minigzip
 binaries and reports explicit skip status when they are not available:

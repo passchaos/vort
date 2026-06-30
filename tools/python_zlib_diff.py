@@ -30,7 +30,17 @@ def main() -> int:
     if not CLI.exists():
         raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
 
-    payloads = ["", "hello", "hello vort", "abcabcabcabc", "aaaaaaaaaaaaaaaaaaaaaaaa", "the quick brown fox " * 8]
+    payloads = [
+        "",
+        "hello",
+        "hello vort",
+        "abcabcabcabc",
+        "aaaaaaaaaaaaaaaaaaaaaaaa",
+        "the quick brown fox " * 8,
+        "match-heavy:" + ("abcabcabcabc" * 64) + ("xyzxyzxyz " * 32),
+        "distance-heavy:" + ("0123456789abcdef" * 512) + "----" + ("0123456789abcdef" * 32),
+        "mixed-lz77:" + (("lorem ipsum dolor sit amet\n" * 16) + ("A" * 257) + ("lorem ipsum dolor sit amet\n" * 16)),
+    ]
     payloads.extend([
         (ROOT / "README.md").read_text(),
         (ROOT / "docs" / "roadmap.md").read_text(),
@@ -98,7 +108,7 @@ def main() -> int:
     assert zlib.decompress(hello_zlib) == b"hello"
     assert zlib.decompress(hello_gzip, wbits=31) == b"hello"
 
-    print(f"python zlib differential smoke: payloads={len(payloads)} cli={CLI}")
+    print(f"python zlib differential smoke: payloads={len(payloads)} match_heavy=3 cli={CLI}")
     return 0
 
 
