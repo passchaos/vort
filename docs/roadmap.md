@@ -104,7 +104,7 @@ architecture blindly.
 - [ ] Production optimal parser with full level/strategy configs.
 - [x] Huffman code generation, simple length building, and canonical-code validation.
 - [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.
-- [ ] Larger decompression hot-path benchmarks across real corpora.
+- [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
 - [x] Built-in small-corpus compression ratio report.

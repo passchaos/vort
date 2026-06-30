@@ -61,6 +61,7 @@ zig build run-dictionary-report
 zig build -Doptimize=ReleaseFast run-file-corpus-report -- README.md docs/roadmap.md
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast
+zig build bench-corpus-decode -Doptimize=ReleaseFast
 zig build bench-deflate-encode -Doptimize=ReleaseFast
 zig build bench-native-parallel -Doptimize=ReleaseFast
 ```
