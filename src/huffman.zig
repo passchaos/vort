@@ -78,7 +78,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
         pub fn decode(self: Self, reader: *bitstream.BitReader) Error!Symbol {
             var code: u16 = 0;
             var bits: u4 = 1;
-            while (bits <= max_code_bits) : (bits += 1) {
+            while (bits <= max_code_bits) {
                 const bit = try reader.readBits(u16, 1);
                 code |= bit << @intCast(bits - 1);
                 for (self.entries[0..self.len]) |entry| {
@@ -86,6 +86,8 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                         return .{ .value = entry.symbol, .bits = bits };
                     }
                 }
+                if (bits == max_code_bits) break;
+                bits += 1;
             }
             return error.InvalidHuffmanCode;
         }

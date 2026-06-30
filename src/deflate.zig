@@ -30,53 +30,122 @@ pub const OwnedDecodeResult = struct {
 };
 
 pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    var lit_freqs: [286]u32 = @splat(0);
-    for (input) |byte| lit_freqs[byte] += 1;
-    lit_freqs[256] = 1; // end of block
-    completeLiteralFrequencySet(&lit_freqs);
-    var lit_lengths_full = huffman.simpleCodeLengths(286, &lit_freqs, 15);
-    const hlit: usize = 286;
-    const hdist: usize = 1;
-    var dist_lengths = [_]u4{0};
+    var tokens: std.ArrayList(lz77.Token) = .empty;
+    defer tokens.deinit(allocator);
+    for (input) |byte| try tokens.append(allocator, .{ .literal = byte });
+    return encodeRawDynamicTokensAlloc(allocator, tokens.items);
+}
 
-    var code_len_lengths: [19]u4 = @splat(0);
-    code_len_lengths[0] = 1;
-    for (lit_lengths_full[0..hlit]) |bits| {
-        if (bits != 0) code_len_lengths[bits] = 1;
-    }
-    for (dist_lengths[0..hdist]) |bits| {
-        if (bits != 0) code_len_lengths[bits] = 1;
-    }
+pub fn encodeRawDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    // Full dynamic token emission is intentionally conservative until canonical
+    // length generation is production-ready. Literal-only dynamic encoding is
+    // exposed separately and verified against Python zlib.
+    _ = options;
+    return encodeRawDynamicLiteralAlloc(allocator, input);
+}
+
+pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
+    var lit_freqs: [286]u32 = @splat(0);
+    var dist_freqs: [30]u32 = @splat(0);
+    for (tokens) |token| switch (token) {
+        .literal => |byte| lit_freqs[byte] += 1,
+        .match => |m| {
+            const len_code = lengthCode(m.length);
+            const dist_code = distanceCode(m.distance);
+            lit_freqs[len_code.symbol] += 1;
+            dist_freqs[dist_code.symbol] += 1;
+        },
+    };
+    lit_freqs[256] = 1;
+    completeLiteralFrequencySet(&lit_freqs);
+    completeDistanceFrequencySet(&dist_freqs);
+
+    var lit_lengths_full = huffman.simpleCodeLengths(286, &lit_freqs, 15);
+    var dist_lengths_full = huffman.simpleCodeLengths(30, &dist_freqs, 15);
+    const hlit: usize = trimCodeLengthCount(286, 257, &lit_lengths_full);
+    const hdist: usize = trimCodeLengthCount(30, 1, &dist_lengths_full);
+
+    var code_len_freqs: [19]u32 = @splat(0);
+    for (lit_lengths_full[0..hlit]) |bits| code_len_freqs[bits] += 1;
+    for (dist_lengths_full[0..hdist]) |bits| code_len_freqs[bits] += 1;
+    completeCodeLengthFrequencySet(&code_len_freqs);
+    var code_len_lengths = huffman.simpleCodeLengths(19, &code_len_freqs, 7);
     var hclen: usize = 4;
     for (huffman.code_length_order, 0..) |symbol, i| {
         if (code_len_lengths[symbol] != 0) hclen = @max(hclen, i + 1);
     }
 
     const lit_encoder = try huffman.HuffmanTable(286).Encoder.init(lit_lengths_full[0..hlit]);
+    const dist_encoder = try huffman.HuffmanTable(30).Encoder.init(dist_lengths_full[0..hdist]);
     const code_len_encoder = try huffman.CodeLengthTable.Encoder.init(&code_len_lengths);
 
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
-    try writer.writeBits(allocator, 1, 1); // final
-    try writer.writeBits(allocator, 0b10, 2); // dynamic
+    try writer.writeBits(allocator, 1, 1);
+    try writer.writeBits(allocator, 0b10, 2);
     try writer.writeBits(allocator, @intCast(hlit - 257), 5);
     try writer.writeBits(allocator, @intCast(hdist - 1), 5);
     try writer.writeBits(allocator, @intCast(hclen - 4), 4);
-    for (huffman.code_length_order[0..hclen]) |symbol| {
-        try writer.writeBits(allocator, code_len_lengths[symbol], 3);
-    }
-    for (lit_lengths_full[0..hlit]) |bits| {
-        try code_len_encoder.writeSymbol(&writer, allocator, bits);
-    }
-    for (dist_lengths[0..hdist]) |bits| {
-        try code_len_encoder.writeSymbol(&writer, allocator, bits);
-    }
-    for (input) |byte| try lit_encoder.writeSymbol(&writer, allocator, byte);
+    for (huffman.code_length_order[0..hclen]) |symbol| try writer.writeBits(allocator, code_len_lengths[symbol], 3);
+    for (lit_lengths_full[0..hlit]) |bits| try code_len_encoder.writeSymbol(&writer, allocator, bits);
+    for (dist_lengths_full[0..hdist]) |bits| try code_len_encoder.writeSymbol(&writer, allocator, bits);
+    for (tokens) |token| switch (token) {
+        .literal => |byte| try lit_encoder.writeSymbol(&writer, allocator, byte),
+        .match => |m| {
+            const len_code = lengthCode(m.length);
+            try lit_encoder.writeSymbol(&writer, allocator, len_code.symbol);
+            if (len_code.extra_bits != 0) try writer.writeBits(allocator, len_code.extra_value, len_code.extra_bits);
+            const dist_code = distanceCode(m.distance);
+            try dist_encoder.writeSymbol(&writer, allocator, dist_code.symbol);
+            if (dist_code.extra_bits != 0) try writer.writeBits(allocator, dist_code.extra_value, dist_code.extra_bits);
+        },
+    };
     try lit_encoder.writeSymbol(&writer, allocator, 256);
     return writer.toOwnedSlice(allocator);
 }
 
+fn trimCodeLengthCount(comptime n: usize, minimum: usize, lengths: *[n]u4) usize {
+    var count = n;
+    while (count > minimum and lengths[count - 1] == 0) count -= 1;
+    return count;
+}
+
 fn completeLiteralFrequencySet(freqs: *[286]u32) void {
+    var active: usize = 0;
+    for (freqs.*) |freq| {
+        if (freq != 0) active += 1;
+    }
+    var target: usize = 2;
+    while (target < active) target <<= 1;
+    var symbol: usize = 0;
+    while (active < target and symbol < freqs.len) : (symbol += 1) {
+        if (freqs[symbol] == 0) {
+            freqs[symbol] = 1;
+            active += 1;
+        }
+    }
+}
+
+fn completeDistanceFrequencySet(freqs: *[30]u32) void {
+    var active: usize = 0;
+    for (freqs.*) |freq| {
+        if (freq != 0) active += 1;
+    }
+    if (active == 0) {
+        freqs[0] = 1;
+        freqs[1] = 1;
+    } else if (active == 1) {
+        for (freqs, 0..) |*freq, i| {
+            if (freq.* == 0) {
+                freq.* = 1;
+                _ = i;
+                break;
+            }
+        }
+    }
+}
+
+fn completeCodeLengthFrequencySet(freqs: *[19]u32) void {
     var active: usize = 0;
     for (freqs.*) |freq| {
         if (freq != 0) active += 1;
@@ -577,7 +646,7 @@ pub fn encodeZlibFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []co
 }
 
 pub fn encodeZlibDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    const raw = try encodeRawDynamicLiteralAlloc(allocator, input);
+    const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, .{});
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, 2 + raw.len + 4);
     errdefer allocator.free(out);
@@ -670,7 +739,7 @@ pub fn encodeGzipFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []co
 }
 
 pub fn encodeGzipDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    const raw = try encodeRawDynamicLiteralAlloc(allocator, input);
+    const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, .{});
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
     errdefer allocator.free(out);
