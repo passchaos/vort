@@ -124,6 +124,7 @@ architecture blindly.
 - [x] Automated per-file Silesia throughput report.
 - [x] Markdown benchmark dashboard export for Silesia suite.
 - [x] External file/directory throughput dashboard input mode.
+- [x] Full-size Silesia Markdown dashboard export.
 - [ ] Automated throughput dashboards across multiple full standard real corpora.
 
 ## Milestone 5: native Vort format research
