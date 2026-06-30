@@ -115,6 +115,7 @@ pub const summarizeDictionaryMatchesAlloc = dictionary.summarizeMatchesAlloc;
 pub const findLongDistanceCandidatesAlloc = long_distance.findCandidatesAlloc;
 pub const summarizeLongDistanceAlloc = long_distance.summarizeAlloc;
 pub const planBlocksAlloc = planner.planBlocksAlloc;
+pub const planBlocksWithLongDistanceAlloc = planner.planBlocksWithLongDistanceAlloc;
 
 test {
     _ = checksum;

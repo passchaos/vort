@@ -140,6 +140,7 @@ architecture blindly.
 - [ ] Production seekable native format integration with native block modes.
 - [x] Long-distance matching scanner experiment.
 - [x] Long-distance matching summary integrated into compression reports.
+- [x] Long-distance-match-aware block planner annotations.
 - [ ] Long-distance matching integration into native/block encoder.
 - [x] Deterministic block planning metadata for future multi-threaded encoding.
 - [x] Deterministic block-planned encoder execution API.
