@@ -72,7 +72,7 @@ architecture blindly.
 
 ## Milestone 5: native Vort format research
 
-- [ ] Design note for native block/frame layout.
+- [x] Initial design note for native block/frame layout.
 - [ ] Dictionary IDs and dictionary training plan.
 - [ ] Splittable/seekable frame index design.
 - [ ] Long-distance matching experiments.

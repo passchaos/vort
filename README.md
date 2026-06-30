@@ -57,6 +57,8 @@ defer allocator.free(decoded);
 
 ## Direction
 
+See `docs/native-format.md` for the initial native Vort frame direction.
+
 Compatibility formats (`raw deflate`, `zlib`, `gzip`, and selected zstd-facing
 workflows) should be behavior-compatible where claimed. Native Vort formats may
 innovate more aggressively, but they must be versioned, documented, fuzzed,
