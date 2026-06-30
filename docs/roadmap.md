@@ -95,6 +95,7 @@ architecture blindly.
 - [x] Fixed encoder parser strategy config selecting greedy/lazy/optimal prototypes.
 - [x] Compression level presets for fast/default/best strategy configs.
 - [x] Fast preset skips dynamic block candidate generation.
+- [x] Fastest preset with shallow hash-chain search for speed.
 - [ ] Production optimal parser with full level/strategy configs.
 - [x] Huffman code generation, simple length building, and canonical-code validation.
 - [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.

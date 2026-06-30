@@ -23,10 +23,11 @@ pub const CompressionOptions = struct {
     block_selection: BlockSelection = .stored_fixed_dynamic,
 };
 
-pub const CompressionLevel = enum { fast, default, best };
+pub const CompressionLevel = enum { fastest, fast, default, best };
 
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
+        .fastest => .{ .parser = .hash, .lz77_options = .{ .max_chain = 4, .nice_len = 8 }, .block_selection = .stored_fixed },
         .fast => .{ .parser = .hash, .lz77_options = .{ .max_chain = 32, .nice_len = 16 }, .block_selection = .stored_fixed },
         .default => .{ .parser = .lazy, .lz77_options = .{ .max_chain = 128, .nice_len = 64 } },
         .best => .{ .parser = .optimal, .lz77_options = .{ .max_chain = 512, .nice_len = 128 } },
@@ -1491,7 +1492,7 @@ test "best encoder selects a valid smallest raw block" {
 
 test "compression level presets round trip" {
     const input = "abcabcabcabc abcabcabcabc";
-    inline for (.{ CompressionLevel.fast, CompressionLevel.default, CompressionLevel.best }) |level| {
+    inline for (.{ CompressionLevel.fastest, CompressionLevel.fast, CompressionLevel.default, CompressionLevel.best }) |level| {
         const encoded = try encodeRawBestAlloc(std.testing.allocator, input, optionsForLevel(level));
         defer std.testing.allocator.free(encoded);
         const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);

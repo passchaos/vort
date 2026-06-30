@@ -18,7 +18,7 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(data);
 
         const encode_start = std.Io.Clock.awake.now(init.io);
-        const encoded = try vort.encodeRawBestAlloc(init.gpa, data, vort.optionsForCompressionLevel(.fast));
+        const encoded = try vort.encodeRawBestAlloc(init.gpa, data, vort.optionsForCompressionLevel(.fastest));
         const encode_elapsed = encode_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
         defer init.gpa.free(encoded);
 

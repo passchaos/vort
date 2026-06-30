@@ -314,6 +314,7 @@ fn parseParserMode(text: ?[]const u8) vort.ParserMode {
 
 fn parseCompressionOptions(text: ?[]const u8) vort.CompressionOptions {
     const value = text orelse return vort.optionsForCompressionLevel(.default);
+    if (std.mem.eql(u8, value, "fastest")) return vort.optionsForCompressionLevel(.fastest);
     if (std.mem.eql(u8, value, "fast")) return vort.optionsForCompressionLevel(.fast);
     if (std.mem.eql(u8, value, "hash")) return .{ .parser = .hash };
     if (std.mem.eql(u8, value, "default")) return vort.optionsForCompressionLevel(.default);
