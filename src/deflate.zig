@@ -485,7 +485,7 @@ pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8
         const block_type = try reader.readBits(u2, 2);
         switch (block_type) {
             0 => try decodeStoredBlockFromReader(allocator, &reader, &out),
-            1 => try decodeCompressedBlockFromReader(allocator, &reader, &out, try huffman.fixedLiteralTable(), try huffman.fixedDistanceTable()),
+            1 => try decodeFixedBlockFromReader(allocator, &reader, &out),
             2 => {
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
@@ -619,6 +619,25 @@ fn decodeStoredBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.
     try out.appendSlice(allocator, reader.input[offset + 4 ..][0..chunk_len]);
     reader.byte_index = offset + 4 + chunk_len;
     reader.bit_index = 0;
+}
+
+fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8)) !void {
+    const dist_table = try huffman.fixedDistanceTable();
+    while (true) {
+        const symbol = (try huffman.decodeFixedLiteralFast(reader)).value;
+        if (symbol < 256) {
+            try out.append(allocator, @intCast(symbol));
+        } else if (symbol == 256) {
+            return;
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, reader);
+            const distance_symbol = (try dist_table.decode(reader)).value;
+            const distance = try decodeDistance(distance_symbol, reader);
+            try appendMatch(allocator, out, length, distance);
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
 }
 
 fn decodeCompressedBlockFromReader(

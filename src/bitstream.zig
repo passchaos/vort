@@ -38,6 +38,23 @@ pub const BitReader = struct {
         return copy.readBits(T, count);
     }
 
+    pub fn skipBits(self: *BitReader, count: u6) Error!void {
+        _ = try self.readBits(u64, count);
+    }
+
+    pub fn peekBitsPadded(self: BitReader, comptime T: type, count: u6) T {
+        var copy = self;
+        var result: T = 0;
+        var shift: u6 = 0;
+        while (shift < count) : (shift += 1) {
+            if (copy.byte_index >= copy.input.len) break;
+            const bit: T = @intCast((copy.input[copy.byte_index] >> copy.bit_index) & 1);
+            result |= bit << @intCast(shift);
+            copy.advanceOneBit();
+        }
+        return result;
+    }
+
     pub fn alignToByte(self: *BitReader) void {
         if (self.bit_index != 0) {
             self.bit_index = 0;
@@ -73,6 +90,23 @@ pub const BitWriter = struct {
                 self.scratch = 0;
             }
         }
+    }
+
+    pub fn skipBits(self: *BitReader, count: u6) Error!void {
+        _ = try self.readBits(u64, count);
+    }
+
+    pub fn peekBitsPadded(self: BitReader, comptime T: type, count: u6) T {
+        var copy = self;
+        var result: T = 0;
+        var shift: u6 = 0;
+        while (shift < count) : (shift += 1) {
+            if (copy.byte_index >= copy.input.len) break;
+            const bit: T = @intCast((copy.input[copy.byte_index] >> copy.bit_index) & 1);
+            result |= bit << @intCast(shift);
+            copy.advanceOneBit();
+        }
+        return result;
     }
 
     pub fn alignToByte(self: *BitWriter, allocator: std.mem.Allocator) !void {

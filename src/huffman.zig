@@ -255,6 +255,31 @@ pub fn weightedCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4
     return lengths;
 }
 
+pub const FixedLookupEntry = struct { symbol: u16, bits: u4 };
+
+pub const fixed_literal_lookup = blk: {
+    @setEvalBranchQuota(10000);
+    const lengths = fixedLiteralLengths();
+    const table = FixedLiteralTable.init(&lengths) catch unreachable;
+    var lookup: [512]FixedLookupEntry = @splat(.{ .symbol = 0, .bits = 0 });
+    for (table.entries[0..table.len]) |entry| {
+        const fill = @as(usize, 1) << @intCast(9 - entry.bits);
+        var i: usize = 0;
+        while (i < fill) : (i += 1) {
+            lookup[entry.code | (i << entry.bits)] = .{ .symbol = entry.symbol, .bits = entry.bits };
+        }
+    }
+    break :blk lookup;
+};
+
+pub fn decodeFixedLiteralFast(reader: *bitstream.BitReader) Error!Symbol {
+    const peek = reader.peekBitsPadded(u16, 9);
+    const entry = fixed_literal_lookup[peek & 0x1ff];
+    if (entry.bits == 0) return error.InvalidHuffmanCode;
+    try reader.skipBits(entry.bits);
+    return .{ .value = entry.symbol, .bits = entry.bits };
+}
+
 pub const FixedLiteralTable = HuffmanTable(fixed_literal_count);
 pub const FixedDistanceTable = HuffmanTable(fixed_distance_count);
 
@@ -402,4 +427,18 @@ test "weighted Huffman length builder favors frequent symbols" {
     const Table = HuffmanTable(freqs.len);
     const table = try Table.init(&lengths);
     try std.testing.expectEqual(@as(usize, 4), table.len);
+}
+
+test "fixed literal fast lookup matches table decoder" {
+    const bytes = [_]u8{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 };
+    var fast = bitstream.BitReader.init(&bytes);
+    _ = try fast.readBits(u1, 1);
+    _ = try fast.readBits(u2, 2);
+    var slow = bitstream.BitReader.init(&bytes);
+    _ = try slow.readBits(u1, 1);
+    _ = try slow.readBits(u2, 2);
+    const table = try fixedLiteralTable();
+    for (0..6) |_| {
+        try std.testing.expectEqual((try table.decode(&slow)).value, (try decodeFixedLiteralFast(&fast)).value);
+    }
 }
