@@ -113,6 +113,23 @@ pub fn build(b: *std.Build) void {
     const fuzz_smoke_step = b.step("run-fuzz-smoke", "Run deterministic malformed-frame smoke corpus");
     fuzz_smoke_step.dependOn(&run_fuzz_smoke.step);
 
+    const fuzz_corpus_exe = b.addExecutable(.{
+        .name = "vort-fuzz-corpus",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/fuzz_corpus.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+
+    const run_fuzz_corpus = b.addRunArtifact(fuzz_corpus_exe);
+    if (b.args) |args| run_fuzz_corpus.addArgs(args);
+    const fuzz_corpus_step = b.step("run-fuzz-corpus", "Run extensible hex-sample fuzz corpus harness");
+    fuzz_corpus_step.dependOn(&run_fuzz_corpus.step);
+
     const checksum_diff_exe = b.addExecutable(.{
         .name = "vort-checksum-diff",
         .root_module = b.createModule(.{
@@ -173,6 +190,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);
+    check_step.dependOn(&fuzz_corpus_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);
     check_step.dependOn(&zlib_diff_exe.step);
     check_step.dependOn(&gzip_diff_exe.step);

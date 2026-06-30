@@ -35,7 +35,8 @@ architecture blindly.
 - [x] Skippable native frames.
 - [x] In-memory frame indexes for concatenated native store streams.
 - [ ] Serialized/sidecar frame indexes.
-- [ ] Coverage-guided fuzz harness for headers and malformed frames.
+- [x] Extensible hex-sample fuzz corpus harness for headers and malformed frames.
+- [ ] Coverage-guided fuzz integration.
 
 ## Milestone 3: deflate/zlib/gzip compatibility
 
