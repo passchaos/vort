@@ -21,6 +21,7 @@ architecture blindly.
 - [x] Portable CRC32 slice-by-4 fast variant with scalar reference checks.
 - [x] Runtime checksum dispatch API selecting portable fast path.
 - [x] CPU feature/dispatch report tool.
+- [x] x86 checksum CPU feature reporting with IEEE-vs-CRC32C safety distinction.
 - [ ] Architecture-specific CPU-dispatched checksum variants.
 - [x] Differential checksum smoke against Zig std reference implementations.
 - [ ] Differential checksum tests against local/system zlib-family tools.

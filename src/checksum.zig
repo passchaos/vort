@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 /// Largest input chunk used by the Adler-32 reference loop before reducing.
 /// This is the zlib-compatible NMAX bound that keeps the running sums within u32.
@@ -154,6 +155,26 @@ pub fn crc32(input: []const u8) u32 {
 
 pub const Crc32Dispatch = enum { scalar, slice4 };
 
+pub const CpuFeatureReport = struct {
+    x86_sse42: bool = false,
+    x86_pclmul: bool = false,
+    ieee_crc32_uses_hardware: bool = false,
+    crc32c_hardware_candidate: bool = false,
+};
+
+pub fn cpuFeatureReport() CpuFeatureReport {
+    var report = CpuFeatureReport{};
+    if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
+        const x86 = std.Target.x86;
+        report.x86_sse42 = x86.featureSetHas(builtin.cpu.features, .sse4_2);
+        report.x86_pclmul = x86.featureSetHas(builtin.cpu.features, .pclmul);
+        // SSE4.2 CRC32 is CRC32C/Castagnoli, not IEEE CRC-32 used by gzip.
+        report.crc32c_hardware_candidate = report.x86_sse42;
+        report.ieee_crc32_uses_hardware = false;
+    }
+    return report;
+}
+
 pub fn bestCrc32Dispatch() Crc32Dispatch {
     return .slice4;
 }
@@ -286,4 +307,10 @@ test "CRC-32 best dispatch matches scalar" {
     const input = "dispatch checksum" ** 31;
     try std.testing.expectEqual(crc32(input), crc32Best(input));
     try std.testing.expectEqual(Crc32Dispatch.slice4, bestCrc32Dispatch());
+}
+
+test "CPU feature report keeps IEEE CRC32 dispatch conservative" {
+    const report = cpuFeatureReport();
+    try std.testing.expect(!report.ieee_crc32_uses_hardware);
+    if (report.crc32c_hardware_candidate) try std.testing.expect(report.x86_sse42);
 }
