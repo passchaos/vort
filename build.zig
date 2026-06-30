@@ -379,6 +379,12 @@ pub fn build(b: *std.Build) void {
     const split_policy_report_step = b.step("run-split-policy-report", "Report adaptive split policy size deltas by level");
     split_policy_report_step.dependOn(&run_split_policy_report.step);
 
+    const split_policy_corpus_report = b.addSystemCommand(&.{ "python3", "tools/split_policy_corpus_report.py" });
+    split_policy_corpus_report.addArtifactArg(split_policy_report_exe);
+    if (b.args) |args| split_policy_corpus_report.addArgs(args);
+    const split_policy_corpus_report_step = b.step("run-split-policy-corpus-report", "Report adaptive split policy deltas across Silesia files");
+    split_policy_corpus_report_step.dependOn(&split_policy_corpus_report.step);
+
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
         .root_module = b.createModule(.{
