@@ -87,13 +87,47 @@ pub fn decodeRawFixedAllocStrict(allocator: std.mem.Allocator, input: []const u8
     return result.bytes;
 }
 
+pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+
+    var reader = bitstream.BitReader.init(input);
+    const parsed = try huffman.parseDynamicLengths(&reader);
+    if (!parsed.header.final) return error.UnsupportedDeflateFeature;
+    const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+    const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+
+    while (true) {
+        const symbol = (try lit_table.decode(&reader)).value;
+        if (symbol < 256) {
+            try out.append(allocator, @intCast(symbol));
+        } else if (symbol == 256) {
+            return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, &reader);
+            const distance_symbol = (try dist_table.decode(&reader)).value;
+            const distance = try decodeDistance(distance_symbol, &reader);
+            try appendMatch(allocator, &out, length, distance);
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
+}
+
+pub fn decodeRawDynamicAllocStrict(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const result = try decodeRawDynamicAlloc(allocator, input);
+    errdefer result.deinit(allocator);
+    if (result.input_read != input.len) return error.TrailingData;
+    return result.bytes;
+}
+
 pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
     if (input.len == 0) return error.TruncatedFrame;
     const block_type = (input[0] >> 1) & 0b11;
     return switch (block_type) {
         0 => decodeRawStoredAllocPartial(allocator, input),
         1 => decodeRawFixedAlloc(allocator, input),
-        2 => error.UnsupportedDeflateFeature,
+        2 => decodeRawDynamicAlloc(allocator, input),
         else => error.InvalidDeflateBlockType,
     };
 }
@@ -645,4 +679,53 @@ test "auto raw decoder dispatches stored and fixed blocks" {
     const fixed = try decodeRawAutoAlloc(std.testing.allocator, &.{ 0x4b, 0x4c, 0x04, 0x01, 0x00 });
     defer std.testing.allocator.free(fixed);
     try std.testing.expectEqualSlices(u8, "aaaaaa", fixed);
+}
+
+test "raw dynamic Huffman inflate decodes zlib dynamic vectors" {
+    const compressed = &.{
+        0x3d, 0xc6, 0x39, 0x11, 0x00, 0x00, 0x0c, 0x02,
+        0x30, 0x2b, 0xb5, 0x52, 0x1e, 0xff, 0x96, 0x38,
+        0x16, 0x96, 0x5c, 0x1e, 0x94, 0xcb, 0x6d, 0x01,
+    };
+    const plain = "ABCDEABCD ABCDEABCD";
+    const decoded = try decodeRawDynamicAllocStrict(std.testing.allocator, compressed);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, plain, decoded);
+    const auto_decoded = try decodeRawAutoAlloc(std.testing.allocator, compressed);
+    defer std.testing.allocator.free(auto_decoded);
+    try std.testing.expectEqualSlices(u8, plain, auto_decoded);
+}
+
+test "zlib and gzip dynamic Huffman wrappers decode dynamic vectors" {
+    const zlib_frame = &.{
+        0x78, 0x01,
+        0x3d, 0xc6,
+        0x39, 0x11,
+        0x00, 0x00,
+        0x0c, 0x02,
+        0x30, 0x2b,
+        0xb5, 0x52,
+        0x1e, 0xff,
+        0x96, 0x38,
+        0x16, 0x96,
+        0x5c, 0x1e,
+        0x94, 0xcb,
+        0x6d, 0x01,
+        0x30, 0x33,
+        0x04, 0xd3,
+    };
+    const gzip_frame = &.{
+        0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+        0x3d, 0xc6, 0x39, 0x11, 0x00, 0x00, 0x0c, 0x02, 0x30, 0x2b,
+        0xb5, 0x52, 0x1e, 0xff, 0x96, 0x38, 0x16, 0x96, 0x5c, 0x1e,
+        0x94, 0xcb, 0x6d, 0x01, 0x17, 0x1c, 0x39, 0xb4, 0x13, 0x00,
+        0x00, 0x00,
+    };
+    const plain = "ABCDEABCD ABCDEABCD";
+    const zlib_decoded = try decodeZlibAlloc(std.testing.allocator, zlib_frame);
+    defer std.testing.allocator.free(zlib_decoded);
+    try std.testing.expectEqualSlices(u8, plain, zlib_decoded);
+    const gzip_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
+    defer std.testing.allocator.free(gzip_decoded);
+    try std.testing.expectEqualSlices(u8, plain, gzip_decoded);
 }

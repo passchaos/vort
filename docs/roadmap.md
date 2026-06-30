@@ -43,13 +43,16 @@ architecture blindly.
 - [x] Stored deflate blocks.
 - [x] Fixed-Huffman inflate for literals and back-references.
 - [x] Dynamic-Huffman header and code-length parser foundation.
-- [ ] Dynamic-Huffman inflate.
+- [x] Dynamic-Huffman inflate for single final blocks.
+- [ ] Multi-block dynamic/stored/fixed raw inflate.
 - [x] zlib wrapper and Adler verification for stored blocks.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
-- [ ] zlib wrapper integration for dynamic Huffman blocks.
+- [x] zlib wrapper integration for single final dynamic-Huffman blocks.
+- [ ] zlib wrapper integration for multi-block dynamic streams.
 - [x] gzip wrapper and CRC/ISIZE verification for stored blocks.
 - [x] gzip wrapper integration for fixed-Huffman blocks.
-- [ ] gzip wrapper integration for dynamic Huffman blocks.
+- [x] gzip wrapper integration for single final dynamic-Huffman blocks.
+- [ ] gzip wrapper integration for multi-block dynamic streams.
 - [x] Stored-block vectors checked against Python/zlib level-0 output.
 - [ ] Differential tests against zlib, zlib-ng, and zlib-rs.
 - [ ] Compatibility benchmark suite.

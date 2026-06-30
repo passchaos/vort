@@ -33,6 +33,7 @@ pub const decodeRawStoredDeflateAlloc = deflate.decodeRawStoredAlloc;
 pub const decodeRawFixed = deflate.decodeRawFixed;
 pub const decodeRawFixedAlloc = deflate.decodeRawFixedAllocStrict;
 pub const decodeRawDeflateAlloc = deflate.decodeRawAutoAlloc;
+pub const decodeRawDynamicAlloc = deflate.decodeRawDynamicAllocStrict;
 pub const encodeZlibStored = deflate.encodeZlibStored;
 pub const decodeZlibStored = deflate.decodeZlibStored;
 pub const encodeZlibStoredAlloc = deflate.encodeZlibStoredAlloc;
