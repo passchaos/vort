@@ -32,11 +32,18 @@ def main() -> int:
         sample = pathlib.Path(td) / "silesia-1m.bin"
         sample.write_bytes(data)
 
+        vort_path = pathlib.Path(td) / "sample.vort.zlib"
         def vort_run():
             if not CLI:
                 return b""
-            out = pathlib.Path(td) / "sample.vort.zlib"
-            subprocess.run([str(CLI), "encode-zlib-best-file", str(sample), str(out), "fastest"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE)
+            subprocess.run([str(CLI), "encode-zlib-best-file", str(sample), str(vort_path), "fastest"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE)
+            return vort_path.read_bytes()
+
+        def vort_decode_run():
+            if not CLI or not vort_path.exists():
+                return b""
+            out = pathlib.Path(td) / "sample.vort.out"
+            subprocess.run([str(CLI), "decode-zlib-file", str(vort_path), str(out)], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE)
             return out.read_bytes()
 
         def gzip_run():
@@ -73,16 +80,19 @@ def main() -> int:
         zlib_ng_data, zlib_ng_s = time_call(zlib_ng_run)
         zlib_rs_data, zlib_rs_s = time_call(zlib_rs_run)
         zstd_data, zstd_s = time_call(zstd_run)
+        vort_decoded, vort_decode_s = time_call(vort_decode_run)
         if vort_data:
             assert zlib.decompress(vort_data) == data
+        if vort_decoded:
+            assert vort_decoded == data
         if gzip_data:
             assert zlib.decompress(gzip_data, 31) == data
         if zlib_ng_data:
             assert zlib.decompress(zlib_ng_data, 31) == data
         if zlib_rs_data:
             assert zlib.decompress(zlib_rs_data) == data
-        print("corpus,input_bytes,vort_zlib_fastest_bytes,vort_ms,gzip_bytes,gzip_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zstd_bytes,zstd_ms")
-        print(f"silesia-1m,{len(data)},{len(vort_data)},{vort_s*1000:.3f},{len(gzip_data)},{gzip_s*1000:.3f},{len(zlib_ng_data)},{zlib_ng_s*1000:.3f},{len(zlib_rs_data)},{zlib_rs_s*1000:.3f},{len(zstd_data)},{zstd_s*1000:.3f}")
+        print("corpus,input_bytes,vort_zlib_fastest_bytes,vort_ms,vort_decode_ms,gzip_bytes,gzip_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zstd_bytes,zstd_ms")
+        print(f"silesia-1m,{len(data)},{len(vort_data)},{vort_s*1000:.3f},{vort_decode_s*1000:.3f},{len(gzip_data)},{gzip_s*1000:.3f},{len(zlib_ng_data)},{zlib_ng_s*1000:.3f},{len(zlib_rs_data)},{zlib_rs_s*1000:.3f},{len(zstd_data)},{zstd_s*1000:.3f}")
     return 0
 
 

@@ -241,6 +241,15 @@ pub fn main(init: std.process.Init) !void {
         const decoded = try vort.decodeRawDeflateAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "raw", compressed.len, decoded);
+    } else if (std.mem.eql(u8, command, "decode-zlib-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded = try vort.decodeZlibAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
     } else if (std.mem.eql(u8, command, "decode-zlib-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const compressed = try hexToOwnedBytes(init.gpa, hex);
