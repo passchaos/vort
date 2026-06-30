@@ -36,3 +36,7 @@ zlib family differential summary: used=1 skipped=1
 To turn this into real coverage, build compatible `minigzip`-style binaries or the zlib-rs `compress` example in
 one of the paths listed in `tools/zlib_family_diff.py`, then rerun the build
 step. Skip output must not be counted as compatibility evidence for that implementation.
+
+The hosted GitHub Actions smoke workflow builds the zlib-rs `compress` example
+under `~/Work/zlib-rs` and reruns `run-zlib-family-diff`, so zlib-rs binary
+coverage is a required CI signal rather than only an optional local probe.

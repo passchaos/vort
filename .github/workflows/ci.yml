@@ -27,13 +27,22 @@ jobs:
       - name: Install optional CLI competitors
         run: |
           sudo apt-get update
-          sudo apt-get install -y gzip zstd
+          sudo apt-get install -y gzip zstd git
 
       - name: Check formatting
         run: zig fmt --check build.zig build.zig.zon src examples bench tools
 
       - name: Run CI smoke aggregate
         run: zig build -Doptimize=ReleaseFast ci-smoke
+
+      - name: Build zlib-rs compress example
+        run: |
+          mkdir -p "$HOME/Work"
+          git clone --depth 1 https://github.com/trifectatechfoundation/zlib-rs "$HOME/Work/zlib-rs"
+          cargo build --manifest-path "$HOME/Work/zlib-rs/Cargo.toml" --example compress
+
+      - name: Run zlib-rs binary differential
+        run: zig build -Doptimize=ReleaseFast run-zlib-family-diff
 
       - name: Run focused fuzz smoke entrypoints
         run: |
