@@ -14,7 +14,7 @@ ZSTD = shutil.which("zstd")
 ZLIB_NG_MINIGZIP = pathlib.Path.home() / "Work" / "zlib-ng" / "build" / "minigzip"
 ZLIB_RS_COMPRESS = pathlib.Path.home() / "Work" / "zlib-rs" / "target" / "debug" / "examples" / "compress"
 SILESIA = pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"
-LIMIT = 128 * 1024
+SMOKE_LIMIT = 128 * 1024
 
 
 def time_call(fn):
@@ -27,7 +27,10 @@ def main() -> int:
     if not SILESIA.exists():
         print("standard corpus report: missing silesia-small.tar")
         return 0
-    data = SILESIA.read_bytes()[:LIMIT]
+    full = "--full" in sys.argv[1:]
+    source = SILESIA.read_bytes()
+    data = source if full else source[:SMOKE_LIMIT]
+    label = "silesia-full" if full else "silesia-128k"
     with tempfile.TemporaryDirectory() as td:
         sample = pathlib.Path(td) / "silesia-1m.bin"
         sample.write_bytes(data)
@@ -115,7 +118,7 @@ def main() -> int:
         if zstd_data:
             assert zstd_decoded == data
         print("corpus,input_bytes,vort_zlib_fastest_bytes,vort_ms,vort_decode_ms,gzip_bytes,gzip_ms,gzip_decode_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_ng_decode_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zlib_rs_decode_ms,zstd_bytes,zstd_ms,zstd_decode_ms")
-        print(f"silesia-1m,{len(data)},{len(vort_data)},{vort_s*1000:.3f},{vort_decode_s*1000:.3f},{len(gzip_data)},{gzip_s*1000:.3f},{gzip_decode_s*1000:.3f},{len(zlib_ng_data)},{zlib_ng_s*1000:.3f},{zlib_ng_decode_s*1000:.3f},{len(zlib_rs_data)},{zlib_rs_s*1000:.3f},{zlib_rs_decode_s*1000:.3f},{len(zstd_data)},{zstd_s*1000:.3f},{zstd_decode_s*1000:.3f}")
+        print(f"{label},{len(data)},{len(vort_data)},{vort_s*1000:.3f},{vort_decode_s*1000:.3f},{len(gzip_data)},{gzip_s*1000:.3f},{gzip_decode_s*1000:.3f},{len(zlib_ng_data)},{zlib_ng_s*1000:.3f},{zlib_ng_decode_s*1000:.3f},{len(zlib_rs_data)},{zlib_rs_s*1000:.3f},{zlib_rs_decode_s*1000:.3f},{len(zstd_data)},{zstd_s*1000:.3f},{zstd_decode_s*1000:.3f}")
     return 0
 
 
