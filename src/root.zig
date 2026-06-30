@@ -8,6 +8,7 @@ pub const deflate = @import("deflate.zig");
 pub const bitstream = @import("bitstream.zig");
 pub const huffman = @import("huffman.zig");
 pub const lz77 = @import("lz77.zig");
+pub const dictionary = @import("dictionary.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -57,6 +58,9 @@ pub const Lz77Token = lz77.Token;
 pub const greedyLz77PlanAlloc = lz77.greedyPlanAlloc;
 pub const lazyGreedyLz77PlanAlloc = lz77.lazyGreedyPlanAlloc;
 
+pub const DictionaryId = dictionary.DictionaryId;
+pub const DictionaryMetadata = dictionary.Metadata;
+
 test {
     _ = checksum;
     _ = core;
@@ -66,4 +70,5 @@ test {
     _ = bitstream;
     _ = huffman;
     _ = lz77;
+    _ = dictionary;
 }
