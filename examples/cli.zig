@@ -140,6 +140,13 @@ pub fn main(init: std.process.Init) !void {
             std.mem.eql(u8, payload, decoded),
             vort.crc32(decoded),
         });
+    } else if (std.mem.eql(u8, command, "vort-workqueue-demo")) {
+        const input = "abcdefghijklmnopqrstuvwxyz" ** 4;
+        const stream = try vort.storeEncodeWorkStealingDeflateStreamAlloc(init.gpa, input, 13, 3);
+        defer init.gpa.free(stream);
+        const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, 10, 20);
+        defer init.gpa.free(range);
+        try stdout.print("range={s} workqueue_stream_bytes={d}\n", .{ range, stream.len });
     } else if (std.mem.eql(u8, command, "vort-threadpool-demo")) {
         const input = "abcdefghijklmnopqrstuvwxyz" ** 4;
         const stream = try vort.storeEncodeThreadPoolDeflateStreamAlloc(init.gpa, input, 13, 3);

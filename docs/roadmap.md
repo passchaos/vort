@@ -129,4 +129,5 @@ architecture blindly.
 - [x] Deterministic block-planned encoder execution API.
 - [x] Parallel multi-threaded encoder execution with deterministic output order.
 - [x] Fixed worker-count thread-pool encoder scheduling.
-- [ ] Production thread-pool encoder benchmarking and work stealing.
+- [x] Work-queue encoder scheduling with deterministic output order.
+- [ ] Production thread-pool encoder benchmarking.
