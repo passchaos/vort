@@ -36,7 +36,8 @@ architecture blindly.
 - [x] In-memory frame indexes for concatenated native store streams.
 - [x] Serialized/sidecar frame indexes.
 - [x] Extensible hex-sample fuzz corpus harness for headers and malformed frames.
-- [ ] Coverage-guided fuzz integration.
+- [x] Coverage-guided fuzz integration plan and reusable corpus entrypoint.
+- [ ] libFuzzer/AFL runner wiring.
 
 ## Milestone 3: deflate/zlib/gzip compatibility
 
