@@ -97,6 +97,21 @@ pub fn build(b: *std.Build) void {
     const deflate_encode_bench_step = b.step("bench-deflate-encode", "Run fixed deflate encode throughput smoke benchmark");
     deflate_encode_bench_step.dependOn(&run_deflate_encode_bench.step);
 
+    const native_parallel_bench_exe = b.addExecutable(.{
+        .name = "vort-bench-native-parallel",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("bench/native_parallel.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_native_parallel_bench = b.addRunArtifact(native_parallel_bench_exe);
+    const native_parallel_bench_step = b.step("bench-native-parallel", "Compare native planned/parallel/thread-pool/work-queue encoders");
+    native_parallel_bench_step.dependOn(&run_native_parallel_bench.step);
+
     const fuzz_smoke_exe = b.addExecutable(.{
         .name = "vort-fuzz-smoke",
         .root_module = b.createModule(.{
@@ -325,6 +340,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&bench_exe.step);
     check_step.dependOn(&deflate_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
+    check_step.dependOn(&native_parallel_bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&fuzz_corpus_exe.step);
     check_step.dependOn(&fuzz_target_exe.step);
