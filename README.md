@@ -38,6 +38,7 @@ zig build run-zlib-diff
 zig build run-gzip-diff
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast
+zig build bench-deflate-encode -Doptimize=ReleaseFast
 ```
 
 ## Current API sketch

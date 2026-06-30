@@ -80,6 +80,23 @@ pub fn build(b: *std.Build) void {
     const deflate_bench_step = b.step("bench-deflate-decode", "Run deflate/zlib/gzip decode throughput smoke benchmark");
     deflate_bench_step.dependOn(&run_deflate_bench.step);
 
+    const deflate_encode_bench_exe = b.addExecutable(.{
+        .name = "vort-bench-deflate-encode",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("bench/deflate_encode.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+
+    const run_deflate_encode_bench = b.addRunArtifact(deflate_encode_bench_exe);
+    if (b.args) |args| run_deflate_encode_bench.addArgs(args);
+    const deflate_encode_bench_step = b.step("bench-deflate-encode", "Run fixed deflate encode throughput smoke benchmark");
+    deflate_encode_bench_step.dependOn(&run_deflate_encode_bench.step);
+
     const fuzz_smoke_exe = b.addExecutable(.{
         .name = "vort-fuzz-smoke",
         .root_module = b.createModule(.{
@@ -149,6 +166,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&cli_exe.step);
     check_step.dependOn(&bench_exe.step);
     check_step.dependOn(&deflate_bench_exe.step);
+    check_step.dependOn(&deflate_encode_bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&checksum_diff_exe.step);
     check_step.dependOn(&zlib_diff_exe.step);
