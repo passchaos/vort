@@ -21,16 +21,17 @@ pub const OwnedDecodeResult = struct {
     }
 };
 
-pub fn decodeRawFixedLiteralOnly(input: []const u8, output: []u8) Error!DecodeResult {
+pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {
     var reader = bitstream.BitReader.init(input);
     const final = try reader.readBits(u1, 1);
     const block_type = try reader.readBits(u2, 2);
     if (block_type != 0b01) return error.InvalidDeflateBlockType;
 
-    const table = try huffman.fixedLiteralTable();
+    const lit_table = try huffman.fixedLiteralTable();
+    const dist_table = try huffman.fixedDistanceTable();
     var out_offset: usize = 0;
     while (true) {
-        const symbol = (try table.decode(&reader)).value;
+        const symbol = (try lit_table.decode(&reader)).value;
         if (symbol < 256) {
             if (out_offset == output.len) return error.OutputTooSmall;
             output[out_offset] = @intCast(symbol);
@@ -38,13 +39,19 @@ pub fn decodeRawFixedLiteralOnly(input: []const u8, output: []u8) Error!DecodeRe
         } else if (symbol == 256) {
             if (final == 0) return error.UnsupportedDeflateFeature;
             return .{ .input_read = reader.byteOffset(), .output_written = out_offset };
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, &reader);
+            const distance_symbol = (try dist_table.decode(&reader)).value;
+            const distance = try decodeDistance(distance_symbol, &reader);
+            try copyMatch(output[0..out_offset], output[out_offset..], length, distance);
+            out_offset += length;
         } else {
-            return error.UnsupportedDeflateFeature;
+            return error.InvalidHuffmanCode;
         }
     }
 }
 
-pub fn decodeRawFixedLiteralOnlyAlloc(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
+pub fn decodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
@@ -53,22 +60,28 @@ pub fn decodeRawFixedLiteralOnlyAlloc(allocator: std.mem.Allocator, input: []con
     const block_type = try reader.readBits(u2, 2);
     if (block_type != 0b01) return error.InvalidDeflateBlockType;
 
-    const table = try huffman.fixedLiteralTable();
+    const lit_table = try huffman.fixedLiteralTable();
+    const dist_table = try huffman.fixedDistanceTable();
     while (true) {
-        const symbol = (try table.decode(&reader)).value;
+        const symbol = (try lit_table.decode(&reader)).value;
         if (symbol < 256) {
             try out.append(allocator, @intCast(symbol));
         } else if (symbol == 256) {
             if (final == 0) return error.UnsupportedDeflateFeature;
             return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, &reader);
+            const distance_symbol = (try dist_table.decode(&reader)).value;
+            const distance = try decodeDistance(distance_symbol, &reader);
+            try appendMatch(allocator, &out, length, distance);
         } else {
-            return error.UnsupportedDeflateFeature;
+            return error.InvalidHuffmanCode;
         }
     }
 }
 
-pub fn decodeRawFixedLiteralOnlyAllocStrict(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    const result = try decodeRawFixedLiteralOnlyAlloc(allocator, input);
+pub fn decodeRawFixedAllocStrict(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const result = try decodeRawFixedAlloc(allocator, input);
     errdefer result.deinit(allocator);
     if (result.input_read != input.len) return error.TrailingData;
     return result.bytes;
@@ -175,6 +188,108 @@ pub fn decodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
     if (result.input_read != input.len) return error.TrailingData;
     return result.bytes;
 }
+
+fn decodeLength(symbol: u16, reader: *bitstream.BitReader) Error!usize {
+    if (symbol < 257 or symbol > 285) return error.InvalidHuffmanCode;
+    const index = symbol - 257;
+    const entry = length_table[index];
+    const extra = if (entry.extra_bits == 0) 0 else try reader.readBits(u16, entry.extra_bits);
+    return entry.base + extra;
+}
+
+fn decodeDistance(symbol: u16, reader: *bitstream.BitReader) Error!usize {
+    if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
+    const entry = distance_table[symbol];
+    const extra = if (entry.extra_bits == 0) 0 else try reader.readBits(u16, entry.extra_bits);
+    return entry.base + extra;
+}
+
+fn copyMatch(history: []const u8, dest: []u8, length: usize, distance: usize) Error!void {
+    if (distance == 0 or distance > history.len) return error.InvalidMatch;
+    if (dest.len < length) return error.OutputTooSmall;
+    var i: usize = 0;
+    while (i < length) : (i += 1) {
+        const absolute = history.len + i - distance;
+        dest[i] = if (absolute < history.len) history[absolute] else dest[absolute - history.len];
+    }
+}
+
+fn appendMatch(allocator: std.mem.Allocator, out: *std.ArrayList(u8), length: usize, distance: usize) !void {
+    if (distance == 0 or distance > out.items.len) return error.InvalidMatch;
+    try out.ensureUnusedCapacity(allocator, length);
+    var i: usize = 0;
+    while (i < length) : (i += 1) {
+        const index = out.items.len - distance;
+        out.appendAssumeCapacity(out.items[index]);
+    }
+}
+
+const LengthEntry = struct { base: u16, extra_bits: u6 };
+const length_table = [_]LengthEntry{
+    .{ .base = 3, .extra_bits = 0 },
+    .{ .base = 4, .extra_bits = 0 },
+    .{ .base = 5, .extra_bits = 0 },
+    .{ .base = 6, .extra_bits = 0 },
+    .{ .base = 7, .extra_bits = 0 },
+    .{ .base = 8, .extra_bits = 0 },
+    .{ .base = 9, .extra_bits = 0 },
+    .{ .base = 10, .extra_bits = 0 },
+    .{ .base = 11, .extra_bits = 1 },
+    .{ .base = 13, .extra_bits = 1 },
+    .{ .base = 15, .extra_bits = 1 },
+    .{ .base = 17, .extra_bits = 1 },
+    .{ .base = 19, .extra_bits = 2 },
+    .{ .base = 23, .extra_bits = 2 },
+    .{ .base = 27, .extra_bits = 2 },
+    .{ .base = 31, .extra_bits = 2 },
+    .{ .base = 35, .extra_bits = 3 },
+    .{ .base = 43, .extra_bits = 3 },
+    .{ .base = 51, .extra_bits = 3 },
+    .{ .base = 59, .extra_bits = 3 },
+    .{ .base = 67, .extra_bits = 4 },
+    .{ .base = 83, .extra_bits = 4 },
+    .{ .base = 99, .extra_bits = 4 },
+    .{ .base = 115, .extra_bits = 4 },
+    .{ .base = 131, .extra_bits = 5 },
+    .{ .base = 163, .extra_bits = 5 },
+    .{ .base = 195, .extra_bits = 5 },
+    .{ .base = 227, .extra_bits = 5 },
+    .{ .base = 258, .extra_bits = 0 },
+};
+
+const DistanceEntry = struct { base: u16, extra_bits: u6 };
+const distance_table = [_]DistanceEntry{
+    .{ .base = 1, .extra_bits = 0 },
+    .{ .base = 2, .extra_bits = 0 },
+    .{ .base = 3, .extra_bits = 0 },
+    .{ .base = 4, .extra_bits = 0 },
+    .{ .base = 5, .extra_bits = 1 },
+    .{ .base = 7, .extra_bits = 1 },
+    .{ .base = 9, .extra_bits = 2 },
+    .{ .base = 13, .extra_bits = 2 },
+    .{ .base = 17, .extra_bits = 3 },
+    .{ .base = 25, .extra_bits = 3 },
+    .{ .base = 33, .extra_bits = 4 },
+    .{ .base = 49, .extra_bits = 4 },
+    .{ .base = 65, .extra_bits = 5 },
+    .{ .base = 97, .extra_bits = 5 },
+    .{ .base = 129, .extra_bits = 6 },
+    .{ .base = 193, .extra_bits = 6 },
+    .{ .base = 257, .extra_bits = 7 },
+    .{ .base = 385, .extra_bits = 7 },
+    .{ .base = 513, .extra_bits = 8 },
+    .{ .base = 769, .extra_bits = 8 },
+    .{ .base = 1025, .extra_bits = 9 },
+    .{ .base = 1537, .extra_bits = 9 },
+    .{ .base = 2049, .extra_bits = 10 },
+    .{ .base = 3073, .extra_bits = 10 },
+    .{ .base = 4097, .extra_bits = 11 },
+    .{ .base = 6145, .extra_bits = 11 },
+    .{ .base = 8193, .extra_bits = 12 },
+    .{ .base = 12289, .extra_bits = 12 },
+    .{ .base = 16385, .extra_bits = 13 },
+    .{ .base = 24577, .extra_bits = 13 },
+};
 
 pub fn zlibStoredEncodedSize(input_len: usize) Error!usize {
     const raw_len = try rawStoredEncodedSize(input_len);
@@ -413,7 +528,7 @@ test "gzip stored wrapper validates crc size header and trailing data" {
     try std.testing.expectError(error.TrailingData, decodeGzipStored(with_trailing[0 .. encoded.len + 1], &out));
 }
 
-test "raw fixed Huffman literal-only inflate matches zlib fixed vectors" {
+test "raw fixed Huffman literal/match inflate matches zlib fixed vectors" {
     const cases = [_]struct { compressed: []const u8, plain: []const u8 }{
         .{ .compressed = &.{ 0x03, 0x00 }, .plain = "" },
         .{ .compressed = &.{ 0x4b, 0x04, 0x00 }, .plain = "a" },
@@ -422,19 +537,28 @@ test "raw fixed Huffman literal-only inflate matches zlib fixed vectors" {
     };
     for (cases) |case| {
         var out: [64]u8 = undefined;
-        const decoded = try decodeRawFixedLiteralOnly(case.compressed, &out);
+        const decoded = try decodeRawFixed(case.compressed, &out);
         try std.testing.expectEqualSlices(u8, case.plain, out[0..decoded.output_written]);
-        const owned = try decodeRawFixedLiteralOnlyAllocStrict(std.testing.allocator, case.compressed);
+        const owned = try decodeRawFixedAllocStrict(std.testing.allocator, case.compressed);
         defer std.testing.allocator.free(owned);
         try std.testing.expectEqualSlices(u8, case.plain, owned);
     }
 }
 
-test "raw fixed Huffman literal-only inflate rejects matches and wrong block types" {
-    const fixed_with_match = &.{ 0x73, 0x74, 0xa4, 0x3d, 0x00 }; // zlib fixed output for "aaaaaa" uses a match.
-    try std.testing.expectError(error.UnsupportedDeflateFeature, decodeRawFixedLiteralOnlyAllocStrict(std.testing.allocator, fixed_with_match));
+test "raw fixed Huffman inflate decodes back references and rejects wrong block types" {
+    const cases = [_]struct { compressed: []const u8, plain: []const u8 }{
+        .{ .compressed = &.{ 0x4b, 0x4c, 0x04, 0x01, 0x00 }, .plain = "aaaaaa" },
+        .{ .compressed = &.{ 0x4b, 0x4c, 0x4a, 0x4e, 0x84, 0x21, 0x00 }, .plain = "abcabcabcabc" },
+        .{ .compressed = &.{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x57, 0xc8, 0x40, 0x27, 0x01 }, .plain = "hello hello hello hello" },
+        .{ .compressed = &.{ 0x4b, 0x4c, 0x1c, 0x05, 0xc4, 0x86, 0x00, 0x00 }, .plain = "a" ** 300 },
+    };
+    for (cases) |case| {
+        const decoded = try decodeRawFixedAllocStrict(std.testing.allocator, case.compressed);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, case.plain, decoded);
+    }
 
     var out: [8]u8 = undefined;
-    try std.testing.expectError(error.InvalidDeflateBlockType, decodeRawFixedLiteralOnly(&.{ 0x01, 0x00, 0x00, 0xff, 0xff }, &out));
-    try std.testing.expectError(error.OutputTooSmall, decodeRawFixedLiteralOnly(&.{ 0x4b, 0x04, 0x00 }, out[0..0]));
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeRawFixed(&.{ 0x01, 0x00, 0x00, 0xff, 0xff }, &out));
+    try std.testing.expectError(error.OutputTooSmall, decodeRawFixed(&.{ 0x4b, 0x04, 0x00 }, out[0..0]));
 }

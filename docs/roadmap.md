@@ -41,8 +41,7 @@ architecture blindly.
 - [x] Canonical Huffman decode table foundation for fixed-Huffman inflate.
 - [ ] Bit writer primitives.
 - [x] Stored deflate blocks.
-- [x] Fixed-Huffman literal-only inflate.
-- [ ] Fixed-Huffman back-reference inflate.
+- [x] Fixed-Huffman inflate for literals and back-references.
 - [ ] Dynamic-Huffman inflate.
 - [x] zlib wrapper and Adler verification for stored blocks.
 - [ ] zlib wrapper integration for fixed/dynamic Huffman blocks.
