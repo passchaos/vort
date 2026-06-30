@@ -142,14 +142,35 @@ def load_cases(full: bool, suite: bool) -> list[tuple[str, bytes]]:
     return [(label, data)]
 
 
+def load_path_cases(paths: list[pathlib.Path], full: bool) -> list[tuple[str, bytes]]:
+    cases: list[tuple[str, bytes]] = []
+    for path in paths:
+        if path.is_dir():
+            for child in sorted(p for p in path.rglob("*") if p.is_file()):
+                data = child.read_bytes()
+                label = str(child.relative_to(path.parent))
+                if not full:
+                    data = data[:SMOKE_LIMIT]
+                    label = f"{label}-128k"
+                cases.append((label, data))
+        else:
+            data = path.read_bytes()
+            label = path.name
+            if not full:
+                data = data[:SMOKE_LIMIT]
+                label = f"{label}-128k"
+            cases.append((label, data))
+    return cases
+
+
 def row_to_dict(row: str) -> dict[str, str]:
     values = row.split(",")
     return dict(zip(COLUMNS, values))
 
 
-def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool) -> None:
+def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool, external_paths: bool = False) -> None:
     records = [row_to_dict(row) for row in rows]
-    title = "Silesia per-file benchmark suite" if suite else "Silesia benchmark smoke"
+    title = "External corpus benchmark suite" if external_paths else ("Silesia per-file benchmark suite" if suite else "Silesia benchmark smoke")
     mode = "full" if full else "bounded-128KiB"
     lines = [
         f"# {title}",
@@ -173,16 +194,25 @@ def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool)
 
 
 def main() -> int:
-    if not SILESIA.exists():
-        print("standard corpus report: missing silesia-small.tar")
-        return 0
     full = "--full" in sys.argv[1:]
     suite = "--suite" in sys.argv[1:]
     markdown_path = None
+    corpus_paths: list[pathlib.Path] = []
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
             markdown_path = pathlib.Path(sys.argv[index + 1])
-    cases = load_cases(full, suite)
+        if arg == "--paths":
+            for value in sys.argv[index + 1 :]:
+                if value.startswith("--"):
+                    break
+                corpus_paths.append(pathlib.Path(value))
+    if corpus_paths:
+        cases = load_path_cases(corpus_paths, full)
+    else:
+        if not SILESIA.exists():
+            print("standard corpus report: missing silesia-small.tar")
+            return 0
+        cases = load_cases(full, suite)
     rows: list[str] = []
     with tempfile.TemporaryDirectory() as td:
         root = pathlib.Path(td)
@@ -192,7 +222,7 @@ def main() -> int:
             rows.append(row)
             print(row)
     if markdown_path is not None:
-        write_markdown(rows, markdown_path, suite, full)
+        write_markdown(rows, markdown_path, suite, full, len(corpus_paths) != 0)
     return 0
 
 
