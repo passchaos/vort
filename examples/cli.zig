@@ -166,6 +166,14 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeGzipDynamicWithOptionsAlloc(init.gpa, payload, .{ .parser = mode });
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zlib-best-file-hex")) {
+        const path = args.next() orelse return error.MissingCorpusPath;
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const mode = parseParserMode(args.next());
+        const encoded = try vort.encodeZlibBestAlloc(init.gpa, data, .{ .parser = mode });
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "decode-raw-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const compressed = try hexToOwnedBytes(init.gpa, hex);

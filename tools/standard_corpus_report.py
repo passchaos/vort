@@ -12,7 +12,7 @@ CLI = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 and pathlib.Path(sys.argv[1
 GZIP = shutil.which("gzip")
 ZSTD = shutil.which("zstd")
 SILESIA = pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"
-LIMIT = 1 << 20
+LIMIT = 128 * 1024
 
 
 def time_call(fn):
@@ -31,9 +31,10 @@ def main() -> int:
         sample.write_bytes(data)
 
         def vort_run():
-            # Vort CLI currently accepts text payloads, so binary corpus Vort timing is
-            # deferred until a file-input encoder command exists.
-            return b""
+            if not CLI:
+                return b""
+            hex_out = subprocess.run([str(CLI), "encode-zlib-best-file-hex", str(sample), "optimal"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
+            return bytes.fromhex(hex_out)
 
         def gzip_run():
             if not GZIP:
