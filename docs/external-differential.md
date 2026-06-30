@@ -15,15 +15,15 @@ binaries and reports explicit skip status when they are not available:
 zig build run-zlib-family-diff
 ```
 
-Expected current output on an unbuilt checkout is similar to:
+If competitor binaries are not built, output is explicit about skipped coverage. After building zlib-ng `minigzip` in `~/Work/zlib-ng/build`, expected output includes zlib-ng coverage:
 
 ```text
 zlib family differential harness:
-- zlib-ng-minigzip: skipped (binary not built)
+- zlib-ng-minigzip: ok (/home/passchaos/Work/zlib-ng/build/minigzip)
 - zlib-rs-minigzip: skipped (binary not built)
-zlib family differential summary: used=0 skipped=2
+zlib family differential summary: used=1 skipped=1
 ```
 
 To turn this into real coverage, build compatible `minigzip`-style binaries in
 one of the paths listed in `tools/zlib_family_diff.py`, then rerun the build
-step. Skip output must not be counted as zlib-ng/zlib-rs compatibility evidence.
+step. Skip output must not be counted as compatibility evidence for that implementation.
