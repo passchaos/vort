@@ -172,4 +172,5 @@ architecture blindly.
 - [x] Native parallel/thread-pool/work-queue benchmark across bounded Silesia files.
 - [x] Native parallel/thread-pool/work-queue Markdown dashboards for bounded/full Silesia.
 - [x] Native parallel/thread-pool/work-queue dashboard accepts external path/tar corpora.
+- [x] Native parallel/thread-pool/work-queue dashboard per-mode throughput summaries.
 - [ ] Production thread-pool encoder benchmarking across full standard real corpora.

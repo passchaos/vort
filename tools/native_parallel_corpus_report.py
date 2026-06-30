@@ -72,13 +72,44 @@ def write_markdown(rows: list[str], path: pathlib.Path, full: bool, external_pat
         f"- mode: `{'full' if full else 'bounded-128KiB'}`",
         f"- rows: {len(records)}",
         "",
+        "## Summary by mode",
+        "",
+        "| mode | files | total input | total stream bytes | total elapsed ms | MiB/s |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for summary in summarize_by_mode(records):
+        lines.append(
+            "| {mode} | {files} | {input_bytes} | {stream_bytes} | {elapsed_ms:.3f} | {mib_s:.2f} |".format(**summary)
+        )
+    lines.extend([
+        "",
+        "## Rows",
+        "",
         "| corpus | mode | input | stream bytes | elapsed ms | range crc32 |",
         "| --- | --- | ---: | ---: | ---: | ---: |",
-    ]
+    ])
     for rec in records:
         lines.append("| {corpus} | {mode} | {input_bytes} | {stream_bytes} | {elapsed_ms} | {range_crc32} |".format(**rec))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
+
+
+def summarize_by_mode(records: list[dict[str, str]]) -> list[dict[str, object]]:
+    by_mode: dict[str, dict[str, object]] = {}
+    for rec in records:
+        mode = rec["mode"]
+        entry = by_mode.setdefault(mode, { "mode": mode, "files": 0, "input_bytes": 0, "stream_bytes": 0, "elapsed_ms": 0.0, "mib_s": 0.0 })
+        entry["files"] = int(entry["files"]) + 1
+        entry["input_bytes"] = int(entry["input_bytes"]) + int(rec["input_bytes"])
+        entry["stream_bytes"] = int(entry["stream_bytes"]) + int(rec["stream_bytes"])
+        entry["elapsed_ms"] = float(entry["elapsed_ms"]) + float(rec["elapsed_ms"])
+    order = { "planned": 0, "parallel": 1, "thread_pool": 2, "work_queue": 3 }
+    summaries = sorted(by_mode.values(), key=lambda item: order.get(str(item["mode"]), 99))
+    for item in summaries:
+        elapsed_s = float(item["elapsed_ms"]) / 1000.0
+        mib = float(item["input_bytes"]) / (1024.0 * 1024.0)
+        item["mib_s"] = 0.0 if elapsed_s == 0 else mib / elapsed_s
+    return summaries
 
 
 def main() -> int:
