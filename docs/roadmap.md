@@ -37,7 +37,9 @@ architecture blindly.
 
 ## Milestone 3: deflate/zlib/gzip compatibility
 
-- [ ] Bit reader/writer primitives.
+- [x] LSB-first bit reader primitive.
+- [x] Canonical Huffman decode table foundation for fixed-Huffman inflate.
+- [ ] Bit writer primitives.
 - [x] Stored deflate blocks.
 - [ ] Fixed-Huffman inflate.
 - [ ] Dynamic-Huffman inflate.

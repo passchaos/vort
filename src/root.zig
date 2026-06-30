@@ -5,6 +5,8 @@ pub const core = @import("core.zig");
 pub const store = @import("store.zig");
 pub const fuzz = @import("fuzz.zig");
 pub const deflate = @import("deflate.zig");
+pub const bitstream = @import("bitstream.zig");
+pub const huffman = @import("huffman.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
@@ -43,4 +45,6 @@ test {
     _ = store;
     _ = fuzz;
     _ = deflate;
+    _ = bitstream;
+    _ = huffman;
 }
