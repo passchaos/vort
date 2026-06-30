@@ -66,6 +66,8 @@ architecture blindly.
 - [x] Local external implementation/tool availability probe.
 - [x] Optional zlib-ng/zlib-rs differential harness with explicit skip reporting.
 - [ ] Built zlib-ng/zlib-rs differential tests running in CI/local validation.
+- [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip.
+- [ ] Full dynamic Huffman encoder with match support.
 - [ ] Compatibility benchmark suite.
 
 ## Milestone 4: compression performance foundation

@@ -29,6 +29,52 @@ pub const OwnedDecodeResult = struct {
     }
 };
 
+pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    var lit_freqs: [286]u32 = @splat(0);
+    for (input) |byte| lit_freqs[byte] += 1;
+    lit_freqs[256] = 1; // end of block
+    var lit_lengths_full = huffman.simpleCodeLengths(286, &lit_freqs, 15);
+    const hlit: usize = 257;
+    const hdist: usize = 1;
+    var dist_lengths = [_]u4{0};
+
+    var code_len_lengths: [19]u4 = @splat(0);
+    code_len_lengths[0] = 1;
+    for (lit_lengths_full[0..hlit]) |bits| {
+        if (bits != 0) code_len_lengths[bits] = 1;
+    }
+    for (dist_lengths[0..hdist]) |bits| {
+        if (bits != 0) code_len_lengths[bits] = 1;
+    }
+    var hclen: usize = 4;
+    for (huffman.code_length_order, 0..) |symbol, i| {
+        if (code_len_lengths[symbol] != 0) hclen = @max(hclen, i + 1);
+    }
+
+    const lit_encoder = try huffman.HuffmanTable(286).Encoder.init(lit_lengths_full[0..hlit]);
+    const code_len_encoder = try huffman.CodeLengthTable.Encoder.init(&code_len_lengths);
+
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writer.writeBits(allocator, 1, 1); // final
+    try writer.writeBits(allocator, 0b10, 2); // dynamic
+    try writer.writeBits(allocator, @intCast(hlit - 257), 5);
+    try writer.writeBits(allocator, @intCast(hdist - 1), 5);
+    try writer.writeBits(allocator, @intCast(hclen - 4), 4);
+    for (huffman.code_length_order[0..hclen]) |symbol| {
+        try writer.writeBits(allocator, code_len_lengths[symbol], 3);
+    }
+    for (lit_lengths_full[0..hlit]) |bits| {
+        try code_len_encoder.writeSymbol(&writer, allocator, bits);
+    }
+    for (dist_lengths[0..hdist]) |bits| {
+        try code_len_encoder.writeSymbol(&writer, allocator, bits);
+    }
+    for (input) |byte| try lit_encoder.writeSymbol(&writer, allocator, byte);
+    try lit_encoder.writeSymbol(&writer, allocator, 256);
+    return writer.toOwnedSlice(allocator);
+}
+
 pub fn encodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return encodeRawFixedWithOptionsAlloc(allocator, input, .{});
 }
@@ -513,6 +559,18 @@ pub fn encodeZlibFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []co
     return out;
 }
 
+pub fn encodeZlibDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const raw = try encodeRawDynamicLiteralAlloc(allocator, input);
+    defer allocator.free(raw);
+    const out = try allocator.alloc(u8, 2 + raw.len + 4);
+    errdefer allocator.free(out);
+    out[0] = 0x78;
+    out[1] = 0x01;
+    @memcpy(out[2..][0..raw.len], raw);
+    std.mem.writeInt(u32, out[2 + raw.len ..][0..4], checksum.adler32(input), .big);
+    return out;
+}
+
 pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
     if (input.len < 2) return error.TruncatedFrame;
     try validateZlibHeader(input[0], input[1]);
@@ -583,6 +641,19 @@ pub fn encodeGzipFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
 
 pub fn encodeGzipFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const raw = try encodeRawFixedWithOptionsAlloc(allocator, input, options);
+    defer allocator.free(raw);
+    const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
+    errdefer allocator.free(out);
+    @memcpy(out[0..gzip_header.len], &gzip_header);
+    @memcpy(out[gzip_header.len..][0..raw.len], raw);
+    const footer = gzip_header.len + raw.len;
+    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
+    return out;
+}
+
+pub fn encodeGzipDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const raw = try encodeRawDynamicLiteralAlloc(allocator, input);
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
     errdefer allocator.free(out);
@@ -1074,5 +1145,28 @@ test "fixed encoder supports parser strategy options" {
         const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+}
+
+test "dynamic literal encoder round trips through raw zlib and gzip decoders" {
+    const cases = [_][]const u8{ "", "hello", "dynamic literal encoder" };
+    for (cases) |case| {
+        const raw = try encodeRawDynamicLiteralAlloc(std.testing.allocator, case);
+        defer std.testing.allocator.free(raw);
+        const raw_decoded = try decodeRawAutoAlloc(std.testing.allocator, raw);
+        defer std.testing.allocator.free(raw_decoded);
+        try std.testing.expectEqualSlices(u8, case, raw_decoded);
+
+        const zlib_frame = try encodeZlibDynamicLiteralAlloc(std.testing.allocator, case);
+        defer std.testing.allocator.free(zlib_frame);
+        const zlib_decoded = try decodeZlibAlloc(std.testing.allocator, zlib_frame);
+        defer std.testing.allocator.free(zlib_decoded);
+        try std.testing.expectEqualSlices(u8, case, zlib_decoded);
+
+        const gzip_frame = try encodeGzipDynamicLiteralAlloc(std.testing.allocator, case);
+        defer std.testing.allocator.free(gzip_frame);
+        const gzip_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
+        defer std.testing.allocator.free(gzip_decoded);
+        try std.testing.expectEqualSlices(u8, case, gzip_decoded);
     }
 }
