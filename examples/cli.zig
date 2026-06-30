@@ -26,6 +26,16 @@ pub fn main(init: std.process.Init) !void {
             vort.crc32(payload),
             vort.crc32c(payload),
         });
+    } else if (std.mem.eql(u8, command, "checksum-file")) {
+        const path = args.next() orelse return error.MissingCorpusPath;
+        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(payload);
+        try stdout.print("input_bytes={d} adler32={d} crc32={d} crc32c={d}\n", .{
+            payload.len,
+            vort.adler32(payload),
+            vort.crc32(payload),
+            vort.crc32c(payload),
+        });
     } else if (std.mem.eql(u8, command, "store-roundtrip")) {
         const payload = args.next() orelse "";
         const encoded = try vort.storeEncodeAlloc(init.gpa, payload);
@@ -285,6 +295,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\commands:
         \\  help | --help              Show this message
         \\  checksum [text]            Print Adler-32, CRC-32, and CRC-32C for text
+        \\  checksum-file [path]       Print Adler-32, CRC-32, and CRC-32C for a file
         \\  store-roundtrip [text]     Encode/decode the native store frame
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate

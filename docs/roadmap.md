@@ -26,7 +26,7 @@ architecture blindly.
 - [x] x86 SSE4.2 CRC32C hardware path selected by dispatch.
 - [ ] Architecture-specific IEEE CRC32 implementation / dispatch.
 - [x] Differential checksum smoke against Zig std reference implementations.
-- [ ] Differential checksum tests against local/system zlib-family tools.
+- [x] Differential checksum tests against Python zlib and local/system gzip wrapper trailers.
 
 ## Milestone 2: native frame plumbing
 

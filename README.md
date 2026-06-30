@@ -40,6 +40,7 @@ zig build run-fuzz-target
 zig build run-libfuzzer-smoke
 zig build run-afl-smoke
 zig build run-checksum-diff
+zig build run-checksum-zlib-diff
 zig build run-zlib-diff
 zig build run-gzip-diff
 zig build run-python-zlib-diff

@@ -207,6 +207,11 @@ pub fn build(b: *std.Build) void {
     const checksum_diff_step = b.step("run-checksum-diff", "Run checksum differential smoke against Zig std reference hashes");
     checksum_diff_step.dependOn(&run_checksum_diff.step);
 
+    const checksum_zlib_diff = b.addSystemCommand(&.{ "python3", "tools/checksum_zlib_diff.py" });
+    checksum_zlib_diff.addArtifactArg(cli_exe);
+    const checksum_zlib_diff_step = b.step("run-checksum-zlib-diff", "Run checksum differential smoke against Python zlib and system gzip trailers");
+    checksum_zlib_diff_step.dependOn(&checksum_zlib_diff.step);
+
     const zlib_diff_exe = b.addExecutable(.{
         .name = "vort-zlib-diff",
         .root_module = b.createModule(.{
@@ -363,6 +368,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(libfuzzer_smoke_step);
     ci_smoke_step.dependOn(afl_smoke_step);
     ci_smoke_step.dependOn(checksum_diff_step);
+    ci_smoke_step.dependOn(checksum_zlib_diff_step);
     ci_smoke_step.dependOn(zlib_diff_step);
     ci_smoke_step.dependOn(gzip_diff_step);
     ci_smoke_step.dependOn(python_zlib_diff_step);
