@@ -187,6 +187,48 @@ pub const Crc32Slice8 = struct {
     }
 };
 
+pub const Crc32CSlice8 = struct {
+    value: u32 = 0xffff_ffff,
+
+    pub const tables = makeCrc32SliceTables(8, Crc32C.polynomial_reflected);
+
+    pub fn init() Crc32CSlice8 {
+        return .{};
+    }
+
+    pub fn update(self: *Crc32CSlice8, input: []const u8) void {
+        var crc = self.value;
+        var index: usize = 0;
+        while (index + 8 <= input.len) : (index += 8) {
+            crc ^= std.mem.readInt(u32, input[index..][0..4], .little);
+            const high = std.mem.readInt(u32, input[index + 4 ..][0..4], .little);
+            crc = tables[7][crc & 0xff] ^
+                tables[6][(crc >> 8) & 0xff] ^
+                tables[5][(crc >> 16) & 0xff] ^
+                tables[4][(crc >> 24) & 0xff] ^
+                tables[3][high & 0xff] ^
+                tables[2][(high >> 8) & 0xff] ^
+                tables[1][(high >> 16) & 0xff] ^
+                tables[0][(high >> 24) & 0xff];
+        }
+        while (index < input.len) : (index += 1) {
+            const table_index: u8 = @truncate(crc ^ input[index]);
+            crc = Crc32C.table[table_index] ^ (crc >> 8);
+        }
+        self.value = crc;
+    }
+
+    pub fn digest(self: Crc32CSlice8) u32 {
+        return ~self.value;
+    }
+
+    pub fn hash(input: []const u8) u32 {
+        var state = Crc32CSlice8.init();
+        state.update(input);
+        return state.digest();
+    }
+};
+
 pub fn adler32(input: []const u8) u32 {
     return Adler32.hash(input);
 }
@@ -196,6 +238,7 @@ pub fn crc32(input: []const u8) u32 {
 }
 
 pub const Crc32Dispatch = enum { scalar, slice4, slice8 };
+pub const Crc32CDispatch = enum { scalar, slice8, hardware };
 
 pub const CpuFeatureReport = struct {
     x86_sse42: bool = false,
@@ -279,11 +322,23 @@ fn crc32cAsm32(acc_in: u32, value: u32) u32 {
 }
 
 pub fn crc32cBest(input: []const u8) u32 {
-    return if (cpuFeatureReport().crc32c_hardware_candidate) crc32cHardwareX86(input) else crc32c(input);
+    return switch (bestCrc32CDispatch()) {
+        .scalar => crc32c(input),
+        .slice8 => crc32cSlice8(input),
+        .hardware => crc32cHardwareX86(input),
+    };
+}
+
+pub fn bestCrc32CDispatch() Crc32CDispatch {
+    return if (cpuFeatureReport().crc32c_hardware_candidate) .hardware else .slice8;
 }
 
 pub fn crc32c(input: []const u8) u32 {
     return Crc32C.hash(input);
+}
+
+pub fn crc32cSlice8(input: []const u8) u32 {
+    return Crc32CSlice8.hash(input);
 }
 
 fn makeCrc32Table(comptime polynomial: u32) [256]u32 {
@@ -375,6 +430,17 @@ test "CRC-32C streaming matches one-shot" {
     try std.testing.expectEqual(crc32c(input), state.digest());
 }
 
+test "CRC-32C slice-by-8 matches scalar" {
+    const cases = [_][]const u8{
+        "",
+        "a",
+        "abc",
+        "123456789",
+        "The quick brown fox jumps over the lazy dog" ** 97,
+    };
+    for (cases) |case| try std.testing.expectEqual(crc32c(case), crc32cSlice8(case));
+}
+
 test "CRC implementations match Zig std catalog" {
     const cases = [_][]const u8{
         "",
@@ -419,5 +485,10 @@ test "CRC-32C hardware path matches table path" {
     for (cases) |case| {
         try std.testing.expectEqual(crc32c(case), crc32cBest(case));
         try std.testing.expectEqual(crc32c(case), crc32cHardwareX86(case));
+    }
+    if (cpuFeatureReport().crc32c_hardware_candidate) {
+        try std.testing.expectEqual(Crc32CDispatch.hardware, bestCrc32CDispatch());
+    } else {
+        try std.testing.expectEqual(Crc32CDispatch.slice8, bestCrc32CDispatch());
     }
 }
