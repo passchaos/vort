@@ -59,6 +59,7 @@ architecture blindly.
 - [x] gzip wrapper integration for multi-block dynamic streams.
 - [x] Stored-block vectors checked against Python/zlib level-0 output.
 - [x] Black-box differential smoke against Python zlib.
+- [x] Local external implementation/tool availability probe.
 - [ ] Differential tests against zlib-ng and zlib-rs.
 - [ ] Compatibility benchmark suite.
 

@@ -183,6 +183,10 @@ pub fn build(b: *std.Build) void {
     const python_zlib_diff_step = b.step("run-python-zlib-diff", "Run black-box differential smoke against Python zlib");
     python_zlib_diff_step.dependOn(&python_zlib_diff.step);
 
+    const external_probe = b.addSystemCommand(&.{ "python3", "tools/external_probe.py" });
+    const external_probe_step = b.step("run-external-probe", "Report available local compression competitors/tools");
+    external_probe_step.dependOn(&external_probe.step);
+
     const compression_report_exe = b.addExecutable(.{
         .name = "vort-compression-report",
         .root_module = b.createModule(.{
