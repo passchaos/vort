@@ -124,6 +124,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_native_parallel_bench = b.addRunArtifact(native_parallel_bench_exe);
+    if (b.args) |args| run_native_parallel_bench.addArgs(args);
     const native_parallel_bench_step = b.step("bench-native-parallel", "Compare native planned/parallel/thread-pool/work-queue encoders");
     native_parallel_bench_step.dependOn(&run_native_parallel_bench.step);
 

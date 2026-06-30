@@ -148,4 +148,5 @@ architecture blindly.
 - [x] Fixed worker-count thread-pool encoder scheduling.
 - [x] Work-queue encoder scheduling with deterministic output order.
 - [x] Native parallel/thread-pool/work-queue encoder benchmark smoke.
-- [ ] Production thread-pool encoder benchmarking across real corpora.
+- [x] Native parallel/thread-pool/work-queue benchmark accepts real file corpora.
+- [ ] Production thread-pool encoder benchmarking across standard real corpora.
