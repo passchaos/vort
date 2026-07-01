@@ -14,7 +14,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - shared progress/error/frame metadata types;
 - raw deflate stored/fixed encode and stored/fixed/dynamic decode, with zlib/gzip wrappers;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, and bounded streaming APIs;
-- LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training, match-coverage, patch-codec, native dictionary-patch frame, native LDM reference frame, and dictionary-/LDM-aware native best-frame prototypes, long-distance match scanner, LDM-aware block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
+- LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training, match-coverage, patch-codec, native dictionary-patch frame, self-contained dictionary streams, native LDM reference frame, and dictionary-/LDM-aware native best-frame prototypes, long-distance match scanner, LDM-aware block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
 
 Hosted CI runs on `main` pushes and pull requests through
 `.github/workflows/ci.yml`, which installs Zig 0.16, checks formatting, runs
@@ -33,6 +33,7 @@ zig build run -- vort-deflate-roundtrip "hello vort"
 zig build run -- vort-blocked-range-demo
 zig build run -- vort-blocked-best-range-demo
 zig build run -- vort-dict-blocked-range-demo
+zig build run -- vort-self-dict-range-demo
 zig build run -- vort-ldm-summary-demo
 zig build run -- vort-ldm-indexed-range-demo
 zig build run -- store-range-demo
