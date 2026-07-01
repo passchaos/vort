@@ -20,7 +20,8 @@ architecture blindly.
 - [x] IEEE CRC-32 with streaming state and known vectors.
 - [x] CRC-32C for modern storage/network workloads.
 - [x] Portable CRC32 slice-by-4 fast variant with scalar reference checks.
-- [x] Portable CRC32 slice-by-8 fast variant selected by dispatch.
+- [x] Portable CRC32 slice-by-8 fast variant.
+- [x] Portable CRC32 slice-by-16 fast variant selected by dispatch.
 - [x] Portable CRC32C slice-by-8 fallback selected when hardware CRC32C is unavailable.
 - [x] Runtime checksum dispatch API selecting portable fast path.
 - [x] CPU feature/dispatch report tool.

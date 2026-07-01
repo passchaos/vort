@@ -187,6 +187,58 @@ pub const Crc32Slice8 = struct {
     }
 };
 
+pub const Crc32Slice16 = struct {
+    value: u32 = 0xffff_ffff,
+
+    pub const tables = makeCrc32SliceTables(16, Crc32.polynomial_reflected);
+
+    pub fn init() Crc32Slice16 {
+        return .{};
+    }
+
+    pub fn update(self: *Crc32Slice16, input: []const u8) void {
+        var crc = self.value;
+        var index: usize = 0;
+        while (index + 16 <= input.len) : (index += 16) {
+            crc ^= std.mem.readInt(u32, input[index..][0..4], .little);
+            const word1 = std.mem.readInt(u32, input[index + 4 ..][0..4], .little);
+            const word2 = std.mem.readInt(u32, input[index + 8 ..][0..4], .little);
+            const word3 = std.mem.readInt(u32, input[index + 12 ..][0..4], .little);
+            crc = tables[15][crc & 0xff] ^
+                tables[14][(crc >> 8) & 0xff] ^
+                tables[13][(crc >> 16) & 0xff] ^
+                tables[12][(crc >> 24) & 0xff] ^
+                tables[11][word1 & 0xff] ^
+                tables[10][(word1 >> 8) & 0xff] ^
+                tables[9][(word1 >> 16) & 0xff] ^
+                tables[8][(word1 >> 24) & 0xff] ^
+                tables[7][word2 & 0xff] ^
+                tables[6][(word2 >> 8) & 0xff] ^
+                tables[5][(word2 >> 16) & 0xff] ^
+                tables[4][(word2 >> 24) & 0xff] ^
+                tables[3][word3 & 0xff] ^
+                tables[2][(word3 >> 8) & 0xff] ^
+                tables[1][(word3 >> 16) & 0xff] ^
+                tables[0][(word3 >> 24) & 0xff];
+        }
+        while (index < input.len) : (index += 1) {
+            const table_index: u8 = @truncate(crc ^ input[index]);
+            crc = Crc32.table[table_index] ^ (crc >> 8);
+        }
+        self.value = crc;
+    }
+
+    pub fn digest(self: Crc32Slice16) u32 {
+        return ~self.value;
+    }
+
+    pub fn hash(input: []const u8) u32 {
+        var state = Crc32Slice16.init();
+        state.update(input);
+        return state.digest();
+    }
+};
+
 pub const Crc32CSlice8 = struct {
     value: u32 = 0xffff_ffff,
 
@@ -237,7 +289,7 @@ pub fn crc32(input: []const u8) u32 {
     return Crc32.hash(input);
 }
 
-pub const Crc32Dispatch = enum { scalar, slice4, slice8 };
+pub const Crc32Dispatch = enum { scalar, slice4, slice8, slice16 };
 pub const Crc32CDispatch = enum { scalar, slice8, hardware };
 
 pub const CpuFeatureReport = struct {
@@ -261,7 +313,7 @@ pub fn cpuFeatureReport() CpuFeatureReport {
 }
 
 pub fn bestCrc32Dispatch() Crc32Dispatch {
-    return .slice8;
+    return .slice16;
 }
 
 pub fn crc32Best(input: []const u8) u32 {
@@ -269,6 +321,7 @@ pub fn crc32Best(input: []const u8) u32 {
         .scalar => crc32(input),
         .slice4 => crc32Slice4(input),
         .slice8 => crc32Slice8(input),
+        .slice16 => crc32Slice16(input),
     };
 }
 
@@ -278,6 +331,10 @@ pub fn crc32Slice4(input: []const u8) u32 {
 
 pub fn crc32Slice8(input: []const u8) u32 {
     return Crc32Slice8.hash(input);
+}
+
+pub fn crc32Slice16(input: []const u8) u32 {
+    return Crc32Slice16.hash(input);
 }
 
 pub fn crc32cHardwareX86(input: []const u8) u32 {
@@ -454,7 +511,7 @@ test "CRC implementations match Zig std catalog" {
     }
 }
 
-test "CRC-32 slice-by-4 and slice-by-8 match scalar" {
+test "CRC-32 slice-by-4 slice-by-8 and slice-by-16 match scalar" {
     const cases = [_][]const u8{
         "",
         "a",
@@ -465,13 +522,14 @@ test "CRC-32 slice-by-4 and slice-by-8 match scalar" {
     for (cases) |case| {
         try std.testing.expectEqual(crc32(case), crc32Slice4(case));
         try std.testing.expectEqual(crc32(case), crc32Slice8(case));
+        try std.testing.expectEqual(crc32(case), crc32Slice16(case));
     }
 }
 
 test "CRC-32 best dispatch matches scalar" {
     const input = "dispatch checksum" ** 31;
     try std.testing.expectEqual(crc32(input), crc32Best(input));
-    try std.testing.expectEqual(Crc32Dispatch.slice8, bestCrc32Dispatch());
+    try std.testing.expectEqual(Crc32Dispatch.slice16, bestCrc32Dispatch());
 }
 
 test "CPU feature report keeps IEEE CRC32 dispatch conservative" {

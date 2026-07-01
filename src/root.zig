@@ -19,6 +19,7 @@ pub const adler32 = checksum.adler32;
 pub const crc32 = checksum.crc32;
 pub const crc32Slice4 = checksum.crc32Slice4;
 pub const crc32Slice8 = checksum.crc32Slice8;
+pub const crc32Slice16 = checksum.crc32Slice16;
 pub const crc32Best = checksum.crc32Best;
 pub const checksumCpuFeatureReport = checksum.cpuFeatureReport;
 pub const crc32c = checksum.crc32c;

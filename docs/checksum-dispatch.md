@@ -7,8 +7,8 @@ computes CRC-32C/Castagnoli rather than the gzip/zlib IEEE polynomial.
 Current status:
 
 - Adler-32: scalar zlib-compatible path.
-- IEEE CRC-32: scalar, slice-by-4, and slice-by-8 portable paths; best dispatch
-  selects slice-by-8.
+- IEEE CRC-32: scalar, slice-by-4, slice-by-8, and slice-by-16 portable paths;
+  best dispatch selects slice-by-16.
 - CRC-32C: scalar, portable slice-by-8 fallback, and x86 SSE4.2 hardware path
   when available.
 
