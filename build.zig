@@ -373,6 +373,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_level_report = b.addRunArtifact(level_report_exe);
+    if (b.args) |args| run_level_report.addArgs(args);
     const level_report_step = b.step("run-level-report", "Report compression level parser and cost-model behavior");
     level_report_step.dependOn(&run_level_report.step);
 

@@ -4,6 +4,7 @@ const vort = @import("vort");
 const Case = struct {
     name: []const u8,
     input: []const u8,
+    owned: bool = false,
 };
 
 const LevelCase = struct {
@@ -11,12 +12,29 @@ const LevelCase = struct {
     level: vort.CompressionLevel,
 };
 
+const builtins = [_]Case{
+    .{ .name = "text", .input = "the quick brown fox jumps over the lazy dog\n" ** 64 },
+    .{ .name = "structured", .input = "abcabcabcabc xyz xyz xyz lorem ipsum lorem ipsum\n" ** 64 },
+    .{ .name = "repeated", .input = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ** 64 },
+};
+
 pub fn main(init: std.process.Init) !void {
-    const cases = [_]Case{
-        .{ .name = "text", .input = "the quick brown fox jumps over the lazy dog\n" ** 64 },
-        .{ .name = "structured", .input = "abcabcabcabc xyz xyz xyz lorem ipsum lorem ipsum\n" ** 64 },
-        .{ .name = "repeated", .input = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ** 64 },
-    };
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
+    defer args.deinit();
+    _ = args.next();
+
+    var file_cases: std.ArrayList(Case) = .empty;
+    defer {
+        for (file_cases.items) |case| if (case.owned) init.gpa.free(case.input);
+        file_cases.deinit(init.gpa);
+    }
+    while (args.next()) |path| {
+        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(64 * 1024 * 1024));
+        errdefer init.gpa.free(input);
+        try file_cases.append(init.gpa, .{ .name = path, .input = input, .owned = true });
+    }
+
+    const cases = if (file_cases.items.len == 0) builtins[0..] else file_cases.items;
     const levels = [_]LevelCase{
         .{ .name = "fastest", .level = .fastest },
         .{ .name = "fast", .level = .fast },

@@ -124,6 +124,7 @@ architecture blindly.
 - [x] Fast preset skips dynamic block candidate generation.
 - [x] Fastest preset with shallow hash-chain search for speed.
 - [x] Compression-level report validating parser/cost-model settings and round trips.
+- [x] Compression-level report accepts ad-hoc file corpora.
 - [x] Level-specific optimal parser match-candidate limits.
 - [x] Level-specific lazy parser gain thresholds.
 - [x] Level-specific minimum match length parser setting.
