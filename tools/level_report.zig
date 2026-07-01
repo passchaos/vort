@@ -48,6 +48,7 @@ pub fn main(init: std.process.Init) !void {
     };
     const strategies = [_]StrategyCase{
         .{ .name = "default", .strategy = .default },
+        .{ .name = "filtered", .strategy = .filtered },
         .{ .name = "huffman_only", .strategy = .huffman_only },
         .{ .name = "rle", .strategy = .rle },
     };
@@ -69,6 +70,7 @@ pub fn main(init: std.process.Init) !void {
                         .lazy => try vort.lazyGreedyLz77PlanAlloc(init.gpa, case.input, options.lz77_options),
                         .optimal => try vort.optimalLz77PlanAlloc(init.gpa, case.input, options.lz77_options),
                     },
+                    .filtered => try vort.filteredLz77PlanAlloc(init.gpa, case.input, options.lz77_options),
                     .huffman_only => try vort.literalLz77PlanAlloc(init.gpa, case.input),
                     .rle => try vort.runLengthLz77PlanAlloc(init.gpa, case.input, options.lz77_options),
                 };

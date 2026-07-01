@@ -133,7 +133,7 @@ architecture blindly.
 - [x] Fixed-Huffman bit-cost model for optimal LZ77 parser decisions.
 - [x] Optimal LZ77 parser evaluates multiple match-distance candidates.
 - [x] Fixed encoder parser strategy config selecting greedy/lazy/optimal prototypes.
-- [x] Compression strategy config selecting default, Huffman-only, and RLE plans.
+- [x] Compression strategy config selecting default, filtered, Huffman-only, and RLE plans.
 - [x] Compression level presets for fast/default/best strategy configs.
 - [x] Fast preset skips dynamic block candidate generation.
 - [x] Fastest preset with shallow hash-chain search for speed.

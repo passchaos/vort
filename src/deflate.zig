@@ -14,7 +14,7 @@ pub const DecodeResult = struct {
 };
 
 pub const ParserMode = enum { hash, greedy, lazy, optimal };
-pub const CompressionStrategy = enum { default, huffman_only, rle };
+pub const CompressionStrategy = enum { default, filtered, huffman_only, rle };
 
 pub const BlockSelection = enum { stored_fixed, stored_fixed_dynamic };
 
@@ -54,6 +54,7 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
             .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, options.lz77_options),
             .optimal => try lz77.optimalPlanAlloc(allocator, input, options.lz77_options),
         },
+        .filtered => try lz77.filteredPlanAlloc(allocator, input, options.lz77_options),
         .huffman_only => try lz77.literalPlanAlloc(allocator, input),
         .rle => try lz77.runLengthPlanAlloc(allocator, input, options.lz77_options),
     };
@@ -1742,13 +1743,19 @@ test "gzip header rejects reserved flags and bad method" {
 
 test "fixed encoder supports compression strategies" {
     const input = "aaaaaaaaaaaaaaaa" ++ "abcabcabc";
-    inline for (.{ CompressionStrategy.default, CompressionStrategy.huffman_only, CompressionStrategy.rle }) |strategy| {
+    inline for (.{ CompressionStrategy.default, CompressionStrategy.filtered, CompressionStrategy.huffman_only, CompressionStrategy.rle }) |strategy| {
         const encoded = try encodeRawBestAlloc(std.testing.allocator, input, .{ .strategy = strategy });
         defer std.testing.allocator.free(encoded);
         const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, input, decoded);
     }
+
+    const filtered_plan = try planTokensAlloc(std.testing.allocator, input, .{ .strategy = .filtered });
+    defer filtered_plan.deinit(std.testing.allocator);
+    const default_plan = try planTokensAlloc(std.testing.allocator, input, .{});
+    defer default_plan.deinit(std.testing.allocator);
+    try std.testing.expect(filtered_plan.stats.matches <= default_plan.stats.matches);
 
     const huffman_plan = try planTokensAlloc(std.testing.allocator, input, .{ .strategy = .huffman_only });
     defer huffman_plan.deinit(std.testing.allocator);

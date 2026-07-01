@@ -56,6 +56,14 @@ pub fn literalPlanAlloc(allocator: std.mem.Allocator, input: []const u8) !Greedy
     return .{ .tokens = tokens, .stats = .{ .literals = input.len } };
 }
 
+pub fn filteredPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    var filtered = options;
+    filtered.min_match = @max(filtered.min_match, 5);
+    filtered.min_savings_bits = @max(filtered.min_savings_bits, 8);
+    filtered.max_candidates = @min(filtered.max_candidates, 2);
+    return lazyGreedyPlanAlloc(allocator, input, filtered);
+}
+
 pub fn runLengthPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
     var tokens: std.ArrayList(Token) = .empty;
     errdefer tokens.deinit(allocator);
@@ -449,6 +457,18 @@ test "literal-only LZ77 planner emits no matches" {
     try std.testing.expectEqual(input.len, plan.stats.literals);
     try std.testing.expectEqual(@as(usize, 0), plan.stats.matches);
     const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
+test "filtered LZ77 planner suppresses short low-value matches" {
+    const input = "abcabc abcabc abcabc";
+    const normal = try lazyGreedyPlanAlloc(std.testing.allocator, input, .{});
+    defer normal.deinit(std.testing.allocator);
+    const filtered = try filteredPlanAlloc(std.testing.allocator, input, .{});
+    defer filtered.deinit(std.testing.allocator);
+    try std.testing.expect(filtered.stats.matches <= normal.stats.matches);
+    const replayed = try replayAlloc(std.testing.allocator, filtered.tokens);
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
 }
