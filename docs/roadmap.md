@@ -155,6 +155,7 @@ architecture blindly.
 - [x] Dictionary training coverage and baseline ratio validation report.
 - [x] Dictionary match scanner and coverage summary API for future encoder integration.
 - [x] Dictionary patch codec prototype with round-trip validation and ratio report.
+- [x] Compact dictionary patch op encoding for lower frame overhead.
 - [x] Native dictionary-patch frame prototype requiring caller dictionary on decode.
 - [x] Dictionary-aware native best-frame selection with fallback to non-dictionary modes.
 - [x] Dictionary-aware blocked native stream with indexed range decode.

@@ -167,8 +167,8 @@ pub fn encodePatchAlloc(allocator: std.mem.Allocator, dict: []const u8, sample: 
         const best = findBestDictionaryMatch(dict, sample[i..], min_match_len);
         if (best.length >= min_match_len) {
             try out.append(allocator, op_match);
-            try appendInt(u32, allocator, &out, @intCast(best.offset));
-            try appendInt(u32, allocator, &out, @intCast(best.length));
+            try appendInt(u16, allocator, &out, @intCast(best.offset));
+            try appendInt(u16, allocator, &out, @intCast(best.length));
             i += best.length;
         } else {
             const literal_start = i;
@@ -178,7 +178,8 @@ pub fn encodePatchAlloc(allocator: std.mem.Allocator, dict: []const u8, sample: 
                 if (next.length >= min_match_len) break;
             }
             try out.append(allocator, op_literal);
-            try appendInt(u32, allocator, &out, @intCast(i - literal_start));
+            if (i - literal_start > std.math.maxInt(u16)) return error.InvalidDictionaryTraining;
+            try appendInt(u16, allocator, &out, @intCast(i - literal_start));
             try out.appendSlice(allocator, sample[literal_start..i]);
         }
     }
@@ -202,18 +203,18 @@ pub fn decodePatchAlloc(allocator: std.mem.Allocator, dict: []const u8, patch: [
         offset += 1;
         switch (tag) {
             op_literal => {
-                if (patch.len - offset < 4) return error.TruncatedFrame;
-                const len: usize = std.mem.readInt(u32, patch[offset..][0..4], .little);
-                offset += 4;
+                if (patch.len - offset < 2) return error.TruncatedFrame;
+                const len: usize = std.mem.readInt(u16, patch[offset..][0..2], .little);
+                offset += 2;
                 if (patch.len - offset < len) return error.TruncatedFrame;
                 try out.appendSlice(allocator, patch[offset..][0..len]);
                 offset += len;
             },
             op_match => {
-                if (patch.len - offset < 8) return error.TruncatedFrame;
-                const dict_offset: usize = std.mem.readInt(u32, patch[offset..][0..4], .little);
-                const len: usize = std.mem.readInt(u32, patch[offset + 4 ..][0..4], .little);
-                offset += 8;
+                if (patch.len - offset < 4) return error.TruncatedFrame;
+                const dict_offset: usize = std.mem.readInt(u16, patch[offset..][0..2], .little);
+                const len: usize = std.mem.readInt(u16, patch[offset + 2 ..][0..2], .little);
+                offset += 4;
                 if (len < min_match_len) return error.CorruptFrame;
                 if (dict_offset > dict.len or dict.len - dict_offset < len) return error.TruncatedFrame;
                 try out.appendSlice(allocator, dict[dict_offset..][0..len]);
@@ -314,4 +315,15 @@ test "dictionary patch codec round trips matched and literal bytes" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, sample, decoded);
     try std.testing.expect(patch.len < sample.len + patch_header_len + 16);
+}
+
+test "dictionary patch uses compact match op encoding" {
+    const dict = "alpha beta gamma";
+    const sample = "alpha beta";
+    const patch = try encodePatchAlloc(std.testing.allocator, dict, sample, 5);
+    defer std.testing.allocator.free(patch);
+    try std.testing.expectEqual(@as(usize, patch_header_len + 1 + 2 + 2), patch.len);
+    const decoded = try decodePatchAlloc(std.testing.allocator, dict, patch);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, sample, decoded);
 }
