@@ -8,6 +8,7 @@ pub fn main(init: std.process.Init) !void {
 
     var markdown_path: ?[]const u8 = null;
     var json_path: ?[]const u8 = null;
+    var case_limit: ?usize = null;
     var pairs: std.ArrayList(Pair) = .empty;
     defer {
         for (pairs.items) |pair| pair.deinit(init.gpa);
@@ -20,6 +21,10 @@ pub fn main(init: std.process.Init) !void {
         }
         if (std.mem.eql(u8, arg, "--json")) {
             json_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--limit")) {
+            case_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
             continue;
         }
         if (std.mem.eql(u8, arg, "--dir")) {
@@ -38,7 +43,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("stream,sidecar,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
-    for (pairs.items) |pair| {
+    for (pairs.items, 0..) |pair, i| {
+        if (case_limit) |limit| if (i >= limit) break;
         const row = try verifyPair(init, pair.stream, pair.sidecar);
         try rows.append(init.gpa, row);
         try printCsvRow(stdout, row);

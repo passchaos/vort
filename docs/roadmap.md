@@ -226,6 +226,7 @@ architecture blindly.
 - [x] Sidecar verifier report discovers .vort/.vidx pairs in directories.
 - [x] Markdown sidecar verifier report with aggregate totals.
 - [x] JSON sidecar verifier report with aggregate totals.
+- [x] Sidecar verifier report supports row limits for directory smoke runs.
 - [x] Native range report covers self-contained dictionary streams.
 - [x] Native range report covers sidecar-indexed self-contained dictionary streams.
 - [x] CLI/range report coverage for blocked native LDM selection.
