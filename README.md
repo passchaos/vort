@@ -34,6 +34,7 @@ zig build run -- vort-blocked-range-demo
 zig build run -- vort-blocked-best-range-demo
 zig build run -- vort-dict-blocked-range-demo
 zig build run -- vort-self-dict-range-demo
+zig build run -- vort-trained-dict-range-demo
 zig build run -- vort-ldm-summary-demo
 zig build run -- vort-ldm-blocked-range-demo
 zig build run -- vort-ldm-indexed-range-demo

@@ -206,6 +206,15 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(dict);
         const modes = try vort.storeSummarizeModes(stream);
         try stdout.print("range={s} self_dict_stream_bytes={d} dict_bytes={d} modes={d}/{d}/{d}/{d}\n", .{ range, stream.len, dict.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch + modes.dictionary_deflate });
+    } else if (std.mem.eql(u8, command, "vort-trained-dict-range-demo")) {
+        const phrase = "self-contained dictionary phrase for native streams";
+        const input = (phrase ++ "!") ** 4;
+        const stream = try vort.storeEncodeBestTrainedDictionaryStreamAlloc(init.gpa, input, phrase.len + 1, 256, 8);
+        defer init.gpa.free(stream);
+        const range = try vort.storeDecodeIndexedRangeAutoAlloc(init.gpa, stream, 7, 64);
+        defer init.gpa.free(range);
+        const modes = try vort.storeSummarizeModes(stream);
+        try stdout.print("range={s} trained_dict_stream_bytes={d} modes={d}/{d}/{d}/{d}\n", .{ range, stream.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch + modes.dictionary_deflate });
     } else if (std.mem.eql(u8, command, "vort-ldm-summary-demo")) {
         const prefix = "abcd" ** 9000;
         const input = prefix ++ "----" ++ prefix[0..64].*;
