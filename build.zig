@@ -144,6 +144,7 @@ pub fn build(b: *std.Build) void {
     const native_parallel_full_dashboard = b.addSystemCommand(&.{ "python3", "tools/native_parallel_corpus_report.py" });
     native_parallel_full_dashboard.addArtifactArg(native_parallel_bench_exe);
     native_parallel_full_dashboard.addArgs(&.{ "--full", "--markdown", "zig-out/vort-native-parallel-full-dashboard.md" });
+    if (b.args) |args| native_parallel_full_dashboard.addArgs(args);
     const native_parallel_full_dashboard_step = b.step("run-native-parallel-full-dashboard", "Write full native parallel Silesia benchmark dashboard to zig-out");
     native_parallel_full_dashboard_step.dependOn(&native_parallel_full_dashboard.step);
 

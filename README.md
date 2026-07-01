@@ -97,6 +97,7 @@ zig build -Doptimize=ReleaseFast run-native-parallel-corpus-report
 zig build -Doptimize=ReleaseFast run-native-parallel-dashboard
 zig build -Doptimize=ReleaseFast run-native-parallel-dashboard -- --paths README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-native-parallel-full-dashboard
+zig build -Doptimize=ReleaseFast run-native-parallel-full-dashboard -- --paths README.md docs/roadmap.md
 ```
 
 ## Current API sketch
