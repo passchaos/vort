@@ -201,6 +201,7 @@ architecture blindly.
 - [x] CLI smoke for indexed native LDM range decode and mode summary.
 - [x] Native range report accepts ad-hoc file corpora.
 - [x] Native range report accepts configurable range offset/length.
+- [x] Native range report can sweep multiple offsets per stream.
 - [x] Native range report covers self-contained dictionary streams.
 - [x] CLI/range report coverage for blocked native LDM selection.
 - [x] Blocked native deflate stream with embedded index and range decode.
