@@ -27,4 +27,5 @@ Required gates before enabling an architecture-specific IEEE path:
 2. Unit tests comparing scalar, portable fast, and architecture-specific output
    over empty, tiny, aligned, unaligned, and multi-KiB buffers.
 3. `run-checksum-diff` and `run-checksum-zlib-diff` must both pass.
-4. `run-cpu-features` must report the selected IEEE path explicitly.
+4. `run-cpu-features` must report the selected IEEE path explicitly; portable
+   builds currently report `portable-ieee-slice16`.
