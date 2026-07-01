@@ -33,9 +33,11 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("checksum smoke: bytes={d} iterations={d} streams=10 elapsed_s={d:.6} throughput_mib_s={d:.2} mix={d}\n", .{
+    try stdout.print("checksum smoke: bytes={d} iterations={d} streams=10 crc32_dispatch={s} crc32c_dispatch={s} elapsed_s={d:.6} throughput_mib_s={d:.2} mix={d}\n", .{
         len,
         iterations,
+        @tagName(vort.checksum.bestCrc32Dispatch()),
+        @tagName(vort.checksum.bestCrc32CDispatch()),
         elapsed_s,
         total_mib / elapsed_s,
         mix,
