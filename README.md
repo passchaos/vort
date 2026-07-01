@@ -131,6 +131,7 @@ zig build -Doptimize=ReleaseFast run-native-parallel-full-dashboard
 zig build -Doptimize=ReleaseFast run-native-parallel-full-dashboard -- --workers 2 --paths README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-native-parallel-multi-corpus-dashboard -- --limit 3
 zig build -Doptimize=ReleaseFast run-native-parallel-multi-corpus-full-dashboard
+zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard
 zig build -Doptimize=ReleaseFast run-native-parallel-multi-corpus-full-dashboard -- --workers 2 --paths README.md docs/roadmap.md
 ```
 

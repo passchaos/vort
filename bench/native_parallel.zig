@@ -20,6 +20,7 @@ pub fn main(init: std.process.Init) !void {
     };
     const block_len: usize = if (args.next()) |value| try std.fmt.parseInt(usize, value, 10) else 97;
     const workers: usize = if (args.next()) |value| try std.fmt.parseInt(usize, value, 10) else 4;
+    const mode_filter = args.next();
     if (block_len == 0 or workers == 0) return error.InvalidBlockPlan;
 
     var stdout_buffer: [1024]u8 = undefined;
@@ -27,7 +28,9 @@ pub fn main(init: std.process.Init) !void {
     const stdout = &stdout_writer.interface;
     try stdout.print("label,mode,workers,input_bytes,stream_bytes,elapsed_ms,range_offset,range_len,range_crc32\n", .{});
 
-    inline for (.{ Mode.planned, Mode.parallel, Mode.thread_pool, Mode.work_queue }) |mode| {
+    const modes = [_]Mode{ .planned, .parallel, .thread_pool, .work_queue };
+    for (modes) |mode| {
+        if (!modeSelected(mode, mode_filter)) continue;
         const start = std.Io.Clock.awake.now(init.io);
         const stream = switch (mode) {
             .planned => try vort.storeEncodePlannedDeflateStreamAlloc(init.gpa, input, block_len, workers),
@@ -46,4 +49,13 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("{s},{s},{d},{d},{d},{d:.3},{d},{d},{d}\n", .{ label, @tagName(mode), workers, input.len, stream.len, elapsed_ms, range_offset, range_len, vort.crc32(range) });
     }
     try stdout.flush();
+}
+
+fn modeSelected(mode: Mode, filter: ?[]const u8) bool {
+    const value = filter orelse return true;
+    var parts = std.mem.splitScalar(u8, value, ',');
+    while (parts.next()) |part| {
+        if (std.mem.eql(u8, part, @tagName(mode))) return true;
+    }
+    return false;
 }

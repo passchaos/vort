@@ -272,4 +272,4 @@ architecture blindly.
 - [x] Native parallel/thread-pool/work-queue dashboard per-mode throughput summaries.
 - [x] Native parallel/thread-pool/work-queue dashboard worker-count sweeps.
 - [x] Native parallel/thread-pool/work-queue dashboard configurable block length.
-- [ ] Production thread-pool encoder benchmarking across full standard real corpora.
+- [x] Production thread-pool encoder benchmarking across full standard real corpora.

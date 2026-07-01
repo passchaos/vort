@@ -85,7 +85,7 @@ def row_to_dict(row: str) -> dict[str, str]:
     return dict(zip(COLS, row.split(",")))
 
 
-def write_markdown(rows: list[str], path: pathlib.Path, full: bool, external_paths: bool = False, sources: list[pathlib.Path] | None = None, block_len: str = "", workers: list[str] | None = None) -> None:
+def write_markdown(rows: list[str], path: pathlib.Path, full: bool, external_paths: bool = False, sources: list[pathlib.Path] | None = None, block_len: str = "", workers: list[str] | None = None, modes: list[str] | None = None) -> None:
     records = [row_to_dict(row) for row in rows]
     lines = [
         "# Native parallel external corpus benchmark" if external_paths else "# Native parallel Silesia benchmark",
@@ -95,6 +95,7 @@ def write_markdown(rows: list[str], path: pathlib.Path, full: bool, external_pat
         f"- sources: `{format_paths(sources or [])}`",
         f"- block length: `{block_len}`",
         f"- workers: `{', '.join(workers or [])}`",
+        f"- modes: `{', '.join(modes or [])}`",
         "",
         "## Summary by mode",
         "",
@@ -150,6 +151,7 @@ def main() -> int:
     workers = "4"
     block_len_override: str | None = None
     worker_values: list[str] = []
+    mode_values: list[str] = []
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
             markdown_path = pathlib.Path(sys.argv[index + 1])
@@ -161,6 +163,8 @@ def main() -> int:
             block_len_override = sys.argv[index + 1]
         if arg == "--worker-sweep" and index + 1 < len(sys.argv):
             worker_values = [value for value in sys.argv[index + 1].split(",") if value]
+        if arg == "--modes" and index + 1 < len(sys.argv):
+            mode_values = [value for value in sys.argv[index + 1].split(",") if value]
         if arg == "--paths":
             for value in sys.argv[index + 1 :]:
                 if value.startswith("--"):
@@ -188,6 +192,9 @@ def main() -> int:
     rows: list[str] = []
     if not worker_values:
         worker_values = [workers]
+    if not mode_values:
+        mode_values = ["planned", "parallel", "thread_pool", "work_queue"]
+    mode_filter = set(mode_values)
     print(HEADER)
     with tempfile.TemporaryDirectory() as td:
         root = pathlib.Path(td)
@@ -195,14 +202,16 @@ def main() -> int:
             sample = root / f"case-{index:03d}.bin"
             sample.write_bytes(data)
             for worker_count in worker_values:
-                out = subprocess.run([str(EXE), str(sample), block_len, worker_count], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip().splitlines()
+                out = subprocess.run([str(EXE), str(sample), block_len, worker_count, ",".join(mode_values)], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip().splitlines()
                 for line in out[1:]:
-                    fields = line.split(",", 1)
-                    row = f"{label},{fields[1]}"
+                    fields = line.split(",")
+                    if len(fields) < 2 or fields[1] not in mode_filter:
+                        continue
+                    row = f"{label},{','.join(fields[1:])}"
                     rows.append(row)
                     print(row)
     if markdown_path is not None:
-        write_markdown(rows, markdown_path, full, len(corpus_paths) != 0 or standard_suite, source_paths, block_len, worker_values)
+        write_markdown(rows, markdown_path, full, len(corpus_paths) != 0 or standard_suite, source_paths, block_len, worker_values, mode_values)
     return 0
 
 

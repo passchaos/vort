@@ -162,6 +162,13 @@ pub fn build(b: *std.Build) void {
     const native_parallel_multi_full_dashboard_step = b.step("run-native-parallel-multi-corpus-full-dashboard", "Discover standard corpora and write full native parallel benchmark dashboard to zig-out");
     native_parallel_multi_full_dashboard_step.dependOn(&native_parallel_multi_full_dashboard.step);
 
+    const native_thread_pool_full_dashboard = b.addSystemCommand(&.{ "python3", "tools/native_parallel_corpus_report.py" });
+    native_thread_pool_full_dashboard.addArtifactArg(native_parallel_bench_exe);
+    native_thread_pool_full_dashboard.addArgs(&.{ "--standard-suite", "--full", "--modes", "thread_pool", "--markdown", "zig-out/vort-native-thread-pool-full-dashboard.md" });
+    if (b.args) |args| native_thread_pool_full_dashboard.addArgs(args);
+    const native_thread_pool_full_dashboard_step = b.step("run-native-thread-pool-full-dashboard", "Write full standard-corpus native thread-pool benchmark dashboard to zig-out");
+    native_thread_pool_full_dashboard_step.dependOn(&native_thread_pool_full_dashboard.step);
+
     const fuzz_smoke_exe = b.addExecutable(.{
         .name = "vort-fuzz-smoke",
         .root_module = b.createModule(.{
