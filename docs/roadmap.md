@@ -113,6 +113,7 @@ architecture blindly.
 - [x] Fixed-Huffman bit-cost selector for stored-vs-fixed block decisions.
 - [x] Dynamic-Huffman bit-cost selector avoiding materialized dynamic candidates for block decisions.
 - [x] Dynamic HCLEN trimming helper with boundary tests.
+- [x] Dynamic HLIT/HDIST trimming helpers with boundary tests.
 - [x] Adaptive split search using stored/fixed/dynamic bit-cost candidates.
 - [x] Level-specific adaptive split policy config and report coverage.
 - [x] Adaptive split policy size-delta report across built-in corpora.

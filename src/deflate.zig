@@ -395,8 +395,8 @@ fn dynamicTokenBitCostAlloc(allocator: std.mem.Allocator, tokens: []const lz77.T
 
     var lit_lengths_full = huffman.treeCodeLengths(286, &lit_freqs, 15);
     var dist_lengths_full = huffman.treeCodeLengths(30, &dist_freqs, 15);
-    const hlit: usize = trimCodeLengthCount(286, 257, &lit_lengths_full);
-    const hdist: usize = trimCodeLengthCount(30, 1, &dist_lengths_full);
+    const hlit = trimmedLiteralCodeCount(&lit_lengths_full);
+    const hdist = trimmedDistanceCodeCount(&dist_lengths_full);
 
     const code_len_ops = try buildCodeLengthOpsAlloc(allocator, lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
     defer allocator.free(code_len_ops);
@@ -442,8 +442,8 @@ fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter
 
     var lit_lengths_full = huffman.treeCodeLengths(286, &lit_freqs, 15);
     var dist_lengths_full = huffman.treeCodeLengths(30, &dist_freqs, 15);
-    const hlit: usize = trimCodeLengthCount(286, 257, &lit_lengths_full);
-    const hdist: usize = trimCodeLengthCount(30, 1, &dist_lengths_full);
+    const hlit = trimmedLiteralCodeCount(&lit_lengths_full);
+    const hdist = trimmedDistanceCodeCount(&dist_lengths_full);
 
     const code_len_ops = try buildCodeLengthOpsAlloc(allocator, lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
     defer allocator.free(code_len_ops);
@@ -509,6 +509,14 @@ fn trimmedCodeLengthAlphabetCount(lengths: *const [19]u4) usize {
         if (lengths[symbol] != 0) hclen = @max(hclen, i + 1);
     }
     return hclen;
+}
+
+fn trimmedLiteralCodeCount(lengths: *[286]u4) usize {
+    return trimCodeLengthCount(286, 257, lengths);
+}
+
+fn trimmedDistanceCodeCount(lengths: *[30]u4) usize {
+    return trimCodeLengthCount(30, 1, lengths);
 }
 
 fn trimCodeLengthCount(comptime n: usize, minimum: usize, lengths: *[n]u4) usize {
@@ -1997,6 +2005,18 @@ test "dynamic HCLEN trimming keeps required code-length alphabet" {
     try std.testing.expectEqual(@as(usize, 4), trimmedCodeLengthAlphabetCount(&lengths));
     lengths[huffman.code_length_order[10]] = 1;
     try std.testing.expectEqual(@as(usize, 11), trimmedCodeLengthAlphabetCount(&lengths));
+}
+
+test "dynamic HLIT and HDIST trimming keep required minimums" {
+    var lit_lengths: [286]u4 = @splat(0);
+    var dist_lengths: [30]u4 = @splat(0);
+    try std.testing.expectEqual(@as(usize, 257), trimmedLiteralCodeCount(&lit_lengths));
+    try std.testing.expectEqual(@as(usize, 1), trimmedDistanceCodeCount(&dist_lengths));
+
+    lit_lengths[285] = 1;
+    dist_lengths[29] = 1;
+    try std.testing.expectEqual(@as(usize, 286), trimmedLiteralCodeCount(&lit_lengths));
+    try std.testing.expectEqual(@as(usize, 30), trimmedDistanceCodeCount(&dist_lengths));
 }
 
 test "split raw best encoder can emit stored block after compressed block" {
