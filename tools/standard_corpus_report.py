@@ -244,7 +244,7 @@ def summarize_codecs(records: list[dict[str, str]]) -> list[dict[str, object]]:
     return summaries
 
 
-def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool, external_paths: bool = False, sources: list[pathlib.Path] | None = None) -> None:
+def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool, external_paths: bool = False, sources: list[pathlib.Path] | None = None, case_limit: int | None = None) -> None:
     records = [row_to_dict(row) for row in rows]
     title = "External corpus benchmark suite" if external_paths else ("Silesia per-file benchmark suite" if suite else "Silesia benchmark smoke")
     mode = "full" if full else "bounded-128KiB"
@@ -258,6 +258,7 @@ def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool,
         f"- zlib-ng minigzip: `{ZLIB_NG_MINIGZIP if ZLIB_NG_MINIGZIP.exists() else 'missing'}`",
         f"- zlib-rs compress: `{ZLIB_RS_COMPRESS if ZLIB_RS_COMPRESS.exists() else 'missing'}`",
         f"- sources: `{format_paths(sources or [])}`",
+        f"- limit: `{case_limit if case_limit is not None else 'none'}`",
         "",
         "## Summary by codec",
         "",
@@ -328,7 +329,7 @@ def main() -> int:
             rows.append(row)
             print(row)
     if markdown_path is not None:
-        write_markdown(rows, markdown_path, suite or standard_suite, full, len(corpus_paths) != 0 or standard_suite, source_paths)
+        write_markdown(rows, markdown_path, suite or standard_suite, full, len(corpus_paths) != 0 or standard_suite, source_paths, case_limit)
     return 0
 
 
