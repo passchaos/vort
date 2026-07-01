@@ -38,6 +38,7 @@ zig build run -- vort-self-dict-range-demo
 zig build run -- vort-trained-dict-range-demo
 zig build run -- vort-ldm-summary-demo
 zig build run -- vort-ldm-blocked-range-demo
+zig build run -- vort-sidecar-ldm-range-demo
 zig build run -- vort-ldm-indexed-range-demo
 zig build run -- store-range-demo
 zig build run -- store-sidecar-range-demo

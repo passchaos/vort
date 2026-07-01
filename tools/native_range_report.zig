@@ -86,6 +86,10 @@ pub fn main(init: std.process.Init) !void {
     const ldm_blocked_stream = try vort.storeEncodeBlockedBestStreamWithLdmAlloc(init.gpa, ldm_input, ldm_input.len, .{}, .{ .min_distance = 32769, .min_length = 16 });
     defer init.gpa.free(ldm_blocked_stream);
     if (sweep) try reportSweep(init, stdout, "ldm-blocked-best", ldm_input, ldm_blocked_stream, null) else try reportCase(init, stdout, "ldm-blocked-best", ldm_input, ldm_blocked_stream, null, range_options);
+
+    const ldm_sidecar = try vort.storeEncodeSidecarBlockedBestStreamWithLdmAlloc(init.gpa, ldm_input, ldm_input.len, .{}, .{ .min_distance = 32769, .min_length = 16 });
+    defer ldm_sidecar.deinit(init.gpa);
+    if (sweep) try reportSidecarSweep(init, stdout, "ldm-sidecar", ldm_input, ldm_sidecar.stream, ldm_sidecar.sidecar_index) else try reportSidecarCase(init, stdout, "ldm-sidecar", ldm_input, ldm_sidecar.stream, ldm_sidecar.sidecar_index, range_options);
     try stdout.flush();
 }
 
