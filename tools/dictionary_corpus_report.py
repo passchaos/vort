@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import pathlib
+import re
 import subprocess
 import sys
 import tarfile
@@ -9,6 +10,17 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 EXE = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 and pathlib.Path(sys.argv[1]).exists() else ROOT / "zig-out" / "bin" / "vort-dictionary-report"
 SILESIA = pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"
 SMOKE_LIMIT = 32 * 1024
+FIELDS = [
+    "sample_bytes",
+    "patch_deflate_bytes",
+    "patch_deflate_ratio",
+    "best_with_dict_bytes",
+    "best_with_dict_ratio",
+    "best_with_dict_patches",
+    "best_with_dict_deflates",
+    "baseline_deflate_bytes",
+    "baseline_ratio",
+]
 
 
 def load_cases(full: bool) -> list[tuple[str, bytes]]:
@@ -37,6 +49,10 @@ def main() -> int:
     full = "--full" in sys.argv[1:]
     all_cases = "--all" in sys.argv[1:]
     per_file = "--per-file" in sys.argv[1:]
+    markdown_path = None
+    for index, arg in enumerate(sys.argv):
+        if arg == "--markdown" and index + 1 < len(sys.argv):
+            markdown_path = pathlib.Path(sys.argv[index + 1])
     cases = load_cases(full)
     if not all_cases:
         cases = cases[:3]
@@ -51,13 +67,44 @@ def main() -> int:
             sample.write_bytes(data)
             paths.append(str(sample))
         if per_file:
+            rows = []
             print("case,report")
             for label, path in zip((label for label, _ in cases), paths):
                 report = subprocess.run([str(EXE), path], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
+                rows.append((label, parse_report(report)))
                 print(f"{label},{report}")
+            if markdown_path is not None:
+                write_markdown(rows, markdown_path, full)
         else:
             print(subprocess.run([str(EXE), *paths], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip())
     return 0
+
+
+def parse_report(report: str) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for field in FIELDS:
+        match = re.search(rf"{field}=([^ ]+)", report)
+        parsed[field] = match.group(1) if match else ""
+    return parsed
+
+
+def write_markdown(rows: list[tuple[str, dict[str, str]]], path: pathlib.Path, full: bool) -> None:
+    lines = [
+        "# Dictionary corpus report",
+        "",
+        f"- mode: `{'full' if full else 'bounded-32KiB'}`",
+        f"- rows: {len(rows)}",
+        "",
+        "| corpus | sample bytes | patch deflate bytes | patch deflate ratio | best+dict bytes | best+dict ratio | dict frames | baseline bytes | baseline ratio |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for label, row in rows:
+        dict_frames = int(row.get("best_with_dict_patches") or 0) + int(row.get("best_with_dict_deflates") or 0)
+        lines.append(
+            f"| {label} | {row['sample_bytes']} | {row['patch_deflate_bytes']} | {row['patch_deflate_ratio']} | {row['best_with_dict_bytes']} | {row['best_with_dict_ratio']} | {dict_frames} | {row['baseline_deflate_bytes']} | {row['baseline_ratio']} |"
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
 
 
 if __name__ == "__main__":

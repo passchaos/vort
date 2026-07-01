@@ -76,6 +76,7 @@ zig build run-dictionary-report
 zig build run-dictionary-report -- README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-report
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-report -- --per-file
+zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard
 zig build run-level-report
 zig build run-split-policy-report
 zig build run-split-policy-report -- README.md docs/roadmap.md

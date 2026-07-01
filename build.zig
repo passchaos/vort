@@ -355,6 +355,12 @@ pub fn build(b: *std.Build) void {
     const dictionary_corpus_report_step = b.step("run-dictionary-corpus-report", "Report dictionary training over bounded Silesia files");
     dictionary_corpus_report_step.dependOn(&dictionary_corpus_report.step);
 
+    const dictionary_corpus_dashboard = b.addSystemCommand(&.{ "python3", "tools/dictionary_corpus_report.py" });
+    dictionary_corpus_dashboard.addArtifactArg(dictionary_report_exe);
+    dictionary_corpus_dashboard.addArgs(&.{ "--per-file", "--markdown", "zig-out/vort-dictionary-corpus-dashboard.md" });
+    const dictionary_corpus_dashboard_step = b.step("run-dictionary-corpus-dashboard", "Write dictionary corpus Markdown dashboard to zig-out");
+    dictionary_corpus_dashboard_step.dependOn(&dictionary_corpus_dashboard.step);
+
     const level_report_exe = b.addExecutable(.{
         .name = "vort-level-report",
         .root_module = b.createModule(.{
