@@ -267,6 +267,18 @@ pub fn main(init: std.process.Init) !void {
         const range = try vort.storeDecodeSidecarIndexedRangeAlloc(init.gpa, stream.items, sidecar, 3, 5);
         defer init.gpa.free(range);
         try stdout.print("range={s} stream_bytes={d} sidecar_bytes={d}\n", .{ range, stream.items.len, sidecar.len });
+    } else if (std.mem.eql(u8, command, "store-sidecar-dict-range-demo")) {
+        const phrase = "self-contained dictionary phrase for native streams";
+        const input = (phrase ++ "!") ** 3;
+        const stream = try vort.storeEncodeSelfContainedDictionaryStreamAlloc(init.gpa, input, phrase.len + 1, 256, 8);
+        defer init.gpa.free(stream);
+        const embedded = try vort.store.parseEmbeddedIndexAlloc(init.gpa, stream);
+        defer embedded.deinit(init.gpa);
+        const sidecar = try vort.storeEncodeFrameIndexAlloc(init.gpa, embedded.entries);
+        defer init.gpa.free(sidecar);
+        const range = try vort.storeDecodeSidecarIndexedRangeAutoAlloc(init.gpa, stream, sidecar, 7, 64);
+        defer init.gpa.free(range);
+        try stdout.print("range={s} stream_bytes={d} sidecar_bytes={d}\n", .{ range, stream.len, sidecar.len });
     } else if (std.mem.eql(u8, command, "encode-raw-fixed-split-hex")) {
         const payload = args.next() orelse "";
         const encoded = try vort.encodeRawFixedSplitAlloc(init.gpa, payload, 7, vort.optionsForCompressionLevel(.fast));
