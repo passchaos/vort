@@ -3,8 +3,8 @@
 Vort includes a dynamic Huffman encoder for raw, zlib, and gzip wrappers. It can emit LZ77 match tokens and is verified by Python zlib through `zig build run-python-zlib-diff`.
 
 The current dynamic encoder uses conservative frequency completion, a
-frequency-weighted tree length builder, and RFC1951 code-length RLE symbols
-16/17/18. It also has raw/zlib/gzip split-best encoders that plan each bounded
+frequency-weighted tree length builders for both literal/distance and
+code-length alphabets, and RFC1951 code-length RLE symbols 16/17/18. It also has raw/zlib/gzip split-best encoders that plan each bounded
 block independently and choose stored, fixed, or dynamic emission per block.
 Stored/fixed/dynamic choices use bit-cost models for stored, fixed-Huffman, and
 dynamic-Huffman candidates, avoiding candidate materialization just to compare

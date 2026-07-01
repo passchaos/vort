@@ -378,7 +378,7 @@ fn dynamicTokenBitCostAlloc(allocator: std.mem.Allocator, tokens: []const lz77.T
     var code_len_freqs: [19]u32 = @splat(0);
     for (code_len_ops) |op| code_len_freqs[op.symbol] += 1;
     completeCodeLengthFrequencySet(&code_len_freqs);
-    const code_len_lengths = huffman.simpleCodeLengths(19, &code_len_freqs, 7);
+    const code_len_lengths = huffman.treeCodeLengths(19, &code_len_freqs, 7);
     var hclen: usize = 4;
     for (huffman.code_length_order, 0..) |symbol, i| {
         if (code_len_lengths[symbol] != 0) hclen = @max(hclen, i + 1);
@@ -428,7 +428,7 @@ fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter
     var code_len_freqs: [19]u32 = @splat(0);
     for (code_len_ops) |op| code_len_freqs[op.symbol] += 1;
     completeCodeLengthFrequencySet(&code_len_freqs);
-    var code_len_lengths = huffman.simpleCodeLengths(19, &code_len_freqs, 7);
+    var code_len_lengths = huffman.treeCodeLengths(19, &code_len_freqs, 7);
     var hclen: usize = 4;
     for (huffman.code_length_order, 0..) |symbol, i| {
         if (code_len_lengths[symbol] != 0) hclen = @max(hclen, i + 1);
@@ -1918,6 +1918,18 @@ test "dynamic bit cost model predicts dynamic token byte length" {
     const dynamic = try encodeRawDynamicTokensFinalAlloc(std.testing.allocator, plan.tokens, true);
     defer std.testing.allocator.free(dynamic);
     try std.testing.expectEqual((try dynamicTokenBitCostAlloc(std.testing.allocator, plan.tokens) + 7) / 8, dynamic.len);
+}
+
+test "dynamic code-length alphabet uses weighted tree lengths" {
+    var freqs: [19]u32 = @splat(0);
+    freqs[0] = 80;
+    freqs[16] = 20;
+    freqs[17] = 10;
+    freqs[18] = 5;
+    completeCodeLengthFrequencySet(&freqs);
+    const lengths = huffman.treeCodeLengths(19, &freqs, 7);
+    try std.testing.expect(lengths[0] <= lengths[18]);
+    try std.testing.expect(lengths[16] <= lengths[18]);
 }
 
 test "split raw best encoder can emit stored block after compressed block" {
