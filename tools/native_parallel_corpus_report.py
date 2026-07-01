@@ -85,7 +85,7 @@ def row_to_dict(row: str) -> dict[str, str]:
     return dict(zip(COLS, row.split(",")))
 
 
-def write_markdown(rows: list[str], path: pathlib.Path, full: bool, external_paths: bool = False, sources: list[pathlib.Path] | None = None) -> None:
+def write_markdown(rows: list[str], path: pathlib.Path, full: bool, external_paths: bool = False, sources: list[pathlib.Path] | None = None, block_len: str = "", workers: list[str] | None = None) -> None:
     records = [row_to_dict(row) for row in rows]
     lines = [
         "# Native parallel external corpus benchmark" if external_paths else "# Native parallel Silesia benchmark",
@@ -93,6 +93,8 @@ def write_markdown(rows: list[str], path: pathlib.Path, full: bool, external_pat
         f"- mode: `{'full' if full else 'bounded-128KiB'}`",
         f"- rows: {len(records)}",
         f"- sources: `{format_paths(sources or [])}`",
+        f"- block length: `{block_len}`",
+        f"- workers: `{', '.join(workers or [])}`",
         "",
         "## Summary by mode",
         "",
@@ -200,7 +202,7 @@ def main() -> int:
                     rows.append(row)
                     print(row)
     if markdown_path is not None:
-        write_markdown(rows, markdown_path, full, len(corpus_paths) != 0 or standard_suite, source_paths)
+        write_markdown(rows, markdown_path, full, len(corpus_paths) != 0 or standard_suite, source_paths, block_len, worker_values)
     return 0
 
 
