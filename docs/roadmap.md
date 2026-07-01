@@ -83,6 +83,7 @@ architecture blindly.
 - [x] Match-heavy dynamic/split/adaptive differential vectors.
 - [x] Python zlib dynamic/adaptive match-heavy differential vectors.
 - [x] System gzip CLI dynamic/adaptive match-heavy differential vectors.
+- [x] zlib-family harness verifies Vort dynamic/adaptive outputs through zlib.
 - [x] Local external implementation/tool availability probe.
 - [x] Optional zlib-ng/zlib-rs differential harness with explicit skip reporting.
 - [x] Built zlib-ng minigzip differential test running in local validation.

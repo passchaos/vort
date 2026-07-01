@@ -62,6 +62,20 @@ def run_zlib_rs_corpus() -> tuple[int, int]:
     return (used, 0)
 
 
+def check_vort_dynamic_outputs() -> int:
+    payloads = [
+        b"match-heavy:" + (b"abcabcabcabc" * 96) + (b"xyzxyzxyz" * 48),
+        b"distance-heavy:" + (b"0123456789abcdef" * 512) + b"----" + (b"0123456789abcdef" * 64),
+    ]
+    for data in payloads:
+        text = data.decode("ascii")
+        zlib_frame = bytes.fromhex(subprocess.run([str(CLI), "encode-zlib-dynamic-hex", text, "default"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip())
+        assert zlib.decompress(zlib_frame) == data
+        gzip_frame = bytes.fromhex(subprocess.run([str(CLI), "encode-gzip-best-adaptive-hex", text, "best"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip())
+        assert zlib.decompress(gzip_frame, wbits=31) == data
+    return len(payloads)
+
+
 def main() -> int:
     payload = b"zlib family differential payload" * 4
     print("zlib family differential harness:")
@@ -87,13 +101,16 @@ def main() -> int:
                 assert zlib.decompress(gz, wbits=31) == payload
                 assert run_vort_decode_gzip(gz) == len(payload)
         print(f"- {name}: ok ({exe})")
+    dynamic_used = check_vort_dynamic_outputs()
+    print(f"- vort-dynamic-zlib-gzip-via-zlib: ok ({dynamic_used} payloads)")
+    used += 1
     corpus_used, _ = run_zlib_rs_corpus()
     if corpus_used:
         print(f"- zlib-rs-gzip-corpus: ok ({corpus_used} files)")
         used += 1
     else:
         print("- zlib-rs-gzip-corpus: skipped (corpus missing)")
-    print(f"zlib family differential summary: used={used} skipped={len(CANDIDATES)+1-used}")
+    print(f"zlib family differential summary: used={used} skipped={len(CANDIDATES)+2-used}")
     return 0
 
 

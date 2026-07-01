@@ -25,5 +25,5 @@ Remaining work for production dynamic encoding:
 - choose HLIT/HDIST/HCLEN trimming safely;
 - expand split-point search beyond bounded candidates and tune the current
   level-specific policies against standard corpora;
-- extend zlib-ng and zlib-rs differential vectors with more match-heavy dynamic
-  payloads.
+- extend zlib-ng and zlib-rs direct CLI/library differential vectors with more
+  match-heavy dynamic payloads.
