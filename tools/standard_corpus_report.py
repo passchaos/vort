@@ -15,6 +15,13 @@ ZSTD = shutil.which("zstd")
 ZLIB_NG_MINIGZIP = pathlib.Path.home() / "Work" / "zlib-ng" / "build" / "minigzip"
 ZLIB_RS_COMPRESS = pathlib.Path.home() / "Work" / "zlib-rs" / "target" / "debug" / "examples" / "compress"
 SILESIA = pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"
+STANDARD_CORPUS_CANDIDATES = [
+    SILESIA,
+    pathlib.Path.home() / "Work" / "corpora" / "calgary.tar",
+    pathlib.Path.home() / "Work" / "corpora" / "canterbury.tar",
+    pathlib.Path.home() / "Work" / "corpora" / "large-canterbury.tar",
+    pathlib.Path.home() / "Work" / "corpora" / "enwik8",
+]
 SMOKE_LIMIT = 128 * 1024
 HEADER = "corpus,input_bytes,vort_zlib_fastest_bytes,vort_ms,vort_decode_ms,gzip_bytes,gzip_ms,gzip_decode_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_ng_decode_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zlib_rs_decode_ms,zstd_bytes,zstd_ms,zstd_decode_ms"
 COLUMNS = HEADER.split(",")
@@ -142,6 +149,16 @@ def load_cases(full: bool, suite: bool) -> list[tuple[str, bytes]]:
     return [(label, data)]
 
 
+def discover_standard_corpora() -> list[pathlib.Path]:
+    found: list[pathlib.Path] = []
+    seen: set[pathlib.Path] = set()
+    for path in STANDARD_CORPUS_CANDIDATES:
+        if path.exists() and path not in seen:
+            found.append(path)
+            seen.add(path)
+    return found
+
+
 def load_path_cases(paths: list[pathlib.Path], full: bool) -> list[tuple[str, bytes]]:
     cases: list[tuple[str, bytes]] = []
     for path in paths:
@@ -264,6 +281,7 @@ def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool,
 def main() -> int:
     full = "--full" in sys.argv[1:]
     suite = "--suite" in sys.argv[1:]
+    standard_suite = "--standard-suite" in sys.argv[1:]
     markdown_path = None
     corpus_paths: list[pathlib.Path] = []
     for index, arg in enumerate(sys.argv):
@@ -276,6 +294,12 @@ def main() -> int:
                 corpus_paths.append(pathlib.Path(value))
     if corpus_paths:
         cases = load_path_cases(corpus_paths, full)
+    elif standard_suite:
+        discovered = discover_standard_corpora()
+        if not discovered:
+            print("standard corpus report: no standard corpora discovered")
+            return 0
+        cases = load_path_cases(discovered, full)
     else:
         if not SILESIA.exists():
             print("standard corpus report: missing silesia-small.tar")
@@ -290,7 +314,7 @@ def main() -> int:
             rows.append(row)
             print(row)
     if markdown_path is not None:
-        write_markdown(rows, markdown_path, suite, full, len(corpus_paths) != 0)
+        write_markdown(rows, markdown_path, suite or standard_suite, full, len(corpus_paths) != 0 or standard_suite)
     return 0
 
 
