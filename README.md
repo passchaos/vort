@@ -85,6 +85,7 @@ zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --suite
 zig build -Doptimize=ReleaseFast run-standard-corpus-suite
 zig build -Doptimize=ReleaseFast run-standard-corpus-dashboard
 zig build -Doptimize=ReleaseFast run-standard-corpus-full-dashboard
+zig build -Doptimize=ReleaseFast run-standard-corpus-full-dashboard -- --paths README.md --limit 1
 zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --paths README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --paths ~/Work/zlib-rs/silesia-small.tar
 zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --full
