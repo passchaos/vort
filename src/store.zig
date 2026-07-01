@@ -1855,6 +1855,19 @@ test "sidecar index bytes support range decode without embedded index" {
     try std.testing.expectEqualSlices(u8, "habet", range);
 }
 
+test "sidecar index range decode rejects tampered checksum" {
+    const frame = try encodeAlloc(std.testing.allocator, "checksum sidecar");
+    defer std.testing.allocator.free(frame);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+    const tampered = try std.testing.allocator.dupe(FrameIndexEntry, index);
+    defer std.testing.allocator.free(tampered);
+    tampered[0].checksum ^= 1;
+    const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, tampered);
+    defer std.testing.allocator.free(sidecar);
+    try std.testing.expectError(error.ChecksumMismatch, decodeSidecarIndexedRangeAlloc(std.testing.allocator, frame, sidecar, 0, 8));
+}
+
 test "sidecar index bytes support dictionary range decode" {
     const dict = "dictionary-only phrase with enough length to beat stored framing";
     const input = (dict ++ "!") ** 2;
