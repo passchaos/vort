@@ -32,6 +32,7 @@ zig build run -- store-roundtrip "hello vort"
 zig build run -- vort-deflate-roundtrip "hello vort"
 zig build run -- vort-blocked-range-demo
 zig build run -- vort-blocked-best-range-demo
+zig build run -- vort-sidecar-blocked-best-range-demo
 zig build run -- vort-dict-blocked-range-demo
 zig build run -- vort-self-dict-range-demo
 zig build run -- vort-trained-dict-range-demo

@@ -251,6 +251,14 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(range);
         const modes = try vort.storeSummarizeModes(stream);
         try stdout.print("range={s} indexed_stream_bytes={d} modes={d}/{d}/{d}\n", .{ range, stream.len, modes.store, modes.deflate, modes.rle });
+    } else if (std.mem.eql(u8, command, "vort-sidecar-blocked-best-range-demo")) {
+        const input = "abcdefghijklmnopqrstuvwxyz" ++ ("aaaaaaaaaaaaaaaa" ** 2) ++ ("abcabcabcabc" ** 2);
+        const sidecar = try vort.storeEncodeSidecarBlockedBestStreamAlloc(init.gpa, input, 16);
+        defer sidecar.deinit(init.gpa);
+        const range = try vort.storeDecodeSidecarIndexedRangeAlloc(init.gpa, sidecar.stream, sidecar.sidecar_index, 10, 32);
+        defer init.gpa.free(range);
+        const modes = try vort.storeSummarizeModes(sidecar.stream);
+        try stdout.print("range={s} stream_bytes={d} sidecar_bytes={d} modes={d}/{d}/{d}\n", .{ range, sidecar.stream.len, sidecar.sidecar_index.len, modes.store, modes.deflate, modes.rle });
     } else if (std.mem.eql(u8, command, "store-sidecar-range-demo")) {
         const first = try vort.storeEncodeAlloc(init.gpa, "alpha");
         defer init.gpa.free(first);
