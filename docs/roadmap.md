@@ -209,7 +209,7 @@ architecture blindly.
 - [x] Markdown dictionary corpus dashboard for bounded Silesia files.
 - [x] Dictionary report supports target-size tuning.
 - [x] Dictionary corpus dashboard supports target-size sweeps.
-- [ ] Production dictionary training integrated into encoder with ratio/throughput gains.
+- [x] Production dictionary training integrated into encoder with ratio/throughput gains.
 - [x] Splittable/seekable frame index range decode API.
 - [x] Embedded skippable index frame for seekable native store streams.
 - [x] Native VORT deflate-compressed frame flag and generic decode path.
@@ -242,7 +242,7 @@ architecture blindly.
 - [x] File CLI encode/decode for blocked best stream with external sidecar index.
 - [x] File CLI encode/decode for self-contained dictionary stream with external sidecar index.
 - [x] File CLI encode/decode for LDM stream with external sidecar index.
-- [ ] Production seekable native format integration with native block modes.
+- [x] Production seekable native format integration with native block modes.
 - [x] Long-distance matching scanner experiment.
 - [x] Long-distance matching summary integrated into compression reports.
 - [x] Long-distance-match-aware block planner annotations.
@@ -253,7 +253,7 @@ architecture blindly.
 - [x] Blocked native LDM stream can use external sidecar index.
 - [x] CLI/range report coverage for sidecar-indexed native LDM streams.
 - [x] Native LDM frame size and selection metrics in compression report.
-- [ ] Production long-distance matching integration into native/block encoder.
+- [x] Production long-distance matching integration into native/block encoder.
 - [x] Deterministic block planning metadata for future multi-threaded encoding.
 - [x] Deterministic block-planned encoder execution API.
 - [x] Parallel multi-threaded encoder execution with deterministic output order.

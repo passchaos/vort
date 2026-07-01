@@ -215,6 +215,30 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(range);
         const modes = try vort.storeSummarizeModes(stream);
         try stdout.print("range={s} trained_dict_stream_bytes={d} modes={d}/{d}/{d}/{d}\n", .{ range, stream.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch + modes.dictionary_deflate });
+    } else if (std.mem.eql(u8, command, "vort-seekable-native-range-demo")) {
+        const phrase = "seekable native trained dictionary phrase";
+        const dict_input = (phrase ++ "!") ** 4;
+        const dict_stream = try vort.storeEncodeSeekableNativeStreamAlloc(init.gpa, dict_input, .{
+            .block_len = phrase.len + 1,
+            .dictionary = .{ .enable = true, .target_size = 256, .min_match_len = 8 },
+        });
+        defer init.gpa.free(dict_stream);
+        const dict_range = try vort.storeDecodeIndexedRangeAutoAlloc(init.gpa, dict_stream, 7, 48);
+        defer init.gpa.free(dict_range);
+        const dict_modes = try vort.storeSummarizeModes(dict_stream);
+
+        const prefix = makeDemoLdmPrefix();
+        const ldm_input = prefix ++ "----" ++ prefix[0..1024].*;
+        const ldm_stream = try vort.storeEncodeSeekableNativeStreamAlloc(init.gpa, ldm_input, .{
+            .block_len = ldm_input.len,
+            .long_distance = .{ .enable = true, .options = .{ .min_distance = 32769, .min_length = 16 }, .align_blocks = false },
+        });
+        defer init.gpa.free(ldm_stream);
+        const ldm_range = try vort.storeDecodeIndexedRangeAutoAlloc(init.gpa, ldm_stream, prefix.len + 4, 24);
+        defer init.gpa.free(ldm_range);
+        const ldm_modes = try vort.storeSummarizeModes(ldm_stream);
+        const ldm_summary = try vort.storeParseEmbeddedLdmSummary(ldm_stream);
+        try stdout.print("dict_crc32={d} dict_stream_bytes={d} dict_modes={d}/{d}/{d}/{d} ldm_crc32={d} ldm_stream_bytes={d} ldm_modes={d}/{d}/{d}/{d}/{d} ldm_candidates={d}\n", .{ vort.crc32(dict_range), dict_stream.len, dict_modes.store, dict_modes.deflate, dict_modes.rle, dict_modes.dictionary_patch + dict_modes.dictionary_deflate, vort.crc32(ldm_range), ldm_stream.len, ldm_modes.store, ldm_modes.deflate, ldm_modes.rle, ldm_modes.dictionary_patch + ldm_modes.dictionary_deflate, ldm_modes.ldm, ldm_summary.candidates });
     } else if (std.mem.eql(u8, command, "vort-ldm-summary-demo")) {
         const prefix = "abcd" ** 9000;
         const input = prefix ++ "----" ++ prefix[0..64].*;

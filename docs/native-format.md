@@ -9,16 +9,13 @@ The current implemented native v0 frame supports store/no-compression,
 deflate-compressed, RLE-compressed, caller-supplied dictionary-patch, and
 long-distance-reference payload modes. Concatenated v0 streams can embed a
 skippable serialized index with per-frame checksum metadata validated during
-range decode, and the blocked best-mode stream encoder can select
-store/deflate/RLE per block while preserving indexed range decode. Opt-in
-dictionary-aware and LDM-aware best-frame encoders can select dictionary-patch or
-LDM reference frames when the caller supplies the required context.
-Self-contained dictionary streams can embed their trained dictionary as skippable
-metadata for indexed range decode, and indexed LDM streams preserve range decode
-through the normal embedded index. Blocked streams can opt into LDM frame
-selection or carry a skippable long-distance-match summary payload for
-encoder/planner feedback, and the LDM-summary encoder aligns block boundaries to
-detected long-distance match starts before appending the metadata. Future native
+range decode. The seekable native encoder integrates these production paths:
+`encodeSeekableNativeStreamAlloc` emits an embedded-index stream and
+`encodeSeekableNativeSidecarStreamAlloc` keeps the index external while selecting
+store/deflate/RLE, trained dictionary-patch/deflate, and LDM reference frames per
+block. It can embed the trained dictionary as skippable metadata, align blocks
+around LDM candidates, preserve indexed range decode, and append skippable
+long-distance-match summaries for encoder/planner feedback. Future native
 versions should preserve the same engineering
 constraints: explicit sizes, bounded memory, deterministic decoding, independent
 corruption localization, and simple parser states that can be fuzzed

@@ -803,6 +803,134 @@ pub const SidecarIndexedStream = struct {
     }
 };
 
+pub const SeekableNativeOptions = struct {
+    block_len: usize = 8192,
+    deflate_options: deflate.CompressionOptions = .{},
+    dictionary: Dictionary = .{},
+    long_distance: LongDistance = .{},
+
+    pub const Dictionary = struct {
+        enable: bool = false,
+        target_size: usize = 256,
+        min_match_len: usize = 8,
+        max_phrase_len: usize = 24,
+        max_phrases: usize = 512,
+    };
+
+    pub const LongDistance = struct {
+        enable: bool = false,
+        options: long_distance.Options = .{},
+        align_blocks: bool = true,
+        embed_summary: bool = true,
+    };
+};
+
+pub fn encodeSeekableNativeStreamAlloc(allocator: std.mem.Allocator, input: []const u8, options: SeekableNativeOptions) ![]u8 {
+    var sidecar = try encodeSeekableNativeSidecarStreamAlloc(allocator, input, options);
+    defer sidecar.deinit(allocator);
+    return embedSidecarIndexAlloc(allocator, sidecar.stream, sidecar.sidecar_index);
+}
+
+pub fn encodeSeekableNativeSidecarStreamAlloc(allocator: std.mem.Allocator, input: []const u8, options: SeekableNativeOptions) !SidecarIndexedStream {
+    if (options.block_len == 0) return error.InvalidBlockPlan;
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+
+    var trained_dict: ?[]u8 = null;
+    defer if (trained_dict) |dict| allocator.free(dict);
+    if (options.dictionary.enable) {
+        trained_dict = try dictionary.trainAlloc(allocator, &.{input}, .{
+            .target_size = options.dictionary.target_size,
+            .min_phrase_len = options.dictionary.min_match_len,
+            .max_phrase_len = options.dictionary.max_phrase_len,
+            .max_phrases = options.dictionary.max_phrases,
+        });
+        if (trained_dict) |dict| {
+            if (dict.len != 0) {
+                const dict_payload = try encodeEmbeddedDictionaryBytesAlloc(allocator, dict);
+                defer allocator.free(dict_payload);
+                const dict_frame = try encodeSkippableAlloc(allocator, dict_payload);
+                defer allocator.free(dict_frame);
+                try stream.appendSlice(allocator, dict_frame);
+            }
+        }
+    }
+
+    const blocks = if (options.long_distance.enable and options.long_distance.align_blocks)
+        try @import("planner.zig").planBlocksAligningLongDistanceAlloc(allocator, input, .{ .block_len = options.block_len, .worker_count = 1 }, options.long_distance.options)
+    else
+        try @import("planner.zig").planBlocksAlloc(allocator, input.len, .{ .block_len = options.block_len, .worker_count = 1 });
+    defer allocator.free(blocks);
+
+    for (blocks) |block| {
+        const chunk = input[block.input_offset..][0..block.input_len];
+        const frame = try encodeSeekableNativeBlockAlloc(allocator, trained_dict, chunk, options);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    if (input.len == 0) {
+        const frame = try encodeSeekableNativeBlockAlloc(allocator, trained_dict, "", options);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+
+    if (options.long_distance.enable and options.long_distance.embed_summary) {
+        const summary = try long_distance.summarizeAlloc(allocator, input, options.long_distance.options);
+        const summary_bytes = encodeLdmSummaryBytes(summary);
+        const summary_frame = try encodeSkippableAlloc(allocator, &summary_bytes);
+        defer allocator.free(summary_frame);
+        try stream.appendSlice(allocator, summary_frame);
+    }
+
+    const index = try buildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const sidecar_index = try encodeFrameIndexAlloc(allocator, index);
+    errdefer allocator.free(sidecar_index);
+    return .{ .stream = try stream.toOwnedSlice(allocator), .sidecar_index = sidecar_index };
+}
+
+fn encodeSeekableNativeBlockAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, options: SeekableNativeOptions) ![]u8 {
+    const native_best = try encodeBlockBestAlloc(allocator, input, options.deflate_options);
+    errdefer allocator.free(native_best);
+    var best = native_best;
+
+    if (dict) |dictionary_bytes| {
+        if (dictionary_bytes.len != 0) {
+            const dict_frame = try encodeBestWithDictionaryAlloc(allocator, dictionary_bytes, input, options.dictionary.min_match_len);
+            errdefer allocator.free(dict_frame);
+            if (dict_frame.len < best.len) {
+                allocator.free(best);
+                best = dict_frame;
+            } else {
+                allocator.free(dict_frame);
+            }
+        }
+    }
+
+    if (options.long_distance.enable) {
+        const ldm_frame = try encodeLongDistanceAlloc(allocator, input, options.long_distance.options);
+        errdefer allocator.free(ldm_frame);
+        if (ldm_frame.len < best.len) {
+            allocator.free(best);
+            best = ldm_frame;
+        } else {
+            allocator.free(ldm_frame);
+        }
+    }
+
+    return best;
+}
+
+fn embedSidecarIndexAlloc(allocator: std.mem.Allocator, stream_bytes: []const u8, sidecar_index: []const u8) ![]u8 {
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    try stream.appendSlice(allocator, stream_bytes);
+    const index_frame = try encodeSkippableAlloc(allocator, sidecar_index);
+    defer allocator.free(index_frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
 pub fn encodeSidecarIndexedStreamAlloc(allocator: std.mem.Allocator, frames: []const []const u8) !SidecarIndexedStream {
     var stream: std.ArrayList(u8) = .empty;
     errdefer stream.deinit(allocator);
@@ -2303,6 +2431,59 @@ test "trained dictionary best stream falls back safely and auto range decodes" {
     const plain_range = try decodeIndexedRangeAutoAlloc(std.testing.allocator, plain, 0, 10);
     defer std.testing.allocator.free(plain_range);
     try std.testing.expectEqualSlices(u8, "plain text", plain_range);
+}
+
+test "seekable native stream integrates native modes trained dictionary and LDM" {
+    const phrase = "production dictionary phrase for seekable native streams";
+    const dict_input = (phrase ++ "!") ** 4;
+    const dict_stream = try encodeSeekableNativeStreamAlloc(std.testing.allocator, dict_input, .{
+        .block_len = phrase.len + 1,
+        .dictionary = .{ .enable = true, .target_size = 256, .min_match_len = 8 },
+    });
+    defer std.testing.allocator.free(dict_stream);
+    const dict_modes = try summarizeModes(dict_stream);
+    try std.testing.expect(dict_modes.dictionary_patch + dict_modes.dictionary_deflate > 0);
+    const dict_range = try decodeIndexedRangeAutoAlloc(std.testing.allocator, dict_stream, 7, 64);
+    defer std.testing.allocator.free(dict_range);
+    try std.testing.expectEqualSlices(u8, dict_input[7..71], dict_range);
+
+    const mixed_input = "abcdefghijklmnopqrstuvwxyz" ++ ("aaaaaaaaaaaaaaaa" ** 2) ++ ("abcabcabcabc" ** 2);
+    const mixed_stream = try encodeSeekableNativeStreamAlloc(std.testing.allocator, mixed_input, .{ .block_len = 16 });
+    defer std.testing.allocator.free(mixed_stream);
+    const mixed_modes = try summarizeModes(mixed_stream);
+    try std.testing.expect(mixed_modes.store + mixed_modes.deflate + mixed_modes.rle >= 2);
+    const mixed_range = try decodeIndexedRangeAutoAlloc(std.testing.allocator, mixed_stream, 10, 32);
+    defer std.testing.allocator.free(mixed_range);
+    try std.testing.expectEqualSlices(u8, mixed_input[10..42], mixed_range);
+
+    const prefix = deterministicLdmPrefix();
+    const ldm_input = prefix ++ "----" ++ prefix[0..1024].*;
+    const ldm_stream = try encodeSeekableNativeStreamAlloc(std.testing.allocator, ldm_input, .{
+        .block_len = ldm_input.len,
+        .long_distance = .{ .enable = true, .options = .{ .min_distance = 32769, .min_length = 16 }, .align_blocks = false },
+    });
+    defer std.testing.allocator.free(ldm_stream);
+    const ldm_modes = try summarizeModes(ldm_stream);
+    try std.testing.expect(ldm_modes.ldm > 0);
+    const ldm_summary = try parseEmbeddedLdmSummary(ldm_stream);
+    try std.testing.expect(ldm_summary.candidates > 0);
+    const ldm_range = try decodeIndexedRangeAutoAlloc(std.testing.allocator, ldm_stream, prefix.len + 4, 32);
+    defer std.testing.allocator.free(ldm_range);
+    try std.testing.expectEqualSlices(u8, prefix[0..32], ldm_range);
+}
+
+test "seekable native sidecar stream supports auto range decode" {
+    const phrase = "sidecar trained dictionary phrase";
+    const input = (phrase ++ "!") ** 4;
+    const sidecar = try encodeSeekableNativeSidecarStreamAlloc(std.testing.allocator, input, .{
+        .block_len = phrase.len + 1,
+        .dictionary = .{ .enable = true, .target_size = 128, .min_match_len = 8 },
+    });
+    defer sidecar.deinit(std.testing.allocator);
+    try validateSidecarIndexAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index);
+    const range = try decodeSidecarIndexedRangeAutoAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, 7, 48);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, input[7..55], range);
 }
 
 test "work-stealing deflate stream matches planned deterministic output" {
