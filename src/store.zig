@@ -1053,6 +1053,19 @@ pub fn encodeSelfContainedDictionaryStreamAlloc(allocator: std.mem.Allocator, in
     return encodeBlockedBestWithDictionaryStreamInternalAlloc(allocator, dict, input, block_len, min_match_len, true);
 }
 
+pub fn encodeBestTrainedDictionaryStreamAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, target_size: usize, min_match_len: usize) ![]u8 {
+    const native_best = try encodeBlockedBestStreamAlloc(allocator, input, block_len);
+    errdefer allocator.free(native_best);
+    const dict_stream = try encodeSelfContainedDictionaryStreamAlloc(allocator, input, block_len, target_size, min_match_len);
+    errdefer allocator.free(dict_stream);
+    if (dict_stream.len < native_best.len) {
+        allocator.free(native_best);
+        return dict_stream;
+    }
+    allocator.free(dict_stream);
+    return native_best;
+}
+
 fn encodeBlockedBestWithDictionaryStreamInternalAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, block_len: usize, min_match_len: usize, embed_dict: bool) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     var stream: std.ArrayList(u8) = .empty;
@@ -1361,6 +1374,16 @@ pub fn decodeSelfContainedDictionaryRangeAlloc(allocator: std.mem.Allocator, inp
     const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
     defer allocator.free(dict);
     return decodeIndexedRangeWithDictionaryAlloc(allocator, dict, input, offset, length);
+}
+
+pub fn decodeIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return decodeIndexedRangeWithDictionaryAlloc(allocator, dict, input, offset, length);
+    } else |err| switch (err) {
+        error.InvalidMagic => return decodeIndexedRangeAlloc(allocator, input, offset, length),
+        else => return err,
+    }
 }
 
 pub const ModeSummary = struct {
@@ -2038,6 +2061,22 @@ test "self-contained dictionary stream embeds dictionary and supports range deco
     const range = try decodeSelfContainedDictionaryRangeAlloc(std.testing.allocator, stream, 7, 64);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[7..71], range);
+}
+
+test "trained dictionary best stream falls back safely and auto range decodes" {
+    const phrase = "self-contained dictionary phrase for native streams";
+    const input = (phrase ++ "!") ** 4;
+    const stream = try encodeBestTrainedDictionaryStreamAlloc(std.testing.allocator, input, phrase.len + 1, 256, 8);
+    defer std.testing.allocator.free(stream);
+    const range = try decodeIndexedRangeAutoAlloc(std.testing.allocator, stream, 7, 64);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, input[7..71], range);
+
+    const plain = try encodeBestTrainedDictionaryStreamAlloc(std.testing.allocator, "plain text without trained benefits", 8, 256, 8);
+    defer std.testing.allocator.free(plain);
+    const plain_range = try decodeIndexedRangeAutoAlloc(std.testing.allocator, plain, 0, 10);
+    defer std.testing.allocator.free(plain_range);
+    try std.testing.expectEqualSlices(u8, "plain text", plain_range);
 }
 
 test "work-stealing deflate stream matches planned deterministic output" {
