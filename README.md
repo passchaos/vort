@@ -73,6 +73,7 @@ zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --paths ~/Work/zl
 zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --full
 zig build run-compression-report
 zig build run-dictionary-report
+zig build run-dictionary-report -- README.md docs/roadmap.md
 zig build run-level-report
 zig build run-split-policy-report
 zig build run-split-policy-report -- README.md docs/roadmap.md

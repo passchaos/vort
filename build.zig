@@ -345,6 +345,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_dictionary_report = b.addRunArtifact(dictionary_report_exe);
+    if (b.args) |args| run_dictionary_report.addArgs(args);
     const dictionary_report_step = b.step("run-dictionary-report", "Report deterministic dictionary training metadata");
     dictionary_report_step.dependOn(&run_dictionary_report.step);
 

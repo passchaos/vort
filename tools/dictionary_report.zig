@@ -2,14 +2,29 @@ const std = @import("std");
 const vort = @import("vort");
 
 pub fn main(init: std.process.Init) !void {
-    const samples = [_][]const u8{
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
+    defer args.deinit();
+    _ = args.next();
+
+    const builtins = [_][]const u8{
         "alpha beta alpha beta alpha beta\n" ** 16,
         "gamma alpha beta gamma alpha beta\n" ** 16,
         "the quick brown fox jumps over the lazy dog\n" ** 8,
     };
+    var file_samples: std.ArrayList([]u8) = .empty;
+    defer {
+        for (file_samples.items) |sample| init.gpa.free(sample);
+        file_samples.deinit(init.gpa);
+    }
+    while (args.next()) |path| {
+        const sample = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(16 * 1024 * 1024));
+        try file_samples.append(init.gpa, sample);
+    }
+    const samples = if (file_samples.items.len == 0) builtins[0..] else file_samples.items;
+
     const target_size: usize = 256;
-    const plan = vort.dictionary.planTraining(&samples, target_size);
-    const dict = try vort.trainDictionaryAlloc(init.gpa, &samples, .{ .target_size = target_size, .min_phrase_len = 5, .max_phrase_len = 24 });
+    const plan = vort.dictionary.planTraining(samples, target_size);
+    const dict = try vort.trainDictionaryAlloc(init.gpa, samples, .{ .target_size = target_size, .min_phrase_len = 5, .max_phrase_len = 24 });
     defer init.gpa.free(dict);
     const meta = vort.DictionaryMetadata.fromBytes(dict, 32 * 1024);
 
