@@ -107,6 +107,7 @@ architecture blindly.
 - [x] Adaptive split search using stored/fixed/dynamic bit-cost candidates.
 - [x] Level-specific adaptive split policy config and report coverage.
 - [x] Adaptive split policy size-delta report across built-in corpora.
+- [x] Adaptive split policy report covers default and filtered strategies.
 - [x] Adaptive split policy report accepts ad-hoc file corpora.
 - [x] Adaptive split policy report across bounded Silesia files.
 - [x] Adaptive split encoder falls back to one-shot best output when smaller.
