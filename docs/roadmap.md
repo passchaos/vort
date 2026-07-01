@@ -152,6 +152,7 @@ architecture blindly.
 - [x] File-path compression/decompression throughput report for ad-hoc corpora.
 - [x] Markdown file-corpus throughput dashboard for ad-hoc corpora.
 - [x] File-corpus throughput dashboard expands directory inputs recursively.
+- [x] File-corpus throughput dashboard expands tar archive inputs.
 - [x] Silesia-sample standard corpus benchmark smoke.
 - [x] Automated per-file Silesia throughput report.
 - [x] Markdown benchmark dashboard export for Silesia suite.

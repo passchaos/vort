@@ -59,6 +59,10 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn appendPathArg(init: std.process.Init, paths: *std.ArrayList(PathEntry), path: []const u8) !void {
+    if (std.mem.endsWith(u8, path, ".tar")) {
+        try appendTarPathArg(init, paths, path);
+        return;
+    }
     const stat = std.Io.Dir.cwd().statFile(init.io, path, .{}) catch {
         try paths.append(init.gpa, .{ .path = path });
         return;
@@ -68,6 +72,10 @@ fn appendPathArg(init: std.process.Init, paths: *std.ArrayList(PathEntry), path:
         return;
     }
 
+    try appendDirectoryArg(init, paths, path);
+}
+
+fn appendDirectoryArg(init: std.process.Init, paths: *std.ArrayList(PathEntry), path: []const u8) !void {
     var dir = try std.Io.Dir.cwd().openDir(init.io, path, .{ .iterate = true });
     defer dir.close(init.io);
     var walker = try dir.walk(init.gpa);
@@ -78,6 +86,26 @@ fn appendPathArg(init: std.process.Init, paths: *std.ArrayList(PathEntry), path:
         errdefer init.gpa.free(joined);
         try paths.append(init.gpa, .{ .path = joined, .owned = true });
     }
+}
+
+fn appendTarPathArg(init: std.process.Init, paths: *std.ArrayList(PathEntry), path: []const u8) !void {
+    const out_dir = try std.fmt.allocPrint(init.gpa, "zig-out/vort-file-corpus-tar-{x}", .{vort.crc32(path)});
+    defer init.gpa.free(out_dir);
+    {
+        var proc = try std.process.spawn(init.io, .{ .argv = &.{ "mkdir", "-p", out_dir } });
+        const term = try proc.wait(init.io);
+        switch (term) {
+            .exited => |code| if (code != 0) return error.InvalidMagic,
+            else => return error.InvalidMagic,
+        }
+    }
+    var proc = try std.process.spawn(init.io, .{ .argv = &.{ "tar", "-xf", path, "-C", out_dir } });
+    const term = try proc.wait(init.io);
+    switch (term) {
+        .exited => |code| if (code != 0) return error.InvalidMagic,
+        else => return error.InvalidMagic,
+    }
+    try appendDirectoryArg(init, paths, out_dir);
 }
 
 const PathEntry = struct {
