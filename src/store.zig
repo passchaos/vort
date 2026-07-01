@@ -1376,6 +1376,16 @@ pub fn decodeSidecarIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator
     return decodeRangeWithDictionaryAlloc(allocator, dict, input, index, offset, length);
 }
 
+pub fn decodeSidecarIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return decodeSidecarIndexedRangeWithDictionaryAlloc(allocator, dict, input, sidecar_index, offset, length);
+    } else |err| switch (err) {
+        error.InvalidMagic => return decodeSidecarIndexedRangeAlloc(allocator, input, sidecar_index, offset, length),
+        else => return err,
+    }
+}
+
 pub fn decodeIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, offset: u64, length: usize) ![]u8 {
     const embedded = try parseEmbeddedIndexAlloc(allocator, input);
     defer embedded.deinit(allocator);
@@ -1857,6 +1867,20 @@ test "sidecar index bytes support dictionary range decode" {
     const range = try decodeSidecarIndexedRangeWithDictionaryAlloc(std.testing.allocator, dict, frame, sidecar, 5, 40);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[5..45], range);
+}
+
+test "sidecar index auto range decode uses embedded dictionary when present" {
+    const phrase = "self-contained dictionary phrase for native streams";
+    const input = (phrase ++ "!") ** 3;
+    const stream = try encodeSelfContainedDictionaryStreamAlloc(std.testing.allocator, input, phrase.len + 1, 256, 8);
+    defer std.testing.allocator.free(stream);
+    const embedded = try parseEmbeddedIndexAlloc(std.testing.allocator, stream);
+    defer embedded.deinit(std.testing.allocator);
+    const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, embedded.entries);
+    defer std.testing.allocator.free(sidecar);
+    const range = try decodeSidecarIndexedRangeAutoAlloc(std.testing.allocator, stream, sidecar, 7, 64);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, input[7..71], range);
 }
 
 test "native deflate frame round trips and records compressed flag" {

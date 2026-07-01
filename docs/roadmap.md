@@ -51,6 +51,7 @@ architecture blindly.
 - [x] Serialized frame indexes carry per-frame checksums validated by range decode.
 - [x] Sidecar frame-index bytes can drive range decode without embedded index.
 - [x] Sidecar frame-index bytes can drive dictionary range decode.
+- [x] Sidecar frame-index bytes can auto range-decode streams with embedded dictionaries.
 - [x] Frame index monotonicity/gap validation before range decode.
 - [x] Extensible hex-sample fuzz corpus harness for headers and malformed frames.
 - [x] Coverage-guided fuzz integration plan and reusable corpus entrypoint.

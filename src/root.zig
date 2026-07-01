@@ -72,6 +72,7 @@ pub const storeEncodeWorkStealingDeflateStreamAlloc = store.encodeWorkStealingDe
 pub const storeDecodeIndexedRangeAlloc = store.decodeIndexedRangeAlloc;
 pub const storeDecodeSidecarIndexedRangeAlloc = store.decodeSidecarIndexedRangeAlloc;
 pub const storeDecodeSidecarIndexedRangeWithDictionaryAlloc = store.decodeSidecarIndexedRangeWithDictionaryAlloc;
+pub const storeDecodeSidecarIndexedRangeAutoAlloc = store.decodeSidecarIndexedRangeAutoAlloc;
 pub const storeDecodeIndexedRangeWithDictionaryAlloc = store.decodeIndexedRangeWithDictionaryAlloc;
 pub const storeDecodeSelfContainedDictionaryRangeAlloc = store.decodeSelfContainedDictionaryRangeAlloc;
 pub const storeDecodeIndexedRangeAutoAlloc = store.decodeIndexedRangeAutoAlloc;
