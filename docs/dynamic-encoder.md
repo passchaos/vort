@@ -19,6 +19,9 @@ The encoder:
   candidate materialization just to compare block modes;
 - provides adaptive split encoding with level-specific split windows and
   search steps, falling back to one-shot best block when smaller;
+- routes the best compression level through the production hash-chain optimal
+  parser, with full raw/zlib/gzip adaptive split coverage across default,
+  filtered, Huffman-only, and RLE strategies;
 - generates correct output verified by Python zlib, system gzip, and
   zlib-ng/zlib-rs differential harnesses.
 
@@ -27,6 +30,7 @@ Remaining encoder work for future milestones:
 - implement package-merge length-limited Huffman for optimal code lengths
   under the 15-bit constraint (current tree + Kraft repair is correct but
   not globally optimal);
-- dynamic-Huffman-aware optimal parser (iterative LZ77 re-optimization
-  using dynamic bit costs);
+- dynamic-Huffman-aware optimal parser refinement (iterative LZ77
+  re-optimization using dynamic bit costs beyond the production fixed-cost
+  optimal parser);
 - split-point search tuning against standard corpora.

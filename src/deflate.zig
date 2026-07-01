@@ -1896,6 +1896,42 @@ test "compression level presets configure match windows" {
     try std.testing.expectEqual(lz77.default_window_len, optionsForLevel(.best).lz77_options.window_len);
 }
 
+test "best level uses production optimal parser with full strategy wrappers" {
+    const input = "abcabcabcabc lorem lorem lorem " ** 8 ++ "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const best = optionsForLevel(.best);
+    try std.testing.expectEqual(ParserMode.optimal, best.parser);
+    try std.testing.expectEqual(lz77.max_optimal_candidates, best.lz77_options.max_candidates);
+    try std.testing.expect(best.lz77_options.max_chain >= 512);
+
+    const optimal_plan = try planTokensAlloc(std.testing.allocator, input, best);
+    defer optimal_plan.deinit(std.testing.allocator);
+    const lazy_plan = try planTokensAlloc(std.testing.allocator, input, optionsForLevel(.default));
+    defer lazy_plan.deinit(std.testing.allocator);
+    try std.testing.expect(lz77.fixedBitCost(optimal_plan.tokens) <= lz77.fixedBitCost(lazy_plan.tokens));
+
+    inline for (.{ CompressionStrategy.default, CompressionStrategy.filtered, CompressionStrategy.huffman_only, CompressionStrategy.rle }) |strategy| {
+        var options = best;
+        options.strategy = strategy;
+        const raw = try encodeRawBestAdaptiveSplitAlloc(std.testing.allocator, input, options, .{ .min_block_len = 16, .max_block_len = 64, .sample_len = 16, .search_step = 16 });
+        defer std.testing.allocator.free(raw);
+        const raw_decoded = try decodeRawAutoAlloc(std.testing.allocator, raw);
+        defer std.testing.allocator.free(raw_decoded);
+        try std.testing.expectEqualSlices(u8, input, raw_decoded);
+
+        const zlib_frame = try encodeZlibBestAdaptiveSplitAlloc(std.testing.allocator, input, options, .{ .min_block_len = 16, .max_block_len = 64, .sample_len = 16, .search_step = 16 });
+        defer std.testing.allocator.free(zlib_frame);
+        const zlib_decoded = try decodeZlibAlloc(std.testing.allocator, zlib_frame);
+        defer std.testing.allocator.free(zlib_decoded);
+        try std.testing.expectEqualSlices(u8, input, zlib_decoded);
+
+        const gzip_frame = try encodeGzipBestAdaptiveSplitAlloc(std.testing.allocator, input, options, .{ .min_block_len = 16, .max_block_len = 64, .sample_len = 16, .search_step = 16 });
+        defer std.testing.allocator.free(gzip_frame);
+        const gzip_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
+        defer std.testing.allocator.free(gzip_decoded);
+        try std.testing.expectEqualSlices(u8, input, gzip_decoded);
+    }
+}
+
 test "gzip concatenated members decode in sequence" {
     const a = try encodeGzipFixedAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(a);

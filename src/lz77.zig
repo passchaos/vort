@@ -181,18 +181,13 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
         if (rev_i + minimum > n) continue;
 
         const max_len = @min(maxMatch(options), n - rev_i);
-        const h = hash3(input[rev_i..][0..3]) & (table_size - 1);
-        var chain_i = head[h];
+        var chain_i = prev[rev_i];
         var checked: usize = 0;
         var candidates_seen: usize = 0;
 
         while (chain_i >= 0 and checked < options.max_chain) : (checked += 1) {
             const candidate: usize = @intCast(chain_i);
-            // Skip positions that are not before rev_i (hash chain may include forward entries).
-            if (candidate >= rev_i) {
-                chain_i = prev[candidate];
-                continue;
-            }
+            std.debug.assert(candidate < rev_i);
             const distance = rev_i - candidate;
             if (distance == 0 or distance > options.window_len) break;
 

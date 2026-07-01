@@ -157,7 +157,7 @@ architecture blindly.
 - [x] Level-specific minimum match savings parser setting.
 - [x] Level-specific maximum match length parser setting.
 - [x] Level-specific match window parser setting.
-- [ ] Production optimal parser with full level/strategy configs.
+- [x] Production optimal parser with full level/strategy configs.
 - [x] Huffman code generation, simple length building, and canonical-code validation.
 - [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
