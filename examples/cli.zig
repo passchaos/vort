@@ -251,6 +251,22 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(range);
         const modes = try vort.storeSummarizeModes(stream);
         try stdout.print("range={s} indexed_stream_bytes={d} modes={d}/{d}/{d}\n", .{ range, stream.len, modes.store, modes.deflate, modes.rle });
+    } else if (std.mem.eql(u8, command, "store-sidecar-range-demo")) {
+        const first = try vort.storeEncodeAlloc(init.gpa, "alpha");
+        defer init.gpa.free(first);
+        const second = try vort.storeEncodeAlloc(init.gpa, "beta");
+        defer init.gpa.free(second);
+        var stream: std.ArrayList(u8) = .empty;
+        defer stream.deinit(init.gpa);
+        try stream.appendSlice(init.gpa, first);
+        try stream.appendSlice(init.gpa, second);
+        const index = try vort.storeBuildFrameIndexAlloc(init.gpa, stream.items);
+        defer init.gpa.free(index);
+        const sidecar = try vort.storeEncodeFrameIndexAlloc(init.gpa, index);
+        defer init.gpa.free(sidecar);
+        const range = try vort.storeDecodeSidecarIndexedRangeAlloc(init.gpa, stream.items, sidecar, 3, 5);
+        defer init.gpa.free(range);
+        try stdout.print("range={s} stream_bytes={d} sidecar_bytes={d}\n", .{ range, stream.items.len, sidecar.len });
     } else if (std.mem.eql(u8, command, "encode-raw-fixed-split-hex")) {
         const payload = args.next() orelse "";
         const encoded = try vort.encodeRawFixedSplitAlloc(init.gpa, payload, 7, vort.optionsForCompressionLevel(.fast));

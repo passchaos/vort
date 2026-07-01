@@ -39,6 +39,7 @@ zig build run -- vort-ldm-summary-demo
 zig build run -- vort-ldm-blocked-range-demo
 zig build run -- vort-ldm-indexed-range-demo
 zig build run -- store-range-demo
+zig build run -- store-sidecar-range-demo
 zig build run -- zlib-store-roundtrip "hello vort"
 zig build run -- gzip-store-roundtrip "hello vort"
 zig build run -- zlib-fixed-roundtrip "hello vort"
