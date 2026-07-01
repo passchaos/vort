@@ -182,6 +182,47 @@ def row_to_dict(row: str) -> dict[str, str]:
     return dict(zip(COLUMNS, values))
 
 
+def summarize_codecs(records: list[dict[str, str]]) -> list[dict[str, object]]:
+    codecs = [
+        ("vort", "vort_zlib_fastest_bytes", "vort_ms", "vort_decode_ms"),
+        ("gzip", "gzip_bytes", "gzip_ms", "gzip_decode_ms"),
+        ("zlib-ng", "zlib_ng_gzip_bytes", "zlib_ng_ms", "zlib_ng_decode_ms"),
+        ("zlib-rs", "zlib_rs_zlib_bytes", "zlib_rs_ms", "zlib_rs_decode_ms"),
+        ("zstd", "zstd_bytes", "zstd_ms", "zstd_decode_ms"),
+    ]
+    summaries: list[dict[str, object]] = []
+    for name, bytes_col, encode_col, decode_col in codecs:
+        total_input = 0
+        total_compressed = 0
+        total_encode_ms = 0.0
+        total_decode_ms = 0.0
+        files = 0
+        for rec in records:
+            compressed = int(rec[bytes_col])
+            if compressed == 0:
+                continue
+            files += 1
+            total_input += int(rec["input_bytes"])
+            total_compressed += compressed
+            total_encode_ms += float(rec[encode_col])
+            total_decode_ms += float(rec[decode_col])
+        input_mib = total_input / (1024.0 * 1024.0)
+        encode_s = total_encode_ms / 1000.0
+        decode_s = total_decode_ms / 1000.0
+        summaries.append({
+            "codec": name,
+            "files": files,
+            "input_bytes": total_input,
+            "compressed_bytes": total_compressed,
+            "ratio": 0.0 if total_input == 0 else total_compressed / total_input,
+            "encode_ms": total_encode_ms,
+            "decode_ms": total_decode_ms,
+            "encode_mib_s": 0.0 if encode_s == 0 else input_mib / encode_s,
+            "decode_mib_s": 0.0 if decode_s == 0 else input_mib / decode_s,
+        })
+    return summaries
+
+
 def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool, external_paths: bool = False) -> None:
     records = [row_to_dict(row) for row in rows]
     title = "External corpus benchmark suite" if external_paths else ("Silesia per-file benchmark suite" if suite else "Silesia benchmark smoke")
@@ -196,9 +237,22 @@ def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool,
         f"- zlib-ng minigzip: `{ZLIB_NG_MINIGZIP if ZLIB_NG_MINIGZIP.exists() else 'missing'}`",
         f"- zlib-rs compress: `{ZLIB_RS_COMPRESS if ZLIB_RS_COMPRESS.exists() else 'missing'}`",
         "",
+        "## Summary by codec",
+        "",
+        "| codec | files | total input | compressed bytes | ratio | encode ms | encode MiB/s | decode ms | decode MiB/s |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for summary in summarize_codecs(records):
+        lines.append(
+            "| {codec} | {files} | {input_bytes} | {compressed_bytes} | {ratio:.4f} | {encode_ms:.3f} | {encode_mib_s:.2f} | {decode_ms:.3f} | {decode_mib_s:.2f} |".format(**summary)
+        )
+    lines.extend([
+        "",
+        "## Rows",
+        "",
         "| corpus | input | Vort bytes | Vort ms | Vort dec ms | gzip bytes | gzip ms | zlib-ng bytes | zlib-rs bytes | zstd bytes |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ]
+    ])
     for rec in records:
         lines.append(
             "| {corpus} | {input_bytes} | {vort_zlib_fastest_bytes} | {vort_ms} | {vort_decode_ms} | {gzip_bytes} | {gzip_ms} | {zlib_ng_gzip_bytes} | {zlib_rs_zlib_bytes} | {zstd_bytes} |".format(**rec)

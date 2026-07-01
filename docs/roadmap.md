@@ -143,6 +143,7 @@ architecture blindly.
 - [x] Silesia-sample standard corpus benchmark smoke.
 - [x] Automated per-file Silesia throughput report.
 - [x] Markdown benchmark dashboard export for Silesia suite.
+- [x] Standard corpus Markdown dashboard per-codec summary totals.
 - [x] External file/directory throughput dashboard input mode.
 - [x] External tar-archive throughput dashboard input mode.
 - [x] Full-size Silesia Markdown dashboard export.
