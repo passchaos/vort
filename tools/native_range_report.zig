@@ -131,6 +131,7 @@ fn reportCase(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, 
 }
 
 fn reportSidecarCase(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8, sidecar: []const u8, options: RangeOptions) !void {
+    try vort.storeValidateSidecarIndexAlloc(init.gpa, stream, sidecar);
     const selected = chooseRange(input, options);
     const range_offset = selected.offset;
     const range_len = selected.len;
