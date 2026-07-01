@@ -147,6 +147,7 @@ architecture blindly.
 - [x] File-path compression ratio report for ad-hoc corpora.
 - [x] zstd CLI compressed-size comparison smoke for sample files.
 - [x] File-path compression/decompression throughput report for ad-hoc corpora.
+- [x] Markdown file-corpus throughput dashboard for ad-hoc corpora.
 - [x] Silesia-sample standard corpus benchmark smoke.
 - [x] Automated per-file Silesia throughput report.
 - [x] Markdown benchmark dashboard export for Silesia suite.
