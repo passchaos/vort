@@ -897,7 +897,7 @@ pub fn encodeBlockedBestStreamAlloc(allocator: std.mem.Allocator, input: []const
     return encodeBlockedBestStreamWithOptionsAlloc(allocator, input, block_len, .{});
 }
 
-pub fn encodeBlockedBestStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: deflate.CompressionOptions) ![]u8 {
+pub fn encodeSidecarBlockedBestStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: deflate.CompressionOptions) !SidecarIndexedStream {
     if (block_len == 0) return error.InvalidBlockPlan;
     var stream: std.ArrayList(u8) = .empty;
     errdefer stream.deinit(allocator);
@@ -916,9 +916,22 @@ pub fn encodeBlockedBestStreamWithOptionsAlloc(allocator: std.mem.Allocator, inp
     }
     const index = try buildFrameIndexAlloc(allocator, stream.items);
     defer allocator.free(index);
-    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
-    defer allocator.free(index_bytes);
-    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    const sidecar_index = try encodeFrameIndexAlloc(allocator, index);
+    errdefer allocator.free(sidecar_index);
+    return .{ .stream = try stream.toOwnedSlice(allocator), .sidecar_index = sidecar_index };
+}
+
+pub fn encodeSidecarBlockedBestStreamAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) !SidecarIndexedStream {
+    return encodeSidecarBlockedBestStreamWithOptionsAlloc(allocator, input, block_len, .{});
+}
+
+pub fn encodeBlockedBestStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: deflate.CompressionOptions) ![]u8 {
+    var sidecar = try encodeSidecarBlockedBestStreamWithOptionsAlloc(allocator, input, block_len, options);
+    defer sidecar.deinit(allocator);
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    try stream.appendSlice(allocator, sidecar.stream);
+    const index_frame = try encodeSkippableAlloc(allocator, sidecar.sidecar_index);
     defer allocator.free(index_frame);
     try stream.appendSlice(allocator, index_frame);
     return stream.toOwnedSlice(allocator);
@@ -1989,6 +2002,16 @@ test "blocked best stream selects native modes and supports range decode" {
     try std.testing.expect(summary.store + summary.deflate + summary.rle >= 2);
     try std.testing.expect(summary.rle >= 1);
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 10, 32);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, input[10..42], range);
+}
+
+test "sidecar blocked best stream keeps index external" {
+    const input = "abcdefghijklmnopqrstuvwxyz" ++ ("aaaaaaaaaaaaaaaa" ** 2) ++ ("abcabcabcabc" ** 2);
+    const sidecar = try encodeSidecarBlockedBestStreamAlloc(std.testing.allocator, input, 16);
+    defer sidecar.deinit(std.testing.allocator);
+    try std.testing.expectError(error.InvalidMagic, parseEmbeddedIndexAlloc(std.testing.allocator, sidecar.stream));
+    const range = try decodeSidecarIndexedRangeAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, 10, 32);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[10..42], range);
 }
