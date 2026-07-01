@@ -183,6 +183,7 @@ architecture blindly.
 - [x] Embedded index range decode for native LDM reference frames.
 - [x] CLI smoke for indexed native LDM range decode and mode summary.
 - [x] Native range report accepts ad-hoc file corpora.
+- [x] Native range report covers self-contained dictionary streams.
 - [x] Blocked native deflate stream with embedded index and range decode.
 - [x] Blocked native best-mode stream with embedded index and range decode.
 - [ ] Production seekable native format integration with native block modes.

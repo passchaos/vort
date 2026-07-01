@@ -41,6 +41,12 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(dict_stream);
     try reportCase(init, stdout, "dict-blocked", dict_input, dict_stream, dict);
 
+    const self_dict_phrase = "self-contained dictionary phrase for native streams";
+    const self_dict_input = (self_dict_phrase ++ "!") ** 4;
+    const self_dict_stream = try vort.storeEncodeSelfContainedDictionaryStreamAlloc(init.gpa, self_dict_input, self_dict_phrase.len + 1, 256, 8);
+    defer init.gpa.free(self_dict_stream);
+    try reportSelfContainedDictionaryCase(init, stdout, "self-dict-blocked", self_dict_input, self_dict_stream);
+
     const ldm_prefix = makeLdmPrefix();
     const ldm_input = ldm_prefix ++ "----" ++ ldm_prefix[0..1024].* ++ "tail";
     const ldm_stream = try makeLdmStream(init.gpa, &ldm_prefix);
@@ -50,8 +56,6 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn reportCase(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8, dict: ?[]const u8) !void {
-    const modes = try vort.storeSummarizeModes(stream);
-    const frames = try vort.store.countConcatenatedFrames(stream);
     const range_offset: usize = if (input.len == 0) 0 else @min(5, input.len - 1);
     const range_len: usize = @min(32, input.len - range_offset);
     const range = if (dict) |dictionary|
@@ -59,6 +63,20 @@ fn reportCase(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, 
     else
         try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, range_offset, range_len);
     defer init.gpa.free(range);
+    try printRangeReport(stdout, name, input, stream, range_offset, range_len, range);
+}
+
+fn reportSelfContainedDictionaryCase(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8) !void {
+    const range_offset: usize = if (input.len == 0) 0 else @min(5, input.len - 1);
+    const range_len: usize = @min(32, input.len - range_offset);
+    const range = try vort.storeDecodeSelfContainedDictionaryRangeAlloc(init.gpa, stream, range_offset, range_len);
+    defer init.gpa.free(range);
+    try printRangeReport(stdout, name, input, stream, range_offset, range_len, range);
+}
+
+fn printRangeReport(stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8, range_offset: usize, range_len: usize, range: []const u8) !void {
+    const modes = try vort.storeSummarizeModes(stream);
+    const frames = try vort.store.countConcatenatedFrames(stream);
     if (!std.mem.eql(u8, input[range_offset..][0..range_len], range)) return error.RoundTripMismatch;
     try stdout.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
         name,
