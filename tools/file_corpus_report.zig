@@ -8,6 +8,8 @@ pub fn main(init: std.process.Init) !void {
 
     var markdown_path: ?[]const u8 = null;
     var case_limit: ?usize = null;
+    var sources: std.ArrayList([]const u8) = .empty;
+    defer sources.deinit(init.gpa);
     var path_entries: std.ArrayList(PathEntry) = .empty;
     defer {
         for (path_entries.items) |entry| if (entry.owned) init.gpa.free(entry.path);
@@ -15,6 +17,7 @@ pub fn main(init: std.process.Init) !void {
     }
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--standard-suite")) {
+            try sources.append(init.gpa, "standard-suite");
             try appendStandardCorpora(init, &path_entries);
             continue;
         }
@@ -26,6 +29,7 @@ pub fn main(init: std.process.Init) !void {
             case_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
             continue;
         }
+        try sources.append(init.gpa, arg);
         try appendPathArg(init, &path_entries, arg);
     }
     if (path_entries.items.len == 0) return error.MissingCorpusPath;
@@ -65,7 +69,7 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("{s},{d},{d},{d:.4},{d:.2},{d:.2}\n", .{ path, data.len, encoded.len, ratio, encode_mib_s, decode_mib_s });
     }
     try stdout.flush();
-    if (markdown_path) |path| try writeMarkdown(init, path, rows.items);
+    if (markdown_path) |path| try writeMarkdown(init, path, rows.items, sources.items);
 }
 
 fn appendStandardCorpora(init: std.process.Init, paths: *std.ArrayList(PathEntry)) !void {
@@ -146,7 +150,7 @@ const ReportRow = struct {
     decode_mib_s: f64,
 };
 
-fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportRow) !void {
+fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportRow, sources: []const []const u8) !void {
     var writer = std.Io.Writer.Allocating.init(init.gpa);
     defer writer.deinit();
     const w = &writer.writer;
@@ -158,7 +162,12 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
     }
     const total_ratio = if (total_input == 0) 0.0 else @as(f64, @floatFromInt(total_encoded)) / @as(f64, @floatFromInt(total_input));
     try w.print("# File corpus report\n\n", .{});
-    try w.print("- rows: {d}\n- total input bytes: {d}\n- total encoded bytes: {d}\n- total ratio: {d:.4}\n\n", .{ rows.len, total_input, total_encoded, total_ratio });
+    try w.print("- rows: {d}\n- total input bytes: {d}\n- total encoded bytes: {d}\n- total ratio: {d:.4}\n- sources: `", .{ rows.len, total_input, total_encoded, total_ratio });
+    for (sources, 0..) |source, i| {
+        if (i != 0) try w.print(", ", .{});
+        try w.print("{s}", .{source});
+    }
+    try w.print("`\n\n", .{});
     try w.print("| path | input bytes | best deflate bytes | ratio | encode MiB/s | decode MiB/s |\n", .{});
     try w.print("| --- | ---: | ---: | ---: | ---: | ---: |\n", .{});
     for (rows) |row| {
