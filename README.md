@@ -98,6 +98,7 @@ zig build -Doptimize=ReleaseFast run-file-corpus-report -- README.md docs/roadma
 zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- docs
 zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- ~/Work/zlib-rs/silesia-small.tar
+zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build bench-corpus-decode -Doptimize=ReleaseFast

@@ -13,6 +13,10 @@ pub fn main(init: std.process.Init) !void {
         path_entries.deinit(init.gpa);
     }
     while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--standard-suite")) {
+            try appendStandardCorpora(init, &path_entries);
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--markdown")) {
             markdown_path = args.next() orelse return error.MissingCorpusPath;
             continue;
@@ -56,6 +60,20 @@ pub fn main(init: std.process.Init) !void {
     }
     try stdout.flush();
     if (markdown_path) |path| try writeMarkdown(init, path, rows.items);
+}
+
+fn appendStandardCorpora(init: std.process.Init, paths: *std.ArrayList(PathEntry)) !void {
+    const candidates = [_][]const u8{
+        "/home/passchaos/Work/zlib-rs/silesia-small.tar",
+        "/home/passchaos/Work/corpora/calgary.tar",
+        "/home/passchaos/Work/corpora/canterbury.tar",
+        "/home/passchaos/Work/corpora/large-canterbury.tar",
+        "/home/passchaos/Work/corpora/enwik8",
+    };
+    for (&candidates) |path| {
+        _ = std.Io.Dir.cwd().statFile(init.io, path, .{}) catch continue;
+        try appendPathArg(init, paths, path);
+    }
 }
 
 fn appendPathArg(init: std.process.Init, paths: *std.ArrayList(PathEntry), path: []const u8) !void {
