@@ -148,6 +148,20 @@ pub fn build(b: *std.Build) void {
     const native_parallel_full_dashboard_step = b.step("run-native-parallel-full-dashboard", "Write full native parallel Silesia benchmark dashboard to zig-out");
     native_parallel_full_dashboard_step.dependOn(&native_parallel_full_dashboard.step);
 
+    const native_parallel_multi_dashboard = b.addSystemCommand(&.{ "python3", "tools/native_parallel_corpus_report.py" });
+    native_parallel_multi_dashboard.addArtifactArg(native_parallel_bench_exe);
+    native_parallel_multi_dashboard.addArgs(&.{ "--standard-suite", "--markdown", "zig-out/vort-native-parallel-multi-corpus-dashboard.md" });
+    if (b.args) |args| native_parallel_multi_dashboard.addArgs(args);
+    const native_parallel_multi_dashboard_step = b.step("run-native-parallel-multi-corpus-dashboard", "Discover standard corpora and write native parallel benchmark dashboard to zig-out");
+    native_parallel_multi_dashboard_step.dependOn(&native_parallel_multi_dashboard.step);
+
+    const native_parallel_multi_full_dashboard = b.addSystemCommand(&.{ "python3", "tools/native_parallel_corpus_report.py" });
+    native_parallel_multi_full_dashboard.addArtifactArg(native_parallel_bench_exe);
+    native_parallel_multi_full_dashboard.addArgs(&.{ "--standard-suite", "--full", "--markdown", "zig-out/vort-native-parallel-multi-corpus-full-dashboard.md" });
+    if (b.args) |args| native_parallel_multi_full_dashboard.addArgs(args);
+    const native_parallel_multi_full_dashboard_step = b.step("run-native-parallel-multi-corpus-full-dashboard", "Discover standard corpora and write full native parallel benchmark dashboard to zig-out");
+    native_parallel_multi_full_dashboard_step.dependOn(&native_parallel_multi_full_dashboard.step);
+
     const fuzz_smoke_exe = b.addExecutable(.{
         .name = "vort-fuzz-smoke",
         .root_module = b.createModule(.{

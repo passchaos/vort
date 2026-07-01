@@ -8,6 +8,13 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 EXE = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 and pathlib.Path(sys.argv[1]).exists() else ROOT / "zig-out" / "bin" / "vort-bench-native-parallel"
 SILESIA = pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"
+STANDARD_CORPUS_CANDIDATES = [
+    SILESIA,
+    pathlib.Path.home() / "Work" / "corpora" / "calgary.tar",
+    pathlib.Path.home() / "Work" / "corpora" / "canterbury.tar",
+    pathlib.Path.home() / "Work" / "corpora" / "large-canterbury.tar",
+    pathlib.Path.home() / "Work" / "corpora" / "enwik8",
+]
 SMOKE_LIMIT = 128 * 1024
 HEADER = "corpus,mode,workers,input_bytes,stream_bytes,elapsed_ms,range_offset,range_len,range_crc32"
 COLS = HEADER.split(",")
@@ -15,6 +22,16 @@ COLS = HEADER.split(",")
 
 def load_default_cases(full: bool) -> list[tuple[str, bytes]]:
     return load_archive_cases(SILESIA, full) if SILESIA.exists() else []
+
+
+def discover_standard_corpora() -> list[pathlib.Path]:
+    found: list[pathlib.Path] = []
+    seen: set[pathlib.Path] = set()
+    for path in STANDARD_CORPUS_CANDIDATES:
+        if path.exists() and path not in seen:
+            found.append(path)
+            seen.add(path)
+    return found
 
 
 def load_archive_cases(path: pathlib.Path, full: bool) -> list[tuple[str, bytes]]:
@@ -118,6 +135,7 @@ def main() -> int:
     if not EXE.exists():
         raise SystemExit(f"missing native parallel bench executable at {EXE}; run zig build first")
     full = "--full" in sys.argv[1:]
+    standard_suite = "--standard-suite" in sys.argv[1:]
     markdown_path = None
     corpus_paths: list[pathlib.Path] = []
     workers = "4"
@@ -132,7 +150,16 @@ def main() -> int:
                     break
                 corpus_paths.append(pathlib.Path(value))
     block_len = "65536" if full else "8192"
-    cases = load_path_cases(corpus_paths, full) if corpus_paths else load_default_cases(full)
+    if corpus_paths:
+        cases = load_path_cases(corpus_paths, full)
+    elif standard_suite:
+        discovered = discover_standard_corpora()
+        if not discovered:
+            print("native parallel corpus report: no standard corpora discovered")
+            return 0
+        cases = load_path_cases(discovered, full)
+    else:
+        cases = load_default_cases(full)
     if not cases:
         print("native parallel corpus report: missing silesia-small.tar")
         return 0
@@ -150,7 +177,7 @@ def main() -> int:
                 rows.append(row)
                 print(row)
     if markdown_path is not None:
-        write_markdown(rows, markdown_path, full, len(corpus_paths) != 0)
+        write_markdown(rows, markdown_path, full, len(corpus_paths) != 0 or standard_suite)
     return 0
 
 
