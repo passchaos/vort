@@ -10,7 +10,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - zlib-compatible Adler-32;
 - gzip/zip-compatible IEEE CRC-32;
 - storage/network-oriented CRC-32C/Castagnoli;
-- portable slice-by-4/slice-by-8/slice-by-16 IEEE CRC-32 and slice-by-8 CRC-32C fast paths plus checksum dispatch reporting;
+- portable slice-by-4/slice-by-8/slice-by-16 IEEE CRC-32 and slice-by-8/slice-by-16 CRC-32C fast paths plus checksum dispatch reporting;
 - shared progress/error/frame metadata types;
 - raw deflate stored/fixed encode and stored/fixed/dynamic decode, with zlib/gzip wrappers;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, and bounded streaming APIs;

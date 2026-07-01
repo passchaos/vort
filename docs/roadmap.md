@@ -22,7 +22,8 @@ architecture blindly.
 - [x] Portable CRC32 slice-by-4 fast variant with scalar reference checks.
 - [x] Portable CRC32 slice-by-8 fast variant.
 - [x] Portable CRC32 slice-by-16 fast variant selected by dispatch.
-- [x] Portable CRC32C slice-by-8 fallback selected when hardware CRC32C is unavailable.
+- [x] Portable CRC32C slice-by-8 fallback.
+- [x] Portable CRC32C slice-by-16 fallback selected when hardware CRC32C is unavailable.
 - [x] Runtime checksum dispatch API selecting portable fast path.
 - [x] CPU feature/dispatch report tool.
 - [x] x86 checksum CPU feature reporting with IEEE-vs-CRC32C safety distinction.
