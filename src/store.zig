@@ -1088,6 +1088,12 @@ pub fn encodeBlockedBestWithDictionaryStreamAlloc(allocator: std.mem.Allocator, 
     return encodeBlockedBestWithDictionaryStreamInternalAlloc(allocator, dict, input, block_len, min_match_len, false);
 }
 
+pub fn encodeSidecarSelfContainedDictionaryStreamAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, target_size: usize, min_match_len: usize) !SidecarIndexedStream {
+    const dict = try dictionary.trainAlloc(allocator, &.{input}, .{ .target_size = target_size, .min_phrase_len = min_match_len, .max_phrase_len = 24 });
+    defer allocator.free(dict);
+    return encodeBlockedBestWithDictionarySidecarStreamInternalAlloc(allocator, dict, input, block_len, min_match_len, true);
+}
+
 pub fn encodeSelfContainedDictionaryStreamAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, target_size: usize, min_match_len: usize) ![]u8 {
     const dict = try dictionary.trainAlloc(allocator, &.{input}, .{ .target_size = target_size, .min_phrase_len = min_match_len, .max_phrase_len = 24 });
     defer allocator.free(dict);
@@ -1107,7 +1113,7 @@ pub fn encodeBestTrainedDictionaryStreamAlloc(allocator: std.mem.Allocator, inpu
     return native_best;
 }
 
-fn encodeBlockedBestWithDictionaryStreamInternalAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, block_len: usize, min_match_len: usize, embed_dict: bool) ![]u8 {
+fn encodeBlockedBestWithDictionarySidecarStreamInternalAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, block_len: usize, min_match_len: usize, embed_dict: bool) !SidecarIndexedStream {
     if (block_len == 0) return error.InvalidBlockPlan;
     var stream: std.ArrayList(u8) = .empty;
     errdefer stream.deinit(allocator);
@@ -1133,9 +1139,18 @@ fn encodeBlockedBestWithDictionaryStreamInternalAlloc(allocator: std.mem.Allocat
     }
     const index = try buildFrameIndexAlloc(allocator, stream.items);
     defer allocator.free(index);
-    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
-    defer allocator.free(index_bytes);
-    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    const sidecar_index = try encodeFrameIndexAlloc(allocator, index);
+    errdefer allocator.free(sidecar_index);
+    return .{ .stream = try stream.toOwnedSlice(allocator), .sidecar_index = sidecar_index };
+}
+
+fn encodeBlockedBestWithDictionaryStreamInternalAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, block_len: usize, min_match_len: usize, embed_dict: bool) ![]u8 {
+    var sidecar = try encodeBlockedBestWithDictionarySidecarStreamInternalAlloc(allocator, dict, input, block_len, min_match_len, embed_dict);
+    defer sidecar.deinit(allocator);
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    try stream.appendSlice(allocator, sidecar.stream);
+    const index_frame = try encodeSkippableAlloc(allocator, sidecar.sidecar_index);
     defer allocator.free(index_frame);
     try stream.appendSlice(allocator, index_frame);
     return stream.toOwnedSlice(allocator);
@@ -2238,6 +2253,16 @@ test "self-contained dictionary stream embeds dictionary and supports range deco
     const summary = try summarizeModes(stream);
     try std.testing.expect(summary.dictionary_patch + summary.dictionary_deflate > 0);
     const range = try decodeSelfContainedDictionaryRangeAlloc(std.testing.allocator, stream, 7, 64);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, input[7..71], range);
+}
+
+test "sidecar self-contained dictionary stream keeps index external" {
+    const phrase = "self-contained dictionary phrase for native streams";
+    const input = (phrase ++ "!") ** 4;
+    const sidecar = try encodeSidecarSelfContainedDictionaryStreamAlloc(std.testing.allocator, input, phrase.len + 1, 256, 8);
+    defer sidecar.deinit(std.testing.allocator);
+    const range = try decodeSidecarIndexedRangeAutoAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, 7, 64);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[7..71], range);
 }

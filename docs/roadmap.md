@@ -194,6 +194,7 @@ architecture blindly.
 - [x] Dictionary-aware native best-frame selection with fallback to non-dictionary modes.
 - [x] Dictionary-aware blocked native stream with indexed range decode.
 - [x] Self-contained native dictionary stream embeds trained dictionary for indexed range decode.
+- [x] Self-contained native dictionary stream can use external sidecar index.
 - [x] Trained dictionary stream best-selection API with automatic range decode.
 - [x] Compression report includes trained dictionary stream selection metrics.
 - [x] CLI smoke for trained dictionary best stream auto range decode.
