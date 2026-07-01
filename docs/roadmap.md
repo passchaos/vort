@@ -121,7 +121,7 @@ architecture blindly.
 - [x] Adaptive split policy report accepts ad-hoc file corpora.
 - [x] Adaptive split policy report across bounded Silesia files.
 - [x] Adaptive split encoder falls back to one-shot best output when smaller.
-- [ ] Production dynamic Huffman encoder with optimized block splitting and block-type decisions.
+- [x] Production dynamic Huffman encoder with optimized block splitting and block-type decisions.
 - [x] Compatibility benchmark smoke suite comparing Vort/gzip/zstd on sample files.
 - [x] Standard-corpus smoke benchmark comparing Vort/gzip/zlib-ng/zlib-rs/zstd.
 - [x] Full local Silesia corpus benchmark mode.
