@@ -194,7 +194,7 @@ pub fn main(init: std.process.Init) !void {
         const range = try vort.storeDecodeIndexedRangeWithDictionaryAlloc(init.gpa, dict, stream, 5, 40);
         defer init.gpa.free(range);
         const modes = try vort.storeSummarizeModes(stream);
-        try stdout.print("range={s} dict_blocked_stream_bytes={d} modes={d}/{d}/{d}/{d}\n", .{ range, stream.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch });
+        try stdout.print("range={s} dict_blocked_stream_bytes={d} modes={d}/{d}/{d}/{d}\n", .{ range, stream.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch + modes.dictionary_deflate });
     } else if (std.mem.eql(u8, command, "vort-self-dict-range-demo")) {
         const phrase = "self-contained dictionary phrase for native streams";
         const input = (phrase ++ "!") ** 4;
@@ -205,7 +205,7 @@ pub fn main(init: std.process.Init) !void {
         const dict = try vort.storeParseEmbeddedDictionaryAlloc(init.gpa, stream);
         defer init.gpa.free(dict);
         const modes = try vort.storeSummarizeModes(stream);
-        try stdout.print("range={s} self_dict_stream_bytes={d} dict_bytes={d} modes={d}/{d}/{d}/{d}\n", .{ range, stream.len, dict.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch });
+        try stdout.print("range={s} self_dict_stream_bytes={d} dict_bytes={d} modes={d}/{d}/{d}/{d}\n", .{ range, stream.len, dict.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch + modes.dictionary_deflate });
     } else if (std.mem.eql(u8, command, "vort-ldm-summary-demo")) {
         const prefix = "abcd" ** 9000;
         const input = prefix ++ "----" ++ prefix[0..64].*;
@@ -221,7 +221,7 @@ pub fn main(init: std.process.Init) !void {
         const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, prefix.len + 4, 24);
         defer init.gpa.free(range);
         const modes = try vort.storeSummarizeModes(stream);
-        try stdout.print("range_crc32={d} ldm_blocked_stream_bytes={d} modes={d}/{d}/{d}/{d}/{d}\n", .{ vort.crc32(range), stream.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch, modes.ldm });
+        try stdout.print("range_crc32={d} ldm_blocked_stream_bytes={d} modes={d}/{d}/{d}/{d}/{d}\n", .{ vort.crc32(range), stream.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch + modes.dictionary_deflate, modes.ldm });
     } else if (std.mem.eql(u8, command, "vort-ldm-indexed-range-demo")) {
         const prefix = makeDemoLdmPrefix();
         const payloads = [_][]const u8{
@@ -233,7 +233,7 @@ pub fn main(init: std.process.Init) !void {
         const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, prefix.len + 4, 24);
         defer init.gpa.free(range);
         const modes = try vort.storeSummarizeModes(stream);
-        try stdout.print("range_crc32={d} ldm_indexed_stream_bytes={d} modes={d}/{d}/{d}/{d}/{d}\n", .{ vort.crc32(range), stream.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch, modes.ldm });
+        try stdout.print("range_crc32={d} ldm_indexed_stream_bytes={d} modes={d}/{d}/{d}/{d}/{d}\n", .{ vort.crc32(range), stream.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch + modes.dictionary_deflate, modes.ldm });
     } else if (std.mem.eql(u8, command, "store-range-demo")) {
         const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
         const stream = try vort.storeEncodeIndexedStreamAlloc(init.gpa, &payloads);
