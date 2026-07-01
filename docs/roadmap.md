@@ -151,6 +151,7 @@ architecture blindly.
 - [x] Initial design note for native block/frame layout.
 - [x] Dictionary IDs and training-plan metadata.
 - [x] Deterministic n-gram dictionary training prototype.
+- [x] Dictionary trainer retains higher-value phrase candidates after candidate cap.
 - [x] Dictionary training metadata/report validation.
 - [x] Dictionary training coverage and baseline ratio validation report.
 - [x] Dictionary match scanner and coverage summary API for future encoder integration.

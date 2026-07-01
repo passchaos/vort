@@ -61,6 +61,8 @@ pub fn trainAlloc(allocator: std.mem.Allocator, samples: []const []const u8, opt
                     phrases.items[idx].score += len;
                 } else if (phrases.items.len < options.max_phrases) {
                     try phrases.append(allocator, .{ .bytes = phrase, .score = len });
+                } else {
+                    replaceWorstPhraseIfBetter(phrases.items, .{ .bytes = phrase, .score = len });
                 }
             }
         }
@@ -90,6 +92,19 @@ fn phraseBetter(_: void, lhs: Phrase, rhs: Phrase) bool {
     if (lhs.score != rhs.score) return lhs.score > rhs.score;
     if (lhs.bytes.len != rhs.bytes.len) return lhs.bytes.len > rhs.bytes.len;
     return std.mem.lessThan(u8, lhs.bytes, rhs.bytes);
+}
+
+fn replaceWorstPhraseIfBetter(phrases: []Phrase, candidate: Phrase) void {
+    if (phrases.len == 0) return;
+    var worst_i: usize = 0;
+    for (phrases[1..], 1..) |phrase, i| {
+        if (phraseWorse(phrase, phrases[worst_i])) worst_i = i;
+    }
+    if (phraseBetter({}, candidate, phrases[worst_i])) phrases[worst_i] = candidate;
+}
+
+fn phraseWorse(lhs: Phrase, rhs: Phrase) bool {
+    return phraseBetter({}, rhs, lhs);
 }
 
 fn containsSlice(haystack: []const u8, needle: []const u8) bool {
@@ -289,6 +304,15 @@ test "dictionary trainer handles empty target" {
     const dict = try trainAlloc(std.testing.allocator, &samples, .{ .target_size = 0 });
     defer std.testing.allocator.free(dict);
     try std.testing.expectEqual(@as(usize, 0), dict.len);
+}
+
+test "dictionary trainer replaces low-value phrase candidates" {
+    var phrases = [_]Phrase{
+        .{ .bytes = "low", .score = 3 },
+        .{ .bytes = "mid", .score = 5 },
+    };
+    replaceWorstPhraseIfBetter(&phrases, .{ .bytes = "valuable", .score = 32 });
+    try std.testing.expect(std.mem.eql(u8, phrases[0].bytes, "valuable") or std.mem.eql(u8, phrases[1].bytes, "valuable"));
 }
 
 test "dictionary match scanner summarizes coverage" {
