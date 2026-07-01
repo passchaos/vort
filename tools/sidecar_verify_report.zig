@@ -9,6 +9,7 @@ pub fn main(init: std.process.Init) !void {
     var markdown_path: ?[]const u8 = null;
     var json_path: ?[]const u8 = null;
     var case_limit: ?usize = null;
+    var keep_going = false;
     var pairs: std.ArrayList(Pair) = .empty;
     defer {
         for (pairs.items) |pair| pair.deinit(init.gpa);
@@ -27,6 +28,10 @@ pub fn main(init: std.process.Init) !void {
             case_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
             continue;
         }
+        if (std.mem.eql(u8, arg, "--keep-going")) {
+            keep_going = true;
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--dir")) {
             try appendDirectoryPairs(init, &pairs, args.next() orelse return error.MissingCorpusPath);
             continue;
@@ -42,10 +47,13 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("stream,sidecar,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
+    try stdout.print("stream,sidecar,status,error,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
     for (pairs.items, 0..) |pair, i| {
         if (case_limit) |limit| if (i >= limit) break;
-        const row = try verifyPair(init, pair.stream, pair.sidecar);
+        const row = verifyPair(init, pair.stream, pair.sidecar) catch |err| row: {
+            if (!keep_going) return err;
+            break :row ReportRow{ .stream = pair.stream, .sidecar = pair.sidecar, .status = "error", .error_name = @errorName(err) };
+        };
         try rows.append(init.gpa, row);
         try printCsvRow(stdout, row);
     }
@@ -70,11 +78,13 @@ const Pair = struct {
 const ReportRow = struct {
     stream: []const u8,
     sidecar: []const u8,
-    stream_bytes: usize,
-    sidecar_bytes: usize,
-    entries: usize,
-    total_uncompressed: u64,
-    crc32: u32,
+    stream_bytes: usize = 0,
+    sidecar_bytes: usize = 0,
+    entries: usize = 0,
+    total_uncompressed: u64 = 0,
+    crc32: u32 = 0,
+    status: []const u8 = "ok",
+    error_name: []const u8 = "",
 };
 
 fn appendDirectoryPairs(init: std.process.Init, pairs: *std.ArrayList(Pair), dir_path: []const u8) !void {
@@ -122,13 +132,16 @@ fn verifyPair(init: std.process.Init, stream_path: []const u8, sidecar_path: []c
         .entries = entries.len,
         .total_uncompressed = total_uncompressed,
         .crc32 = vort.crc32(sidecar),
+        .status = "ok",
     };
 }
 
 fn printCsvRow(stdout: *std.Io.Writer, row: ReportRow) !void {
-    try stdout.print("{s},{s},{d},{d},{d},{d},{d}\n", .{
+    try stdout.print("{s},{s},{s},{s},{d},{d},{d},{d},{d}\n", .{
         row.stream,
         row.sidecar,
+        row.status,
+        row.error_name,
         row.stream_bytes,
         row.sidecar_bytes,
         row.entries,
@@ -145,18 +158,21 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
     var total_sidecar: usize = 0;
     var total_entries: usize = 0;
     var total_uncompressed: u64 = 0;
+    var ok_rows: usize = 0;
+    var error_rows: usize = 0;
     for (rows) |row| {
+        if (std.mem.eql(u8, row.status, "ok")) ok_rows += 1 else error_rows += 1;
         total_stream += row.stream_bytes;
         total_sidecar += row.sidecar_bytes;
         total_entries += row.entries;
         total_uncompressed += row.total_uncompressed;
     }
     try w.print("# Sidecar verification report\n\n", .{});
-    try w.print("- rows: {d}\n- total stream bytes: {d}\n- total sidecar bytes: {d}\n- total entries: {d}\n- total uncompressed bytes: {d}\n\n", .{ rows.len, total_stream, total_sidecar, total_entries, total_uncompressed });
-    try w.print("| stream | sidecar | stream bytes | sidecar bytes | entries | total uncompressed | sidecar crc32 |\n", .{});
-    try w.print("| --- | --- | ---: | ---: | ---: | ---: | ---: |\n", .{});
+    try w.print("- rows: {d}\n- ok rows: {d}\n- error rows: {d}\n- total stream bytes: {d}\n- total sidecar bytes: {d}\n- total entries: {d}\n- total uncompressed bytes: {d}\n\n", .{ rows.len, ok_rows, error_rows, total_stream, total_sidecar, total_entries, total_uncompressed });
+    try w.print("| stream | sidecar | status | error | stream bytes | sidecar bytes | entries | total uncompressed | sidecar crc32 |\n", .{});
+    try w.print("| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |\n", .{});
     for (rows) |row| {
-        try w.print("| {s} | {s} | {d} | {d} | {d} | {d} | {d} |\n", .{ row.stream, row.sidecar, row.stream_bytes, row.sidecar_bytes, row.entries, row.total_uncompressed, row.crc32 });
+        try w.print("| {s} | {s} | {s} | {s} | {d} | {d} | {d} | {d} | {d} |\n", .{ row.stream, row.sidecar, row.status, row.error_name, row.stream_bytes, row.sidecar_bytes, row.entries, row.total_uncompressed, row.crc32 });
     }
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
 }
@@ -169,18 +185,25 @@ fn writeJson(init: std.process.Init, path: []const u8, rows: []const ReportRow) 
     var total_sidecar: usize = 0;
     var total_entries: usize = 0;
     var total_uncompressed: u64 = 0;
+    var ok_rows: usize = 0;
+    var error_rows: usize = 0;
     for (rows) |row| {
+        if (std.mem.eql(u8, row.status, "ok")) ok_rows += 1 else error_rows += 1;
         total_stream += row.stream_bytes;
         total_sidecar += row.sidecar_bytes;
         total_entries += row.entries;
         total_uncompressed += row.total_uncompressed;
     }
-    try w.print("{{\n  \"rows\": {d},\n  \"total_stream_bytes\": {d},\n  \"total_sidecar_bytes\": {d},\n  \"total_entries\": {d},\n  \"total_uncompressed_bytes\": {d},\n  \"items\": [\n", .{ rows.len, total_stream, total_sidecar, total_entries, total_uncompressed });
+    try w.print("{{\n  \"rows\": {d},\n  \"ok_rows\": {d},\n  \"error_rows\": {d},\n  \"total_stream_bytes\": {d},\n  \"total_sidecar_bytes\": {d},\n  \"total_entries\": {d},\n  \"total_uncompressed_bytes\": {d},\n  \"items\": [\n", .{ rows.len, ok_rows, error_rows, total_stream, total_sidecar, total_entries, total_uncompressed });
     for (rows, 0..) |row, i| {
         try w.print("    {{\"stream\": ", .{});
         try std.json.Stringify.value(row.stream, .{}, w);
         try w.print(", \"sidecar\": ", .{});
         try std.json.Stringify.value(row.sidecar, .{}, w);
+        try w.print(", \"status\": ", .{});
+        try std.json.Stringify.value(row.status, .{}, w);
+        try w.print(", \"error\": ", .{});
+        try std.json.Stringify.value(row.error_name, .{}, w);
         try w.print(", \"stream_bytes\": {d}, \"sidecar_bytes\": {d}, \"entries\": {d}, \"total_uncompressed\": {d}, \"crc32\": {d}}}{s}\n", .{
             row.stream_bytes,
             row.sidecar_bytes,
