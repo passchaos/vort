@@ -35,6 +35,7 @@ zig build run -- vort-blocked-best-range-demo
 zig build run -- vort-dict-blocked-range-demo
 zig build run -- vort-self-dict-range-demo
 zig build run -- vort-ldm-summary-demo
+zig build run -- vort-ldm-blocked-range-demo
 zig build run -- vort-ldm-indexed-range-demo
 zig build run -- store-range-demo
 zig build run -- zlib-store-roundtrip "hello vort"

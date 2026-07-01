@@ -52,6 +52,10 @@ pub fn main(init: std.process.Init) !void {
     const ldm_stream = try makeLdmStream(init.gpa, &ldm_prefix);
     defer init.gpa.free(ldm_stream);
     try reportCase(init, stdout, "ldm-indexed", ldm_input, ldm_stream, null);
+
+    const ldm_blocked_stream = try vort.storeEncodeBlockedBestStreamWithLdmAlloc(init.gpa, ldm_input, ldm_input.len, .{}, .{ .min_distance = 32769, .min_length = 16 });
+    defer init.gpa.free(ldm_blocked_stream);
+    try reportCase(init, stdout, "ldm-blocked-best", ldm_input, ldm_blocked_stream, null);
     try stdout.flush();
 }
 

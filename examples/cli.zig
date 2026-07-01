@@ -213,6 +213,15 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(stream);
         const summary = try vort.storeParseEmbeddedLdmSummary(stream);
         try stdout.print("ldm_stream_bytes={d} candidates={d} longest={d} max_distance={d}\n", .{ stream.len, summary.candidates, summary.longest, summary.max_distance });
+    } else if (std.mem.eql(u8, command, "vort-ldm-blocked-range-demo")) {
+        const prefix = makeDemoLdmPrefix();
+        const input = prefix ++ "----" ++ prefix[0..1024].*;
+        const stream = try vort.storeEncodeBlockedBestStreamWithLdmAlloc(init.gpa, input, input.len, .{}, .{ .min_distance = 32769, .min_length = 16 });
+        defer init.gpa.free(stream);
+        const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, prefix.len + 4, 24);
+        defer init.gpa.free(range);
+        const modes = try vort.storeSummarizeModes(stream);
+        try stdout.print("range_crc32={d} ldm_blocked_stream_bytes={d} modes={d}/{d}/{d}/{d}/{d}\n", .{ vort.crc32(range), stream.len, modes.store, modes.deflate, modes.rle, modes.dictionary_patch, modes.ldm });
     } else if (std.mem.eql(u8, command, "vort-ldm-indexed-range-demo")) {
         const prefix = makeDemoLdmPrefix();
         const payloads = [_][]const u8{
