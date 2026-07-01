@@ -70,6 +70,7 @@ pub const storeEncodeParallelDeflateStreamAlloc = store.encodeParallelDeflateStr
 pub const storeEncodeThreadPoolDeflateStreamAlloc = store.encodeThreadPoolDeflateStreamAlloc;
 pub const storeEncodeWorkStealingDeflateStreamAlloc = store.encodeWorkStealingDeflateStreamAlloc;
 pub const storeDecodeIndexedRangeAlloc = store.decodeIndexedRangeAlloc;
+pub const storeDecodeSidecarIndexedRangeAlloc = store.decodeSidecarIndexedRangeAlloc;
 pub const storeDecodeIndexedRangeWithDictionaryAlloc = store.decodeIndexedRangeWithDictionaryAlloc;
 pub const storeDecodeSelfContainedDictionaryRangeAlloc = store.decodeSelfContainedDictionaryRangeAlloc;
 pub const storeDecodeIndexedRangeAutoAlloc = store.decodeIndexedRangeAutoAlloc;

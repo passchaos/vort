@@ -49,6 +49,7 @@ architecture blindly.
 - [x] In-memory frame indexes for concatenated native store streams.
 - [x] Serialized/sidecar frame indexes.
 - [x] Serialized frame indexes carry per-frame checksums validated by range decode.
+- [x] Sidecar frame-index bytes can drive range decode without embedded index.
 - [x] Frame index monotonicity/gap validation before range decode.
 - [x] Extensible hex-sample fuzz corpus harness for headers and malformed frames.
 - [x] Coverage-guided fuzz integration plan and reusable corpus entrypoint.

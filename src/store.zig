@@ -1364,6 +1364,12 @@ pub fn decodeIndexedRangeAlloc(allocator: std.mem.Allocator, input: []const u8, 
     return decodeRangeAlloc(allocator, input, embedded.entries, offset, length);
 }
 
+pub fn decodeSidecarIndexedRangeAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
+    const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
+    defer allocator.free(index);
+    return decodeRangeAlloc(allocator, input, index, offset, length);
+}
+
 pub fn decodeIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, offset: u64, length: usize) ![]u8 {
     const embedded = try parseEmbeddedIndexAlloc(allocator, input);
     defer embedded.deinit(allocator);
@@ -1813,6 +1819,24 @@ test "indexed stream embeds sidecar index as skippable frame" {
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 3, 8);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, "habetaga", range);
+}
+
+test "sidecar index bytes support range decode without embedded index" {
+    const first = try encodeAlloc(std.testing.allocator, "alpha");
+    defer std.testing.allocator.free(first);
+    const second = try encodeAlloc(std.testing.allocator, "beta");
+    defer std.testing.allocator.free(second);
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, first);
+    try stream.appendSlice(std.testing.allocator, second);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, stream.items);
+    defer std.testing.allocator.free(index);
+    const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, index);
+    defer std.testing.allocator.free(sidecar);
+    const range = try decodeSidecarIndexedRangeAlloc(std.testing.allocator, stream.items, sidecar, 3, 5);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, "habet", range);
 }
 
 test "native deflate frame round trips and records compressed flag" {
