@@ -194,6 +194,10 @@ def load_path_cases(paths: list[pathlib.Path], full: bool) -> list[tuple[str, by
     return cases
 
 
+def format_paths(paths: list[pathlib.Path]) -> str:
+    return ", ".join(str(path) for path in paths) if paths else "none"
+
+
 def row_to_dict(row: str) -> dict[str, str]:
     values = row.split(",")
     return dict(zip(COLUMNS, values))
@@ -240,7 +244,7 @@ def summarize_codecs(records: list[dict[str, str]]) -> list[dict[str, object]]:
     return summaries
 
 
-def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool, external_paths: bool = False) -> None:
+def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool, external_paths: bool = False, sources: list[pathlib.Path] | None = None) -> None:
     records = [row_to_dict(row) for row in rows]
     title = "External corpus benchmark suite" if external_paths else ("Silesia per-file benchmark suite" if suite else "Silesia benchmark smoke")
     mode = "full" if full else "bounded-128KiB"
@@ -253,6 +257,7 @@ def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool,
         f"- zstd: `{ZSTD or 'missing'}`",
         f"- zlib-ng minigzip: `{ZLIB_NG_MINIGZIP if ZLIB_NG_MINIGZIP.exists() else 'missing'}`",
         f"- zlib-rs compress: `{ZLIB_RS_COMPRESS if ZLIB_RS_COMPRESS.exists() else 'missing'}`",
+        f"- sources: `{format_paths(sources or [])}`",
         "",
         "## Summary by codec",
         "",
@@ -284,6 +289,7 @@ def main() -> int:
     standard_suite = "--standard-suite" in sys.argv[1:]
     markdown_path = None
     corpus_paths: list[pathlib.Path] = []
+    source_paths: list[pathlib.Path] = []
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
             markdown_path = pathlib.Path(sys.argv[index + 1])
@@ -293,17 +299,20 @@ def main() -> int:
                     break
                 corpus_paths.append(pathlib.Path(value))
     if corpus_paths:
+        source_paths = corpus_paths
         cases = load_path_cases(corpus_paths, full)
     elif standard_suite:
         discovered = discover_standard_corpora()
         if not discovered:
             print("standard corpus report: no standard corpora discovered")
             return 0
+        source_paths = discovered
         cases = load_path_cases(discovered, full)
     else:
         if not SILESIA.exists():
             print("standard corpus report: missing silesia-small.tar")
             return 0
+        source_paths = [SILESIA]
         cases = load_cases(full, suite)
     rows: list[str] = []
     with tempfile.TemporaryDirectory() as td:
@@ -314,7 +323,7 @@ def main() -> int:
             rows.append(row)
             print(row)
     if markdown_path is not None:
-        write_markdown(rows, markdown_path, suite or standard_suite, full, len(corpus_paths) != 0 or standard_suite)
+        write_markdown(rows, markdown_path, suite or standard_suite, full, len(corpus_paths) != 0 or standard_suite, source_paths)
     return 0
 
 

@@ -77,17 +77,22 @@ def load_path_cases(paths: list[pathlib.Path], full: bool) -> list[tuple[str, by
     return cases
 
 
+def format_paths(paths: list[pathlib.Path]) -> str:
+    return ", ".join(str(path) for path in paths) if paths else "none"
+
+
 def row_to_dict(row: str) -> dict[str, str]:
     return dict(zip(COLS, row.split(",")))
 
 
-def write_markdown(rows: list[str], path: pathlib.Path, full: bool, external_paths: bool = False) -> None:
+def write_markdown(rows: list[str], path: pathlib.Path, full: bool, external_paths: bool = False, sources: list[pathlib.Path] | None = None) -> None:
     records = [row_to_dict(row) for row in rows]
     lines = [
         "# Native parallel external corpus benchmark" if external_paths else "# Native parallel Silesia benchmark",
         "",
         f"- mode: `{'full' if full else 'bounded-128KiB'}`",
         f"- rows: {len(records)}",
+        f"- sources: `{format_paths(sources or [])}`",
         "",
         "## Summary by mode",
         "",
@@ -138,6 +143,7 @@ def main() -> int:
     standard_suite = "--standard-suite" in sys.argv[1:]
     markdown_path = None
     corpus_paths: list[pathlib.Path] = []
+    source_paths: list[pathlib.Path] = []
     workers = "4"
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
@@ -151,14 +157,17 @@ def main() -> int:
                 corpus_paths.append(pathlib.Path(value))
     block_len = "65536" if full else "8192"
     if corpus_paths:
+        source_paths = corpus_paths
         cases = load_path_cases(corpus_paths, full)
     elif standard_suite:
         discovered = discover_standard_corpora()
         if not discovered:
             print("native parallel corpus report: no standard corpora discovered")
             return 0
+        source_paths = discovered
         cases = load_path_cases(discovered, full)
     else:
+        source_paths = [SILESIA]
         cases = load_default_cases(full)
     if not cases:
         print("native parallel corpus report: missing silesia-small.tar")
@@ -177,7 +186,7 @@ def main() -> int:
                 rows.append(row)
                 print(row)
     if markdown_path is not None:
-        write_markdown(rows, markdown_path, full, len(corpus_paths) != 0 or standard_suite)
+        write_markdown(rows, markdown_path, full, len(corpus_paths) != 0 or standard_suite, source_paths)
     return 0
 
 
