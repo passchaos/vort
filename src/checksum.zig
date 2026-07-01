@@ -347,6 +347,7 @@ pub const Crc32CDispatch = enum { scalar, slice8, slice16, hardware };
 pub const CpuFeatureReport = struct {
     x86_sse42: bool = false,
     x86_pclmul: bool = false,
+    arm_crc32: bool = false,
     ieee_crc32_uses_hardware: bool = false,
     ieee_crc32_pclmul_candidate: bool = false,
     crc32c_hardware_candidate: bool = false,
@@ -362,6 +363,11 @@ pub fn cpuFeatureReport() CpuFeatureReport {
         // PCLMUL may accelerate IEEE CRC-32 folding once an implementation is validated.
         report.ieee_crc32_pclmul_candidate = report.x86_pclmul;
         report.crc32c_hardware_candidate = report.x86_sse42;
+        report.ieee_crc32_uses_hardware = false;
+    } else if (builtin.cpu.arch == .aarch64) {
+        const aarch64 = std.Target.aarch64;
+        report.arm_crc32 = aarch64.featureSetHas(builtin.cpu.features, .crc);
+        // ARM CRC32 instructions can accelerate IEEE CRC-32 after validation.
         report.ieee_crc32_uses_hardware = false;
     }
     return report;
@@ -599,6 +605,7 @@ test "CPU feature report keeps IEEE CRC32 dispatch conservative" {
     const report = cpuFeatureReport();
     try std.testing.expect(!report.ieee_crc32_uses_hardware);
     if (report.ieee_crc32_pclmul_candidate) try std.testing.expect(report.x86_pclmul);
+    if (builtin.cpu.arch == .aarch64 and report.arm_crc32) try std.testing.expect(!report.ieee_crc32_uses_hardware);
     if (report.crc32c_hardware_candidate) try std.testing.expect(report.x86_sse42);
 }
 

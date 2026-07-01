@@ -24,7 +24,8 @@ Required gates before enabling an architecture-specific IEEE path:
 
 1. Runtime or target-feature detection that distinguishes IEEE CRC-32 from
    CRC-32C instructions. `run-cpu-features` now reports
-   `ieee_crc32_pclmul_candidate` separately from SSE4.2 CRC32C.
+   `ieee_crc32_pclmul_candidate` separately from SSE4.2 CRC32C, and
+   reports ARM CRC32 feature availability as `arm_crc32`.
 2. Unit tests comparing scalar, portable fast, and architecture-specific output
    over empty, tiny, aligned, unaligned, and multi-KiB buffers.
 3. `run-checksum-diff` and `run-checksum-zlib-diff` must both pass.
