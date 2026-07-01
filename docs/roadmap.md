@@ -197,6 +197,7 @@ architecture blindly.
 - [x] Work-queue encoder scheduling with deterministic output order.
 - [x] Native parallel/thread-pool/work-queue encoder benchmark smoke.
 - [x] Native parallel/thread-pool/work-queue benchmark accepts real file corpora.
+- [x] Native parallel/thread-pool/work-queue benchmark accepts configurable worker counts.
 - [x] Native parallel/thread-pool/work-queue benchmark across bounded Silesia files.
 - [x] Native parallel/thread-pool/work-queue Markdown dashboards for bounded/full Silesia.
 - [x] Native parallel/thread-pool/work-queue dashboard accepts external path/tar corpora.

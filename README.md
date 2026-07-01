@@ -92,12 +92,12 @@ zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build bench-corpus-decode -Doptimize=ReleaseFast
 zig build bench-deflate-encode -Doptimize=ReleaseFast
 zig build bench-native-parallel -Doptimize=ReleaseFast
-zig build bench-native-parallel -Doptimize=ReleaseFast -- README.md 4096
+zig build bench-native-parallel -Doptimize=ReleaseFast -- README.md 4096 2
 zig build -Doptimize=ReleaseFast run-native-parallel-corpus-report
 zig build -Doptimize=ReleaseFast run-native-parallel-dashboard
-zig build -Doptimize=ReleaseFast run-native-parallel-dashboard -- --paths README.md docs/roadmap.md
+zig build -Doptimize=ReleaseFast run-native-parallel-dashboard -- --workers 2 --paths README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-native-parallel-full-dashboard
-zig build -Doptimize=ReleaseFast run-native-parallel-full-dashboard -- --paths README.md docs/roadmap.md
+zig build -Doptimize=ReleaseFast run-native-parallel-full-dashboard -- --workers 2 --paths README.md docs/roadmap.md
 ```
 
 ## Current API sketch

@@ -9,7 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 EXE = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 and pathlib.Path(sys.argv[1]).exists() else ROOT / "zig-out" / "bin" / "vort-bench-native-parallel"
 SILESIA = pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"
 SMOKE_LIMIT = 128 * 1024
-HEADER = "corpus,mode,input_bytes,stream_bytes,elapsed_ms,range_offset,range_len,range_crc32"
+HEADER = "corpus,mode,workers,input_bytes,stream_bytes,elapsed_ms,range_offset,range_len,range_crc32"
 COLS = HEADER.split(",")
 
 
@@ -74,22 +74,22 @@ def write_markdown(rows: list[str], path: pathlib.Path, full: bool, external_pat
         "",
         "## Summary by mode",
         "",
-        "| mode | files | total input | total stream bytes | total elapsed ms | MiB/s |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| mode | workers | files | total input | total stream bytes | total elapsed ms | MiB/s |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for summary in summarize_by_mode(records):
         lines.append(
-            "| {mode} | {files} | {input_bytes} | {stream_bytes} | {elapsed_ms:.3f} | {mib_s:.2f} |".format(**summary)
+            "| {mode} | {workers} | {files} | {input_bytes} | {stream_bytes} | {elapsed_ms:.3f} | {mib_s:.2f} |".format(**summary)
         )
     lines.extend([
         "",
         "## Rows",
         "",
-        "| corpus | mode | input | stream bytes | elapsed ms | range crc32 |",
-        "| --- | --- | ---: | ---: | ---: | ---: |",
+        "| corpus | mode | workers | input | stream bytes | elapsed ms | range crc32 |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ])
     for rec in records:
-        lines.append("| {corpus} | {mode} | {input_bytes} | {stream_bytes} | {elapsed_ms} | {range_crc32} |".format(**rec))
+        lines.append("| {corpus} | {mode} | {workers} | {input_bytes} | {stream_bytes} | {elapsed_ms} | {range_crc32} |".format(**rec))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
 
@@ -98,7 +98,9 @@ def summarize_by_mode(records: list[dict[str, str]]) -> list[dict[str, object]]:
     by_mode: dict[str, dict[str, object]] = {}
     for rec in records:
         mode = rec["mode"]
-        entry = by_mode.setdefault(mode, { "mode": mode, "files": 0, "input_bytes": 0, "stream_bytes": 0, "elapsed_ms": 0.0, "mib_s": 0.0 })
+        workers = rec.get("workers", "")
+        key = f"{mode}:{workers}"
+        entry = by_mode.setdefault(key, { "mode": mode, "workers": workers, "files": 0, "input_bytes": 0, "stream_bytes": 0, "elapsed_ms": 0.0, "mib_s": 0.0 })
         entry["files"] = int(entry["files"]) + 1
         entry["input_bytes"] = int(entry["input_bytes"]) + int(rec["input_bytes"])
         entry["stream_bytes"] = int(entry["stream_bytes"]) + int(rec["stream_bytes"])
@@ -118,9 +120,12 @@ def main() -> int:
     full = "--full" in sys.argv[1:]
     markdown_path = None
     corpus_paths: list[pathlib.Path] = []
+    workers = "4"
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
             markdown_path = pathlib.Path(sys.argv[index + 1])
+        if arg == "--workers" and index + 1 < len(sys.argv):
+            workers = sys.argv[index + 1]
         if arg == "--paths":
             for value in sys.argv[index + 1 :]:
                 if value.startswith("--"):
@@ -138,7 +143,7 @@ def main() -> int:
         for index, (label, data) in enumerate(cases):
             sample = root / f"case-{index:03d}.bin"
             sample.write_bytes(data)
-            out = subprocess.run([str(EXE), str(sample), block_len], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip().splitlines()
+            out = subprocess.run([str(EXE), str(sample), block_len, workers], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip().splitlines()
             for line in out[1:]:
                 fields = line.split(",", 1)
                 row = f"{label},{fields[1]}"

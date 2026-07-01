@@ -19,13 +19,13 @@ pub fn main(init: std.process.Init) !void {
         break :blk data;
     };
     const block_len: usize = if (args.next()) |value| try std.fmt.parseInt(usize, value, 10) else 97;
-    const workers: usize = 4;
-    if (block_len == 0) return error.InvalidBlockPlan;
+    const workers: usize = if (args.next()) |value| try std.fmt.parseInt(usize, value, 10) else 4;
+    if (block_len == 0 or workers == 0) return error.InvalidBlockPlan;
 
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("label,mode,input_bytes,stream_bytes,elapsed_ms,range_offset,range_len,range_crc32\n", .{});
+    try stdout.print("label,mode,workers,input_bytes,stream_bytes,elapsed_ms,range_offset,range_len,range_crc32\n", .{});
 
     inline for (.{ Mode.planned, Mode.parallel, Mode.thread_pool, Mode.work_queue }) |mode| {
         const start = std.Io.Clock.awake.now(init.io);
@@ -43,7 +43,7 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(range);
         try std.testing.expectEqualSlices(u8, input[range_offset..][0..range_len], range);
         const elapsed_ms = @as(f64, @floatFromInt(elapsed_ns)) / @as(f64, std.time.ns_per_ms);
-        try stdout.print("{s},{s},{d},{d},{d:.3},{d},{d},{d}\n", .{ label, @tagName(mode), input.len, stream.len, elapsed_ms, range_offset, range_len, vort.crc32(range) });
+        try stdout.print("{s},{s},{d},{d},{d},{d:.3},{d},{d},{d}\n", .{ label, @tagName(mode), workers, input.len, stream.len, elapsed_ms, range_offset, range_len, vort.crc32(range) });
     }
     try stdout.flush();
 }
