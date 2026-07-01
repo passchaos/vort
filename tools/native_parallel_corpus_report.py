@@ -142,6 +142,7 @@ def main() -> int:
     full = "--full" in sys.argv[1:]
     standard_suite = "--standard-suite" in sys.argv[1:]
     markdown_path = None
+    case_limit: int | None = None
     corpus_paths: list[pathlib.Path] = []
     source_paths: list[pathlib.Path] = []
     workers = "4"
@@ -149,6 +150,8 @@ def main() -> int:
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
             markdown_path = pathlib.Path(sys.argv[index + 1])
+        if arg == "--limit" and index + 1 < len(sys.argv):
+            case_limit = int(sys.argv[index + 1])
         if arg == "--workers" and index + 1 < len(sys.argv):
             workers = sys.argv[index + 1]
         if arg == "--worker-sweep" and index + 1 < len(sys.argv):
@@ -175,6 +178,8 @@ def main() -> int:
     if not cases:
         print("native parallel corpus report: missing silesia-small.tar")
         return 0
+    if case_limit is not None:
+        cases = cases[:case_limit]
     rows: list[str] = []
     if not worker_values:
         worker_values = [workers]

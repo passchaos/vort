@@ -288,11 +288,14 @@ def main() -> int:
     suite = "--suite" in sys.argv[1:]
     standard_suite = "--standard-suite" in sys.argv[1:]
     markdown_path = None
+    case_limit: int | None = None
     corpus_paths: list[pathlib.Path] = []
     source_paths: list[pathlib.Path] = []
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
             markdown_path = pathlib.Path(sys.argv[index + 1])
+        if arg == "--limit" and index + 1 < len(sys.argv):
+            case_limit = int(sys.argv[index + 1])
         if arg == "--paths":
             for value in sys.argv[index + 1 :]:
                 if value.startswith("--"):
@@ -314,6 +317,8 @@ def main() -> int:
             return 0
         source_paths = [SILESIA]
         cases = load_cases(full, suite)
+    if case_limit is not None:
+        cases = cases[:case_limit]
     rows: list[str] = []
     with tempfile.TemporaryDirectory() as td:
         root = pathlib.Path(td)

@@ -115,6 +115,7 @@ architecture blindly.
 - [x] External path/directory benchmark suite mode for additional corpora.
 - [x] External tar-archive benchmark suite mode for packed standard corpora.
 - [x] Discoverable multi-standard-corpus benchmark dashboard automation.
+- [x] Discoverable corpus dashboards support row limits for smoke automation.
 - [x] Full-mode discoverable multi-standard-corpus benchmark dashboard automation.
 - [x] Discoverable multi-standard-corpus CSV suite automation.
 - [x] Full-mode discoverable multi-standard-corpus CSV suite automation.
