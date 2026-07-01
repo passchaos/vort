@@ -63,6 +63,7 @@ pub fn main(init: std.process.Init) !void {
             for (strategies) |strategy_case| {
                 var options = vort.optionsForCompressionLevel(level_case.level);
                 options.strategy = strategy_case.strategy;
+                options = vort.normalizeCompressionOptionsForStrategy(options);
                 const plan = switch (options.strategy) {
                     .default => switch (options.parser) {
                         .hash => try vort.hashGreedyLz77PlanAlloc(init.gpa, case.input, options.lz77_options),

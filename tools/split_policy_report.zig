@@ -63,6 +63,7 @@ fn reportCase(allocator: std.mem.Allocator, stdout: *std.Io.Writer, name: []cons
         for (strategies) |strategy_case| {
             var options = vort.optionsForCompressionLevel(level_case.level);
             options.strategy = strategy_case.strategy;
+            options = vort.normalizeCompressionOptionsForStrategy(options);
             const one_shot = try vort.encodeRawBestAlloc(allocator, input, options);
             defer allocator.free(one_shot);
             const adaptive = try vort.encodeRawBestAdaptiveSplitAlloc(allocator, input, options, options.split_options);

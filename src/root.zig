@@ -104,6 +104,7 @@ pub const AdaptiveSplitOptions = deflate.AdaptiveSplitOptions;
 pub const BlockSelection = deflate.BlockSelection;
 pub const CompressionLevel = deflate.CompressionLevel;
 pub const optionsForCompressionLevel = deflate.optionsForLevel;
+pub const normalizeCompressionOptionsForStrategy = deflate.normalizeOptionsForStrategy;
 pub const ParserMode = deflate.ParserMode;
 pub const encodeRawStoredDeflateAlloc = deflate.encodeRawStoredAlloc;
 pub const decodeRawStoredDeflateAlloc = deflate.decodeRawStoredAlloc;

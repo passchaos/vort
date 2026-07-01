@@ -46,17 +46,41 @@ pub const OwnedDecodeResult = struct {
     }
 };
 
-fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !lz77.GreedyPlan {
-    return switch (options.strategy) {
-        .default => switch (options.parser) {
-            .hash => try lz77.hashGreedyPlanAlloc(allocator, input, options.lz77_options),
-            .greedy => try lz77.greedyPlanAlloc(allocator, input, options.lz77_options),
-            .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, options.lz77_options),
-            .optimal => try lz77.optimalPlanAlloc(allocator, input, options.lz77_options),
+pub fn normalizeOptionsForStrategy(options: CompressionOptions) CompressionOptions {
+    var normalized = options;
+    switch (normalized.strategy) {
+        .default => {},
+        .filtered => {
+            normalized.lz77_options.min_match = @max(normalized.lz77_options.min_match, 5);
+            normalized.lz77_options.min_savings_bits = @max(normalized.lz77_options.min_savings_bits, 8);
+            normalized.lz77_options.max_candidates = @min(normalized.lz77_options.max_candidates, 2);
         },
-        .filtered => try lz77.filteredPlanAlloc(allocator, input, options.lz77_options),
+        .huffman_only => {
+            normalized.lz77_options.max_chain = 0;
+            normalized.lz77_options.max_candidates = 0;
+            normalized.lz77_options.min_savings_bits = std.math.maxInt(usize);
+        },
+        .rle => {
+            normalized.lz77_options.window_len = 1;
+            normalized.lz77_options.max_candidates = 1;
+            normalized.lz77_options.min_match = @max(normalized.lz77_options.min_match, 3);
+        },
+    }
+    return normalized;
+}
+
+fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !lz77.GreedyPlan {
+    const normalized = normalizeOptionsForStrategy(options);
+    return switch (normalized.strategy) {
+        .default => switch (normalized.parser) {
+            .hash => try lz77.hashGreedyPlanAlloc(allocator, input, normalized.lz77_options),
+            .greedy => try lz77.greedyPlanAlloc(allocator, input, normalized.lz77_options),
+            .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, normalized.lz77_options),
+            .optimal => try lz77.optimalPlanAlloc(allocator, input, normalized.lz77_options),
+        },
+        .filtered => try lz77.filteredPlanAlloc(allocator, input, normalized.lz77_options),
         .huffman_only => try lz77.literalPlanAlloc(allocator, input),
-        .rle => try lz77.runLengthPlanAlloc(allocator, input, options.lz77_options),
+        .rle => try lz77.runLengthPlanAlloc(allocator, input, normalized.lz77_options),
     };
 }
 
@@ -1739,6 +1763,24 @@ test "zlib header rejects bad method window check and dictionary flag" {
 test "gzip header rejects reserved flags and bad method" {
     try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x08, 0xe0, 0, 0, 0, 0, 0, 3 }));
     try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x00, 0x00, 0, 0, 0, 0, 0, 3 }));
+}
+
+test "compression strategy normalization adjusts parser knobs" {
+    var options = optionsForLevel(.best);
+    options.strategy = .filtered;
+    const filtered = normalizeOptionsForStrategy(options);
+    try std.testing.expect(filtered.lz77_options.min_match >= 5);
+    try std.testing.expect(filtered.lz77_options.min_savings_bits >= 8);
+    try std.testing.expect(filtered.lz77_options.max_candidates <= 2);
+
+    options.strategy = .rle;
+    const rle = normalizeOptionsForStrategy(options);
+    try std.testing.expectEqual(@as(usize, 1), rle.lz77_options.window_len);
+    try std.testing.expectEqual(@as(usize, 1), rle.lz77_options.max_candidates);
+
+    options.strategy = .huffman_only;
+    const huffman_only = normalizeOptionsForStrategy(options);
+    try std.testing.expectEqual(@as(usize, 0), huffman_only.lz77_options.max_chain);
 }
 
 test "fixed encoder supports compression strategies" {
