@@ -793,7 +793,17 @@ pub fn decodeRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: ?[]con
     return out.toOwnedSlice(allocator);
 }
 
-pub fn encodeIndexedStreamAlloc(allocator: std.mem.Allocator, frames: []const []const u8) ![]u8 {
+pub const SidecarIndexedStream = struct {
+    stream: []u8,
+    sidecar_index: []u8,
+
+    pub fn deinit(self: SidecarIndexedStream, allocator: std.mem.Allocator) void {
+        allocator.free(self.stream);
+        allocator.free(self.sidecar_index);
+    }
+};
+
+pub fn encodeSidecarIndexedStreamAlloc(allocator: std.mem.Allocator, frames: []const []const u8) !SidecarIndexedStream {
     var stream: std.ArrayList(u8) = .empty;
     errdefer stream.deinit(allocator);
     for (frames) |payload| {
@@ -803,9 +813,18 @@ pub fn encodeIndexedStreamAlloc(allocator: std.mem.Allocator, frames: []const []
     }
     const index = try buildFrameIndexAlloc(allocator, stream.items);
     defer allocator.free(index);
-    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
-    defer allocator.free(index_bytes);
-    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    const sidecar_index = try encodeFrameIndexAlloc(allocator, index);
+    errdefer allocator.free(sidecar_index);
+    return .{ .stream = try stream.toOwnedSlice(allocator), .sidecar_index = sidecar_index };
+}
+
+pub fn encodeIndexedStreamAlloc(allocator: std.mem.Allocator, frames: []const []const u8) ![]u8 {
+    var sidecar = try encodeSidecarIndexedStreamAlloc(allocator, frames);
+    defer sidecar.deinit(allocator);
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    try stream.appendSlice(allocator, sidecar.stream);
+    const index_frame = try encodeSkippableAlloc(allocator, sidecar.sidecar_index);
     defer allocator.free(index_frame);
     try stream.appendSlice(allocator, index_frame);
     return stream.toOwnedSlice(allocator);
@@ -1833,6 +1852,16 @@ test "indexed stream embeds sidecar index as skippable frame" {
     try std.testing.expectEqual(@as(usize, 3), embedded.entries.len);
     try std.testing.expect(embedded.payload_offset > 0);
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 3, 8);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, "habetaga", range);
+}
+
+test "sidecar indexed stream encoder keeps index external" {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const sidecar = try encodeSidecarIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer sidecar.deinit(std.testing.allocator);
+    try std.testing.expectError(error.InvalidMagic, parseEmbeddedIndexAlloc(std.testing.allocator, sidecar.stream));
+    const range = try decodeSidecarIndexedRangeAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, 3, 8);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, "habetaga", range);
 }

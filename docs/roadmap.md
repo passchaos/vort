@@ -49,6 +49,7 @@ architecture blindly.
 - [x] In-memory frame indexes for concatenated native store streams.
 - [x] Serialized/sidecar frame indexes.
 - [x] Serialized frame indexes carry per-frame checksums validated by range decode.
+- [x] Sidecar-indexed stream encoder keeps index external.
 - [x] Sidecar frame-index bytes can drive range decode without embedded index.
 - [x] Sidecar frame-index bytes can drive dictionary range decode.
 - [x] Sidecar frame-index bytes can auto range-decode streams with embedded dictionaries.
