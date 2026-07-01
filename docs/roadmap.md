@@ -31,7 +31,7 @@ architecture blindly.
 - [x] Architecture-specific IEEE CRC32 dispatch plan and safety gates.
 - [x] x86 PCLMUL candidate reporting for future IEEE CRC32 dispatch.
 - [x] ARM CRC32 feature reporting for future IEEE CRC32 dispatch.
-- [ ] Architecture-specific IEEE CRC32 implementation / dispatch.
+- [x] Architecture-specific IEEE CRC32 implementation / dispatch.
 - [x] Differential checksum smoke against Zig std reference implementations.
 - [x] Differential checksum tests against Python zlib and local/system gzip wrapper trailers.
 

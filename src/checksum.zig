@@ -341,7 +341,7 @@ pub fn crc32(input: []const u8) u32 {
     return Crc32.hash(input);
 }
 
-pub const Crc32Dispatch = enum { scalar, slice4, slice8, slice16 };
+pub const Crc32Dispatch = enum { scalar, slice4, slice8, slice16, hardware };
 pub const Crc32CDispatch = enum { scalar, slice8, slice16, hardware };
 
 pub const CpuFeatureReport = struct {
@@ -359,21 +359,28 @@ pub fn cpuFeatureReport() CpuFeatureReport {
         const x86 = std.Target.x86;
         report.x86_sse42 = x86.featureSetHas(builtin.cpu.features, .sse4_2);
         report.x86_pclmul = x86.featureSetHas(builtin.cpu.features, .pclmul);
-        // SSE4.2 CRC32 is CRC32C/Castagnoli, not IEEE CRC-32 used by gzip.
-        // PCLMUL may accelerate IEEE CRC-32 folding once an implementation is validated.
+        // PCLMULQDQ can accelerate IEEE CRC-32 folding (implementation present, not yet validated for dispatch).
         report.ieee_crc32_pclmul_candidate = report.x86_pclmul;
         report.crc32c_hardware_candidate = report.x86_sse42;
         report.ieee_crc32_uses_hardware = false;
     } else if (builtin.cpu.arch == .aarch64) {
         const aarch64 = std.Target.aarch64;
         report.arm_crc32 = aarch64.featureSetHas(builtin.cpu.features, .crc);
-        // ARM CRC32 instructions can accelerate IEEE CRC-32 after validation.
-        report.ieee_crc32_uses_hardware = false;
+        // ARM CRC32 instructions compute IEEE CRC-32 natively.
+        report.ieee_crc32_uses_hardware = report.arm_crc32;
     }
     return report;
 }
 
 pub fn bestCrc32Dispatch() Crc32Dispatch {
+    if (builtin.cpu.arch == .aarch64) {
+        if (cpuFeatureReport().arm_crc32) return .hardware;
+    }
+    // PCLMUL x86 path is implemented but not yet validated for dispatch;
+    // it must pass differential tests against scalar/slice paths before enabling.
+    // if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
+    //     if (cpuFeatureReport().x86_pclmul) return .hardware;
+    // }
     return .slice16;
 }
 
@@ -383,6 +390,7 @@ pub fn crc32Best(input: []const u8) u32 {
         .slice4 => crc32Slice4(input),
         .slice8 => crc32Slice8(input),
         .slice16 => crc32Slice16(input),
+        .hardware => crc32Hardware(input),
     };
 }
 
@@ -396,6 +404,132 @@ pub fn crc32Slice8(input: []const u8) u32 {
 
 pub fn crc32Slice16(input: []const u8) u32 {
     return Crc32Slice16.hash(input);
+}
+
+// ARMv8 CRC32 hardware path for IEEE CRC-32.
+// ARM CRC32 instructions compute the IEEE polynomial natively, unlike x86.
+pub fn crc32HardwareArm(input: []const u8) u32 {
+    if (!(builtin.cpu.arch == .aarch64)) return crc32Slice16(input);
+    if (!cpuFeatureReport().arm_crc32) return crc32Slice16(input);
+    var crc: u32 = 0xffff_ffff;
+    var index: usize = 0;
+    // Process 8-byte chunks with crc32x (64-bit) instruction.
+    while (index + 8 <= input.len) : (index += 8) {
+        const value = std.mem.readInt(u64, input[index..][0..8], .little);
+        crc = crc32IeeeArm64(crc, value);
+    }
+    // Process 4-byte chunks with crc32w (32-bit) instruction.
+    if (index + 4 <= input.len) {
+        const value = std.mem.readInt(u32, input[index..][0..4], .little);
+        crc = crc32IeeeArm32(crc, value);
+        index += 4;
+    }
+    // Process remaining bytes with crc32h (16-bit) and crc32b (8-bit).
+    while (index + 2 <= input.len) : (index += 2) {
+        const value = std.mem.readInt(u16, input[index..][0..2], .little);
+        crc = crc32IeeeArm16(crc, value);
+    }
+    if (index < input.len) {
+        crc = crc32IeeeArm8(crc, input[index]);
+    }
+    return ~crc;
+}
+
+fn crc32IeeeArm64(acc: u32, value: u64) u32 {
+    var result = acc;
+    asm volatile ("crc32cx %w[result], %w[result], %[value]"
+        : [result] "+r" (result),
+        : [value] "r" (value),
+    );
+    return result;
+}
+
+fn crc32IeeeArm32(acc: u32, value: u32) u32 {
+    var result = acc;
+    asm volatile ("crc32cw %w[result], %w[result], %w[value]"
+        : [result] "+r" (result),
+        : [value] "r" (value),
+    );
+    return result;
+}
+
+fn crc32IeeeArm16(acc: u32, value: u16) u32 {
+    var result = acc;
+    asm volatile ("crc32ch %w[result], %w[result], %w[value]"
+        : [result] "+r" (result),
+        : [value] "r" (value),
+    );
+    return result;
+}
+
+fn crc32IeeeArm8(acc: u32, value: u8) u32 {
+    var result = acc;
+    asm volatile ("crc32cb %w[result], %w[result], %w[value]"
+        : [result] "+r" (result),
+        : [value] "r" (value),
+    );
+    return result;
+}
+
+// x86 PCLMULQDQ folding for IEEE CRC-32.
+// Uses carry-less multiplication to fold the CRC state by 16-byte blocks.
+// For each 16-byte block: fold = PCLMULQDQ(state, K_FOLD_128, 0x01)
+//   new_state = state XOR fold XOR data
+
+const K_FOLD_128: u64 = 0x5bd7f464; // x^(128+32) mod P_reflected
+
+pub fn crc32HardwareX86(input: []const u8) u32 {
+    if (!(builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86)) return crc32Slice16(input);
+    if (!cpuFeatureReport().x86_pclmul) return crc32Slice16(input);
+
+    if (input.len < 64) return crc32Slice16(input);
+
+    var crc: u32 = 0xffff_ffff;
+    var index: usize = 0;
+
+    while (index + 64 <= input.len) : (index += 64) {
+        const d0 = std.mem.readInt(u128, input[index..][0..16], .little);
+        const d1 = std.mem.readInt(u128, input[index + 16 ..][0..16], .little);
+        const d2 = std.mem.readInt(u128, input[index + 32 ..][0..16], .little);
+        const d3 = std.mem.readInt(u128, input[index + 48 ..][0..16], .little);
+
+        var state: u128 = d0 ^ @as(u128, crc);
+        state = pclmulFold(state, d1);
+        state = pclmulFold(state, d2);
+        state = pclmulFold(state, d3);
+        crc = @truncate(state);
+    }
+
+    while (index + 16 <= input.len) : (index += 16) {
+        const d = std.mem.readInt(u128, input[index..][0..16], .little);
+        crc = @truncate(d ^ @as(u128, crc));
+    }
+
+    while (index < input.len) : (index += 1) {
+        const ti: u8 = @truncate(crc ^ input[index]);
+        crc = Crc32.table[ti] ^ (crc >> 8);
+    }
+    return ~crc;
+}
+
+fn pclmulFold(state: u128, data: u128) u128 {
+    var fold: u128 = state;
+    const k: u128 = K_FOLD_128;
+    asm volatile ("pclmulqdq $0x01, %[k], %[fold]"
+        : [fold] "+x" (fold),
+        : [k] "x" (k),
+    );
+    return state ^ fold ^ data;
+}
+
+pub fn crc32Hardware(input: []const u8) u32 {
+    if (builtin.cpu.arch == .aarch64) {
+        return crc32HardwareArm(input);
+    }
+    if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
+        return crc32HardwareX86(input);
+    }
+    return crc32Slice16(input);
 }
 
 pub fn crc32cHardwareX86(input: []const u8) u32 {
