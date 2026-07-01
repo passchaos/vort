@@ -32,7 +32,8 @@ aggressively.
   uncompressed offsets, checksums per block, and external sidecar indexes; the
   current serialized v0 index records each frame checksum and rejects mismatched
   or non-monotonic range-decode sidecars; sidecar index bytes can also drive
-  range decode without an embedded index.
+  range decode without an embedded index, including streams that require an
+  external dictionary.
 - Dictionary-first: content dictionaries should carry stable IDs, training
   metadata, window constraints, and compatibility hints.
 - Multi-mode compression: store, fixed-Huffman deflate-compatible, dynamic

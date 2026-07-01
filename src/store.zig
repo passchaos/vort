@@ -1370,6 +1370,12 @@ pub fn decodeSidecarIndexedRangeAlloc(allocator: std.mem.Allocator, input: []con
     return decodeRangeAlloc(allocator, input, index, offset, length);
 }
 
+pub fn decodeSidecarIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
+    const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
+    defer allocator.free(index);
+    return decodeRangeWithDictionaryAlloc(allocator, dict, input, index, offset, length);
+}
+
 pub fn decodeIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, offset: u64, length: usize) ![]u8 {
     const embedded = try parseEmbeddedIndexAlloc(allocator, input);
     defer embedded.deinit(allocator);
@@ -1837,6 +1843,20 @@ test "sidecar index bytes support range decode without embedded index" {
     const range = try decodeSidecarIndexedRangeAlloc(std.testing.allocator, stream.items, sidecar, 3, 5);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, "habet", range);
+}
+
+test "sidecar index bytes support dictionary range decode" {
+    const dict = "dictionary-only phrase with enough length to beat stored framing";
+    const input = (dict ++ "!") ** 2;
+    const frame = try encodeBestWithDictionaryAlloc(std.testing.allocator, dict, input, 8);
+    defer std.testing.allocator.free(frame);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+    const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, index);
+    defer std.testing.allocator.free(sidecar);
+    const range = try decodeSidecarIndexedRangeWithDictionaryAlloc(std.testing.allocator, dict, frame, sidecar, 5, 40);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, input[5..45], range);
 }
 
 test "native deflate frame round trips and records compressed flag" {
