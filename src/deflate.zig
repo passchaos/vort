@@ -404,10 +404,7 @@ fn dynamicTokenBitCostAlloc(allocator: std.mem.Allocator, tokens: []const lz77.T
     for (code_len_ops) |op| code_len_freqs[op.symbol] += 1;
     completeCodeLengthFrequencySet(&code_len_freqs);
     const code_len_lengths = huffman.treeCodeLengths(19, &code_len_freqs, 7);
-    var hclen: usize = 4;
-    for (huffman.code_length_order, 0..) |symbol, i| {
-        if (code_len_lengths[symbol] != 0) hclen = @max(hclen, i + 1);
-    }
+    const hclen = trimmedCodeLengthAlphabetCount(&code_len_lengths);
 
     var bits: usize = 3 + 5 + 5 + 4 + hclen * 3;
     for (code_len_ops) |op| {
@@ -454,10 +451,7 @@ fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter
     for (code_len_ops) |op| code_len_freqs[op.symbol] += 1;
     completeCodeLengthFrequencySet(&code_len_freqs);
     var code_len_lengths = huffman.treeCodeLengths(19, &code_len_freqs, 7);
-    var hclen: usize = 4;
-    for (huffman.code_length_order, 0..) |symbol, i| {
-        if (code_len_lengths[symbol] != 0) hclen = @max(hclen, i + 1);
-    }
+    const hclen = trimmedCodeLengthAlphabetCount(&code_len_lengths);
 
     const lit_encoder = try huffman.HuffmanTable(286).Encoder.init(lit_lengths_full[0..hlit]);
     const dist_encoder = try huffman.HuffmanTable(30).Encoder.init(dist_lengths_full[0..hdist]);
@@ -507,6 +501,14 @@ pub fn encodeRawDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u
         offset += n;
     }
     return writer.toOwnedSlice(allocator);
+}
+
+fn trimmedCodeLengthAlphabetCount(lengths: *const [19]u4) usize {
+    var hclen: usize = 4;
+    for (huffman.code_length_order, 0..) |symbol, i| {
+        if (lengths[symbol] != 0) hclen = @max(hclen, i + 1);
+    }
+    return hclen;
 }
 
 fn trimCodeLengthCount(comptime n: usize, minimum: usize, lengths: *[n]u4) usize {
@@ -1986,6 +1988,15 @@ test "dynamic code-length alphabet uses weighted tree lengths" {
     const lengths = huffman.treeCodeLengths(19, &freqs, 7);
     try std.testing.expect(lengths[0] <= lengths[18]);
     try std.testing.expect(lengths[16] <= lengths[18]);
+}
+
+test "dynamic HCLEN trimming keeps required code-length alphabet" {
+    var lengths: [19]u4 = @splat(0);
+    try std.testing.expectEqual(@as(usize, 4), trimmedCodeLengthAlphabetCount(&lengths));
+    lengths[huffman.code_length_order[3]] = 1;
+    try std.testing.expectEqual(@as(usize, 4), trimmedCodeLengthAlphabetCount(&lengths));
+    lengths[huffman.code_length_order[10]] = 1;
+    try std.testing.expectEqual(@as(usize, 11), trimmedCodeLengthAlphabetCount(&lengths));
 }
 
 test "split raw best encoder can emit stored block after compressed block" {

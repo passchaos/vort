@@ -22,7 +22,7 @@ Remaining work for production dynamic encoding:
 
 - replace the current weighted tree length builder with production-quality
   package-merge length-limited Huffman lengths;
-- choose HLIT/HDIST/HCLEN trimming safely;
+- extend HLIT/HDIST/HCLEN trimming validation against larger corpora;
 - expand split-point search beyond bounded candidates and tune the current
   level-specific policies against standard corpora;
 - extend zlib-ng and zlib-rs direct CLI/library differential vectors with more
