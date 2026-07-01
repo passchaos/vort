@@ -18,6 +18,8 @@ pub const skippable_magic = [_]u8{ 'V', 'S', 'K', 'P' };
 pub const skippable_header_len: usize = 8;
 const ldm_summary_magic = [_]u8{ 'V', 'L', 'D', 'M' };
 const ldm_summary_len: usize = 28;
+const embedded_dictionary_magic = [_]u8{ 'V', 'D', 'I', 'C' };
+const embedded_dictionary_header_len: usize = 20;
 
 const flags_none: u8 = 0;
 const flags_deflate: u8 = 1;
@@ -938,6 +940,49 @@ pub fn parseLdmSummary(input: []const u8) Error!long_distance.Summary {
     };
 }
 
+fn encodeEmbeddedDictionaryBytesAlloc(allocator: std.mem.Allocator, dict: []const u8) ![]u8 {
+    if (dict.len > std.math.maxInt(u32)) return error.IntegerOverflow;
+    const out = try allocator.alloc(u8, embedded_dictionary_header_len + dict.len);
+    errdefer allocator.free(out);
+    @memcpy(out[0..4], &embedded_dictionary_magic);
+    const id = dictionary.DictionaryId.fromBytes(dict);
+    std.mem.writeInt(u64, out[4..12], id.asInt(), .little);
+    std.mem.writeInt(u32, out[12..16], @intCast(dict.len), .little);
+    std.mem.writeInt(u32, out[16..20], 0, .little);
+    @memcpy(out[embedded_dictionary_header_len..], dict);
+    return out;
+}
+
+pub fn parseEmbeddedDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    var offset: usize = 0;
+    var found: ?[]const u8 = null;
+    while (offset < input.len) {
+        const tail = input[offset..];
+        if (tail.len >= 4 and std.mem.eql(u8, tail[0..4], &skippable_magic)) {
+            const payload = try parseSkippable(tail);
+            if (payload.len >= embedded_dictionary_header_len and std.mem.eql(u8, payload[0..4], &embedded_dictionary_magic)) {
+                if (std.mem.readInt(u32, payload[16..20], .little) != 0) return error.CorruptFrame;
+                const len: usize = std.mem.readInt(u32, payload[12..16], .little);
+                if (payload.len - embedded_dictionary_header_len < len) return error.TruncatedFrame;
+                const dict = payload[embedded_dictionary_header_len..][0..len];
+                const expected_id = std.mem.readInt(u64, payload[4..12], .little);
+                if (dictionary.DictionaryId.fromBytes(dict).asInt() != expected_id) return error.ChecksumMismatch;
+                found = dict;
+            }
+            const total = try skippableTotalLen(tail);
+            if (tail.len < total) return error.TruncatedFrame;
+            offset += total;
+        } else {
+            const info = try parseHeader(tail);
+            const total = try frameLenFromInfo(info);
+            if (tail.len < total) return error.TruncatedFrame;
+            offset += total;
+        }
+    }
+    const dict = found orelse return error.InvalidMagic;
+    return allocator.dupe(u8, dict);
+}
+
 pub fn parseEmbeddedLdmSummary(input: []const u8) Error!long_distance.Summary {
     var offset: usize = 0;
     var found: ?long_distance.Summary = null;
@@ -960,9 +1005,26 @@ pub fn parseEmbeddedLdmSummary(input: []const u8) Error!long_distance.Summary {
 }
 
 pub fn encodeBlockedBestWithDictionaryStreamAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, block_len: usize, min_match_len: usize) ![]u8 {
+    return encodeBlockedBestWithDictionaryStreamInternalAlloc(allocator, dict, input, block_len, min_match_len, false);
+}
+
+pub fn encodeSelfContainedDictionaryStreamAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, target_size: usize, min_match_len: usize) ![]u8 {
+    const dict = try dictionary.trainAlloc(allocator, &.{input}, .{ .target_size = target_size, .min_phrase_len = min_match_len, .max_phrase_len = 24 });
+    defer allocator.free(dict);
+    return encodeBlockedBestWithDictionaryStreamInternalAlloc(allocator, dict, input, block_len, min_match_len, true);
+}
+
+fn encodeBlockedBestWithDictionaryStreamInternalAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, block_len: usize, min_match_len: usize, embed_dict: bool) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     var stream: std.ArrayList(u8) = .empty;
     errdefer stream.deinit(allocator);
+    if (embed_dict) {
+        const dict_payload = try encodeEmbeddedDictionaryBytesAlloc(allocator, dict);
+        defer allocator.free(dict_payload);
+        const dict_frame = try encodeSkippableAlloc(allocator, dict_payload);
+        defer allocator.free(dict_frame);
+        try stream.appendSlice(allocator, dict_frame);
+    }
     var offset: usize = 0;
     while (offset < input.len) {
         const n = @min(block_len, input.len - offset);
@@ -1241,6 +1303,12 @@ pub fn decodeIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict:
     const embedded = try parseEmbeddedIndexAlloc(allocator, input);
     defer embedded.deinit(allocator);
     return decodeRangeWithDictionaryAlloc(allocator, dict, input, embedded.entries, offset, length);
+}
+
+pub fn decodeSelfContainedDictionaryRangeAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
+    const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
+    defer allocator.free(dict);
+    return decodeIndexedRangeWithDictionaryAlloc(allocator, dict, input, offset, length);
 }
 
 pub const ModeSummary = struct {
@@ -1864,6 +1932,21 @@ test "blocked dictionary best stream supports dictionary range decode" {
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[5..45], range);
     try std.testing.expectError(error.InvalidDictionaryTraining, decodeIndexedRangeAlloc(std.testing.allocator, stream, 5, 40));
+}
+
+test "self-contained dictionary stream embeds dictionary and supports range decode" {
+    const phrase = "self-contained dictionary phrase for native streams";
+    const input = (phrase ++ "!") ** 4;
+    const stream = try encodeSelfContainedDictionaryStreamAlloc(std.testing.allocator, input, phrase.len + 1, 256, 8);
+    defer std.testing.allocator.free(stream);
+    const dict = try parseEmbeddedDictionaryAlloc(std.testing.allocator, stream);
+    defer std.testing.allocator.free(dict);
+    try std.testing.expect(dict.len > 0);
+    const summary = try summarizeModes(stream);
+    try std.testing.expect(summary.dictionary_patch + summary.dictionary_deflate > 0);
+    const range = try decodeSelfContainedDictionaryRangeAlloc(std.testing.allocator, stream, 7, 64);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, input[7..71], range);
 }
 
 test "work-stealing deflate stream matches planned deterministic output" {

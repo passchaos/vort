@@ -12,8 +12,10 @@ skippable serialized index with per-frame checksum metadata validated during
 range decode, and the blocked best-mode stream encoder can select
 store/deflate/RLE per block while preserving indexed range decode. Opt-in
 dictionary-aware and LDM-aware best-frame encoders can select dictionary-patch or
-LDM reference frames when the caller supplies the required context, and indexed
-LDM streams preserve range decode through the normal embedded index. Blocked
+LDM reference frames when the caller supplies the required context.
+Self-contained dictionary streams can embed their trained dictionary as skippable
+metadata for indexed range decode, and indexed LDM streams preserve range decode
+through the normal embedded index. Blocked
 streams can carry a skippable long-distance-match summary payload for
 encoder/planner feedback, and the LDM-summary encoder aligns block boundaries to
 detected long-distance match starts before appending the metadata. Future native
