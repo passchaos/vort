@@ -81,6 +81,7 @@ architecture blindly.
 - [x] Black-box differential smoke against Python zlib.
 - [x] Black-box differential smoke against system gzip CLI.
 - [x] Match-heavy dynamic/split/adaptive differential vectors.
+- [x] Python zlib dynamic/adaptive match-heavy differential vectors.
 - [x] System gzip CLI dynamic/adaptive match-heavy differential vectors.
 - [x] Local external implementation/tool availability probe.
 - [x] Optional zlib-ng/zlib-rs differential harness with explicit skip reporting.
