@@ -477,12 +477,26 @@ pub fn build(b: *std.Build) void {
     const standard_corpus_full_dashboard_step = b.step("run-standard-corpus-full-dashboard", "Write a full-size Markdown Silesia benchmark dashboard to zig-out");
     standard_corpus_full_dashboard_step.dependOn(&standard_corpus_full_dashboard.step);
 
+    const standard_multi_corpus_suite = b.addSystemCommand(&.{ "python3", "tools/standard_corpus_report.py" });
+    standard_multi_corpus_suite.addArtifactArg(cli_exe);
+    standard_multi_corpus_suite.addArg("--standard-suite");
+    if (b.args) |args| standard_multi_corpus_suite.addArgs(args);
+    const standard_multi_corpus_suite_step = b.step("run-standard-multi-corpus-suite", "Discover standard corpora and run Vort/gzip/zlib-ng/zlib-rs/zstd benchmark suite");
+    standard_multi_corpus_suite_step.dependOn(&standard_multi_corpus_suite.step);
+
     const standard_multi_corpus_dashboard = b.addSystemCommand(&.{ "python3", "tools/standard_corpus_report.py" });
     standard_multi_corpus_dashboard.addArtifactArg(cli_exe);
     standard_multi_corpus_dashboard.addArgs(&.{ "--standard-suite", "--markdown", "zig-out/vort-standard-multi-corpus-dashboard.md" });
     if (b.args) |args| standard_multi_corpus_dashboard.addArgs(args);
     const standard_multi_corpus_dashboard_step = b.step("run-standard-multi-corpus-dashboard", "Discover standard corpora and write a Markdown benchmark dashboard to zig-out");
     standard_multi_corpus_dashboard_step.dependOn(&standard_multi_corpus_dashboard.step);
+
+    const standard_multi_corpus_full_suite = b.addSystemCommand(&.{ "python3", "tools/standard_corpus_report.py" });
+    standard_multi_corpus_full_suite.addArtifactArg(cli_exe);
+    standard_multi_corpus_full_suite.addArgs(&.{ "--standard-suite", "--full" });
+    if (b.args) |args| standard_multi_corpus_full_suite.addArgs(args);
+    const standard_multi_corpus_full_suite_step = b.step("run-standard-multi-corpus-full-suite", "Discover standard corpora and run a full-mode Vort/gzip/zlib-ng/zlib-rs/zstd benchmark suite");
+    standard_multi_corpus_full_suite_step.dependOn(&standard_multi_corpus_full_suite.step);
 
     const standard_multi_corpus_full_dashboard = b.addSystemCommand(&.{ "python3", "tools/standard_corpus_report.py" });
     standard_multi_corpus_full_dashboard.addArtifactArg(cli_exe);

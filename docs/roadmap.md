@@ -113,6 +113,8 @@ architecture blindly.
 - [x] External tar-archive benchmark suite mode for packed standard corpora.
 - [x] Discoverable multi-standard-corpus benchmark dashboard automation.
 - [x] Full-mode discoverable multi-standard-corpus benchmark dashboard automation.
+- [x] Discoverable multi-standard-corpus CSV suite automation.
+- [x] Full-mode discoverable multi-standard-corpus CSV suite automation.
 - [ ] Full compatibility benchmark suite automation across multiple standard corpora.
 
 ## Milestone 4: compression performance foundation
