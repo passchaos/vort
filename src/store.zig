@@ -736,6 +736,19 @@ pub fn decodeFrameIndexAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return entries;
 }
 
+pub fn validateFrameIndex(index: []const FrameIndexEntry) Error!void {
+    var expected_uncompressed: u64 = 0;
+    var previous_frame_end: usize = 0;
+    for (index) |entry| {
+        if (entry.frame_len < header_len) return error.CorruptFrame;
+        if (entry.uncompressed_len == 0) return error.CorruptFrame;
+        if (entry.uncompressed_offset != expected_uncompressed) return error.CorruptFrame;
+        if (entry.frame_offset < previous_frame_end) return error.CorruptFrame;
+        previous_frame_end = std.math.add(usize, entry.frame_offset, entry.frame_len) catch return error.IntegerOverflow;
+        expected_uncompressed = std.math.add(u64, expected_uncompressed, entry.uncompressed_len) catch return error.IntegerOverflow;
+    }
+}
+
 pub fn findFrameForOffset(index: []const FrameIndexEntry, uncompressed_offset: u64) ?usize {
     for (index, 0..) |entry, i| {
         if (uncompressed_offset >= entry.uncompressed_offset and uncompressed_offset < entry.uncompressed_offset + entry.uncompressed_len) return i;
@@ -748,6 +761,7 @@ pub fn decodeRangeAlloc(allocator: std.mem.Allocator, input: []const u8, index: 
 }
 
 pub fn decodeRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize) ![]u8 {
+    try validateFrameIndex(index);
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     if (length == 0) return out.toOwnedSlice(allocator);
@@ -1690,6 +1704,33 @@ test "range decode validates sidecar index checksum" {
     tampered[0].uncompressed_len = index[0].uncompressed_len;
     tampered[0].frame_len -= 1;
     try std.testing.expectError(error.CorruptFrame, decodeRangeAlloc(std.testing.allocator, frame, tampered, 0, 4));
+}
+
+test "frame index validation rejects gaps overlaps and empty frames" {
+    const first = try encodeAlloc(std.testing.allocator, "first");
+    defer std.testing.allocator.free(first);
+    const second = try encodeAlloc(std.testing.allocator, "second");
+    defer std.testing.allocator.free(second);
+    var combined: std.ArrayList(u8) = .empty;
+    defer combined.deinit(std.testing.allocator);
+    try combined.appendSlice(std.testing.allocator, first);
+    try combined.appendSlice(std.testing.allocator, second);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, combined.items);
+    defer std.testing.allocator.free(index);
+    try validateFrameIndex(index);
+
+    const tampered = try std.testing.allocator.dupe(FrameIndexEntry, index);
+    defer std.testing.allocator.free(tampered);
+    tampered[1].uncompressed_offset += 1;
+    try std.testing.expectError(error.CorruptFrame, validateFrameIndex(tampered));
+
+    tampered[1].uncompressed_offset = index[1].uncompressed_offset;
+    tampered[1].frame_offset = index[0].frame_offset;
+    try std.testing.expectError(error.CorruptFrame, validateFrameIndex(tampered));
+
+    tampered[1].frame_offset = index[1].frame_offset;
+    tampered[1].uncompressed_len = 0;
+    try std.testing.expectError(error.CorruptFrame, validateFrameIndex(tampered));
 }
 
 test "indexed stream embeds sidecar index as skippable frame" {

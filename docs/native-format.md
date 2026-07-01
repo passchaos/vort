@@ -31,7 +31,7 @@ aggressively.
 - Strong indexing: optional frame indexes should support byte-range lookup,
   uncompressed offsets, checksums per block, and external sidecar indexes; the
   current serialized v0 index records each frame checksum and rejects mismatched
-  range-decode sidecars.
+  or non-monotonic range-decode sidecars.
 - Dictionary-first: content dictionaries should carry stable IDs, training
   metadata, window constraints, and compatibility hints.
 - Multi-mode compression: store, fixed-Huffman deflate-compatible, dynamic
