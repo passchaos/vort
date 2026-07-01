@@ -7,7 +7,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     const report = vort.checksum.cpuFeatureReport();
-    try stdout.print("cpu arch={s} os={s} crc32_dispatch={s} crc32_ieee_note={s} crc32c_dispatch={s} x86_sse42={} x86_pclmul={} crc32c_hw_candidate={} ieee_crc32_hw={} crc32c_best={s}\n", .{
+    try stdout.print("cpu arch={s} os={s} crc32_dispatch={s} crc32_ieee_note={s} crc32c_dispatch={s} x86_sse42={} x86_pclmul={} crc32c_hw_candidate={} ieee_crc32_pclmul_candidate={} ieee_crc32_hw={} crc32c_best={s}\n", .{
         @tagName(builtin.cpu.arch),
         @tagName(builtin.os.tag),
         @tagName(vort.checksum.bestCrc32Dispatch()),
@@ -16,6 +16,7 @@ pub fn main(init: std.process.Init) !void {
         report.x86_sse42,
         report.x86_pclmul,
         report.crc32c_hardware_candidate,
+        report.ieee_crc32_pclmul_candidate,
         report.ieee_crc32_uses_hardware,
         @tagName(vort.checksum.bestCrc32CDispatch()),
     });

@@ -348,6 +348,7 @@ pub const CpuFeatureReport = struct {
     x86_sse42: bool = false,
     x86_pclmul: bool = false,
     ieee_crc32_uses_hardware: bool = false,
+    ieee_crc32_pclmul_candidate: bool = false,
     crc32c_hardware_candidate: bool = false,
 };
 
@@ -358,6 +359,8 @@ pub fn cpuFeatureReport() CpuFeatureReport {
         report.x86_sse42 = x86.featureSetHas(builtin.cpu.features, .sse4_2);
         report.x86_pclmul = x86.featureSetHas(builtin.cpu.features, .pclmul);
         // SSE4.2 CRC32 is CRC32C/Castagnoli, not IEEE CRC-32 used by gzip.
+        // PCLMUL may accelerate IEEE CRC-32 folding once an implementation is validated.
+        report.ieee_crc32_pclmul_candidate = report.x86_pclmul;
         report.crc32c_hardware_candidate = report.x86_sse42;
         report.ieee_crc32_uses_hardware = false;
     }
@@ -595,6 +598,7 @@ test "CRC-32 best dispatch matches scalar" {
 test "CPU feature report keeps IEEE CRC32 dispatch conservative" {
     const report = cpuFeatureReport();
     try std.testing.expect(!report.ieee_crc32_uses_hardware);
+    if (report.ieee_crc32_pclmul_candidate) try std.testing.expect(report.x86_pclmul);
     if (report.crc32c_hardware_candidate) try std.testing.expect(report.x86_sse42);
 }
 
