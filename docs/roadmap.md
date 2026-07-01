@@ -226,6 +226,7 @@ architecture blindly.
 - [x] Blocked native best-mode stream with external sidecar index and range decode.
 - [x] CLI smoke for blocked best stream with external sidecar index.
 - [x] File CLI encode/decode for blocked best stream with external sidecar index.
+- [x] File CLI encode/decode for self-contained dictionary stream with external sidecar index.
 - [ ] Production seekable native format integration with native block modes.
 - [x] Long-distance matching scanner experiment.
 - [x] Long-distance matching summary integrated into compression reports.
