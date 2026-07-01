@@ -49,10 +49,13 @@ def main() -> int:
     full = "--full" in sys.argv[1:]
     all_cases = "--all" in sys.argv[1:]
     per_file = "--per-file" in sys.argv[1:]
+    target_args: list[str] = []
     markdown_path = None
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
             markdown_path = pathlib.Path(sys.argv[index + 1])
+        if arg == "--target" and index + 1 < len(sys.argv):
+            target_args = ["--target", sys.argv[index + 1]]
     cases = load_cases(full)
     if not all_cases:
         cases = cases[:3]
@@ -70,13 +73,13 @@ def main() -> int:
             rows = []
             print("case,report")
             for label, path in zip((label for label, _ in cases), paths):
-                report = subprocess.run([str(EXE), path], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
+                report = subprocess.run([str(EXE), *target_args, path], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
                 rows.append((label, parse_report(report)))
                 print(f"{label},{report}")
             if markdown_path is not None:
                 write_markdown(rows, markdown_path, full)
         else:
-            print(subprocess.run([str(EXE), *paths], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip())
+            print(subprocess.run([str(EXE), *target_args, *paths], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip())
     return 0
 
 

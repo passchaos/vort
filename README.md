@@ -74,6 +74,7 @@ zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --full
 zig build run-compression-report
 zig build run-dictionary-report
 zig build run-dictionary-report -- README.md docs/roadmap.md
+zig build run-dictionary-report -- --target 512 README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-report
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-report -- --per-file
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard

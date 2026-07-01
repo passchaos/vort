@@ -16,13 +16,18 @@ pub fn main(init: std.process.Init) !void {
         for (file_samples.items) |sample| init.gpa.free(sample);
         file_samples.deinit(init.gpa);
     }
+    var target_size: usize = 256;
     while (args.next()) |path| {
+        if (std.mem.eql(u8, path, "--target")) {
+            const value = args.next() orelse return error.InvalidDictionaryTraining;
+            target_size = try std.fmt.parseInt(usize, value, 10);
+            continue;
+        }
         const sample = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(16 * 1024 * 1024));
         try file_samples.append(init.gpa, sample);
     }
     const samples = if (file_samples.items.len == 0) builtins[0..] else file_samples.items;
 
-    const target_size: usize = 256;
     const plan = vort.dictionary.planTraining(samples, target_size);
     const dict = try vort.trainDictionaryAlloc(init.gpa, samples, .{ .target_size = target_size, .min_phrase_len = 5, .max_phrase_len = 24 });
     defer init.gpa.free(dict);
