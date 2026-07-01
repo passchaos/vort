@@ -89,11 +89,20 @@ def parse_report(report: str) -> dict[str, str]:
 
 
 def write_markdown(rows: list[tuple[str, dict[str, str]]], path: pathlib.Path, full: bool) -> None:
+    summary = summarize_rows(rows)
     lines = [
         "# Dictionary corpus report",
         "",
         f"- mode: `{'full' if full else 'bounded-32KiB'}`",
         f"- rows: {len(rows)}",
+        f"- total sample bytes: {summary['sample_bytes']}",
+        f"- total best+dict bytes: {summary['best_with_dict_bytes']}",
+        f"- total baseline bytes: {summary['baseline_deflate_bytes']}",
+        f"- net delta bytes: {summary['delta_bytes']}",
+        f"- files improved: {summary['improved']}",
+        f"- files regressed: {summary['regressed']}",
+        "",
+        "## Rows",
         "",
         "| corpus | sample bytes | patch deflate bytes | patch deflate ratio | best+dict bytes | best+dict ratio | dict frames | baseline bytes | baseline ratio |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
@@ -105,6 +114,29 @@ def write_markdown(rows: list[tuple[str, dict[str, str]]], path: pathlib.Path, f
         )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
+
+
+def summarize_rows(rows: list[tuple[str, dict[str, str]]]) -> dict[str, int]:
+    summary = {
+        "sample_bytes": 0,
+        "best_with_dict_bytes": 0,
+        "baseline_deflate_bytes": 0,
+        "delta_bytes": 0,
+        "improved": 0,
+        "regressed": 0,
+    }
+    for _, row in rows:
+        best = int(row.get("best_with_dict_bytes") or 0)
+        baseline = int(row.get("baseline_deflate_bytes") or 0)
+        summary["sample_bytes"] += int(row.get("sample_bytes") or 0)
+        summary["best_with_dict_bytes"] += best
+        summary["baseline_deflate_bytes"] += baseline
+        if best < baseline:
+            summary["improved"] += 1
+        elif best > baseline:
+            summary["regressed"] += 1
+    summary["delta_bytes"] = summary["best_with_dict_bytes"] - summary["baseline_deflate_bytes"]
+    return summary
 
 
 if __name__ == "__main__":
