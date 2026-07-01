@@ -218,4 +218,5 @@ architecture blindly.
 - [x] Native parallel/thread-pool/work-queue dashboard discovers standard corpora.
 - [x] Native parallel/thread-pool/work-queue full dashboard discovers standard corpora.
 - [x] Native parallel/thread-pool/work-queue dashboard per-mode throughput summaries.
+- [x] Native parallel/thread-pool/work-queue dashboard worker-count sweeps.
 - [ ] Production thread-pool encoder benchmarking across full standard real corpora.

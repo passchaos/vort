@@ -102,6 +102,7 @@ zig build bench-native-parallel -Doptimize=ReleaseFast -- README.md 4096 2
 zig build -Doptimize=ReleaseFast run-native-parallel-corpus-report
 zig build -Doptimize=ReleaseFast run-native-parallel-dashboard
 zig build -Doptimize=ReleaseFast run-native-parallel-dashboard -- --workers 2 --paths README.md docs/roadmap.md
+zig build -Doptimize=ReleaseFast run-native-parallel-dashboard -- --worker-sweep 1,2,4 --paths README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-native-parallel-full-dashboard
 zig build -Doptimize=ReleaseFast run-native-parallel-full-dashboard -- --workers 2 --paths README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-native-parallel-multi-corpus-dashboard

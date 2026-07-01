@@ -145,11 +145,14 @@ def main() -> int:
     corpus_paths: list[pathlib.Path] = []
     source_paths: list[pathlib.Path] = []
     workers = "4"
+    worker_values: list[str] = []
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
             markdown_path = pathlib.Path(sys.argv[index + 1])
         if arg == "--workers" and index + 1 < len(sys.argv):
             workers = sys.argv[index + 1]
+        if arg == "--worker-sweep" and index + 1 < len(sys.argv):
+            worker_values = [value for value in sys.argv[index + 1].split(",") if value]
         if arg == "--paths":
             for value in sys.argv[index + 1 :]:
                 if value.startswith("--"):
@@ -173,18 +176,21 @@ def main() -> int:
         print("native parallel corpus report: missing silesia-small.tar")
         return 0
     rows: list[str] = []
+    if not worker_values:
+        worker_values = [workers]
     print(HEADER)
     with tempfile.TemporaryDirectory() as td:
         root = pathlib.Path(td)
         for index, (label, data) in enumerate(cases):
             sample = root / f"case-{index:03d}.bin"
             sample.write_bytes(data)
-            out = subprocess.run([str(EXE), str(sample), block_len, workers], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip().splitlines()
-            for line in out[1:]:
-                fields = line.split(",", 1)
-                row = f"{label},{fields[1]}"
-                rows.append(row)
-                print(row)
+            for worker_count in worker_values:
+                out = subprocess.run([str(EXE), str(sample), block_len, worker_count], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip().splitlines()
+                for line in out[1:]:
+                    fields = line.split(",", 1)
+                    row = f"{label},{fields[1]}"
+                    rows.append(row)
+                    print(row)
     if markdown_path is not None:
         write_markdown(rows, markdown_path, full, len(corpus_paths) != 0 or standard_suite, source_paths)
     return 0
