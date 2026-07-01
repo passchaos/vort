@@ -156,6 +156,7 @@ architecture blindly.
 - [x] File-corpus throughput dashboard expands directory inputs recursively.
 - [x] File-corpus throughput dashboard expands tar archive inputs.
 - [x] File-corpus throughput dashboard discovers standard corpora.
+- [x] File-corpus throughput dashboard supports row limits for smoke automation.
 - [x] Silesia-sample standard corpus benchmark smoke.
 - [x] Automated per-file Silesia throughput report.
 - [x] Markdown benchmark dashboard export for Silesia suite.

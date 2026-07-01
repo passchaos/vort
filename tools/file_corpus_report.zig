@@ -7,6 +7,7 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
 
     var markdown_path: ?[]const u8 = null;
+    var case_limit: ?usize = null;
     var path_entries: std.ArrayList(PathEntry) = .empty;
     defer {
         for (path_entries.items) |entry| if (entry.owned) init.gpa.free(entry.path);
@@ -21,6 +22,10 @@ pub fn main(init: std.process.Init) !void {
             markdown_path = args.next() orelse return error.MissingCorpusPath;
             continue;
         }
+        if (std.mem.eql(u8, arg, "--limit")) {
+            case_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+            continue;
+        }
         try appendPathArg(init, &path_entries, arg);
     }
     if (path_entries.items.len == 0) return error.MissingCorpusPath;
@@ -33,7 +38,8 @@ pub fn main(init: std.process.Init) !void {
     const stdout = &stdout_writer.interface;
     try stdout.print("path,input_bytes,best_deflate_bytes,best_ratio,encode_mib_s,decode_mib_s\n", .{});
 
-    for (path_entries.items) |entry| {
+    for (path_entries.items, 0..) |entry, i| {
+        if (case_limit) |limit| if (i >= limit) break;
         const path = entry.path;
         const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(data);
