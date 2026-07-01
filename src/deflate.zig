@@ -390,7 +390,6 @@ fn dynamicTokenBitCostAlloc(allocator: std.mem.Allocator, tokens: []const lz77.T
     };
     lit_freqs[256] = 1;
     completeLiteralFrequencySet(&lit_freqs);
-    if (!dynamicDistanceSafe(&dist_freqs)) return lz77.fixedBitCost(tokens);
     completeDistanceFrequencySet(&dist_freqs);
 
     var lit_lengths_full = huffman.treeCodeLengths(286, &lit_freqs, 15);
@@ -437,7 +436,6 @@ fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter
     };
     lit_freqs[256] = 1;
     completeLiteralFrequencySet(&lit_freqs);
-    if (!dynamicDistanceSafe(&dist_freqs)) return writeFixedTokens(allocator, writer, tokens, final);
     completeDistanceFrequencySet(&dist_freqs);
 
     var lit_lengths_full = huffman.treeCodeLengths(286, &lit_freqs, 15);
@@ -530,13 +528,15 @@ fn completeLiteralFrequencySet(freqs: *[286]u32) void {
     for (freqs.*) |freq| {
         if (freq != 0) active += 1;
     }
-    var target: usize = 2;
-    while (target < active) target <<= 1;
-    var symbol: usize = 0;
-    while (active < target and symbol < freqs.len) : (symbol += 1) {
-        if (freqs[symbol] == 0) {
-            freqs[symbol] = 1;
-            active += 1;
+    // Only need 2 symbols for a valid Huffman tree (EOB is always preset).
+    if (active < 2) {
+        var sym: usize = 0;
+        while (sym < freqs.len) : (sym += 1) {
+            if (freqs[sym] == 0) {
+                freqs[sym] = 1;
+                active += 1;
+                if (active >= 2) break;
+            }
         }
     }
 }
@@ -546,32 +546,17 @@ fn completeDistanceFrequencySet(freqs: *[30]u32) void {
     for (freqs.*) |freq| {
         if (freq != 0) active += 1;
     }
-    if (active == 0) {
-        freqs[0] = 1;
-        freqs[1] = 1;
-        active = 2;
-    }
-    var target: usize = 2;
-    while (target < active) target <<= 1;
-    var symbol: usize = 0;
-    while (active < target and symbol < freqs.len) : (symbol += 1) {
-        if (freqs[symbol] == 0) {
-            freqs[symbol] = 1;
-            active += 1;
+    // Only need 2 symbols for a valid Huffman tree.
+    if (active < 2) {
+        var sym: usize = 0;
+        while (sym < freqs.len) : (sym += 1) {
+            if (freqs[sym] == 0) {
+                freqs[sym] = 1;
+                active += 1;
+                if (active >= 2) break;
+            }
         }
     }
-}
-
-fn dynamicDistanceSafe(freqs: *const [30]u32) bool {
-    var active: usize = 0;
-    var max_symbol: usize = 0;
-    for (freqs, 0..) |freq, i| {
-        if (freq != 0) {
-            active += 1;
-            max_symbol = i;
-        }
-    }
-    return active <= 8 and max_symbol <= 7;
 }
 
 fn completeCodeLengthFrequencySet(freqs: *[19]u32) void {
@@ -579,13 +564,15 @@ fn completeCodeLengthFrequencySet(freqs: *[19]u32) void {
     for (freqs.*) |freq| {
         if (freq != 0) active += 1;
     }
-    var target: usize = 2;
-    while (target < active) target <<= 1;
-    var symbol: usize = 0;
-    while (active < target and symbol < freqs.len) : (symbol += 1) {
-        if (freqs[symbol] == 0) {
-            freqs[symbol] = 1;
-            active += 1;
+    // Only need 2 symbols for a valid Huffman tree.
+    if (active < 2) {
+        var sym: usize = 0;
+        while (sym < freqs.len) : (sym += 1) {
+            if (freqs[sym] == 0) {
+                freqs[sym] = 1;
+                active += 1;
+                if (active >= 2) break;
+            }
         }
     }
 }
