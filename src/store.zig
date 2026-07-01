@@ -937,7 +937,7 @@ pub fn encodeBlockedBestStreamWithOptionsAlloc(allocator: std.mem.Allocator, inp
     return stream.toOwnedSlice(allocator);
 }
 
-pub fn encodeBlockedBestStreamWithLdmAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: deflate.CompressionOptions, ldm_options: long_distance.Options) ![]u8 {
+pub fn encodeSidecarBlockedBestStreamWithLdmAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: deflate.CompressionOptions, ldm_options: long_distance.Options) !SidecarIndexedStream {
     var stream = try std.ArrayList(u8).initCapacity(allocator, 0);
     errdefer stream.deinit(allocator);
     const plan = try @import("planner.zig").planBlocksAlloc(allocator, input.len, .{ .block_len = block_len, .worker_count = 1 });
@@ -954,9 +954,18 @@ pub fn encodeBlockedBestStreamWithLdmAlloc(allocator: std.mem.Allocator, input: 
     }
     const index = try buildFrameIndexAlloc(allocator, stream.items);
     defer allocator.free(index);
-    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
-    defer allocator.free(index_bytes);
-    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    const sidecar_index = try encodeFrameIndexAlloc(allocator, index);
+    errdefer allocator.free(sidecar_index);
+    return .{ .stream = try stream.toOwnedSlice(allocator), .sidecar_index = sidecar_index };
+}
+
+pub fn encodeBlockedBestStreamWithLdmAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: deflate.CompressionOptions, ldm_options: long_distance.Options) ![]u8 {
+    var sidecar = try encodeSidecarBlockedBestStreamWithLdmAlloc(allocator, input, block_len, options, ldm_options);
+    defer sidecar.deinit(allocator);
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    try stream.appendSlice(allocator, sidecar.stream);
+    const index_frame = try encodeSkippableAlloc(allocator, sidecar.sidecar_index);
     defer allocator.free(index_frame);
     try stream.appendSlice(allocator, index_frame);
     return stream.toOwnedSlice(allocator);
@@ -2038,6 +2047,18 @@ test "blocked best stream can select long-distance frames" {
     const summary = try summarizeModes(stream);
     try std.testing.expect(summary.ldm > 0);
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, prefix.len + 4, 32);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, prefix[0..32], range);
+}
+
+test "sidecar blocked LDM stream keeps index external" {
+    const prefix = deterministicLdmPrefix();
+    const input = prefix ++ "----" ++ prefix[0..1024].*;
+    const sidecar = try encodeSidecarBlockedBestStreamWithLdmAlloc(std.testing.allocator, input, input.len, .{}, .{ .min_distance = 32769, .min_length = 16 });
+    defer sidecar.deinit(std.testing.allocator);
+    const summary = try summarizeModes(sidecar.stream);
+    try std.testing.expect(summary.ldm > 0);
+    const range = try decodeSidecarIndexedRangeAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, prefix.len + 4, 32);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, prefix[0..32], range);
 }

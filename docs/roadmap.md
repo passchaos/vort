@@ -232,6 +232,7 @@ architecture blindly.
 - [x] Native blocked stream planning aligns blocks to long-distance match starts.
 - [x] Prototype native LDM reference frame with opt-in best-frame selection.
 - [x] Blocked native best stream can opt into long-distance frame selection.
+- [x] Blocked native LDM stream can use external sidecar index.
 - [x] Native LDM frame size and selection metrics in compression report.
 - [ ] Production long-distance matching integration into native/block encoder.
 - [x] Deterministic block planning metadata for future multi-threaded encoding.
