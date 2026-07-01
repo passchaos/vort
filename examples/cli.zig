@@ -411,6 +411,15 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = stream_path, .data = sidecar.stream });
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = sidecar_path, .data = sidecar.sidecar_index });
         try stdout.print("input_bytes={d} stream_bytes={d} sidecar_bytes={d} stream={s} sidecar={s}\n", .{ data.len, sidecar.stream.len, sidecar.sidecar_index.len, stream_path, sidecar_path });
+    } else if (std.mem.eql(u8, command, "verify-vort-sidecar-index-file")) {
+        const stream_path = args.next() orelse return error.MissingCorpusPath;
+        const sidecar_path = args.next() orelse return error.MissingCorpusPath;
+        const stream = try std.Io.Dir.cwd().readFileAlloc(init.io, stream_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(stream);
+        const sidecar = try std.Io.Dir.cwd().readFileAlloc(init.io, sidecar_path, init.gpa, .limited(16 * 1024 * 1024));
+        defer init.gpa.free(sidecar);
+        try vort.storeValidateSidecarIndexAlloc(init.gpa, stream, sidecar);
+        try stdout.print("sidecar_ok=true stream_bytes={d} sidecar_bytes={d}\n", .{ stream.len, sidecar.len });
     } else if (std.mem.eql(u8, command, "decode-vort-sidecar-range-file")) {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
         const sidecar_path = args.next() orelse return error.MissingCorpusPath;

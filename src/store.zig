@@ -1420,6 +1420,20 @@ pub fn decodeIndexedRangeAlloc(allocator: std.mem.Allocator, input: []const u8, 
     return decodeRangeAlloc(allocator, input, embedded.entries, offset, length);
 }
 
+pub fn validateSidecarIndexAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8) !void {
+    const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
+    defer allocator.free(index);
+    try validateFrameIndex(index);
+    for (index) |entry| {
+        if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
+        const frame = input[entry.frame_offset..][0..entry.frame_len];
+        const info = try parseHeader(frame);
+        if (entry.frame_len != try frameLenFromInfo(info)) return error.CorruptFrame;
+        if (entry.uncompressed_len != info.uncompressed_size) return error.CorruptFrame;
+        if (entry.checksum != info.checksum) return error.ChecksumMismatch;
+    }
+}
+
 pub fn decodeSidecarIndexedRangeAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
     const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
     defer allocator.free(index);
@@ -1932,6 +1946,14 @@ test "sidecar index range decode rejects tampered checksum" {
     const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, tampered);
     defer std.testing.allocator.free(sidecar);
     try std.testing.expectError(error.ChecksumMismatch, decodeSidecarIndexedRangeAlloc(std.testing.allocator, frame, sidecar, 0, 8));
+    try std.testing.expectError(error.ChecksumMismatch, validateSidecarIndexAlloc(std.testing.allocator, frame, sidecar));
+}
+
+test "sidecar index validator accepts matching stream" {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const sidecar = try encodeSidecarIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer sidecar.deinit(std.testing.allocator);
+    try validateSidecarIndexAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index);
 }
 
 test "sidecar index bytes support dictionary range decode" {

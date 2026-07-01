@@ -219,6 +219,7 @@ architecture blindly.
 - [x] Native range report can sweep multiple offsets per stream.
 - [x] Native range report covers external sidecar index range decode.
 - [x] Sidecar index range decode rejects tampered checksums.
+- [x] Sidecar index verifier API and file CLI.
 - [x] Native range report covers self-contained dictionary streams.
 - [x] CLI/range report coverage for blocked native LDM selection.
 - [x] Blocked native deflate stream with embedded index and range decode.

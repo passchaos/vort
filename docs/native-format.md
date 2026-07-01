@@ -30,7 +30,7 @@ aggressively.
   block or seek point without scanning from the beginning.
 - Strong indexing: optional frame indexes should support byte-range lookup,
   uncompressed offsets, checksums per block, and external sidecar indexes; the
-  current serialized v0 index records each frame checksum and rejects mismatched
+  current serialized v0 index records each frame checksum, can be validated against the target stream, and rejects mismatched
   or non-monotonic range-decode sidecars; sidecar-indexed encoders can keep the
   index external, and sidecar index bytes can drive range decode without an
   embedded index, including streams that embed or require a dictionary.
