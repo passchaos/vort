@@ -7,6 +7,7 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
 
     var markdown_path: ?[]const u8 = null;
+    var json_path: ?[]const u8 = null;
     var pairs: std.ArrayList(Pair) = .empty;
     defer {
         for (pairs.items) |pair| pair.deinit(init.gpa);
@@ -15,6 +16,10 @@ pub fn main(init: std.process.Init) !void {
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--markdown")) {
             markdown_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--json")) {
+            json_path = args.next() orelse return error.MissingCorpusPath;
             continue;
         }
         if (std.mem.eql(u8, arg, "--dir")) {
@@ -40,6 +45,7 @@ pub fn main(init: std.process.Init) !void {
     }
     try stdout.flush();
     if (markdown_path) |path| try writeMarkdown(init, path, rows.items);
+    if (json_path) |path| try writeJson(init, path, rows.items);
 }
 
 const Pair = struct {
@@ -146,5 +152,38 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
     for (rows) |row| {
         try w.print("| {s} | {s} | {d} | {d} | {d} | {d} | {d} |\n", .{ row.stream, row.sidecar, row.stream_bytes, row.sidecar_bytes, row.entries, row.total_uncompressed, row.crc32 });
     }
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
+}
+
+fn writeJson(init: std.process.Init, path: []const u8, rows: []const ReportRow) !void {
+    var writer = std.Io.Writer.Allocating.init(init.gpa);
+    defer writer.deinit();
+    const w = &writer.writer;
+    var total_stream: usize = 0;
+    var total_sidecar: usize = 0;
+    var total_entries: usize = 0;
+    var total_uncompressed: u64 = 0;
+    for (rows) |row| {
+        total_stream += row.stream_bytes;
+        total_sidecar += row.sidecar_bytes;
+        total_entries += row.entries;
+        total_uncompressed += row.total_uncompressed;
+    }
+    try w.print("{{\n  \"rows\": {d},\n  \"total_stream_bytes\": {d},\n  \"total_sidecar_bytes\": {d},\n  \"total_entries\": {d},\n  \"total_uncompressed_bytes\": {d},\n  \"items\": [\n", .{ rows.len, total_stream, total_sidecar, total_entries, total_uncompressed });
+    for (rows, 0..) |row, i| {
+        try w.print("    {{\"stream\": ", .{});
+        try std.json.Stringify.value(row.stream, .{}, w);
+        try w.print(", \"sidecar\": ", .{});
+        try std.json.Stringify.value(row.sidecar, .{}, w);
+        try w.print(", \"stream_bytes\": {d}, \"sidecar_bytes\": {d}, \"entries\": {d}, \"total_uncompressed\": {d}, \"crc32\": {d}}}{s}\n", .{
+            row.stream_bytes,
+            row.sidecar_bytes,
+            row.entries,
+            row.total_uncompressed,
+            row.crc32,
+            if (i + 1 == rows.len) "" else ",",
+        });
+    }
+    try w.print("  ]\n}}\n", .{});
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
 }
