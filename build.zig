@@ -431,6 +431,22 @@ pub fn build(b: *std.Build) void {
     const native_range_report_step = b.step("run-native-range-report", "Report indexed range decode across native modes");
     native_range_report_step.dependOn(&run_native_range_report.step);
 
+    const sidecar_verify_report_exe = b.addExecutable(.{
+        .name = "vort-sidecar-verify-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/sidecar_verify_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_sidecar_verify_report = b.addRunArtifact(sidecar_verify_report_exe);
+    if (b.args) |args| run_sidecar_verify_report.addArgs(args);
+    const sidecar_verify_report_step = b.step("run-sidecar-verify-report", "Verify native sidecar index files against streams");
+    sidecar_verify_report_step.dependOn(&run_sidecar_verify_report.step);
+
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
         .root_module = b.createModule(.{
@@ -538,6 +554,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&level_report_exe.step);
     check_step.dependOn(&split_policy_report_exe.step);
     check_step.dependOn(&native_range_report_exe.step);
+    check_step.dependOn(&sidecar_verify_report_exe.step);
     check_step.dependOn(&file_corpus_report_exe.step);
     check_step.dependOn(&cpu_features_exe.step);
 

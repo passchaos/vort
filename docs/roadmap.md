@@ -221,6 +221,7 @@ architecture blindly.
 - [x] Native range report validates sidecar indexes before range decode.
 - [x] Sidecar index range decode rejects tampered checksums.
 - [x] Sidecar index verifier API and file CLI.
+- [x] Sidecar verifier report for stream/index file pairs.
 - [x] Native range report covers self-contained dictionary streams.
 - [x] Native range report covers sidecar-indexed self-contained dictionary streams.
 - [x] CLI/range report coverage for blocked native LDM selection.
