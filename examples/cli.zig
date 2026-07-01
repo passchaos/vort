@@ -451,6 +451,18 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(range);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = range });
         try stdout.print("range_bytes={d} crc32={d} path={s}\n", .{ range.len, vort.crc32(range), output_path });
+    } else if (std.mem.eql(u8, command, "encode-vort-sidecar-ldm-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const stream_path = args.next() orelse return error.MissingCorpusPath;
+        const sidecar_path = args.next() orelse return error.MissingCorpusPath;
+        const block_len = try parseBlockLen(args.next(), 8192);
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const sidecar = try vort.storeEncodeSidecarBlockedBestStreamWithLdmAlloc(init.gpa, data, block_len, .{}, .{ .min_distance = 32769, .min_length = 16 });
+        defer sidecar.deinit(init.gpa);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = stream_path, .data = sidecar.stream });
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = sidecar_path, .data = sidecar.sidecar_index });
+        try stdout.print("input_bytes={d} stream_bytes={d} sidecar_bytes={d} stream={s} sidecar={s}\n", .{ data.len, sidecar.stream.len, sidecar.sidecar_index.len, stream_path, sidecar_path });
     } else if (std.mem.eql(u8, command, "decode-raw-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const compressed = try hexToOwnedBytes(init.gpa, hex);
