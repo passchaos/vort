@@ -161,6 +161,7 @@ architecture blindly.
 - [x] Dictionary-aware native best-frame selection with fallback to non-dictionary modes.
 - [x] Dictionary-aware blocked native stream with indexed range decode.
 - [x] Dictionary training and patch report accepts ad-hoc file corpora.
+- [x] Dictionary training and patch report across bounded Silesia files.
 - [ ] Production dictionary training integrated into encoder with ratio/throughput gains.
 - [x] Splittable/seekable frame index range decode API.
 - [x] Embedded skippable index frame for seekable native store streams.
