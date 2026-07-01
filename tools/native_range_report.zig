@@ -95,12 +95,12 @@ fn chooseRange(input: []const u8, options: RangeOptions) struct { offset: usize,
 }
 
 fn reportSweep(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8, dict: ?[]const u8) !void {
-    const offsets = [_]usize{ 0, 5, if (input.len == 0) 0 else input.len / 2 };
+    const offsets = [_]usize{ 0, 5, if (input.len == 0) 0 else input.len / 2, input.len -| 32 };
     for (&offsets) |offset| try reportCase(init, stdout, name, input, stream, dict, .{ .offset = offset, .length = 32 });
 }
 
 fn reportSelfContainedDictionarySweep(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8) !void {
-    const offsets = [_]usize{ 0, 5, if (input.len == 0) 0 else input.len / 2 };
+    const offsets = [_]usize{ 0, 5, if (input.len == 0) 0 else input.len / 2, input.len -| 32 };
     for (&offsets) |offset| try reportSelfContainedDictionaryCase(init, stdout, name, input, stream, .{ .offset = offset, .length = 32 });
 }
 
