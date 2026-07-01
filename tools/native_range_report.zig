@@ -56,6 +56,11 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(store_stream);
     if (sweep) try reportSweep(init, stdout, "store-indexed", store_input, store_stream, null) else try reportCase(init, stdout, "store-indexed", store_input, store_stream, null, range_options);
 
+    const sidecar_stream = try makeSidecarStoreStream(init.gpa);
+    defer init.gpa.free(sidecar_stream.stream);
+    defer init.gpa.free(sidecar_stream.sidecar);
+    if (sweep) try reportSidecarSweep(init, stdout, "store-sidecar", store_input, sidecar_stream.stream, sidecar_stream.sidecar) else try reportSidecarCase(init, stdout, "store-sidecar", store_input, sidecar_stream.stream, sidecar_stream.sidecar, range_options);
+
     const blocked_input = "abcdefghijklmnopqrstuvwxyz" ++ ("aaaaaaaaaaaaaaaa" ** 2) ++ ("abcabcabcabc" ** 2);
     const blocked_stream = try vort.storeEncodeBlockedBestStreamAlloc(init.gpa, blocked_input, 16);
     defer init.gpa.free(blocked_stream);
@@ -99,6 +104,11 @@ fn reportSweep(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8,
     for (&offsets) |offset| try reportCase(init, stdout, name, input, stream, dict, .{ .offset = offset, .length = 32 });
 }
 
+fn reportSidecarSweep(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8, sidecar: []const u8) !void {
+    const offsets = [_]usize{ 0, 5, if (input.len == 0) 0 else input.len / 2, input.len -| 32 };
+    for (&offsets) |offset| try reportSidecarCase(init, stdout, name, input, stream, sidecar, .{ .offset = offset, .length = 32 });
+}
+
 fn reportSelfContainedDictionarySweep(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8) !void {
     const offsets = [_]usize{ 0, 5, if (input.len == 0) 0 else input.len / 2, input.len -| 32 };
     for (&offsets) |offset| try reportSelfContainedDictionaryCase(init, stdout, name, input, stream, .{ .offset = offset, .length = 32 });
@@ -112,6 +122,15 @@ fn reportCase(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, 
         try vort.storeDecodeIndexedRangeWithDictionaryAlloc(init.gpa, dictionary, stream, range_offset, range_len)
     else
         try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, range_offset, range_len);
+    defer init.gpa.free(range);
+    try printRangeReport(stdout, name, input, stream, range_offset, range_len, range);
+}
+
+fn reportSidecarCase(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8, sidecar: []const u8, options: RangeOptions) !void {
+    const selected = chooseRange(input, options);
+    const range_offset = selected.offset;
+    const range_len = selected.len;
+    const range = try vort.storeDecodeSidecarIndexedRangeAlloc(init.gpa, stream, sidecar, range_offset, range_len);
     defer init.gpa.free(range);
     try printRangeReport(stdout, name, input, stream, range_offset, range_len, range);
 }
@@ -145,9 +164,30 @@ fn printRangeReport(stdout: *std.Io.Writer, name: []const u8, input: []const u8,
     });
 }
 
+const SidecarStream = struct {
+    stream: []u8,
+    sidecar: []u8,
+};
+
 fn makeStoreStream(allocator: std.mem.Allocator) ![]u8 {
     const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
     return vort.storeEncodeIndexedStreamAlloc(allocator, &payloads);
+}
+
+fn makeSidecarStoreStream(allocator: std.mem.Allocator) !SidecarStream {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    var stream: std.ArrayList(u8) = .empty;
+    errdefer stream.deinit(allocator);
+    for (&payloads) |payload| {
+        const frame = try vort.storeEncodeAlloc(allocator, payload);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    const index = try vort.storeBuildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const sidecar = try vort.storeEncodeFrameIndexAlloc(allocator, index);
+    errdefer allocator.free(sidecar);
+    return .{ .stream = try stream.toOwnedSlice(allocator), .sidecar = sidecar };
 }
 
 fn makeLdmStream(allocator: std.mem.Allocator, prefix: *const [33_000]u8) ![]u8 {
