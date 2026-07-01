@@ -470,6 +470,13 @@ pub fn build(b: *std.Build) void {
     const standard_multi_corpus_dashboard_step = b.step("run-standard-multi-corpus-dashboard", "Discover standard corpora and write a Markdown benchmark dashboard to zig-out");
     standard_multi_corpus_dashboard_step.dependOn(&standard_multi_corpus_dashboard.step);
 
+    const standard_multi_corpus_full_dashboard = b.addSystemCommand(&.{ "python3", "tools/standard_corpus_report.py" });
+    standard_multi_corpus_full_dashboard.addArtifactArg(cli_exe);
+    standard_multi_corpus_full_dashboard.addArgs(&.{ "--standard-suite", "--full", "--markdown", "zig-out/vort-standard-multi-corpus-full-dashboard.md" });
+    if (b.args) |args| standard_multi_corpus_full_dashboard.addArgs(args);
+    const standard_multi_corpus_full_dashboard_step = b.step("run-standard-multi-corpus-full-dashboard", "Discover standard corpora and write a full-mode Markdown benchmark dashboard to zig-out");
+    standard_multi_corpus_full_dashboard_step.dependOn(&standard_multi_corpus_full_dashboard.step);
+
     const check_step = b.step("check", "Compile library tests, CLI, benchmark, fuzz-smoke, and differential entrypoints");
     check_step.dependOn(&tests.step);
     check_step.dependOn(&cli_exe.step);
