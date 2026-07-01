@@ -18,8 +18,10 @@ pub fn main(init: std.process.Init) !void {
     var dictionary_longest: usize = 0;
     var compressed_total: usize = 0;
     var patch_total: usize = 0;
+    var patch_deflate_total: usize = 0;
     var best_with_dict_total: usize = 0;
     var best_with_dict_patches: usize = 0;
+    var best_with_dict_deflates: usize = 0;
     for (samples) |sample| {
         const summary = try vort.summarizeDictionaryMatchesAlloc(init.gpa, dict, sample, 5);
         covered += summary.covered_bytes;
@@ -31,11 +33,22 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(patched);
         if (!std.mem.eql(u8, sample, patched)) return error.RoundTripMismatch;
         patch_total += patch.len;
+        const patch_deflate = try vort.storeEncodeDictionaryDeflateAlloc(init.gpa, dict, sample, 5);
+        defer init.gpa.free(patch_deflate);
+        const patch_deflate_decoded = try vort.storeDecodeDictionaryPatchAlloc(init.gpa, dict, patch_deflate);
+        defer init.gpa.free(patch_deflate_decoded);
+        if (!std.mem.eql(u8, sample, patch_deflate_decoded)) return error.RoundTripMismatch;
+        patch_deflate_total += patch_deflate.len;
         const best_with_dict = try vort.storeEncodeBestWithDictionaryAlloc(init.gpa, dict, sample, 5);
         defer init.gpa.free(best_with_dict);
         const info = try vort.store.parseHeader(best_with_dict);
         if (info.flags == 3) {
             best_with_dict_patches += 1;
+            const decoded = try vort.storeDecodeDictionaryPatchAlloc(init.gpa, dict, best_with_dict);
+            defer init.gpa.free(decoded);
+            if (!std.mem.eql(u8, sample, decoded)) return error.RoundTripMismatch;
+        } else if (info.flags == 5) {
+            best_with_dict_deflates += 1;
             const decoded = try vort.storeDecodeDictionaryPatchAlloc(init.gpa, dict, best_with_dict);
             defer init.gpa.free(decoded);
             if (!std.mem.eql(u8, sample, decoded)) return error.RoundTripMismatch;
@@ -52,12 +65,13 @@ pub fn main(init: std.process.Init) !void {
     const coverage = if (plan.total_sample_bytes == 0) 0.0 else @as(f64, @floatFromInt(covered)) / @as(f64, @floatFromInt(plan.total_sample_bytes));
     const ratio = if (plan.total_sample_bytes == 0) 0.0 else @as(f64, @floatFromInt(compressed_total)) / @as(f64, @floatFromInt(plan.total_sample_bytes));
     const patch_ratio = if (plan.total_sample_bytes == 0) 0.0 else @as(f64, @floatFromInt(patch_total)) / @as(f64, @floatFromInt(plan.total_sample_bytes));
+    const patch_deflate_ratio = if (plan.total_sample_bytes == 0) 0.0 else @as(f64, @floatFromInt(patch_deflate_total)) / @as(f64, @floatFromInt(plan.total_sample_bytes));
     const best_with_dict_ratio = if (plan.total_sample_bytes == 0) 0.0 else @as(f64, @floatFromInt(best_with_dict_total)) / @as(f64, @floatFromInt(plan.total_sample_bytes));
 
     var stdout_buffer: [768]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("dictionary report: samples={d} sample_bytes={d} target={d} dict_bytes={d} id={x} window={d} matches={d} covered_bytes={d} longest={d} coverage={d:.4} patch_bytes={d} patch_ratio={d:.4} best_with_dict_bytes={d} best_with_dict_ratio={d:.4} best_with_dict_patches={d} baseline_deflate_bytes={d} baseline_ratio={d:.4}\n", .{
+    try stdout.print("dictionary report: samples={d} sample_bytes={d} target={d} dict_bytes={d} id={x} window={d} matches={d} covered_bytes={d} longest={d} coverage={d:.4} patch_bytes={d} patch_ratio={d:.4} patch_deflate_bytes={d} patch_deflate_ratio={d:.4} best_with_dict_bytes={d} best_with_dict_ratio={d:.4} best_with_dict_patches={d} best_with_dict_deflates={d} baseline_deflate_bytes={d} baseline_ratio={d:.4}\n", .{
         plan.sample_count,
         plan.total_sample_bytes,
         plan.target_size,
@@ -70,9 +84,12 @@ pub fn main(init: std.process.Init) !void {
         coverage,
         patch_total,
         patch_ratio,
+        patch_deflate_total,
+        patch_deflate_ratio,
         best_with_dict_total,
         best_with_dict_ratio,
         best_with_dict_patches,
+        best_with_dict_deflates,
         compressed_total,
         ratio,
     });

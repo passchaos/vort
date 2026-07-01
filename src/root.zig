@@ -36,6 +36,7 @@ pub const storeEncodeAlloc = store.encodeAlloc;
 pub const storeEncodeDeflateAlloc = store.encodeDeflateAlloc;
 pub const storeEncodeRleAlloc = store.encodeRleAlloc;
 pub const storeEncodeDictionaryPatchAlloc = store.encodeDictionaryPatchAlloc;
+pub const storeEncodeDictionaryDeflateAlloc = store.encodeDictionaryDeflateAlloc;
 pub const storeEncodeLongDistanceAlloc = store.encodeLongDistanceAlloc;
 pub const storeEncodeBestWithLongDistanceAlloc = store.encodeBestWithLongDistanceAlloc;
 pub const storeEncodeBestWithDictionaryAlloc = store.encodeBestWithDictionaryAlloc;

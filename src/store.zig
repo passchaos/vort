@@ -24,6 +24,7 @@ const flags_deflate: u8 = 1;
 const flags_rle: u8 = 2;
 const flags_dictionary_patch: u8 = 3;
 const flags_ldm: u8 = 4;
+const flags_dictionary_deflate: u8 = 5;
 
 pub fn skippableEncodedSize(payload_len: usize) Error!usize {
     if (payload_len > std.math.maxInt(u32)) return error.IntegerOverflow;
@@ -178,6 +179,25 @@ pub fn encodeDictionaryPatchAlloc(allocator: std.mem.Allocator, dict: []const u8
     return out;
 }
 
+pub fn encodeDictionaryDeflateAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, min_match_len: usize) ![]u8 {
+    const patch = try dictionary.encodePatchAlloc(allocator, dict, input, min_match_len);
+    defer allocator.free(patch);
+    const compressed = try deflate.encodeRawBestAlloc(allocator, patch, deflate.optionsForLevel(.fastest));
+    defer allocator.free(compressed);
+    const required = try encodedSize(compressed.len);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    writeHeader(out[0..header_len], .{
+        .version = current_version,
+        .flags = flags_dictionary_deflate,
+        .uncompressed_size = @intCast(input.len),
+        .stored_size = @intCast(compressed.len),
+        .checksum = checksum.crc32(input),
+    });
+    @memcpy(out[header_len..], compressed);
+    return out;
+}
+
 pub fn encodeLongDistanceAlloc(allocator: std.mem.Allocator, input: []const u8, options: long_distance.Options) ![]u8 {
     const payload = try encodeLongDistancePayloadAlloc(allocator, input, options);
     defer allocator.free(payload);
@@ -235,11 +255,19 @@ pub fn encodeBestWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const
     errdefer allocator.free(native_best);
     const dict_frame = try encodeDictionaryPatchAlloc(allocator, dict, input, min_match_len);
     errdefer allocator.free(dict_frame);
-    if (dict_frame.len < native_best.len) {
+    const dict_deflate_frame = try encodeDictionaryDeflateAlloc(allocator, dict, input, min_match_len);
+    errdefer allocator.free(dict_deflate_frame);
+    if (dict_frame.len <= dict_deflate_frame.len and dict_frame.len < native_best.len) {
+        allocator.free(dict_deflate_frame);
         allocator.free(native_best);
         return dict_frame;
     }
     allocator.free(dict_frame);
+    if (dict_deflate_frame.len < native_best.len) {
+        allocator.free(native_best);
+        return dict_deflate_frame;
+    }
+    allocator.free(dict_deflate_frame);
     return native_best;
 }
 
@@ -292,6 +320,7 @@ pub fn decodeAnyAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
         flags_deflate => try deflate.decodeRawAutoAlloc(allocator, payload),
         flags_rle => try decodeRlePayloadAlloc(allocator, payload),
         flags_dictionary_patch => return error.InvalidDictionaryTraining,
+        flags_dictionary_deflate => return error.InvalidDictionaryTraining,
         flags_ldm => try decodeLongDistancePayloadAlloc(allocator, payload, @intCast(info.uncompressed_size)),
         else => return error.CorruptFrame,
     };
@@ -340,11 +369,16 @@ fn decodeLongDistancePayloadAlloc(allocator: std.mem.Allocator, payload: []const
 
 pub fn decodeDictionaryPatchAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8) ![]u8 {
     const info = try parseHeader(input);
-    if (info.flags != flags_dictionary_patch) return error.CorruptFrame;
     const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
     const total_len = try encodedSize(payload_len);
     if (input.len < total_len) return error.TruncatedFrame;
-    const decoded = try dictionary.decodePatchAlloc(allocator, dict, input[header_len..total_len]);
+    const patch = switch (info.flags) {
+        flags_dictionary_patch => try allocator.dupe(u8, input[header_len..total_len]),
+        flags_dictionary_deflate => try deflate.decodeRawAutoAlloc(allocator, input[header_len..total_len]),
+        else => return error.CorruptFrame,
+    };
+    defer allocator.free(patch);
+    const decoded = try dictionary.decodePatchAlloc(allocator, dict, patch);
     errdefer allocator.free(decoded);
     if (decoded.len != info.uncompressed_size) return error.SizeMismatch;
     if (checksum.crc32(decoded) != info.checksum) return error.ChecksumMismatch;
@@ -381,7 +415,7 @@ pub fn parseHeader(input: []const u8) Error!FrameInfo {
     const version = input[4];
     if (version != current_version) return error.UnsupportedVersion;
     const flags = input[5];
-    if (flags != flags_none and flags != flags_deflate and flags != flags_rle and flags != flags_dictionary_patch and flags != flags_ldm) return error.CorruptFrame;
+    if (flags != flags_none and flags != flags_deflate and flags != flags_rle and flags != flags_dictionary_patch and flags != flags_dictionary_deflate and flags != flags_ldm) return error.CorruptFrame;
     if (input[6] != 0 or input[7] != 0) return error.CorruptFrame;
     if (std.mem.readInt(u32, input[28..32], .little) != 0) return error.CorruptFrame;
 
@@ -721,7 +755,7 @@ pub fn decodeRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: ?[]con
         if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
         const frame = input[entry.frame_offset..][0..entry.frame_len];
         const frame_info = try parseHeader(frame);
-        const decoded = if (frame_info.flags == flags_dictionary_patch) blk: {
+        const decoded = if (frame_info.flags == flags_dictionary_patch or frame_info.flags == flags_dictionary_deflate) blk: {
             const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
             break :blk try decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame);
         } else try decodeAnyAlloc(allocator, frame);
@@ -1208,6 +1242,7 @@ pub const ModeSummary = struct {
     deflate: usize = 0,
     rle: usize = 0,
     dictionary_patch: usize = 0,
+    dictionary_deflate: usize = 0,
     ldm: usize = 0,
 };
 
@@ -1228,6 +1263,7 @@ pub fn summarizeModes(input: []const u8) Error!ModeSummary {
             flags_deflate => summary.deflate += 1,
             flags_rle => summary.rle += 1,
             flags_dictionary_patch => summary.dictionary_patch += 1,
+            flags_dictionary_deflate => summary.dictionary_deflate += 1,
             flags_ldm => summary.ldm += 1,
             else => return error.CorruptFrame,
         }
@@ -1757,13 +1793,25 @@ test "native dictionary patch frame decodes with caller dictionary" {
     try std.testing.expectError(error.InvalidDictionaryTraining, decodeAnyAlloc(std.testing.allocator, frame));
 }
 
+test "native dictionary deflate frame decodes with caller dictionary" {
+    const dict = "alpha beta gamma";
+    const input = "zz alpha beta yy gamma";
+    const frame = try encodeDictionaryDeflateAlloc(std.testing.allocator, dict, input, 5);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_dictionary_deflate, info.flags);
+    const decoded = try decodeDictionaryPatchAlloc(std.testing.allocator, dict, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
 test "native dictionary best encoder chooses patch only when smaller" {
     const dict = "dictionary-only phrase with enough length to beat stored framing";
     const input = dict ++ "!";
     const frame = try encodeBestWithDictionaryAlloc(std.testing.allocator, dict, input, 8);
     defer std.testing.allocator.free(frame);
     const info = try parseHeader(frame);
-    try std.testing.expectEqual(flags_dictionary_patch, info.flags);
+    try std.testing.expect(info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate);
     const decoded = try decodeDictionaryPatchAlloc(std.testing.allocator, dict, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
@@ -1772,6 +1820,7 @@ test "native dictionary best encoder chooses patch only when smaller" {
     defer std.testing.allocator.free(fallback);
     const fallback_info = try parseHeader(fallback);
     try std.testing.expect(fallback_info.flags != flags_dictionary_patch);
+    try std.testing.expect(fallback_info.flags != flags_dictionary_deflate);
 }
 
 test "blocked dictionary best stream supports dictionary range decode" {
@@ -1780,7 +1829,7 @@ test "blocked dictionary best stream supports dictionary range decode" {
     const stream = try encodeBlockedBestWithDictionaryStreamAlloc(std.testing.allocator, dict, input, dict.len + 1, 8);
     defer std.testing.allocator.free(stream);
     const summary = try summarizeModes(stream);
-    try std.testing.expect(summary.dictionary_patch > 0);
+    try std.testing.expect(summary.dictionary_patch + summary.dictionary_deflate > 0);
     const range = try decodeIndexedRangeWithDictionaryAlloc(std.testing.allocator, dict, stream, 5, 40);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[5..45], range);
