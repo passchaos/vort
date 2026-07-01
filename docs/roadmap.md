@@ -223,6 +223,7 @@ architecture blindly.
 - [x] Parallel multi-threaded encoder execution with deterministic output order.
 - [x] Fixed worker-count thread-pool encoder scheduling.
 - [x] Work-queue encoder scheduling with deterministic output order.
+- [x] Parallel/thread-pool/work-queue worker-count edge-case tests.
 - [x] Native parallel/thread-pool/work-queue encoder benchmark smoke.
 - [x] Native parallel/thread-pool/work-queue benchmark accepts real file corpora.
 - [x] Native parallel/thread-pool/work-queue benchmark accepts configurable worker counts.

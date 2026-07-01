@@ -1942,6 +1942,23 @@ test "thread-pool deflate stream matches planned deterministic output" {
     try std.testing.expectEqualSlices(u8, planned, pooled);
 }
 
+test "parallel stream encoders reject zero worker count" {
+    const input = "abcdefghijklmnopqrstuvwxyz";
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedDeflateStreamAlloc(std.testing.allocator, input, 13, 0));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeParallelDeflateStreamAlloc(std.testing.allocator, input, 13, 0));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeThreadPoolDeflateStreamAlloc(std.testing.allocator, input, 13, 0));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeWorkStealingDeflateStreamAlloc(std.testing.allocator, input, 13, 0));
+}
+
+test "work-stealing deflate stream supports worker-count sweep" {
+    const input = "abcdefghijklmnopqrstuvwxyz" ** 4;
+    const one = try encodeWorkStealingDeflateStreamAlloc(std.testing.allocator, input, 13, 1);
+    defer std.testing.allocator.free(one);
+    const four = try encodeWorkStealingDeflateStreamAlloc(std.testing.allocator, input, 13, 4);
+    defer std.testing.allocator.free(four);
+    try std.testing.expectEqualSlices(u8, one, four);
+}
+
 test "native RLE frame round trips repeated payloads" {
     const input = "aaaaabbbbbbbbbbbbbcccccccccccccccc";
     const frame = try encodeRleAlloc(std.testing.allocator, input);
