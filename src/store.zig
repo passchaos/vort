@@ -674,7 +674,7 @@ pub fn buildFrameIndexAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
 
 pub const serialized_index_magic = [_]u8{ 'V', 'I', 'D', 'X' };
 pub const serialized_index_header_len: usize = 8;
-pub const serialized_index_entry_len: usize = 32;
+pub const serialized_index_entry_len: usize = 40;
 
 pub fn serializedFrameIndexSize(entry_count: usize) Error!usize {
     const entries_len = std.math.mul(usize, entry_count, serialized_index_entry_len) catch return error.IntegerOverflow;
@@ -692,6 +692,8 @@ pub fn encodeFrameIndex(entries: []const FrameIndexEntry, output: []u8) Error!us
         std.mem.writeInt(u64, output[offset + 8 ..][0..8], @intCast(entry.frame_len), .little);
         std.mem.writeInt(u64, output[offset + 16 ..][0..8], entry.uncompressed_offset, .little);
         std.mem.writeInt(u64, output[offset + 24 ..][0..8], entry.uncompressed_len, .little);
+        std.mem.writeInt(u32, output[offset + 32 ..][0..4], entry.checksum, .little);
+        std.mem.writeInt(u32, output[offset + 36 ..][0..4], 0, .little);
         offset += serialized_index_entry_len;
     }
     return required;
@@ -724,8 +726,9 @@ pub fn decodeFrameIndexAlloc(allocator: std.mem.Allocator, input: []const u8) ![
             .frame_len = std.math.cast(usize, frame_len) orelse return error.IntegerOverflow,
             .uncompressed_offset = std.mem.readInt(u64, input[offset + 16 ..][0..8], .little),
             .uncompressed_len = std.mem.readInt(u64, input[offset + 24 ..][0..8], .little),
-            .checksum = 0,
+            .checksum = std.mem.readInt(u32, input[offset + 32 ..][0..4], .little),
         };
+        if (std.mem.readInt(u32, input[offset + 36 ..][0..4], .little) != 0) return error.CorruptFrame;
         offset += serialized_index_entry_len;
     }
     return entries;
@@ -755,6 +758,9 @@ pub fn decodeRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: ?[]con
         if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
         const frame = input[entry.frame_offset..][0..entry.frame_len];
         const frame_info = try parseHeader(frame);
+        if (entry.frame_len != try frameLenFromInfo(frame_info)) return error.CorruptFrame;
+        if (entry.checksum != frame_info.checksum) return error.ChecksumMismatch;
+        if (entry.uncompressed_len != frame_info.uncompressed_size) return error.CorruptFrame;
         const decoded = if (frame_info.flags == flags_dictionary_patch or frame_info.flags == flags_dictionary_deflate) blk: {
             const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
             break :blk try decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame);
@@ -1534,10 +1540,12 @@ test "frame index records offsets sizes and skips metadata" {
     try std.testing.expectEqual(first.len, index[0].frame_len);
     try std.testing.expectEqual(@as(u64, 0), index[0].uncompressed_offset);
     try std.testing.expectEqual(@as(u64, 5), index[0].uncompressed_len);
+    try std.testing.expectEqual(checksum.crc32("first"), index[0].checksum);
     try std.testing.expectEqual(first.len + skip.len, index[1].frame_offset);
     try std.testing.expectEqual(second.len, index[1].frame_len);
     try std.testing.expectEqual(@as(u64, 5), index[1].uncompressed_offset);
     try std.testing.expectEqual(@as(u64, 6), index[1].uncompressed_len);
+    try std.testing.expectEqual(checksum.crc32("second"), index[1].checksum);
 }
 
 test "frame index serializes and decodes as sidecar" {
@@ -1562,6 +1570,7 @@ test "frame index serializes and decodes as sidecar" {
         try std.testing.expectEqual(expected.frame_len, actual.frame_len);
         try std.testing.expectEqual(expected.uncompressed_offset, actual.uncompressed_offset);
         try std.testing.expectEqual(expected.uncompressed_len, actual.uncompressed_len);
+        try std.testing.expectEqual(expected.checksum, actual.checksum);
     }
 }
 
@@ -1592,6 +1601,27 @@ test "range decode rejects out of bounds" {
     const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(index);
     try std.testing.expectError(error.RangeOutOfBounds, decodeRangeAlloc(std.testing.allocator, frame, index, 4, 4));
+}
+
+test "range decode validates sidecar index checksum" {
+    const frame = try encodeAlloc(std.testing.allocator, "indexed checksum guard");
+    defer std.testing.allocator.free(frame);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+    try std.testing.expect(index.len == 1);
+
+    const tampered = try std.testing.allocator.dupe(FrameIndexEntry, index);
+    defer std.testing.allocator.free(tampered);
+    tampered[0].checksum ^= 1;
+    try std.testing.expectError(error.ChecksumMismatch, decodeRangeAlloc(std.testing.allocator, frame, tampered, 0, 4));
+
+    tampered[0].checksum = index[0].checksum;
+    tampered[0].uncompressed_len += 1;
+    try std.testing.expectError(error.CorruptFrame, decodeRangeAlloc(std.testing.allocator, frame, tampered, 0, 4));
+
+    tampered[0].uncompressed_len = index[0].uncompressed_len;
+    tampered[0].frame_len -= 1;
+    try std.testing.expectError(error.CorruptFrame, decodeRangeAlloc(std.testing.allocator, frame, tampered, 0, 4));
 }
 
 test "indexed stream embeds sidecar index as skippable frame" {

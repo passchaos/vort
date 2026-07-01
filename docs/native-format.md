@@ -8,7 +8,8 @@ without inheriting all historical wire-format tradeoffs.
 The current implemented native v0 frame supports store/no-compression,
 deflate-compressed, RLE-compressed, caller-supplied dictionary-patch, and
 long-distance-reference payload modes. Concatenated v0 streams can embed a
-skippable serialized index, and the blocked best-mode stream encoder can select
+skippable serialized index with per-frame checksum metadata validated during
+range decode, and the blocked best-mode stream encoder can select
 store/deflate/RLE per block while preserving indexed range decode. Opt-in
 dictionary-aware and LDM-aware best-frame encoders can select dictionary-patch or
 LDM reference frames when the caller supplies the required context, and indexed
@@ -26,7 +27,9 @@ aggressively.
 - Splittable by construction: large streams should be independently decodable by
   block or seek point without scanning from the beginning.
 - Strong indexing: optional frame indexes should support byte-range lookup,
-  uncompressed offsets, checksums per block, and external sidecar indexes.
+  uncompressed offsets, checksums per block, and external sidecar indexes; the
+  current serialized v0 index records each frame checksum and rejects mismatched
+  range-decode sidecars.
 - Dictionary-first: content dictionaries should carry stable IDs, training
   metadata, window constraints, and compatibility hints.
 - Multi-mode compression: store, fixed-Huffman deflate-compatible, dynamic
