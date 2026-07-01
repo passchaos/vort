@@ -181,6 +181,7 @@ architecture blindly.
 - [x] Dictionary-aware blocked native stream with indexed range decode.
 - [x] Self-contained native dictionary stream embeds trained dictionary for indexed range decode.
 - [x] Trained dictionary stream best-selection API with automatic range decode.
+- [x] Compression report includes trained dictionary stream selection metrics.
 - [x] CLI smoke for trained dictionary best stream auto range decode.
 - [x] Dictionary training and patch report accepts ad-hoc file corpora.
 - [x] Dictionary training and patch report across bounded Silesia files.

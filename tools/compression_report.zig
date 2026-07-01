@@ -16,7 +16,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("name,input_bytes,best_deflate_bytes,zlib_fixed_bytes,gzip_fixed_bytes,native_ldm_bytes,native_ldm_best_bytes,native_ldm_selected,best_ratio,ldm_candidates,ldm_longest,ldm_max_distance,ldm_blocks\n", .{});
+    try stdout.print("name,input_bytes,best_deflate_bytes,zlib_fixed_bytes,gzip_fixed_bytes,native_ldm_bytes,native_ldm_best_bytes,native_ldm_selected,trained_dict_stream_bytes,trained_dict_selected,trained_dict_modes,best_ratio,ldm_candidates,ldm_longest,ldm_max_distance,ldm_blocks\n", .{});
     for (cases) |case| {
         const raw = try vort.encodeRawBestAlloc(init.gpa, case.input, .{});
         defer init.gpa.free(raw);
@@ -35,6 +35,15 @@ pub fn main(init: std.process.Init) !void {
         const ldm_best_decoded = try vort.storeDecodeAnyAlloc(init.gpa, ldm_best);
         defer init.gpa.free(ldm_best_decoded);
         if (!std.mem.eql(u8, case.input, ldm_best_decoded)) return error.RoundTripMismatch;
+        const trained_dict = try vort.storeEncodeBestTrainedDictionaryStreamAlloc(init.gpa, case.input, 8192, 256, 8);
+        defer init.gpa.free(trained_dict);
+        const trained_range_len: usize = @min(case.input.len, 32);
+        const trained_range = try vort.storeDecodeIndexedRangeAutoAlloc(init.gpa, trained_dict, 0, trained_range_len);
+        defer init.gpa.free(trained_range);
+        if (!std.mem.eql(u8, case.input[0..trained_range_len], trained_range)) return error.RoundTripMismatch;
+        const trained_modes = try vort.storeSummarizeModes(trained_dict);
+        const trained_dict_modes = trained_modes.dictionary_patch + trained_modes.dictionary_deflate;
+        const trained_dict_selected = trained_dict_modes > 0;
         const ratio = if (case.input.len == 0) 0.0 else @as(f64, @floatFromInt(raw.len)) / @as(f64, @floatFromInt(case.input.len));
         const ldm = try vort.summarizeLongDistanceAlloc(init.gpa, case.input, .{});
         const blocks = try vort.planBlocksWithLongDistanceAlloc(init.gpa, case.input, .{ .block_len = 8192, .worker_count = 1 }, .{});
@@ -43,7 +52,7 @@ pub fn main(init: std.process.Init) !void {
         for (blocks) |block| {
             if (block.ldm_candidates != 0) ldm_blocks += 1;
         }
-        try stdout.print("{s},{d},{d},{d},{d},{d},{d},{},{d:.4},{d},{d},{d},{d}\n", .{
+        try stdout.print("{s},{d},{d},{d},{d},{d},{d},{},{d},{},{d},{d:.4},{d},{d},{d},{d}\n", .{
             case.name,
             case.input.len,
             raw.len,
@@ -52,6 +61,9 @@ pub fn main(init: std.process.Init) !void {
             ldm_frame.len,
             ldm_best.len,
             ldm_best_info.flags == 4,
+            trained_dict.len,
+            trained_dict_selected,
+            trained_dict_modes,
             ratio,
             ldm.candidates,
             ldm.longest,

@@ -761,10 +761,10 @@ pub fn decodeRangeAlloc(allocator: std.mem.Allocator, input: []const u8, index: 
 }
 
 pub fn decodeRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize) ![]u8 {
-    try validateFrameIndex(index);
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     if (length == 0) return out.toOwnedSlice(allocator);
+    try validateFrameIndex(index);
     const end = std.math.add(u64, offset, length) catch return error.IntegerOverflow;
     const start_i = findFrameForOffset(index, offset) orelse return error.RangeOutOfBounds;
     var i = start_i;
@@ -1744,6 +1744,14 @@ test "range decode rejects out of bounds" {
     const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(index);
     try std.testing.expectError(error.RangeOutOfBounds, decodeRangeAlloc(std.testing.allocator, frame, index, 4, 4));
+}
+
+test "zero-length range decode succeeds for empty indexed stream" {
+    const stream = try encodeBlockedBestStreamAlloc(std.testing.allocator, "", 8);
+    defer std.testing.allocator.free(stream);
+    const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 0, 0);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqual(@as(usize, 0), range.len);
 }
 
 test "range decode validates sidecar index checksum" {
