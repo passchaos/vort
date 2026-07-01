@@ -43,6 +43,8 @@ zig build run -- vort-ldm-indexed-range-demo
 zig build run -- store-range-demo
 zig build run -- store-sidecar-range-demo
 zig build run -- store-sidecar-dict-range-demo
+zig build run -- encode-vort-sidecar-best-file README.md /tmp/readme.vort /tmp/readme.vidx 4096
+zig build run -- decode-vort-sidecar-range-file /tmp/readme.vort /tmp/readme.vidx /tmp/readme.range 32 64
 zig build run -- zlib-store-roundtrip "hello vort"
 zig build run -- gzip-store-roundtrip "hello vort"
 zig build run -- zlib-fixed-roundtrip "hello vort"
