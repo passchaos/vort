@@ -169,6 +169,7 @@ architecture blindly.
 - [x] Per-file dictionary training and patch report for bounded Silesia files.
 - [x] Markdown dictionary corpus dashboard for bounded Silesia files.
 - [x] Dictionary report supports target-size tuning.
+- [x] Dictionary corpus dashboard supports target-size sweeps.
 - [ ] Production dictionary training integrated into encoder with ratio/throughput gains.
 - [x] Splittable/seekable frame index range decode API.
 - [x] Embedded skippable index frame for seekable native store streams.

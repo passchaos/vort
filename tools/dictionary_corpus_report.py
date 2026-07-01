@@ -11,6 +11,8 @@ EXE = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 and pathlib.Path(sys.argv[1
 SILESIA = pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"
 SMOKE_LIMIT = 32 * 1024
 FIELDS = [
+    "target",
+    "dict_bytes",
     "sample_bytes",
     "patch_deflate_bytes",
     "patch_deflate_ratio",
@@ -50,12 +52,15 @@ def main() -> int:
     all_cases = "--all" in sys.argv[1:]
     per_file = "--per-file" in sys.argv[1:]
     target_args: list[str] = []
+    target_values: list[str] = []
     markdown_path = None
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
             markdown_path = pathlib.Path(sys.argv[index + 1])
         if arg == "--target" and index + 1 < len(sys.argv):
             target_args = ["--target", sys.argv[index + 1]]
+        if arg == "--targets" and index + 1 < len(sys.argv):
+            target_values = [value for value in sys.argv[index + 1].split(",") if value]
     cases = load_cases(full)
     if not all_cases:
         cases = cases[:3]
@@ -69,7 +74,17 @@ def main() -> int:
             sample = root / f"{index:03d}-{label.replace('/', '_')}.bin"
             sample.write_bytes(data)
             paths.append(str(sample))
-        if per_file:
+        if target_values:
+            rows = []
+            print("target,report")
+            for target in target_values:
+                report = subprocess.run([str(EXE), "--target", target, *paths], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
+                parsed = parse_report(report)
+                rows.append((f"target-{target}", parsed))
+                print(f"{target},{report}")
+            if markdown_path is not None:
+                write_markdown(rows, markdown_path, full)
+        elif per_file:
             rows = []
             print("case,report")
             for label, path in zip((label for label, _ in cases), paths):
@@ -107,13 +122,13 @@ def write_markdown(rows: list[tuple[str, dict[str, str]]], path: pathlib.Path, f
         "",
         "## Rows",
         "",
-        "| corpus | sample bytes | patch deflate bytes | patch deflate ratio | best+dict bytes | best+dict ratio | dict frames | baseline bytes | baseline ratio |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| corpus | target | dict bytes | sample bytes | patch deflate bytes | patch deflate ratio | best+dict bytes | best+dict ratio | dict frames | baseline bytes | baseline ratio |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for label, row in rows:
         dict_frames = int(row.get("best_with_dict_patches") or 0) + int(row.get("best_with_dict_deflates") or 0)
         lines.append(
-            f"| {label} | {row['sample_bytes']} | {row['patch_deflate_bytes']} | {row['patch_deflate_ratio']} | {row['best_with_dict_bytes']} | {row['best_with_dict_ratio']} | {dict_frames} | {row['baseline_deflate_bytes']} | {row['baseline_ratio']} |"
+            f"| {label} | {row['target']} | {row['dict_bytes']} | {row['sample_bytes']} | {row['patch_deflate_bytes']} | {row['patch_deflate_ratio']} | {row['best_with_dict_bytes']} | {row['best_with_dict_ratio']} | {dict_frames} | {row['baseline_deflate_bytes']} | {row['baseline_ratio']} |"
         )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")

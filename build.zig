@@ -359,6 +359,7 @@ pub fn build(b: *std.Build) void {
     const dictionary_corpus_dashboard = b.addSystemCommand(&.{ "python3", "tools/dictionary_corpus_report.py" });
     dictionary_corpus_dashboard.addArtifactArg(dictionary_report_exe);
     dictionary_corpus_dashboard.addArgs(&.{ "--per-file", "--markdown", "zig-out/vort-dictionary-corpus-dashboard.md" });
+    if (b.args) |args| dictionary_corpus_dashboard.addArgs(args);
     const dictionary_corpus_dashboard_step = b.step("run-dictionary-corpus-dashboard", "Write dictionary corpus Markdown dashboard to zig-out");
     dictionary_corpus_dashboard_step.dependOn(&dictionary_corpus_dashboard.step);
 
