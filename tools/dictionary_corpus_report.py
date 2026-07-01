@@ -36,6 +36,7 @@ def main() -> int:
         raise SystemExit(f"missing dictionary report executable at {EXE}; run zig build first")
     full = "--full" in sys.argv[1:]
     all_cases = "--all" in sys.argv[1:]
+    per_file = "--per-file" in sys.argv[1:]
     cases = load_cases(full)
     if not all_cases:
         cases = cases[:3]
@@ -49,7 +50,13 @@ def main() -> int:
             sample = root / f"{index:03d}-{label.replace('/', '_')}.bin"
             sample.write_bytes(data)
             paths.append(str(sample))
-        print(subprocess.run([str(EXE), *paths], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip())
+        if per_file:
+            print("case,report")
+            for label, path in zip((label for label, _ in cases), paths):
+                report = subprocess.run([str(EXE), path], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
+                print(f"{label},{report}")
+        else:
+            print(subprocess.run([str(EXE), *paths], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip())
     return 0
 
 
