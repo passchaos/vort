@@ -80,6 +80,7 @@ pub const encodeRawDynamicWithOptionsAlloc = deflate.encodeRawDynamicWithOptions
 pub const encodeRawDynamicSplitAlloc = deflate.encodeRawDynamicSplitAlloc;
 pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAlloc;
 pub const CompressionOptions = deflate.CompressionOptions;
+pub const CompressionStrategy = deflate.CompressionStrategy;
 pub const AdaptiveSplitOptions = deflate.AdaptiveSplitOptions;
 pub const BlockSelection = deflate.BlockSelection;
 pub const CompressionLevel = deflate.CompressionLevel;
@@ -122,6 +123,8 @@ pub const fixedLz77BitCost = lz77.fixedBitCost;
 pub const hashGreedyLz77PlanAlloc = lz77.hashGreedyPlanAlloc;
 pub const greedyLz77PlanAlloc = lz77.greedyPlanAlloc;
 pub const lazyGreedyLz77PlanAlloc = lz77.lazyGreedyPlanAlloc;
+pub const literalLz77PlanAlloc = lz77.literalPlanAlloc;
+pub const runLengthLz77PlanAlloc = lz77.runLengthPlanAlloc;
 pub const optimalLz77PlanAlloc = lz77.optimalPlanAlloc;
 
 pub const DictionaryId = dictionary.DictionaryId;

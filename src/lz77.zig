@@ -49,6 +49,41 @@ pub const GreedyPlan = struct {
 
 pub const max_optimal_candidates = 16;
 
+pub fn literalPlanAlloc(allocator: std.mem.Allocator, input: []const u8) !GreedyPlan {
+    const tokens = try allocator.alloc(Token, input.len);
+    errdefer allocator.free(tokens);
+    for (input, tokens) |byte, *token| token.* = .{ .literal = byte };
+    return .{ .tokens = tokens, .stats = .{ .literals = input.len } };
+}
+
+pub fn runLengthPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    var tokens: std.ArrayList(Token) = .empty;
+    errdefer tokens.deinit(allocator);
+    var stats = PlanStats{};
+
+    var pos: usize = 0;
+    while (pos < input.len) {
+        if (pos > 0 and input[pos] == input[pos - 1]) {
+            const max_len = @min(maxMatch(options), input.len - pos);
+            var len: usize = 1;
+            while (len < max_len and input[pos + len] == input[pos - 1]) len += 1;
+            if (acceptMatch(input, pos, len, 1, options)) {
+                try tokens.append(allocator, .{ .match = .{ .length = @intCast(len), .distance = 1 } });
+                stats.matches += 1;
+                stats.matched_bytes += len;
+                pos += len;
+                continue;
+            }
+        }
+
+        try tokens.append(allocator, .{ .literal = input[pos] });
+        stats.literals += 1;
+        pos += 1;
+    }
+
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
 pub fn greedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
     var tokens: std.ArrayList(Token) = .empty;
     errdefer tokens.deinit(allocator);
@@ -405,6 +440,31 @@ fn findBestMatch(input: []const u8, pos: usize, options: GreedyOptions) MatchCan
         }
     }
     return best;
+}
+
+test "literal-only LZ77 planner emits no matches" {
+    const input = "abcabcabc";
+    const plan = try literalPlanAlloc(std.testing.allocator, input);
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expectEqual(input.len, plan.stats.literals);
+    try std.testing.expectEqual(@as(usize, 0), plan.stats.matches);
+    const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
+test "run-length LZ77 planner limits matches to byte runs" {
+    const input = "aaaaabbbbccxyz";
+    const plan = try runLengthPlanAlloc(std.testing.allocator, input, .{ .min_match = 3 });
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expect(plan.stats.matches >= 2);
+    for (plan.tokens) |token| switch (token) {
+        .match => |m| try std.testing.expectEqual(@as(u16, 1), m.distance),
+        else => {},
+    };
+    const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
 }
 
 test "greedy LZ77 planner round trips literals and matches" {

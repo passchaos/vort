@@ -14,11 +14,13 @@ pub const DecodeResult = struct {
 };
 
 pub const ParserMode = enum { hash, greedy, lazy, optimal };
+pub const CompressionStrategy = enum { default, huffman_only, rle };
 
 pub const BlockSelection = enum { stored_fixed, stored_fixed_dynamic };
 
 pub const CompressionOptions = struct {
     parser: ParserMode = .greedy,
+    strategy: CompressionStrategy = .default,
     lz77_options: lz77.GreedyOptions = .{},
     block_selection: BlockSelection = .stored_fixed_dynamic,
     split_options: AdaptiveSplitOptions = .{},
@@ -45,11 +47,15 @@ pub const OwnedDecodeResult = struct {
 };
 
 fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !lz77.GreedyPlan {
-    return switch (options.parser) {
-        .hash => try lz77.hashGreedyPlanAlloc(allocator, input, options.lz77_options),
-        .greedy => try lz77.greedyPlanAlloc(allocator, input, options.lz77_options),
-        .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, options.lz77_options),
-        .optimal => try lz77.optimalPlanAlloc(allocator, input, options.lz77_options),
+    return switch (options.strategy) {
+        .default => switch (options.parser) {
+            .hash => try lz77.hashGreedyPlanAlloc(allocator, input, options.lz77_options),
+            .greedy => try lz77.greedyPlanAlloc(allocator, input, options.lz77_options),
+            .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, options.lz77_options),
+            .optimal => try lz77.optimalPlanAlloc(allocator, input, options.lz77_options),
+        },
+        .huffman_only => try lz77.literalPlanAlloc(allocator, input),
+        .rle => try lz77.runLengthPlanAlloc(allocator, input, options.lz77_options),
     };
 }
 
@@ -1732,6 +1738,29 @@ test "zlib header rejects bad method window check and dictionary flag" {
 test "gzip header rejects reserved flags and bad method" {
     try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x08, 0xe0, 0, 0, 0, 0, 0, 3 }));
     try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x00, 0x00, 0, 0, 0, 0, 0, 3 }));
+}
+
+test "fixed encoder supports compression strategies" {
+    const input = "aaaaaaaaaaaaaaaa" ++ "abcabcabc";
+    inline for (.{ CompressionStrategy.default, CompressionStrategy.huffman_only, CompressionStrategy.rle }) |strategy| {
+        const encoded = try encodeRawBestAlloc(std.testing.allocator, input, .{ .strategy = strategy });
+        defer std.testing.allocator.free(encoded);
+        const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+
+    const huffman_plan = try planTokensAlloc(std.testing.allocator, input, .{ .strategy = .huffman_only });
+    defer huffman_plan.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 0), huffman_plan.stats.matches);
+
+    const rle_plan = try planTokensAlloc(std.testing.allocator, input, .{ .strategy = .rle });
+    defer rle_plan.deinit(std.testing.allocator);
+    try std.testing.expect(rle_plan.stats.matches > 0);
+    for (rle_plan.tokens) |token| switch (token) {
+        .match => |m| try std.testing.expectEqual(@as(u16, 1), m.distance),
+        else => {},
+    };
 }
 
 test "fixed encoder supports parser strategy options" {

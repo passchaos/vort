@@ -437,6 +437,8 @@ fn parseCompressionOptions(text: ?[]const u8) vort.CompressionOptions {
     if (std.mem.eql(u8, value, "hash")) return .{ .parser = .hash };
     if (std.mem.eql(u8, value, "default")) return vort.optionsForCompressionLevel(.default);
     if (std.mem.eql(u8, value, "best")) return vort.optionsForCompressionLevel(.best);
+    if (std.mem.eql(u8, value, "huffman") or std.mem.eql(u8, value, "huffman-only")) return .{ .strategy = .huffman_only };
+    if (std.mem.eql(u8, value, "rle")) return .{ .strategy = .rle };
     if (std.mem.eql(u8, value, "greedy")) return .{ .parser = .greedy };
     if (std.mem.eql(u8, value, "lazy")) return .{ .parser = .lazy };
     if (std.mem.eql(u8, value, "optimal")) return .{ .parser = .optimal };
