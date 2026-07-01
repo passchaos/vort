@@ -156,13 +156,20 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
     const w = &writer.writer;
     var total_input: usize = 0;
     var total_encoded: usize = 0;
+    var encode_sum: f64 = 0.0;
+    var decode_sum: f64 = 0.0;
     for (rows) |row| {
         total_input += row.input_bytes;
         total_encoded += row.encoded_bytes;
+        encode_sum += row.encode_mib_s;
+        decode_sum += row.decode_mib_s;
     }
     const total_ratio = if (total_input == 0) 0.0 else @as(f64, @floatFromInt(total_encoded)) / @as(f64, @floatFromInt(total_input));
+    const row_count_f = @as(f64, @floatFromInt(rows.len));
+    const avg_encode = if (rows.len == 0) 0.0 else encode_sum / row_count_f;
+    const avg_decode = if (rows.len == 0) 0.0 else decode_sum / row_count_f;
     try w.print("# File corpus report\n\n", .{});
-    try w.print("- rows: {d}\n- total input bytes: {d}\n- total encoded bytes: {d}\n- total ratio: {d:.4}\n- sources: `", .{ rows.len, total_input, total_encoded, total_ratio });
+    try w.print("- rows: {d}\n- total input bytes: {d}\n- total encoded bytes: {d}\n- total ratio: {d:.4}\n- avg encode MiB/s: {d:.2}\n- avg decode MiB/s: {d:.2}\n- sources: `", .{ rows.len, total_input, total_encoded, total_ratio, avg_encode, avg_decode });
     for (sources, 0..) |source, i| {
         if (i != 0) try w.print(", ", .{});
         try w.print("{s}", .{source});

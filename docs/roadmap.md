@@ -158,6 +158,7 @@ architecture blindly.
 - [x] zstd CLI compressed-size comparison smoke for sample files.
 - [x] File-path compression/decompression throughput report for ad-hoc corpora.
 - [x] Markdown file-corpus throughput dashboard for ad-hoc corpora.
+- [x] File-corpus throughput dashboard includes average encode/decode throughput.
 - [x] File-corpus throughput dashboard expands directory inputs recursively.
 - [x] File-corpus throughput dashboard expands tar archive inputs.
 - [x] File-corpus throughput dashboard discovers standard corpora.
