@@ -116,6 +116,7 @@ zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- README.md docs/roa
 zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- docs
 zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- ~/Work/zlib-rs/silesia-small.tar
 zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard -- --limit 3
+zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard -- --limit 3
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build bench-corpus-decode -Doptimize=ReleaseFast

@@ -475,6 +475,12 @@ pub fn build(b: *std.Build) void {
     const file_corpus_standard_dashboard_step = b.step("run-file-corpus-standard-dashboard", "Discover standard corpora and write file corpus dashboard to zig-out");
     file_corpus_standard_dashboard_step.dependOn(&run_file_corpus_standard_dashboard.step);
 
+    const run_file_corpus_standard_full_dashboard = b.addRunArtifact(file_corpus_report_exe);
+    run_file_corpus_standard_full_dashboard.addArgs(&.{ "--full", "--markdown", "zig-out/vort-file-corpus-standard-full-dashboard.md", "--standard-suite" });
+    if (b.args) |args| run_file_corpus_standard_full_dashboard.addArgs(args);
+    const file_corpus_standard_full_dashboard_step = b.step("run-file-corpus-standard-full-dashboard", "Discover standard corpora and write full file corpus dashboard to zig-out");
+    file_corpus_standard_full_dashboard_step.dependOn(&run_file_corpus_standard_full_dashboard.step);
+
     const compat_benchmark = b.addSystemCommand(&.{ "python3", "tools/compat_benchmark.py" });
     compat_benchmark.addArtifactArg(cli_exe);
     const compat_benchmark_step = b.step("run-compat-benchmark", "Run smoke benchmark comparing Vort, gzip, and zstd on sample files");

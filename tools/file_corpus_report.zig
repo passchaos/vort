@@ -8,6 +8,8 @@ pub fn main(init: std.process.Init) !void {
 
     var markdown_path: ?[]const u8 = null;
     var case_limit: ?usize = null;
+    var full_mode = false;
+    var read_limit: std.Io.Limit = .limited(128 * 1024 * 1024);
     var sources: std.ArrayList([]const u8) = .empty;
     defer sources.deinit(init.gpa);
     var path_entries: std.ArrayList(PathEntry) = .empty;
@@ -19,6 +21,11 @@ pub fn main(init: std.process.Init) !void {
         if (std.mem.eql(u8, arg, "--standard-suite")) {
             try sources.append(init.gpa, "standard-suite");
             try appendStandardCorpora(init, &path_entries);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--full")) {
+            full_mode = true;
+            read_limit = .unlimited;
             continue;
         }
         if (std.mem.eql(u8, arg, "--markdown")) {
@@ -45,7 +52,7 @@ pub fn main(init: std.process.Init) !void {
     for (path_entries.items, 0..) |entry, i| {
         if (case_limit) |limit| if (i >= limit) break;
         const path = entry.path;
-        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, read_limit);
         defer init.gpa.free(data);
 
         const encode_start = std.Io.Clock.awake.now(init.io);
@@ -69,7 +76,7 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("{s},{d},{d},{d:.4},{d:.2},{d:.2}\n", .{ path, data.len, encoded.len, ratio, encode_mib_s, decode_mib_s });
     }
     try stdout.flush();
-    if (markdown_path) |path| try writeMarkdown(init, path, rows.items, sources.items);
+    if (markdown_path) |path| try writeMarkdown(init, path, rows.items, sources.items, full_mode);
 }
 
 fn appendStandardCorpora(init: std.process.Init, paths: *std.ArrayList(PathEntry)) !void {
@@ -150,7 +157,7 @@ const ReportRow = struct {
     decode_mib_s: f64,
 };
 
-fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportRow, sources: []const []const u8) !void {
+fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportRow, sources: []const []const u8, full_mode: bool) !void {
     var writer = std.Io.Writer.Allocating.init(init.gpa);
     defer writer.deinit();
     const w = &writer.writer;
@@ -169,7 +176,7 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
     const avg_encode = if (rows.len == 0) 0.0 else encode_sum / row_count_f;
     const avg_decode = if (rows.len == 0) 0.0 else decode_sum / row_count_f;
     try w.print("# File corpus report\n\n", .{});
-    try w.print("- rows: {d}\n- total input bytes: {d}\n- total encoded bytes: {d}\n- total ratio: {d:.4}\n- avg encode MiB/s: {d:.2}\n- avg decode MiB/s: {d:.2}\n- sources: `", .{ rows.len, total_input, total_encoded, total_ratio, avg_encode, avg_decode });
+    try w.print("- mode: `{s}`\n- per-file read limit: `{s}`\n- rows: {d}\n- total input bytes: {d}\n- total encoded bytes: {d}\n- total ratio: {d:.4}\n- avg encode MiB/s: {d:.2}\n- avg decode MiB/s: {d:.2}\n- sources: `", .{ if (full_mode) "full" else "bounded-read", if (full_mode) "unlimited" else "128 MiB", rows.len, total_input, total_encoded, total_ratio, avg_encode, avg_decode });
     for (sources, 0..) |source, i| {
         if (i != 0) try w.print(", ", .{});
         try w.print("{s}", .{source});

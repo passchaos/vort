@@ -181,7 +181,7 @@ architecture blindly.
 - [x] External tar-archive throughput dashboard input mode.
 - [x] Full-size Silesia Markdown dashboard export.
 - [x] Full-size Silesia Markdown dashboard forwards external path/limit args.
-- [ ] Automated throughput dashboards across multiple full standard real corpora.
+- [x] Automated throughput dashboards across multiple full standard real corpora.
 
 ## Milestone 5: native Vort format research
 
