@@ -77,6 +77,10 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(self_dict_stream);
     if (sweep) try reportSelfContainedDictionarySweep(init, stdout, "self-dict-blocked", self_dict_input, self_dict_stream) else try reportSelfContainedDictionaryCase(init, stdout, "self-dict-blocked", self_dict_input, self_dict_stream, range_options);
 
+    const self_dict_sidecar = try vort.storeEncodeSidecarSelfContainedDictionaryStreamAlloc(init.gpa, self_dict_input, self_dict_phrase.len + 1, 256, 8);
+    defer self_dict_sidecar.deinit(init.gpa);
+    if (sweep) try reportSidecarAutoSweep(init, stdout, "self-dict-sidecar", self_dict_input, self_dict_sidecar.stream, self_dict_sidecar.sidecar_index) else try reportSidecarAutoCase(init, stdout, "self-dict-sidecar", self_dict_input, self_dict_sidecar.stream, self_dict_sidecar.sidecar_index, range_options);
+
     const ldm_prefix = makeLdmPrefix();
     const ldm_input = ldm_prefix ++ "----" ++ ldm_prefix[0..1024].* ++ "tail";
     const ldm_stream = try makeLdmStream(init.gpa, &ldm_prefix);
@@ -113,6 +117,11 @@ fn reportSidecarSweep(init: std.process.Init, stdout: *std.Io.Writer, name: []co
     for (&offsets) |offset| try reportSidecarCase(init, stdout, name, input, stream, sidecar, .{ .offset = offset, .length = 32 });
 }
 
+fn reportSidecarAutoSweep(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8, sidecar: []const u8) !void {
+    const offsets = [_]usize{ 0, 5, if (input.len == 0) 0 else input.len / 2, input.len -| 32 };
+    for (&offsets) |offset| try reportSidecarAutoCase(init, stdout, name, input, stream, sidecar, .{ .offset = offset, .length = 32 });
+}
+
 fn reportSelfContainedDictionarySweep(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8) !void {
     const offsets = [_]usize{ 0, 5, if (input.len == 0) 0 else input.len / 2, input.len -| 32 };
     for (&offsets) |offset| try reportSelfContainedDictionaryCase(init, stdout, name, input, stream, .{ .offset = offset, .length = 32 });
@@ -136,6 +145,16 @@ fn reportSidecarCase(init: std.process.Init, stdout: *std.Io.Writer, name: []con
     const range_offset = selected.offset;
     const range_len = selected.len;
     const range = try vort.storeDecodeSidecarIndexedRangeAlloc(init.gpa, stream, sidecar, range_offset, range_len);
+    defer init.gpa.free(range);
+    try printRangeReport(stdout, name, input, stream, range_offset, range_len, range);
+}
+
+fn reportSidecarAutoCase(init: std.process.Init, stdout: *std.Io.Writer, name: []const u8, input: []const u8, stream: []const u8, sidecar: []const u8, options: RangeOptions) !void {
+    try vort.storeValidateSidecarIndexAlloc(init.gpa, stream, sidecar);
+    const selected = chooseRange(input, options);
+    const range_offset = selected.offset;
+    const range_len = selected.len;
+    const range = try vort.storeDecodeSidecarIndexedRangeAutoAlloc(init.gpa, stream, sidecar, range_offset, range_len);
     defer init.gpa.free(range);
     try printRangeReport(stdout, name, input, stream, range_offset, range_len, range);
 }

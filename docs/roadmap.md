@@ -222,6 +222,7 @@ architecture blindly.
 - [x] Sidecar index range decode rejects tampered checksums.
 - [x] Sidecar index verifier API and file CLI.
 - [x] Native range report covers self-contained dictionary streams.
+- [x] Native range report covers sidecar-indexed self-contained dictionary streams.
 - [x] CLI/range report coverage for blocked native LDM selection.
 - [x] Blocked native deflate stream with embedded index and range decode.
 - [x] Blocked native best-mode stream with embedded index and range decode.
