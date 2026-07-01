@@ -146,6 +146,7 @@ def main() -> int:
     corpus_paths: list[pathlib.Path] = []
     source_paths: list[pathlib.Path] = []
     workers = "4"
+    block_len_override: str | None = None
     worker_values: list[str] = []
     for index, arg in enumerate(sys.argv):
         if arg == "--markdown" and index + 1 < len(sys.argv):
@@ -154,6 +155,8 @@ def main() -> int:
             case_limit = int(sys.argv[index + 1])
         if arg == "--workers" and index + 1 < len(sys.argv):
             workers = sys.argv[index + 1]
+        if arg == "--block-len" and index + 1 < len(sys.argv):
+            block_len_override = sys.argv[index + 1]
         if arg == "--worker-sweep" and index + 1 < len(sys.argv):
             worker_values = [value for value in sys.argv[index + 1].split(",") if value]
         if arg == "--paths":
@@ -161,7 +164,7 @@ def main() -> int:
                 if value.startswith("--"):
                     break
                 corpus_paths.append(pathlib.Path(value))
-    block_len = "65536" if full else "8192"
+    block_len = block_len_override or ("65536" if full else "8192")
     if corpus_paths:
         source_paths = corpus_paths
         cases = load_path_cases(corpus_paths, full)
