@@ -73,7 +73,19 @@ def main() -> int:
         frame = bytes.fromhex(run_cli("encode-gzip-best-split-hex", text, "17", "default"))
         assert gzip_decompress(frame) == data
 
-    print(f"gzip cli differential smoke: payloads={len(payloads)} split_payloads={len(split_payloads)} gzip={GZIP} cli={CLI}")
+    dynamic_payloads = [
+        b"match-heavy:" + (b"abcabcabcabc" * 96) + (b"xyzxyzxyz" * 48),
+        b"distance-heavy:" + (b"0123456789abcdef" * 512) + b"----" + (b"0123456789abcdef" * 64),
+        (b"lorem ipsum dolor sit amet\n" * 32) + (b"A" * 511) + (b"lorem ipsum dolor sit amet\n" * 32),
+    ]
+    for data in dynamic_payloads:
+        text = data.decode("ascii")
+        frame = bytes.fromhex(run_cli("encode-gzip-dynamic-hex", text, "default"))
+        assert gzip_decompress(frame) == data
+        adaptive = bytes.fromhex(run_cli("encode-gzip-best-adaptive-hex", text, "best"))
+        assert gzip_decompress(adaptive) == data
+
+    print(f"gzip cli differential smoke: payloads={len(payloads)} split_payloads={len(split_payloads)} dynamic_payloads={len(dynamic_payloads)} gzip={GZIP} cli={CLI}")
     return 0
 
 
