@@ -905,6 +905,31 @@ pub fn encodeBlockedBestStreamWithOptionsAlloc(allocator: std.mem.Allocator, inp
     return stream.toOwnedSlice(allocator);
 }
 
+pub fn encodeBlockedBestStreamWithLdmAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: deflate.CompressionOptions, ldm_options: long_distance.Options) ![]u8 {
+    var stream = try std.ArrayList(u8).initCapacity(allocator, 0);
+    errdefer stream.deinit(allocator);
+    const plan = try @import("planner.zig").planBlocksAlloc(allocator, input.len, .{ .block_len = block_len, .worker_count = 1 });
+    defer allocator.free(plan);
+    for (plan) |block| {
+        const frame = try encodeBlockBestWithLdmAlloc(allocator, input[block.input_offset..][0..block.input_len], options, ldm_options);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    if (input.len == 0) {
+        const frame = try encodeBlockBestWithLdmAlloc(allocator, "", options, ldm_options);
+        defer allocator.free(frame);
+        try stream.appendSlice(allocator, frame);
+    }
+    const index = try buildFrameIndexAlloc(allocator, stream.items);
+    defer allocator.free(index);
+    const index_bytes = try encodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try encodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
 pub fn encodeBlockedBestStreamWithLdmSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: deflate.CompressionOptions, ldm_options: long_distance.Options) ![]u8 {
     var stream = try std.ArrayList(u8).initCapacity(allocator, 0);
     errdefer stream.deinit(allocator);
@@ -1060,6 +1085,19 @@ fn encodeBlockedBestWithDictionaryStreamInternalAlloc(allocator: std.mem.Allocat
     defer allocator.free(index_frame);
     try stream.appendSlice(allocator, index_frame);
     return stream.toOwnedSlice(allocator);
+}
+
+fn encodeBlockBestWithLdmAlloc(allocator: std.mem.Allocator, input: []const u8, options: deflate.CompressionOptions, ldm_options: long_distance.Options) ![]u8 {
+    const native_best = try encodeBlockBestAlloc(allocator, input, options);
+    errdefer allocator.free(native_best);
+    const ldm_frame = try encodeLongDistanceAlloc(allocator, input, ldm_options);
+    errdefer allocator.free(ldm_frame);
+    if (ldm_frame.len < native_best.len) {
+        allocator.free(native_best);
+        return ldm_frame;
+    }
+    allocator.free(ldm_frame);
+    return native_best;
 }
 
 fn encodeBlockBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: deflate.CompressionOptions) ![]u8 {
@@ -1826,6 +1864,18 @@ test "blocked best stream can embed long-distance summary metadata" {
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 5, 12);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[5..17], range);
+}
+
+test "blocked best stream can select long-distance frames" {
+    const prefix = deterministicLdmPrefix();
+    const input = prefix ++ "----" ++ prefix[0..1024].*;
+    const stream = try encodeBlockedBestStreamWithLdmAlloc(std.testing.allocator, input, input.len, .{}, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(stream);
+    const summary = try summarizeModes(stream);
+    try std.testing.expect(summary.ldm > 0);
+    const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, prefix.len + 4, 32);
+    defer std.testing.allocator.free(range);
+    try std.testing.expectEqualSlices(u8, prefix[0..32], range);
 }
 
 test "planned deflate stream is deterministic across worker counts" {

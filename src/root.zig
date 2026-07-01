@@ -58,6 +58,7 @@ pub const storeEncodeIndexedLongDistanceStreamAlloc = store.encodeIndexedLongDis
 pub const storeEncodeBlockedDeflateStreamAlloc = store.encodeBlockedDeflateStreamAlloc;
 pub const storeEncodeBlockedBestStreamAlloc = store.encodeBlockedBestStreamAlloc;
 pub const storeEncodeBlockedBestStreamWithOptionsAlloc = store.encodeBlockedBestStreamWithOptionsAlloc;
+pub const storeEncodeBlockedBestStreamWithLdmAlloc = store.encodeBlockedBestStreamWithLdmAlloc;
 pub const storeEncodeBlockedBestStreamWithLdmSummaryAlloc = store.encodeBlockedBestStreamWithLdmSummaryAlloc;
 pub const storeEncodeBlockedBestWithDictionaryStreamAlloc = store.encodeBlockedBestWithDictionaryStreamAlloc;
 pub const storeEncodeSelfContainedDictionaryStreamAlloc = store.encodeSelfContainedDictionaryStreamAlloc;

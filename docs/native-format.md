@@ -15,8 +15,8 @@ dictionary-aware and LDM-aware best-frame encoders can select dictionary-patch o
 LDM reference frames when the caller supplies the required context.
 Self-contained dictionary streams can embed their trained dictionary as skippable
 metadata for indexed range decode, and indexed LDM streams preserve range decode
-through the normal embedded index. Blocked
-streams can carry a skippable long-distance-match summary payload for
+through the normal embedded index. Blocked streams can opt into LDM frame
+selection or carry a skippable long-distance-match summary payload for
 encoder/planner feedback, and the LDM-summary encoder aligns block boundaries to
 detected long-distance match starts before appending the metadata. Future native
 versions should preserve the same engineering
