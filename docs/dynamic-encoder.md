@@ -15,8 +15,8 @@ best block whenever that is smaller. For complex distance-code sets that are not
 yet proven safe, the dynamic encoder conservatively falls back to fixed-Huffman
 token emission so public outputs remain zlib-compatible. The split-best and
 adaptive-split compatibility wrappers are covered by the Python zlib and system
-gzip differential smoke harnesses, including match-heavy dynamic/adaptive zlib and gzip
-payloads.
+gzip differential smoke harnesses, including match-heavy raw split-best, zlib dynamic/split-best, and gzip
+adaptive payloads.
 
 Remaining work for production dynamic encoding:
 

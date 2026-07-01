@@ -69,8 +69,12 @@ def check_vort_dynamic_outputs() -> int:
     ]
     for data in payloads:
         text = data.decode("ascii")
+        raw_split = bytes.fromhex(subprocess.run([str(CLI), "encode-raw-best-split-hex", text, "257", "best"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip())
+        assert zlib.decompress(raw_split, wbits=-15) == data
         zlib_frame = bytes.fromhex(subprocess.run([str(CLI), "encode-zlib-dynamic-hex", text, "default"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip())
         assert zlib.decompress(zlib_frame) == data
+        zlib_split = bytes.fromhex(subprocess.run([str(CLI), "encode-zlib-best-split-hex", text, "257", "best"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip())
+        assert zlib.decompress(zlib_split) == data
         gzip_frame = bytes.fromhex(subprocess.run([str(CLI), "encode-gzip-best-adaptive-hex", text, "best"], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip())
         assert zlib.decompress(gzip_frame, wbits=31) == data
     return len(payloads)
