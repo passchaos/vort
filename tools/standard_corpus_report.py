@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+import os
 import pathlib
+import platform
 import shutil
 import subprocess
 import sys
@@ -12,15 +14,16 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 CLI = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 and pathlib.Path(sys.argv[1]).exists() else None
 GZIP = shutil.which("gzip")
 ZSTD = shutil.which("zstd")
-ZLIB_NG_MINIGZIP = pathlib.Path.home() / "Work" / "zlib-ng" / "build" / "minigzip"
-ZLIB_RS_COMPRESS = pathlib.Path.home() / "Work" / "zlib-rs" / "target" / "debug" / "examples" / "compress"
-SILESIA = pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"
+ZLIB_NG_MINIGZIP = pathlib.Path(os.environ.get("VORT_ZLIB_NG_MINIGZIP", pathlib.Path.home() / "Work" / "zlib-ng" / "build" / "minigzip"))
+ZLIB_RS_COMPRESS = pathlib.Path(os.environ.get("VORT_ZLIB_RS_COMPRESS", pathlib.Path.home() / "Work" / "zlib-rs" / "target" / "debug" / "examples" / "compress"))
+SILESIA = pathlib.Path(os.environ.get("VORT_SILESIA_PATH", pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"))
+CORPORA_DIR = pathlib.Path(os.environ.get("VORT_CORPORA_DIR", pathlib.Path.home() / "Work" / "corpora"))
 STANDARD_CORPUS_CANDIDATES = [
     SILESIA,
-    pathlib.Path.home() / "Work" / "corpora" / "calgary.tar",
-    pathlib.Path.home() / "Work" / "corpora" / "canterbury.tar",
-    pathlib.Path.home() / "Work" / "corpora" / "large-canterbury.tar",
-    pathlib.Path.home() / "Work" / "corpora" / "enwik8",
+    CORPORA_DIR / "calgary.tar",
+    CORPORA_DIR / "canterbury.tar",
+    CORPORA_DIR / "large-canterbury.tar",
+    CORPORA_DIR / "enwik8",
 ]
 SMOKE_LIMIT = 128 * 1024
 HEADER = "corpus,input_bytes,vort_zlib_fastest_bytes,vort_ms,vort_decode_ms,gzip_bytes,gzip_ms,gzip_decode_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_ng_decode_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zlib_rs_decode_ms,zstd_bytes,zstd_ms,zstd_decode_ms"
@@ -244,17 +247,73 @@ def summarize_codecs(records: list[dict[str, str]]) -> list[dict[str, object]]:
     return summaries
 
 
+def capture_metadata() -> dict[str, str]:
+    meta: dict[str, str] = {}
+    try:
+        meta["git_commit"] = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True
+        ).stdout.strip()[:12]
+    except Exception:
+        meta["git_commit"] = "unknown"
+    try:
+        meta["git_branch"] = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except Exception:
+        meta["git_branch"] = "unknown"
+    meta["host"] = platform.node()
+    meta["cpu"] = platform.processor() or platform.machine()
+    meta["os"] = f"{platform.system()} {platform.release()}"
+    meta["python"] = sys.version.split()[0]
+    if CLI:
+        try:
+            result = subprocess.run(
+                [str(CLI), "--version"], cwd=ROOT, capture_output=True, text=True
+            )
+            meta["vort_version"] = result.stdout.strip() or "unknown"
+        except Exception:
+            meta["vort_version"] = "unknown"
+    else:
+        meta["vort_version"] = "missing"
+    if GZIP:
+        try:
+            result = subprocess.run([GZIP, "--version"], capture_output=True, text=True)
+            meta["gzip_version"] = result.stdout.splitlines()[0] if result.stdout else "unknown"
+        except Exception:
+            meta["gzip_version"] = "unknown"
+    else:
+        meta["gzip_version"] = "missing"
+    if ZSTD:
+        try:
+            result = subprocess.run([ZSTD, "--version"], capture_output=True, text=True)
+            meta["zstd_version"] = result.stdout.strip() if result.stdout else "unknown"
+        except Exception:
+            meta["zstd_version"] = "unknown"
+    else:
+        meta["zstd_version"] = "missing"
+    meta["zlib_version"] = zlib.ZLIB_VERSION
+    return meta
+
+
 def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool, external_paths: bool = False, sources: list[pathlib.Path] | None = None, case_limit: int | None = None) -> None:
     records = [row_to_dict(row) for row in rows]
     title = "External corpus benchmark suite" if external_paths else ("Silesia per-file benchmark suite" if suite else "Silesia benchmark smoke")
     mode = "full" if full else "bounded-128KiB"
+    meta = capture_metadata()
     lines = [
         f"# {title}",
         "",
         f"- mode: `{mode}`",
         f"- rows: {len(records)}",
-        f"- gzip: `{GZIP or 'missing'}`",
-        f"- zstd: `{ZSTD or 'missing'}`",
+        f"- generated: {time.strftime('%Y-%m-%d %H:%M:%S %Z')}",
+        f"- host: `{meta['host']}`",
+        f"- cpu: `{meta['cpu']}`",
+        f"- os: `{meta['os']}`",
+        f"- git commit: `{meta['git_commit']}` ({meta['git_branch']})",
+        f"- vort: `{meta['vort_version']}`",
+        f"- gzip: `{meta['gzip_version']}`",
+        f"- zstd: `{meta['zstd_version']}`",
+        f"- python zlib: `{meta['zlib_version']}`",
         f"- zlib-ng minigzip: `{ZLIB_NG_MINIGZIP if ZLIB_NG_MINIGZIP.exists() else 'missing'}`",
         f"- zlib-rs compress: `{ZLIB_RS_COMPRESS if ZLIB_RS_COMPRESS.exists() else 'missing'}`",
         f"- sources: `{format_paths(sources or [])}`",
