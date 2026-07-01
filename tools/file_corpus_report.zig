@@ -7,16 +7,19 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
 
     var markdown_path: ?[]const u8 = null;
-    var paths: std.ArrayList([]const u8) = .empty;
-    defer paths.deinit(init.gpa);
+    var path_entries: std.ArrayList(PathEntry) = .empty;
+    defer {
+        for (path_entries.items) |entry| if (entry.owned) init.gpa.free(entry.path);
+        path_entries.deinit(init.gpa);
+    }
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--markdown")) {
             markdown_path = args.next() orelse return error.MissingCorpusPath;
             continue;
         }
-        try paths.append(init.gpa, arg);
+        try appendPathArg(init, &path_entries, arg);
     }
-    if (paths.items.len == 0) return error.MissingCorpusPath;
+    if (path_entries.items.len == 0) return error.MissingCorpusPath;
 
     var rows: std.ArrayList(ReportRow) = .empty;
     defer rows.deinit(init.gpa);
@@ -26,7 +29,8 @@ pub fn main(init: std.process.Init) !void {
     const stdout = &stdout_writer.interface;
     try stdout.print("path,input_bytes,best_deflate_bytes,best_ratio,encode_mib_s,decode_mib_s\n", .{});
 
-    for (paths.items) |path| {
+    for (path_entries.items) |entry| {
+        const path = entry.path;
         const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(data);
 
@@ -53,6 +57,33 @@ pub fn main(init: std.process.Init) !void {
     try stdout.flush();
     if (markdown_path) |path| try writeMarkdown(init, path, rows.items);
 }
+
+fn appendPathArg(init: std.process.Init, paths: *std.ArrayList(PathEntry), path: []const u8) !void {
+    const stat = std.Io.Dir.cwd().statFile(init.io, path, .{}) catch {
+        try paths.append(init.gpa, .{ .path = path });
+        return;
+    };
+    if (stat.kind != .directory) {
+        try paths.append(init.gpa, .{ .path = path });
+        return;
+    }
+
+    var dir = try std.Io.Dir.cwd().openDir(init.io, path, .{ .iterate = true });
+    defer dir.close(init.io);
+    var walker = try dir.walk(init.gpa);
+    defer walker.deinit();
+    while (try walker.next(init.io)) |entry| {
+        if (entry.kind != .file) continue;
+        const joined = try std.fs.path.join(init.gpa, &.{ path, entry.path });
+        errdefer init.gpa.free(joined);
+        try paths.append(init.gpa, .{ .path = joined, .owned = true });
+    }
+}
+
+const PathEntry = struct {
+    path: []const u8,
+    owned: bool = false,
+};
 
 const ReportRow = struct {
     path: []const u8,

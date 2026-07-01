@@ -96,6 +96,7 @@ zig build run-native-range-report
 zig build run-native-range-report -- README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-file-corpus-report -- README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- README.md docs/roadmap.md
+zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- docs
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build bench-corpus-decode -Doptimize=ReleaseFast
