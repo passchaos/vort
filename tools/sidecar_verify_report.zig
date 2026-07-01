@@ -6,17 +6,17 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
 
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
-    const stdout = &stdout_writer.interface;
-    try stdout.print("stream,sidecar,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
-
+    var markdown_path: ?[]const u8 = null;
     var pairs: std.ArrayList(Pair) = .empty;
     defer {
         for (pairs.items) |pair| pair.deinit(init.gpa);
         pairs.deinit(init.gpa);
     }
     while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--markdown")) {
+            markdown_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--dir")) {
             try appendDirectoryPairs(init, &pairs, args.next() orelse return error.MissingCorpusPath);
             continue;
@@ -25,8 +25,21 @@ pub fn main(init: std.process.Init) !void {
         try pairs.append(init.gpa, .{ .stream = arg, .sidecar = sidecar_path });
     }
     if (pairs.items.len == 0) return error.MissingCorpusPath;
-    for (pairs.items) |pair| try reportPair(init, stdout, pair.stream, pair.sidecar);
+
+    var rows: std.ArrayList(ReportRow) = .empty;
+    defer rows.deinit(init.gpa);
+
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
+    const stdout = &stdout_writer.interface;
+    try stdout.print("stream,sidecar,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
+    for (pairs.items) |pair| {
+        const row = try verifyPair(init, pair.stream, pair.sidecar);
+        try rows.append(init.gpa, row);
+        try printCsvRow(stdout, row);
+    }
     try stdout.flush();
+    if (markdown_path) |path| try writeMarkdown(init, path, rows.items);
 }
 
 const Pair = struct {
@@ -40,6 +53,16 @@ const Pair = struct {
             allocator.free(self.sidecar);
         }
     }
+};
+
+const ReportRow = struct {
+    stream: []const u8,
+    sidecar: []const u8,
+    stream_bytes: usize,
+    sidecar_bytes: usize,
+    entries: usize,
+    total_uncompressed: u64,
+    crc32: u32,
 };
 
 fn appendDirectoryPairs(init: std.process.Init, pairs: *std.ArrayList(Pair), dir_path: []const u8) !void {
@@ -69,7 +92,7 @@ fn replaceExtension(allocator: std.mem.Allocator, path: []const u8, extension: [
     return std.fmt.allocPrint(allocator, "{s}{s}", .{ path[0..dot], extension });
 }
 
-fn reportPair(init: std.process.Init, stdout: *std.Io.Writer, stream_path: []const u8, sidecar_path: []const u8) !void {
+fn verifyPair(init: std.process.Init, stream_path: []const u8, sidecar_path: []const u8) !ReportRow {
     const stream = try std.Io.Dir.cwd().readFileAlloc(init.io, stream_path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(stream);
     const sidecar = try std.Io.Dir.cwd().readFileAlloc(init.io, sidecar_path, init.gpa, .limited(16 * 1024 * 1024));
@@ -79,13 +102,49 @@ fn reportPair(init: std.process.Init, stdout: *std.Io.Writer, stream_path: []con
     defer init.gpa.free(entries);
     var total_uncompressed: u64 = 0;
     for (entries) |entry| total_uncompressed += entry.uncompressed_len;
+    return .{
+        .stream = stream_path,
+        .sidecar = sidecar_path,
+        .stream_bytes = stream.len,
+        .sidecar_bytes = sidecar.len,
+        .entries = entries.len,
+        .total_uncompressed = total_uncompressed,
+        .crc32 = vort.crc32(sidecar),
+    };
+}
+
+fn printCsvRow(stdout: *std.Io.Writer, row: ReportRow) !void {
     try stdout.print("{s},{s},{d},{d},{d},{d},{d}\n", .{
-        stream_path,
-        sidecar_path,
-        stream.len,
-        sidecar.len,
-        entries.len,
-        total_uncompressed,
-        vort.crc32(sidecar),
+        row.stream,
+        row.sidecar,
+        row.stream_bytes,
+        row.sidecar_bytes,
+        row.entries,
+        row.total_uncompressed,
+        row.crc32,
     });
+}
+
+fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportRow) !void {
+    var writer = std.Io.Writer.Allocating.init(init.gpa);
+    defer writer.deinit();
+    const w = &writer.writer;
+    var total_stream: usize = 0;
+    var total_sidecar: usize = 0;
+    var total_entries: usize = 0;
+    var total_uncompressed: u64 = 0;
+    for (rows) |row| {
+        total_stream += row.stream_bytes;
+        total_sidecar += row.sidecar_bytes;
+        total_entries += row.entries;
+        total_uncompressed += row.total_uncompressed;
+    }
+    try w.print("# Sidecar verification report\n\n", .{});
+    try w.print("- rows: {d}\n- total stream bytes: {d}\n- total sidecar bytes: {d}\n- total entries: {d}\n- total uncompressed bytes: {d}\n\n", .{ rows.len, total_stream, total_sidecar, total_entries, total_uncompressed });
+    try w.print("| stream | sidecar | stream bytes | sidecar bytes | entries | total uncompressed | sidecar crc32 |\n", .{});
+    try w.print("| --- | --- | ---: | ---: | ---: | ---: | ---: |\n", .{});
+    for (rows) |row| {
+        try w.print("| {s} | {s} | {d} | {d} | {d} | {d} | {d} |\n", .{ row.stream, row.sidecar, row.stream_bytes, row.sidecar_bytes, row.entries, row.total_uncompressed, row.crc32 });
+    }
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
 }
