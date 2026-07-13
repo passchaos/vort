@@ -1163,10 +1163,34 @@ pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
     return raw.output_written;
 }
 
+pub fn decodeZlibStoredWithDictionary(input: []const u8, output: []u8, dictionary: []const u8) Error!usize {
+    const header = try parseZlibHeader(input, dictionary);
+
+    // Stored deflate blocks do not reference history, so the dictionary is only
+    // used to satisfy and validate the zlib DICTID before the stored payload.
+    const raw = try decodeRawStored(input[header.data_offset..], output);
+    const footer_offset = header.data_offset + raw.input_read;
+    if (input.len - footer_offset < 4) return error.TruncatedFrame;
+    const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
+    if (checksum.adler32(output[0..raw.output_written]) != expected) return error.ChecksumMismatch;
+    if (footer_offset + 4 != input.len) return error.TrailingData;
+    return raw.output_written;
+}
+
 pub fn decodeZlibStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const scratch = try allocator.alloc(u8, input.len);
     defer allocator.free(scratch);
     const written = try decodeZlibStored(input, scratch);
+    const out = try allocator.alloc(u8, written);
+    errdefer allocator.free(out);
+    @memcpy(out, scratch[0..written]);
+    return out;
+}
+
+pub fn decodeZlibStoredAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) ![]u8 {
+    const scratch = try allocator.alloc(u8, input.len);
+    defer allocator.free(scratch);
+    const written = try decodeZlibStoredWithDictionary(input, scratch, dictionary);
     const out = try allocator.alloc(u8, written);
     errdefer allocator.free(out);
     @memcpy(out, scratch[0..written]);
@@ -2149,6 +2173,11 @@ test "zlib preset dictionary streams cover stored and dynamic blocks" {
     const stored = try decodeZlibAllocWithDictionary(std.testing.allocator, stored_frame, "hello ");
     defer std.testing.allocator.free(stored);
     try std.testing.expectEqualSlices(u8, "hello hello hello", stored);
+    try std.testing.expectError(error.NeedDictionary, decodeZlibStoredAlloc(std.testing.allocator, stored_frame));
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibStoredAllocWithDictionary(std.testing.allocator, stored_frame, "wrong dictionary"));
+    const stored_specific = try decodeZlibStoredAllocWithDictionary(std.testing.allocator, stored_frame, "hello ");
+    defer std.testing.allocator.free(stored_specific);
+    try std.testing.expectEqualSlices(u8, "hello hello hello", stored_specific);
 
     const dynamic_frame = &.{
         0x78, 0x20, 0x08, 0x61, 0x02, 0x35, 0x25,

@@ -140,6 +140,7 @@ architecture blindly.
 - [x] zlib/gzip wrappers reject truncated non-final raw deflate streams across stored/fixed/dynamic blocks.
 - [x] zlib wrapper and Adler verification for stored blocks.
 - [x] zlib wrapper reports preset-dictionary streams as dictionary requirements.
+- [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
 - [x] Raw/zlib preset-dictionary decode covers stored/fixed/dynamic block cases.
 - [x] CLI and Python differential smoke cover raw/zlib preset-dictionary decode.
