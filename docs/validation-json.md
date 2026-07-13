@@ -229,12 +229,14 @@ Top-level fields:
 - `artifact_count`
 - `producer_step_covered`
 - `producer_step_missing`
+- `producer_step_allowed_missing`
 - `artifacts`
 
 Each artifact includes:
 
 - `name`, `path`, `category`, `format`
 - `producer_step`
+- `producer_missing_allowed`
 - `size_bytes`, `mtime_utc`
 - JSON summary fields when applicable: `schema`, `schema_version`, `rows`, `ok`
 
@@ -247,6 +249,7 @@ Example:
   "artifact_count": 1,
   "producer_step_covered": 1,
   "producer_step_missing": [],
+  "producer_step_allowed_missing": [],
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",
@@ -254,6 +257,7 @@ Example:
       "category": "validation",
       "format": "json",
       "producer_step": "zig build run-validation-json-dashboard",
+      "producer_missing_allowed": false,
       "size_bytes": 349,
       "mtime_utc": "2026-07-13T11:00:55Z",
       "schema": "vort.validation_json_smoke",
@@ -284,6 +288,7 @@ Top-level fields:
 | --- | --- | --- |
 | `schema` | string | Always `vort.dashboard_producers`. |
 | `schema_version` | integer | Currently `1`. |
+| `allow_missing` | object | Optional allowlist for temporary artifacts without producer mappings. |
 | `exact` | object | Map from exact artifact filename to producer command. |
 | `contains` | array | Ordered fallback rules for filename substring matches. |
 
@@ -294,12 +299,16 @@ Each `contains` rule has:
 | `match` | string | Substring to search for in the artifact filename. |
 | `producer_step` | string | Command shown in the Markdown index and JSON manifest. |
 
-Resolution order:
+Producer resolution order:
 
 1. Exact filename match in `exact`.
 2. First matching rule in `contains`.
 3. Built-in fallback mappings in `tools/dashboard_index.py`.
 4. Empty `producer_step` when no rule matches.
+
+Strict producer coverage ignores missing mappings that match
+`allow_missing.exact` or `allow_missing.contains`, but still records them in the
+dashboard manifest as `producer_missing_allowed=true`.
 
 Example:
 
@@ -307,6 +316,12 @@ Example:
 {
   "schema": "vort.dashboard_producers",
   "schema_version": 1,
+  "allow_missing": {
+    "exact": [],
+    "contains": [
+      "scratch"
+    ]
+  },
   "exact": {
     "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard"
   },

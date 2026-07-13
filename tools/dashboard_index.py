@@ -68,6 +68,20 @@ def producer_step_for(path: Path, producer_map: dict) -> str:
     return ""
 
 
+def is_allowed_missing(path: Path, producer_map: dict) -> bool:
+    allow = producer_map.get("allow_missing")
+    if not isinstance(allow, dict):
+        return False
+    name = path.name
+    exact = allow.get("exact")
+    if isinstance(exact, list) and name in exact:
+        return True
+    contains = allow.get("contains")
+    if isinstance(contains, list):
+        return any(isinstance(match, str) and match in name for match in contains)
+    return False
+
+
 def read_json(path: Path) -> dict:
     try:
         value = json.loads(path.read_text())
@@ -103,12 +117,14 @@ def artifact_record(path: Path, output_dir: Path, producer_map: dict) -> dict:
     stat = path.stat()
     mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     data = read_json(path) if path.suffix == ".json" else {}
+    producer_step = producer_step_for(path, producer_map)
     return {
         "name": path.name,
         "path": path.relative_to(output_dir).as_posix(),
         "category": category_for(path),
         "format": path.suffix.lstrip("."),
-        "producer_step": producer_step_for(path, producer_map),
+        "producer_step": producer_step,
+        "producer_missing_allowed": producer_step == "" and is_allowed_missing(path, producer_map),
         "size_bytes": stat.st_size,
         "mtime_utc": mtime,
         "schema": data.get("schema"),
@@ -141,7 +157,8 @@ def main() -> int:
         grouped.setdefault(category_for(artifact), []).append(artifact)
 
     records = [artifact_record(path, output.parent, producer_map) for path in artifacts]
-    producer_step_missing = [record["name"] for record in records if not record["producer_step"]]
+    producer_step_missing = [record["name"] for record in records if not record["producer_step"] and not record["producer_missing_allowed"]]
+    producer_step_allowed_missing = [record["name"] for record in records if not record["producer_step"] and record["producer_missing_allowed"]]
     producer_step_covered = len(records) - len(producer_step_missing)
 
     lines = [
@@ -151,6 +168,7 @@ def main() -> int:
         f"",
         f"- artifacts: {len(artifacts)}",
         f"- producer steps: {producer_step_covered}/{len(records)}",
+        f"- allowed missing producer steps: {len(producer_step_allowed_missing)}",
         "",
     ]
     for category in sorted(grouped):
@@ -181,6 +199,7 @@ def main() -> int:
                 "schema_version": 1,
                 "artifact_count": len(records),
                 "producer_step_covered": producer_step_covered,
+                "producer_step_allowed_missing": producer_step_allowed_missing,
                 "producer_step_missing": producer_step_missing,
                 "artifacts": records,
             },

@@ -1,6 +1,10 @@
 {
   "schema": "vort.dashboard_producers",
   "schema_version": 1,
+  "allow_missing": {
+    "contains": [],
+    "exact": []
+  },
   "exact": {
     "vort-dashboard-index.json": "zig build run-dashboard-index",
     "vort-dashboard-index.md": "zig build run-dashboard-index",
