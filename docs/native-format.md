@@ -20,8 +20,10 @@ corruption that would not change sidecar bytes or frame headers.
 `run-sidecar-corrupt-smoke` exercises the distinction by mutating payload bytes
 across store, deflate, RLE, dictionary, LDM, self-contained dictionary sidecar,
 and seekable native sidecar streams: metadata validation succeeds by contract,
-and full validation rejects each corrupted stream. The seekable native encoder
-integrates these production paths:
+and full validation rejects each corrupted stream. The same smoke can write
+Markdown and JSON artifacts for CI/dashboard retention via the report tool's
+`--markdown` and `--json` flags. The seekable native encoder integrates these
+production paths:
 `encodeSeekableNativeStreamAlloc` emits an embedded-index stream and
 `encodeSeekableNativeSidecarStreamAlloc` keeps the index external while selecting
 store/deflate/RLE, trained dictionary-patch/deflate, and LDM reference frames per

@@ -11,6 +11,7 @@ pub fn main(init: std.process.Init) !void {
     var case_limit: ?usize = null;
     var validation_mode: vort.SidecarValidationMode = .full;
     var keep_going = false;
+    var corrupt_self_test = false;
     var pairs: std.ArrayList(Pair) = .empty;
     defer {
         for (pairs.items) |pair| pair.deinit(init.gpa);
@@ -18,8 +19,8 @@ pub fn main(init: std.process.Init) !void {
     }
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--self-test-corrupt")) {
-            try runCorruptSelfTest(init);
-            return;
+            corrupt_self_test = true;
+            continue;
         }
         if (std.mem.eql(u8, arg, "--markdown")) {
             markdown_path = args.next() orelse return error.MissingCorpusPath;
@@ -55,6 +56,10 @@ pub fn main(init: std.process.Init) !void {
         }
         const sidecar_path = args.next() orelse return error.MissingCorpusPath;
         try pairs.append(init.gpa, .{ .stream = arg, .sidecar = sidecar_path });
+    }
+    if (corrupt_self_test) {
+        try runCorruptSelfTest(init, markdown_path, json_path);
+        return;
     }
     if (pairs.items.len == 0) return error.MissingCorpusPath;
 
@@ -111,7 +116,7 @@ fn parseValidationMode(text: []const u8) !vort.SidecarValidationMode {
     return error.InvalidSidecarValidationMode;
 }
 
-fn runCorruptSelfTest(init: std.process.Init) !void {
+fn runCorruptSelfTest(init: std.process.Init, markdown_path: ?[]const u8, json_path: ?[]const u8) !void {
     var stdout_buffer: [512]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
@@ -153,12 +158,20 @@ fn runCorruptSelfTest(init: std.process.Init) !void {
         null,
     ));
 
+    var rows: std.ArrayList(CorruptReportRow) = .empty;
+    defer rows.deinit(init.gpa);
     var metadata_ok: usize = 0;
     var full_rejected: usize = 0;
     for (cases.items) |case| {
         const full_error_name = try validateCorruptCase(init.gpa, case);
         metadata_ok += 1;
         full_rejected += 1;
+        try rows.append(init.gpa, .{
+            .case_name = case.name,
+            .full_error_name = full_error_name,
+            .stream_bytes = case.stream.len,
+            .sidecar_bytes = case.sidecar_index.len,
+        });
         try stdout.print("corrupt_case={s} metadata_ok=true full_rejected=true full_error={s} stream_bytes={d} sidecar_bytes={d}\n", .{
             case.name,
             full_error_name,
@@ -173,6 +186,8 @@ fn runCorruptSelfTest(init: std.process.Init) !void {
         full_rejected,
     });
     try stdout.flush();
+    if (markdown_path) |path| try writeCorruptMarkdown(init, path, rows.items);
+    if (json_path) |path| try writeCorruptJson(init, path, rows.items);
 }
 
 const CorruptCase = struct {
@@ -185,6 +200,15 @@ const CorruptCase = struct {
         allocator.free(self.stream);
         allocator.free(self.sidecar_index);
     }
+};
+
+const CorruptReportRow = struct {
+    case_name: []const u8,
+    metadata_ok: bool = true,
+    full_rejected: bool = true,
+    full_error_name: []const u8,
+    stream_bytes: usize,
+    sidecar_bytes: usize,
 };
 
 fn makeCorruptCase(allocator: std.mem.Allocator, name: []const u8, frame: []u8, dictionary: ?[]const u8) !CorruptCase {
@@ -230,6 +254,59 @@ fn validateCorruptCase(allocator: std.mem.Allocator, case: CorruptCase) ![]const
     };
     if (full_error_name.len == 0) return error.CorruptFrame;
     return full_error_name;
+}
+
+fn writeCorruptMarkdown(init: std.process.Init, path: []const u8, rows: []const CorruptReportRow) !void {
+    var writer = std.Io.Writer.Allocating.init(init.gpa);
+    defer writer.deinit();
+    const w = &writer.writer;
+    var metadata_ok: usize = 0;
+    var full_rejected: usize = 0;
+    for (rows) |row| {
+        if (row.metadata_ok) metadata_ok += 1;
+        if (row.full_rejected) full_rejected += 1;
+    }
+    try w.print("# Sidecar corrupt-payload smoke report\n\n", .{});
+    try w.print("- rows: {d}\n- metadata-ok rows: {d}\n- full-rejected rows: {d}\n\n", .{ rows.len, metadata_ok, full_rejected });
+    try w.print("| case | metadata ok | full rejected | full error | stream bytes | sidecar bytes |\n", .{});
+    try w.print("| --- | --- | --- | --- | ---: | ---: |\n", .{});
+    for (rows) |row| {
+        try w.print("| {s} | {} | {} | {s} | {d} | {d} |\n", .{
+            row.case_name,
+            row.metadata_ok,
+            row.full_rejected,
+            row.full_error_name,
+            row.stream_bytes,
+            row.sidecar_bytes,
+        });
+    }
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
+}
+
+fn writeCorruptJson(init: std.process.Init, path: []const u8, rows: []const CorruptReportRow) !void {
+    var writer = std.Io.Writer.Allocating.init(init.gpa);
+    defer writer.deinit();
+    const w = &writer.writer;
+    var metadata_ok: usize = 0;
+    var full_rejected: usize = 0;
+    for (rows) |row| {
+        if (row.metadata_ok) metadata_ok += 1;
+        if (row.full_rejected) full_rejected += 1;
+    }
+    try w.print("{{\n  \"rows\": {d},\n  \"metadata_ok_rows\": {d},\n  \"full_rejected_rows\": {d},\n  \"items\": [\n", .{ rows.len, metadata_ok, full_rejected });
+    for (rows, 0..) |row, i| {
+        try w.print("    {{\"case\": ", .{});
+        try std.json.Stringify.value(row.case_name, .{}, w);
+        try w.print(", \"metadata_ok\": {}, \"full_rejected\": {}, \"full_error\": ", .{ row.metadata_ok, row.full_rejected });
+        try std.json.Stringify.value(row.full_error_name, .{}, w);
+        try w.print(", \"stream_bytes\": {d}, \"sidecar_bytes\": {d}}}{s}\n", .{
+            row.stream_bytes,
+            row.sidecar_bytes,
+            if (i + 1 == rows.len) "" else ",",
+        });
+    }
+    try w.print("  ]\n}}\n", .{});
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
 }
 
 fn appendDirectoryPairs(init: std.process.Init, pairs: *std.ArrayList(Pair), dir_path: []const u8) !void {
