@@ -17,6 +17,10 @@ pub fn main(init: std.process.Init) !void {
         pairs.deinit(init.gpa);
     }
     while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--self-test-corrupt")) {
+            try runCorruptSelfTest(init);
+            return;
+        }
         if (std.mem.eql(u8, arg, "--markdown")) {
             markdown_path = args.next() orelse return error.MissingCorpusPath;
             continue;
@@ -105,6 +109,44 @@ fn parseValidationMode(text: []const u8) !vort.SidecarValidationMode {
     if (std.mem.eql(u8, text, "metadata") or std.mem.eql(u8, text, "fast")) return .metadata;
     if (std.mem.eql(u8, text, "full")) return .full;
     return error.InvalidSidecarValidationMode;
+}
+
+fn runCorruptSelfTest(init: std.process.Init) !void {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const sidecar = try vort.storeEncodeSidecarIndexedStreamAlloc(init.gpa, &payloads);
+    defer sidecar.deinit(init.gpa);
+
+    try vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, sidecar.stream, sidecar.sidecar_index, .{ .mode = .metadata });
+    try vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, sidecar.stream, sidecar.sidecar_index, .{ .mode = .full });
+
+    const entries = try vort.storeDecodeFrameIndexAlloc(init.gpa, sidecar.sidecar_index);
+    defer init.gpa.free(entries);
+    if (entries.len == 0) return error.CorruptFrame;
+
+    const tampered = try init.gpa.dupe(u8, sidecar.stream);
+    defer init.gpa.free(tampered);
+    // Flip a stored payload byte rather than the header or sidecar bytes. The
+    // metadata-only verifier should still accept this by contract, while full
+    // verification must reject it through frame checksum validation.
+    tampered[entries[0].frame_offset + vort.store.header_len] ^= 1;
+
+    try vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, tampered, sidecar.sidecar_index, .{ .mode = .metadata });
+    var full_error_name: []const u8 = "";
+    vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, tampered, sidecar.sidecar_index, .{ .mode = .full }) catch |err| {
+        full_error_name = @errorName(err);
+    };
+    if (full_error_name.len == 0) return error.CorruptFrame;
+
+    var stdout_buffer: [512]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
+    const stdout = &stdout_writer.interface;
+    try stdout.print("corrupt_self_test=true metadata_ok=true full_rejected=true full_error={s} entries={d} stream_bytes={d} sidecar_bytes={d}\n", .{
+        full_error_name,
+        entries.len,
+        sidecar.stream.len,
+        sidecar.sidecar_index.len,
+    });
+    try stdout.flush();
 }
 
 fn appendDirectoryPairs(init: std.process.Init, pairs: *std.ArrayList(Pair), dir_path: []const u8) !void {

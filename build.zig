@@ -454,6 +454,11 @@ pub fn build(b: *std.Build) void {
     const sidecar_verify_report_step = b.step("run-sidecar-verify-report", "Verify native sidecar index files against streams");
     sidecar_verify_report_step.dependOn(&run_sidecar_verify_report.step);
 
+    const run_sidecar_corrupt_smoke = b.addRunArtifact(sidecar_verify_report_exe);
+    run_sidecar_corrupt_smoke.addArg("--self-test-corrupt");
+    const sidecar_corrupt_smoke_step = b.step("run-sidecar-corrupt-smoke", "Verify sidecar metadata/full validation behavior on a corrupted payload");
+    sidecar_corrupt_smoke_step.dependOn(&run_sidecar_corrupt_smoke.step);
+
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
         .root_module = b.createModule(.{
@@ -599,6 +604,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(level_report_step);
     ci_smoke_step.dependOn(split_policy_report_step);
     ci_smoke_step.dependOn(native_range_report_step);
+    ci_smoke_step.dependOn(sidecar_corrupt_smoke_step);
     ci_smoke_step.dependOn(compat_benchmark_step);
     ci_smoke_step.dependOn(standard_corpus_report_step);
     ci_smoke_step.dependOn(standard_multi_corpus_dashboard_step);

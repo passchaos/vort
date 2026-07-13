@@ -16,8 +16,11 @@ agreement without decoding payloads, while the default
 corruption that would not change sidecar bytes or frame headers.
 `validateSidecarIndexAlloc` auto-loads embedded dictionaries in full mode, while
 `validateSidecarIndexWithDictionaryAlloc` and
-`validateSidecarIndexWithOptionsAlloc` cover external-dictionary streams. The
-seekable native encoder integrates these production paths:
+`validateSidecarIndexWithOptionsAlloc` cover external-dictionary streams.
+`run-sidecar-corrupt-smoke` exercises the distinction by mutating a stored
+payload byte: metadata validation succeeds by contract, and full validation
+rejects the stream. The seekable native encoder integrates these production
+paths:
 `encodeSeekableNativeStreamAlloc` emits an embedded-index stream and
 `encodeSeekableNativeSidecarStreamAlloc` keeps the index external while selecting
 store/deflate/RLE, trained dictionary-patch/deflate, and LDM reference frames per
