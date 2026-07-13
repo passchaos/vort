@@ -205,6 +205,11 @@ fn parseDynamicLengthsBody(header: DynamicHeader, reader: *bitstream.BitReader) 
     var parsed = DynamicLengths{ .header = header };
     @memcpy(parsed.literal_lengths[0..header.hlit], combined[0..header.hlit]);
     @memcpy(parsed.distance_lengths[0..header.hdist], combined[header.hlit..][0..header.hdist]);
+    // A dynamic literal/length alphabet without the end-of-block symbol cannot
+    // terminate a compressed block. Reject it at header parse time so wrappers
+    // consistently report a malformed dynamic header instead of decoding until
+    // the bitstream happens to run out.
+    if (parsed.literal_lengths[256] == 0) return error.InvalidDynamicBlockHeader;
     return parsed;
 }
 
