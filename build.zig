@@ -483,6 +483,12 @@ pub fn build(b: *std.Build) void {
     const validation_json_dashboard_step = b.step("run-validation-json-dashboard", "Write validation JSON schema smoke summary to zig-out");
     validation_json_dashboard_step.dependOn(&validation_json_dashboard.step);
 
+    const dashboard_index = b.addSystemCommand(&.{ "python3", "tools/dashboard_index.py" });
+    const dashboard_index_step = b.step("run-dashboard-index", "Write a Markdown index for zig-out dashboard artifacts");
+    dashboard_index_step.dependOn(&dashboard_index.step);
+    dashboard_index_step.dependOn(sidecar_corrupt_dashboard_step);
+    dashboard_index_step.dependOn(validation_json_dashboard_step);
+
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
         .root_module = b.createModule(.{
@@ -632,6 +638,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(sidecar_corrupt_dashboard_step);
     ci_smoke_step.dependOn(validation_json_smoke_step);
     ci_smoke_step.dependOn(validation_json_dashboard_step);
+    ci_smoke_step.dependOn(dashboard_index_step);
     ci_smoke_step.dependOn(compat_benchmark_step);
     ci_smoke_step.dependOn(standard_corpus_report_step);
     ci_smoke_step.dependOn(standard_multi_corpus_dashboard_step);
