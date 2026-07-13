@@ -7,6 +7,7 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
 
     var state = State{};
+    defer state.deinit(init.gpa);
 
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--file")) {
@@ -66,6 +67,7 @@ const State = struct {
     // related samples under one directive, while inline comments can still set
     // the expectation next to the sample that first needs it.
     expected: ?Expected = null,
+    dictionary: ?[]u8 = null,
     saw_store: bool = false,
     saw_deflate: bool = false,
     saw_zlib: bool = false,
@@ -96,6 +98,24 @@ const State = struct {
                 };
             }
         }
+    }
+
+    fn setDictionary(self: *State, allocator: std.mem.Allocator, bytes: []const u8) !void {
+        const owned = try allocator.dupe(u8, bytes);
+        errdefer allocator.free(owned);
+        self.clearDictionary(allocator);
+        self.dictionary = owned;
+    }
+
+    fn clearDictionary(self: *State, allocator: std.mem.Allocator) void {
+        if (self.dictionary) |dictionary| {
+            allocator.free(dictionary);
+            self.dictionary = null;
+        }
+    }
+
+    fn deinit(self: *State, allocator: std.mem.Allocator) void {
+        self.clearDictionary(allocator);
     }
 };
 
@@ -134,6 +154,22 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
         state.mode = .gzip;
         return;
     }
+    if (std.mem.eql(u8, arg, "--dict-clear")) {
+        state.clearDictionary(allocator);
+        return;
+    }
+    const dict_prefix = "--dict=";
+    if (std.mem.startsWith(u8, arg, dict_prefix)) {
+        try state.setDictionary(allocator, arg[dict_prefix.len..]);
+        return;
+    }
+    const dict_hex_prefix = "--dict-hex=";
+    if (std.mem.startsWith(u8, arg, dict_hex_prefix)) {
+        const dictionary = try hexToOwnedBytes(allocator, arg[dict_hex_prefix.len..]);
+        defer allocator.free(dictionary);
+        try state.setDictionary(allocator, dictionary);
+        return;
+    }
     if (std.mem.eql(u8, arg, "--expect-accept")) {
         state.expected = .accept;
         return;
@@ -169,7 +205,7 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
         },
         .deflate => {
             state.saw_deflate = true;
-            const outcome: Outcome = if (vort.decodeRawDeflateAlloc(allocator, bytes)) |decoded| result: {
+            const outcome: Outcome = if (decodeRawDeflateSample(allocator, state.dictionary, bytes)) |decoded| result: {
                 defer allocator.free(decoded);
                 break :result .accepted;
             } else |err| switch (err) {
@@ -188,7 +224,7 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
         },
         .zlib => {
             state.saw_zlib = true;
-            const outcome: Outcome = if (vort.decodeZlibAlloc(allocator, bytes)) |decoded| result: {
+            const outcome: Outcome = if (decodeZlibSample(allocator, state.dictionary, bytes)) |decoded| result: {
                 defer allocator.free(decoded);
                 break :result .accepted;
             } else |err| switch (err) {
@@ -232,6 +268,16 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
             try state.recordOutcome(outcome);
         },
     }
+}
+
+fn decodeRawDeflateSample(allocator: std.mem.Allocator, dictionary: ?[]const u8, bytes: []const u8) ![]u8 {
+    if (dictionary) |dict| return vort.decodeRawDeflateAllocWithDictionary(allocator, bytes, dict);
+    return vort.decodeRawDeflateAlloc(allocator, bytes);
+}
+
+fn decodeZlibSample(allocator: std.mem.Allocator, dictionary: ?[]const u8, bytes: []const u8) ![]u8 {
+    if (dictionary) |dict| return vort.decodeZlibAllocWithDictionary(allocator, bytes, dict);
+    return vort.decodeZlibAlloc(allocator, bytes);
 }
 
 fn processCommentDirective(state: *State, comment: []const u8) !void {

@@ -30,6 +30,10 @@ outcome for subsequent tokens; corpus files may use `# expect: accept` or
 `# expect: reject` inline next to a sample. The harness fails on
 `UnexpectedAccept` or `UnexpectedReject` when a regression changes a sample's
 classification.
+`--dict=<text>`, `--dict-hex=<hex>`, and `--dict-clear` set or clear a sticky
+preset dictionary for subsequent raw deflate and zlib samples, allowing minimized
+dictionary-reference regressions to live in the same corpus file as ordinary
+wrapper samples.
 `tools/fuzz_target.zig` exposes `fuzzOne(allocator, data)` for raw-byte fuzz
 runners and also has a smoke-test main. `tools/fuzz_libfuzzer.zig` exports `LLVMFuzzerTestOneInput` and is smoke-tested by `run-libfuzzer-smoke`. `tools/fuzz_afl.zig` is an AFL-style file-input driver suitable for `@@` invocations and is smoke-tested by `run-afl-smoke`. AFL/libFuzzer packaging should preserve crashing inputs as hex samples in regression tests.
 The `ci-smoke` aggregate build step runs the deterministic fuzz entrypoints
