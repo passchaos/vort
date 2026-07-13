@@ -104,6 +104,12 @@ def main() -> int:
     dictionary = b"hello "
     dict_payload = b"hello hello hello"
     for strategy in [zlib.Z_DEFAULT_STRATEGY, zlib.Z_FIXED]:
+        co = zlib.compressobj(level=9, wbits=-15, strategy=strategy, zdict=dictionary)
+        raw_dict = co.compress(dict_payload) + co.flush()
+        out = run_cli("decode-raw-dict-hex", raw_dict.hex(), dictionary.decode("ascii"))
+        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
+        assert int(parse_field(out, "crc32")) == (zlib.crc32(dict_payload) & 0xFFFFFFFF), out
+
         co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, strategy=strategy, zdict=dictionary)
         zlib_dict = co.compress(dict_payload) + co.flush()
         out = run_cli("decode-zlib-dict-hex", zlib_dict.hex(), dictionary.decode("ascii"))

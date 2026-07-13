@@ -581,6 +581,14 @@ pub fn main(init: std.process.Init) !void {
         const decoded = try vort.decodeRawDeflateAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "raw", compressed.len, decoded);
+    } else if (std.mem.eql(u8, command, "decode-raw-dict-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const dictionary = args.next() orelse "";
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const decoded = try vort.decodeRawDeflateAllocWithDictionary(init.gpa, compressed, dictionary);
+        defer init.gpa.free(decoded);
+        try printDecoded(stdout, "raw_dict", compressed.len, decoded);
     } else if (std.mem.eql(u8, command, "decode-zlib-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -634,6 +642,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
         \\  decode-raw-hex [hex]      Decode raw deflate hex to text
+        \\  decode-raw-dict-hex [hex] [dict]
+        \\                              Decode raw deflate hex with a preset dictionary
         \\  decode-zlib-hex [hex]     Decode zlib-wrapped deflate hex to text
         \\  decode-zlib-dict-hex [hex] [dict]
         \\                              Decode zlib-wrapped deflate hex with a preset dictionary

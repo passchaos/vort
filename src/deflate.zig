@@ -783,6 +783,13 @@ pub fn decodeRawAutoAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8
     return result.bytes;
 }
 
+pub fn decodeRawAutoAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) ![]u8 {
+    const result = try decodeRawAutoAllocPartialWithDictionary(allocator, input, dictionary);
+    errdefer result.deinit(allocator);
+    if (result.input_read != input.len) return error.TrailingData;
+    return result.bytes;
+}
+
 pub fn rawStoredEncodedSize(input_len: usize) Error!usize {
     const blocks: usize = if (input_len == 0) 1 else ((input_len - 1) / max_stored_block_len) + 1;
     const header_bytes = std.math.mul(usize, blocks, 5) catch return error.IntegerOverflow;
@@ -2054,6 +2061,13 @@ test "zlib preset dictionary streams decode with caller dictionary" {
     const decoded = try decodeZlibAllocWithDictionary(std.testing.allocator, frame, "hello ");
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "hello hello hello", decoded);
+}
+
+test "raw deflate preset dictionary streams decode with caller dictionary" {
+    const decoded = try decodeRawAutoAllocWithDictionary(std.testing.allocator, &.{ 0xcb, 0x40, 0x27, 0x01 }, "hello ");
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "hello hello hello", decoded);
+    try std.testing.expectError(error.InvalidMatch, decodeRawAutoAlloc(std.testing.allocator, &.{ 0xcb, 0x40, 0x27, 0x01 }));
 }
 
 test "gzip header rejects reserved flags and bad method" {

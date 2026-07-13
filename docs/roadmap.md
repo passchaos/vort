@@ -133,11 +133,12 @@ architecture blindly.
 - [x] Single-block fixed/dynamic inflate rejects non-final blocks instead of accepting incomplete streams.
 - [x] Multi-block raw/zlib/gzip inflate across stored/fixed/dynamic block types.
 - [x] Raw auto inflate rejects truncated streams after non-final stored/fixed/dynamic blocks.
+- [x] Raw preset-dictionary decode API supports dictionary back-references.
 - [x] zlib/gzip wrappers reject truncated non-final raw deflate streams across stored/fixed/dynamic blocks.
 - [x] zlib wrapper and Adler verification for stored blocks.
 - [x] zlib wrapper reports preset-dictionary streams as dictionary requirements.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
-- [x] CLI and Python differential smoke cover zlib preset-dictionary decode.
+- [x] CLI and Python differential smoke cover raw/zlib preset-dictionary decode.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
 - [x] zlib wrapper integration for multi-block dynamic streams.
