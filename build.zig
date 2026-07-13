@@ -321,6 +321,10 @@ pub fn build(b: *std.Build) void {
     const rust_deflate_diff_step = b.step("run-rust-deflate-diff", "Run fdeflate/miniz_oxide differential smoke when local checkouts are available");
     rust_deflate_diff_step.dependOn(&rust_deflate_diff.step);
 
+    const rust_deflate_bench = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_bench.py" });
+    const rust_deflate_bench_step = b.step("run-rust-deflate-bench", "Run fdeflate/miniz_oxide decode throughput smoke benchmark");
+    rust_deflate_bench_step.dependOn(&rust_deflate_bench.step);
+
     const external_probe = b.addSystemCommand(&.{ "python3", "tools/external_probe.py" });
     const external_probe_step = b.step("run-external-probe", "Report available local compression competitors/tools");
     external_probe_step.dependOn(&external_probe.step);
