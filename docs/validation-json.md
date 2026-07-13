@@ -43,6 +43,28 @@ Fields:
 | `stream_bytes` | integer | Input stream byte length read by the CLI. |
 | `sidecar_bytes` | integer/null | Sidecar byte length, or `null` for embedded-index validation. |
 
+Example failure:
+
+```json
+{
+  "schema": "vort.validation_report",
+  "schema_version": 1,
+  "target": "sidecar",
+  "ok": false,
+  "mode": "full",
+  "stage": "payload_decode",
+  "error": "ChecksumMismatch",
+  "recoverability_hint": "payload_corrupt",
+  "frame_index": 0,
+  "frame_offset": 0,
+  "uncompressed_offset": 0,
+  "frame_flags": 1,
+  "frame_mode": "deflate",
+  "stream_bytes": 2868,
+  "sidecar_bytes": 128
+}
+```
+
 ## `vort.sidecar_verify_report`
 
 Produced by:
@@ -76,6 +98,31 @@ aggregate fields:
   `uncompressed_offset`, `frame_flags`, `frame_mode`
 - `stream_bytes`, `sidecar_bytes`, `entries`, `total_uncompressed`, `crc32`
 
+Example:
+
+```json
+{
+  "schema": "vort.sidecar_verify_report",
+  "schema_version": 1,
+  "rows": 1,
+  "ok_rows": 0,
+  "error_rows": 1,
+  "items": [
+    {
+      "stream": "/tmp/bad.vort",
+      "sidecar": "/tmp/bad.vidx",
+      "mode": "full",
+      "status": "error",
+      "error": "ChecksumMismatch",
+      "recoverability_hint": "payload_corrupt",
+      "validation_stage": "payload_decode",
+      "frame_index": 0,
+      "frame_mode": "deflate"
+    }
+  ]
+}
+```
+
 ## `vort.sidecar_corrupt_smoke_report`
 
 Produced by:
@@ -105,6 +152,28 @@ Each item contains:
 - `stream_bytes`
 - `sidecar_bytes`
 
+Example:
+
+```json
+{
+  "schema": "vort.sidecar_corrupt_smoke_report",
+  "schema_version": 1,
+  "rows": 1,
+  "metadata_ok_rows": 1,
+  "full_rejected_rows": 1,
+  "items": [
+    {
+      "case": "deflate",
+      "metadata_ok": true,
+      "full_rejected": true,
+      "full_error": "TruncatedFrame",
+      "stream_bytes": 44,
+      "sidecar_bytes": 48
+    }
+  ]
+}
+```
+
 ## `vort.validation_json_smoke`
 
 Produced by:
@@ -124,6 +193,24 @@ Important fields:
 - `checked_schemas`: schemas successfully parsed
 - `cli_success_ok`, `cli_failure_ok`, `cli_failure_hint`
 - `report_rows`, `corrupt_rows`
+
+Example:
+
+```json
+{
+  "schema": "vort.validation_json_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "checked_schemas": [
+    "vort.validation_report",
+    "vort.sidecar_verify_report",
+    "vort.sidecar_corrupt_smoke_report"
+  ],
+  "cli_failure_hint": "payload_corrupt",
+  "report_rows": 1,
+  "corrupt_rows": 8
+}
+```
 
 ## `vort.dashboard_index`
 
@@ -148,6 +235,30 @@ Each artifact includes:
 - `producer_step`
 - `size_bytes`, `mtime_utc`
 - JSON summary fields when applicable: `schema`, `schema_version`, `rows`, `ok`
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_index",
+  "schema_version": 1,
+  "artifact_count": 1,
+  "artifacts": [
+    {
+      "name": "vort-validation-json-smoke.json",
+      "path": "vort-validation-json-smoke.json",
+      "category": "validation",
+      "format": "json",
+      "producer_step": "zig build run-validation-json-dashboard",
+      "size_bytes": 349,
+      "mtime_utc": "2026-07-13T11:00:55Z",
+      "schema": "vort.validation_json_smoke",
+      "schema_version": 1,
+      "ok": true
+    }
+  ]
+}
+```
 
 ## `vort.dashboard_producers`
 
@@ -185,3 +296,21 @@ Resolution order:
 2. First matching rule in `contains`.
 3. Built-in fallback mappings in `tools/dashboard_index.py`.
 4. Empty `producer_step` when no rule matches.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_producers",
+  "schema_version": 1,
+  "exact": {
+    "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard"
+  },
+  "contains": [
+    {
+      "match": "native-parallel",
+      "producer_step": "zig build -Doptimize=ReleaseFast bench-native-parallel"
+    }
+  ]
+}
+```
