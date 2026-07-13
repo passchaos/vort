@@ -367,20 +367,6 @@ pub fn build(b: *std.Build) void {
     const rust_deflate_encode_bench_csv_step = b.step("run-rust-deflate-encode-bench-csv", "Write Vort/fdeflate/miniz_oxide encode benchmark CSV to zig-out");
     rust_deflate_encode_bench_csv_step.dependOn(&rust_deflate_encode_bench_csv.step);
 
-    const rust_deflate_benchmark_summary = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_benchmark_summary.py" });
-    rust_deflate_benchmark_summary.addArgs(&.{
-        "--decode-csv",
-        "zig-out/vort-rust-deflate-decode-bench.csv",
-        "--encode-csv",
-        "zig-out/vort-rust-deflate-encode-bench.csv",
-        "--output",
-        "zig-out/vort-rust-deflate-benchmark-summary.md",
-    });
-    rust_deflate_benchmark_summary.step.dependOn(rust_deflate_bench_csv_step);
-    rust_deflate_benchmark_summary.step.dependOn(rust_deflate_encode_bench_csv_step);
-    const rust_deflate_benchmark_summary_step = b.step("run-rust-deflate-benchmark-summary", "Write Vort/fdeflate/miniz_oxide benchmark Markdown summary to zig-out");
-    rust_deflate_benchmark_summary_step.dependOn(&rust_deflate_benchmark_summary.step);
-
     const external_probe = b.addSystemCommand(&.{ "python3", "tools/external_probe.py" });
     const external_probe_step = b.step("run-external-probe", "Report available local compression competitors/tools");
     external_probe_step.dependOn(&external_probe.step);
@@ -485,6 +471,23 @@ pub fn build(b: *std.Build) void {
     run_dynamic_plan_report_csv.addArgs(&.{ "--csv", "zig-out/vort-dynamic-plan-report.csv" });
     const dynamic_plan_report_csv_step = b.step("run-dynamic-plan-report-csv", "Write dynamic Huffman/LZ77 plan stats CSV to zig-out");
     dynamic_plan_report_csv_step.dependOn(&run_dynamic_plan_report_csv.step);
+
+    const rust_deflate_benchmark_summary = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_benchmark_summary.py" });
+    rust_deflate_benchmark_summary.addArgs(&.{
+        "--decode-csv",
+        "zig-out/vort-rust-deflate-decode-bench.csv",
+        "--encode-csv",
+        "zig-out/vort-rust-deflate-encode-bench.csv",
+        "--dynamic-plan-csv",
+        "zig-out/vort-dynamic-plan-report.csv",
+        "--output",
+        "zig-out/vort-rust-deflate-benchmark-summary.md",
+    });
+    rust_deflate_benchmark_summary.step.dependOn(rust_deflate_bench_csv_step);
+    rust_deflate_benchmark_summary.step.dependOn(rust_deflate_encode_bench_csv_step);
+    rust_deflate_benchmark_summary.step.dependOn(dynamic_plan_report_csv_step);
+    const rust_deflate_benchmark_summary_step = b.step("run-rust-deflate-benchmark-summary", "Write Vort/fdeflate/miniz_oxide benchmark Markdown summary to zig-out");
+    rust_deflate_benchmark_summary_step.dependOn(&rust_deflate_benchmark_summary.step);
 
     const split_policy_report_exe = b.addExecutable(.{
         .name = "vort-split-policy-report",

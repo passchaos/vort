@@ -77,15 +77,35 @@ def encode_lines(rows: list[dict[str, str]]) -> list[str]:
     return lines
 
 
+def dynamic_plan_lines(rows: list[dict[str, str]]) -> list[str]:
+    lines = [
+        "## Dynamic plan diagnostics",
+        "",
+        "| path | tokens | matches | matched bytes | fixed/dynamic size | best/dynamic time | stats/dynamic time | code-length ops |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['path']} | {row['token_count']} | {row['match_tokens']} | {row['matched_bytes']} | "
+            f"{fnum(row, 'fixed_dynamic_size_ratio'):.3f} | {fnum(row, 'best_dynamic_time_ratio'):.3f} | "
+            f"{fnum(row, 'stats_dynamic_time_ratio'):.3f} | {row['code_length_ops']} |"
+        )
+    lines.append("")
+    return lines
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--decode-csv", default="zig-out/vort-rust-deflate-decode-bench.csv")
     parser.add_argument("--encode-csv", default="zig-out/vort-rust-deflate-encode-bench.csv")
+    parser.add_argument("--dynamic-plan-csv", default="zig-out/vort-dynamic-plan-report.csv")
     parser.add_argument("--output", default="zig-out/vort-rust-deflate-benchmark-summary.md")
     args = parser.parse_args()
 
     decode_rows = read_rows(Path(args.decode_csv))
     encode_rows = read_rows(Path(args.encode_csv))
+    dynamic_plan_path = Path(args.dynamic_plan_csv)
+    dynamic_plan_rows = read_rows(dynamic_plan_path) if dynamic_plan_path.exists() else []
     lines = [
         "# Vort vs Rust deflate benchmark summary",
         "",
@@ -94,10 +114,15 @@ def main() -> int:
     ]
     lines.extend(decode_lines(decode_rows))
     lines.extend(encode_lines(encode_rows))
+    if dynamic_plan_rows:
+        lines.extend(dynamic_plan_lines(dynamic_plan_rows))
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines))
-    print(f"rust_deflate_benchmark_summary={output} decode_rows={len(decode_rows)} encode_rows={len(encode_rows)}")
+    print(
+        f"rust_deflate_benchmark_summary={output} "
+        f"decode_rows={len(decode_rows)} encode_rows={len(encode_rows)} dynamic_plan_rows={len(dynamic_plan_rows)}"
+    )
     return 0
 
 
