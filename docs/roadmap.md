@@ -141,6 +141,7 @@ architecture blindly.
 - [x] Raw auto inflate rejects truncated streams after non-final stored/fixed/dynamic blocks.
 - [x] Raw preset-dictionary decode API supports dictionary back-references.
 - [x] Raw/zlib/gzip one-shot decode APIs support explicit output limits.
+- [x] File CLI and Python differential smoke cover raw deflate file decode with output limits.
 - [x] zlib/gzip wrappers reject truncated non-final raw deflate streams across stored/fixed/dynamic blocks.
 - [x] zlib wrapper and Adler verification for stored blocks.
 - [x] zlib wrapper reports preset-dictionary streams as dictionary requirements.

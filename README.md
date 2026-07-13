@@ -78,6 +78,12 @@ zig build run -- gzip-fixed-roundtrip "hello vort"
 zig build run -- decode-raw-hex cb48cdc9c90700
 zig build run -- decode-raw-hex cb48cdc9c90700 5
 zig build run -- decode-raw-dict-hex cb402701 "hello "
+python3 - <<'PY'
+import zlib
+co = zlib.compressobj(level=6, wbits=-15)
+open("/tmp/vort.raw", "wb").write(co.compress(b"hello") + co.flush())
+PY
+zig build run -- decode-raw-file /tmp/vort.raw /tmp/vort-raw.out 5
 zig build run -- decode-zlib-hex 7801cb48cdc9c90700062c0215
 zig build run -- decode-zlib-dict-hex 78f908610235cb4027013a2e067d "hello "
 python3 - <<'PY'

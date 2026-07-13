@@ -163,6 +163,23 @@ def main() -> int:
         assert limited_path.read_bytes() == zlib_file_payload, out
         expect_cli_failure("decode-zlib-file", str(compressed_path), str(tmp / "too-small.bin"), str(len(zlib_file_payload) - 1), error_name="OutputLimitExceeded")
 
+    raw_file_payload = b"raw deflate file output limit smoke"
+    co = zlib.compressobj(level=6, wbits=-15)
+    raw_file_frame = co.compress(raw_file_payload) + co.flush()
+    with tempfile.TemporaryDirectory(prefix="vort-raw-file-", dir=ROOT / ".zig-cache") as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        compressed_path = tmp / "sample.raw"
+        decoded_path = tmp / "decoded.bin"
+        limited_path = tmp / "decoded-limited.bin"
+        compressed_path.write_bytes(raw_file_frame)
+        out = run_cli("decode-raw-file", str(compressed_path), str(decoded_path))
+        assert int(parse_field(out, "decoded_bytes")) == len(raw_file_payload), out
+        assert decoded_path.read_bytes() == raw_file_payload, out
+        out = run_cli("decode-raw-file", str(compressed_path), str(limited_path), str(len(raw_file_payload)))
+        assert int(parse_field(out, "decoded_bytes")) == len(raw_file_payload), out
+        assert limited_path.read_bytes() == raw_file_payload, out
+        expect_cli_failure("decode-raw-file", str(compressed_path), str(tmp / "too-small.bin"), str(len(raw_file_payload) - 1), error_name="OutputLimitExceeded")
+
     co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, zdict=dictionary)
     zlib_dict_file = co.compress(dict_payload) + co.flush()
     with tempfile.TemporaryDirectory(prefix="vort-zlib-dict-", dir=ROOT / ".zig-cache") as tmpdir:
