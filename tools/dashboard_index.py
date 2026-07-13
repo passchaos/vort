@@ -20,10 +20,17 @@ def category_for(path: Path) -> str:
     return "other"
 
 
-def json_summary(path: Path) -> str:
+def read_json(path: Path) -> dict:
     try:
-        data = json.loads(path.read_text())
+        value = json.loads(path.read_text())
     except Exception:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def json_summary(path: Path) -> str:
+    data = read_json(path)
+    if not data:
         return ""
     schema = data.get("schema")
     rows = data.get("rows")
@@ -44,15 +51,39 @@ def artifact_metadata(path: Path) -> str:
     return f"{stat.st_size} bytes, updated `{mtime}`"
 
 
+def artifact_record(path: Path, output_dir: Path) -> dict:
+    stat = path.stat()
+    mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    data = read_json(path) if path.suffix == ".json" else {}
+    return {
+        "name": path.name,
+        "path": path.relative_to(output_dir).as_posix(),
+        "category": category_for(path),
+        "format": path.suffix.lstrip("."),
+        "size_bytes": stat.st_size,
+        "mtime_utc": mtime,
+        "schema": data.get("schema"),
+        "schema_version": data.get("schema_version"),
+        "rows": data.get("rows"),
+        "ok": data.get("ok"),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dir", default="zig-out", help="dashboard artifact directory")
     parser.add_argument("--output", default="zig-out/vort-dashboard-index.md", help="Markdown index path")
+    parser.add_argument("--manifest", default="zig-out/vort-dashboard-index.json", help="JSON artifact manifest path")
     args = parser.parse_args()
 
     root = Path(args.dir)
     output = Path(args.output)
-    artifacts = sorted(path for path in root.glob("vort-*") if path.suffix in {".md", ".json"} and path.resolve() != output.resolve())
+    manifest = Path(args.manifest)
+    artifacts = sorted(
+        path
+        for path in root.glob("vort-*")
+        if path.suffix in {".md", ".json"} and path.resolve() not in {output.resolve(), manifest.resolve()}
+    )
     grouped: dict[str, list[Path]] = {}
     for artifact in artifacts:
         grouped.setdefault(category_for(artifact), []).append(artifact)
@@ -82,7 +113,22 @@ def main() -> int:
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines))
-    print(f"dashboard_index={output} artifacts={len(artifacts)}")
+    records = [artifact_record(path, output.parent) for path in artifacts]
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema": "vort.dashboard_index",
+                "schema_version": 1,
+                "artifact_count": len(records),
+                "artifacts": records,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    print(f"dashboard_index={output} manifest={manifest} artifacts={len(artifacts)}")
     return 0
 
 

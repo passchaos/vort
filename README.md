@@ -60,7 +60,7 @@ zig build run-sidecar-verify-report -- --self-test-corrupt --markdown /tmp/sidec
 zig build run-sidecar-corrupt-dashboard
 zig build run-validation-json-smoke
 zig build run-validation-json-dashboard
-zig build run-dashboard-index
+zig build run-dashboard-index  # writes zig-out/vort-dashboard-index.md and .json
 zig build run-sidecar-verify-report -- --dir /tmp --limit 8 --keep-going
 zig build run-sidecar-verify-report -- --markdown /tmp/sidecar-report.md --json /tmp/sidecar-report.json --dir /tmp
 zig build run -- decode-vort-sidecar-range-file /tmp/readme.vort /tmp/readme.vidx /tmp/readme.range 32 64
