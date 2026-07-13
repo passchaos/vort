@@ -55,5 +55,5 @@ payload set; it is not yet throughput or ratio evidence, so dedicated benchmark
 harnesses are still required before making performance claims. The
 `run-rust-deflate-bench` step is the first such decode-throughput smoke: it
 builds a release-mode temporary Cargo runner against both Rust checkouts and
-prints CSV rows for fdeflate/miniz_oxide zlib decode throughput on generated
-tiny, repetitive, text, and binary payloads.
+prints CSV rows comparing Vort, fdeflate, and miniz_oxide zlib decode
+throughput on generated tiny, repetitive, text, and binary payloads.

@@ -14,6 +14,7 @@ import textwrap
 import zlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+VORT_BENCH = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else None
 FDEFLATE = pathlib.Path.home() / "Work" / "fdeflate"
 MINIZ_OXIDE = pathlib.Path.home() / "Work" / "miniz_oxide" / "miniz_oxide"
 
@@ -86,6 +87,20 @@ def run_bench(project: pathlib.Path, engine: str, frame: pathlib.Path, iteration
     return int(fields["elapsed_ns"]), int(fields["mix"])
 
 
+def run_vort_bench(frame: pathlib.Path, iterations: int) -> tuple[int, int]:
+    if VORT_BENCH is None:
+        raise RuntimeError("missing Vort zlib decode benchmark executable")
+    out = subprocess.run(
+        [str(VORT_BENCH), str(frame), str(iterations)],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+    ).stdout.strip()
+    fields = dict(item.split("=", 1) for item in out.split())
+    return int(fields["elapsed_ns"]), int(fields["mix"])
+
+
 def iterations_for(size: int) -> int:
     target = 32 * 1024 * 1024
     return max(64, min(10_000, target // max(size, 1)))
@@ -120,8 +135,9 @@ def main() -> int:
             frame = tmp / f"{name}.zlib"
             frame.write_bytes(zlib.compress(payload, level=6))
             iterations = iterations_for(len(payload))
-            for engine in ("fdeflate", "miniz_oxide"):
-                elapsed_ns, mix = run_bench(project, engine, frame, iterations)
+            rows = [("vort", run_vort_bench(frame, iterations))]
+            rows.extend((engine, run_bench(project, engine, frame, iterations)) for engine in ("fdeflate", "miniz_oxide"))
+            for engine, (elapsed_ns, mix) in rows:
                 print(
                     f"{engine},{name},{len(payload)},{frame.stat().st_size},{iterations},"
                     f"{elapsed_ns / 1_000_000_000:.6f},{throughput_mib_s(len(payload), iterations, elapsed_ns):.2f},{mix}"

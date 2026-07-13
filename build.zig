@@ -95,6 +95,18 @@ pub fn build(b: *std.Build) void {
     const corpus_decode_bench_step = b.step("bench-corpus-decode", "Run real-corpus raw/zlib/gzip decode throughput smoke benchmark");
     corpus_decode_bench_step.dependOn(&run_corpus_decode_bench.step);
 
+    const zlib_decode_bench_exe = b.addExecutable(.{
+        .name = "vort-zlib-decode-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zlib_decode_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+
     const deflate_encode_bench_exe = b.addExecutable(.{
         .name = "vort-bench-deflate-encode",
         .root_module = b.createModule(.{
@@ -322,6 +334,7 @@ pub fn build(b: *std.Build) void {
     rust_deflate_diff_step.dependOn(&rust_deflate_diff.step);
 
     const rust_deflate_bench = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_bench.py" });
+    rust_deflate_bench.addArtifactArg(zlib_decode_bench_exe);
     const rust_deflate_bench_step = b.step("run-rust-deflate-bench", "Run fdeflate/miniz_oxide decode throughput smoke benchmark");
     rust_deflate_bench_step.dependOn(&rust_deflate_bench.step);
 
@@ -605,6 +618,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&bench_exe.step);
     check_step.dependOn(&deflate_bench_exe.step);
     check_step.dependOn(&corpus_decode_bench_exe.step);
+    check_step.dependOn(&zlib_decode_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);

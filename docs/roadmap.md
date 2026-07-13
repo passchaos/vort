@@ -191,6 +191,7 @@ architecture blindly.
 - [x] External probe reports git revisions for local compressor checkouts.
 - [x] fdeflate/miniz_oxide path-dependency differential smoke runs through Cargo and Vort CLI.
 - [x] fdeflate/miniz_oxide decode-throughput smoke benchmark runs through Cargo.
+- [x] Rust deflate decode benchmark reports Vort/fdeflate/miniz_oxide rows in one CSV.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
 - [x] Dynamic Huffman encoder with LZ77 match support, verified by Python zlib.
 - [x] Dynamic Huffman encoder code-length RLE using symbols 16/17/18.
