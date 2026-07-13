@@ -102,6 +102,41 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
     };
 }
 
+pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
+    comptime {
+        if (lookup_bits == 0 or lookup_bits > max_code_bits) @compileError("invalid Huffman lookup width");
+    }
+    return struct {
+        table: HuffmanTable(max_symbols),
+        lookup: [@as(usize, 1) << lookup_bits]FixedLookupEntry = @splat(.{ .symbol = 0, .bits = 0 }),
+
+        const Self = @This();
+
+        pub fn init(table: HuffmanTable(max_symbols)) Self {
+            var decoder = Self{ .table = table };
+            for (table.entries[0..table.len]) |entry| {
+                if (entry.bits > lookup_bits) continue;
+                const fill = @as(usize, 1) << @intCast(lookup_bits - entry.bits);
+                var i: usize = 0;
+                while (i < fill) : (i += 1) {
+                    decoder.lookup[entry.code | (i << entry.bits)] = .{ .symbol = entry.symbol, .bits = entry.bits };
+                }
+            }
+            return decoder;
+        }
+
+        pub fn decode(self: *const Self, reader: *bitstream.BitReader) Error!Symbol {
+            const peek = reader.peekBitsPadded(u16, lookup_bits);
+            const entry = self.lookup[peek & ((@as(usize, 1) << lookup_bits) - 1)];
+            if (entry.bits != 0) {
+                try reader.skipBits(entry.bits);
+                return .{ .value = entry.symbol, .bits = entry.bits };
+            }
+            return self.table.decode(reader);
+        }
+    };
+}
+
 pub const code_length_order = [_]u8{ 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
 pub const CodeLengthTable = HuffmanTable(19);
 
@@ -475,6 +510,16 @@ test "canonical Huffman decoder handles a small RFC-style tree" {
     try std.testing.expectEqual(@as(u16, 1), (try table.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 0), (try table.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 2), (try table.decode(&reader)).value);
+}
+
+test "fast Huffman decoder falls back for long codes" {
+    const Table = HuffmanTable(4);
+    const table = try Table.init(&.{ 2, 1, 3, 3 });
+    const fast = FastDecoder(4, 2).init(table);
+    var reader = bitstream.BitReader.init(&.{0b0001_1010});
+    try std.testing.expectEqual(@as(u16, 1), (try fast.decode(&reader)).value);
+    try std.testing.expectEqual(@as(u16, 0), (try fast.decode(&reader)).value);
+    try std.testing.expectEqual(@as(u16, 2), (try fast.decode(&reader)).value);
 }
 
 test "canonical Huffman decoder rejects oversubscribed trees" {

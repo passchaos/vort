@@ -136,6 +136,7 @@ architecture blindly.
 - [x] Dynamic-Huffman inflate rejects literal/length alphabets that omit end-of-block.
 - [x] zlib/gzip wrappers propagate malformed dynamic-Huffman code-length repeat failures.
 - [x] Dynamic-Huffman inflate for single final blocks.
+- [x] Dynamic-Huffman inflate uses a fast lookup decoder with fallback for long codes.
 - [x] Dynamic-Huffman inflate rejects matches when the distance alphabet has no usable codes.
 - [x] Deflate fuzz smoke and hex corpus cover dynamic matches without distance codes.
 - [x] zlib/gzip wrappers propagate malformed dynamic-Huffman distance-code failures.

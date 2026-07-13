@@ -722,9 +722,11 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
     const parsed = try huffman.parseDynamicLengths(&reader);
     const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
     const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+    const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+    const dist_decoder = huffman.FastDecoder(30, 10).init(dist_table);
 
     while (true) {
-        const symbol = (try lit_table.decode(&reader)).value;
+        const symbol = (try lit_decoder.decode(&reader)).value;
         if (symbol < 256) {
             try out.append(allocator, @intCast(symbol));
         } else if (symbol == 256) {
@@ -732,7 +734,7 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
             return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, &reader);
-            const distance_symbol = (try dist_table.decode(&reader)).value;
+            const distance_symbol = (try dist_decoder.decode(&reader)).value;
             const distance = try decodeDistance(distance_symbol, &reader);
             try appendMatch(allocator, &out, length, distance);
         } else {
@@ -768,7 +770,9 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_table, &dist_table);
+                const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+                const dist_decoder = huffman.FastDecoder(30, 10).init(dist_table);
+                try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
             },
             else => return error.InvalidDeflateBlockType,
         }
