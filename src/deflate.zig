@@ -93,6 +93,48 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
     return writer.toOwnedSlice(allocator);
 }
 
+pub const DynamicPlanStats = struct {
+    input_bytes: usize,
+    token_count: usize,
+    literal_tokens: usize,
+    match_tokens: usize,
+    matched_bytes: usize,
+    stored_bytes: usize,
+    fixed_bits: usize,
+    fixed_bytes: usize,
+    dynamic_bits: usize,
+    dynamic_bytes: usize,
+    hlit: usize,
+    hdist: usize,
+    hclen: usize,
+    code_length_ops: usize,
+};
+
+pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !DynamicPlanStats {
+    const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    const dynamic_plan = try DynamicCodingPlan.init(allocator, plan.tokens);
+    defer dynamic_plan.deinit(allocator);
+    const fixed_bits = lz77.fixedBitCost(plan.tokens);
+    const dynamic_bits = dynamic_plan.bitCost(plan.tokens);
+    return .{
+        .input_bytes = input.len,
+        .token_count = plan.stats.tokenCount(),
+        .literal_tokens = plan.stats.literals,
+        .match_tokens = plan.stats.matches,
+        .matched_bytes = plan.stats.matched_bytes,
+        .stored_bytes = try rawStoredEncodedSize(input.len),
+        .fixed_bits = fixed_bits,
+        .fixed_bytes = (fixed_bits + 7) / 8,
+        .dynamic_bits = dynamic_bits,
+        .dynamic_bytes = (dynamic_bits + 7) / 8,
+        .hlit = dynamic_plan.hlit,
+        .hdist = dynamic_plan.hdist,
+        .hclen = dynamic_plan.hclen,
+        .code_length_ops = dynamic_plan.code_len_ops.len,
+    };
+}
+
 pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     const effective_block_len = @min(block_len, max_stored_block_len);

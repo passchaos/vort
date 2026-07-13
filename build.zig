@@ -465,6 +465,22 @@ pub fn build(b: *std.Build) void {
     const level_report_step = b.step("run-level-report", "Report compression level parser and cost-model behavior");
     level_report_step.dependOn(&run_level_report.step);
 
+    const dynamic_plan_report_exe = b.addExecutable(.{
+        .name = "vort-dynamic-plan-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/dynamic_plan_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_dynamic_plan_report = b.addRunArtifact(dynamic_plan_report_exe);
+    if (b.args) |args| run_dynamic_plan_report.addArgs(args);
+    const dynamic_plan_report_step = b.step("run-dynamic-plan-report", "Report dynamic Huffman/LZ77 plan stats for files");
+    dynamic_plan_report_step.dependOn(&run_dynamic_plan_report.step);
+
     const split_policy_report_exe = b.addExecutable(.{
         .name = "vort-split-policy-report",
         .root_module = b.createModule(.{
@@ -676,6 +692,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&compression_report_exe.step);
     check_step.dependOn(&dictionary_report_exe.step);
     check_step.dependOn(&level_report_exe.step);
+    check_step.dependOn(&dynamic_plan_report_exe.step);
     check_step.dependOn(&split_policy_report_exe.step);
     check_step.dependOn(&native_range_report_exe.step);
     check_step.dependOn(&sidecar_verify_report_exe.step);
@@ -704,6 +721,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(compression_report_step);
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(level_report_step);
+    ci_smoke_step.dependOn(dynamic_plan_report_step);
     ci_smoke_step.dependOn(split_policy_report_step);
     ci_smoke_step.dependOn(native_range_report_step);
     ci_smoke_step.dependOn(sidecar_corrupt_smoke_step);

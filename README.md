@@ -160,6 +160,7 @@ zig build -Doptimize=ReleaseFast run-dictionary-corpus-report -- --per-file
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard -- --targets 128,256,512
 zig build run-level-report
+zig build run-dynamic-plan-report
 zig build run-split-policy-report
 zig build run-split-policy-report -- README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-split-policy-corpus-report

@@ -222,6 +222,7 @@ architecture blindly.
 - [x] Dynamic-Huffman bit-cost selector avoiding materialized dynamic candidates for block decisions.
 - [x] One-shot best encoder reuses a single LZ77 token plan across stored/fixed/dynamic selection.
 - [x] One-shot best encoder reuses dynamic Huffman coding plans between cost and write.
+- [x] Dynamic Huffman plan report exposes LZ77/token and code-length planning stats.
 - [x] Dynamic HCLEN trimming helper with boundary tests.
 - [x] Dynamic HLIT/HDIST trimming helpers with boundary tests.
 - [x] Adaptive split search using stored/fixed/dynamic bit-cost candidates.
