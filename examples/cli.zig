@@ -703,7 +703,7 @@ fn printValidationFailure(stdout: *std.Io.Writer, label: []const u8, report: vor
 }
 
 fn printValidationJson(stdout: *std.Io.Writer, label: []const u8, report: vort.ValidationReport, stream_len: usize, sidecar_len: ?usize) !void {
-    try stdout.print("{{\"target\":\"{s}\",\"ok\":{},\"mode\":\"{s}\",\"stage\":\"{s}\",\"error\":", .{
+    try stdout.print("{{\"schema\":\"vort.validation_report\",\"schema_version\":1,\"target\":\"{s}\",\"ok\":{},\"mode\":\"{s}\",\"stage\":\"{s}\",\"error\":", .{
         label,
         report.ok,
         @tagName(report.mode),

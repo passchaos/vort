@@ -327,7 +327,7 @@ fn writeCorruptJson(init: std.process.Init, path: []const u8, rows: []const Corr
         if (row.metadata_ok) metadata_ok += 1;
         if (row.full_rejected) full_rejected += 1;
     }
-    try w.print("{{\n  \"rows\": {d},\n  \"metadata_ok_rows\": {d},\n  \"full_rejected_rows\": {d},\n  \"items\": [\n", .{ rows.len, metadata_ok, full_rejected });
+    try w.print("{{\n  \"schema\": \"vort.sidecar_corrupt_smoke_report\",\n  \"schema_version\": 1,\n  \"rows\": {d},\n  \"metadata_ok_rows\": {d},\n  \"full_rejected_rows\": {d},\n  \"items\": [\n", .{ rows.len, metadata_ok, full_rejected });
     for (rows, 0..) |row, i| {
         try w.print("    {{\"case\": ", .{});
         try std.json.Stringify.value(row.case_name, .{}, w);
@@ -501,7 +501,7 @@ fn writeJson(init: std.process.Init, path: []const u8, rows: []const ReportRow) 
         total_entries += row.entries;
         total_uncompressed += row.total_uncompressed;
     }
-    try w.print("{{\n  \"rows\": {d},\n  \"ok_rows\": {d},\n  \"error_rows\": {d},\n  \"total_stream_bytes\": {d},\n  \"total_sidecar_bytes\": {d},\n  \"total_entries\": {d},\n  \"total_uncompressed_bytes\": {d},\n  \"items\": [\n", .{ rows.len, ok_rows, error_rows, total_stream, total_sidecar, total_entries, total_uncompressed });
+    try w.print("{{\n  \"schema\": \"vort.sidecar_verify_report\",\n  \"schema_version\": 1,\n  \"rows\": {d},\n  \"ok_rows\": {d},\n  \"error_rows\": {d},\n  \"total_stream_bytes\": {d},\n  \"total_sidecar_bytes\": {d},\n  \"total_entries\": {d},\n  \"total_uncompressed_bytes\": {d},\n  \"items\": [\n", .{ rows.len, ok_rows, error_rows, total_stream, total_sidecar, total_entries, total_uncompressed });
     for (rows, 0..) |row, i| {
         try w.print("    {{\"stream\": ", .{});
         try std.json.Stringify.value(row.stream, .{}, w);
