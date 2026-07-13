@@ -62,6 +62,7 @@ architecture blindly.
 - [x] CLI smoke for embedded-index encode and metadata/full validation.
 - [x] CLI smoke for embedded-index range decode.
 - [x] CLI help lists sidecar and embedded-index file workflows.
+- [x] CLI help groups basics, compatibility formats, and native indexed file workflows.
 - [x] CLI smoke for sidecar-index range decode.
 - [x] CLI smoke for sidecar-index dictionary auto range decode.
 - [x] Frame index monotonicity/gap validation before range decode.

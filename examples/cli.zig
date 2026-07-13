@@ -567,11 +567,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
     try stdout.print(
         \\vort bootstrap CLI
         \\
-        \\commands:
+        \\basics:
         \\  help | --help              Show this message
         \\  checksum [text]            Print Adler-32, CRC-32, and CRC-32C for text
         \\  checksum-file [path]       Print Adler-32, CRC-32, and CRC-32C for a file
         \\  store-roundtrip [text]     Encode/decode the native store frame
+        \\
+        \\compatibility formats:
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
         \\  decode-raw-hex [hex]      Decode raw deflate hex to text
@@ -579,6 +581,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-gzip-hex [hex]     Decode gzip-wrapped deflate hex to text
         \\  encode-zlib-best-file <in> <out> [level]
         \\                              Encode a zlib-compatible file with best-block selection
+        \\
+        \\native indexed file workflows:
         \\  encode-vort-sidecar-best-file <in> <stream> <sidecar> [block_len]
         \\                              Encode native Vort stream plus external sidecar index
         \\  verify-vort-sidecar-index-file <stream> <sidecar> [full|metadata]
