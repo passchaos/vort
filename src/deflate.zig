@@ -663,7 +663,7 @@ pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {
             output[out_offset] = @intCast(symbol);
             out_offset += 1;
         } else if (symbol == 256) {
-            _ = final;
+            if (final == 0) return error.TruncatedFrame;
             return .{ .input_read = reader.byteOffset(), .output_written = out_offset };
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, &reader);
@@ -694,7 +694,7 @@ pub fn decodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) !Own
         if (symbol < 256) {
             try out.append(allocator, @intCast(symbol));
         } else if (symbol == 256) {
-            _ = final;
+            if (final == 0) return error.TruncatedFrame;
             return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, &reader);
@@ -728,6 +728,7 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
         if (symbol < 256) {
             try out.append(allocator, @intCast(symbol));
         } else if (symbol == 256) {
+            if (!parsed.header.final) return error.TruncatedFrame;
             return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, &reader);
@@ -1509,6 +1510,16 @@ test "raw fixed Huffman literal/match inflate matches zlib fixed vectors" {
     }
 }
 
+test "single-block fixed Huffman decoder rejects non-final blocks" {
+    // This is the fixed-Huffman one-byte "a" vector with only BFINAL cleared.
+    // The single-block fixed decoder must not silently accept a stream that
+    // promises another block; multi-block callers should use decodeRawAutoAlloc.
+    const non_final_fixed = [_]u8{ 0x4a, 0x04, 0x00 };
+    var out: [8]u8 = undefined;
+    try std.testing.expectError(error.TruncatedFrame, decodeRawFixed(&non_final_fixed, &out));
+    try std.testing.expectError(error.TruncatedFrame, decodeRawFixedAllocStrict(std.testing.allocator, &non_final_fixed));
+}
+
 test "raw fixed Huffman inflate decodes back references and rejects wrong block types" {
     const cases = [_]struct { compressed: []const u8, plain: []const u8 }{
         .{ .compressed = &.{ 0x4b, 0x4c, 0x04, 0x01, 0x00 }, .plain = "aaaaaa" },
@@ -1841,6 +1852,15 @@ test "dynamic literal encoder round trips through raw zlib and gzip decoders" {
         defer std.testing.allocator.free(gzip_decoded);
         try std.testing.expectEqualSlices(u8, case, gzip_decoded);
     }
+}
+
+test "single-block dynamic Huffman decoder rejects non-final blocks" {
+    const raw = try encodeRawDynamicLiteralAlloc(std.testing.allocator, "dynamic non-final smoke");
+    defer std.testing.allocator.free(raw);
+    const non_final = try std.testing.allocator.dupe(u8, raw);
+    defer std.testing.allocator.free(non_final);
+    non_final[0] &= 0xfe;
+    try std.testing.expectError(error.TruncatedFrame, decodeRawDynamicAllocStrict(std.testing.allocator, non_final));
 }
 
 test "dynamic code length RLE emits repeat symbols" {
