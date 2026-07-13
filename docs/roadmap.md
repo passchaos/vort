@@ -140,6 +140,7 @@ architecture blindly.
 - [x] Deflate fuzz smoke and hex corpus cover dynamic matches without distance codes.
 - [x] zlib/gzip wrappers propagate malformed dynamic-Huffman distance-code failures.
 - [x] Deflate fuzz smoke and hex corpus cover match distances beyond available history.
+- [x] Deflate fuzz smoke and hex corpus cover dynamic match distances beyond output history.
 - [x] Single-block fixed/dynamic inflate rejects non-final blocks instead of accepting incomplete streams.
 - [x] Multi-block raw/zlib/gzip inflate across stored/fixed/dynamic block types.
 - [x] Raw auto inflate rejects truncated streams after non-final stored/fixed/dynamic blocks.

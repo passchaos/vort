@@ -3,6 +3,7 @@ const store = @import("store.zig");
 const deflate = @import("deflate.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
+const lz77 = @import("lz77.zig");
 
 pub const CorpusStats = struct {
     cases: usize = 0,
@@ -102,6 +103,10 @@ pub fn runDeflateSmokeCorpus(allocator: std.mem.Allocator) !CorpusStats {
     const missing_distance = try malformedMissingDistanceDynamicAlloc(allocator);
     defer allocator.free(missing_distance);
     try expectMalformedDeflate(allocator, &stats, missing_distance);
+
+    const dynamic_invalid_match = try malformedDynamicInvalidMatchAlloc(allocator);
+    defer allocator.free(dynamic_invalid_match);
+    try expectMalformedDeflate(allocator, &stats, dynamic_invalid_match);
 
     return stats;
 }
@@ -252,6 +257,13 @@ fn malformedMissingDistanceDynamicAlloc(allocator: std.mem.Allocator) ![]u8 {
     return writer.toOwnedSlice(allocator);
 }
 
+fn malformedDynamicInvalidMatchAlloc(allocator: std.mem.Allocator) ![]u8 {
+    const tokens = [_]lz77.Token{
+        .{ .match = .{ .length = 3, .distance = 1 } },
+    };
+    return deflate.encodeRawDynamicTokensAlloc(allocator, &tokens);
+}
+
 fn writeMinimalDynamicHeader(allocator: std.mem.Allocator, writer: *bitstream.BitWriter) !void {
     try writer.writeBits(allocator, 1, 1);
     try writer.writeBits(allocator, 0b10, 2);
@@ -269,7 +281,7 @@ test "store smoke corpus covers malformed and valid frames" {
 
 test "deflate smoke corpus covers valid and malformed raw streams" {
     const stats = try runDeflateSmokeCorpus(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 15), stats.cases);
+    try std.testing.expectEqual(@as(usize, 16), stats.cases);
     try std.testing.expectEqual(@as(usize, 3), stats.valid_frames);
-    try std.testing.expectEqual(@as(usize, 12), stats.expected_errors);
+    try std.testing.expectEqual(@as(usize, 13), stats.expected_errors);
 }

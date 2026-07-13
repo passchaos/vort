@@ -59,6 +59,10 @@ cb402701 # expect: reject
 --deflate
 0d800104000000400000000000000000000000000400000000000000000000000000000000000000460000 # expect: reject
 
+# Malformed dynamic Huffman: distance code exists but match points before output history.
+--deflate
+0dc181000000000090ff6b08 # expect: reject
+
 # Preset dictionary samples: fixed/dynamic raw deflate and zlib-wrapped streams.
 --dict-hex=68656c6c6f20
 --deflate
