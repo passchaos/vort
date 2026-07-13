@@ -80,6 +80,7 @@ pub const storeEncodeSeekableNativeStreamAlloc = store.encodeSeekableNativeStrea
 pub const storeEncodeSeekableNativeSidecarStreamAlloc = store.encodeSeekableNativeSidecarStreamAlloc;
 pub const storeDecodeIndexedRangeAlloc = store.decodeIndexedRangeAlloc;
 pub const storeValidateSidecarIndexAlloc = store.validateSidecarIndexAlloc;
+pub const storeValidateSidecarIndexWithDictionaryAlloc = store.validateSidecarIndexWithDictionaryAlloc;
 pub const storeDecodeSidecarIndexedRangeAlloc = store.decodeSidecarIndexedRangeAlloc;
 pub const storeDecodeSidecarIndexedRangeWithDictionaryAlloc = store.decodeSidecarIndexedRangeWithDictionaryAlloc;
 pub const storeDecodeSidecarIndexedRangeAutoAlloc = store.decodeSidecarIndexedRangeAutoAlloc;

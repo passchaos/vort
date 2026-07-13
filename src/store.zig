@@ -1549,6 +1549,20 @@ pub fn decodeIndexedRangeAlloc(allocator: std.mem.Allocator, input: []const u8, 
 }
 
 pub fn validateSidecarIndexAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8) !void {
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index);
+    } else |err| switch (err) {
+        error.InvalidMagic => return validateSidecarIndexInternalAlloc(allocator, null, input, sidecar_index),
+        else => return err,
+    }
+}
+
+pub fn validateSidecarIndexWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8) !void {
+    return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index);
+}
+
+fn validateSidecarIndexInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, sidecar_index: []const u8) !void {
     const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
     defer allocator.free(index);
     try validateFrameIndex(index);
@@ -1559,6 +1573,17 @@ pub fn validateSidecarIndexAlloc(allocator: std.mem.Allocator, input: []const u8
         if (entry.frame_len != try frameLenFromInfo(info)) return error.CorruptFrame;
         if (entry.uncompressed_len != info.uncompressed_size) return error.CorruptFrame;
         if (entry.checksum != info.checksum) return error.ChecksumMismatch;
+        // A sidecar can outlive and travel separately from its stream, so
+        // structural agreement with frame headers is not enough: a payload byte
+        // could be modified while both the frame header and sidecar checksum
+        // remain unchanged. Decode each referenced frame once to force the
+        // normal per-mode checksum and size verification paths to run before a
+        // verifier reports the pair as reusable for range reads.
+        const decoded = if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) blk: {
+            const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
+            break :blk try decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame);
+        } else try decodeAnyAlloc(allocator, frame);
+        allocator.free(decoded);
     }
 }
 
@@ -2077,6 +2102,18 @@ test "sidecar index range decode rejects tampered checksum" {
     try std.testing.expectError(error.ChecksumMismatch, validateSidecarIndexAlloc(std.testing.allocator, frame, sidecar));
 }
 
+test "sidecar index validator decodes frames to catch payload tampering" {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const sidecar = try encodeSidecarIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer sidecar.deinit(std.testing.allocator);
+
+    const tampered = try std.testing.allocator.dupe(u8, sidecar.stream);
+    defer std.testing.allocator.free(tampered);
+    tampered[header_len] ^= 1;
+
+    try std.testing.expectError(error.ChecksumMismatch, validateSidecarIndexAlloc(std.testing.allocator, tampered, sidecar.sidecar_index));
+}
+
 test "sidecar index validator accepts matching stream" {
     const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
     const sidecar = try encodeSidecarIndexedStreamAlloc(std.testing.allocator, &payloads);
@@ -2098,6 +2135,20 @@ test "sidecar index bytes support dictionary range decode" {
     try std.testing.expectEqualSlices(u8, input[5..45], range);
 }
 
+test "sidecar index validator supports caller-supplied dictionaries" {
+    const dict = "dictionary-only phrase with enough length to beat stored framing";
+    const input = (dict ++ "!") ** 2;
+    const frame = try encodeBestWithDictionaryAlloc(std.testing.allocator, dict, input, 8);
+    defer std.testing.allocator.free(frame);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+    const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, index);
+    defer std.testing.allocator.free(sidecar);
+
+    try validateSidecarIndexWithDictionaryAlloc(std.testing.allocator, dict, frame, sidecar);
+    try std.testing.expectError(error.InvalidDictionaryTraining, validateSidecarIndexAlloc(std.testing.allocator, frame, sidecar));
+}
+
 test "sidecar index auto range decode uses embedded dictionary when present" {
     const phrase = "self-contained dictionary phrase for native streams";
     const input = (phrase ++ "!") ** 3;
@@ -2110,6 +2161,34 @@ test "sidecar index auto range decode uses embedded dictionary when present" {
     const range = try decodeSidecarIndexedRangeAutoAlloc(std.testing.allocator, stream, sidecar, 7, 64);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[7..71], range);
+}
+
+test "sidecar index validator auto-loads embedded dictionary and catches corrupt dictionary payloads" {
+    const phrase = "self-contained dictionary phrase for native streams";
+    const input = (phrase ++ "!") ** 3;
+    const stream = try encodeSelfContainedDictionaryStreamAlloc(std.testing.allocator, input, phrase.len + 1, 256, 8);
+    defer std.testing.allocator.free(stream);
+    const embedded = try parseEmbeddedIndexAlloc(std.testing.allocator, stream);
+    defer embedded.deinit(std.testing.allocator);
+    const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, embedded.entries);
+    defer std.testing.allocator.free(sidecar);
+
+    try validateSidecarIndexAlloc(std.testing.allocator, stream, sidecar);
+
+    const tampered = try std.testing.allocator.dupe(u8, stream);
+    defer std.testing.allocator.free(tampered);
+    const entry = embedded.entries[0];
+    tampered[entry.frame_offset + header_len] ^= 1;
+    validateSidecarIndexAlloc(std.testing.allocator, tampered, sidecar) catch |err| switch (err) {
+        error.ChecksumMismatch,
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.InvalidHuffmanCode,
+        error.SizeMismatch,
+        => return,
+        else => return err,
+    };
+    try std.testing.expect(false);
 }
 
 test "native deflate frame round trips and records compressed flag" {
