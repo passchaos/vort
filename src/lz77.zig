@@ -366,12 +366,23 @@ fn fixedMatchCost(length: usize, distance: usize) usize {
 
 fn fixedLengthSymbolCost(length: usize) usize {
     std.debug.assert(length >= min_match_len and length <= max_match_len);
-    return if (length == max_match_len) 8 else 7 + lengthExtraBits(length);
+    if (length <= 10) return 7;
+    if (length <= 18) return 8;
+    if (length <= 34) return 9;
+    if (length <= 66) return 10;
+    if (length <= 130) return 11;
+    if (length <= 257) return 12;
+    return 8; // 258 is the fixed-Huffman code 285 with no extra bits.
 }
 
 fn fixedDistanceSymbolCost(distance: usize) usize {
     std.debug.assert(distance >= 1 and distance <= default_window_len);
-    return 5 + distanceExtraBits(distance);
+    return 5 + fixedDistanceExtraBitsFast(distance);
+}
+
+fn fixedDistanceExtraBitsFast(distance: usize) usize {
+    if (distance <= 4) return 0;
+    return std.math.log2_int(usize, distance - 1) - 1;
 }
 
 fn lengthExtraBits(length: usize) usize {
