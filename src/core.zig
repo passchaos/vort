@@ -23,6 +23,7 @@ pub const Error = error{
     InvalidBlockPlan,
     InvalidDictionaryTraining,
     RangeOutOfBounds,
+    OutputLimitExceeded,
     TrailingData,
 };
 

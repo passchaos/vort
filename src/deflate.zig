@@ -749,10 +749,10 @@ pub fn decodeRawDynamicAllocStrict(allocator: std.mem.Allocator, input: []const 
 }
 
 pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
-    return decodeRawAutoAllocPartialWithDictionary(allocator, input, "");
+    return decodeRawAutoAllocPartialWithDictionary(allocator, input, "", null);
 }
 
-fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) !OwnedDecodeResult {
+fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: ?usize) !OwnedDecodeResult {
     if (input.len == 0) return error.TruncatedFrame;
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -762,13 +762,13 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
         const final = (try reader.readBits(u1, 1)) != 0;
         const block_type = try reader.readBits(u2, 2);
         switch (block_type) {
-            0 => try decodeStoredBlockFromReader(allocator, &reader, &out),
-            1 => try decodeFixedBlockFromReader(allocator, &reader, &out, dictionary),
+            0 => try decodeStoredBlockFromReader(allocator, &reader, &out, max_output_len),
+            1 => try decodeFixedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len),
             2 => {
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, &lit_table, &dist_table);
+                try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_table, &dist_table);
             },
             else => return error.InvalidDeflateBlockType,
         }
@@ -784,7 +784,21 @@ pub fn decodeRawAutoAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8
 }
 
 pub fn decodeRawAutoAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) ![]u8 {
-    const result = try decodeRawAutoAllocPartialWithDictionary(allocator, input, dictionary);
+    const result = try decodeRawAutoAllocPartialWithDictionary(allocator, input, dictionary, null);
+    errdefer result.deinit(allocator);
+    if (result.input_read != input.len) return error.TrailingData;
+    return result.bytes;
+}
+
+pub fn decodeRawAutoAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    const result = try decodeRawAutoAllocPartialWithDictionary(allocator, input, "", max_output_len);
+    errdefer result.deinit(allocator);
+    if (result.input_read != input.len) return error.TrailingData;
+    return result.bytes;
+}
+
+pub fn decodeRawAutoAllocWithDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
+    const result = try decodeRawAutoAllocPartialWithDictionary(allocator, input, dictionary, max_output_len);
     errdefer result.deinit(allocator);
     if (result.input_read != input.len) return error.TrailingData;
     return result.bytes;
@@ -892,7 +906,7 @@ pub fn decodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
     return result.bytes;
 }
 
-fn decodeStoredBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8)) !void {
+fn decodeStoredBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), max_output_len: ?usize) !void {
     reader.alignToByte();
     const offset = reader.byte_index;
     if (reader.input.len - offset < 4) return error.TruncatedFrame;
@@ -901,15 +915,17 @@ fn decodeStoredBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.
     if (nlen != ~len) return error.StoredLengthMismatch;
     const chunk_len: usize = len;
     if (reader.input.len - offset - 4 < chunk_len) return error.TruncatedFrame;
+    try ensureOutputLimit(out.items.len, chunk_len, max_output_len);
     try out.appendSlice(allocator, reader.input[offset + 4 ..][0..chunk_len]);
     reader.byte_index = offset + 4 + chunk_len;
     reader.bit_index = 0;
 }
 
-fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), dictionary: []const u8) !void {
+fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), dictionary: []const u8, max_output_len: ?usize) !void {
     while (true) {
         const symbol = (try huffman.decodeFixedLiteralFast(reader)).value;
         if (symbol < 256) {
+            try ensureOutputLimit(out.items.len, 1, max_output_len);
             try out.append(allocator, @intCast(symbol));
         } else if (symbol == 256) {
             return;
@@ -917,7 +933,7 @@ fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.B
             const length = try decodeLength(symbol, reader);
             const distance_symbol = (try huffman.decodeFixedDistanceFast(reader)).value;
             const distance = try decodeDistance(distance_symbol, reader);
-            try appendMatchWithDictionary(allocator, out, dictionary, length, distance);
+            try appendMatchWithDictionary(allocator, out, dictionary, length, distance, max_output_len);
         } else {
             return error.InvalidHuffmanCode;
         }
@@ -929,12 +945,14 @@ fn decodeCompressedBlockFromReader(
     reader: *bitstream.BitReader,
     out: *std.ArrayList(u8),
     dictionary: []const u8,
+    max_output_len: ?usize,
     lit_table: anytype,
     dist_table: anytype,
 ) !void {
     while (true) {
         const symbol = (try lit_table.decode(reader)).value;
         if (symbol < 256) {
+            try ensureOutputLimit(out.items.len, 1, max_output_len);
             try out.append(allocator, @intCast(symbol));
         } else if (symbol == 256) {
             return;
@@ -942,7 +960,7 @@ fn decodeCompressedBlockFromReader(
             const length = try decodeLength(symbol, reader);
             const distance_symbol = (try dist_table.decode(reader)).value;
             const distance = try decodeDistance(distance_symbol, reader);
-            try appendMatchWithDictionary(allocator, out, dictionary, length, distance);
+            try appendMatchWithDictionary(allocator, out, dictionary, length, distance, max_output_len);
         } else {
             return error.InvalidHuffmanCode;
         }
@@ -975,11 +993,12 @@ fn copyMatch(history: []const u8, dest: []u8, length: usize, distance: usize) Er
 }
 
 fn appendMatch(allocator: std.mem.Allocator, out: *std.ArrayList(u8), length: usize, distance: usize) !void {
-    try appendMatchWithDictionary(allocator, out, "", length, distance);
+    try appendMatchWithDictionary(allocator, out, "", length, distance, null);
 }
 
-fn appendMatchWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary: []const u8, length: usize, distance: usize) !void {
+fn appendMatchWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary: []const u8, length: usize, distance: usize, max_output_len: ?usize) !void {
     if (distance == 0 or distance > out.items.len + dictionary.len) return error.InvalidMatch;
+    try ensureOutputLimit(out.items.len, length, max_output_len);
     try out.ensureUnusedCapacity(allocator, length);
     var i: usize = 0;
     while (i < length) : (i += 1) {
@@ -987,6 +1006,11 @@ fn appendMatchWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u
         const byte = if (absolute < dictionary.len) dictionary[absolute] else out.items[absolute - dictionary.len];
         out.appendAssumeCapacity(byte);
     }
+}
+
+fn ensureOutputLimit(current_len: usize, additional_len: usize, max_output_len: ?usize) Error!void {
+    const limit = max_output_len orelse return;
+    if (additional_len > limit or current_len > limit - additional_len) return error.OutputLimitExceeded;
 }
 
 const LengthEntry = struct { base: u16, extra_bits: u6 };
@@ -1205,11 +1229,23 @@ pub fn decodeZlibAllocWithDictionary(allocator: std.mem.Allocator, input: []cons
     return decodeZlibAllocWithOptionalDictionary(allocator, input, dictionary);
 }
 
+pub fn decodeZlibAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryLimited(allocator, input, null, max_output_len);
+}
+
+pub fn decodeZlibAllocWithDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryLimited(allocator, input, dictionary, max_output_len);
+}
+
 fn decodeZlibAllocWithOptionalDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryLimited(allocator, input, dictionary, null);
+}
+
+fn decodeZlibAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
 
-    const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[header.data_offset..], raw_dictionary);
+    const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[header.data_offset..], raw_dictionary, max_output_len);
     errdefer raw.deinit(allocator);
     const footer_offset = header.data_offset + raw.input_read;
     if (input.len - footer_offset < 4) return error.TruncatedFrame;
@@ -1365,9 +1401,17 @@ pub fn decodeGzipConcatenatedAlloc(allocator: std.mem.Allocator, input: []const 
 }
 
 pub fn decodeGzipAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    return decodeGzipAllocLimitedInternal(allocator, input, null);
+}
+
+pub fn decodeGzipAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    return decodeGzipAllocLimitedInternal(allocator, input, max_output_len);
+}
+
+fn decodeGzipAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
     const data_offset = try parseGzipHeader(input);
 
-    const raw = try decodeRawAutoAllocPartial(allocator, input[data_offset..]);
+    const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[data_offset..], "", max_output_len);
     errdefer raw.deinit(allocator);
     const footer_offset = data_offset + raw.input_read;
     if (input.len - footer_offset < 8) return error.TruncatedFrame;
@@ -2200,6 +2244,37 @@ test "raw deflate preset dictionary streams decode fixed and dynamic blocks" {
     defer std.testing.allocator.free(dynamic_decoded);
     try std.testing.expectEqualSlices(u8, "hello ", dynamic_decoded);
     try std.testing.expectError(error.InvalidMatch, decodeRawAutoAlloc(std.testing.allocator, &.{ 0x25, 0xc4, 0x21, 0x01, 0x00, 0x00, 0x00, 0x00, 0x90, 0xff, 0xaf, 0x05, 0x82, 0x03 }));
+}
+
+test "one-shot deflate wrappers enforce output limits" {
+    const raw = try encodeRawFixedAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(raw);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeRawAutoAllocLimited(std.testing.allocator, raw, 4));
+    const raw_ok = try decodeRawAutoAllocLimited(std.testing.allocator, raw, 5);
+    defer std.testing.allocator.free(raw_ok);
+    try std.testing.expectEqualSlices(u8, "hello", raw_ok);
+
+    const zlib_frame = try encodeZlibFixedAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(zlib_frame);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeZlibAllocLimited(std.testing.allocator, zlib_frame, 4));
+    const zlib_ok = try decodeZlibAllocLimited(std.testing.allocator, zlib_frame, 5);
+    defer std.testing.allocator.free(zlib_ok);
+    try std.testing.expectEqualSlices(u8, "hello", zlib_ok);
+
+    const gzip_frame = try encodeGzipFixedAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(gzip_frame);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeGzipAllocLimited(std.testing.allocator, gzip_frame, 4));
+    const gzip_ok = try decodeGzipAllocLimited(std.testing.allocator, gzip_frame, 5);
+    defer std.testing.allocator.free(gzip_ok);
+    try std.testing.expectEqualSlices(u8, "hello", gzip_ok);
+
+    try std.testing.expectError(error.OutputLimitExceeded, decodeRawAutoAllocWithDictionaryLimited(std.testing.allocator, &.{ 0xcb, 0x40, 0x27, 0x01 }, "hello ", 16));
+    const dict_ok = try decodeZlibAllocWithDictionaryLimited(std.testing.allocator, &.{
+        0x78, 0xf9, 0x08, 0x61, 0x02, 0x35, 0xcb,
+        0x40, 0x27, 0x01, 0x3a, 0x2e, 0x06, 0x7d,
+    }, "hello ", 17);
+    defer std.testing.allocator.free(dict_ok);
+    try std.testing.expectEqualSlices(u8, "hello hello hello", dict_ok);
 }
 
 test "gzip header rejects reserved flags and bad method" {
