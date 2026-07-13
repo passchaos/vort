@@ -1,5 +1,8 @@
 const std = @import("std");
 const store = @import("store.zig");
+const deflate = @import("deflate.zig");
+const bitstream = @import("bitstream.zig");
+const huffman = @import("huffman.zig");
 
 pub const CorpusStats = struct {
     cases: usize = 0,
@@ -50,9 +53,107 @@ pub fn runStoreSmokeCorpus(allocator: std.mem.Allocator) !CorpusStats {
     return stats;
 }
 
+pub fn runDeflateSmokeCorpus(allocator: std.mem.Allocator) !CorpusStats {
+    var stats = CorpusStats{};
+
+    const stored = try deflate.encodeRawStoredAlloc(allocator, "stored");
+    defer allocator.free(stored);
+    try expectDeflateRoundTrip(allocator, &stats, stored, "stored");
+
+    const fixed = try deflate.encodeRawFixedAlloc(allocator, "fixed fixed fixed");
+    defer allocator.free(fixed);
+    try expectDeflateRoundTrip(allocator, &stats, fixed, "fixed fixed fixed");
+
+    const dynamic = try deflate.encodeRawDynamicLiteralAlloc(allocator, "dynamic");
+    defer allocator.free(dynamic);
+    try expectDeflateRoundTrip(allocator, &stats, dynamic, "dynamic");
+
+    try expectMalformedDeflate(allocator, &stats, &.{ 0x00, 0x01, 0x00, 0xfe, 0xff, 'x' });
+    try expectMalformedDeflate(allocator, &stats, &.{ 0x4a, 0x04, 0x00 });
+
+    const non_final_dynamic = try allocator.dupe(u8, dynamic);
+    defer allocator.free(non_final_dynamic);
+    non_final_dynamic[0] &= 0xfe;
+    try expectMalformedDeflate(allocator, &stats, non_final_dynamic);
+
+    const malformed_repeat = try malformedRepeat16DynamicHeaderAlloc(allocator);
+    defer allocator.free(malformed_repeat);
+    try expectMalformedDeflate(allocator, &stats, malformed_repeat);
+
+    const oversubscribed = try oversubscribedCodeLengthDynamicHeaderAlloc(allocator);
+    defer allocator.free(oversubscribed);
+    try expectMalformedDeflate(allocator, &stats, oversubscribed);
+
+    return stats;
+}
+
+fn expectDeflateRoundTrip(allocator: std.mem.Allocator, stats: *CorpusStats, encoded: []const u8, plain: []const u8) !void {
+    stats.cases += 1;
+    const decoded = try deflate.decodeRawAutoAlloc(allocator, encoded);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, plain, decoded);
+    stats.valid_frames += 1;
+}
+
+fn expectMalformedDeflate(allocator: std.mem.Allocator, stats: *CorpusStats, encoded: []const u8) !void {
+    stats.cases += 1;
+    if (deflate.decodeRawAutoAlloc(allocator, encoded)) |decoded| {
+        defer allocator.free(decoded);
+        return error.UnexpectedValidFrame;
+    } else |err| switch (err) {
+        error.TruncatedFrame,
+        error.InvalidDynamicBlockHeader,
+        error.InvalidHuffmanCode,
+        => stats.expected_errors += 1,
+        else => return err,
+    }
+}
+
+fn malformedRepeat16DynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
+    var lengths: [19]u4 = @splat(0);
+    lengths[0] = 1;
+    lengths[16] = 1;
+    const encoder = try huffman.CodeLengthTable.Encoder.init(&lengths);
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeMinimalDynamicHeader(allocator, &writer);
+    try writer.writeBits(allocator, 1, 3);
+    try writer.writeBits(allocator, 0, 3);
+    try writer.writeBits(allocator, 0, 3);
+    try writer.writeBits(allocator, 1, 3);
+    try encoder.writeSymbol(&writer, allocator, 16);
+    return writer.toOwnedSlice(allocator);
+}
+
+fn oversubscribedCodeLengthDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeMinimalDynamicHeader(allocator, &writer);
+    try writer.writeBits(allocator, 1, 3);
+    try writer.writeBits(allocator, 1, 3);
+    try writer.writeBits(allocator, 1, 3);
+    try writer.writeBits(allocator, 0, 3);
+    return writer.toOwnedSlice(allocator);
+}
+
+fn writeMinimalDynamicHeader(allocator: std.mem.Allocator, writer: *bitstream.BitWriter) !void {
+    try writer.writeBits(allocator, 1, 1);
+    try writer.writeBits(allocator, 0b10, 2);
+    try writer.writeBits(allocator, 0, 5);
+    try writer.writeBits(allocator, 0, 5);
+    try writer.writeBits(allocator, 0, 4);
+}
+
 test "store smoke corpus covers malformed and valid frames" {
     const stats = try runStoreSmokeCorpus(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 11), stats.cases);
     try std.testing.expectEqual(@as(usize, 4), stats.valid_frames);
     try std.testing.expectEqual(@as(usize, 7), stats.expected_errors);
+}
+
+test "deflate smoke corpus covers valid and malformed raw streams" {
+    const stats = try runDeflateSmokeCorpus(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 8), stats.cases);
+    try std.testing.expectEqual(@as(usize, 3), stats.valid_frames);
+    try std.testing.expectEqual(@as(usize, 5), stats.expected_errors);
 }
