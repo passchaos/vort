@@ -86,6 +86,7 @@ zig build run-fuzz-smoke
 zig build run-fuzz-corpus
 zig build run-fuzz-corpus -- --deflate 4b0400 4a0400
 zig build run-fuzz-corpus -- --zlib 7801cb48cdc9c90700062c0215 0000 --gzip 1f8b0800000000000403cb48cdc9c9070086a6103605000000 0000
+zig build run-fuzz-corpus -- --file corpus/deflate-wrapper-smoke.hex
 zig build run-fuzz-target
 zig build run-libfuzzer-smoke
 zig build run-afl-smoke

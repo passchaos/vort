@@ -104,6 +104,7 @@ architecture blindly.
 - [x] Deflate fuzz smoke corpus covers valid raw streams and malformed dynamic/non-final cases.
 - [x] Hex-sample fuzz corpus harness supports raw deflate samples.
 - [x] Hex-sample fuzz corpus harness supports zlib/gzip wrapper samples.
+- [x] Hex-sample fuzz corpus harness can load deflate/zlib/gzip samples from corpus files.
 - [x] libFuzzer-compatible exported entrypoint smoke.
 - [x] AFL-style file-input fuzz driver smoke.
 - [x] Local CI smoke runner wiring for fuzz entrypoints.

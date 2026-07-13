@@ -1,0 +1,14 @@
+# Raw deflate samples: valid fixed "a", then non-final fixed/truncated.
+--deflate
+4b0400
+4a0400
+
+# zlib-wrapped fixed "hello", then bad header.
+--zlib
+7801cb48cdc9c90700062c0215
+0000
+
+# gzip-wrapped fixed "hello", then bad header.
+--gzip
+1f8b0800000000000403cb48cdc9c9070086a6103605000000
+0000
