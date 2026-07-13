@@ -104,6 +104,7 @@ architecture blindly.
 - [x] Deflate fuzz smoke corpus covers valid raw streams and malformed dynamic/non-final cases.
 - [x] Deflate fuzz smoke corpus covers fixed-Huffman reserved literal/distance symbols.
 - [x] Deflate fuzz smoke corpus covers dynamic code-length repeat overrun cases.
+- [x] Deflate wrapper hex corpus covers dynamic repeat-17 overrun samples.
 - [x] Hex-sample fuzz corpus harness supports raw deflate samples.
 - [x] Hex-sample fuzz corpus harness supports zlib/gzip wrapper samples.
 - [x] Hex-sample fuzz corpus harness can load deflate/zlib/gzip samples from corpus files.

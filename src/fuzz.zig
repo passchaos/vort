@@ -86,6 +86,10 @@ pub fn runDeflateSmokeCorpus(allocator: std.mem.Allocator) !CorpusStats {
     defer allocator.free(repeat_overrun);
     try expectMalformedDeflate(allocator, &stats, repeat_overrun);
 
+    const zero_repeat_overrun = try malformedRepeat17OverrunDynamicHeaderAlloc(allocator);
+    defer allocator.free(zero_repeat_overrun);
+    try expectMalformedDeflate(allocator, &stats, zero_repeat_overrun);
+
     const oversubscribed = try oversubscribedCodeLengthDynamicHeaderAlloc(allocator);
     defer allocator.free(oversubscribed);
     try expectMalformedDeflate(allocator, &stats, oversubscribed);
@@ -154,6 +158,29 @@ fn malformedRepeat18OverrunDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u
     return writer.toOwnedSlice(allocator);
 }
 
+fn malformedRepeat17OverrunDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
+    var lengths: [19]u4 = @splat(0);
+    lengths[17] = 1;
+    const encoder = try huffman.CodeLengthTable.Encoder.init(&lengths);
+
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeMinimalDynamicHeader(allocator, &writer);
+    try writer.writeBits(allocator, 0, 3);
+    try writer.writeBits(allocator, 1, 3);
+    try writer.writeBits(allocator, 0, 3);
+    try writer.writeBits(allocator, 0, 3);
+    // Repeat-17 can encode only 3..10 zeros at a time. Fill the expected
+    // HLIT+HDIST length vector exactly with 86 three-zero repeats, then emit
+    // one more repeat so parseDynamicLengthsBody must reject the overrun.
+    var repeats: usize = 0;
+    while (repeats < 87) : (repeats += 1) {
+        try encoder.writeSymbol(&writer, allocator, 17);
+        try writer.writeBits(allocator, 0, 3);
+    }
+    return writer.toOwnedSlice(allocator);
+}
+
 fn oversubscribedCodeLengthDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
@@ -205,7 +232,7 @@ test "store smoke corpus covers malformed and valid frames" {
 
 test "deflate smoke corpus covers valid and malformed raw streams" {
     const stats = try runDeflateSmokeCorpus(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 12), stats.cases);
+    try std.testing.expectEqual(@as(usize, 13), stats.cases);
     try std.testing.expectEqual(@as(usize, 3), stats.valid_frames);
-    try std.testing.expectEqual(@as(usize, 9), stats.expected_errors);
+    try std.testing.expectEqual(@as(usize, 10), stats.expected_errors);
 }
