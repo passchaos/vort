@@ -481,6 +481,11 @@ pub fn build(b: *std.Build) void {
     const dynamic_plan_report_step = b.step("run-dynamic-plan-report", "Report dynamic Huffman/LZ77 plan stats for files");
     dynamic_plan_report_step.dependOn(&run_dynamic_plan_report.step);
 
+    const run_dynamic_plan_report_csv = b.addRunArtifact(dynamic_plan_report_exe);
+    run_dynamic_plan_report_csv.addArgs(&.{ "--csv", "zig-out/vort-dynamic-plan-report.csv" });
+    const dynamic_plan_report_csv_step = b.step("run-dynamic-plan-report-csv", "Write dynamic Huffman/LZ77 plan stats CSV to zig-out");
+    dynamic_plan_report_csv_step.dependOn(&run_dynamic_plan_report_csv.step);
+
     const split_policy_report_exe = b.addExecutable(.{
         .name = "vort-split-policy-report",
         .root_module = b.createModule(.{

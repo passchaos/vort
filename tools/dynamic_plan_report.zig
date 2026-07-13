@@ -6,21 +6,39 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
 
+    var csv_path: ?[]const u8 = null;
+    var paths: std.ArrayList([]const u8) = .empty;
+    defer paths.deinit(init.gpa);
+    while (args.next()) |path| {
+        if (std.mem.eql(u8, path, "--csv")) {
+            csv_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
+        try paths.append(init.gpa, path);
+    }
+
+    var output = std.Io.Writer.Allocating.init(init.gpa);
+    defer output.deinit();
+    const writer = &output.writer;
+    try writer.print("path,input_bytes,token_count,literal_tokens,match_tokens,matched_bytes,stored_bytes,fixed_bytes,dynamic_bytes,hlit,hdist,hclen,code_length_ops,stats_ns,dynamic_encode_ns,best_encode_ns,dynamic_zlib_bytes,best_zlib_bytes\n", .{});
+
+    if (paths.items.len == 0) {
+        try reportPath(init, writer, "README.md");
+        try reportPath(init, writer, "docs/roadmap.md");
+    } else {
+        for (paths.items) |path| try reportPath(init, writer, path);
+    }
+    const bytes = output.written();
+
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("path,input_bytes,token_count,literal_tokens,match_tokens,matched_bytes,stored_bytes,fixed_bytes,dynamic_bytes,hlit,hdist,hclen,code_length_ops,stats_ns,dynamic_encode_ns,best_encode_ns,dynamic_zlib_bytes,best_zlib_bytes\n", .{});
-
-    var saw_path = false;
-    while (args.next()) |path| {
-        saw_path = true;
-        try reportPath(init, stdout, path);
-    }
-    if (!saw_path) {
-        try reportPath(init, stdout, "README.md");
-        try reportPath(init, stdout, "docs/roadmap.md");
-    }
+    try stdout.writeAll(bytes);
     try stdout.flush();
+
+    if (csv_path) |path| {
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = bytes });
+    }
 }
 
 fn reportPath(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8) !void {
