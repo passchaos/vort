@@ -14,7 +14,13 @@ import textwrap
 import zlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-VORT_BENCH = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else None
+ARGS = sys.argv[1:]
+CSV_PATH = None
+if "--csv" in ARGS:
+    index = ARGS.index("--csv")
+    CSV_PATH = pathlib.Path(ARGS[index + 1])
+    del ARGS[index : index + 2]
+VORT_BENCH = pathlib.Path(ARGS[0]) if ARGS else None
 FDEFLATE = pathlib.Path.home() / "Work" / "fdeflate"
 MINIZ_OXIDE = pathlib.Path.home() / "Work" / "miniz_oxide" / "miniz_oxide"
 
@@ -136,7 +142,7 @@ def main() -> int:
         ("text", b"the quick brown fox jumps over the lazy dog\n" * 1024),
         ("binary", bytes((i * 131 + (i >> 3) * 17 + 29) & 0xFF for i in range(64 * 1024))),
     ]
-    print("engine,case,input_bytes,zlib_bytes,iterations,elapsed_s,throughput_mib_s,mix")
+    output_rows = ["engine,case,input_bytes,zlib_bytes,iterations,elapsed_s,throughput_mib_s,mix"]
     with tempfile.TemporaryDirectory(prefix="vort-rust-deflate-bench-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         project = write_runner(tmp / "runner")
@@ -147,10 +153,15 @@ def main() -> int:
             rows = [("vort", run_vort_bench(frame, iterations))]
             rows.extend((engine, run_bench(project, engine, frame, iterations)) for engine in ("fdeflate", "miniz_oxide"))
             for engine, (elapsed_ns, mix) in rows:
-                print(
+                output_rows.append(
                     f"{engine},{name},{len(payload)},{frame.stat().st_size},{iterations},"
                     f"{elapsed_ns / 1_000_000_000:.6f},{throughput_mib_s(len(payload), iterations, elapsed_ns):.2f},{mix}"
                 )
+    for row in output_rows:
+        print(row)
+    if CSV_PATH is not None:
+        CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CSV_PATH.write_text("\n".join(output_rows) + "\n")
     return 0
 
 

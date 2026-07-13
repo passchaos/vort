@@ -350,10 +350,22 @@ pub fn build(b: *std.Build) void {
     const rust_deflate_bench_step = b.step("run-rust-deflate-bench", "Run fdeflate/miniz_oxide decode throughput smoke benchmark");
     rust_deflate_bench_step.dependOn(&rust_deflate_bench.step);
 
+    const rust_deflate_bench_csv = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_bench.py" });
+    rust_deflate_bench_csv.addArtifactArg(zlib_decode_bench_exe);
+    rust_deflate_bench_csv.addArgs(&.{ "--csv", "zig-out/vort-rust-deflate-decode-bench.csv" });
+    const rust_deflate_bench_csv_step = b.step("run-rust-deflate-bench-csv", "Write Vort/fdeflate/miniz_oxide decode benchmark CSV to zig-out");
+    rust_deflate_bench_csv_step.dependOn(&rust_deflate_bench_csv.step);
+
     const rust_deflate_encode_bench = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_encode_bench.py" });
     rust_deflate_encode_bench.addArtifactArg(zlib_encode_bench_exe);
     const rust_deflate_encode_bench_step = b.step("run-rust-deflate-encode-bench", "Run Vort/fdeflate/miniz_oxide encode throughput and size smoke benchmark");
     rust_deflate_encode_bench_step.dependOn(&rust_deflate_encode_bench.step);
+
+    const rust_deflate_encode_bench_csv = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_encode_bench.py" });
+    rust_deflate_encode_bench_csv.addArtifactArg(zlib_encode_bench_exe);
+    rust_deflate_encode_bench_csv.addArgs(&.{ "--csv", "zig-out/vort-rust-deflate-encode-bench.csv" });
+    const rust_deflate_encode_bench_csv_step = b.step("run-rust-deflate-encode-bench-csv", "Write Vort/fdeflate/miniz_oxide encode benchmark CSV to zig-out");
+    rust_deflate_encode_bench_csv_step.dependOn(&rust_deflate_encode_bench_csv.step);
 
     const external_probe = b.addSystemCommand(&.{ "python3", "tools/external_probe.py" });
     const external_probe_step = b.step("run-external-probe", "Report available local compression competitors/tools");
