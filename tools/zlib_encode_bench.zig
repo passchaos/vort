@@ -8,10 +8,11 @@ pub fn main(init: std.process.Init) !void {
 
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+    const level = parseLevel(args.next());
     const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(input);
 
-    const options = vort.optionsForCompressionLevel(.default);
+    const options = vort.optionsForCompressionLevel(level);
     const warmup = try vort.encodeZlibBestAlloc(init.gpa, input, options);
     init.gpa.free(warmup);
 
@@ -32,4 +33,12 @@ pub fn main(init: std.process.Init) !void {
     const stdout = &stdout_writer.interface;
     try stdout.print("elapsed_ns={d} zlib_bytes={d} mix={d}\n", .{ elapsed_ns, last_size, mix });
     try stdout.flush();
+}
+
+fn parseLevel(text: ?[]const u8) vort.CompressionLevel {
+    const value = text orelse return .default;
+    if (std.mem.eql(u8, value, "fastest")) return .fastest;
+    if (std.mem.eql(u8, value, "fast")) return .fast;
+    if (std.mem.eql(u8, value, "best")) return .best;
+    return .default;
 }

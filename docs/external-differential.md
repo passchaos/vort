@@ -62,5 +62,7 @@ decode before timing to reduce cold-start noise.
 
 `run-rust-deflate-encode-bench` provides the matching encode-side smoke. It
 prints CSV rows for zlib output size, ratio, and encode throughput for Vort,
-fdeflate, and miniz_oxide on the same generated payloads. Run it with
-`-Doptimize=ReleaseFast` before interpreting the Vort row.
+fdeflate, and miniz_oxide on the same generated payloads. Vort is reported at
+fastest, fast, and default presets so speed/ratio tradeoffs are visible next to
+the Rust baselines. Run it with `-Doptimize=ReleaseFast` before interpreting the
+Vort rows.

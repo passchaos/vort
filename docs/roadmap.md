@@ -198,6 +198,7 @@ architecture blindly.
 - [x] Rust deflate decode benchmark documentation requires ReleaseFast Vort rows.
 - [x] Rust deflate decode benchmark performs warmup decodes before timing.
 - [x] Rust deflate encode benchmark reports Vort/fdeflate/miniz_oxide size and throughput rows.
+- [x] Rust deflate encode benchmark reports multiple Vort level presets.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
 - [x] Dynamic Huffman encoder with LZ77 match support, verified by Python zlib.
 - [x] Dynamic Huffman encoder code-length RLE using symbols 16/17/18.

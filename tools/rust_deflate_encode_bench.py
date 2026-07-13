@@ -91,11 +91,11 @@ def run_rust(project: pathlib.Path, engine: str, input_path: pathlib.Path, itera
     return parse_fields(out)
 
 
-def run_vort(input_path: pathlib.Path, iterations: int) -> dict[str, int]:
+def run_vort(input_path: pathlib.Path, iterations: int, level: str) -> dict[str, int]:
     if VORT_BENCH is None:
         raise RuntimeError("missing Vort zlib encode benchmark executable")
     out = subprocess.run(
-        [str(VORT_BENCH), str(input_path), str(iterations)],
+        [str(VORT_BENCH), str(input_path), str(iterations), level],
         cwd=ROOT,
         check=True,
         text=True,
@@ -138,7 +138,11 @@ def main() -> int:
             plain = tmp / f"{name}.bin"
             plain.write_bytes(payload)
             iterations = iterations_for(len(payload))
-            rows = [("vort", run_vort(plain, iterations))]
+            rows = [
+                ("vort-fastest", run_vort(plain, iterations, "fastest")),
+                ("vort-fast", run_vort(plain, iterations, "fast")),
+                ("vort-default", run_vort(plain, iterations, "default")),
+            ]
             rows.extend((engine, run_rust(project, engine, plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))
             for engine, fields in rows:
                 print(
