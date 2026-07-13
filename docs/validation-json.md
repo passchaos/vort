@@ -148,3 +148,40 @@ Each artifact includes:
 - `producer_step`
 - `size_bytes`, `mtime_utc`
 - JSON summary fields when applicable: `schema`, `schema_version`, `rows`, `ok`
+
+## `vort.dashboard_producers`
+
+Consumed by:
+
+```sh
+zig build run-dashboard-index
+python3 tools/dashboard_index.py --producer-map tools/dashboard_producers.json
+```
+
+This schema maps known dashboard artifact names to the build command that
+regenerates them. The mapping is intentionally external to
+`tools/dashboard_index.py` so new artifacts can be documented without changing
+the scanner logic.
+
+Top-level fields:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `schema` | string | Always `vort.dashboard_producers`. |
+| `schema_version` | integer | Currently `1`. |
+| `exact` | object | Map from exact artifact filename to producer command. |
+| `contains` | array | Ordered fallback rules for filename substring matches. |
+
+Each `contains` rule has:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `match` | string | Substring to search for in the artifact filename. |
+| `producer_step` | string | Command shown in the Markdown index and JSON manifest. |
+
+Resolution order:
+
+1. Exact filename match in `exact`.
+2. First matching rule in `contains`.
+3. Built-in fallback mappings in `tools/dashboard_index.py`.
+4. Empty `producer_step` when no rule matches.
