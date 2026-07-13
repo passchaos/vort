@@ -322,10 +322,15 @@ fn maxMatch(options: GreedyOptions) usize {
 fn acceptMatch(input: []const u8, pos: usize, length: usize, distance: usize, options: GreedyOptions) bool {
     if (length < minMatch(options) or distance == 0) return false;
     if (pos + length > input.len) return false;
-    var literal_cost: usize = 0;
-    for (input[pos..][0..length]) |byte| literal_cost += fixedLiteralCost(byte);
     const match_cost = fixedMatchCost(length, distance);
-    return literal_cost >= match_cost + options.min_savings_bits;
+    const required_cost = match_cost + options.min_savings_bits;
+    const literal_min_cost = length * 8;
+    if (literal_min_cost >= required_cost) return true;
+    if (literal_min_cost + length < required_cost) return false;
+
+    var literal_cost = literal_min_cost;
+    for (input[pos..][0..length]) |byte| literal_cost += @intFromBool(byte > 143);
+    return literal_cost >= required_cost;
 }
 
 pub fn fixedBitCost(tokens: []const Token) usize {
