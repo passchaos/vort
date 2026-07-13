@@ -181,6 +181,7 @@ zig build -Doptimize=ReleaseFast run-rust-deflate-bench
 zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv
 zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench
 zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv
+zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary
 zig build bench-native-parallel -Doptimize=ReleaseFast
 zig build bench-native-parallel -Doptimize=ReleaseFast -- README.md 4096 2
 zig build -Doptimize=ReleaseFast run-native-parallel-corpus-report

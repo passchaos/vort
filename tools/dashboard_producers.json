@@ -38,6 +38,10 @@
     "vort-rust-deflate-encode-bench.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv"
+    },
+    "vort-rust-deflate-benchmark-summary.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary"
     }
   },
   "exact": {
@@ -50,6 +54,7 @@
     "vort-native-thread-pool-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard",
     "vort-rust-deflate-decode-bench.csv": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv",
     "vort-rust-deflate-encode-bench.csv": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv",
+    "vort-rust-deflate-benchmark-summary.md": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary",
     "vort-sidecar-corrupt-smoke.json": "zig build run-sidecar-corrupt-dashboard",
     "vort-sidecar-corrupt-smoke.md": "zig build run-sidecar-corrupt-dashboard",
     "vort-standard-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-corpus-dashboard",

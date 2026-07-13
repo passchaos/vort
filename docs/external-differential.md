@@ -71,3 +71,6 @@ the Rust baselines. It also includes real project README/roadmap files. Run it
 with `-Doptimize=ReleaseFast` before interpreting the Vort rows. Use
 `run-rust-deflate-encode-bench-csv` to persist the same rows to
 `zig-out/vort-rust-deflate-encode-bench.csv`.
+`run-rust-deflate-benchmark-summary` consumes both CSV files and writes
+`zig-out/vort-rust-deflate-benchmark-summary.md`, highlighting per-case Vort
+throughput and compressed-size ratios against the best Rust baseline.
