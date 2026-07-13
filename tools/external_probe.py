@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import pathlib
 import shutil
+import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CHECKS = [
@@ -18,7 +19,22 @@ CHECKS = [
 print("external compression probe:")
 for name, value in CHECKS:
     if isinstance(value, pathlib.Path):
-        status = str(value) if value.exists() else "missing"
+        if value.exists():
+            status = str(value)
+            try:
+                rev = subprocess.run(
+                    ["git", "-C", str(value), "rev-parse", "--short", "HEAD"],
+                    check=True,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                ).stdout.strip()
+                if rev:
+                    status = f"{status} (git {rev})"
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                pass
+        else:
+            status = "missing"
     else:
         status = value or "missing"
     print(f"- {name}: {status}")

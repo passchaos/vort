@@ -44,8 +44,8 @@ coverage is a required CI signal rather than only an optional local probe.
 
 Additional Rust deflate baselines are expected under `~/Work/fdeflate` and
 `~/Work/miniz_oxide` when available. They are tracked by `run-external-probe`
-as local source checkouts now, and should be promoted into executable
-differential and benchmark harnesses as soon as suitable decode/encode CLI or
-example binaries are built. Until those binaries are exercised by a Vort build
-step, their presence is discovery evidence only, not compatibility or
-performance proof.
+as local source checkouts, including their current git revision when available,
+and should be promoted into executable differential and benchmark harnesses as
+soon as suitable decode/encode CLI or example binaries are built. Until those
+binaries are exercised by a Vort build step, their presence is discovery
+evidence only, not compatibility or performance proof.
