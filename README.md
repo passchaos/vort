@@ -60,6 +60,7 @@ zig build run-sidecar-verify-report -- --self-test-corrupt --markdown /tmp/sidec
 zig build run-sidecar-corrupt-dashboard
 zig build run-validation-json-smoke
 zig build run-validation-json-dashboard
+zig build run-validation-json-docs-check
 zig build run-dashboard-index  # writes zig-out/vort-dashboard-index.md/.json using tools/dashboard_producers.json
 zig build run-sidecar-verify-report -- --dir /tmp --limit 8 --keep-going
 zig build run-sidecar-verify-report -- --markdown /tmp/sidecar-report.md --json /tmp/sidecar-report.json --dir /tmp

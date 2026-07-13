@@ -65,6 +65,7 @@ architecture blindly.
 - [x] Validation JSON schema smoke can write a fixed zig-out summary artifact.
 - [x] Validation JSON schema reference documents field meanings and compatibility rules.
 - [x] Validation JSON schema reference includes example objects for every validation/dashboard schema.
+- [x] Validation JSON schema reference examples are checked by a build step.
 - [x] Dashboard index links zig-out validation, sidecar, and benchmark artifacts from a single Markdown entrypoint.
 - [x] Dashboard index includes artifact sizes and UTC update timestamps.
 - [x] Dashboard index emits a JSON artifact manifest with schema, category, size, timestamp, and row metadata.

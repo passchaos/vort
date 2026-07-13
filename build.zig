@@ -483,6 +483,10 @@ pub fn build(b: *std.Build) void {
     const validation_json_dashboard_step = b.step("run-validation-json-dashboard", "Write validation JSON schema smoke summary to zig-out");
     validation_json_dashboard_step.dependOn(&validation_json_dashboard.step);
 
+    const validation_json_docs_check = b.addSystemCommand(&.{ "python3", "tools/validation_json_docs_check.py" });
+    const validation_json_docs_check_step = b.step("run-validation-json-docs-check", "Validate JSON examples in docs/validation-json.md");
+    validation_json_docs_check_step.dependOn(&validation_json_docs_check.step);
+
     const dashboard_index = b.addSystemCommand(&.{ "python3", "tools/dashboard_index.py" });
     const dashboard_index_step = b.step("run-dashboard-index", "Write a Markdown index for zig-out dashboard artifacts");
     dashboard_index_step.dependOn(&dashboard_index.step);
@@ -638,6 +642,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(sidecar_corrupt_dashboard_step);
     ci_smoke_step.dependOn(validation_json_smoke_step);
     ci_smoke_step.dependOn(validation_json_dashboard_step);
+    ci_smoke_step.dependOn(validation_json_docs_check_step);
     ci_smoke_step.dependOn(dashboard_index_step);
     ci_smoke_step.dependOn(compat_benchmark_step);
     ci_smoke_step.dependOn(standard_corpus_report_step);
