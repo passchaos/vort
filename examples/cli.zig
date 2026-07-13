@@ -476,6 +476,17 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(range);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = range });
         try stdout.print("range_bytes={d} crc32={d} path={s}\n", .{ range.len, vort.crc32(range), output_path });
+    } else if (std.mem.eql(u8, command, "decode-vort-embedded-range-file")) {
+        const stream_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const offset = try std.fmt.parseInt(u64, args.next() orelse return error.MissingCorpusPath, 10);
+        const length = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+        const stream = try std.Io.Dir.cwd().readFileAlloc(init.io, stream_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(stream);
+        const range = try vort.storeDecodeIndexedRangeAlloc(init.gpa, stream, offset, length);
+        defer init.gpa.free(range);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = range });
+        try stdout.print("range_bytes={d} crc32={d} path={s}\n", .{ range.len, vort.crc32(range), output_path });
     } else if (std.mem.eql(u8, command, "encode-vort-sidecar-dict-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const stream_path = args.next() orelse return error.MissingCorpusPath;
