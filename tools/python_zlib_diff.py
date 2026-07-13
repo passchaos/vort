@@ -27,6 +27,14 @@ def parse_field(output: str, name: str) -> str:
     return match.group(1)
 
 
+def expect_cli_failure(*args: str, error_name: str) -> None:
+    result = subprocess.run([str(CLI), *args], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode == 0:
+        raise AssertionError(f"expected {args!r} to fail with {error_name}, got stdout={result.stdout!r}")
+    if error_name not in result.stderr:
+        raise AssertionError(f"expected {error_name} in stderr for {args!r}, got stderr={result.stderr!r}")
+
+
 def main() -> int:
     if not CLI.exists():
         raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
@@ -138,6 +146,22 @@ def main() -> int:
     out = run_cli("decode-zlib-dict-hex", zlib_dynamic_dict.hex(), dictionary_text)
     assert int(parse_field(out, "decoded_bytes")) == len(dictionary), out
     assert int(parse_field(out, "crc32")) == (zlib.crc32(dictionary) & 0xFFFFFFFF), out
+
+    zlib_file_payload = b"zlib file output limit smoke"
+    zlib_file_frame = zlib.compress(zlib_file_payload, level=6)
+    with tempfile.TemporaryDirectory(prefix="vort-zlib-file-", dir=ROOT / ".zig-cache") as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        compressed_path = tmp / "sample.zlib"
+        decoded_path = tmp / "decoded.bin"
+        limited_path = tmp / "decoded-limited.bin"
+        compressed_path.write_bytes(zlib_file_frame)
+        out = run_cli("decode-zlib-file", str(compressed_path), str(decoded_path))
+        assert int(parse_field(out, "decoded_bytes")) == len(zlib_file_payload), out
+        assert decoded_path.read_bytes() == zlib_file_payload, out
+        out = run_cli("decode-zlib-file", str(compressed_path), str(limited_path), str(len(zlib_file_payload)))
+        assert int(parse_field(out, "decoded_bytes")) == len(zlib_file_payload), out
+        assert limited_path.read_bytes() == zlib_file_payload, out
+        expect_cli_failure("decode-zlib-file", str(compressed_path), str(tmp / "too-small.bin"), str(len(zlib_file_payload) - 1), error_name="OutputLimitExceeded")
 
     co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, zdict=dictionary)
     zlib_dict_file = co.compress(dict_payload) + co.flush()

@@ -80,6 +80,11 @@ zig build run -- decode-raw-hex cb48cdc9c90700 5
 zig build run -- decode-raw-dict-hex cb402701 "hello "
 zig build run -- decode-zlib-hex 7801cb48cdc9c90700062c0215
 zig build run -- decode-zlib-dict-hex 78f908610235cb4027013a2e067d "hello "
+python3 - <<'PY'
+import zlib
+open("/tmp/vort.zlib", "wb").write(zlib.compress(b"hello"))
+PY
+zig build run -- decode-zlib-file /tmp/vort.zlib /tmp/vort-zlib.out 5
 printf "hello " > /tmp/vort.dict && python3 - <<'PY'
 import zlib
 d = b"hello "
