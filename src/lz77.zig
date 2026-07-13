@@ -428,6 +428,14 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
             stats.matches += 1;
             stats.matched_bytes += best.length;
             const end = @min(input.len, pos + best.length);
+            insertHash(input, pos, head, prev);
+            // fdeflate-style fast parsers do not seed every byte inside a
+            // consumed match. Keeping just the first and final few positions
+            // preserves useful future anchors while avoiding long insertion
+            // runs on repetitive data, which dominates fast/fastest levels.
+            const tail_start = if (end > pos + 4) end - 4 else pos + 1;
+            pos += 1;
+            if (pos < tail_start) pos = tail_start;
             while (pos < end) : (pos += 1) insertHash(input, pos, head, prev);
         } else {
             try tokens.append(allocator, .{ .literal = input[pos] });
