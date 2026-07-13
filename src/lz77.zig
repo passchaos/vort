@@ -49,6 +49,14 @@ pub const GreedyPlan = struct {
 
 pub const max_optimal_candidates = 16;
 
+fn initTokenList(allocator: std.mem.Allocator, input_len: usize) !std.ArrayList(Token) {
+    // Every input byte can become at most one token. A small eager reserve
+    // removes the first few hot-path reallocations without over-allocating for
+    // highly compressible blocks whose token stream is much smaller than the
+    // source block.
+    return std.ArrayList(Token).initCapacity(allocator, @min(input_len, 4096));
+}
+
 pub fn literalPlanAlloc(allocator: std.mem.Allocator, input: []const u8) !GreedyPlan {
     const tokens = try allocator.alloc(Token, input.len);
     errdefer allocator.free(tokens);
@@ -65,7 +73,7 @@ pub fn filteredPlanAlloc(allocator: std.mem.Allocator, input: []const u8, option
 }
 
 pub fn runLengthPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
-    var tokens: std.ArrayList(Token) = .empty;
+    var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
     var stats = PlanStats{};
 
@@ -93,7 +101,7 @@ pub fn runLengthPlanAlloc(allocator: std.mem.Allocator, input: []const u8, optio
 }
 
 pub fn greedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
-    var tokens: std.ArrayList(Token) = .empty;
+    var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
     var stats = PlanStats{};
 
@@ -140,7 +148,7 @@ fn preferScanLazy(input: []const u8) bool {
 }
 
 fn scanLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
-    var tokens: std.ArrayList(Token) = .empty;
+    var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
     var stats = PlanStats{};
 
@@ -182,7 +190,7 @@ fn hashLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     defer allocator.free(prev);
     @memset(prev, -1);
 
-    var tokens: std.ArrayList(Token) = .empty;
+    var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
     var stats = PlanStats{};
 
@@ -285,7 +293,7 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
         }
     }
 
-    var tokens: std.ArrayList(Token) = .empty;
+    var tokens = try initTokenList(allocator, n);
     errdefer tokens.deinit(allocator);
     var stats = PlanStats{};
     var pos: usize = 0;
@@ -392,7 +400,7 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     defer allocator.free(prev);
     @memset(prev, -1);
 
-    var tokens: std.ArrayList(Token) = .empty;
+    var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
     var stats = PlanStats{};
 
