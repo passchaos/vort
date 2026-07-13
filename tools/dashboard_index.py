@@ -20,6 +20,33 @@ def category_for(path: Path) -> str:
     return "other"
 
 
+def producer_step_for(path: Path) -> str:
+    name = path.name
+    exact = {
+        "vort-sidecar-corrupt-smoke.md": "zig build run-sidecar-corrupt-dashboard",
+        "vort-sidecar-corrupt-smoke.json": "zig build run-sidecar-corrupt-dashboard",
+        "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
+        "vort-dashboard-index.md": "zig build run-dashboard-index",
+        "vort-dashboard-index.json": "zig build run-dashboard-index",
+        "vort-dictionary-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard",
+        "vort-file-corpus-standard-dashboard.md": "zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard",
+        "vort-file-corpus-standard-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard",
+        "vort-native-parallel-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard",
+        "vort-native-thread-pool-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard",
+        "vort-standard-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-corpus-dashboard",
+        "vort-standard-corpus-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-corpus-full-dashboard",
+    }
+    if name in exact:
+        return exact[name]
+    if "native-parallel" in name:
+        return "zig build -Doptimize=ReleaseFast bench-native-parallel"
+    if "path-dashboard" in name:
+        return "zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- <paths>"
+    if "tar-dashboard" in name:
+        return "zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --paths <tar>"
+    return ""
+
+
 def read_json(path: Path) -> dict:
     try:
         value = json.loads(path.read_text())
@@ -60,6 +87,7 @@ def artifact_record(path: Path, output_dir: Path) -> dict:
         "path": path.relative_to(output_dir).as_posix(),
         "category": category_for(path),
         "format": path.suffix.lstrip("."),
+        "producer_step": producer_step_for(path),
         "size_bytes": stat.st_size,
         "mtime_utc": mtime,
         "schema": data.get("schema"),
@@ -103,6 +131,9 @@ def main() -> int:
             note = json_summary(artifact) if artifact.suffix == ".json" else ""
             metadata = artifact_metadata(artifact)
             suffix = f" — {metadata}"
+            producer_step = producer_step_for(artifact)
+            if producer_step:
+                suffix += f", `{producer_step}`"
             if note:
                 suffix += f", {note}"
             lines.append(f"- [{artifact.name}]({rel.as_posix()}){suffix}")
