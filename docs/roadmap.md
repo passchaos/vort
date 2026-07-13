@@ -115,6 +115,7 @@ architecture blindly.
 - [x] Fixed-Huffman inflate for literals and back-references.
 - [x] Fixed-Huffman fast lookup decode path for literals and distances.
 - [x] Dynamic-Huffman header and code-length parser foundation.
+- [x] Dynamic-Huffman code-length parser rejects invalid repeat symbols and overrun repeats.
 - [x] Dynamic-Huffman inflate for single final blocks.
 - [x] Single-block fixed/dynamic inflate rejects non-final blocks instead of accepting incomplete streams.
 - [x] Multi-block raw/zlib/gzip inflate across stored/fixed/dynamic block types.

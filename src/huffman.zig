@@ -505,6 +505,57 @@ test "dynamic length parser expands repeat symbols" {
     try std.testing.expectEqual(@as(u4, 1), parsed.distance_lengths[0]);
 }
 
+test "dynamic length parser rejects invalid repeat symbols" {
+    {
+        var lengths: [19]u4 = @splat(0);
+        lengths[0] = 1;
+        lengths[16] = 1;
+        const encoder = try CodeLengthTable.Encoder.init(&lengths);
+        var writer = bitstream.BitWriter{};
+        defer writer.deinit(std.testing.allocator);
+        try writer.writeBits(std.testing.allocator, 1, 1);
+        try writer.writeBits(std.testing.allocator, 0b10, 2);
+        try writer.writeBits(std.testing.allocator, 0, 5);
+        try writer.writeBits(std.testing.allocator, 0, 5);
+        try writer.writeBits(std.testing.allocator, 0, 4);
+        try writer.writeBits(std.testing.allocator, 1, 3);
+        try writer.writeBits(std.testing.allocator, 0, 3);
+        try writer.writeBits(std.testing.allocator, 0, 3);
+        try writer.writeBits(std.testing.allocator, 1, 3);
+        try encoder.writeSymbol(&writer, std.testing.allocator, 16);
+        const bytes = try writer.toOwnedSlice(std.testing.allocator);
+        defer std.testing.allocator.free(bytes);
+        var reader = bitstream.BitReader.init(bytes);
+        try std.testing.expectError(error.InvalidDynamicBlockHeader, parseDynamicLengths(&reader));
+    }
+
+    {
+        var lengths: [19]u4 = @splat(0);
+        lengths[0] = 1;
+        lengths[18] = 1;
+        const encoder = try CodeLengthTable.Encoder.init(&lengths);
+        var writer = bitstream.BitWriter{};
+        defer writer.deinit(std.testing.allocator);
+        try writer.writeBits(std.testing.allocator, 1, 1);
+        try writer.writeBits(std.testing.allocator, 0b10, 2);
+        try writer.writeBits(std.testing.allocator, 0, 5);
+        try writer.writeBits(std.testing.allocator, 0, 5);
+        try writer.writeBits(std.testing.allocator, 0, 4);
+        try writer.writeBits(std.testing.allocator, 0, 3);
+        try writer.writeBits(std.testing.allocator, 0, 3);
+        try writer.writeBits(std.testing.allocator, 1, 3);
+        try writer.writeBits(std.testing.allocator, 1, 3);
+        try encoder.writeSymbol(&writer, std.testing.allocator, 18);
+        try writer.writeBits(std.testing.allocator, 127, 7);
+        try encoder.writeSymbol(&writer, std.testing.allocator, 18);
+        try writer.writeBits(std.testing.allocator, 127, 7);
+        const bytes = try writer.toOwnedSlice(std.testing.allocator);
+        defer std.testing.allocator.free(bytes);
+        var reader = bitstream.BitReader.init(bytes);
+        try std.testing.expectError(error.InvalidDynamicBlockHeader, parseDynamicLengths(&reader));
+    }
+}
+
 test "fixed Huffman encoder writes symbols decoded by fixed table" {
     const lengths = fixedLiteralLengths();
     const encoder = try FixedLiteralTable.Encoder.init(&lengths);
