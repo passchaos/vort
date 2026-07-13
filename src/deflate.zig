@@ -632,10 +632,8 @@ pub fn encodeRawFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []con
 }
 
 fn writeFixedTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, tokens: []const lz77.Token, final: bool) !void {
-    const lit_lengths = huffman.fixedLiteralLengths();
-    const lit_encoder = try huffman.FixedLiteralTable.Encoder.init(&lit_lengths);
-    const dist_lengths = huffman.fixedDistanceLengths();
-    const dist_encoder = try huffman.FixedDistanceTable.Encoder.init(&dist_lengths);
+    const lit_encoder = huffman.fixed_literal_encoder;
+    const dist_encoder = huffman.fixed_distance_encoder;
     try writer.writeBits(allocator, @intFromBool(final), 1);
     try writer.writeBits(allocator, 0b01, 2);
     for (tokens) |token| {

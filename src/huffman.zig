@@ -457,6 +457,8 @@ pub fn decodeFixedDistanceFast(reader: *bitstream.BitReader) Error!Symbol {
 
 pub const FixedLiteralTable = HuffmanTable(fixed_literal_count);
 pub const FixedDistanceTable = HuffmanTable(fixed_distance_count);
+pub const FixedLiteralEncoder = FixedLiteralTable.Encoder;
+pub const FixedDistanceEncoder = FixedDistanceTable.Encoder;
 
 pub fn fixedLiteralLengths() [fixed_literal_count]u4 {
     var lengths: [fixed_literal_count]u4 = undefined;
@@ -485,6 +487,16 @@ pub fn fixedDistanceTable() Error!FixedDistanceTable {
     const lengths = fixedDistanceLengths();
     return FixedDistanceTable.init(&lengths);
 }
+
+pub const fixed_literal_encoder = blk: {
+    const lengths = fixedLiteralLengths();
+    break :blk FixedLiteralEncoder.init(&lengths) catch unreachable;
+};
+
+pub const fixed_distance_encoder = blk: {
+    const lengths = fixedDistanceLengths();
+    break :blk FixedDistanceEncoder.init(&lengths) catch unreachable;
+};
 
 fn reverseBits(code: u16, bits: u4) u16 {
     var out: u16 = 0;
