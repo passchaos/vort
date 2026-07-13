@@ -437,6 +437,11 @@ fn findBestHashMatch(input: []const u8, pos: usize, options: GreedyOptions, head
         const candidate: usize = @intCast(candidate_i);
         const distance = pos - candidate;
         if (distance == 0 or distance > options.window_len) break;
+        if (best.length == max_len) break;
+        if (input[candidate + best.length] != input[pos + best.length]) {
+            candidate_i = prev[candidate];
+            continue;
+        }
         const len = matchLength(input, candidate, pos, max_len);
         if (len >= minimum and len > best.length) {
             best = .{ .length = len, .distance = distance };
