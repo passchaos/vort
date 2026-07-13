@@ -610,6 +610,22 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "decode-raw-dict-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const dictionary_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dictionary_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(dictionary);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeRawDeflateAllocWithDictionaryLimited(init.gpa, compressed, dictionary, limit)
+        else
+            try vort.decodeRawDeflateAllocWithDictionary(init.gpa, compressed, dictionary);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("compressed_bytes={d} dictionary_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, dictionary.len, decoded.len, output_path });
     } else if (std.mem.eql(u8, command, "decode-zlib-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -713,6 +729,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode raw deflate hex with a preset dictionary
         \\  decode-raw-file <in> <out> [max_output]
         \\                              Decode raw deflate file bytes with an optional output limit
+        \\  decode-raw-dict-file <in> <out> <dict> [max_output]
+        \\                              Decode raw deflate file bytes with a preset dictionary file
         \\  decode-zlib-hex [hex] [max_output]
         \\                              Decode zlib-wrapped deflate hex to text
         \\  decode-zlib-dict-hex [hex] [dict] [max_output]

@@ -84,6 +84,9 @@ co = zlib.compressobj(level=6, wbits=-15)
 open("/tmp/vort.raw", "wb").write(co.compress(b"hello") + co.flush())
 PY
 zig build run -- decode-raw-file /tmp/vort.raw /tmp/vort-raw.out 5
+printf "hello " > /tmp/vort.dict
+printf "cb402701" | xxd -r -p > /tmp/vort-dict.raw
+zig build run -- decode-raw-dict-file /tmp/vort-dict.raw /tmp/vort-raw-dict.out /tmp/vort.dict 17
 zig build run -- decode-zlib-hex 7801cb48cdc9c90700062c0215
 zig build run -- decode-zlib-dict-hex 78f908610235cb4027013a2e067d "hello "
 python3 - <<'PY'

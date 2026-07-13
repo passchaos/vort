@@ -142,6 +142,22 @@ def main() -> int:
     assert int(parse_field(out, "decoded_bytes")) == len(dictionary), out
     assert int(parse_field(out, "crc32")) == (zlib.crc32(dictionary) & 0xFFFFFFFF), out
 
+    with tempfile.TemporaryDirectory(prefix="vort-raw-dict-file-", dir=ROOT / ".zig-cache") as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        compressed_path = tmp / "dict.raw"
+        dictionary_path = tmp / "dict.bin"
+        decoded_path = tmp / "decoded.bin"
+        limited_path = tmp / "decoded-limited.bin"
+        compressed_path.write_bytes(raw_dynamic_dict)
+        dictionary_path.write_bytes(dictionary)
+        out = run_cli("decode-raw-dict-file", str(compressed_path), str(decoded_path), str(dictionary_path))
+        assert int(parse_field(out, "decoded_bytes")) == len(dictionary), out
+        assert decoded_path.read_bytes() == dictionary, out
+        out = run_cli("decode-raw-dict-file", str(compressed_path), str(limited_path), str(dictionary_path), str(len(dictionary)))
+        assert int(parse_field(out, "decoded_bytes")) == len(dictionary), out
+        assert limited_path.read_bytes() == dictionary, out
+        expect_cli_failure("decode-raw-dict-file", str(compressed_path), str(tmp / "too-small.bin"), str(dictionary_path), str(len(dictionary) - 1), error_name="OutputLimitExceeded")
+
     zlib_dynamic_dict = bytes.fromhex("78200861023525c421010000000090ffaf05820308610235")
     out = run_cli("decode-zlib-dict-hex", zlib_dynamic_dict.hex(), dictionary_text)
     assert int(parse_field(out, "decoded_bytes")) == len(dictionary), out
