@@ -473,9 +473,7 @@ fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
         const left = std.mem.readInt(u64, input[a + len ..][0..8], .little);
         const right = std.mem.readInt(u64, input[b + len ..][0..8], .little);
         if (left != right) {
-            var inner: usize = 0;
-            while (inner < 8 and input[a + len + inner] == input[b + len + inner]) inner += 1;
-            return len + inner;
+            return len + @ctz(left ^ right) / 8;
         }
     }
     while (len < max_len and input[a + len] == input[b + len]) len += 1;
