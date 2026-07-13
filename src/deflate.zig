@@ -1655,6 +1655,39 @@ test "dynamic Huffman decoder rejects matches without distance codes" {
     try std.testing.expectError(error.InvalidHuffmanCode, decodeGzipAlloc(std.testing.allocator, gzip_frame.items));
 }
 
+test "dynamic Huffman decoder rejects oversubscribed code-length alphabets" {
+    var writer = bitstream.BitWriter{};
+    defer writer.deinit(std.testing.allocator);
+    try writer.writeBits(std.testing.allocator, 1, 1);
+    try writer.writeBits(std.testing.allocator, 0b10, 2);
+    try writer.writeBits(std.testing.allocator, 0, 5);
+    try writer.writeBits(std.testing.allocator, 0, 5);
+    try writer.writeBits(std.testing.allocator, 0, 4);
+    try writer.writeBits(std.testing.allocator, 1, 3);
+    try writer.writeBits(std.testing.allocator, 1, 3);
+    try writer.writeBits(std.testing.allocator, 1, 3);
+    try writer.writeBits(std.testing.allocator, 0, 3);
+    const encoded = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+
+    try std.testing.expectError(error.InvalidHuffmanCode, decodeRawDynamicAllocStrict(std.testing.allocator, encoded));
+    try std.testing.expectError(error.InvalidHuffmanCode, decodeRawAutoAlloc(std.testing.allocator, encoded));
+
+    var zlib_frame: std.ArrayList(u8) = .empty;
+    defer zlib_frame.deinit(std.testing.allocator);
+    try zlib_frame.appendSlice(std.testing.allocator, &.{ 0x78, 0x01 });
+    try zlib_frame.appendSlice(std.testing.allocator, encoded);
+    try zlib_frame.appendSlice(std.testing.allocator, &.{ 0, 0, 0, 0 });
+    try std.testing.expectError(error.InvalidHuffmanCode, decodeZlibAlloc(std.testing.allocator, zlib_frame.items));
+
+    var gzip_frame: std.ArrayList(u8) = .empty;
+    defer gzip_frame.deinit(std.testing.allocator);
+    try gzip_frame.appendSlice(std.testing.allocator, &gzip_header);
+    try gzip_frame.appendSlice(std.testing.allocator, encoded);
+    try gzip_frame.appendSlice(std.testing.allocator, &.{ 0, 0, 0, 0, 0, 0, 0, 0 });
+    try std.testing.expectError(error.InvalidHuffmanCode, decodeGzipAlloc(std.testing.allocator, gzip_frame.items));
+}
+
 test "zlib and gzip dynamic Huffman wrappers decode dynamic vectors" {
     const zlib_frame = &.{
         0x78, 0x01,

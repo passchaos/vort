@@ -117,6 +117,7 @@ architecture blindly.
 - [x] Fixed-Huffman fast lookup decode path for literals and distances.
 - [x] Dynamic-Huffman header and code-length parser foundation.
 - [x] Dynamic-Huffman code-length parser rejects invalid repeat symbols and overrun repeats.
+- [x] Dynamic-Huffman inflate rejects oversubscribed code-length alphabets through raw/zlib/gzip paths.
 - [x] Dynamic-Huffman inflate for single final blocks.
 - [x] Dynamic-Huffman inflate rejects matches when the distance alphabet has no usable codes.
 - [x] zlib/gzip wrappers propagate malformed dynamic-Huffman distance-code failures.
