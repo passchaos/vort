@@ -39,7 +39,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 return encoder;
             }
 
-            pub fn writeSymbol(self: Encoder, writer: *bitstream.BitWriter, allocator: std.mem.Allocator, symbol: usize) !void {
+            pub fn writeSymbol(self: *const Encoder, writer: *bitstream.BitWriter, allocator: std.mem.Allocator, symbol: usize) !void {
                 if (symbol >= max_symbols or self.bits[symbol] == 0) return error.InvalidHuffmanCode;
                 try writer.writeBits(allocator, self.codes[symbol], self.bits[symbol]);
             }
