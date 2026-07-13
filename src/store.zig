@@ -1589,9 +1589,35 @@ pub fn validateSidecarIndexWithOptionsAlloc(allocator: std.mem.Allocator, input:
     }
 }
 
+pub fn validateEmbeddedIndexAlloc(allocator: std.mem.Allocator, input: []const u8) !void {
+    return validateEmbeddedIndexWithOptionsAlloc(allocator, input, .{});
+}
+
+pub fn validateEmbeddedIndexMetadataAlloc(allocator: std.mem.Allocator, input: []const u8) !void {
+    return validateEmbeddedIndexWithOptionsAlloc(allocator, input, .{ .mode = .metadata });
+}
+
+pub fn validateEmbeddedIndexWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: SidecarValidationOptions) !void {
+    const embedded = try parseEmbeddedIndexAlloc(allocator, input);
+    defer embedded.deinit(allocator);
+    if (options.mode == .metadata) return validateFrameIndexEntriesInternalAlloc(allocator, options.dictionary, input, embedded.entries, .metadata);
+    if (options.dictionary) |dict| return validateFrameIndexEntriesInternalAlloc(allocator, dict, input, embedded.entries, options.mode);
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return validateFrameIndexEntriesInternalAlloc(allocator, dict, input, embedded.entries, options.mode);
+    } else |err| switch (err) {
+        error.InvalidMagic => return validateFrameIndexEntriesInternalAlloc(allocator, null, input, embedded.entries, options.mode),
+        else => return err,
+    }
+}
+
 fn validateSidecarIndexInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, sidecar_index: []const u8, mode: SidecarValidationMode) !void {
     const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
     defer allocator.free(index);
+    return validateFrameIndexEntriesInternalAlloc(allocator, dict, input, index, mode);
+}
+
+fn validateFrameIndexEntriesInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, mode: SidecarValidationMode) !void {
     try validateFrameIndex(index);
     for (index) |entry| {
         if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
@@ -2154,6 +2180,47 @@ test "sidecar index metadata validation skips payload decode by design" {
     try validateSidecarIndexMetadataAlloc(std.testing.allocator, tampered, sidecar.sidecar_index);
     try validateSidecarIndexWithOptionsAlloc(std.testing.allocator, tampered, sidecar.sidecar_index, .{ .mode = .metadata });
     try std.testing.expectError(error.ChecksumMismatch, validateSidecarIndexWithOptionsAlloc(std.testing.allocator, tampered, sidecar.sidecar_index, .{ .mode = .full }));
+}
+
+test "embedded index validation supports metadata and full modes" {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const stream = try encodeIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer std.testing.allocator.free(stream);
+
+    try validateEmbeddedIndexAlloc(std.testing.allocator, stream);
+    const tampered = try std.testing.allocator.dupe(u8, stream);
+    defer std.testing.allocator.free(tampered);
+    tampered[header_len] ^= 1;
+
+    try validateEmbeddedIndexMetadataAlloc(std.testing.allocator, tampered);
+    try validateEmbeddedIndexWithOptionsAlloc(std.testing.allocator, tampered, .{ .mode = .metadata });
+    try std.testing.expectError(error.ChecksumMismatch, validateEmbeddedIndexWithOptionsAlloc(std.testing.allocator, tampered, .{ .mode = .full }));
+}
+
+test "embedded index validation auto-loads embedded dictionaries" {
+    const phrase = "self-contained dictionary phrase for native streams";
+    const input = (phrase ++ "!") ** 4;
+    const stream = try encodeSelfContainedDictionaryStreamAlloc(std.testing.allocator, input, phrase.len + 1, 256, 8);
+    defer std.testing.allocator.free(stream);
+
+    try validateEmbeddedIndexAlloc(std.testing.allocator, stream);
+    const tampered = try std.testing.allocator.dupe(u8, stream);
+    defer std.testing.allocator.free(tampered);
+    const embedded = try parseEmbeddedIndexAlloc(std.testing.allocator, stream);
+    defer embedded.deinit(std.testing.allocator);
+    tampered[embedded.entries[0].frame_offset + header_len] ^= 1;
+
+    try validateEmbeddedIndexMetadataAlloc(std.testing.allocator, tampered);
+    validateEmbeddedIndexAlloc(std.testing.allocator, tampered) catch |err| switch (err) {
+        error.ChecksumMismatch,
+        error.TruncatedFrame,
+        error.CorruptFrame,
+        error.InvalidHuffmanCode,
+        error.SizeMismatch,
+        => return,
+        else => return err,
+    };
+    try std.testing.expect(false);
 }
 
 test "sidecar index validator accepts matching stream" {

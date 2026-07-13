@@ -14,16 +14,16 @@ range decode. Sidecar-index validation has explicit modes:
 agreement without decoding payloads, while the default
 `SidecarValidationMode.full` decodes each referenced frame so it detects payload
 corruption that would not change sidecar bytes or frame headers.
-`validateSidecarIndexAlloc` auto-loads embedded dictionaries in full mode, while
-`validateSidecarIndexWithDictionaryAlloc` and
+`validateEmbeddedIndexAlloc` and `validateSidecarIndexAlloc` auto-load embedded
+dictionaries in full mode, while `validateSidecarIndexWithDictionaryAlloc` and
 `validateSidecarIndexWithOptionsAlloc` cover external-dictionary streams.
 `run-sidecar-corrupt-smoke` exercises the distinction by mutating payload bytes
 across store, deflate, RLE, dictionary, LDM, self-contained dictionary sidecar,
-and seekable native sidecar streams: metadata validation succeeds by contract,
-and full validation rejects each corrupted stream. The same smoke can write
-Markdown and JSON artifacts for CI/dashboard retention via the report tool's
-`--markdown` and `--json` flags. The seekable native encoder integrates these
-production paths:
+seekable native sidecar, and embedded-index streams: metadata validation
+succeeds by contract, and full validation rejects each corrupted stream. The
+same smoke can write Markdown and JSON artifacts for CI/dashboard retention via
+the report tool's `--markdown` and `--json` flags. The seekable native encoder
+integrates these production paths:
 `encodeSeekableNativeStreamAlloc` emits an embedded-index stream and
 `encodeSeekableNativeSidecarStreamAlloc` keeps the index external while selecting
 store/deflate/RLE, trained dictionary-patch/deflate, and LDM reference frames per

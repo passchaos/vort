@@ -158,6 +158,13 @@ fn runCorruptSelfTest(init: std.process.Init, markdown_path: ?[]const u8, json_p
         null,
     ));
 
+    try appendCorruptCase(init.gpa, &cases, try makeEmbeddedCorruptCase(
+        init.gpa,
+        "embedded-index",
+        try vort.storeEncodeIndexedStreamAlloc(init.gpa, &.{ "alpha", "beta", "gamma" }),
+        null,
+    ));
+
     var rows: std.ArrayList(CorruptReportRow) = .empty;
     defer rows.deinit(init.gpa);
     var metadata_ok: usize = 0;
@@ -195,10 +202,11 @@ const CorruptCase = struct {
     stream: []u8,
     sidecar_index: []u8,
     dictionary: ?[]const u8 = null,
+    embedded_index: bool = false,
 
     fn deinit(self: CorruptCase, allocator: std.mem.Allocator) void {
         allocator.free(self.stream);
-        allocator.free(self.sidecar_index);
+        if (!self.embedded_index) allocator.free(self.sidecar_index);
     }
 };
 
@@ -220,6 +228,11 @@ fn makeCorruptCase(allocator: std.mem.Allocator, name: []const u8, frame: []u8, 
     return .{ .name = name, .stream = frame, .sidecar_index = sidecar_index, .dictionary = dictionary };
 }
 
+fn makeEmbeddedCorruptCase(allocator: std.mem.Allocator, name: []const u8, stream: []u8, dictionary: ?[]const u8) !CorruptCase {
+    errdefer allocator.free(stream);
+    return .{ .name = name, .stream = stream, .sidecar_index = "", .dictionary = dictionary, .embedded_index = true };
+}
+
 fn makeCorruptCaseFromSidecar(allocator: std.mem.Allocator, name: []const u8, sidecar: vort.store.SidecarIndexedStream, dictionary: ?[]const u8) !CorruptCase {
     errdefer sidecar.deinit(allocator);
     return .{ .name = name, .stream = sidecar.stream, .sidecar_index = sidecar.sidecar_index, .dictionary = dictionary };
@@ -231,12 +244,15 @@ fn appendCorruptCase(allocator: std.mem.Allocator, cases: *std.ArrayList(Corrupt
 }
 
 fn validateCorruptCase(allocator: std.mem.Allocator, case: CorruptCase) ![]const u8 {
-    try vort.storeValidateSidecarIndexWithOptionsAlloc(allocator, case.stream, case.sidecar_index, .{ .mode = .metadata, .dictionary = case.dictionary });
-    try vort.storeValidateSidecarIndexWithOptionsAlloc(allocator, case.stream, case.sidecar_index, .{ .mode = .full, .dictionary = case.dictionary });
+    try validateCaseStream(allocator, case, .metadata);
+    try validateCaseStream(allocator, case, .full);
 
-    const entries = try vort.storeDecodeFrameIndexAlloc(allocator, case.sidecar_index);
-    defer allocator.free(entries);
+    const entries = if (case.embedded_index) blk: {
+        const embedded = try vort.store.parseEmbeddedIndexAlloc(allocator, case.stream);
+        break :blk embedded.entries;
+    } else try vort.storeDecodeFrameIndexAlloc(allocator, case.sidecar_index);
     if (entries.len == 0) return error.CorruptFrame;
+    defer allocator.free(entries);
 
     const tampered = try allocator.dupe(u8, case.stream);
     defer allocator.free(tampered);
@@ -247,13 +263,24 @@ fn validateCorruptCase(allocator: std.mem.Allocator, case: CorruptCase) ![]const
     // verification must reject it through the frame's decode/checksum path.
     tampered[payload_offset] ^= 1;
 
-    try vort.storeValidateSidecarIndexWithOptionsAlloc(allocator, tampered, case.sidecar_index, .{ .mode = .metadata, .dictionary = case.dictionary });
+    try validateCaseBytes(allocator, case, tampered, .metadata);
     var full_error_name: []const u8 = "";
-    vort.storeValidateSidecarIndexWithOptionsAlloc(allocator, tampered, case.sidecar_index, .{ .mode = .full, .dictionary = case.dictionary }) catch |err| {
+    validateCaseBytes(allocator, case, tampered, .full) catch |err| {
         full_error_name = @errorName(err);
     };
     if (full_error_name.len == 0) return error.CorruptFrame;
     return full_error_name;
+}
+
+fn validateCaseStream(allocator: std.mem.Allocator, case: CorruptCase, mode: vort.SidecarValidationMode) !void {
+    return validateCaseBytes(allocator, case, case.stream, mode);
+}
+
+fn validateCaseBytes(allocator: std.mem.Allocator, case: CorruptCase, stream: []const u8, mode: vort.SidecarValidationMode) !void {
+    if (case.embedded_index) {
+        return vort.storeValidateEmbeddedIndexWithOptionsAlloc(allocator, stream, .{ .mode = mode, .dictionary = case.dictionary });
+    }
+    return vort.storeValidateSidecarIndexWithOptionsAlloc(allocator, stream, case.sidecar_index, .{ .mode = mode, .dictionary = case.dictionary });
 }
 
 fn writeCorruptMarkdown(init: std.process.Init, path: []const u8, rows: []const CorruptReportRow) !void {
