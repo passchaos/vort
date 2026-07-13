@@ -177,7 +177,7 @@ zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build bench-corpus-decode -Doptimize=ReleaseFast
 zig build bench-deflate-encode -Doptimize=ReleaseFast
-zig build run-rust-deflate-bench
+zig build -Doptimize=ReleaseFast run-rust-deflate-bench
 zig build bench-native-parallel -Doptimize=ReleaseFast
 zig build bench-native-parallel -Doptimize=ReleaseFast -- README.md 4096 2
 zig build -Doptimize=ReleaseFast run-native-parallel-corpus-report

@@ -53,7 +53,8 @@ decode through Vort and Vort-generated zlib frames decode through both Rust
 implementations. Passing that smoke is compatibility evidence for its small
 payload set; it is not yet throughput or ratio evidence, so dedicated benchmark
 harnesses are still required before making performance claims. The
-`run-rust-deflate-bench` step is the first such decode-throughput smoke: it
-builds a release-mode temporary Cargo runner against both Rust checkouts and
-prints CSV rows comparing Vort, fdeflate, and miniz_oxide zlib decode
-throughput on generated tiny, repetitive, text, and binary payloads.
+`run-rust-deflate-bench` step is the first such decode-throughput smoke: run it
+with `-Doptimize=ReleaseFast` so the Vort row is comparable to the release-mode
+temporary Cargo runner built against both Rust checkouts. It prints CSV rows
+comparing Vort, fdeflate, and miniz_oxide zlib decode throughput on generated
+tiny, repetitive, text, and binary payloads.
