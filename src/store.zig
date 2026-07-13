@@ -1587,11 +1587,20 @@ pub const ValidationStage = enum {
     payload_decode,
 };
 
+pub const ValidationHint = enum {
+    none,
+    index_mismatch,
+    payload_corrupt,
+    retry_with_dictionary,
+    truncated_input,
+};
+
 pub const ValidationReport = struct {
     ok: bool = true,
     mode: SidecarValidationMode,
     stage: ValidationStage = .index_decode,
     error_name: []const u8 = "",
+    recoverability_hint: ValidationHint = .none,
     frame_index: ?usize = null,
     frame_offset: ?usize = null,
     uncompressed_offset: ?u64 = null,
@@ -1736,11 +1745,22 @@ fn validationFailure(mode: SidecarValidationMode, stage: ValidationStage, err: a
         .mode = mode,
         .stage = stage,
         .error_name = @errorName(err),
+        .recoverability_hint = validationHint(stage, err),
         .frame_index = frame_index,
         .frame_offset = if (entry) |e| e.frame_offset else null,
         .uncompressed_offset = if (entry) |e| e.uncompressed_offset else null,
         .frame_flags = frame_flags,
         .frame_mode = if (frame_flags) |flags| frameModeName(flags) else "",
+    };
+}
+
+fn validationHint(stage: ValidationStage, err: anyerror) ValidationHint {
+    return switch (stage) {
+        .index_decode, .index_structure, .frame_metadata => .index_mismatch,
+        .frame_bounds => .truncated_input,
+        .frame_header => if (err == error.TruncatedFrame) .truncated_input else .index_mismatch,
+        .dictionary_parse => .payload_corrupt,
+        .payload_decode => if (err == error.InvalidDictionaryTraining) .retry_with_dictionary else .payload_corrupt,
     };
 }
 
@@ -2313,6 +2333,7 @@ test "sidecar index report captures frame failure context" {
     try std.testing.expectEqual(SidecarValidationMode.full, report.mode);
     try std.testing.expectEqual(ValidationStage.payload_decode, report.stage);
     try std.testing.expectEqualStrings("ChecksumMismatch", report.error_name);
+    try std.testing.expectEqual(ValidationHint.payload_corrupt, report.recoverability_hint);
     try std.testing.expectEqual(@as(?usize, 0), report.frame_index);
     try std.testing.expectEqual(@as(?usize, 0), report.frame_offset);
     try std.testing.expectEqual(@as(?u64, 0), report.uncompressed_offset);
@@ -2349,6 +2370,7 @@ test "embedded index report captures frame failure context" {
     try std.testing.expectEqual(SidecarValidationMode.full, report.mode);
     try std.testing.expectEqual(ValidationStage.payload_decode, report.stage);
     try std.testing.expectEqualStrings("ChecksumMismatch", report.error_name);
+    try std.testing.expectEqual(ValidationHint.payload_corrupt, report.recoverability_hint);
     try std.testing.expectEqual(@as(?usize, 0), report.frame_index);
     try std.testing.expectEqual(@as(?usize, 0), report.frame_offset);
     try std.testing.expectEqual(@as(?u64, 0), report.uncompressed_offset);

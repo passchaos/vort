@@ -69,7 +69,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("stream,sidecar,mode,status,error,validation_stage,frame_index,frame_offset,uncompressed_offset,frame_flags,frame_mode,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
+    try stdout.print("stream,sidecar,mode,status,error,recoverability_hint,validation_stage,frame_index,frame_offset,uncompressed_offset,frame_flags,frame_mode,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
     for (pairs.items, 0..) |pair, i| {
         if (case_limit) |limit| if (i >= limit) break;
         const row = verifyPair(init, pair.stream, pair.sidecar, validation_mode, keep_going) catch |err| row: {
@@ -108,6 +108,7 @@ const ReportRow = struct {
     crc32: u32 = 0,
     status: []const u8 = "ok",
     error_name: []const u8 = "",
+    recoverability_hint: []const u8 = "",
     validation_stage: []const u8 = "",
     frame_index: ?usize = null,
     frame_offset: ?usize = null,
@@ -399,6 +400,7 @@ fn reportRowFromValidation(stream_path: []const u8, sidecar_path: []const u8, va
         .sidecar_bytes = sidecar_len,
         .status = if (validation.ok) "ok" else "error",
         .error_name = validation.error_name,
+        .recoverability_hint = if (validation.ok) "" else @tagName(validation.recoverability_hint),
         .validation_stage = if (validation.ok) "" else @tagName(validation.stage),
         .frame_index = validation.frame_index,
         .frame_offset = validation.frame_offset,
@@ -409,12 +411,13 @@ fn reportRowFromValidation(stream_path: []const u8, sidecar_path: []const u8, va
 }
 
 fn printCsvRow(stdout: *std.Io.Writer, row: ReportRow) !void {
-    try stdout.print("{s},{s},{s},{s},{s},{s},", .{
+    try stdout.print("{s},{s},{s},{s},{s},{s},{s},", .{
         row.stream,
         row.sidecar,
         row.validation_mode,
         row.status,
         row.error_name,
+        row.recoverability_hint,
         row.validation_stage,
     });
     try printOptionalUsize(stdout, row.frame_index);
@@ -465,10 +468,10 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
     }
     try w.print("# Sidecar verification report\n\n", .{});
     try w.print("- rows: {d}\n- ok rows: {d}\n- error rows: {d}\n- total stream bytes: {d}\n- total sidecar bytes: {d}\n- total entries: {d}\n- total uncompressed bytes: {d}\n\n", .{ rows.len, ok_rows, error_rows, total_stream, total_sidecar, total_entries, total_uncompressed });
-    try w.print("| stream | sidecar | mode | status | error | stage | frame index | frame offset | uncompressed offset | frame flags | frame mode | stream bytes | sidecar bytes | entries | total uncompressed | sidecar crc32 |\n", .{});
-    try w.print("| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |\n", .{});
+    try w.print("| stream | sidecar | mode | status | error | hint | stage | frame index | frame offset | uncompressed offset | frame flags | frame mode | stream bytes | sidecar bytes | entries | total uncompressed | sidecar crc32 |\n", .{});
+    try w.print("| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |\n", .{});
     for (rows) |row| {
-        try w.print("| {s} | {s} | {s} | {s} | {s} | {s} | ", .{ row.stream, row.sidecar, row.validation_mode, row.status, row.error_name, row.validation_stage });
+        try w.print("| {s} | {s} | {s} | {s} | {s} | {s} | {s} | ", .{ row.stream, row.sidecar, row.validation_mode, row.status, row.error_name, row.recoverability_hint, row.validation_stage });
         try printOptionalUsize(w, row.frame_index);
         try w.print(" | ", .{});
         try printOptionalUsize(w, row.frame_offset);
@@ -510,6 +513,8 @@ fn writeJson(init: std.process.Init, path: []const u8, rows: []const ReportRow) 
         try std.json.Stringify.value(row.status, .{}, w);
         try w.print(", \"error\": ", .{});
         try std.json.Stringify.value(row.error_name, .{}, w);
+        try w.print(", \"recoverability_hint\": ", .{});
+        try std.json.Stringify.value(row.recoverability_hint, .{}, w);
         try w.print(", \"validation_stage\": ", .{});
         try std.json.Stringify.value(row.validation_stage, .{}, w);
         try w.print(", \"frame_index\": ", .{});

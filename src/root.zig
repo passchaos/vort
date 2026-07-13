@@ -83,6 +83,7 @@ pub const storeDecodeIndexedRangeAlloc = store.decodeIndexedRangeAlloc;
 pub const SidecarValidationMode = store.SidecarValidationMode;
 pub const SidecarValidationOptions = store.SidecarValidationOptions;
 pub const ValidationStage = store.ValidationStage;
+pub const ValidationHint = store.ValidationHint;
 pub const ValidationReport = store.ValidationReport;
 pub const storeValidateSidecarIndexAlloc = store.validateSidecarIndexAlloc;
 pub const storeValidateSidecarIndexMetadataAlloc = store.validateSidecarIndexMetadataAlloc;

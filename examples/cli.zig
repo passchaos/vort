@@ -675,6 +675,7 @@ fn printValidationFailure(stdout: *std.Io.Writer, label: []const u8, report: vor
         @tagName(report.stage),
         report.error_name,
     });
+    if (report.recoverability_hint != .none) try stdout.print(" hint={s}", .{@tagName(report.recoverability_hint)});
     if (report.frame_index) |value| try stdout.print(" frame_index={d}", .{value});
     if (report.frame_offset) |value| try stdout.print(" frame_offset={d}", .{value});
     if (report.uncompressed_offset) |value| try stdout.print(" uncompressed_offset={d}", .{value});
