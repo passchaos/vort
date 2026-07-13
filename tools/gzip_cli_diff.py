@@ -25,6 +25,14 @@ def parse_field(output: str, name: str) -> str:
     return match.group(1)
 
 
+def expect_cli_failure(*args: str, error_name: str) -> None:
+    result = subprocess.run([str(CLI), *args], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode == 0:
+        raise AssertionError(f"expected {args!r} to fail with {error_name}, got stdout={result.stdout!r}")
+    if error_name not in result.stderr:
+        raise AssertionError(f"expected {error_name} in stderr for {args!r}, got stderr={result.stderr!r}")
+
+
 def gzip_compress(data: bytes) -> bytes:
     if not GZIP:
         raise RuntimeError("gzip missing")
@@ -68,6 +76,8 @@ def main() -> int:
             out = run_cli("decode-gzip-file", str(compressed_path), str(limited_path), str(len(data)))
             assert int(parse_field(out, "decoded_bytes")) == len(data), out
             assert limited_path.read_bytes() == data, out
+            if data:
+                expect_cli_failure("decode-gzip-file", str(compressed_path), str(tmp / "too-small.out"), str(len(data) - 1), error_name="OutputLimitExceeded")
 
     concatenated = gzip_compress(b"hello ") + gzip_compress(b"world")
     concatenated_plain = b"hello world"
@@ -83,6 +93,7 @@ def main() -> int:
         out = run_cli("decode-gzip-file", str(compressed_path), str(limited_path), str(len(concatenated_plain)))
         assert int(parse_field(out, "decoded_bytes")) == len(concatenated_plain), out
         assert limited_path.read_bytes() == concatenated_plain, out
+        expect_cli_failure("decode-gzip-file", str(compressed_path), str(tmp / "cat-too-small.out"), str(len(concatenated_plain) - 1), error_name="OutputLimitExceeded")
 
     # Vort fixed gzip known vector -> system gzip.
     vort_hello = bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a6103605000000")
