@@ -459,29 +459,47 @@ pub fn main(init: std.process.Init) !void {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
         const sidecar_path = args.next() orelse return error.MissingCorpusPath;
         const validation_mode = try parseSidecarValidationMode(args.next());
+        const output_format = try parseValidationOutputFormat(args.next());
         const stream = try std.Io.Dir.cwd().readFileAlloc(init.io, stream_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(stream);
         const sidecar = try std.Io.Dir.cwd().readFileAlloc(init.io, sidecar_path, init.gpa, .limited(16 * 1024 * 1024));
         defer init.gpa.free(sidecar);
         const report = vort.storeValidateSidecarIndexReportAlloc(init.gpa, stream, sidecar, .{ .mode = validation_mode });
         if (!report.ok) {
-            try printValidationFailure(stdout, "sidecar", report);
+            if (output_format == .json) {
+                try printValidationJson(stdout, "sidecar", report, stream.len, sidecar.len);
+            } else {
+                try printValidationFailure(stdout, "sidecar", report);
+            }
             try stdout.flush();
             return error.CorruptFrame;
         }
-        try stdout.print("sidecar_ok=true mode={s} stream_bytes={d} sidecar_bytes={d}\n", .{ @tagName(validation_mode), stream.len, sidecar.len });
+        if (output_format == .json) {
+            try printValidationJson(stdout, "sidecar", report, stream.len, sidecar.len);
+        } else {
+            try stdout.print("sidecar_ok=true mode={s} stream_bytes={d} sidecar_bytes={d}\n", .{ @tagName(validation_mode), stream.len, sidecar.len });
+        }
     } else if (std.mem.eql(u8, command, "verify-vort-embedded-index-file")) {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
         const validation_mode = try parseSidecarValidationMode(args.next());
+        const output_format = try parseValidationOutputFormat(args.next());
         const stream = try std.Io.Dir.cwd().readFileAlloc(init.io, stream_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(stream);
         const report = vort.storeValidateEmbeddedIndexReportAlloc(init.gpa, stream, .{ .mode = validation_mode });
         if (!report.ok) {
-            try printValidationFailure(stdout, "embedded", report);
+            if (output_format == .json) {
+                try printValidationJson(stdout, "embedded", report, stream.len, null);
+            } else {
+                try printValidationFailure(stdout, "embedded", report);
+            }
             try stdout.flush();
             return error.CorruptFrame;
         }
-        try stdout.print("embedded_index_ok=true mode={s} stream_bytes={d}\n", .{ @tagName(validation_mode), stream.len });
+        if (output_format == .json) {
+            try printValidationJson(stdout, "embedded", report, stream.len, null);
+        } else {
+            try stdout.print("embedded_index_ok=true mode={s} stream_bytes={d}\n", .{ @tagName(validation_mode), stream.len });
+        }
     } else if (std.mem.eql(u8, command, "decode-vort-sidecar-range-file")) {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
         const sidecar_path = args.next() orelse return error.MissingCorpusPath;
@@ -616,13 +634,13 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\native indexed file workflows:
         \\  encode-vort-sidecar-best-file <in> <stream> <sidecar> [block_len]
         \\                              Encode native Vort stream plus external sidecar index
-        \\  verify-vort-sidecar-index-file <stream> <sidecar> [full|metadata]
+        \\  verify-vort-sidecar-index-file <stream> <sidecar> [full|metadata] [text|json]
         \\                              Validate an external sidecar index against a stream
         \\  decode-vort-sidecar-range-file <stream> <sidecar> <out> <offset> <len>
         \\                              Decode an indexed range through an external sidecar
         \\  encode-vort-embedded-best-file <in> <stream> [block_len]
         \\                              Encode native Vort stream with embedded index
-        \\  verify-vort-embedded-index-file <stream> [full|metadata]
+        \\  verify-vort-embedded-index-file <stream> [full|metadata] [text|json]
         \\                              Validate an embedded-index stream
         \\  decode-vort-embedded-range-file <stream> <out> <offset> <len>
         \\                              Decode an indexed range from an embedded-index stream
@@ -684,6 +702,37 @@ fn printValidationFailure(stdout: *std.Io.Writer, label: []const u8, report: vor
     try stdout.print("\n", .{});
 }
 
+fn printValidationJson(stdout: *std.Io.Writer, label: []const u8, report: vort.ValidationReport, stream_len: usize, sidecar_len: ?usize) !void {
+    try stdout.print("{{\"target\":\"{s}\",\"ok\":{},\"mode\":\"{s}\",\"stage\":\"{s}\",\"error\":", .{
+        label,
+        report.ok,
+        @tagName(report.mode),
+        @tagName(report.stage),
+    });
+    try std.json.Stringify.value(report.error_name, .{}, stdout);
+    try stdout.print(",\"recoverability_hint\":\"{s}\",\"frame_index\":", .{@tagName(report.recoverability_hint)});
+    try printOptionalJson(usize, stdout, report.frame_index);
+    try stdout.print(",\"frame_offset\":", .{});
+    try printOptionalJson(usize, stdout, report.frame_offset);
+    try stdout.print(",\"uncompressed_offset\":", .{});
+    try printOptionalJson(u64, stdout, report.uncompressed_offset);
+    try stdout.print(",\"frame_flags\":", .{});
+    try printOptionalJson(u8, stdout, report.frame_flags);
+    try stdout.print(",\"frame_mode\":", .{});
+    try std.json.Stringify.value(report.frame_mode, .{}, stdout);
+    try stdout.print(",\"stream_bytes\":{d},\"sidecar_bytes\":", .{stream_len});
+    try printOptionalJson(usize, stdout, sidecar_len);
+    try stdout.print("}}\n", .{});
+}
+
+fn printOptionalJson(comptime T: type, stdout: *std.Io.Writer, value: ?T) !void {
+    if (value) |payload| {
+        try stdout.print("{d}", .{payload});
+    } else {
+        try stdout.print("null", .{});
+    }
+}
+
 fn parseParserMode(text: ?[]const u8) vort.ParserMode {
     return parseCompressionOptions(text).parser;
 }
@@ -709,6 +758,15 @@ fn parseSidecarValidationMode(text: ?[]const u8) !vort.SidecarValidationMode {
     const value = text orelse return .full;
     if (std.mem.eql(u8, value, "metadata") or std.mem.eql(u8, value, "fast")) return .metadata;
     if (std.mem.eql(u8, value, "full")) return .full;
+    return error.InvalidSidecarValidationMode;
+}
+
+const ValidationOutputFormat = enum { text, json };
+
+fn parseValidationOutputFormat(text: ?[]const u8) !ValidationOutputFormat {
+    const value = text orelse return .text;
+    if (std.mem.eql(u8, value, "text")) return .text;
+    if (std.mem.eql(u8, value, "json")) return .json;
     return error.InvalidSidecarValidationMode;
 }
 

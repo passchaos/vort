@@ -49,8 +49,10 @@ zig build run -- encode-vort-embedded-best-file README.md /tmp/readme-embedded.v
 zig build run -- encode-vort-embedded-dict-file README.md /tmp/readme-embedded-dict.vort 4096
 zig build run -- verify-vort-sidecar-index-file /tmp/readme.vort /tmp/readme.vidx
 zig build run -- verify-vort-sidecar-index-file /tmp/readme.vort /tmp/readme.vidx metadata
+zig build run -- verify-vort-sidecar-index-file /tmp/readme.vort /tmp/readme.vidx full json
 zig build run -- verify-vort-embedded-index-file /tmp/readme-embedded.vort
 zig build run -- verify-vort-embedded-index-file /tmp/readme-embedded.vort metadata
+zig build run -- verify-vort-embedded-index-file /tmp/readme-embedded.vort full json
 zig build run-sidecar-verify-report -- /tmp/readme.vort /tmp/readme.vidx
 zig build run-sidecar-verify-report -- --mode metadata /tmp/readme.vort /tmp/readme.vidx
 zig build run-sidecar-corrupt-smoke

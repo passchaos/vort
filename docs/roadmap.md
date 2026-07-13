@@ -59,6 +59,7 @@ architecture blindly.
 - [x] Sidecar and embedded-index validation reports expose structured failure context for diagnostics.
 - [x] Sidecar verification reports include validation stage and frame context fields in CSV/Markdown/JSON output.
 - [x] CLI verify commands print structured validation failure context before returning errors.
+- [x] CLI verify commands support machine-readable JSON validation output.
 - [x] Validation diagnostics include readable frame mode names alongside numeric frame flags.
 - [x] Validation diagnostics include recoverability hints for corruption/index/dictionary failures.
 - [x] Sidecar corrupt-payload smoke verifies metadata mode accepts header-consistent streams while full mode rejects store/deflate/RLE/dictionary/LDM/self-contained/seekable sidecar/embedded-index payload corruption.
