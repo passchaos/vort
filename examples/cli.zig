@@ -679,6 +679,7 @@ fn printValidationFailure(stdout: *std.Io.Writer, label: []const u8, report: vor
     if (report.frame_offset) |value| try stdout.print(" frame_offset={d}", .{value});
     if (report.uncompressed_offset) |value| try stdout.print(" uncompressed_offset={d}", .{value});
     if (report.frame_flags) |value| try stdout.print(" frame_flags={d}", .{value});
+    if (report.frame_mode.len != 0) try stdout.print(" frame_mode={s}", .{report.frame_mode});
     try stdout.print("\n", .{});
 }
 

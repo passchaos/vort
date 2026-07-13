@@ -69,7 +69,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("stream,sidecar,mode,status,error,validation_stage,frame_index,frame_offset,uncompressed_offset,frame_flags,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
+    try stdout.print("stream,sidecar,mode,status,error,validation_stage,frame_index,frame_offset,uncompressed_offset,frame_flags,frame_mode,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
     for (pairs.items, 0..) |pair, i| {
         if (case_limit) |limit| if (i >= limit) break;
         const row = verifyPair(init, pair.stream, pair.sidecar, validation_mode, keep_going) catch |err| row: {
@@ -113,6 +113,7 @@ const ReportRow = struct {
     frame_offset: ?usize = null,
     uncompressed_offset: ?u64 = null,
     frame_flags: ?u8 = null,
+    frame_mode: []const u8 = "",
 };
 
 fn parseValidationMode(text: []const u8) !vort.SidecarValidationMode {
@@ -403,6 +404,7 @@ fn reportRowFromValidation(stream_path: []const u8, sidecar_path: []const u8, va
         .frame_offset = validation.frame_offset,
         .uncompressed_offset = validation.uncompressed_offset,
         .frame_flags = validation.frame_flags,
+        .frame_mode = validation.frame_mode,
     };
 }
 
@@ -422,7 +424,8 @@ fn printCsvRow(stdout: *std.Io.Writer, row: ReportRow) !void {
     try printOptionalU64(stdout, row.uncompressed_offset);
     try stdout.print(",", .{});
     try printOptionalU8(stdout, row.frame_flags);
-    try stdout.print(",{d},{d},{d},{d},{d}\n", .{
+    try stdout.print(",{s},{d},{d},{d},{d},{d}\n", .{
+        row.frame_mode,
         row.stream_bytes,
         row.sidecar_bytes,
         row.entries,
@@ -462,8 +465,8 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
     }
     try w.print("# Sidecar verification report\n\n", .{});
     try w.print("- rows: {d}\n- ok rows: {d}\n- error rows: {d}\n- total stream bytes: {d}\n- total sidecar bytes: {d}\n- total entries: {d}\n- total uncompressed bytes: {d}\n\n", .{ rows.len, ok_rows, error_rows, total_stream, total_sidecar, total_entries, total_uncompressed });
-    try w.print("| stream | sidecar | mode | status | error | stage | frame index | frame offset | uncompressed offset | frame flags | stream bytes | sidecar bytes | entries | total uncompressed | sidecar crc32 |\n", .{});
-    try w.print("| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n", .{});
+    try w.print("| stream | sidecar | mode | status | error | stage | frame index | frame offset | uncompressed offset | frame flags | frame mode | stream bytes | sidecar bytes | entries | total uncompressed | sidecar crc32 |\n", .{});
+    try w.print("| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |\n", .{});
     for (rows) |row| {
         try w.print("| {s} | {s} | {s} | {s} | {s} | {s} | ", .{ row.stream, row.sidecar, row.validation_mode, row.status, row.error_name, row.validation_stage });
         try printOptionalUsize(w, row.frame_index);
@@ -473,7 +476,7 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
         try printOptionalU64(w, row.uncompressed_offset);
         try w.print(" | ", .{});
         try printOptionalU8(w, row.frame_flags);
-        try w.print(" | {d} | {d} | {d} | {d} | {d} |\n", .{ row.stream_bytes, row.sidecar_bytes, row.entries, row.total_uncompressed, row.crc32 });
+        try w.print(" | {s} | {d} | {d} | {d} | {d} | {d} |\n", .{ row.frame_mode, row.stream_bytes, row.sidecar_bytes, row.entries, row.total_uncompressed, row.crc32 });
     }
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
 }
@@ -517,6 +520,8 @@ fn writeJson(init: std.process.Init, path: []const u8, rows: []const ReportRow) 
         try writeOptionalJson(u64, w, row.uncompressed_offset);
         try w.print(", \"frame_flags\": ", .{});
         try writeOptionalJson(u8, w, row.frame_flags);
+        try w.print(", \"frame_mode\": ", .{});
+        try std.json.Stringify.value(row.frame_mode, .{}, w);
         try w.print(", \"stream_bytes\": {d}, \"sidecar_bytes\": {d}, \"entries\": {d}, \"total_uncompressed\": {d}, \"crc32\": {d}}}{s}\n", .{
             row.stream_bytes,
             row.sidecar_bytes,

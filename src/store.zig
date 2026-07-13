@@ -28,6 +28,18 @@ const flags_dictionary_patch: u8 = 3;
 const flags_ldm: u8 = 4;
 const flags_dictionary_deflate: u8 = 5;
 
+pub fn frameModeName(flags: u8) []const u8 {
+    return switch (flags) {
+        flags_none => "store",
+        flags_deflate => "deflate",
+        flags_rle => "rle",
+        flags_dictionary_patch => "dictionary_patch",
+        flags_ldm => "ldm",
+        flags_dictionary_deflate => "dictionary_deflate",
+        else => "unknown",
+    };
+}
+
 pub fn skippableEncodedSize(payload_len: usize) Error!usize {
     if (payload_len > std.math.maxInt(u32)) return error.IntegerOverflow;
     return std.math.add(usize, skippable_header_len, payload_len) catch error.IntegerOverflow;
@@ -1584,6 +1596,7 @@ pub const ValidationReport = struct {
     frame_offset: ?usize = null,
     uncompressed_offset: ?u64 = null,
     frame_flags: ?u8 = null,
+    frame_mode: []const u8 = "",
 };
 
 pub fn validateSidecarIndexAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8) !void {
@@ -1727,6 +1740,7 @@ fn validationFailure(mode: SidecarValidationMode, stage: ValidationStage, err: a
         .frame_offset = if (entry) |e| e.frame_offset else null,
         .uncompressed_offset = if (entry) |e| e.uncompressed_offset else null,
         .frame_flags = frame_flags,
+        .frame_mode = if (frame_flags) |flags| frameModeName(flags) else "",
     };
 }
 
@@ -1918,6 +1932,16 @@ test "store frame reports malformed and corrupt data" {
     encoded[header_len] ^= 0xff;
     var out: [16]u8 = undefined;
     try std.testing.expectError(error.ChecksumMismatch, decode(encoded[0..written], &out));
+}
+
+test "native frame mode names cover known flags" {
+    try std.testing.expectEqualStrings("store", frameModeName(flags_none));
+    try std.testing.expectEqualStrings("deflate", frameModeName(flags_deflate));
+    try std.testing.expectEqualStrings("rle", frameModeName(flags_rle));
+    try std.testing.expectEqualStrings("dictionary_patch", frameModeName(flags_dictionary_patch));
+    try std.testing.expectEqualStrings("ldm", frameModeName(flags_ldm));
+    try std.testing.expectEqualStrings("dictionary_deflate", frameModeName(flags_dictionary_deflate));
+    try std.testing.expectEqualStrings("unknown", frameModeName(255));
 }
 
 test "store frame checks output capacity and truncation" {
@@ -2293,6 +2317,7 @@ test "sidecar index report captures frame failure context" {
     try std.testing.expectEqual(@as(?usize, 0), report.frame_offset);
     try std.testing.expectEqual(@as(?u64, 0), report.uncompressed_offset);
     try std.testing.expectEqual(@as(?u8, flags_none), report.frame_flags);
+    try std.testing.expectEqualStrings("store", report.frame_mode);
 }
 
 test "embedded index validation supports metadata and full modes" {
@@ -2328,6 +2353,7 @@ test "embedded index report captures frame failure context" {
     try std.testing.expectEqual(@as(?usize, 0), report.frame_offset);
     try std.testing.expectEqual(@as(?u64, 0), report.uncompressed_offset);
     try std.testing.expectEqual(@as(?u8, flags_none), report.frame_flags);
+    try std.testing.expectEqualStrings("store", report.frame_mode);
 }
 
 test "embedded index validation auto-loads embedded dictionaries" {

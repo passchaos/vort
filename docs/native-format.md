@@ -19,7 +19,7 @@ dictionaries in full mode, while `validateSidecarIndexWithDictionaryAlloc` and
 `validateSidecarIndexWithOptionsAlloc` cover external-dictionary streams.
 `validateSidecarIndexReportAlloc` and `validateEmbeddedIndexReportAlloc` return
 structured failure context (validation mode, stage, frame index/offset,
-uncompressed offset, frame flags, and error name) for diagnostics without
+uncompressed offset, numeric frame flags, readable frame mode, and error name) for diagnostics without
 replacing the throwing APIs. `run-sidecar-verify-report` includes the same
 context columns/fields in CSV, Markdown, and JSON output when validation fails.
 `run-sidecar-corrupt-smoke` exercises the distinction by mutating payload bytes
