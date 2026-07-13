@@ -12,7 +12,8 @@
         "schema": "str",
         "schema_version": "int",
         "smoke_gate_covered": "int",
-        "smoke_gate_missing": "list"
+        "smoke_gate_missing": "list",
+        "smoke_gate_required_missing": "list"
       },
       "item_collection": "artifacts",
       "item_enums": {
@@ -48,6 +49,7 @@
         "artifact_metadata": "dict",
         "contains": "list",
         "exact": "dict",
+        "required_smoke_gates": "list",
         "schema": "str",
         "schema_version": "int"
       },

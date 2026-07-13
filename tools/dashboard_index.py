@@ -90,6 +90,13 @@ def artifact_config_for(path: Path, producer_map: dict) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def required_smoke_gates(producer_map: dict) -> list[str]:
+    required = producer_map.get("required_smoke_gates")
+    if not isinstance(required, list):
+        return []
+    return [name for name in required if isinstance(name, str)]
+
+
 def read_json(path: Path) -> dict:
     try:
         value = json.loads(path.read_text())
@@ -155,6 +162,7 @@ def main() -> int:
     parser.add_argument("--manifest", default="zig-out/vort-dashboard-index.json", help="JSON artifact manifest path")
     parser.add_argument("--producer-map", default="tools/dashboard_producers.json", help="JSON producer-step mapping path")
     parser.add_argument("--strict-producers", action="store_true", help="fail if any artifact lacks a producer_step")
+    parser.add_argument("--strict-smoke-gates", action="store_true", help="fail if required artifacts lack a smoke_gate")
     args = parser.parse_args()
 
     root = Path(args.dir)
@@ -176,6 +184,12 @@ def main() -> int:
     producer_step_covered = len(records) - len(producer_step_missing)
     smoke_gate_missing = [record["name"] for record in records if not record["smoke_gate"]]
     smoke_gate_covered = len(records) - len(smoke_gate_missing)
+    records_by_name = {record["name"]: record for record in records}
+    smoke_gate_required_missing = [
+        name
+        for name in required_smoke_gates(producer_map)
+        if name not in records_by_name or not records_by_name[name]["smoke_gate"]
+    ]
 
     lines = [
         "# Vort dashboard index",
@@ -186,6 +200,7 @@ def main() -> int:
         f"- producer steps: {producer_step_covered}/{len(records)}",
         f"- allowed missing producer steps: {len(producer_step_allowed_missing)}",
         f"- smoke gates: {smoke_gate_covered}/{len(records)}",
+        f"- required smoke gates missing: {len(smoke_gate_required_missing)}",
         "",
     ]
     for category in sorted(grouped):
@@ -220,6 +235,7 @@ def main() -> int:
                 "producer_step_missing": producer_step_missing,
                 "smoke_gate_covered": smoke_gate_covered,
                 "smoke_gate_missing": smoke_gate_missing,
+                "smoke_gate_required_missing": smoke_gate_required_missing,
                 "artifacts": records,
             },
             indent=2,
@@ -230,6 +246,9 @@ def main() -> int:
     if args.strict_producers and producer_step_missing:
         missing = ",".join(producer_step_missing)
         raise SystemExit(f"dashboard_index_missing_producers={missing}")
+    if args.strict_smoke_gates and smoke_gate_required_missing:
+        missing = ",".join(smoke_gate_required_missing)
+        raise SystemExit(f"dashboard_index_missing_smoke_gates={missing}")
     print(f"dashboard_index={output} manifest={manifest} artifacts={len(artifacts)}")
     return 0
 

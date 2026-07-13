@@ -232,6 +232,7 @@ Top-level fields:
 - `producer_step_allowed_missing`
 - `smoke_gate_covered`
 - `smoke_gate_missing`
+- `smoke_gate_required_missing`
 - `artifacts`
 
 Each artifact includes:
@@ -256,6 +257,7 @@ Example:
   "producer_step_allowed_missing": [],
   "smoke_gate_covered": 1,
   "smoke_gate_missing": [],
+  "smoke_gate_required_missing": [],
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",
@@ -300,6 +302,7 @@ Top-level fields:
 | `artifact_metadata` | object | Optional per-artifact metadata such as expected format and smoke gate. |
 | `exact` | object | Map from exact artifact filename to producer command. |
 | `contains` | array | Ordered fallback rules for filename substring matches. |
+| `required_smoke_gates` | array | Artifact filenames that must have a non-empty `smoke_gate` when strict smoke-gate checks run. |
 
 Each `contains` rule has:
 
@@ -321,6 +324,8 @@ dashboard manifest as `producer_missing_allowed=true`.
 When `artifact_metadata.<name>.expected_format` is present, the dashboard index
 checks it against the artifact filename suffix. `smoke_gate` is copied into the
 dashboard manifest to show the validation command associated with that artifact.
+`required_smoke_gates` drives `--strict-smoke-gates`, causing dashboard index
+generation to fail when a required artifact is absent or lacks a smoke gate.
 
 Example:
 
@@ -334,6 +339,9 @@ Example:
       "scratch"
     ]
   },
+  "required_smoke_gates": [
+    "vort-validation-json-smoke.json"
+  ],
   "artifact_metadata": {
     "vort-validation-json-smoke.json": {
       "expected_format": "json",

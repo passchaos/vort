@@ -84,6 +84,7 @@ architecture blindly.
 - [x] Dashboard producer config supports allowlisted temporary artifacts without producer mappings.
 - [x] Dashboard producer config records expected artifact formats and smoke gates in the manifest.
 - [x] Dashboard manifest reports smoke-gate coverage and missing smoke gates.
+- [x] Dashboard index build step fails when required smoke gates are missing.
 - [x] Validation diagnostics include readable frame mode names alongside numeric frame flags.
 - [x] Validation diagnostics include recoverability hints for corruption/index/dictionary failures.
 - [x] Sidecar corrupt-payload smoke verifies metadata mode accepts header-consistent streams while full mode rejects store/deflate/RLE/dictionary/LDM/self-contained/seekable sidecar/embedded-index payload corruption.

@@ -5,6 +5,11 @@
     "contains": [],
     "exact": []
   },
+  "required_smoke_gates": [
+    "vort-sidecar-corrupt-smoke.json",
+    "vort-sidecar-corrupt-smoke.md",
+    "vort-validation-json-smoke.json"
+  ],
   "artifact_metadata": {
     "vort-dashboard-index.json": {
       "expected_format": "json",
