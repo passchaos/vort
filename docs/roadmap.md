@@ -189,6 +189,7 @@ architecture blindly.
 - [x] CI zlib-rs binary differential test.
 - [x] External probe discovers local fdeflate and miniz_oxide checkouts as Rust deflate baselines.
 - [x] External probe reports git revisions for local compressor checkouts.
+- [x] fdeflate/miniz_oxide path-dependency differential smoke runs through Cargo and Vort CLI.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
 - [x] Dynamic Huffman encoder with LZ77 match support, verified by Python zlib.
 - [x] Dynamic Huffman encoder code-length RLE using symbols 16/17/18.

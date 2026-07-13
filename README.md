@@ -131,6 +131,7 @@ zig build run-gzip-diff
 zig build run-python-zlib-diff
 zig build run-gzip-cli-diff
 zig build run-zlib-family-diff
+zig build run-rust-deflate-diff
 zig build run-external-probe
 zig build run-cpu-features
 zig build run-zstd-compare

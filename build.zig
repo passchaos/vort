@@ -316,6 +316,11 @@ pub fn build(b: *std.Build) void {
     const zlib_family_diff_step = b.step("run-zlib-family-diff", "Run optional zlib-ng/zlib-rs differential harness when binaries are available");
     zlib_family_diff_step.dependOn(&zlib_family_diff.step);
 
+    const rust_deflate_diff = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_diff.py" });
+    rust_deflate_diff.addArtifactArg(cli_exe);
+    const rust_deflate_diff_step = b.step("run-rust-deflate-diff", "Run fdeflate/miniz_oxide differential smoke when local checkouts are available");
+    rust_deflate_diff_step.dependOn(&rust_deflate_diff.step);
+
     const external_probe = b.addSystemCommand(&.{ "python3", "tools/external_probe.py" });
     const external_probe_step = b.step("run-external-probe", "Report available local compression competitors/tools");
     external_probe_step.dependOn(&external_probe.step);
@@ -630,6 +635,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(python_zlib_diff_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(zlib_family_diff_step);
+    ci_smoke_step.dependOn(rust_deflate_diff_step);
     ci_smoke_step.dependOn(external_probe_step);
     ci_smoke_step.dependOn(cpu_features_step);
     ci_smoke_step.dependOn(zstd_compare_step);

@@ -7,6 +7,7 @@ and the system `gzip` CLI.
 zig build run-checksum-zlib-diff
 zig build run-python-zlib-diff
 zig build run-gzip-cli-diff
+zig build run-rust-deflate-diff
 zig build -Doptimize=ReleaseFast ci-smoke
 ```
 
@@ -15,8 +16,9 @@ zlib, then verifies Python zlib Adler-32 trailers and system gzip CRC-32
 trailers. The `ci-smoke` aggregate includes that checksum harness, the Python
 zlib and gzip CLI deflate/gzip harnesses, match-heavy dynamic/split/adaptive
 payloads, split-best gzip output checks against system `gzip -dc`, optional
-zlib-ng/zlib-rs family coverage, the external-tool probe, fuzz smoke entrypoints,
-and bounded benchmark reports.
+zlib-ng/zlib-rs family coverage, fdeflate/miniz_oxide source-checkout
+differential smoke, the external-tool probe, fuzz smoke entrypoints, and bounded
+benchmark reports.
 
 The optional zlib-family harness detects locally built zlib-ng/zlib-rs minigzip
 binaries and reports explicit skip status when they are not available:
@@ -45,7 +47,9 @@ coverage is a required CI signal rather than only an optional local probe.
 Additional Rust deflate baselines are expected under `~/Work/fdeflate` and
 `~/Work/miniz_oxide` when available. They are tracked by `run-external-probe`
 as local source checkouts, including their current git revision when available,
-and should be promoted into executable differential and benchmark harnesses as
-soon as suitable decode/encode CLI or example binaries are built. Until those
-binaries are exercised by a Vort build step, their presence is discovery
-evidence only, not compatibility or performance proof.
+and `run-rust-deflate-diff` builds a temporary Cargo runner with path
+dependencies to both checkouts. That smoke verifies Rust-generated zlib frames
+decode through Vort and Vort-generated zlib frames decode through both Rust
+implementations. Passing that smoke is compatibility evidence for its small
+payload set; it is not yet throughput or ratio evidence, so dedicated benchmark
+harnesses are still required before making performance claims.
