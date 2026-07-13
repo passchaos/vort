@@ -20,7 +20,7 @@ pub fn main(init: std.process.Init) !void {
     var output = std.Io.Writer.Allocating.init(init.gpa);
     defer output.deinit();
     const writer = &output.writer;
-    try writer.print("path,input_bytes,token_count,literal_tokens,match_tokens,matched_bytes,stored_bytes,fixed_bytes,dynamic_bytes,hlit,hdist,hclen,code_length_ops,stats_ns,dynamic_encode_ns,best_encode_ns,dynamic_zlib_bytes,best_zlib_bytes\n", .{});
+    try writer.print("path,input_bytes,token_count,literal_tokens,match_tokens,matched_bytes,stored_bytes,fixed_bytes,dynamic_bytes,hlit,hdist,hclen,code_length_ops,stats_ns,dynamic_encode_ns,best_encode_ns,dynamic_zlib_bytes,best_zlib_bytes,fixed_dynamic_size_ratio,best_dynamic_time_ratio,stats_dynamic_time_ratio\n", .{});
 
     if (paths.items.len == 0) {
         try reportPath(init, writer, "README.md");
@@ -60,7 +60,11 @@ fn reportPath(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8) 
     defer init.gpa.free(best_zlib);
     const best_encode_ns = best_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 
-    try stdout.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
+    const fixed_dynamic_size_ratio = ratio(stats.fixed_bytes, stats.dynamic_bytes);
+    const best_dynamic_time_ratio = ratioSigned(best_encode_ns, dynamic_encode_ns);
+    const stats_dynamic_time_ratio = ratioSigned(stats_ns, dynamic_encode_ns);
+
+    try stdout.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.4},{d:.4},{d:.4}\n", .{
         path,
         stats.input_bytes,
         stats.token_count,
@@ -79,5 +83,18 @@ fn reportPath(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8) 
         best_encode_ns,
         dynamic_zlib.len,
         best_zlib.len,
+        fixed_dynamic_size_ratio,
+        best_dynamic_time_ratio,
+        stats_dynamic_time_ratio,
     });
+}
+
+fn ratio(numerator: usize, denominator: usize) f64 {
+    if (denominator == 0) return 0;
+    return @as(f64, @floatFromInt(numerator)) / @as(f64, @floatFromInt(denominator));
+}
+
+fn ratioSigned(numerator: i128, denominator: i128) f64 {
+    if (denominator == 0) return 0;
+    return @as(f64, @floatFromInt(numerator)) / @as(f64, @floatFromInt(denominator));
 }

@@ -225,6 +225,7 @@ architecture blindly.
 - [x] Dynamic Huffman plan report exposes LZ77/token and code-length planning stats.
 - [x] Dynamic Huffman plan report includes stats/dynamic/best encode timings.
 - [x] Dynamic Huffman plan report can write a CSV artifact for dashboard tracking.
+- [x] Dynamic Huffman plan report includes size and timing ratio diagnostics.
 - [x] Dynamic HCLEN trimming helper with boundary tests.
 - [x] Dynamic HLIT/HDIST trimming helpers with boundary tests.
 - [x] Adaptive split search using stored/fixed/dynamic bit-cost candidates.
