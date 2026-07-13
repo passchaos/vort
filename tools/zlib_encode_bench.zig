@@ -1,7 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 
-const EncodeMode = enum { best, fixed };
+const EncodeMode = enum { best, dynamic, fixed };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -46,6 +46,9 @@ fn parseMode(text: ?[]const u8) Mode {
     if (std.mem.startsWith(u8, value, "fixed-")) {
         return .{ .kind = .fixed, .level = parseLevel(value["fixed-".len..]) };
     }
+    if (std.mem.startsWith(u8, value, "dynamic-")) {
+        return .{ .kind = .dynamic, .level = parseLevel(value["dynamic-".len..]) };
+    }
     return .{ .kind = .best, .level = parseLevel(value) };
 }
 
@@ -60,6 +63,7 @@ fn encode(allocator: std.mem.Allocator, input: []const u8, mode: Mode) ![]u8 {
     const options = vort.optionsForCompressionLevel(mode.level);
     return switch (mode.kind) {
         .best => vort.encodeZlibBestAlloc(allocator, input, options),
+        .dynamic => vort.encodeZlibDynamicWithOptionsAlloc(allocator, input, options),
         .fixed => vort.encodeZlibFixedWithOptionsAlloc(allocator, input, options),
     };
 }

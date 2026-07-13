@@ -150,6 +150,7 @@ def main() -> int:
                 ("vort-fastest", run_vort(plain, iterations, "fastest")),
                 ("vort-fast", run_vort(plain, iterations, "fast")),
                 ("vort-default", run_vort(plain, iterations, "default")),
+                ("vort-dynamic-default", run_vort(plain, iterations, "dynamic-default")),
                 ("vort-fixed-fast", run_vort(plain, iterations, "fixed-fast")),
             ]
             rows.extend((engine, run_rust(project, engine, plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))
