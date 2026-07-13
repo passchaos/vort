@@ -61,6 +61,7 @@ architecture blindly.
 - [x] Sidecar corrupt-payload dashboard step writes fixed zig-out Markdown/JSON artifacts and runs in CI smoke.
 - [x] CLI smoke for embedded-index encode and metadata/full validation.
 - [x] CLI smoke for embedded-index range decode.
+- [x] CLI smoke for embedded-index self-contained dictionary encode and auto range decode.
 - [x] CLI help lists sidecar and embedded-index file workflows.
 - [x] CLI help groups basics, compatibility formats, and native indexed file workflows.
 - [x] CLI smoke for sidecar-index range decode.
