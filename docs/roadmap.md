@@ -201,6 +201,7 @@ architecture blindly.
 - [x] Rust deflate encode benchmark reports multiple Vort level presets.
 - [x] Rust deflate benchmark CSV artifact steps write decode and encode rows to zig-out.
 - [x] Dashboard index tracks Rust deflate benchmark CSV artifacts.
+- [x] Rust deflate benchmarks include real README/roadmap payloads.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
 - [x] Dynamic Huffman encoder with LZ77 match support, verified by Python zlib.
 - [x] Dynamic Huffman encoder code-length RLE using symbols 16/17/18.

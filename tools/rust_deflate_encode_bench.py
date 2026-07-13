@@ -135,6 +135,8 @@ def main() -> int:
         ("repetitive", b"abcabcabcabc" * 512),
         ("text", b"the quick brown fox jumps over the lazy dog\n" * 1024),
         ("binary", bytes((i * 131 + (i >> 3) * 17 + 29) & 0xFF for i in range(64 * 1024))),
+        ("readme", (ROOT / "README.md").read_bytes()),
+        ("roadmap", (ROOT / "docs" / "roadmap.md").read_bytes()),
     ]
     output_rows = ["engine,case,input_bytes,zlib_bytes,ratio,iterations,elapsed_s,throughput_mib_s,mix"]
     with tempfile.TemporaryDirectory(prefix="vort-rust-deflate-encode-bench-", dir=ROOT / ".zig-cache") as tmpdir:
