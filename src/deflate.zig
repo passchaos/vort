@@ -230,14 +230,16 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
         return writeFixedTokens(allocator, writer, tokens, final);
     }
 
-    const dynamic_len = encodedBytesForBitsFromState(writer.*, try dynamicTokenBitCostAlloc(allocator, tokens));
+    const dynamic_plan = try DynamicCodingPlan.init(allocator, tokens);
+    defer dynamic_plan.deinit(allocator);
+    const dynamic_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.bitCost(tokens));
     if (stored_len <= fixed_len and stored_len <= dynamic_len) {
         return writeStoredBlock(allocator, writer, plain, final);
     }
     if (fixed_len <= dynamic_len) {
         return writeFixedTokens(allocator, writer, tokens, final);
     }
-    return writeDynamicTokens(allocator, writer, tokens, final);
+    return dynamic_plan.write(allocator, writer, tokens, final);
 }
 
 fn encodedBytesForBitsFromState(writer: bitstream.BitWriter, bit_count: usize) usize {
@@ -303,6 +305,107 @@ const CodeLengthOp = struct {
     extra_value: u8 = 0,
 };
 
+const DynamicCodingPlan = struct {
+    lit_lengths_full: [286]u4,
+    dist_lengths_full: [30]u4,
+    code_len_lengths: [19]u4,
+    code_len_ops: []CodeLengthOp,
+    hlit: usize,
+    hdist: usize,
+    hclen: usize,
+
+    fn init(allocator: std.mem.Allocator, tokens: []const lz77.Token) !DynamicCodingPlan {
+        var lit_freqs: [286]u32 = @splat(0);
+        var dist_freqs: [30]u32 = @splat(0);
+        for (tokens) |token| switch (token) {
+            .literal => |byte| lit_freqs[byte] += 1,
+            .match => |m| {
+                const len_code = lengthCode(m.length);
+                const dist_code = distanceCode(m.distance);
+                lit_freqs[len_code.symbol] += 1;
+                dist_freqs[dist_code.symbol] += 1;
+            },
+        };
+        lit_freqs[256] = 1;
+        completeLiteralFrequencySet(&lit_freqs);
+        completeDistanceFrequencySet(&dist_freqs);
+
+        var lit_lengths_full = huffman.treeCodeLengths(286, &lit_freqs, 15);
+        var dist_lengths_full = huffman.treeCodeLengths(30, &dist_freqs, 15);
+        const hlit = trimmedLiteralCodeCount(&lit_lengths_full);
+        const hdist = trimmedDistanceCodeCount(&dist_lengths_full);
+
+        const code_len_ops = try buildCodeLengthOpsAlloc(allocator, lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
+        errdefer allocator.free(code_len_ops);
+        var code_len_freqs: [19]u32 = @splat(0);
+        for (code_len_ops) |op| code_len_freqs[op.symbol] += 1;
+        completeCodeLengthFrequencySet(&code_len_freqs);
+        const code_len_lengths = huffman.treeCodeLengths(19, &code_len_freqs, 7);
+        const hclen = trimmedCodeLengthAlphabetCount(&code_len_lengths);
+
+        return .{
+            .lit_lengths_full = lit_lengths_full,
+            .dist_lengths_full = dist_lengths_full,
+            .code_len_lengths = code_len_lengths,
+            .code_len_ops = code_len_ops,
+            .hlit = hlit,
+            .hdist = hdist,
+            .hclen = hclen,
+        };
+    }
+
+    fn deinit(self: *const DynamicCodingPlan, allocator: std.mem.Allocator) void {
+        allocator.free(self.code_len_ops);
+    }
+
+    fn bitCost(self: *const DynamicCodingPlan, tokens: []const lz77.Token) usize {
+        var bits: usize = 3 + 5 + 5 + 4 + self.hclen * 3;
+        for (self.code_len_ops) |op| {
+            bits += self.code_len_lengths[op.symbol] + op.extra_bits;
+        }
+        for (tokens) |token| switch (token) {
+            .literal => |byte| bits += self.lit_lengths_full[byte],
+            .match => |m| {
+                const len_code = lengthCode(m.length);
+                const dist_code = distanceCode(m.distance);
+                bits += self.lit_lengths_full[len_code.symbol] + len_code.extra_bits;
+                bits += self.dist_lengths_full[dist_code.symbol] + dist_code.extra_bits;
+            },
+        };
+        bits += self.lit_lengths_full[256];
+        return bits;
+    }
+
+    fn write(self: *const DynamicCodingPlan, allocator: std.mem.Allocator, writer: *bitstream.BitWriter, tokens: []const lz77.Token, final: bool) !void {
+        const lit_encoder = try huffman.HuffmanTable(286).Encoder.init(self.lit_lengths_full[0..self.hlit]);
+        const dist_encoder = try huffman.HuffmanTable(30).Encoder.init(self.dist_lengths_full[0..self.hdist]);
+        const code_len_encoder = try huffman.CodeLengthTable.Encoder.init(&self.code_len_lengths);
+
+        try writer.writeBits(allocator, @intFromBool(final), 1);
+        try writer.writeBits(allocator, 0b10, 2);
+        try writer.writeBits(allocator, @intCast(self.hlit - 257), 5);
+        try writer.writeBits(allocator, @intCast(self.hdist - 1), 5);
+        try writer.writeBits(allocator, @intCast(self.hclen - 4), 4);
+        for (huffman.code_length_order[0..self.hclen]) |symbol| try writer.writeBits(allocator, self.code_len_lengths[symbol], 3);
+        for (self.code_len_ops) |op| {
+            try code_len_encoder.writeSymbol(writer, allocator, op.symbol);
+            if (op.extra_bits != 0) try writer.writeBits(allocator, op.extra_value, op.extra_bits);
+        }
+        for (tokens) |token| switch (token) {
+            .literal => |byte| try lit_encoder.writeSymbol(writer, allocator, byte),
+            .match => |m| {
+                const len_code = lengthCode(m.length);
+                try lit_encoder.writeSymbol(writer, allocator, len_code.symbol);
+                if (len_code.extra_bits != 0) try writer.writeBits(allocator, len_code.extra_value, len_code.extra_bits);
+                const dist_code = distanceCode(m.distance);
+                try dist_encoder.writeSymbol(writer, allocator, dist_code.symbol);
+                if (dist_code.extra_bits != 0) try writer.writeBits(allocator, dist_code.extra_value, dist_code.extra_bits);
+            },
+        };
+        try lit_encoder.writeSymbol(writer, allocator, 256);
+    }
+};
+
 fn buildCodeLengthOpsAlloc(allocator: std.mem.Allocator, lit_lengths: []const u4, dist_lengths: []const u4) ![]CodeLengthOp {
     var ops: std.ArrayList(CodeLengthOp) = .empty;
     errdefer ops.deinit(allocator);
@@ -355,106 +458,15 @@ fn encodeRawDynamicTokensFinalAlloc(allocator: std.mem.Allocator, tokens: []cons
 }
 
 fn dynamicTokenBitCostAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) !usize {
-    var lit_freqs: [286]u32 = @splat(0);
-    var dist_freqs: [30]u32 = @splat(0);
-    for (tokens) |token| switch (token) {
-        .literal => |byte| lit_freqs[byte] += 1,
-        .match => |m| {
-            const len_code = lengthCode(m.length);
-            const dist_code = distanceCode(m.distance);
-            lit_freqs[len_code.symbol] += 1;
-            dist_freqs[dist_code.symbol] += 1;
-        },
-    };
-    lit_freqs[256] = 1;
-    completeLiteralFrequencySet(&lit_freqs);
-    completeDistanceFrequencySet(&dist_freqs);
-
-    var lit_lengths_full = huffman.treeCodeLengths(286, &lit_freqs, 15);
-    var dist_lengths_full = huffman.treeCodeLengths(30, &dist_freqs, 15);
-    const hlit = trimmedLiteralCodeCount(&lit_lengths_full);
-    const hdist = trimmedDistanceCodeCount(&dist_lengths_full);
-
-    const code_len_ops = try buildCodeLengthOpsAlloc(allocator, lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
-    defer allocator.free(code_len_ops);
-    var code_len_freqs: [19]u32 = @splat(0);
-    for (code_len_ops) |op| code_len_freqs[op.symbol] += 1;
-    completeCodeLengthFrequencySet(&code_len_freqs);
-    const code_len_lengths = huffman.treeCodeLengths(19, &code_len_freqs, 7);
-    const hclen = trimmedCodeLengthAlphabetCount(&code_len_lengths);
-
-    var bits: usize = 3 + 5 + 5 + 4 + hclen * 3;
-    for (code_len_ops) |op| {
-        bits += code_len_lengths[op.symbol] + op.extra_bits;
-    }
-    for (tokens) |token| switch (token) {
-        .literal => |byte| bits += lit_lengths_full[byte],
-        .match => |m| {
-            const len_code = lengthCode(m.length);
-            const dist_code = distanceCode(m.distance);
-            bits += lit_lengths_full[len_code.symbol] + len_code.extra_bits;
-            bits += dist_lengths_full[dist_code.symbol] + dist_code.extra_bits;
-        },
-    };
-    bits += lit_lengths_full[256];
-    return bits;
+    const plan = try DynamicCodingPlan.init(allocator, tokens);
+    defer plan.deinit(allocator);
+    return plan.bitCost(tokens);
 }
 
 fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, tokens: []const lz77.Token, final: bool) !void {
-    var lit_freqs: [286]u32 = @splat(0);
-    var dist_freqs: [30]u32 = @splat(0);
-    for (tokens) |token| switch (token) {
-        .literal => |byte| lit_freqs[byte] += 1,
-        .match => |m| {
-            const len_code = lengthCode(m.length);
-            const dist_code = distanceCode(m.distance);
-            lit_freqs[len_code.symbol] += 1;
-            dist_freqs[dist_code.symbol] += 1;
-        },
-    };
-    lit_freqs[256] = 1;
-    completeLiteralFrequencySet(&lit_freqs);
-    completeDistanceFrequencySet(&dist_freqs);
-
-    var lit_lengths_full = huffman.treeCodeLengths(286, &lit_freqs, 15);
-    var dist_lengths_full = huffman.treeCodeLengths(30, &dist_freqs, 15);
-    const hlit = trimmedLiteralCodeCount(&lit_lengths_full);
-    const hdist = trimmedDistanceCodeCount(&dist_lengths_full);
-
-    const code_len_ops = try buildCodeLengthOpsAlloc(allocator, lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
-    defer allocator.free(code_len_ops);
-    var code_len_freqs: [19]u32 = @splat(0);
-    for (code_len_ops) |op| code_len_freqs[op.symbol] += 1;
-    completeCodeLengthFrequencySet(&code_len_freqs);
-    var code_len_lengths = huffman.treeCodeLengths(19, &code_len_freqs, 7);
-    const hclen = trimmedCodeLengthAlphabetCount(&code_len_lengths);
-
-    const lit_encoder = try huffman.HuffmanTable(286).Encoder.init(lit_lengths_full[0..hlit]);
-    const dist_encoder = try huffman.HuffmanTable(30).Encoder.init(dist_lengths_full[0..hdist]);
-    const code_len_encoder = try huffman.CodeLengthTable.Encoder.init(&code_len_lengths);
-
-    try writer.writeBits(allocator, @intFromBool(final), 1);
-    try writer.writeBits(allocator, 0b10, 2);
-    try writer.writeBits(allocator, @intCast(hlit - 257), 5);
-    try writer.writeBits(allocator, @intCast(hdist - 1), 5);
-    try writer.writeBits(allocator, @intCast(hclen - 4), 4);
-    for (huffman.code_length_order[0..hclen]) |symbol| try writer.writeBits(allocator, code_len_lengths[symbol], 3);
-    for (code_len_ops) |op| {
-        try code_len_encoder.writeSymbol(writer, allocator, op.symbol);
-        if (op.extra_bits != 0) try writer.writeBits(allocator, op.extra_value, op.extra_bits);
-    }
-    for (tokens) |token| switch (token) {
-        .literal => |byte| try lit_encoder.writeSymbol(writer, allocator, byte),
-        .match => |m| {
-            const len_code = lengthCode(m.length);
-            try lit_encoder.writeSymbol(writer, allocator, len_code.symbol);
-            if (len_code.extra_bits != 0) try writer.writeBits(allocator, len_code.extra_value, len_code.extra_bits);
-            const dist_code = distanceCode(m.distance);
-            try dist_encoder.writeSymbol(writer, allocator, dist_code.symbol);
-            if (dist_code.extra_bits != 0) try writer.writeBits(allocator, dist_code.extra_value, dist_code.extra_bits);
-        },
-    };
-    try lit_encoder.writeSymbol(writer, allocator, 256);
+    const plan = try DynamicCodingPlan.init(allocator, tokens);
+    defer plan.deinit(allocator);
+    try plan.write(allocator, writer, tokens, final);
 }
 
 pub fn encodeRawDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
