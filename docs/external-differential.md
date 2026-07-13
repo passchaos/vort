@@ -59,3 +59,8 @@ temporary Cargo runner built against both Rust checkouts. It prints CSV rows
 comparing Vort, fdeflate, and miniz_oxide zlib decode throughput on generated
 tiny, repetitive, text, and binary payloads. Each engine performs one warmup
 decode before timing to reduce cold-start noise.
+
+`run-rust-deflate-encode-bench` provides the matching encode-side smoke. It
+prints CSV rows for zlib output size, ratio, and encode throughput for Vort,
+fdeflate, and miniz_oxide on the same generated payloads. Run it with
+`-Doptimize=ReleaseFast` before interpreting the Vort row.
