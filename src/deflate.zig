@@ -113,8 +113,7 @@ pub const DynamicPlanStats = struct {
 pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !DynamicPlanStats {
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    const dynamic_plan = try DynamicCodingPlan.init(allocator, plan.tokens);
-    defer dynamic_plan.deinit(allocator);
+    const dynamic_plan = try DynamicCodingPlan.init(plan.tokens);
     const fixed_bits = lz77.fixedBitCost(plan.tokens);
     const dynamic_bits = dynamic_plan.bitCost(plan.tokens);
     return .{
@@ -236,7 +235,7 @@ fn scoreSplitCandidate(allocator: std.mem.Allocator, input: []const u8, candidat
     const stored = len + 5;
     const fixed = (lz77.fixedBitCost(plan.tokens) + 7) / 8;
     if (options.block_selection == .stored_fixed) return @min(stored, fixed);
-    const dynamic = (try dynamicTokenBitCostAlloc(allocator, plan.tokens) + 7) / 8;
+    const dynamic = (try dynamicTokenBitCost(plan.tokens) + 7) / 8;
     return @min(@min(stored, fixed), dynamic);
 }
 
@@ -272,8 +271,7 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
         return writeFixedTokens(allocator, writer, tokens, final);
     }
 
-    const dynamic_plan = try DynamicCodingPlan.init(allocator, tokens);
-    defer dynamic_plan.deinit(allocator);
+    const dynamic_plan = try DynamicCodingPlan.init(tokens);
     const dynamic_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.bitCost(tokens));
     if (stored_len <= fixed_len and stored_len <= dynamic_len) {
         return writeStoredBlock(allocator, writer, plain, final);
@@ -347,16 +345,38 @@ const CodeLengthOp = struct {
     extra_value: u8 = 0,
 };
 
+const max_dynamic_code_length_ops = 286 + 30;
+
+const CodeLengthOpBuffer = struct {
+    items: [max_dynamic_code_length_ops]CodeLengthOp = undefined,
+    len: usize = 0,
+
+    fn append(self: *CodeLengthOpBuffer, op: CodeLengthOp) !void {
+        // Dynamic DEFLATE headers describe at most HLIT + HDIST code lengths
+        // (286 + 30). The repeat opcodes 16/17/18 always replace multiple raw
+        // lengths with a single op, so RLE can never need more ops than the
+        // uncompressed length sequence. Keep the check as a defensive guard
+        // against future changes to the header encoder.
+        if (self.len >= self.items.len) return error.InvalidBlockPlan;
+        self.items[self.len] = op;
+        self.len += 1;
+    }
+
+    fn slice(self: *const CodeLengthOpBuffer) []const CodeLengthOp {
+        return self.items[0..self.len];
+    }
+};
+
 const DynamicCodingPlan = struct {
     lit_lengths_full: [286]u4,
     dist_lengths_full: [30]u4,
     code_len_lengths: [19]u4,
-    code_len_ops: []CodeLengthOp,
+    code_len_ops: CodeLengthOpBuffer,
     hlit: usize,
     hdist: usize,
     hclen: usize,
 
-    fn init(allocator: std.mem.Allocator, tokens: []const lz77.Token) !DynamicCodingPlan {
+    fn init(tokens: []const lz77.Token) !DynamicCodingPlan {
         var lit_freqs: [286]u32 = @splat(0);
         var dist_freqs: [30]u32 = @splat(0);
         for (tokens) |token| switch (token) {
@@ -377,10 +397,9 @@ const DynamicCodingPlan = struct {
         const hlit = trimmedLiteralCodeCount(&lit_lengths_full);
         const hdist = trimmedDistanceCodeCount(&dist_lengths_full);
 
-        const code_len_ops = try buildCodeLengthOpsAlloc(allocator, lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
-        errdefer allocator.free(code_len_ops);
+        const code_len_ops = try buildCodeLengthOps(lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
         var code_len_freqs: [19]u32 = @splat(0);
-        for (code_len_ops) |op| code_len_freqs[op.symbol] += 1;
+        for (code_len_ops.slice()) |op| code_len_freqs[op.symbol] += 1;
         completeCodeLengthFrequencySet(&code_len_freqs);
         const code_len_lengths = huffman.treeCodeLengths(19, &code_len_freqs, 7);
         const hclen = trimmedCodeLengthAlphabetCount(&code_len_lengths);
@@ -396,13 +415,9 @@ const DynamicCodingPlan = struct {
         };
     }
 
-    fn deinit(self: *const DynamicCodingPlan, allocator: std.mem.Allocator) void {
-        allocator.free(self.code_len_ops);
-    }
-
     fn bitCost(self: *const DynamicCodingPlan, tokens: []const lz77.Token) usize {
         var bits: usize = 3 + 5 + 5 + 4 + self.hclen * 3;
-        for (self.code_len_ops) |op| {
+        for (self.code_len_ops.slice()) |op| {
             bits += self.code_len_lengths[op.symbol] + op.extra_bits;
         }
         for (tokens) |token| switch (token) {
@@ -429,7 +444,7 @@ const DynamicCodingPlan = struct {
         try writer.writeBits(allocator, @intCast(self.hdist - 1), 5);
         try writer.writeBits(allocator, @intCast(self.hclen - 4), 4);
         for (huffman.code_length_order[0..self.hclen]) |symbol| try writer.writeBits(allocator, self.code_len_lengths[symbol], 3);
-        for (self.code_len_ops) |op| {
+        for (self.code_len_ops.slice()) |op| {
             try code_len_encoder.writeSymbol(writer, allocator, op.symbol);
             if (op.extra_bits != 0) try writer.writeBits(allocator, op.extra_value, op.extra_bits);
         }
@@ -448,15 +463,14 @@ const DynamicCodingPlan = struct {
     }
 };
 
-fn buildCodeLengthOpsAlloc(allocator: std.mem.Allocator, lit_lengths: []const u4, dist_lengths: []const u4) ![]CodeLengthOp {
-    var ops: std.ArrayList(CodeLengthOp) = .empty;
-    errdefer ops.deinit(allocator);
-    try appendCodeLengthOps(allocator, &ops, lit_lengths);
-    try appendCodeLengthOps(allocator, &ops, dist_lengths);
-    return ops.toOwnedSlice(allocator);
+fn buildCodeLengthOps(lit_lengths: []const u4, dist_lengths: []const u4) !CodeLengthOpBuffer {
+    var ops = CodeLengthOpBuffer{};
+    try appendCodeLengthOps(&ops, lit_lengths);
+    try appendCodeLengthOps(&ops, dist_lengths);
+    return ops;
 }
 
-fn appendCodeLengthOps(allocator: std.mem.Allocator, ops: *std.ArrayList(CodeLengthOp), lengths: []const u4) !void {
+fn appendCodeLengthOps(ops: *CodeLengthOpBuffer, lengths: []const u4) !void {
     var i: usize = 0;
     while (i < lengths.len) {
         const value = lengths[i];
@@ -466,23 +480,23 @@ fn appendCodeLengthOps(allocator: std.mem.Allocator, ops: *std.ArrayList(CodeLen
             var remaining = run;
             while (remaining >= 11) {
                 const count = @min(remaining, 138);
-                try ops.append(allocator, .{ .symbol = 18, .extra_bits = 7, .extra_value = @intCast(count - 11) });
+                try ops.append(.{ .symbol = 18, .extra_bits = 7, .extra_value = @intCast(count - 11) });
                 remaining -= count;
             }
             if (remaining >= 3) {
-                try ops.append(allocator, .{ .symbol = 17, .extra_bits = 3, .extra_value = @intCast(remaining - 3) });
+                try ops.append(.{ .symbol = 17, .extra_bits = 3, .extra_value = @intCast(remaining - 3) });
                 remaining = 0;
             }
-            while (remaining > 0) : (remaining -= 1) try ops.append(allocator, .{ .symbol = 0 });
+            while (remaining > 0) : (remaining -= 1) try ops.append(.{ .symbol = 0 });
         } else {
-            try ops.append(allocator, .{ .symbol = value });
+            try ops.append(.{ .symbol = value });
             var remaining = run - 1;
             while (remaining >= 3) {
                 const count = @min(remaining, 6);
-                try ops.append(allocator, .{ .symbol = 16, .extra_bits = 2, .extra_value = @intCast(count - 3) });
+                try ops.append(.{ .symbol = 16, .extra_bits = 2, .extra_value = @intCast(count - 3) });
                 remaining -= count;
             }
-            while (remaining > 0) : (remaining -= 1) try ops.append(allocator, .{ .symbol = value });
+            while (remaining > 0) : (remaining -= 1) try ops.append(.{ .symbol = value });
         }
         i += run;
     }
@@ -499,15 +513,13 @@ fn encodeRawDynamicTokensFinalAlloc(allocator: std.mem.Allocator, tokens: []cons
     return writer.toOwnedSlice(allocator);
 }
 
-fn dynamicTokenBitCostAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) !usize {
-    const plan = try DynamicCodingPlan.init(allocator, tokens);
-    defer plan.deinit(allocator);
+fn dynamicTokenBitCost(tokens: []const lz77.Token) !usize {
+    const plan = try DynamicCodingPlan.init(tokens);
     return plan.bitCost(tokens);
 }
 
 fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, tokens: []const lz77.Token, final: bool) !void {
-    const plan = try DynamicCodingPlan.init(allocator, tokens);
-    defer plan.deinit(allocator);
+    const plan = try DynamicCodingPlan.init(tokens);
     try plan.write(allocator, writer, tokens, final);
 }
 
@@ -2493,11 +2505,10 @@ test "single-block dynamic Huffman decoder rejects non-final blocks" {
 test "dynamic code length RLE emits repeat symbols" {
     const lit_lengths = [_]u4{0} ** 20 ++ [_]u4{5} ** 7;
     const dist_lengths = [_]u4{5} ** 4;
-    const ops = try buildCodeLengthOpsAlloc(std.testing.allocator, &lit_lengths, &dist_lengths);
-    defer std.testing.allocator.free(ops);
+    const ops = try buildCodeLengthOps(&lit_lengths, &dist_lengths);
     var saw_zero_repeat = false;
     var saw_prev_repeat = false;
-    for (ops) |op| {
+    for (ops.slice()) |op| {
         if (op.symbol == 18 or op.symbol == 17) saw_zero_repeat = true;
         if (op.symbol == 16) saw_prev_repeat = true;
     }
@@ -2657,7 +2668,7 @@ test "dynamic bit cost model predicts dynamic token byte length" {
     defer plan.deinit(std.testing.allocator);
     const dynamic = try encodeRawDynamicTokensFinalAlloc(std.testing.allocator, plan.tokens, true);
     defer std.testing.allocator.free(dynamic);
-    try std.testing.expectEqual((try dynamicTokenBitCostAlloc(std.testing.allocator, plan.tokens) + 7) / 8, dynamic.len);
+    try std.testing.expectEqual((try dynamicTokenBitCost(plan.tokens) + 7) / 8, dynamic.len);
 }
 
 test "dynamic code-length alphabet uses weighted tree lengths" {
