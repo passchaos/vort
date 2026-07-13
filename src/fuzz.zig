@@ -82,6 +82,10 @@ pub fn runDeflateSmokeCorpus(allocator: std.mem.Allocator) !CorpusStats {
     defer allocator.free(malformed_repeat);
     try expectMalformedDeflate(allocator, &stats, malformed_repeat);
 
+    const repeat_overrun = try malformedRepeat18OverrunDynamicHeaderAlloc(allocator);
+    defer allocator.free(repeat_overrun);
+    try expectMalformedDeflate(allocator, &stats, repeat_overrun);
+
     const oversubscribed = try oversubscribedCodeLengthDynamicHeaderAlloc(allocator);
     defer allocator.free(oversubscribed);
     try expectMalformedDeflate(allocator, &stats, oversubscribed);
@@ -128,6 +132,25 @@ fn malformedRepeat16DynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
     try writer.writeBits(allocator, 0, 3);
     try writer.writeBits(allocator, 1, 3);
     try encoder.writeSymbol(&writer, allocator, 16);
+    return writer.toOwnedSlice(allocator);
+}
+
+fn malformedRepeat18OverrunDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
+    var lengths: [19]u4 = @splat(0);
+    lengths[18] = 1;
+    const encoder = try huffman.CodeLengthTable.Encoder.init(&lengths);
+
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeMinimalDynamicHeader(allocator, &writer);
+    try writer.writeBits(allocator, 0, 3);
+    try writer.writeBits(allocator, 0, 3);
+    try writer.writeBits(allocator, 1, 3);
+    try writer.writeBits(allocator, 0, 3);
+    try encoder.writeSymbol(&writer, allocator, 18);
+    try writer.writeBits(allocator, 127, 7);
+    try encoder.writeSymbol(&writer, allocator, 18);
+    try writer.writeBits(allocator, 127, 7);
     return writer.toOwnedSlice(allocator);
 }
 
@@ -182,7 +205,7 @@ test "store smoke corpus covers malformed and valid frames" {
 
 test "deflate smoke corpus covers valid and malformed raw streams" {
     const stats = try runDeflateSmokeCorpus(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 11), stats.cases);
+    try std.testing.expectEqual(@as(usize, 12), stats.cases);
     try std.testing.expectEqual(@as(usize, 3), stats.valid_frames);
-    try std.testing.expectEqual(@as(usize, 8), stats.expected_errors);
+    try std.testing.expectEqual(@as(usize, 9), stats.expected_errors);
 }
