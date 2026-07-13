@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
 import json
 from pathlib import Path
@@ -124,6 +125,14 @@ def json_summary(path: Path) -> str:
     return ", ".join(parts)
 
 
+def csv_row_count(path: Path) -> int | None:
+    try:
+        with path.open(newline="") as f:
+            return sum(1 for _ in csv.DictReader(f))
+    except Exception:
+        return None
+
+
 def artifact_metadata(path: Path) -> str:
     stat = path.stat()
     mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
@@ -134,6 +143,9 @@ def artifact_record(path: Path, output_dir: Path, producer_map: dict) -> dict:
     stat = path.stat()
     mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     data = read_json(path) if path.suffix == ".json" else {}
+    rows = data.get("rows")
+    if rows is None and path.suffix == ".csv":
+        rows = csv_row_count(path)
     producer_step = producer_step_for(path, producer_map)
     artifact_config = artifact_config_for(path, producer_map)
     expected_format = artifact_config.get("expected_format", "")
@@ -152,7 +164,7 @@ def artifact_record(path: Path, output_dir: Path, producer_map: dict) -> dict:
         "mtime_utc": mtime,
         "schema": data.get("schema"),
         "schema_version": data.get("schema_version"),
-        "rows": data.get("rows"),
+        "rows": rows,
         "ok": data.get("ok"),
     }
 
@@ -209,7 +221,13 @@ def main() -> int:
         lines.extend([f"## {category}", ""])
         for artifact in grouped[category]:
             rel = artifact.relative_to(output.parent)
-            note = json_summary(artifact) if artifact.suffix == ".json" else ""
+            if artifact.suffix == ".json":
+                note = json_summary(artifact)
+            elif artifact.suffix == ".csv":
+                rows = csv_row_count(artifact)
+                note = f"rows `{rows}`" if rows is not None else ""
+            else:
+                note = ""
             metadata = artifact_metadata(artifact)
             suffix = f" — {metadata}"
             producer_step = producer_step_for(artifact, producer_map)
