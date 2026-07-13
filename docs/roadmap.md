@@ -68,6 +68,7 @@ architecture blindly.
 - [x] Validation JSON schema reference examples are checked by a build step.
 - [x] Validation JSON schema reference checker validates required top-level and item fields.
 - [x] Validation JSON schema reference checker validates documented example field types.
+- [x] Validation JSON schema reference checker validates documented enum values.
 - [x] Dashboard index links zig-out validation, sidecar, and benchmark artifacts from a single Markdown entrypoint.
 - [x] Dashboard index includes artifact sizes and UTC update timestamps.
 - [x] Dashboard index emits a JSON artifact manifest with schema, category, size, timestamp, and row metadata.

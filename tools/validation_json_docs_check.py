@@ -202,6 +202,87 @@ ITEM_FIELD_TYPES = {
     },
 }
 
+FIELD_ENUMS = {
+    "vort.validation_report": {
+        "target": {"sidecar", "embedded"},
+        "mode": {"metadata", "full"},
+        "stage": {
+            "index_decode",
+            "index_structure",
+            "dictionary_parse",
+            "frame_bounds",
+            "frame_header",
+            "frame_metadata",
+            "payload_decode",
+        },
+        "recoverability_hint": {
+            "none",
+            "index_mismatch",
+            "payload_corrupt",
+            "retry_with_dictionary",
+            "truncated_input",
+        },
+        "frame_mode": {
+            "",
+            "store",
+            "deflate",
+            "rle",
+            "dictionary_patch",
+            "dictionary_deflate",
+            "ldm",
+            "unknown",
+        },
+    },
+    "vort.validation_json_smoke": {
+        "cli_failure_hint": {
+            "none",
+            "index_mismatch",
+            "payload_corrupt",
+            "retry_with_dictionary",
+            "truncated_input",
+        },
+    },
+}
+
+ITEM_FIELD_ENUMS = {
+    "vort.sidecar_verify_report": {
+        "mode": {"metadata", "full"},
+        "status": {"ok", "error"},
+        "recoverability_hint": {
+            "",
+            "none",
+            "index_mismatch",
+            "payload_corrupt",
+            "retry_with_dictionary",
+            "truncated_input",
+        },
+        "validation_stage": {
+            "",
+            "index_decode",
+            "index_structure",
+            "dictionary_parse",
+            "frame_bounds",
+            "frame_header",
+            "frame_metadata",
+            "payload_decode",
+        },
+        "frame_mode": {
+            "",
+            "store",
+            "deflate",
+            "rle",
+            "dictionary_patch",
+            "dictionary_deflate",
+            "ldm",
+            "unknown",
+        },
+    },
+    "vort.dashboard_index": {
+        "category": {"validation", "corpus and ratio", "native parallel", "other"},
+        "format": {"json", "md"},
+    },
+}
+
 
 def require_fields(value: dict, fields: set[str], label: str) -> None:
     missing = fields - value.keys()
@@ -213,6 +294,12 @@ def require_types(value: dict[str, Any], types: dict[str, type | tuple[type, ...
     for field, expected in types.items():
         if not isinstance(value[field], expected):
             raise AssertionError(f"{label}.{field} expected {expected}, got {type(value[field])}")
+
+
+def require_enums(value: dict[str, Any], enums: dict[str, set[str]], label: str) -> None:
+    for field, allowed in enums.items():
+        if value[field] not in allowed:
+            raise AssertionError(f"{label}.{field} has unexpected value {value[field]!r}; allowed={sorted(allowed)}")
 
 
 def main() -> int:
@@ -231,6 +318,7 @@ def main() -> int:
             raise AssertionError(f"unexpected schema example: {schema!r}")
         require_fields(value, REQUIRED_FIELDS[schema], schema)
         require_types(value, FIELD_TYPES[schema], schema)
+        require_enums(value, FIELD_ENUMS.get(schema, {}), schema)
         item_fields = ITEM_REQUIRED_FIELDS.get(schema)
         if item_fields:
             items_name = "artifacts" if schema == "vort.dashboard_index" else "items"
@@ -239,6 +327,7 @@ def main() -> int:
                 raise AssertionError(f"{schema} must include non-empty {items_name}")
             require_fields(items[0], item_fields, f"{schema}.{items_name}[0]")
             require_types(items[0], ITEM_FIELD_TYPES[schema], f"{schema}.{items_name}[0]")
+            require_enums(items[0], ITEM_FIELD_ENUMS.get(schema, {}), f"{schema}.{items_name}[0]")
     print(f"validation_json_docs=ok examples={len(parsed)}")
     return 0
 
