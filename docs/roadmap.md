@@ -122,6 +122,7 @@ architecture blindly.
 - [x] Stored deflate decoders ignore non-zero byte-alignment padding bits.
 - [x] Fixed-Huffman inflate for literals and back-references.
 - [x] Fixed-Huffman fast lookup decode path for literals and distances.
+- [x] Fixed-Huffman inflate rejects reserved literal/length symbols through raw/zlib/gzip paths.
 - [x] Fixed-Huffman inflate rejects reserved distance symbols through raw/zlib/gzip paths.
 - [x] Dynamic-Huffman header and code-length parser foundation.
 - [x] Dynamic-Huffman code-length parser rejects invalid repeat symbols and overrun repeats.

@@ -1652,6 +1652,41 @@ test "fixed Huffman decoder rejects reserved distance symbols" {
     try std.testing.expectError(error.InvalidHuffmanCode, decodeGzipAlloc(std.testing.allocator, gzip_frame.items));
 }
 
+test "fixed Huffman decoder rejects reserved literal length symbols" {
+    const lit_lengths = huffman.fixedLiteralLengths();
+    const lit_encoder = try huffman.FixedLiteralTable.Encoder.init(&lit_lengths);
+
+    var writer = bitstream.BitWriter{};
+    defer writer.deinit(std.testing.allocator);
+    try writer.writeBits(std.testing.allocator, 1, 1);
+    try writer.writeBits(std.testing.allocator, 0b01, 2);
+    // Literal/length symbols 286 and 287 are present in the fixed tree to fill
+    // out canonical bit patterns, but RFC 1951 reserves them from compressed
+    // data. They must be rejected consistently before wrapper footer checks.
+    try lit_encoder.writeSymbol(&writer, std.testing.allocator, 286);
+    const encoded = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+
+    var out: [16]u8 = undefined;
+    try std.testing.expectError(error.InvalidHuffmanCode, decodeRawFixed(encoded, &out));
+    try std.testing.expectError(error.InvalidHuffmanCode, decodeRawFixedAllocStrict(std.testing.allocator, encoded));
+    try std.testing.expectError(error.InvalidHuffmanCode, decodeRawAutoAlloc(std.testing.allocator, encoded));
+
+    var zlib_frame: std.ArrayList(u8) = .empty;
+    defer zlib_frame.deinit(std.testing.allocator);
+    try zlib_frame.appendSlice(std.testing.allocator, &.{ 0x78, 0x01 });
+    try zlib_frame.appendSlice(std.testing.allocator, encoded);
+    try zlib_frame.appendSlice(std.testing.allocator, &.{ 0, 0, 0, 0 });
+    try std.testing.expectError(error.InvalidHuffmanCode, decodeZlibAlloc(std.testing.allocator, zlib_frame.items));
+
+    var gzip_frame: std.ArrayList(u8) = .empty;
+    defer gzip_frame.deinit(std.testing.allocator);
+    try gzip_frame.appendSlice(std.testing.allocator, &gzip_header);
+    try gzip_frame.appendSlice(std.testing.allocator, encoded);
+    try gzip_frame.appendSlice(std.testing.allocator, &.{ 0, 0, 0, 0, 0, 0, 0, 0 });
+    try std.testing.expectError(error.InvalidHuffmanCode, decodeGzipAlloc(std.testing.allocator, gzip_frame.items));
+}
+
 test "zlib and gzip fixed Huffman wrappers decode zlib fixed vectors" {
     const zlib_cases = [_]struct { compressed: []const u8, plain: []const u8 }{
         .{ .compressed = &.{ 0x78, 0x01, 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00, 0x06, 0x2c, 0x02, 0x15 }, .plain = "hello" },
