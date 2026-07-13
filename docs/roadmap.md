@@ -137,6 +137,7 @@ architecture blindly.
 - [x] zlib wrapper and Adler verification for stored blocks.
 - [x] zlib wrapper reports preset-dictionary streams as dictionary requirements.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
+- [x] CLI and Python differential smoke cover zlib preset-dictionary decode.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
 - [x] zlib wrapper integration for multi-block dynamic streams.

@@ -101,6 +101,15 @@ def main() -> int:
         gzip_adaptive_vort = bytes.fromhex(run_cli("encode-gzip-best-adaptive-hex", text, "default"))
         assert zlib.decompress(gzip_adaptive_vort, wbits=31) == data, text
 
+    dictionary = b"hello "
+    dict_payload = b"hello hello hello"
+    for strategy in [zlib.Z_DEFAULT_STRATEGY, zlib.Z_FIXED]:
+        co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, strategy=strategy, zdict=dictionary)
+        zlib_dict = co.compress(dict_payload) + co.flush()
+        out = run_cli("decode-zlib-dict-hex", zlib_dict.hex(), dictionary.decode("ascii"))
+        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
+        assert int(parse_field(out, "crc32")) == (zlib.crc32(dict_payload) & 0xFFFFFFFF), out
+
     dynamic_payloads = [
         b"match-heavy:" + (b"abcabcabcabc" * 96) + (b"xyzxyzxyz" * 48),
         b"distance-heavy:" + (b"0123456789abcdef" * 512) + b"----" + (b"0123456789abcdef" * 64),
