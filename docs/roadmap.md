@@ -122,6 +122,7 @@ architecture blindly.
 - [x] LSB-first bit writer primitive.
 - [x] Stored deflate blocks.
 - [x] Stored deflate decoders ignore non-zero byte-alignment padding bits.
+- [x] Stored raw/zlib/gzip alloc decoders support explicit output limits.
 - [x] Fixed-Huffman inflate for literals and back-references.
 - [x] Fixed-Huffman fast lookup decode path for literals and distances.
 - [x] Fixed-Huffman inflate rejects reserved literal/length symbols through raw/zlib/gzip paths.

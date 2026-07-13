@@ -871,6 +871,10 @@ pub fn decodeRawStored(input: []const u8, output: []u8) Error!DecodeResult {
 }
 
 pub fn decodeRawStoredAllocPartial(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
+    return decodeRawStoredAllocPartialLimitedInternal(allocator, input, null);
+}
+
+fn decodeRawStoredAllocPartialLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !OwnedDecodeResult {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
@@ -889,6 +893,7 @@ pub fn decodeRawStoredAllocPartial(allocator: std.mem.Allocator, input: []const 
 
         const chunk_len: usize = len;
         if (input.len - offset - 4 < chunk_len) return error.TruncatedFrame;
+        try ensureOutputLimit(out.items.len, chunk_len, max_output_len);
         try out.appendSlice(allocator, input[offset + 4 ..][0..chunk_len]);
         reader.byte_index = offset + 4 + chunk_len;
         reader.bit_index = 0;
@@ -901,6 +906,13 @@ pub fn decodeRawStoredAllocPartial(allocator: std.mem.Allocator, input: []const 
 
 pub fn decodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const result = try decodeRawStoredAllocPartial(allocator, input);
+    errdefer result.deinit(allocator);
+    if (result.input_read != input.len) return error.TrailingData;
+    return result.bytes;
+}
+
+pub fn decodeRawStoredAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    const result = try decodeRawStoredAllocPartialLimitedInternal(allocator, input, max_output_len);
     errdefer result.deinit(allocator);
     if (result.input_read != input.len) return error.TrailingData;
     return result.bytes;
@@ -1211,10 +1223,32 @@ pub fn decodeZlibStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return out;
 }
 
+pub fn decodeZlibStoredAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    const scratch = try allocator.alloc(u8, input.len);
+    defer allocator.free(scratch);
+    const written = try decodeZlibStored(input, scratch);
+    if (written > max_output_len) return error.OutputLimitExceeded;
+    const out = try allocator.alloc(u8, written);
+    errdefer allocator.free(out);
+    @memcpy(out, scratch[0..written]);
+    return out;
+}
+
 pub fn decodeZlibStoredAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) ![]u8 {
     const scratch = try allocator.alloc(u8, input.len);
     defer allocator.free(scratch);
     const written = try decodeZlibStoredWithDictionary(input, scratch, dictionary);
+    const out = try allocator.alloc(u8, written);
+    errdefer allocator.free(out);
+    @memcpy(out, scratch[0..written]);
+    return out;
+}
+
+pub fn decodeZlibStoredAllocWithDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
+    const scratch = try allocator.alloc(u8, input.len);
+    defer allocator.free(scratch);
+    const written = try decodeZlibStoredWithDictionary(input, scratch, dictionary);
+    if (written > max_output_len) return error.OutputLimitExceeded;
     const out = try allocator.alloc(u8, written);
     errdefer allocator.free(out);
     @memcpy(out, scratch[0..written]);
@@ -1374,6 +1408,17 @@ pub fn decodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     const scratch = try allocator.alloc(u8, input.len);
     defer allocator.free(scratch);
     const written = try decodeGzipStored(input, scratch);
+    const out = try allocator.alloc(u8, written);
+    errdefer allocator.free(out);
+    @memcpy(out, scratch[0..written]);
+    return out;
+}
+
+pub fn decodeGzipStoredAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    const scratch = try allocator.alloc(u8, input.len);
+    defer allocator.free(scratch);
+    const written = try decodeGzipStored(input, scratch);
+    if (written > max_output_len) return error.OutputLimitExceeded;
     const out = try allocator.alloc(u8, written);
     errdefer allocator.free(out);
     @memcpy(out, scratch[0..written]);
@@ -1570,6 +1615,29 @@ test "stored deflate decoders ignore byte-alignment padding bits" {
     const gzip_auto = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
     defer std.testing.allocator.free(gzip_auto);
     try std.testing.expectEqualSlices(u8, "", gzip_auto);
+}
+
+test "stored deflate alloc decoders enforce output limits" {
+    const raw = try encodeRawStoredAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(raw);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeRawStoredAllocLimited(std.testing.allocator, raw, 4));
+    const raw_ok = try decodeRawStoredAllocLimited(std.testing.allocator, raw, 5);
+    defer std.testing.allocator.free(raw_ok);
+    try std.testing.expectEqualSlices(u8, "hello", raw_ok);
+
+    const zlib_frame = try encodeZlibStoredAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(zlib_frame);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeZlibStoredAllocLimited(std.testing.allocator, zlib_frame, 4));
+    const zlib_ok = try decodeZlibStoredAllocLimited(std.testing.allocator, zlib_frame, 5);
+    defer std.testing.allocator.free(zlib_ok);
+    try std.testing.expectEqualSlices(u8, "hello", zlib_ok);
+
+    const gzip_frame = try encodeGzipStoredAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(gzip_frame);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeGzipStoredAllocLimited(std.testing.allocator, gzip_frame, 4));
+    const gzip_ok = try decodeGzipStoredAllocLimited(std.testing.allocator, gzip_frame, 5);
+    defer std.testing.allocator.free(gzip_ok);
+    try std.testing.expectEqualSlices(u8, "hello", gzip_ok);
 }
 
 test "zlib stored wrapper matches level-0 vectors" {
@@ -2232,6 +2300,10 @@ test "zlib preset dictionary streams cover stored and dynamic blocks" {
     const stored_specific = try decodeZlibStoredAllocWithDictionary(std.testing.allocator, stored_frame, "hello ");
     defer std.testing.allocator.free(stored_specific);
     try std.testing.expectEqualSlices(u8, "hello hello hello", stored_specific);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeZlibStoredAllocWithDictionaryLimited(std.testing.allocator, stored_frame, "hello ", 16));
+    const stored_limited = try decodeZlibStoredAllocWithDictionaryLimited(std.testing.allocator, stored_frame, "hello ", 17);
+    defer std.testing.allocator.free(stored_limited);
+    try std.testing.expectEqualSlices(u8, "hello hello hello", stored_limited);
 
     const dynamic_frame = &.{
         0x78, 0x20, 0x08, 0x61, 0x02, 0x35, 0x25,
