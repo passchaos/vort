@@ -463,14 +463,24 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(stream);
         const sidecar = try std.Io.Dir.cwd().readFileAlloc(init.io, sidecar_path, init.gpa, .limited(16 * 1024 * 1024));
         defer init.gpa.free(sidecar);
-        try vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, stream, sidecar, .{ .mode = validation_mode });
+        const report = vort.storeValidateSidecarIndexReportAlloc(init.gpa, stream, sidecar, .{ .mode = validation_mode });
+        if (!report.ok) {
+            try printValidationFailure(stdout, "sidecar", report);
+            try stdout.flush();
+            return error.CorruptFrame;
+        }
         try stdout.print("sidecar_ok=true mode={s} stream_bytes={d} sidecar_bytes={d}\n", .{ @tagName(validation_mode), stream.len, sidecar.len });
     } else if (std.mem.eql(u8, command, "verify-vort-embedded-index-file")) {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
         const validation_mode = try parseSidecarValidationMode(args.next());
         const stream = try std.Io.Dir.cwd().readFileAlloc(init.io, stream_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(stream);
-        try vort.storeValidateEmbeddedIndexWithOptionsAlloc(init.gpa, stream, .{ .mode = validation_mode });
+        const report = vort.storeValidateEmbeddedIndexReportAlloc(init.gpa, stream, .{ .mode = validation_mode });
+        if (!report.ok) {
+            try printValidationFailure(stdout, "embedded", report);
+            try stdout.flush();
+            return error.CorruptFrame;
+        }
         try stdout.print("embedded_index_ok=true mode={s} stream_bytes={d}\n", .{ @tagName(validation_mode), stream.len });
     } else if (std.mem.eql(u8, command, "decode-vort-sidecar-range-file")) {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
@@ -655,6 +665,20 @@ fn printDecoded(stdout: *std.Io.Writer, label: []const u8, compressed_len: usize
 
 fn printHex(stdout: *std.Io.Writer, bytes: []const u8) !void {
     for (bytes) |byte| try stdout.print("{x:0>2}", .{byte});
+    try stdout.print("\n", .{});
+}
+
+fn printValidationFailure(stdout: *std.Io.Writer, label: []const u8, report: vort.ValidationReport) !void {
+    try stdout.print("{s}_validation_ok=false mode={s} stage={s} error={s}", .{
+        label,
+        @tagName(report.mode),
+        @tagName(report.stage),
+        report.error_name,
+    });
+    if (report.frame_index) |value| try stdout.print(" frame_index={d}", .{value});
+    if (report.frame_offset) |value| try stdout.print(" frame_offset={d}", .{value});
+    if (report.uncompressed_offset) |value| try stdout.print(" uncompressed_offset={d}", .{value});
+    if (report.frame_flags) |value| try stdout.print(" frame_flags={d}", .{value});
     try stdout.print("\n", .{});
 }
 
