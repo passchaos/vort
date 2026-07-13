@@ -54,6 +54,12 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 if (bits != 0) counts[bits] += 1;
             }
 
+            var available: i32 = 1;
+            for (1..max_code_bits + 1) |bits| {
+                available = (available << 1) - @as(i32, counts[bits]);
+                if (available < 0) return error.InvalidHuffmanCode;
+            }
+
             var code: u16 = 0;
             var next_code: [max_code_bits + 1]u16 = @splat(0);
             for (1..max_code_bits + 1) |bits| {
@@ -464,6 +470,11 @@ test "canonical Huffman decoder handles a small RFC-style tree" {
     try std.testing.expectEqual(@as(u16, 1), (try table.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 0), (try table.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 2), (try table.decode(&reader)).value);
+}
+
+test "canonical Huffman decoder rejects oversubscribed trees" {
+    const Table = HuffmanTable(3);
+    try std.testing.expectError(error.InvalidHuffmanCode, Table.init(&.{ 1, 1, 1 }));
 }
 
 test "fixed literal table decodes end-of-block code" {

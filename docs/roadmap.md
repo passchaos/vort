@@ -110,6 +110,7 @@ architecture blindly.
 
 - [x] LSB-first bit reader primitive.
 - [x] Canonical Huffman decode table foundation for fixed-Huffman inflate.
+- [x] Canonical Huffman table construction rejects oversubscribed trees.
 - [x] LSB-first bit writer primitive.
 - [x] Stored deflate blocks.
 - [x] Fixed-Huffman inflate for literals and back-references.
