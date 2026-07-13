@@ -148,6 +148,7 @@ architecture blindly.
 - [x] Raw/zlib preset-dictionary decode covers stored/fixed/dynamic block cases.
 - [x] CLI and Python differential smoke cover raw/zlib preset-dictionary decode.
 - [x] File CLI and Python differential smoke cover zlib preset-dictionary decode.
+- [x] CLI decode commands expose optional output limits for raw/zlib/gzip workflows.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
 - [x] zlib wrapper integration for multi-block dynamic streams.

@@ -67,6 +67,8 @@ def main() -> int:
             crc = int(parse_field(out, "crc32"))
             assert decoded_len == len(data), (command, text, out)
             assert crc == (zlib.crc32(data) & 0xFFFFFFFF), (command, text, out)
+            limited = run_cli(command, compressed.hex(), str(len(data)))
+            assert int(parse_field(limited, "decoded_bytes")) == len(data), (command, text, limited)
 
         zlib_roundtrip = run_cli("zlib-fixed-roundtrip", text)
         assert int(parse_field(zlib_roundtrip, "input_bytes")) == len(data), zlib_roundtrip
@@ -116,12 +118,16 @@ def main() -> int:
         out = run_cli("decode-raw-dict-hex", raw_dict.hex(), dictionary_text)
         assert int(parse_field(out, "decoded_bytes")) == len(payload), out
         assert int(parse_field(out, "crc32")) == (zlib.crc32(payload) & 0xFFFFFFFF), out
+        limited = run_cli("decode-raw-dict-hex", raw_dict.hex(), dictionary_text, str(len(payload)))
+        assert int(parse_field(limited, "decoded_bytes")) == len(payload), limited
 
         co = zlib.compressobj(level=level, wbits=zlib.MAX_WBITS, strategy=strategy, zdict=dictionary)
         zlib_dict = co.compress(payload) + co.flush()
         out = run_cli("decode-zlib-dict-hex", zlib_dict.hex(), dictionary_text)
         assert int(parse_field(out, "decoded_bytes")) == len(payload), out
         assert int(parse_field(out, "crc32")) == (zlib.crc32(payload) & 0xFFFFFFFF), out
+        limited = run_cli("decode-zlib-dict-hex", zlib_dict.hex(), dictionary_text, str(len(payload)))
+        assert int(parse_field(limited, "decoded_bytes")) == len(payload), limited
 
     raw_dynamic_dict = bytes.fromhex("25c421010000000090ffaf058203")
     out = run_cli("decode-raw-dict-hex", raw_dynamic_dict.hex(), dictionary_text)
@@ -145,6 +151,10 @@ def main() -> int:
         out = run_cli("decode-zlib-dict-file", str(compressed_path), str(decoded_path), str(dictionary_path))
         assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
         assert decoded_path.read_bytes() == dict_payload, out
+        limited_path = tmp / "decoded-limited.bin"
+        out = run_cli("decode-zlib-dict-file", str(compressed_path), str(limited_path), str(dictionary_path), str(len(dict_payload)))
+        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
+        assert limited_path.read_bytes() == dict_payload, out
 
     dynamic_payloads = [
         b"match-heavy:" + (b"abcabcabcabc" * 96) + (b"xyzxyzxyz" * 48),

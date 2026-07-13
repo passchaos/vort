@@ -576,25 +576,37 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("input_bytes={d} stream_bytes={d} sidecar_bytes={d} stream={s} sidecar={s}\n", .{ data.len, sidecar.stream.len, sidecar.sidecar_index.len, stream_path, sidecar_path });
     } else if (std.mem.eql(u8, command, "decode-raw-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
+        const max_output_len = try parseOptionalLimit(args.next());
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
-        const decoded = try vort.decodeRawDeflateAlloc(init.gpa, compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeRawDeflateAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.decodeRawDeflateAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "raw", compressed.len, decoded);
     } else if (std.mem.eql(u8, command, "decode-raw-dict-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const dictionary = args.next() orelse "";
+        const max_output_len = try parseOptionalLimit(args.next());
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
-        const decoded = try vort.decodeRawDeflateAllocWithDictionary(init.gpa, compressed, dictionary);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeRawDeflateAllocWithDictionaryLimited(init.gpa, compressed, dictionary, limit)
+        else
+            try vort.decodeRawDeflateAllocWithDictionary(init.gpa, compressed, dictionary);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "raw_dict", compressed.len, decoded);
     } else if (std.mem.eql(u8, command, "decode-zlib-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
-        const decoded = try vort.decodeZlibAlloc(init.gpa, compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeZlibAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.decodeZlibAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
@@ -602,34 +614,50 @@ pub fn main(init: std.process.Init) !void {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
         const dictionary_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
         const dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dictionary_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(dictionary);
-        const decoded = try vort.decodeZlibAllocWithDictionary(init.gpa, compressed, dictionary);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeZlibAllocWithDictionaryLimited(init.gpa, compressed, dictionary, limit)
+        else
+            try vort.decodeZlibAllocWithDictionary(init.gpa, compressed, dictionary);
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("compressed_bytes={d} dictionary_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, dictionary.len, decoded.len, output_path });
     } else if (std.mem.eql(u8, command, "decode-zlib-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
+        const max_output_len = try parseOptionalLimit(args.next());
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
-        const decoded = try vort.decodeZlibAlloc(init.gpa, compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeZlibAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.decodeZlibAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "zlib", compressed.len, decoded);
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const dictionary = args.next() orelse "";
+        const max_output_len = try parseOptionalLimit(args.next());
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
-        const decoded = try vort.decodeZlibAllocWithDictionary(init.gpa, compressed, dictionary);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeZlibAllocWithDictionaryLimited(init.gpa, compressed, dictionary, limit)
+        else
+            try vort.decodeZlibAllocWithDictionary(init.gpa, compressed, dictionary);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "zlib_dict", compressed.len, decoded);
     } else if (std.mem.eql(u8, command, "decode-gzip-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
+        const max_output_len = try parseOptionalLimit(args.next());
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
-        const decoded = try vort.decodeGzipConcatenatedAlloc(init.gpa, compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeGzipConcatenatedAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.decodeGzipConcatenatedAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "gzip", compressed.len, decoded);
     } else {
@@ -653,15 +681,20 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\compatibility formats:
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
-        \\  decode-raw-hex [hex]      Decode raw deflate hex to text
-        \\  decode-raw-dict-hex [hex] [dict]
+        \\  decode-raw-hex [hex] [max_output]
+        \\                              Decode raw deflate hex to text
+        \\  decode-raw-dict-hex [hex] [dict] [max_output]
         \\                              Decode raw deflate hex with a preset dictionary
-        \\  decode-zlib-hex [hex]     Decode zlib-wrapped deflate hex to text
-        \\  decode-zlib-dict-hex [hex] [dict]
+        \\  decode-zlib-hex [hex] [max_output]
+        \\                              Decode zlib-wrapped deflate hex to text
+        \\  decode-zlib-dict-hex [hex] [dict] [max_output]
         \\                              Decode zlib-wrapped deflate hex with a preset dictionary
-        \\  decode-zlib-dict-file <in> <out> <dict>
+        \\  decode-zlib-file <in> <out> [max_output]
+        \\                              Decode a zlib file with an optional output limit
+        \\  decode-zlib-dict-file <in> <out> <dict> [max_output]
         \\                              Decode a zlib file with a preset dictionary file
-        \\  decode-gzip-hex [hex]     Decode gzip-wrapped deflate hex to text
+        \\  decode-gzip-hex [hex] [max_output]
+        \\                              Decode gzip-wrapped deflate hex to text
         \\  encode-zlib-best-file <in> <out> [level]
         \\                              Encode a zlib-compatible file with best-block selection
         \\
@@ -786,6 +819,11 @@ fn parseBlockLen(text: ?[]const u8, default: usize) !usize {
     const parsed = try std.fmt.parseInt(usize, value, 10);
     if (parsed == 0) return error.InvalidBlockPlan;
     return parsed;
+}
+
+fn parseOptionalLimit(text: ?[]const u8) !?usize {
+    const value = text orelse return null;
+    return try std.fmt.parseInt(usize, value, 10);
 }
 
 fn parseSidecarValidationMode(text: ?[]const u8) !vort.SidecarValidationMode {
