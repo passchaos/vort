@@ -13,6 +13,8 @@ def category_for(path: Path) -> str:
     name = path.name
     if "validation" in name or "sidecar-corrupt" in name:
         return "validation"
+    if "bench" in name or "benchmark" in name:
+        return "benchmark"
     if "standard" in name or "corpus" in name or "dictionary" in name:
         return "corpus and ratio"
     if "parallel" in name or "thread-pool" in name:
@@ -172,7 +174,7 @@ def main() -> int:
     artifacts = sorted(
         path
         for path in root.glob("vort-*")
-        if path.suffix in {".md", ".json"} and path.resolve() not in {output.resolve(), manifest.resolve()}
+        if path.suffix in {".csv", ".md", ".json"} and path.resolve() not in {output.resolve(), manifest.resolve()}
     )
     grouped: dict[str, list[Path]] = {}
     for artifact in artifacts:
