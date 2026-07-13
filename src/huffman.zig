@@ -318,11 +318,16 @@ pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n
         return lengths;
     }
 
+    const leaf_count = node_count;
+    std.mem.sort(TreeNode, nodes[0..leaf_count], {}, treeNodeLess);
+    var leaf_index: usize = 0;
+    var internal_index: usize = leaf_count;
     var active = node_count;
     while (active > 1) {
-        const pair = twoSmallestNodes(&nodes, node_count);
-        nodes[pair.a].used = true;
-        nodes[pair.b].used = true;
+        const pair = .{
+            .a = popSmallestNode(&nodes, leaf_count, &leaf_index, &internal_index, node_count),
+            .b = popSmallestNode(&nodes, leaf_count, &leaf_index, &internal_index, node_count),
+        };
         nodes[node_count] = .{
             .freq = nodes[pair.a].freq + nodes[pair.b].freq,
             .left = pair.a,
@@ -368,24 +373,26 @@ const TreeNode = struct {
     symbol: ?usize = null,
     left: ?usize = null,
     right: ?usize = null,
-    used: bool = false,
 };
 
-const NodePair = struct { a: usize, b: usize };
+fn treeNodeLess(_: void, lhs: TreeNode, rhs: TreeNode) bool {
+    return nodeLess(lhs, rhs);
+}
 
-fn twoSmallestNodes(nodes: []const TreeNode, node_count: usize) NodePair {
-    var first: ?usize = null;
-    var second: ?usize = null;
-    for (nodes[0..node_count], 0..) |node, i| {
-        if (node.used) continue;
-        if (first == null or nodeLess(node, nodes[first.?])) {
-            second = first;
-            first = i;
-        } else if (second == null or nodeLess(node, nodes[second.?])) {
-            second = i;
-        }
+fn popSmallestNode(nodes: []const TreeNode, leaf_count: usize, leaf_index: *usize, internal_index: *usize, node_count: usize) usize {
+    if (leaf_index.* >= leaf_count) {
+        const index = internal_index.*;
+        internal_index.* += 1;
+        return index;
     }
-    return .{ .a = first.?, .b = second.? };
+    if (internal_index.* >= node_count or nodeLess(nodes[leaf_index.*], nodes[internal_index.*])) {
+        const index = leaf_index.*;
+        leaf_index.* += 1;
+        return index;
+    }
+    const index = internal_index.*;
+    internal_index.* += 1;
+    return index;
 }
 
 fn nodeLess(lhs: TreeNode, rhs: TreeNode) bool {

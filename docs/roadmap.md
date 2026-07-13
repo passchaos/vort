@@ -226,6 +226,7 @@ architecture blindly.
 - [x] Dynamic Huffman plan report includes stats/dynamic/best encode timings.
 - [x] Dynamic Huffman plan report can write a CSV artifact for dashboard tracking.
 - [x] Dynamic Huffman plan report includes size and timing ratio diagnostics.
+- [x] Huffman tree length builder uses sorted-leaf/internal-node queues instead of repeated full scans.
 - [x] Dynamic HCLEN trimming helper with boundary tests.
 - [x] Dynamic HLIT/HDIST trimming helpers with boundary tests.
 - [x] Adaptive split search using stored/fixed/dynamic bit-cost candidates.
