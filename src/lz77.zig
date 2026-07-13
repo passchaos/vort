@@ -188,7 +188,9 @@ fn hashLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     @memset(head, -1);
     const prev = try allocator.alloc(isize, input.len);
     defer allocator.free(prev);
-    @memset(prev, -1);
+    // `prev` is intentionally left uninitialized: every position reachable
+    // through `head` is written by `insertHash` before it can be followed.
+    // Avoiding a full-buffer clear removes one hot memory pass per block.
 
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
@@ -247,7 +249,8 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
     @memset(head, -1);
     const prev = try allocator.alloc(isize, n);
     defer allocator.free(prev);
-    @memset(prev, -1);
+    // `prev` entries are written by the pre-population pass below before the
+    // reverse dynamic-programming search reads any insertable position.
 
     // Pre-populate hash chain for all positions.
     for (0..n) |i| insertHash(input, i, head, prev);
@@ -398,7 +401,8 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     @memset(head, -1);
     const prev = try allocator.alloc(isize, input.len);
     defer allocator.free(prev);
-    @memset(prev, -1);
+    // As in the lazy parser, only positions already inserted into `head` are
+    // traversed, so every reachable `prev` slot has been initialized.
 
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
