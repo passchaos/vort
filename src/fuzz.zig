@@ -98,6 +98,10 @@ pub fn runDeflateSmokeCorpus(allocator: std.mem.Allocator) !CorpusStats {
     defer allocator.free(missing_eob);
     try expectMalformedDeflate(allocator, &stats, missing_eob);
 
+    const missing_distance = try malformedMissingDistanceDynamicAlloc(allocator);
+    defer allocator.free(missing_distance);
+    try expectMalformedDeflate(allocator, &stats, missing_distance);
+
     return stats;
 }
 
@@ -215,6 +219,37 @@ fn missingEndOfBlockDynamicHeaderAlloc(allocator: std.mem.Allocator) ![]u8 {
     return writer.toOwnedSlice(allocator);
 }
 
+fn malformedMissingDistanceDynamicAlloc(allocator: std.mem.Allocator) ![]u8 {
+    var lit_lengths: [258]u4 = @splat(0);
+    lit_lengths['a'] = 2;
+    lit_lengths[256] = 2;
+    lit_lengths[257] = 2;
+    var code_len_lengths: [19]u4 = @splat(0);
+    code_len_lengths[0] = 1;
+    code_len_lengths[2] = 1;
+    const code_len_encoder = try huffman.CodeLengthTable.Encoder.init(&code_len_lengths);
+    const lit_encoder = try huffman.HuffmanTable(258).Encoder.init(&lit_lengths);
+
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writer.writeBits(allocator, 1, 1);
+    try writer.writeBits(allocator, 0b10, 2);
+    try writer.writeBits(allocator, 1, 5);
+    try writer.writeBits(allocator, 0, 5);
+    try writer.writeBits(allocator, 12, 4);
+    for (huffman.code_length_order[0..16]) |symbol| {
+        try writer.writeBits(allocator, code_len_lengths[symbol], 3);
+    }
+    for (&lit_lengths) |len| try code_len_encoder.writeSymbol(&writer, allocator, len);
+    try code_len_encoder.writeSymbol(&writer, allocator, 0);
+    try lit_encoder.writeSymbol(&writer, allocator, 'a');
+    try lit_encoder.writeSymbol(&writer, allocator, 257);
+    // Ensure the empty distance alphabet fails as InvalidHuffmanCode rather
+    // than ending prematurely with TruncatedFrame.
+    try writer.writeBits(allocator, 0, 15);
+    return writer.toOwnedSlice(allocator);
+}
+
 fn writeMinimalDynamicHeader(allocator: std.mem.Allocator, writer: *bitstream.BitWriter) !void {
     try writer.writeBits(allocator, 1, 1);
     try writer.writeBits(allocator, 0b10, 2);
@@ -232,7 +267,7 @@ test "store smoke corpus covers malformed and valid frames" {
 
 test "deflate smoke corpus covers valid and malformed raw streams" {
     const stats = try runDeflateSmokeCorpus(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 13), stats.cases);
+    try std.testing.expectEqual(@as(usize, 14), stats.cases);
     try std.testing.expectEqual(@as(usize, 3), stats.valid_frames);
-    try std.testing.expectEqual(@as(usize, 10), stats.expected_errors);
+    try std.testing.expectEqual(@as(usize, 11), stats.expected_errors);
 }
