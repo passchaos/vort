@@ -27,6 +27,7 @@
       },
       "item_fields": {
         "category": "str",
+        "expected_format": "str",
         "format": "str",
         "mtime_utc": "str",
         "name": "str",
@@ -35,12 +36,14 @@
         "producer_step": "str",
         "schema": "str?",
         "schema_version": "int?",
-        "size_bytes": "int"
+        "size_bytes": "int",
+        "smoke_gate": "str"
       }
     },
     "vort.dashboard_producers": {
       "fields": {
         "allow_missing": "dict",
+        "artifact_metadata": "dict",
         "contains": "list",
         "exact": "dict",
         "schema": "str",

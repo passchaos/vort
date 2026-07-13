@@ -5,6 +5,28 @@
     "contains": [],
     "exact": []
   },
+  "artifact_metadata": {
+    "vort-dashboard-index.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-dashboard-index"
+    },
+    "vort-dashboard-index.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-dashboard-index"
+    },
+    "vort-sidecar-corrupt-smoke.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-sidecar-corrupt-dashboard"
+    },
+    "vort-sidecar-corrupt-smoke.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-sidecar-corrupt-dashboard"
+    },
+    "vort-validation-json-smoke.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-validation-json-dashboard"
+    }
+  },
   "exact": {
     "vort-dashboard-index.json": "zig build run-dashboard-index",
     "vort-dashboard-index.md": "zig build run-dashboard-index",

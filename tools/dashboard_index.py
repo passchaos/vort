@@ -82,6 +82,14 @@ def is_allowed_missing(path: Path, producer_map: dict) -> bool:
     return False
 
 
+def artifact_config_for(path: Path, producer_map: dict) -> dict:
+    metadata = producer_map.get("artifact_metadata")
+    if not isinstance(metadata, dict):
+        return {}
+    value = metadata.get(path.name)
+    return value if isinstance(value, dict) else {}
+
+
 def read_json(path: Path) -> dict:
     try:
         value = json.loads(path.read_text())
@@ -118,13 +126,19 @@ def artifact_record(path: Path, output_dir: Path, producer_map: dict) -> dict:
     mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     data = read_json(path) if path.suffix == ".json" else {}
     producer_step = producer_step_for(path, producer_map)
+    artifact_config = artifact_config_for(path, producer_map)
+    expected_format = artifact_config.get("expected_format", "")
+    if expected_format and expected_format != path.suffix.lstrip("."):
+        raise ValueError(f"{path.name} expected format {expected_format!r} but found {path.suffix!r}")
     return {
         "name": path.name,
         "path": path.relative_to(output_dir).as_posix(),
         "category": category_for(path),
         "format": path.suffix.lstrip("."),
+        "expected_format": expected_format,
         "producer_step": producer_step,
         "producer_missing_allowed": producer_step == "" and is_allowed_missing(path, producer_map),
+        "smoke_gate": artifact_config.get("smoke_gate", ""),
         "size_bytes": stat.st_size,
         "mtime_utc": mtime,
         "schema": data.get("schema"),
