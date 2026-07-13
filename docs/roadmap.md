@@ -144,6 +144,7 @@ architecture blindly.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
 - [x] Raw/zlib preset-dictionary decode covers stored/fixed/dynamic block cases.
 - [x] CLI and Python differential smoke cover raw/zlib preset-dictionary decode.
+- [x] File CLI and Python differential smoke cover zlib preset-dictionary decode.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
 - [x] zlib wrapper integration for multi-block dynamic streams.

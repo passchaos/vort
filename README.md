@@ -79,6 +79,14 @@ zig build run -- decode-raw-hex cb48cdc9c90700
 zig build run -- decode-raw-dict-hex cb402701 "hello "
 zig build run -- decode-zlib-hex 7801cb48cdc9c90700062c0215
 zig build run -- decode-zlib-dict-hex 78f908610235cb4027013a2e067d "hello "
+printf "hello " > /tmp/vort.dict && python3 - <<'PY'
+import zlib
+d = b"hello "
+p = b"hello hello hello"
+co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, zdict=d)
+open("/tmp/vort-dict.zlib", "wb").write(co.compress(p) + co.flush())
+PY
+zig build run -- decode-zlib-dict-file /tmp/vort-dict.zlib /tmp/vort-dict.out /tmp/vort.dict
 zig build run -- decode-gzip-hex 1f8b0800000000000403cb48cdc9c9070086a6103605000000
 zig build run -- encode-raw-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 fast
 zig build run -- encode-zlib-best-adaptive-hex "abcdefghijklmnopqrstuvwxyz" default

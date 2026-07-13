@@ -598,6 +598,18 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "decode-zlib-dict-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const dictionary_path = args.next() orelse return error.MissingCorpusPath;
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dictionary_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(dictionary);
+        const decoded = try vort.decodeZlibAllocWithDictionary(init.gpa, compressed, dictionary);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("compressed_bytes={d} dictionary_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, dictionary.len, decoded.len, output_path });
     } else if (std.mem.eql(u8, command, "decode-zlib-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const compressed = try hexToOwnedBytes(init.gpa, hex);
@@ -647,6 +659,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-zlib-hex [hex]     Decode zlib-wrapped deflate hex to text
         \\  decode-zlib-dict-hex [hex] [dict]
         \\                              Decode zlib-wrapped deflate hex with a preset dictionary
+        \\  decode-zlib-dict-file <in> <out> <dict>
+        \\                              Decode a zlib file with a preset dictionary file
         \\  decode-gzip-hex [hex]     Decode gzip-wrapped deflate hex to text
         \\  encode-zlib-best-file <in> <out> [level]
         \\                              Encode a zlib-compatible file with best-block selection

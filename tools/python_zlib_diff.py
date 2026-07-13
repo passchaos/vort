@@ -8,6 +8,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import tempfile
 import zlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -131,6 +132,19 @@ def main() -> int:
     out = run_cli("decode-zlib-dict-hex", zlib_dynamic_dict.hex(), dictionary_text)
     assert int(parse_field(out, "decoded_bytes")) == len(dictionary), out
     assert int(parse_field(out, "crc32")) == (zlib.crc32(dictionary) & 0xFFFFFFFF), out
+
+    co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, zdict=dictionary)
+    zlib_dict_file = co.compress(dict_payload) + co.flush()
+    with tempfile.TemporaryDirectory(prefix="vort-zlib-dict-", dir=ROOT / ".zig-cache") as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        compressed_path = tmp / "dict.zlib"
+        dictionary_path = tmp / "dict.bin"
+        decoded_path = tmp / "decoded.bin"
+        compressed_path.write_bytes(zlib_dict_file)
+        dictionary_path.write_bytes(dictionary)
+        out = run_cli("decode-zlib-dict-file", str(compressed_path), str(decoded_path), str(dictionary_path))
+        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
+        assert decoded_path.read_bytes() == dict_payload, out
 
     dynamic_payloads = [
         b"match-heavy:" + (b"abcabcabcabc" * 96) + (b"xyzxyzxyz" * 48),
