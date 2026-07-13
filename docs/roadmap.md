@@ -57,6 +57,7 @@ architecture blindly.
 - [x] Sidecar index validation exposes explicit metadata-only and full-decode modes for large corpus workflows.
 - [x] Embedded-index validation exposes the same metadata-only/full-decode semantics as sidecar validation.
 - [x] Sidecar and embedded-index validation reports expose structured failure context for diagnostics.
+- [x] Sidecar verification reports include validation stage and frame context fields in CSV/Markdown/JSON output.
 - [x] Sidecar corrupt-payload smoke verifies metadata mode accepts header-consistent streams while full mode rejects store/deflate/RLE/dictionary/LDM/self-contained/seekable sidecar/embedded-index payload corruption.
 - [x] Sidecar corrupt-payload smoke can emit Markdown/JSON artifacts for dashboard retention.
 - [x] Sidecar corrupt-payload dashboard step writes fixed zig-out Markdown/JSON artifacts and runs in CI smoke.
