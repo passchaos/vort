@@ -670,23 +670,72 @@ const CodeExtra = struct {
 };
 
 fn lengthCode(length: u16) CodeExtra {
-    for (length_table, 0..) |entry, i| {
-        const span: u16 = if (entry.extra_bits == 0) 1 else @as(u16, 1) << @intCast(entry.extra_bits);
-        if (length >= entry.base and length < entry.base + span) {
-            return .{ .symbol = @intCast(257 + i), .extra_bits = entry.extra_bits, .extra_value = length - entry.base };
-        }
-    }
-    unreachable;
+    std.debug.assert(length >= lz77.min_match_len and length <= lz77.max_match_len);
+    if (length <= 10) return .{ .symbol = length + 254, .extra_bits = 0, .extra_value = 0 };
+    if (length == 258) return .{ .symbol = 285, .extra_bits = 0, .extra_value = 0 };
+
+    const extra_bits: u6 = @intCast(std.math.log2_int(u16, length - 3) - 2);
+    const span: u16 = @as(u16, 1) << @intCast(extra_bits);
+    const group_base: u16 = (@as(u16, 1) << @intCast(extra_bits + 2)) + 3;
+    const offset = length - group_base;
+    const slot = offset / span;
+    return .{
+        .symbol = 261 + @as(u16, extra_bits) * 4 + slot,
+        .extra_bits = extra_bits,
+        .extra_value = offset & (span - 1),
+    };
 }
 
 fn distanceCode(distance: u16) CodeExtra {
-    for (distance_table, 0..) |entry, i| {
-        const span: u16 = if (entry.extra_bits == 0) 1 else @as(u16, 1) << @intCast(entry.extra_bits);
-        if (distance >= entry.base and distance < entry.base + span) {
-            return .{ .symbol = @intCast(i), .extra_bits = entry.extra_bits, .extra_value = distance - entry.base };
+    std.debug.assert(distance >= 1 and distance <= lz77.default_window_len);
+    if (distance <= 4) return .{ .symbol = distance - 1, .extra_bits = 0, .extra_value = 0 };
+
+    const extra_bits: u6 = @intCast(std.math.log2_int(u16, distance - 1) - 1);
+    const span: u16 = @as(u16, 1) << @intCast(extra_bits);
+    const group_base: u16 = (@as(u16, 1) << @intCast(extra_bits + 1)) + 1;
+    const offset = distance - group_base;
+    const slot = offset / span;
+    return .{
+        .symbol = 2 + @as(u16, extra_bits) * 2 + slot,
+        .extra_bits = extra_bits,
+        .extra_value = offset & (span - 1),
+    };
+}
+
+test "fast length and distance code selection matches RFC tables" {
+    for (length_table, 0..) |entry, i| {
+        const first = lengthCode(entry.base);
+        try std.testing.expectEqual(@as(u16, @intCast(257 + i)), first.symbol);
+        try std.testing.expectEqual(entry.extra_bits, first.extra_bits);
+        try std.testing.expectEqual(@as(u16, 0), first.extra_value);
+
+        if (entry.extra_bits != 0 and entry.base != 227) {
+            const last_len = entry.base + (@as(u16, 1) << @intCast(entry.extra_bits)) - 1;
+            const last = lengthCode(last_len);
+            try std.testing.expectEqual(@as(u16, @intCast(257 + i)), last.symbol);
+            try std.testing.expectEqual(entry.extra_bits, last.extra_bits);
+            try std.testing.expectEqual(last_len - entry.base, last.extra_value);
         }
     }
-    unreachable;
+    for (distance_table, 0..) |entry, i| {
+        const first = distanceCode(entry.base);
+        try std.testing.expectEqual(@as(u16, @intCast(i)), first.symbol);
+        try std.testing.expectEqual(entry.extra_bits, first.extra_bits);
+        try std.testing.expectEqual(@as(u16, 0), first.extra_value);
+
+        if (entry.extra_bits != 0) {
+            const last_dist = entry.base + (@as(u16, 1) << @intCast(entry.extra_bits)) - 1;
+            const last = distanceCode(last_dist);
+            try std.testing.expectEqual(@as(u16, @intCast(i)), last.symbol);
+            try std.testing.expectEqual(entry.extra_bits, last.extra_bits);
+            try std.testing.expectEqual(last_dist - entry.base, last.extra_value);
+        }
+    }
+
+    const max_length = lengthCode(258);
+    try std.testing.expectEqual(@as(u16, 285), max_length.symbol);
+    try std.testing.expectEqual(@as(u6, 0), max_length.extra_bits);
+    try std.testing.expectEqual(@as(u16, 0), max_length.extra_value);
 }
 
 pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {
