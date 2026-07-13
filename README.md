@@ -201,6 +201,33 @@ const encoded = try vort.storeEncodeAlloc(allocator, "payload");
 defer allocator.free(encoded);
 const decoded = try vort.storeDecodeAlloc(allocator, encoded);
 defer allocator.free(decoded);
+
+const raw = try vort.encodeRawFixedDeflateAlloc(allocator, "payload");
+defer allocator.free(raw);
+const bounded = try vort.decodeRawDeflateAllocLimited(allocator, raw, 1024);
+defer allocator.free(bounded);
+
+const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
+defer allocator.free(zlib_bytes);
+const zlib_bounded = try vort.decodeZlibAllocLimited(allocator, zlib_bytes, 1024);
+defer allocator.free(zlib_bounded);
+
+const gzip_bytes = try vort.encodeGzipFixedAlloc(allocator, "payload");
+defer allocator.free(gzip_bytes);
+const gzip_bounded = try vort.decodeGzipConcatenatedAllocLimited(allocator, gzip_bytes, 1024);
+defer allocator.free(gzip_bounded);
+
+// Limited decode APIs return error.OutputLimitExceeded before allocating or
+// appending beyond the caller's declared uncompressed-size budget. Dictionary
+// variants are available for raw deflate and zlib streams that need preset
+// history:
+// const dict_decoded = try vort.decodeZlibAllocWithDictionaryLimited(
+//     allocator,
+//     zlib_with_dictionary,
+//     dictionary,
+//     1024,
+// );
+// defer allocator.free(dict_decoded);
 ```
 
 ## Direction
