@@ -1574,6 +1574,21 @@ test "auto raw decoder dispatches stored and fixed blocks" {
     try std.testing.expectEqualSlices(u8, "aaaaaa", fixed);
 }
 
+test "auto raw decoder rejects truncated streams after non-final blocks" {
+    const non_final_stored = [_]u8{ 0x00, 0x01, 0x00, 0xfe, 0xff, 'x' };
+    try std.testing.expectError(error.TruncatedFrame, decodeRawAutoAlloc(std.testing.allocator, &non_final_stored));
+
+    const non_final_fixed = [_]u8{ 0x4a, 0x04, 0x00 };
+    try std.testing.expectError(error.TruncatedFrame, decodeRawAutoAlloc(std.testing.allocator, &non_final_fixed));
+
+    const dynamic = try encodeRawDynamicLiteralAlloc(std.testing.allocator, "dynamic truncated tail");
+    defer std.testing.allocator.free(dynamic);
+    const non_final_dynamic = try std.testing.allocator.dupe(u8, dynamic);
+    defer std.testing.allocator.free(non_final_dynamic);
+    non_final_dynamic[0] &= 0xfe;
+    try std.testing.expectError(error.TruncatedFrame, decodeRawAutoAlloc(std.testing.allocator, non_final_dynamic));
+}
+
 test "raw dynamic Huffman inflate decodes zlib dynamic vectors" {
     const compressed = &.{
         0x3d, 0xc6, 0x39, 0x11, 0x00, 0x00, 0x0c, 0x02,
