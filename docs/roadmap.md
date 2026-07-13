@@ -134,6 +134,7 @@ architecture blindly.
 - [x] Raw auto inflate rejects truncated streams after non-final stored/fixed/dynamic blocks.
 - [x] zlib/gzip wrappers reject truncated non-final raw deflate streams across stored/fixed/dynamic blocks.
 - [x] zlib wrapper and Adler verification for stored blocks.
+- [x] zlib wrapper reports preset-dictionary streams as unsupported dictionary requirements.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
 - [x] zlib wrapper integration for multi-block dynamic streams.

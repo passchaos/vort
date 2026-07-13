@@ -15,6 +15,7 @@ pub const Error = error{
     StoredLengthMismatch,
     BadZlibHeader,
     BadGzipHeader,
+    NeedDictionary,
     InvalidHuffmanCode,
     UnsupportedDeflateFeature,
     InvalidMatch,

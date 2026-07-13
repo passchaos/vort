@@ -1336,7 +1336,7 @@ fn validateZlibHeader(cmf: u8, flg: u8) Error!void {
     if ((cmf >> 4) > 7) return error.BadZlibHeader;
     const combined: u16 = (@as(u16, cmf) << 8) | flg;
     if (combined % 31 != 0) return error.BadZlibHeader;
-    if ((flg & 0x20) != 0) return error.BadZlibHeader;
+    if ((flg & 0x20) != 0) return error.NeedDictionary;
 }
 
 const gzip_header = [_]u8{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03 };
@@ -1969,7 +1969,11 @@ test "zlib header rejects bad method window check and dictionary flag" {
     var out: [32]u8 = undefined;
     try std.testing.expectError(error.BadZlibHeader, decodeZlibStored(&.{ 0x77, 0x85, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01 }, &out));
     try std.testing.expectError(error.BadZlibHeader, decodeZlibStored(&.{ 0x88, 0x98, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01 }, &out));
-    try std.testing.expectError(error.BadZlibHeader, decodeZlibStored(&.{ 0x78, 0x20, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01 }, &out));
+    // FDICT is a valid zlib header bit, but Vort does not yet accept caller
+    // supplied preset dictionaries for zlib streams. Surface that as a distinct
+    // capability error rather than conflating it with malformed FCHECK/CMF.
+    try std.testing.expectError(error.NeedDictionary, decodeZlibStored(&.{ 0x78, 0x20, 0x00, 0x00, 0x00, 0x00 }, &out));
+    try std.testing.expectError(error.NeedDictionary, decodeZlibAlloc(std.testing.allocator, &.{ 0x78, 0x20, 0x00, 0x00, 0x00, 0x00 }));
 }
 
 test "gzip header rejects reserved flags and bad method" {

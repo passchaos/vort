@@ -201,6 +201,7 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
                 error.CorruptFrame,
                 error.TrailingData,
                 error.BadZlibHeader,
+                error.NeedDictionary,
                 error.ChecksumMismatch,
                 error.SizeMismatch,
                 => .rejected,

@@ -7,6 +7,7 @@
 --zlib
 7801cb48cdc9c90700062c0215 # expect: accept
 0000 # expect: reject
+782000000000 # expect: reject
 
 # gzip-wrapped fixed "hello", then bad header.
 --gzip
