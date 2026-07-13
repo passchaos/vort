@@ -199,6 +199,7 @@ architecture blindly.
 - [x] Rust deflate decode benchmark performs warmup decodes before timing.
 - [x] Rust deflate encode benchmark reports Vort/fdeflate/miniz_oxide size and throughput rows.
 - [x] Rust deflate encode benchmark reports multiple Vort level presets.
+- [x] Rust deflate encode benchmark includes a Vort fixed-fast row to isolate best-selection overhead.
 - [x] Rust deflate benchmark CSV artifact steps write decode and encode rows to zig-out.
 - [x] Dashboard index tracks Rust deflate benchmark CSV artifacts.
 - [x] Dashboard index reports CSV benchmark row counts.

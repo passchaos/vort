@@ -66,9 +66,10 @@ noise. Use
 `run-rust-deflate-encode-bench` provides the matching encode-side smoke. It
 prints CSV rows for zlib output size, ratio, and encode throughput for Vort,
 fdeflate, and miniz_oxide on the same generated payloads. Vort is reported at
-fastest, fast, and default presets so speed/ratio tradeoffs are visible next to
-the Rust baselines. It also includes real project README/roadmap files. Run it
-with `-Doptimize=ReleaseFast` before interpreting the Vort rows. Use
+fastest, fast, default, and fixed-fast modes so speed/ratio tradeoffs and
+best-selection overhead are visible next to the Rust baselines. It also includes
+real project README/roadmap files. Run it with `-Doptimize=ReleaseFast` before
+interpreting the Vort rows. Use
 `run-rust-deflate-encode-bench-csv` to persist the same rows to
 `zig-out/vort-rust-deflate-encode-bench.csv`.
 `run-rust-deflate-benchmark-summary` consumes both CSV files and writes

@@ -1,6 +1,8 @@
 const std = @import("std");
 const vort = @import("vort");
 
+const EncodeMode = enum { best, fixed };
+
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
@@ -8,19 +10,18 @@ pub fn main(init: std.process.Init) !void {
 
     const input_path = args.next() orelse return error.MissingCorpusPath;
     const iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
-    const level = parseLevel(args.next());
+    const mode = parseMode(args.next());
     const input = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(input);
 
-    const options = vort.optionsForCompressionLevel(level);
-    const warmup = try vort.encodeZlibBestAlloc(init.gpa, input, options);
+    const warmup = try encode(init.gpa, input, mode);
     init.gpa.free(warmup);
 
     var mix: u64 = 0;
     var last_size: usize = 0;
     const start = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |_| {
-        const encoded = try vort.encodeZlibBestAlloc(init.gpa, input, options);
+        const encoded = try encode(init.gpa, input, mode);
         defer init.gpa.free(encoded);
         last_size = encoded.len;
         mix +%= encoded.len;
@@ -35,10 +36,30 @@ pub fn main(init: std.process.Init) !void {
     try stdout.flush();
 }
 
-fn parseLevel(text: ?[]const u8) vort.CompressionLevel {
-    const value = text orelse return .default;
+const Mode = struct {
+    kind: EncodeMode,
+    level: vort.CompressionLevel,
+};
+
+fn parseMode(text: ?[]const u8) Mode {
+    const value = text orelse return .{ .kind = .best, .level = .default };
+    if (std.mem.startsWith(u8, value, "fixed-")) {
+        return .{ .kind = .fixed, .level = parseLevel(value["fixed-".len..]) };
+    }
+    return .{ .kind = .best, .level = parseLevel(value) };
+}
+
+fn parseLevel(value: []const u8) vort.CompressionLevel {
     if (std.mem.eql(u8, value, "fastest")) return .fastest;
     if (std.mem.eql(u8, value, "fast")) return .fast;
     if (std.mem.eql(u8, value, "best")) return .best;
     return .default;
+}
+
+fn encode(allocator: std.mem.Allocator, input: []const u8, mode: Mode) ![]u8 {
+    const options = vort.optionsForCompressionLevel(mode.level);
+    return switch (mode.kind) {
+        .best => vort.encodeZlibBestAlloc(allocator, input, options),
+        .fixed => vort.encodeZlibFixedWithOptionsAlloc(allocator, input, options),
+    };
 }
