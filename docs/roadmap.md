@@ -102,6 +102,7 @@ architecture blindly.
 - [x] Coverage-guided fuzz integration plan and reusable corpus entrypoint.
 - [x] Raw-byte fuzz target function and smoke executable.
 - [x] Deflate fuzz smoke corpus covers valid raw streams and malformed dynamic/non-final cases.
+- [x] Deflate fuzz smoke corpus covers fixed-Huffman reserved literal/distance symbols.
 - [x] Hex-sample fuzz corpus harness supports raw deflate samples.
 - [x] Hex-sample fuzz corpus harness supports zlib/gzip wrapper samples.
 - [x] Hex-sample fuzz corpus harness can load deflate/zlib/gzip samples from corpus files.

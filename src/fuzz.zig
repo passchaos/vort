@@ -70,6 +70,8 @@ pub fn runDeflateSmokeCorpus(allocator: std.mem.Allocator) !CorpusStats {
 
     try expectMalformedDeflate(allocator, &stats, &.{ 0x00, 0x01, 0x00, 0xfe, 0xff, 'x' });
     try expectMalformedDeflate(allocator, &stats, &.{ 0x4a, 0x04, 0x00 });
+    try expectMalformedDeflate(allocator, &stats, &.{ 0x4b, 0x04, 0x3e, 0x00 });
+    try expectMalformedDeflate(allocator, &stats, &.{ 0x1b, 0x03 });
 
     const non_final_dynamic = try allocator.dupe(u8, dynamic);
     defer allocator.free(non_final_dynamic);
@@ -180,7 +182,7 @@ test "store smoke corpus covers malformed and valid frames" {
 
 test "deflate smoke corpus covers valid and malformed raw streams" {
     const stats = try runDeflateSmokeCorpus(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 9), stats.cases);
+    try std.testing.expectEqual(@as(usize, 11), stats.cases);
     try std.testing.expectEqual(@as(usize, 3), stats.valid_frames);
-    try std.testing.expectEqual(@as(usize, 6), stats.expected_errors);
+    try std.testing.expectEqual(@as(usize, 8), stats.expected_errors);
 }
