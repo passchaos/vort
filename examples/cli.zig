@@ -438,12 +438,13 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, command, "verify-vort-sidecar-index-file")) {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
         const sidecar_path = args.next() orelse return error.MissingCorpusPath;
+        const validation_mode = try parseSidecarValidationMode(args.next());
         const stream = try std.Io.Dir.cwd().readFileAlloc(init.io, stream_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(stream);
         const sidecar = try std.Io.Dir.cwd().readFileAlloc(init.io, sidecar_path, init.gpa, .limited(16 * 1024 * 1024));
         defer init.gpa.free(sidecar);
-        try vort.storeValidateSidecarIndexAlloc(init.gpa, stream, sidecar);
-        try stdout.print("sidecar_ok=true stream_bytes={d} sidecar_bytes={d}\n", .{ stream.len, sidecar.len });
+        try vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, stream, sidecar, .{ .mode = validation_mode });
+        try stdout.print("sidecar_ok=true mode={s} stream_bytes={d} sidecar_bytes={d}\n", .{ @tagName(validation_mode), stream.len, sidecar.len });
     } else if (std.mem.eql(u8, command, "decode-vort-sidecar-range-file")) {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
         const sidecar_path = args.next() orelse return error.MissingCorpusPath;
@@ -599,6 +600,13 @@ fn parseBlockLen(text: ?[]const u8, default: usize) !usize {
     const parsed = try std.fmt.parseInt(usize, value, 10);
     if (parsed == 0) return error.InvalidBlockPlan;
     return parsed;
+}
+
+fn parseSidecarValidationMode(text: ?[]const u8) !vort.SidecarValidationMode {
+    const value = text orelse return .full;
+    if (std.mem.eql(u8, value, "metadata") or std.mem.eql(u8, value, "fast")) return .metadata;
+    if (std.mem.eql(u8, value, "full")) return .full;
+    return error.InvalidSidecarValidationMode;
 }
 
 fn parseCompressionOptions(text: ?[]const u8) vort.CompressionOptions {

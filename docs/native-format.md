@@ -9,11 +9,15 @@ The current implemented native v0 frame supports store/no-compression,
 deflate-compressed, RLE-compressed, caller-supplied dictionary-patch, and
 long-distance-reference payload modes. Concatenated v0 streams can embed a
 skippable serialized index with per-frame checksum metadata validated during
-range decode. Sidecar-index validation also decodes each referenced frame, so it
-detects payload corruption that would not change sidecar bytes or frame headers;
-`validateSidecarIndexAlloc` auto-loads embedded dictionaries, while
-`validateSidecarIndexWithDictionaryAlloc` covers external-dictionary streams.
-The seekable native encoder integrates these production paths:
+range decode. Sidecar-index validation has explicit modes:
+`SidecarValidationMode.metadata` checks sidecar/index structure and frame-header
+agreement without decoding payloads, while the default
+`SidecarValidationMode.full` decodes each referenced frame so it detects payload
+corruption that would not change sidecar bytes or frame headers.
+`validateSidecarIndexAlloc` auto-loads embedded dictionaries in full mode, while
+`validateSidecarIndexWithDictionaryAlloc` and
+`validateSidecarIndexWithOptionsAlloc` cover external-dictionary streams. The
+seekable native encoder integrates these production paths:
 `encodeSeekableNativeStreamAlloc` emits an embedded-index stream and
 `encodeSeekableNativeSidecarStreamAlloc` keeps the index external while selecting
 store/deflate/RLE, trained dictionary-patch/deflate, and LDM reference frames per
@@ -31,11 +35,11 @@ simple parser states that can be fuzzed aggressively.
 - Strong indexing: optional frame indexes should support byte-range lookup,
   uncompressed offsets, checksums per block, and external sidecar indexes; the
   current serialized v0 index records each frame checksum, can be validated
-  against the target stream by decoding referenced frames, and rejects mismatched,
-  payload-corrupt, or non-monotonic range-decode sidecars; sidecar-indexed
-  encoders can keep the index external, and sidecar index bytes can drive range
-  decode without an embedded index, including streams that embed or require a
-  dictionary.
+  against the target stream either by cheap metadata checks or by full referenced
+  frame decoding, and rejects mismatched, payload-corrupt (full mode), or
+  non-monotonic range-decode sidecars; sidecar-indexed encoders can keep the
+  index external, and sidecar index bytes can drive range decode without an
+  embedded index, including streams that embed or require a dictionary.
 - Dictionary-first: content dictionaries should carry stable IDs, training
   metadata, window constraints, and compatibility hints.
 - Multi-mode compression: store, fixed-Huffman deflate-compatible, dynamic

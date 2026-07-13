@@ -9,6 +9,7 @@ pub fn main(init: std.process.Init) !void {
     var markdown_path: ?[]const u8 = null;
     var json_path: ?[]const u8 = null;
     var case_limit: ?usize = null;
+    var validation_mode: vort.SidecarValidationMode = .full;
     var keep_going = false;
     var pairs: std.ArrayList(Pair) = .empty;
     defer {
@@ -26,6 +27,18 @@ pub fn main(init: std.process.Init) !void {
         }
         if (std.mem.eql(u8, arg, "--limit")) {
             case_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--mode")) {
+            validation_mode = try parseValidationMode(args.next() orelse return error.MissingCorpusPath);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--metadata-only")) {
+            validation_mode = .metadata;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--full")) {
+            validation_mode = .full;
             continue;
         }
         if (std.mem.eql(u8, arg, "--keep-going")) {
@@ -47,12 +60,12 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("stream,sidecar,status,error,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
+    try stdout.print("stream,sidecar,mode,status,error,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
     for (pairs.items, 0..) |pair, i| {
         if (case_limit) |limit| if (i >= limit) break;
-        const row = verifyPair(init, pair.stream, pair.sidecar) catch |err| row: {
+        const row = verifyPair(init, pair.stream, pair.sidecar, validation_mode) catch |err| row: {
             if (!keep_going) return err;
-            break :row ReportRow{ .stream = pair.stream, .sidecar = pair.sidecar, .status = "error", .error_name = @errorName(err) };
+            break :row ReportRow{ .stream = pair.stream, .sidecar = pair.sidecar, .validation_mode = @tagName(validation_mode), .status = "error", .error_name = @errorName(err) };
         };
         try rows.append(init.gpa, row);
         try printCsvRow(stdout, row);
@@ -78,6 +91,7 @@ const Pair = struct {
 const ReportRow = struct {
     stream: []const u8,
     sidecar: []const u8,
+    validation_mode: []const u8,
     stream_bytes: usize = 0,
     sidecar_bytes: usize = 0,
     entries: usize = 0,
@@ -86,6 +100,12 @@ const ReportRow = struct {
     status: []const u8 = "ok",
     error_name: []const u8 = "",
 };
+
+fn parseValidationMode(text: []const u8) !vort.SidecarValidationMode {
+    if (std.mem.eql(u8, text, "metadata") or std.mem.eql(u8, text, "fast")) return .metadata;
+    if (std.mem.eql(u8, text, "full")) return .full;
+    return error.InvalidSidecarValidationMode;
+}
 
 fn appendDirectoryPairs(init: std.process.Init, pairs: *std.ArrayList(Pair), dir_path: []const u8) !void {
     var dir = try std.Io.Dir.cwd().openDir(init.io, dir_path, .{ .iterate = true });
@@ -114,12 +134,12 @@ fn replaceExtension(allocator: std.mem.Allocator, path: []const u8, extension: [
     return std.fmt.allocPrint(allocator, "{s}{s}", .{ path[0..dot], extension });
 }
 
-fn verifyPair(init: std.process.Init, stream_path: []const u8, sidecar_path: []const u8) !ReportRow {
+fn verifyPair(init: std.process.Init, stream_path: []const u8, sidecar_path: []const u8, validation_mode: vort.SidecarValidationMode) !ReportRow {
     const stream = try std.Io.Dir.cwd().readFileAlloc(init.io, stream_path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(stream);
     const sidecar = try std.Io.Dir.cwd().readFileAlloc(init.io, sidecar_path, init.gpa, .limited(16 * 1024 * 1024));
     defer init.gpa.free(sidecar);
-    try vort.storeValidateSidecarIndexAlloc(init.gpa, stream, sidecar);
+    try vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, stream, sidecar, .{ .mode = validation_mode });
     const entries = try vort.storeDecodeFrameIndexAlloc(init.gpa, sidecar);
     defer init.gpa.free(entries);
     var total_uncompressed: u64 = 0;
@@ -127,6 +147,7 @@ fn verifyPair(init: std.process.Init, stream_path: []const u8, sidecar_path: []c
     return .{
         .stream = stream_path,
         .sidecar = sidecar_path,
+        .validation_mode = @tagName(validation_mode),
         .stream_bytes = stream.len,
         .sidecar_bytes = sidecar.len,
         .entries = entries.len,
@@ -137,9 +158,10 @@ fn verifyPair(init: std.process.Init, stream_path: []const u8, sidecar_path: []c
 }
 
 fn printCsvRow(stdout: *std.Io.Writer, row: ReportRow) !void {
-    try stdout.print("{s},{s},{s},{s},{d},{d},{d},{d},{d}\n", .{
+    try stdout.print("{s},{s},{s},{s},{s},{d},{d},{d},{d},{d}\n", .{
         row.stream,
         row.sidecar,
+        row.validation_mode,
         row.status,
         row.error_name,
         row.stream_bytes,
@@ -169,10 +191,10 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
     }
     try w.print("# Sidecar verification report\n\n", .{});
     try w.print("- rows: {d}\n- ok rows: {d}\n- error rows: {d}\n- total stream bytes: {d}\n- total sidecar bytes: {d}\n- total entries: {d}\n- total uncompressed bytes: {d}\n\n", .{ rows.len, ok_rows, error_rows, total_stream, total_sidecar, total_entries, total_uncompressed });
-    try w.print("| stream | sidecar | status | error | stream bytes | sidecar bytes | entries | total uncompressed | sidecar crc32 |\n", .{});
-    try w.print("| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |\n", .{});
+    try w.print("| stream | sidecar | mode | status | error | stream bytes | sidecar bytes | entries | total uncompressed | sidecar crc32 |\n", .{});
+    try w.print("| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |\n", .{});
     for (rows) |row| {
-        try w.print("| {s} | {s} | {s} | {s} | {d} | {d} | {d} | {d} | {d} |\n", .{ row.stream, row.sidecar, row.status, row.error_name, row.stream_bytes, row.sidecar_bytes, row.entries, row.total_uncompressed, row.crc32 });
+        try w.print("| {s} | {s} | {s} | {s} | {s} | {d} | {d} | {d} | {d} | {d} |\n", .{ row.stream, row.sidecar, row.validation_mode, row.status, row.error_name, row.stream_bytes, row.sidecar_bytes, row.entries, row.total_uncompressed, row.crc32 });
     }
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
 }
@@ -200,6 +222,8 @@ fn writeJson(init: std.process.Init, path: []const u8, rows: []const ReportRow) 
         try std.json.Stringify.value(row.stream, .{}, w);
         try w.print(", \"sidecar\": ", .{});
         try std.json.Stringify.value(row.sidecar, .{}, w);
+        try w.print(", \"mode\": ", .{});
+        try std.json.Stringify.value(row.validation_mode, .{}, w);
         try w.print(", \"status\": ", .{});
         try std.json.Stringify.value(row.status, .{}, w);
         try w.print(", \"error\": ", .{});

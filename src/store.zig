@@ -1548,21 +1548,48 @@ pub fn decodeIndexedRangeAlloc(allocator: std.mem.Allocator, input: []const u8, 
     return decodeRangeAlloc(allocator, input, embedded.entries, offset, length);
 }
 
+pub const SidecarValidationMode = enum {
+    /// Check only sidecar/index structure, frame spans, frame headers, and the
+    /// checksum values recorded in frame headers. This is intentionally cheap
+    /// for large corpus dashboards, but it cannot detect payload bytes changed
+    /// without updating the header.
+    metadata,
+    /// Decode every indexed frame through the normal per-mode decoder and
+    /// checksum path. This is the corruption-detection mode callers should use
+    /// before trusting sidecars for recovery or archival workflows.
+    full,
+};
+
+pub const SidecarValidationOptions = struct {
+    mode: SidecarValidationMode = .full,
+    dictionary: ?[]const u8 = null,
+};
+
 pub fn validateSidecarIndexAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8) !void {
+    return validateSidecarIndexWithOptionsAlloc(allocator, input, sidecar_index, .{});
+}
+
+pub fn validateSidecarIndexMetadataAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8) !void {
+    return validateSidecarIndexWithOptionsAlloc(allocator, input, sidecar_index, .{ .mode = .metadata });
+}
+
+pub fn validateSidecarIndexWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8) !void {
+    return validateSidecarIndexWithOptionsAlloc(allocator, input, sidecar_index, .{ .dictionary = dict });
+}
+
+pub fn validateSidecarIndexWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, options: SidecarValidationOptions) !void {
+    if (options.mode == .metadata) return validateSidecarIndexInternalAlloc(allocator, options.dictionary, input, sidecar_index, .metadata);
+    if (options.dictionary) |dict| return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index, options.mode);
     if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
         defer allocator.free(dict);
-        return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index);
+        return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index, options.mode);
     } else |err| switch (err) {
-        error.InvalidMagic => return validateSidecarIndexInternalAlloc(allocator, null, input, sidecar_index),
+        error.InvalidMagic => return validateSidecarIndexInternalAlloc(allocator, null, input, sidecar_index, options.mode),
         else => return err,
     }
 }
 
-pub fn validateSidecarIndexWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8) !void {
-    return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index);
-}
-
-fn validateSidecarIndexInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, sidecar_index: []const u8) !void {
+fn validateSidecarIndexInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, sidecar_index: []const u8, mode: SidecarValidationMode) !void {
     const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
     defer allocator.free(index);
     try validateFrameIndex(index);
@@ -1573,6 +1600,7 @@ fn validateSidecarIndexInternalAlloc(allocator: std.mem.Allocator, dict: ?[]cons
         if (entry.frame_len != try frameLenFromInfo(info)) return error.CorruptFrame;
         if (entry.uncompressed_len != info.uncompressed_size) return error.CorruptFrame;
         if (entry.checksum != info.checksum) return error.ChecksumMismatch;
+        if (mode == .metadata) continue;
         // A sidecar can outlive and travel separately from its stream, so
         // structural agreement with frame headers is not enough: a payload byte
         // could be modified while both the frame header and sidecar checksum
@@ -2114,6 +2142,20 @@ test "sidecar index validator decodes frames to catch payload tampering" {
     try std.testing.expectError(error.ChecksumMismatch, validateSidecarIndexAlloc(std.testing.allocator, tampered, sidecar.sidecar_index));
 }
 
+test "sidecar index metadata validation skips payload decode by design" {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const sidecar = try encodeSidecarIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer sidecar.deinit(std.testing.allocator);
+
+    const tampered = try std.testing.allocator.dupe(u8, sidecar.stream);
+    defer std.testing.allocator.free(tampered);
+    tampered[header_len] ^= 1;
+
+    try validateSidecarIndexMetadataAlloc(std.testing.allocator, tampered, sidecar.sidecar_index);
+    try validateSidecarIndexWithOptionsAlloc(std.testing.allocator, tampered, sidecar.sidecar_index, .{ .mode = .metadata });
+    try std.testing.expectError(error.ChecksumMismatch, validateSidecarIndexWithOptionsAlloc(std.testing.allocator, tampered, sidecar.sidecar_index, .{ .mode = .full }));
+}
+
 test "sidecar index validator accepts matching stream" {
     const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
     const sidecar = try encodeSidecarIndexedStreamAlloc(std.testing.allocator, &payloads);
@@ -2146,6 +2188,8 @@ test "sidecar index validator supports caller-supplied dictionaries" {
     defer std.testing.allocator.free(sidecar);
 
     try validateSidecarIndexWithDictionaryAlloc(std.testing.allocator, dict, frame, sidecar);
+    try validateSidecarIndexWithOptionsAlloc(std.testing.allocator, frame, sidecar, .{ .dictionary = dict });
+    try validateSidecarIndexWithOptionsAlloc(std.testing.allocator, frame, sidecar, .{ .mode = .metadata });
     try std.testing.expectError(error.InvalidDictionaryTraining, validateSidecarIndexAlloc(std.testing.allocator, frame, sidecar));
 }
 

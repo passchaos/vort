@@ -54,6 +54,7 @@ architecture blindly.
 - [x] Sidecar frame-index bytes can drive dictionary range decode.
 - [x] Sidecar frame-index bytes can auto range-decode streams with embedded dictionaries.
 - [x] Sidecar index validation decodes referenced frames and catches payload corruption, including dictionary streams.
+- [x] Sidecar index validation exposes explicit metadata-only and full-decode modes for large corpus workflows.
 - [x] CLI smoke for sidecar-index range decode.
 - [x] CLI smoke for sidecar-index dictionary auto range decode.
 - [x] Frame index monotonicity/gap validation before range decode.
