@@ -1381,12 +1381,21 @@ pub fn decodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
 }
 
 pub fn decodeGzipConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    return decodeGzipConcatenatedAllocLimitedInternal(allocator, input, null);
+}
+
+pub fn decodeGzipConcatenatedAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    return decodeGzipConcatenatedAllocLimitedInternal(allocator, input, max_output_len);
+}
+
+fn decodeGzipConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var offset: usize = 0;
     while (offset < input.len) {
         const data_offset = try parseGzipHeader(input[offset..]);
-        const raw = try decodeRawAutoAllocPartial(allocator, input[offset + data_offset ..]);
+        const member_limit = if (max_output_len) |limit| limit -| out.items.len else null;
+        const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[offset + data_offset ..], "", member_limit);
         defer raw.deinit(allocator);
         const footer_offset = offset + data_offset + raw.input_read;
         if (input.len - footer_offset < 8) return error.TruncatedFrame;
@@ -1394,6 +1403,7 @@ pub fn decodeGzipConcatenatedAlloc(allocator: std.mem.Allocator, input: []const 
         const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
         if (checksum.crc32(raw.bytes) != expected_crc) return error.ChecksumMismatch;
         if (@as(u32, @truncate(raw.bytes.len)) != expected_size) return error.SizeMismatch;
+        try ensureOutputLimit(out.items.len, raw.bytes.len, max_output_len);
         try out.appendSlice(allocator, raw.bytes);
         offset = footer_offset + 8;
     }
@@ -2473,6 +2483,10 @@ test "gzip concatenated members decode in sequence" {
     const decoded = try decodeGzipConcatenatedAlloc(std.testing.allocator, cat.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "helloworld", decoded);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeGzipConcatenatedAllocLimited(std.testing.allocator, cat.items, 9));
+    const limited = try decodeGzipConcatenatedAllocLimited(std.testing.allocator, cat.items, 10);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, "helloworld", limited);
 }
 
 test "fast level skips dynamic block candidate" {

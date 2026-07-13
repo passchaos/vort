@@ -156,6 +156,7 @@ architecture blindly.
 - [x] gzip wrapper integration for single final dynamic-Huffman blocks.
 - [x] gzip wrapper integration for multi-block dynamic streams.
 - [x] gzip concatenated member decode support.
+- [x] gzip concatenated member decode supports explicit total output limits.
 - [x] Stored-block vectors checked against Python/zlib level-0 output.
 - [x] Black-box differential smoke against Python zlib.
 - [x] Black-box differential smoke against system gzip CLI.
