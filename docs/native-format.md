@@ -24,6 +24,7 @@ hint, and error name) for diagnostics without replacing the throwing APIs.
 `run-sidecar-verify-report` includes the same context columns/fields in CSV,
 Markdown, and JSON output when validation fails. JSON validation artifacts carry
 stable `schema` and `schema_version` fields so scripts can gate compatibility.
+See `validation-json.md` for the current schema field reference.
 `run-sidecar-corrupt-smoke` exercises the distinction by mutating payload bytes
 across store, deflate, RLE, dictionary, LDM, self-contained dictionary sidecar,
 seekable native sidecar, and embedded-index streams: metadata validation
