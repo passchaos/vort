@@ -16,6 +16,9 @@ from pathlib import Path
 
 from validation_json_docs_check import load_manifest, validate_value_against_manifest
 
+ROOT = Path(__file__).resolve().parents[1]
+DASHBOARD_INDEX = ROOT / "tools" / "dashboard_index.py"
+
 
 def run(args: list[str], *, check: bool = True, stdout: int | None = subprocess.PIPE) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, check=check, text=True, stdout=stdout, stderr=subprocess.STDOUT)
@@ -55,8 +58,10 @@ def main() -> int:
         stream_path = root / "stream.vort"
         bad_stream_path = root / "stream-bad.vort"
         sidecar_path = root / "stream.vidx"
-        report_path = root / "report.json"
-        corrupt_path = root / "corrupt.json"
+        report_path = root / "vort-sidecar-verify-report.json"
+        corrupt_path = root / "vort-sidecar-corrupt-smoke.json"
+        dashboard_path = root / "vort-dashboard-index.md"
+        dashboard_manifest_path = root / "vort-dashboard-index.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -98,6 +103,24 @@ def main() -> int:
         assert corrupt["schema_version"] == 1
         assert corrupt["rows"] >= 1
         validate_value_against_manifest(corrupt, schemas_def)
+
+        run(
+            [
+                "python3",
+                str(DASHBOARD_INDEX),
+                "--dir",
+                str(root),
+                "--output",
+                str(dashboard_path),
+                "--manifest",
+                str(dashboard_manifest_path),
+            ]
+        )
+        dashboard = json.loads(dashboard_manifest_path.read_text())
+        assert dashboard["schema"] == "vort.dashboard_index"
+        assert dashboard["schema_version"] == 1
+        assert dashboard["artifact_count"] >= 2
+        validate_value_against_manifest(dashboard, schemas_def)
         summary = {
             "schema": "vort.validation_json_smoke",
             "schema_version": 1,
@@ -106,6 +129,7 @@ def main() -> int:
                 ok["schema"],
                 report["schema"],
                 corrupt["schema"],
+                dashboard["schema"],
             ],
             "cli_success_ok": ok["ok"],
             "cli_failure_ok": failure["ok"],
