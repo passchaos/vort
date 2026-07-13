@@ -124,6 +124,7 @@ def main() -> int:
     parser.add_argument("--output", default="zig-out/vort-dashboard-index.md", help="Markdown index path")
     parser.add_argument("--manifest", default="zig-out/vort-dashboard-index.json", help="JSON artifact manifest path")
     parser.add_argument("--producer-map", default="tools/dashboard_producers.json", help="JSON producer-step mapping path")
+    parser.add_argument("--strict-producers", action="store_true", help="fail if any artifact lacks a producer_step")
     args = parser.parse_args()
 
     root = Path(args.dir)
@@ -188,6 +189,9 @@ def main() -> int:
         )
         + "\n"
     )
+    if args.strict_producers and producer_step_missing:
+        missing = ",".join(producer_step_missing)
+        raise SystemExit(f"dashboard_index_missing_producers={missing}")
     print(f"dashboard_index={output} manifest={manifest} artifacts={len(artifacts)}")
     return 0
 

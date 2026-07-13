@@ -487,7 +487,7 @@ pub fn build(b: *std.Build) void {
     const validation_json_docs_check_step = b.step("run-validation-json-docs-check", "Validate JSON examples in docs/validation-json.md");
     validation_json_docs_check_step.dependOn(&validation_json_docs_check.step);
 
-    const dashboard_index = b.addSystemCommand(&.{ "python3", "tools/dashboard_index.py" });
+    const dashboard_index = b.addSystemCommand(&.{ "python3", "tools/dashboard_index.py", "--strict-producers" });
     const dashboard_index_step = b.step("run-dashboard-index", "Write a Markdown index for zig-out dashboard artifacts");
     dashboard_index_step.dependOn(&dashboard_index.step);
     dashboard_index_step.dependOn(sidecar_corrupt_dashboard_step);
