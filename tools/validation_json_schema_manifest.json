@@ -40,6 +40,11 @@
         "exact": "dict",
         "schema": "str",
         "schema_version": "int"
+      },
+      "item_collection": "contains",
+      "item_fields": {
+        "match": "str",
+        "producer_step": "str"
       }
     },
     "vort.sidecar_corrupt_smoke_report": {
