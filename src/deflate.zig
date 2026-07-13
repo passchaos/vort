@@ -1107,6 +1107,11 @@ fn appendMatchWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u
     if (distance == 0 or distance > out.items.len + dictionary.len) return error.InvalidMatch;
     try ensureOutputLimit(out.items.len, length, max_output_len);
     try out.ensureUnusedCapacity(allocator, length);
+    if (distance == 1 and out.items.len != 0) {
+        const byte = out.items[out.items.len - 1];
+        out.appendNTimesAssumeCapacity(byte, length);
+        return;
+    }
     var i: usize = 0;
     while (i < length) : (i += 1) {
         const absolute = dictionary.len + out.items.len - distance;
