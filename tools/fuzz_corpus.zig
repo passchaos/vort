@@ -46,8 +46,26 @@ pub fn main(init: std.process.Init) !void {
 
 const Mode = enum { store, deflate, zlib, gzip };
 
+const Outcome = enum { accepted, rejected };
+
+const Expected = enum {
+    accept,
+    reject,
+
+    fn matches(self: Expected, outcome: Outcome) bool {
+        return switch (self) {
+            .accept => outcome == .accepted,
+            .reject => outcome == .rejected,
+        };
+    }
+};
+
 const State = struct {
     mode: Mode = .store,
+    // Expected outcomes are sticky on purpose: corpus files often group many
+    // related samples under one directive, while inline comments can still set
+    // the expectation next to the sample that first needs it.
+    expected: ?Expected = null,
     saw_store: bool = false,
     saw_deflate: bool = false,
     saw_zlib: bool = false,
@@ -63,13 +81,37 @@ const State = struct {
             @as(usize, @intFromBool(self.saw_gzip));
         return if (mode_count > 1) "mixed" else if (self.saw_gzip) "gzip" else if (self.saw_zlib) "zlib" else if (self.saw_deflate) "deflate" else "store";
     }
+
+    fn recordOutcome(self: *State, outcome: Outcome) !void {
+        self.cases += 1;
+        switch (outcome) {
+            .accepted => self.accepted += 1,
+            .rejected => self.rejected += 1,
+        }
+        if (self.expected) |expected| {
+            if (!expected.matches(outcome)) {
+                return switch (outcome) {
+                    .accepted => error.UnexpectedAccept,
+                    .rejected => error.UnexpectedReject,
+                };
+            }
+        }
+    }
 };
 
 fn processFileTokens(allocator: std.mem.Allocator, state: *State, contents: []const u8) !void {
     var lines = std.mem.splitScalar(u8, contents, '\n');
     while (lines.next()) |line| {
-        const trimmed = std.mem.trim(u8, line, " \t\r");
-        if (trimmed.len == 0 or trimmed[0] == '#') continue;
+        // Treat '#' as an inline comment delimiter, but still scan the comment
+        // for lightweight directives such as "# expect: reject". This keeps
+        // corpus files friendly to reducers and code review: each sample stays
+        // a plain hex token with optional human-readable expectations.
+        const hash_index = std.mem.indexOfScalar(u8, line, '#');
+        const sample_part = if (hash_index) |index| line[0..index] else line;
+        if (hash_index) |index| try processCommentDirective(state, line[index + 1 ..]);
+
+        const trimmed = std.mem.trim(u8, sample_part, " \t\r");
+        if (trimmed.len == 0) continue;
         var tokens = std.mem.tokenizeAny(u8, trimmed, " \t\r");
         while (tokens.next()) |token| try processToken(allocator, state, token);
     }
@@ -92,29 +134,44 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
         state.mode = .gzip;
         return;
     }
+    if (std.mem.eql(u8, arg, "--expect-accept")) {
+        state.expected = .accept;
+        return;
+    }
+    if (std.mem.eql(u8, arg, "--expect-reject")) {
+        state.expected = .reject;
+        return;
+    }
+    if (std.mem.eql(u8, arg, "--expect-any")) {
+        state.expected = null;
+        return;
+    }
+    const expect_prefix = "--expect=";
+    if (std.mem.startsWith(u8, arg, expect_prefix)) {
+        state.expected = try parseExpected(arg[expect_prefix.len..]);
+        return;
+    }
 
     const bytes = try hexToOwnedBytes(allocator, arg);
     defer allocator.free(bytes);
-    state.cases += 1;
     switch (state.mode) {
         .store => {
             state.saw_store = true;
-            if (vort.store.parseHeader(bytes)) |_| {
-                state.accepted += 1;
-            } else |err| switch (err) {
+            const outcome: Outcome = if (vort.store.parseHeader(bytes)) |_| .accepted else |err| switch (err) {
                 error.TruncatedFrame,
                 error.InvalidMagic,
                 error.UnsupportedVersion,
                 error.CorruptFrame,
-                => state.rejected += 1,
+                => .rejected,
                 else => return err,
-            }
+            };
+            try state.recordOutcome(outcome);
         },
         .deflate => {
             state.saw_deflate = true;
-            if (vort.decodeRawDeflateAlloc(allocator, bytes)) |decoded| {
+            const outcome: Outcome = if (vort.decodeRawDeflateAlloc(allocator, bytes)) |decoded| result: {
                 defer allocator.free(decoded);
-                state.accepted += 1;
+                break :result .accepted;
             } else |err| switch (err) {
                 error.TruncatedFrame,
                 error.InvalidDeflateBlockType,
@@ -124,15 +181,16 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
                 error.InvalidMatch,
                 error.CorruptFrame,
                 error.TrailingData,
-                => state.rejected += 1,
+                => .rejected,
                 else => return err,
-            }
+            };
+            try state.recordOutcome(outcome);
         },
         .zlib => {
             state.saw_zlib = true;
-            if (vort.decodeZlibAlloc(allocator, bytes)) |decoded| {
+            const outcome: Outcome = if (vort.decodeZlibAlloc(allocator, bytes)) |decoded| result: {
                 defer allocator.free(decoded);
-                state.accepted += 1;
+                break :result .accepted;
             } else |err| switch (err) {
                 error.TruncatedFrame,
                 error.InvalidDeflateBlockType,
@@ -145,15 +203,16 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
                 error.BadZlibHeader,
                 error.ChecksumMismatch,
                 error.SizeMismatch,
-                => state.rejected += 1,
+                => .rejected,
                 else => return err,
-            }
+            };
+            try state.recordOutcome(outcome);
         },
         .gzip => {
             state.saw_gzip = true;
-            if (vort.decodeGzipAlloc(allocator, bytes)) |decoded| {
+            const outcome: Outcome = if (vort.decodeGzipAlloc(allocator, bytes)) |decoded| result: {
                 defer allocator.free(decoded);
-                state.accepted += 1;
+                break :result .accepted;
             } else |err| switch (err) {
                 error.TruncatedFrame,
                 error.InvalidDeflateBlockType,
@@ -166,11 +225,28 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
                 error.BadGzipHeader,
                 error.ChecksumMismatch,
                 error.SizeMismatch,
-                => state.rejected += 1,
+                => .rejected,
                 else => return err,
-            }
+            };
+            try state.recordOutcome(outcome);
         },
     }
+}
+
+fn processCommentDirective(state: *State, comment: []const u8) !void {
+    const trimmed = std.mem.trim(u8, comment, " \t\r");
+    const expect_prefix = "expect:";
+    if (std.mem.startsWith(u8, trimmed, expect_prefix)) {
+        state.expected = try parseExpected(trimmed[expect_prefix.len..]);
+    }
+}
+
+fn parseExpected(value: []const u8) !?Expected {
+    const trimmed = std.mem.trim(u8, value, " \t\r");
+    if (std.mem.eql(u8, trimmed, "accept") or std.mem.eql(u8, trimmed, "accepted")) return .accept;
+    if (std.mem.eql(u8, trimmed, "reject") or std.mem.eql(u8, trimmed, "rejected")) return .reject;
+    if (std.mem.eql(u8, trimmed, "any") or std.mem.eql(u8, trimmed, "none")) return null;
+    return error.InvalidExpectedOutcome;
 }
 
 fn hexToOwnedBytes(allocator: std.mem.Allocator, hex: []const u8) ![]u8 {
