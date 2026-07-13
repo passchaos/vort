@@ -161,6 +161,7 @@ architecture blindly.
 - [x] gzip concatenated member decode support.
 - [x] gzip concatenated member decode supports explicit total output limits.
 - [x] File CLI and gzip differential smoke cover gzip file decode with output limits.
+- [x] File CLI and gzip differential smoke cover concatenated gzip file decode.
 - [x] Stored-block vectors checked against Python/zlib level-0 output.
 - [x] Black-box differential smoke against Python zlib.
 - [x] Black-box differential smoke against system gzip CLI.

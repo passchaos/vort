@@ -69,6 +69,21 @@ def main() -> int:
             assert int(parse_field(out, "decoded_bytes")) == len(data), out
             assert limited_path.read_bytes() == data, out
 
+    concatenated = gzip_compress(b"hello ") + gzip_compress(b"world")
+    concatenated_plain = b"hello world"
+    with tempfile.TemporaryDirectory(prefix="vort-gzip-cat-", dir=ROOT / ".zig-cache") as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        compressed_path = tmp / "cat.gz"
+        decoded_path = tmp / "cat.out"
+        limited_path = tmp / "cat-limited.out"
+        compressed_path.write_bytes(concatenated)
+        out = run_cli("decode-gzip-file", str(compressed_path), str(decoded_path))
+        assert int(parse_field(out, "decoded_bytes")) == len(concatenated_plain), out
+        assert decoded_path.read_bytes() == concatenated_plain, out
+        out = run_cli("decode-gzip-file", str(compressed_path), str(limited_path), str(len(concatenated_plain)))
+        assert int(parse_field(out, "decoded_bytes")) == len(concatenated_plain), out
+        assert limited_path.read_bytes() == concatenated_plain, out
+
     # Vort fixed gzip known vector -> system gzip.
     vort_hello = bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a6103605000000")
     assert gzip_decompress(vort_hello) == b"hello"

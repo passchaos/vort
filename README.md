@@ -93,8 +93,10 @@ zig build run -- decode-gzip-hex 1f8b0800000000000403cb48cdc9c9070086a6103605000
 python3 - <<'PY'
 import gzip
 open("/tmp/vort.gz", "wb").write(gzip.compress(b"hello", mtime=0))
+open("/tmp/vort-cat.gz", "wb").write(gzip.compress(b"hello ", mtime=0) + gzip.compress(b"world", mtime=0))
 PY
 zig build run -- decode-gzip-file /tmp/vort.gz /tmp/vort-gzip.out 5
+zig build run -- decode-gzip-file /tmp/vort-cat.gz /tmp/vort-gzip-cat.out 11
 zig build run -- encode-raw-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 fast
 zig build run -- encode-zlib-best-adaptive-hex "abcdefghijklmnopqrstuvwxyz" default
 zig build run -- encode-zlib-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 default
