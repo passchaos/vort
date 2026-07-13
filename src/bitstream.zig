@@ -22,14 +22,8 @@ pub const BitReader = struct {
 
     pub fn readBits(self: *BitReader, comptime T: type, count: u6) Error!T {
         if (count > @bitSizeOf(T)) return error.CorruptFrame;
-        var result: T = 0;
-        var shift: u6 = 0;
-        while (shift < count) : (shift += 1) {
-            if (self.byte_index >= self.input.len) return error.TruncatedFrame;
-            const bit: T = @intCast((self.input[self.byte_index] >> self.bit_index) & 1);
-            result |= bit << @intCast(shift);
-            self.advanceOneBit();
-        }
+        const result = self.peekBitsPadded(T, count);
+        try self.skipBits(count);
         return result;
     }
 
@@ -49,16 +43,25 @@ pub const BitReader = struct {
     }
 
     pub fn peekBitsPadded(self: BitReader, comptime T: type, count: u6) T {
-        var copy = self;
-        var result: T = 0;
-        var shift: u6 = 0;
-        while (shift < count) : (shift += 1) {
-            if (copy.byte_index >= copy.input.len) break;
-            const bit: T = @intCast((copy.input[copy.byte_index] >> copy.bit_index) & 1);
-            result |= bit << @intCast(shift);
-            copy.advanceOneBit();
+        std.debug.assert(count <= @bitSizeOf(T));
+        if (count == 0 or self.byte_index >= self.input.len) return 0;
+
+        // Deflate stores bits LSB-first, so a little-endian byte window shifted
+        // by bit_index yields the requested bit sequence directly. Missing
+        // bytes are intentionally treated as zero padding for fast lookup
+        // probes; readBits/skipBits performs the strict availability check.
+        const requested_bits = @as(usize, self.bit_index) + @as(usize, count);
+        const requested_bytes = (requested_bits + 7) / 8;
+        const available_bytes = self.input.len - self.byte_index;
+        const bytes_to_read = @min(requested_bytes, available_bytes);
+        var window: u128 = 0;
+        var i: usize = 0;
+        while (i < bytes_to_read) : (i += 1) {
+            window |= @as(u128, self.input[self.byte_index + i]) << @intCast(i * 8);
         }
-        return result;
+        const shifted = window >> self.bit_index;
+        const mask = (@as(u128, 1) << @intCast(count)) - 1;
+        return @intCast(shifted & mask);
     }
 
     pub fn alignToByte(self: *BitReader) void {
@@ -66,11 +69,6 @@ pub const BitReader = struct {
             self.bit_index = 0;
             self.byte_index += 1;
         }
-    }
-
-    fn advanceOneBit(self: *BitReader) void {
-        self.bit_index +%= 1;
-        if (self.bit_index == 0) self.byte_index += 1;
     }
 };
 
@@ -132,6 +130,14 @@ test "BitReader skipBits advances without reading values" {
     try reader.skipBits(6);
     try std.testing.expectEqual(@as(usize, 16), reader.bitPosition());
     try std.testing.expectError(error.TruncatedFrame, reader.skipBits(1));
+}
+
+test "BitReader peekBitsPadded uses zero padding past input" {
+    var reader = BitReader.init(&.{0b0000_1011});
+    try reader.skipBits(4);
+    try std.testing.expectEqual(@as(u8, 0), reader.peekBitsPadded(u8, 8));
+    try std.testing.expectError(error.TruncatedFrame, reader.readBits(u8, 5));
+    try std.testing.expectEqual(@as(u4, 0), try reader.readBits(u4, 4));
 }
 
 test "BitWriter emits LSB-first bytes readable by BitReader" {
