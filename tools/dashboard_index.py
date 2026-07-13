@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 from pathlib import Path
 
@@ -37,6 +38,12 @@ def json_summary(path: Path) -> str:
     return ", ".join(parts)
 
 
+def artifact_metadata(path: Path) -> str:
+    stat = path.stat()
+    mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+    return f"{stat.st_size} bytes, updated `{mtime}`"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dir", default="zig-out", help="dashboard artifact directory")
@@ -54,6 +61,8 @@ def main() -> int:
         "# Vort dashboard index",
         "",
         "Generated from `zig-out` artifacts. Paths are relative to this index file.",
+        f"",
+        f"- artifacts: {len(artifacts)}",
         "",
     ]
     for category in sorted(grouped):
@@ -61,7 +70,10 @@ def main() -> int:
         for artifact in grouped[category]:
             rel = artifact.relative_to(output.parent)
             note = json_summary(artifact) if artifact.suffix == ".json" else ""
-            suffix = f" — {note}" if note else ""
+            metadata = artifact_metadata(artifact)
+            suffix = f" — {metadata}"
+            if note:
+                suffix += f", {note}"
             lines.append(f"- [{artifact.name}]({rel.as_posix()}){suffix}")
         lines.append("")
     if not artifacts:
