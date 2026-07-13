@@ -9,6 +9,8 @@ pub fn main(init: std.process.Init) !void {
     var mode: Mode = .store;
     var saw_store = false;
     var saw_deflate = false;
+    var saw_zlib = false;
+    var saw_gzip = false;
     var cases: usize = 0;
     var accepted: usize = 0;
     var rejected: usize = 0;
@@ -20,6 +22,14 @@ pub fn main(init: std.process.Init) !void {
         }
         if (std.mem.eql(u8, arg, "--deflate")) {
             mode = .deflate;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--zlib")) {
+            mode = .zlib;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--gzip")) {
+            mode = .gzip;
             continue;
         }
 
@@ -58,6 +68,48 @@ pub fn main(init: std.process.Init) !void {
                     else => return err,
                 }
             },
+            .zlib => {
+                saw_zlib = true;
+                if (vort.decodeZlibAlloc(init.gpa, bytes)) |decoded| {
+                    defer init.gpa.free(decoded);
+                    accepted += 1;
+                } else |err| switch (err) {
+                    error.TruncatedFrame,
+                    error.InvalidDeflateBlockType,
+                    error.StoredLengthMismatch,
+                    error.InvalidDynamicBlockHeader,
+                    error.InvalidHuffmanCode,
+                    error.InvalidMatch,
+                    error.CorruptFrame,
+                    error.TrailingData,
+                    error.BadZlibHeader,
+                    error.ChecksumMismatch,
+                    error.SizeMismatch,
+                    => rejected += 1,
+                    else => return err,
+                }
+            },
+            .gzip => {
+                saw_gzip = true;
+                if (vort.decodeGzipAlloc(init.gpa, bytes)) |decoded| {
+                    defer init.gpa.free(decoded);
+                    accepted += 1;
+                } else |err| switch (err) {
+                    error.TruncatedFrame,
+                    error.InvalidDeflateBlockType,
+                    error.StoredLengthMismatch,
+                    error.InvalidDynamicBlockHeader,
+                    error.InvalidHuffmanCode,
+                    error.InvalidMatch,
+                    error.CorruptFrame,
+                    error.TrailingData,
+                    error.BadGzipHeader,
+                    error.ChecksumMismatch,
+                    error.SizeMismatch,
+                    => rejected += 1,
+                    else => return err,
+                }
+            },
         }
     }
 
@@ -82,12 +134,13 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [512]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    const mode_label = if (saw_store and saw_deflate) "mixed" else if (saw_deflate) "deflate" else "store";
+    const mode_count = @as(usize, @intFromBool(saw_store)) + @as(usize, @intFromBool(saw_deflate)) + @as(usize, @intFromBool(saw_zlib)) + @as(usize, @intFromBool(saw_gzip));
+    const mode_label = if (mode_count > 1) "mixed" else if (saw_gzip) "gzip" else if (saw_zlib) "zlib" else if (saw_deflate) "deflate" else "store";
     try stdout.print("fuzz corpus: mode={s} cases={d} accepted={d} rejected={d}\n", .{ mode_label, cases, accepted, rejected });
     try stdout.flush();
 }
 
-const Mode = enum { store, deflate };
+const Mode = enum { store, deflate, zlib, gzip };
 
 fn hexToOwnedBytes(allocator: std.mem.Allocator, hex: []const u8) ![]u8 {
     if ((hex.len & 1) != 0) return error.InvalidHexInput;
