@@ -57,4 +57,5 @@ harnesses are still required before making performance claims. The
 with `-Doptimize=ReleaseFast` so the Vort row is comparable to the release-mode
 temporary Cargo runner built against both Rust checkouts. It prints CSV rows
 comparing Vort, fdeflate, and miniz_oxide zlib decode throughput on generated
-tiny, repetitive, text, and binary payloads.
+tiny, repetitive, text, and binary payloads. Each engine performs one warmup
+decode before timing to reduce cold-start noise.

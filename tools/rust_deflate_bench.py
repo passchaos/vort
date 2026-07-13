@@ -50,6 +50,15 @@ def write_runner(workdir: pathlib.Path) -> pathlib.Path:
                 let engine = &args[1];
                 let frame = fs::read(&args[2]).expect("read frame");
                 let iterations: usize = args[3].parse().expect("iterations");
+                let warmup = match engine.as_str() {
+                    "fdeflate" => fdeflate::decompress_to_vec(&frame).expect("fdeflate decode"),
+                    "miniz_oxide" => miniz_oxide::inflate::decompress_to_vec_zlib(&frame).expect("miniz_oxide decode"),
+                    _ => {
+                        eprintln!("unknown engine: {engine}");
+                        process::exit(2);
+                    }
+                };
+                drop(warmup);
                 let start = Instant::now();
                 let mut mix: u64 = 0;
                 for _ in 0..iterations {

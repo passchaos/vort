@@ -11,6 +11,9 @@ pub fn main(init: std.process.Init) !void {
     const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, frame_path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(frame);
 
+    const warmup = try vort.decodeZlibAlloc(init.gpa, frame);
+    init.gpa.free(warmup);
+
     var mix: u64 = 0;
     const start = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |_| {
