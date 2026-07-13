@@ -102,6 +102,7 @@ architecture blindly.
 - [x] Coverage-guided fuzz integration plan and reusable corpus entrypoint.
 - [x] Raw-byte fuzz target function and smoke executable.
 - [x] Deflate fuzz smoke corpus covers valid raw streams and malformed dynamic/non-final cases.
+- [x] Hex-sample fuzz corpus harness supports raw deflate samples.
 - [x] libFuzzer-compatible exported entrypoint smoke.
 - [x] AFL-style file-input fuzz driver smoke.
 - [x] Local CI smoke runner wiring for fuzz entrypoints.

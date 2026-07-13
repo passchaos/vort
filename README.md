@@ -84,6 +84,7 @@ zig build run -- encode-zlib-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 defau
 zig build run -- encode-gzip-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 default
 zig build run-fuzz-smoke
 zig build run-fuzz-corpus
+zig build run-fuzz-corpus -- --deflate 4b0400 4a0400
 zig build run-fuzz-target
 zig build run-libfuzzer-smoke
 zig build run-afl-smoke
