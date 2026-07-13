@@ -62,6 +62,7 @@ architecture blindly.
 - [x] CLI verify commands support machine-readable JSON validation output.
 - [x] Validation JSON outputs include schema and schema_version fields for script compatibility.
 - [x] Validation JSON schema smoke parses CLI/report/corrupt JSON outputs and runs in CI smoke.
+- [x] Validation JSON schema smoke can write a fixed zig-out summary artifact.
 - [x] Validation diagnostics include readable frame mode names alongside numeric frame flags.
 - [x] Validation diagnostics include recoverability hints for corruption/index/dictionary failures.
 - [x] Sidecar corrupt-payload smoke verifies metadata mode accepts header-consistent streams while full mode rejects store/deflate/RLE/dictionary/LDM/self-contained/seekable sidecar/embedded-index payload corruption.

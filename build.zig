@@ -476,6 +476,13 @@ pub fn build(b: *std.Build) void {
     const validation_json_smoke_step = b.step("run-validation-json-smoke", "Validate CLI and report JSON schema outputs");
     validation_json_smoke_step.dependOn(&validation_json_smoke.step);
 
+    const validation_json_dashboard = b.addSystemCommand(&.{ "python3", "tools/validation_json_smoke.py" });
+    validation_json_dashboard.addArtifactArg(cli_exe);
+    validation_json_dashboard.addArtifactArg(sidecar_verify_report_exe);
+    validation_json_dashboard.addArgs(&.{ "--summary", "zig-out/vort-validation-json-smoke.json" });
+    const validation_json_dashboard_step = b.step("run-validation-json-dashboard", "Write validation JSON schema smoke summary to zig-out");
+    validation_json_dashboard_step.dependOn(&validation_json_dashboard.step);
+
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
         .root_module = b.createModule(.{
@@ -624,6 +631,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(sidecar_corrupt_smoke_step);
     ci_smoke_step.dependOn(sidecar_corrupt_dashboard_step);
     ci_smoke_step.dependOn(validation_json_smoke_step);
+    ci_smoke_step.dependOn(validation_json_dashboard_step);
     ci_smoke_step.dependOn(compat_benchmark_step);
     ci_smoke_step.dependOn(standard_corpus_report_step);
     ci_smoke_step.dependOn(standard_multi_corpus_dashboard_step);

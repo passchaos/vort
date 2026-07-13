@@ -27,12 +27,25 @@ def first_json_line(text: str) -> dict:
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
-        print("usage: validation_json_smoke.py <vort-cli> <sidecar-report>", file=sys.stderr)
+    if len(sys.argv) not in (3, 5):
+        print("usage: validation_json_smoke.py <vort-cli> <sidecar-report> [--summary <path>]", file=sys.stderr)
         return 2
 
     cli = sys.argv[1]
     report_exe = sys.argv[2]
+    summary_path: Path | None = None
+    if len(sys.argv) == 5:
+        if sys.argv[3] != "--summary":
+            print("usage: validation_json_smoke.py <vort-cli> <sidecar-report> [--summary <path>]", file=sys.stderr)
+            return 2
+        summary_path = Path(sys.argv[4])
+
+    summary: dict[str, object] = {
+        "schema": "vort.validation_json_smoke",
+        "schema_version": 1,
+        "ok": False,
+        "checked_schemas": [],
+    }
     with tempfile.TemporaryDirectory(prefix="vort-validation-json-") as tmp:
         root = Path(tmp)
         input_path = root / "input.txt"
@@ -78,7 +91,25 @@ def main() -> int:
         assert corrupt["schema"] == "vort.sidecar_corrupt_smoke_report"
         assert corrupt["schema_version"] == 1
         assert corrupt["rows"] >= 1
+        summary = {
+            "schema": "vort.validation_json_smoke",
+            "schema_version": 1,
+            "ok": True,
+            "checked_schemas": [
+                ok["schema"],
+                report["schema"],
+                corrupt["schema"],
+            ],
+            "cli_success_ok": ok["ok"],
+            "cli_failure_ok": failure["ok"],
+            "cli_failure_hint": failure["recoverability_hint"],
+            "report_rows": report["rows"],
+            "corrupt_rows": corrupt["rows"],
+        }
 
+    if summary_path is not None:
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     print("validation_json_smoke=ok schemas=vort.validation_report,vort.sidecar_verify_report,vort.sidecar_corrupt_smoke_report")
     return 0
 
