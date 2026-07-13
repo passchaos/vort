@@ -227,6 +227,8 @@ Top-level fields:
 - `schema`: `vort.dashboard_index`
 - `schema_version`: `1`
 - `artifact_count`
+- `producer_step_covered`
+- `producer_step_missing`
 - `artifacts`
 
 Each artifact includes:
@@ -243,6 +245,8 @@ Example:
   "schema": "vort.dashboard_index",
   "schema_version": 1,
   "artifact_count": 1,
+  "producer_step_covered": 1,
+  "producer_step_missing": [],
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",

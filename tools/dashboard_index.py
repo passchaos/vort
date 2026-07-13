@@ -139,12 +139,17 @@ def main() -> int:
     for artifact in artifacts:
         grouped.setdefault(category_for(artifact), []).append(artifact)
 
+    records = [artifact_record(path, output.parent, producer_map) for path in artifacts]
+    producer_step_missing = [record["name"] for record in records if not record["producer_step"]]
+    producer_step_covered = len(records) - len(producer_step_missing)
+
     lines = [
         "# Vort dashboard index",
         "",
         "Generated from `zig-out` artifacts. Paths are relative to this index file.",
         f"",
         f"- artifacts: {len(artifacts)}",
+        f"- producer steps: {producer_step_covered}/{len(records)}",
         "",
     ]
     for category in sorted(grouped):
@@ -167,7 +172,6 @@ def main() -> int:
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines))
-    records = [artifact_record(path, output.parent, producer_map) for path in artifacts]
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text(
         json.dumps(
@@ -175,6 +179,8 @@ def main() -> int:
                 "schema": "vort.dashboard_index",
                 "schema_version": 1,
                 "artifact_count": len(records),
+                "producer_step_covered": producer_step_covered,
+                "producer_step_missing": producer_step_missing,
                 "artifacts": records,
             },
             indent=2,

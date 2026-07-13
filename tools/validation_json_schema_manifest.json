@@ -6,6 +6,8 @@
       "fields": {
         "artifact_count": "int",
         "artifacts": "list",
+        "producer_step_covered": "int",
+        "producer_step_missing": "list",
         "schema": "str",
         "schema_version": "int"
       },

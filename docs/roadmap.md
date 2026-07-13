@@ -79,6 +79,7 @@ architecture blindly.
 - [x] Dashboard index reads producer build-step mappings from an external JSON config.
 - [x] Dashboard producer config schema is documented alongside validation JSON schemas.
 - [x] Dashboard producer config is validated by the shared JSON schema checker.
+- [x] Dashboard manifest reports producer-step coverage and missing producer mappings.
 - [x] Validation diagnostics include readable frame mode names alongside numeric frame flags.
 - [x] Validation diagnostics include recoverability hints for corruption/index/dictionary failures.
 - [x] Sidecar corrupt-payload smoke verifies metadata mode accepts header-consistent streams while full mode rejects store/deflate/RLE/dictionary/LDM/self-contained/seekable sidecar/embedded-index payload corruption.
