@@ -3,6 +3,7 @@
 4b0400 # expect: accept
 090000ffff # expect: accept
 4a0400 # expect: reject
+4b043e00 # expect: reject
 
 # zlib-wrapped fixed "hello", stored empty with non-zero stored padding, then bad header/preset dictionaries.
 --zlib
@@ -11,12 +12,14 @@
 0000 # expect: reject
 782000000000 # expect: reject
 78f908610235cb4027013a2e067d # expect: reject
+78014b043e0000000000 # expect: reject
 
 # gzip-wrapped fixed "hello", then bad header.
 --gzip
 1f8b0800000000000403cb48cdc9c9070086a6103605000000 # expect: accept
 1f8b0800000000000403090000ffff0000000000000000 # expect: accept
 0000 # expect: reject
+1f8b08000000000004034b043e000000000000000000 # expect: reject
 
 # Malformed dynamic Huffman: oversubscribed code-length alphabet.
 --deflate
