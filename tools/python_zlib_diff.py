@@ -102,19 +102,35 @@ def main() -> int:
         assert zlib.decompress(gzip_adaptive_vort, wbits=31) == data, text
 
     dictionary = b"hello "
+    dictionary_text = dictionary.decode("ascii")
     dict_payload = b"hello hello hello"
-    for strategy in [zlib.Z_DEFAULT_STRATEGY, zlib.Z_FIXED]:
-        co = zlib.compressobj(level=9, wbits=-15, strategy=strategy, zdict=dictionary)
-        raw_dict = co.compress(dict_payload) + co.flush()
-        out = run_cli("decode-raw-dict-hex", raw_dict.hex(), dictionary.decode("ascii"))
-        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
-        assert int(parse_field(out, "crc32")) == (zlib.crc32(dict_payload) & 0xFFFFFFFF), out
+    dict_cases = [
+        (0, zlib.Z_DEFAULT_STRATEGY, dict_payload),
+        (9, zlib.Z_DEFAULT_STRATEGY, dict_payload),
+        (9, zlib.Z_FIXED, dict_payload),
+    ]
+    for level, strategy, payload in dict_cases:
+        co = zlib.compressobj(level=level, wbits=-15, strategy=strategy, zdict=dictionary)
+        raw_dict = co.compress(payload) + co.flush()
+        out = run_cli("decode-raw-dict-hex", raw_dict.hex(), dictionary_text)
+        assert int(parse_field(out, "decoded_bytes")) == len(payload), out
+        assert int(parse_field(out, "crc32")) == (zlib.crc32(payload) & 0xFFFFFFFF), out
 
-        co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, strategy=strategy, zdict=dictionary)
-        zlib_dict = co.compress(dict_payload) + co.flush()
-        out = run_cli("decode-zlib-dict-hex", zlib_dict.hex(), dictionary.decode("ascii"))
-        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
-        assert int(parse_field(out, "crc32")) == (zlib.crc32(dict_payload) & 0xFFFFFFFF), out
+        co = zlib.compressobj(level=level, wbits=zlib.MAX_WBITS, strategy=strategy, zdict=dictionary)
+        zlib_dict = co.compress(payload) + co.flush()
+        out = run_cli("decode-zlib-dict-hex", zlib_dict.hex(), dictionary_text)
+        assert int(parse_field(out, "decoded_bytes")) == len(payload), out
+        assert int(parse_field(out, "crc32")) == (zlib.crc32(payload) & 0xFFFFFFFF), out
+
+    raw_dynamic_dict = bytes.fromhex("25c421010000000090ffaf058203")
+    out = run_cli("decode-raw-dict-hex", raw_dynamic_dict.hex(), dictionary_text)
+    assert int(parse_field(out, "decoded_bytes")) == len(dictionary), out
+    assert int(parse_field(out, "crc32")) == (zlib.crc32(dictionary) & 0xFFFFFFFF), out
+
+    zlib_dynamic_dict = bytes.fromhex("78200861023525c421010000000090ffaf05820308610235")
+    out = run_cli("decode-zlib-dict-hex", zlib_dynamic_dict.hex(), dictionary_text)
+    assert int(parse_field(out, "decoded_bytes")) == len(dictionary), out
+    assert int(parse_field(out, "crc32")) == (zlib.crc32(dictionary) & 0xFFFFFFFF), out
 
     dynamic_payloads = [
         b"match-heavy:" + (b"abcabcabcabc" * 96) + (b"xyzxyzxyz" * 48),

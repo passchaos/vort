@@ -2138,11 +2138,39 @@ test "zlib preset dictionary streams decode with caller dictionary" {
     try std.testing.expectEqualSlices(u8, "hello hello hello", decoded);
 }
 
-test "raw deflate preset dictionary streams decode with caller dictionary" {
-    const decoded = try decodeRawAutoAllocWithDictionary(std.testing.allocator, &.{ 0xcb, 0x40, 0x27, 0x01 }, "hello ");
-    defer std.testing.allocator.free(decoded);
-    try std.testing.expectEqualSlices(u8, "hello hello hello", decoded);
+test "zlib preset dictionary streams cover stored and dynamic blocks" {
+    const stored_frame = &.{
+        0x78, 0x3f, 0x08, 0x61, 0x02, 0x35, 0x01,
+        0x11, 0x00, 0xee, 0xff, 'h',  'e',  'l',
+        'l',  'o',  ' ',  'h',  'e',  'l',  'l',
+        'o',  ' ',  'h',  'e',  'l',  'l',  'o',
+        0x3a, 0x2e, 0x06, 0x7d,
+    };
+    const stored = try decodeZlibAllocWithDictionary(std.testing.allocator, stored_frame, "hello ");
+    defer std.testing.allocator.free(stored);
+    try std.testing.expectEqualSlices(u8, "hello hello hello", stored);
+
+    const dynamic_frame = &.{
+        0x78, 0x20, 0x08, 0x61, 0x02, 0x35, 0x25,
+        0xc4, 0x21, 0x01, 0x00, 0x00, 0x00, 0x00,
+        0x90, 0xff, 0xaf, 0x05, 0x82, 0x03, 0x08,
+        0x61, 0x02, 0x35,
+    };
+    const dynamic = try decodeZlibAllocWithDictionary(std.testing.allocator, dynamic_frame, "hello ");
+    defer std.testing.allocator.free(dynamic);
+    try std.testing.expectEqualSlices(u8, "hello ", dynamic);
+}
+
+test "raw deflate preset dictionary streams decode fixed and dynamic blocks" {
+    const fixed_decoded = try decodeRawAutoAllocWithDictionary(std.testing.allocator, &.{ 0xcb, 0x40, 0x27, 0x01 }, "hello ");
+    defer std.testing.allocator.free(fixed_decoded);
+    try std.testing.expectEqualSlices(u8, "hello hello hello", fixed_decoded);
     try std.testing.expectError(error.InvalidMatch, decodeRawAutoAlloc(std.testing.allocator, &.{ 0xcb, 0x40, 0x27, 0x01 }));
+
+    const dynamic_decoded = try decodeRawAutoAllocWithDictionary(std.testing.allocator, &.{ 0x25, 0xc4, 0x21, 0x01, 0x00, 0x00, 0x00, 0x00, 0x90, 0xff, 0xaf, 0x05, 0x82, 0x03 }, "hello ");
+    defer std.testing.allocator.free(dynamic_decoded);
+    try std.testing.expectEqualSlices(u8, "hello ", dynamic_decoded);
+    try std.testing.expectError(error.InvalidMatch, decodeRawAutoAlloc(std.testing.allocator, &.{ 0x25, 0xc4, 0x21, 0x01, 0x00, 0x00, 0x00, 0x00, 0x90, 0xff, 0xaf, 0x05, 0x82, 0x03 }));
 }
 
 test "gzip header rejects reserved flags and bad method" {
