@@ -49,8 +49,8 @@ def encode_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Encode speed and size",
         "",
-        "| case | best Vort speed MiB/s | best Rust speed MiB/s | Vort speed / Rust | best Vort size | best Rust size | Vort size / Rust |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| case | best Vort speed MiB/s | best Rust speed MiB/s | Vort speed / Rust | Vort default / dynamic speed | best Vort size | best Rust size | Vort size / Rust |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for case, items in sorted(by_case(rows).items()):
         vort_rows = [row for row in items if row["engine"].startswith("vort")]
@@ -61,9 +61,15 @@ def encode_lines(rows: list[dict[str, str]]) -> list[str]:
         best_rust_size = min(rust_rows, key=lambda row: inum(row, "zlib_bytes"))
         speed_ratio = fnum(best_vort_speed, "throughput_mib_s") / fnum(best_rust_speed, "throughput_mib_s")
         size_ratio = inum(best_vort_size, "zlib_bytes") / max(inum(best_rust_size, "zlib_bytes"), 1)
+        vort_default = next((row for row in vort_rows if row["engine"] == "vort-default"), None)
+        vort_dynamic = next((row for row in vort_rows if row["engine"] == "vort-dynamic-default"), None)
+        dynamic_overhead = ""
+        if vort_default is not None and vort_dynamic is not None and fnum(vort_dynamic, "throughput_mib_s") != 0:
+            dynamic_overhead = f"{fnum(vort_default, 'throughput_mib_s') / fnum(vort_dynamic, 'throughput_mib_s'):.3f}"
         lines.append(
             f"| {case} | {best_vort_speed['engine']} {fnum(best_vort_speed, 'throughput_mib_s'):.2f} | "
             f"{best_rust_speed['engine']} {fnum(best_rust_speed, 'throughput_mib_s'):.2f} | {speed_ratio:.3f} | "
+            f"{dynamic_overhead} | "
             f"{best_vort_size['engine']} {inum(best_vort_size, 'zlib_bytes')} | "
             f"{best_rust_size['engine']} {inum(best_rust_size, 'zlib_bytes')} | {size_ratio:.3f} |"
         )
