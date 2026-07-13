@@ -132,6 +132,27 @@ fn runCorruptSelfTest(init: std.process.Init) !void {
     const ldm_input = ldm_prefix ++ "----" ++ ldm_prefix[0..64].*;
     try appendCorruptCase(init.gpa, &cases, try makeCorruptCase(init.gpa, "ldm", try vort.storeEncodeLongDistanceAlloc(init.gpa, ldm_input, .{ .min_distance = 32769, .min_length = 16 }), null));
 
+    const self_dict_phrase = "self-contained sidecar dictionary phrase";
+    const self_dict_input = (self_dict_phrase ++ "!") ** 4;
+    try appendCorruptCase(init.gpa, &cases, try makeCorruptCaseFromSidecar(
+        init.gpa,
+        "self-dict-sidecar",
+        try vort.storeEncodeSidecarSelfContainedDictionaryStreamAlloc(init.gpa, self_dict_input, self_dict_phrase.len + 1, 256, 8),
+        null,
+    ));
+
+    const seekable_phrase = "seekable native sidecar dictionary phrase";
+    const seekable_input = (seekable_phrase ++ "!") ** 4;
+    try appendCorruptCase(init.gpa, &cases, try makeCorruptCaseFromSidecar(
+        init.gpa,
+        "seekable-sidecar",
+        try vort.storeEncodeSeekableNativeSidecarStreamAlloc(init.gpa, seekable_input, .{
+            .block_len = seekable_phrase.len + 1,
+            .dictionary = .{ .enable = true, .target_size = 256, .min_match_len = 8 },
+        }),
+        null,
+    ));
+
     var metadata_ok: usize = 0;
     var full_rejected: usize = 0;
     for (cases.items) |case| {
@@ -173,6 +194,11 @@ fn makeCorruptCase(allocator: std.mem.Allocator, name: []const u8, frame: []u8, 
     const sidecar_index = try vort.storeEncodeFrameIndexAlloc(allocator, index);
     errdefer allocator.free(sidecar_index);
     return .{ .name = name, .stream = frame, .sidecar_index = sidecar_index, .dictionary = dictionary };
+}
+
+fn makeCorruptCaseFromSidecar(allocator: std.mem.Allocator, name: []const u8, sidecar: vort.store.SidecarIndexedStream, dictionary: ?[]const u8) !CorruptCase {
+    errdefer sidecar.deinit(allocator);
+    return .{ .name = name, .stream = sidecar.stream, .sidecar_index = sidecar.sidecar_index, .dictionary = dictionary };
 }
 
 fn appendCorruptCase(allocator: std.mem.Allocator, cases: *std.ArrayList(CorruptCase), case: CorruptCase) !void {
