@@ -1565,6 +1565,27 @@ pub const SidecarValidationOptions = struct {
     dictionary: ?[]const u8 = null,
 };
 
+pub const ValidationStage = enum {
+    index_decode,
+    index_structure,
+    dictionary_parse,
+    frame_bounds,
+    frame_header,
+    frame_metadata,
+    payload_decode,
+};
+
+pub const ValidationReport = struct {
+    ok: bool = true,
+    mode: SidecarValidationMode,
+    stage: ValidationStage = .index_decode,
+    error_name: []const u8 = "",
+    frame_index: ?usize = null,
+    frame_offset: ?usize = null,
+    uncompressed_offset: ?u64 = null,
+    frame_flags: ?u8 = null,
+};
+
 pub fn validateSidecarIndexAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8) !void {
     return validateSidecarIndexWithOptionsAlloc(allocator, input, sidecar_index, .{});
 }
@@ -1589,6 +1610,18 @@ pub fn validateSidecarIndexWithOptionsAlloc(allocator: std.mem.Allocator, input:
     }
 }
 
+pub fn validateSidecarIndexReportAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, options: SidecarValidationOptions) ValidationReport {
+    if (options.mode == .metadata) return validateSidecarIndexReportInternalAlloc(allocator, options.dictionary, input, sidecar_index, .metadata);
+    if (options.dictionary) |dict| return validateSidecarIndexReportInternalAlloc(allocator, dict, input, sidecar_index, options.mode);
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return validateSidecarIndexReportInternalAlloc(allocator, dict, input, sidecar_index, options.mode);
+    } else |err| switch (err) {
+        error.InvalidMagic => return validateSidecarIndexReportInternalAlloc(allocator, null, input, sidecar_index, options.mode),
+        else => return validationFailure(options.mode, .dictionary_parse, err, null, null, null),
+    }
+}
+
 pub fn validateEmbeddedIndexAlloc(allocator: std.mem.Allocator, input: []const u8) !void {
     return validateEmbeddedIndexWithOptionsAlloc(allocator, input, .{});
 }
@@ -1608,6 +1641,22 @@ pub fn validateEmbeddedIndexWithOptionsAlloc(allocator: std.mem.Allocator, input
     } else |err| switch (err) {
         error.InvalidMagic => return validateFrameIndexEntriesInternalAlloc(allocator, null, input, embedded.entries, options.mode),
         else => return err,
+    }
+}
+
+pub fn validateEmbeddedIndexReportAlloc(allocator: std.mem.Allocator, input: []const u8, options: SidecarValidationOptions) ValidationReport {
+    const embedded = parseEmbeddedIndexAlloc(allocator, input) catch |err| {
+        return validationFailure(options.mode, .index_decode, err, null, null, null);
+    };
+    defer embedded.deinit(allocator);
+    if (options.mode == .metadata) return validateFrameIndexEntriesReportInternalAlloc(allocator, options.dictionary, input, embedded.entries, .metadata);
+    if (options.dictionary) |dict| return validateFrameIndexEntriesReportInternalAlloc(allocator, dict, input, embedded.entries, options.mode);
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return validateFrameIndexEntriesReportInternalAlloc(allocator, dict, input, embedded.entries, options.mode);
+    } else |err| switch (err) {
+        error.InvalidMagic => return validateFrameIndexEntriesReportInternalAlloc(allocator, null, input, embedded.entries, options.mode),
+        else => return validationFailure(options.mode, .dictionary_parse, err, null, null, null),
     }
 }
 
@@ -1639,6 +1688,46 @@ fn validateFrameIndexEntriesInternalAlloc(allocator: std.mem.Allocator, dict: ?[
         } else try decodeAnyAlloc(allocator, frame);
         allocator.free(decoded);
     }
+}
+
+fn validateSidecarIndexReportInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, sidecar_index: []const u8, mode: SidecarValidationMode) ValidationReport {
+    const index = decodeFrameIndexAlloc(allocator, sidecar_index) catch |err| {
+        return validationFailure(mode, .index_decode, err, null, null, null);
+    };
+    defer allocator.free(index);
+    return validateFrameIndexEntriesReportInternalAlloc(allocator, dict, input, index, mode);
+}
+
+fn validateFrameIndexEntriesReportInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, mode: SidecarValidationMode) ValidationReport {
+    validateFrameIndex(index) catch |err| return validationFailure(mode, .index_structure, err, null, null, null);
+    for (index, 0..) |entry, i| {
+        if (input.len - entry.frame_offset < entry.frame_len) return validationFailure(mode, .frame_bounds, error.TruncatedFrame, i, entry, null);
+        const frame = input[entry.frame_offset..][0..entry.frame_len];
+        const info = parseHeader(frame) catch |err| return validationFailure(mode, .frame_header, err, i, entry, null);
+        if (entry.frame_len != (frameLenFromInfo(info) catch |err| return validationFailure(mode, .frame_metadata, err, i, entry, info.flags))) return validationFailure(mode, .frame_metadata, error.CorruptFrame, i, entry, info.flags);
+        if (entry.uncompressed_len != info.uncompressed_size) return validationFailure(mode, .frame_metadata, error.CorruptFrame, i, entry, info.flags);
+        if (entry.checksum != info.checksum) return validationFailure(mode, .frame_metadata, error.ChecksumMismatch, i, entry, info.flags);
+        if (mode == .metadata) continue;
+        const decoded = if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) blk: {
+            const dictionary_bytes = dict orelse return validationFailure(mode, .payload_decode, error.InvalidDictionaryTraining, i, entry, info.flags);
+            break :blk decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame) catch |err| return validationFailure(mode, .payload_decode, err, i, entry, info.flags);
+        } else decodeAnyAlloc(allocator, frame) catch |err| return validationFailure(mode, .payload_decode, err, i, entry, info.flags);
+        allocator.free(decoded);
+    }
+    return .{ .ok = true, .mode = mode };
+}
+
+fn validationFailure(mode: SidecarValidationMode, stage: ValidationStage, err: anyerror, frame_index: ?usize, entry: ?FrameIndexEntry, frame_flags: ?u8) ValidationReport {
+    return .{
+        .ok = false,
+        .mode = mode,
+        .stage = stage,
+        .error_name = @errorName(err),
+        .frame_index = frame_index,
+        .frame_offset = if (entry) |e| e.frame_offset else null,
+        .uncompressed_offset = if (entry) |e| e.uncompressed_offset else null,
+        .frame_flags = frame_flags,
+    };
 }
 
 pub fn decodeSidecarIndexedRangeAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
@@ -2182,6 +2271,30 @@ test "sidecar index metadata validation skips payload decode by design" {
     try std.testing.expectError(error.ChecksumMismatch, validateSidecarIndexWithOptionsAlloc(std.testing.allocator, tampered, sidecar.sidecar_index, .{ .mode = .full }));
 }
 
+test "sidecar index report captures frame failure context" {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const sidecar = try encodeSidecarIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer sidecar.deinit(std.testing.allocator);
+
+    const ok_report = validateSidecarIndexReportAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, .{ .mode = .metadata });
+    try std.testing.expect(ok_report.ok);
+    try std.testing.expectEqual(SidecarValidationMode.metadata, ok_report.mode);
+
+    const tampered = try std.testing.allocator.dupe(u8, sidecar.stream);
+    defer std.testing.allocator.free(tampered);
+    tampered[header_len] ^= 1;
+
+    const report = validateSidecarIndexReportAlloc(std.testing.allocator, tampered, sidecar.sidecar_index, .{ .mode = .full });
+    try std.testing.expect(!report.ok);
+    try std.testing.expectEqual(SidecarValidationMode.full, report.mode);
+    try std.testing.expectEqual(ValidationStage.payload_decode, report.stage);
+    try std.testing.expectEqualStrings("ChecksumMismatch", report.error_name);
+    try std.testing.expectEqual(@as(?usize, 0), report.frame_index);
+    try std.testing.expectEqual(@as(?usize, 0), report.frame_offset);
+    try std.testing.expectEqual(@as(?u64, 0), report.uncompressed_offset);
+    try std.testing.expectEqual(@as(?u8, flags_none), report.frame_flags);
+}
+
 test "embedded index validation supports metadata and full modes" {
     const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
     const stream = try encodeIndexedStreamAlloc(std.testing.allocator, &payloads);
@@ -2195,6 +2308,26 @@ test "embedded index validation supports metadata and full modes" {
     try validateEmbeddedIndexMetadataAlloc(std.testing.allocator, tampered);
     try validateEmbeddedIndexWithOptionsAlloc(std.testing.allocator, tampered, .{ .mode = .metadata });
     try std.testing.expectError(error.ChecksumMismatch, validateEmbeddedIndexWithOptionsAlloc(std.testing.allocator, tampered, .{ .mode = .full }));
+}
+
+test "embedded index report captures frame failure context" {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const stream = try encodeIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer std.testing.allocator.free(stream);
+
+    const tampered = try std.testing.allocator.dupe(u8, stream);
+    defer std.testing.allocator.free(tampered);
+    tampered[header_len] ^= 1;
+
+    const report = validateEmbeddedIndexReportAlloc(std.testing.allocator, tampered, .{ .mode = .full });
+    try std.testing.expect(!report.ok);
+    try std.testing.expectEqual(SidecarValidationMode.full, report.mode);
+    try std.testing.expectEqual(ValidationStage.payload_decode, report.stage);
+    try std.testing.expectEqualStrings("ChecksumMismatch", report.error_name);
+    try std.testing.expectEqual(@as(?usize, 0), report.frame_index);
+    try std.testing.expectEqual(@as(?usize, 0), report.frame_offset);
+    try std.testing.expectEqual(@as(?u64, 0), report.uncompressed_offset);
+    try std.testing.expectEqual(@as(?u8, flags_none), report.frame_flags);
 }
 
 test "embedded index validation auto-loads embedded dictionaries" {

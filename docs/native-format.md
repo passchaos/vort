@@ -17,6 +17,10 @@ corruption that would not change sidecar bytes or frame headers.
 `validateEmbeddedIndexAlloc` and `validateSidecarIndexAlloc` auto-load embedded
 dictionaries in full mode, while `validateSidecarIndexWithDictionaryAlloc` and
 `validateSidecarIndexWithOptionsAlloc` cover external-dictionary streams.
+`validateSidecarIndexReportAlloc` and `validateEmbeddedIndexReportAlloc` return
+structured failure context (validation mode, stage, frame index/offset,
+uncompressed offset, frame flags, and error name) for diagnostics without
+replacing the throwing APIs.
 `run-sidecar-corrupt-smoke` exercises the distinction by mutating payload bytes
 across store, deflate, RLE, dictionary, LDM, self-contained dictionary sidecar,
 seekable native sidecar, and embedded-index streams: metadata validation
