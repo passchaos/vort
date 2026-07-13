@@ -58,6 +58,31 @@ def require_enums(value: dict[str, Any], enums: dict[str, list[str]], label: str
             raise AssertionError(f"{label}.{field} has unexpected value {value[field]!r}; allowed={sorted(allowed)}")
 
 
+def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str, Any]) -> None:
+    schema = value.get("schema")
+    schema_def = schemas_def.get(schema)
+    if not isinstance(schema_def, dict):
+        raise AssertionError(f"unexpected schema example: {schema!r}")
+    fields = schema_def.get("fields")
+    if not isinstance(fields, dict):
+        raise AssertionError(f"schema {schema!r} must define fields")
+    require_fields(value, set(fields), schema)
+    require_types(value, fields, schema)
+    require_enums(value, schema_def.get("enums", {}), schema)
+
+    item_collection = schema_def.get("item_collection")
+    if item_collection:
+        item_fields = schema_def.get("item_fields")
+        if not isinstance(item_fields, dict):
+            raise AssertionError(f"schema {schema!r} must define item_fields")
+        items = value.get(item_collection)
+        if not isinstance(items, list) or not items:
+            raise AssertionError(f"{schema} must include non-empty {item_collection}")
+        require_fields(items[0], set(item_fields), f"{schema}.{item_collection}[0]")
+        require_types(items[0], item_fields, f"{schema}.{item_collection}[0]")
+        require_enums(items[0], schema_def.get("item_enums", {}), f"{schema}.{item_collection}[0]")
+
+
 def main() -> int:
     schemas_def = load_manifest()
     expected_schemas = set(schemas_def)
@@ -71,28 +96,7 @@ def main() -> int:
     if len(parsed) != len(expected_schemas):
         raise AssertionError(f"expected {len(expected_schemas)} examples, found {len(parsed)}")
     for value in parsed:
-        schema = value.get("schema")
-        schema_def = schemas_def.get(schema)
-        if not isinstance(schema_def, dict):
-            raise AssertionError(f"unexpected schema example: {schema!r}")
-        fields = schema_def.get("fields")
-        if not isinstance(fields, dict):
-            raise AssertionError(f"schema {schema!r} must define fields")
-        require_fields(value, set(fields), schema)
-        require_types(value, fields, schema)
-        require_enums(value, schema_def.get("enums", {}), schema)
-
-        item_collection = schema_def.get("item_collection")
-        if item_collection:
-            item_fields = schema_def.get("item_fields")
-            if not isinstance(item_fields, dict):
-                raise AssertionError(f"schema {schema!r} must define item_fields")
-            items = value.get(item_collection)
-            if not isinstance(items, list) or not items:
-                raise AssertionError(f"{schema} must include non-empty {item_collection}")
-            require_fields(items[0], set(item_fields), f"{schema}.{item_collection}[0]")
-            require_types(items[0], item_fields, f"{schema}.{item_collection}[0]")
-            require_enums(items[0], schema_def.get("item_enums", {}), f"{schema}.{item_collection}[0]")
+        validate_value_against_manifest(value, schemas_def)
     print(f"validation_json_docs=ok examples={len(parsed)}")
     return 0
 

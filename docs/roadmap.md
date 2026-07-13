@@ -62,6 +62,7 @@ architecture blindly.
 - [x] CLI verify commands support machine-readable JSON validation output.
 - [x] Validation JSON outputs include schema and schema_version fields for script compatibility.
 - [x] Validation JSON schema smoke parses CLI/report/corrupt JSON outputs and runs in CI smoke.
+- [x] Validation JSON schema smoke validates generated JSON against the shared schema manifest.
 - [x] Validation JSON schema smoke can write a fixed zig-out summary artifact.
 - [x] Validation JSON schema reference documents field meanings and compatibility rules.
 - [x] Validation JSON schema reference includes example objects for every validation/dashboard schema.

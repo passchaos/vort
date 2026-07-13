@@ -14,6 +14,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from validation_json_docs_check import load_manifest, validate_value_against_manifest
+
 
 def run(args: list[str], *, check: bool = True, stdout: int | None = subprocess.PIPE) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, check=check, text=True, stdout=stdout, stderr=subprocess.STDOUT)
@@ -46,6 +48,7 @@ def main() -> int:
         "ok": False,
         "checked_schemas": [],
     }
+    schemas_def = load_manifest()
     with tempfile.TemporaryDirectory(prefix="vort-validation-json-") as tmp:
         root = Path(tmp)
         input_path = root / "input.txt"
@@ -64,6 +67,7 @@ def main() -> int:
         assert ok["schema_version"] == 1
         assert ok["target"] == "sidecar"
         assert ok["ok"] is True
+        validate_value_against_manifest(ok, schemas_def)
 
         bad = bytearray(stream_path.read_bytes())
         bad[32] ^= 1
@@ -79,18 +83,21 @@ def main() -> int:
         assert failure["ok"] is False
         assert failure["recoverability_hint"] == "payload_corrupt"
         assert failure["frame_mode"]
+        validate_value_against_manifest(failure, schemas_def)
 
         run([report_exe, "--json", str(report_path), str(stream_path), str(sidecar_path)])
         report = json.loads(report_path.read_text())
         assert report["schema"] == "vort.sidecar_verify_report"
         assert report["schema_version"] == 1
         assert report["rows"] == 1
+        validate_value_against_manifest(report, schemas_def)
 
         run([report_exe, "--self-test-corrupt", "--json", str(corrupt_path)])
         corrupt = json.loads(corrupt_path.read_text())
         assert corrupt["schema"] == "vort.sidecar_corrupt_smoke_report"
         assert corrupt["schema_version"] == 1
         assert corrupt["rows"] >= 1
+        validate_value_against_manifest(corrupt, schemas_def)
         summary = {
             "schema": "vort.validation_json_smoke",
             "schema_version": 1,
@@ -106,6 +113,7 @@ def main() -> int:
             "report_rows": report["rows"],
             "corrupt_rows": corrupt["rows"],
         }
+        validate_value_against_manifest(summary, schemas_def)
 
     if summary_path is not None:
         summary_path.parent.mkdir(parents=True, exist_ok=True)
