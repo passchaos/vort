@@ -151,6 +151,7 @@ architecture blindly.
 - [x] File CLI and Python differential smoke cover zlib preset-dictionary decode.
 - [x] CLI decode commands expose optional output limits for raw/zlib/gzip workflows.
 - [x] File CLI and Python differential smoke cover zlib file decode with output limits.
+- [x] zlib dictionary-file differential smoke rejects too-small output limits.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
 - [x] zlib wrapper integration for multi-block dynamic streams.

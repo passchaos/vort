@@ -179,6 +179,7 @@ def main() -> int:
         out = run_cli("decode-zlib-dict-file", str(compressed_path), str(limited_path), str(dictionary_path), str(len(dict_payload)))
         assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
         assert limited_path.read_bytes() == dict_payload, out
+        expect_cli_failure("decode-zlib-dict-file", str(compressed_path), str(tmp / "too-small.bin"), str(dictionary_path), str(len(dict_payload) - 1), error_name="OutputLimitExceeded")
 
     dynamic_payloads = [
         b"match-heavy:" + (b"abcabcabcabc" * 96) + (b"xyzxyzxyz" * 48),
