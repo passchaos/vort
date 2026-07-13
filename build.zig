@@ -470,6 +470,12 @@ pub fn build(b: *std.Build) void {
     const sidecar_corrupt_dashboard_step = b.step("run-sidecar-corrupt-dashboard", "Write sidecar corrupt-payload smoke Markdown/JSON artifacts to zig-out");
     sidecar_corrupt_dashboard_step.dependOn(&run_sidecar_corrupt_dashboard.step);
 
+    const validation_json_smoke = b.addSystemCommand(&.{ "python3", "tools/validation_json_smoke.py" });
+    validation_json_smoke.addArtifactArg(cli_exe);
+    validation_json_smoke.addArtifactArg(sidecar_verify_report_exe);
+    const validation_json_smoke_step = b.step("run-validation-json-smoke", "Validate CLI and report JSON schema outputs");
+    validation_json_smoke_step.dependOn(&validation_json_smoke.step);
+
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
         .root_module = b.createModule(.{
@@ -617,6 +623,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(native_range_report_step);
     ci_smoke_step.dependOn(sidecar_corrupt_smoke_step);
     ci_smoke_step.dependOn(sidecar_corrupt_dashboard_step);
+    ci_smoke_step.dependOn(validation_json_smoke_step);
     ci_smoke_step.dependOn(compat_benchmark_step);
     ci_smoke_step.dependOn(standard_corpus_report_step);
     ci_smoke_step.dependOn(standard_multi_corpus_dashboard_step);
