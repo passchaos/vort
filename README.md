@@ -12,7 +12,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - storage/network-oriented CRC-32C/Castagnoli;
 - portable slice-by-4/slice-by-8/slice-by-16 IEEE CRC-32 and slice-by-8/slice-by-16 CRC-32C fast paths plus checksum dispatch reporting;
 - shared progress/error/frame metadata types;
-- raw deflate stored/fixed encode and stored/fixed/dynamic decode, with zlib/gzip wrappers;
+- raw deflate stored/fixed encode and stored/fixed/dynamic decode, with zlib/gzip wrappers and zlib preset-dictionary decode;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, and bounded streaming APIs;
 - LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training, match-coverage, patch-codec, native dictionary-patch frame, self-contained dictionary streams, native LDM reference frame, and dictionary-/LDM-aware native best-frame prototypes, long-distance match scanner, LDM-aware block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
 

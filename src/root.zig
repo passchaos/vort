@@ -141,6 +141,7 @@ pub const decodeZlibStored = deflate.decodeZlibStored;
 pub const encodeZlibStoredAlloc = deflate.encodeZlibStoredAlloc;
 pub const decodeZlibStoredAlloc = deflate.decodeZlibStoredAlloc;
 pub const decodeZlibAlloc = deflate.decodeZlibAlloc;
+pub const decodeZlibAllocWithDictionary = deflate.decodeZlibAllocWithDictionary;
 pub const encodeGzipStored = deflate.encodeGzipStored;
 pub const encodeGzipFixedAlloc = deflate.encodeGzipFixedAlloc;
 pub const encodeGzipBestAlloc = deflate.encodeGzipBestAlloc;

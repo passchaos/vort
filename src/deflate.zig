@@ -749,6 +749,10 @@ pub fn decodeRawDynamicAllocStrict(allocator: std.mem.Allocator, input: []const 
 }
 
 pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
+    return decodeRawAutoAllocPartialWithDictionary(allocator, input, "");
+}
+
+fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) !OwnedDecodeResult {
     if (input.len == 0) return error.TruncatedFrame;
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -759,12 +763,12 @@ pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8
         const block_type = try reader.readBits(u2, 2);
         switch (block_type) {
             0 => try decodeStoredBlockFromReader(allocator, &reader, &out),
-            1 => try decodeFixedBlockFromReader(allocator, &reader, &out),
+            1 => try decodeFixedBlockFromReader(allocator, &reader, &out, dictionary),
             2 => {
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                try decodeCompressedBlockFromReader(allocator, &reader, &out, &lit_table, &dist_table);
+                try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, &lit_table, &dist_table);
             },
             else => return error.InvalidDeflateBlockType,
         }
@@ -895,7 +899,7 @@ fn decodeStoredBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.
     reader.bit_index = 0;
 }
 
-fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8)) !void {
+fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), dictionary: []const u8) !void {
     while (true) {
         const symbol = (try huffman.decodeFixedLiteralFast(reader)).value;
         if (symbol < 256) {
@@ -906,7 +910,7 @@ fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.B
             const length = try decodeLength(symbol, reader);
             const distance_symbol = (try huffman.decodeFixedDistanceFast(reader)).value;
             const distance = try decodeDistance(distance_symbol, reader);
-            try appendMatch(allocator, out, length, distance);
+            try appendMatchWithDictionary(allocator, out, dictionary, length, distance);
         } else {
             return error.InvalidHuffmanCode;
         }
@@ -917,6 +921,7 @@ fn decodeCompressedBlockFromReader(
     allocator: std.mem.Allocator,
     reader: *bitstream.BitReader,
     out: *std.ArrayList(u8),
+    dictionary: []const u8,
     lit_table: anytype,
     dist_table: anytype,
 ) !void {
@@ -930,7 +935,7 @@ fn decodeCompressedBlockFromReader(
             const length = try decodeLength(symbol, reader);
             const distance_symbol = (try dist_table.decode(reader)).value;
             const distance = try decodeDistance(distance_symbol, reader);
-            try appendMatch(allocator, out, length, distance);
+            try appendMatchWithDictionary(allocator, out, dictionary, length, distance);
         } else {
             return error.InvalidHuffmanCode;
         }
@@ -963,12 +968,17 @@ fn copyMatch(history: []const u8, dest: []u8, length: usize, distance: usize) Er
 }
 
 fn appendMatch(allocator: std.mem.Allocator, out: *std.ArrayList(u8), length: usize, distance: usize) !void {
-    if (distance == 0 or distance > out.items.len) return error.InvalidMatch;
+    try appendMatchWithDictionary(allocator, out, "", length, distance);
+}
+
+fn appendMatchWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary: []const u8, length: usize, distance: usize) !void {
+    if (distance == 0 or distance > out.items.len + dictionary.len) return error.InvalidMatch;
     try out.ensureUnusedCapacity(allocator, length);
     var i: usize = 0;
     while (i < length) : (i += 1) {
-        const index = out.items.len - distance;
-        out.appendAssumeCapacity(out.items[index]);
+        const absolute = dictionary.len + out.items.len - distance;
+        const byte = if (absolute < dictionary.len) dictionary[absolute] else out.items[absolute - dictionary.len];
+        out.appendAssumeCapacity(byte);
     }
 }
 
@@ -1135,11 +1145,10 @@ pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
 }
 
 pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
-    if (input.len < 2) return error.TruncatedFrame;
-    try validateZlibHeader(input[0], input[1]);
+    const header = try parseZlibHeader(input, null);
 
-    const raw = try decodeRawStored(input[2..], output);
-    const footer_offset = 2 + raw.input_read;
+    const raw = try decodeRawStored(input[header.data_offset..], output);
+    const footer_offset = header.data_offset + raw.input_read;
     if (input.len - footer_offset < 4) return error.TruncatedFrame;
     const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
     if (checksum.adler32(output[0..raw.output_written]) != expected) return error.ChecksumMismatch;
@@ -1158,12 +1167,20 @@ pub fn decodeZlibStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
 }
 
 pub fn decodeZlibAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    if (input.len < 2) return error.TruncatedFrame;
-    try validateZlibHeader(input[0], input[1]);
+    return decodeZlibAllocWithOptionalDictionary(allocator, input, null);
+}
 
-    const raw = try decodeRawAutoAllocPartial(allocator, input[2..]);
+pub fn decodeZlibAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionary(allocator, input, dictionary);
+}
+
+fn decodeZlibAllocWithOptionalDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8) ![]u8 {
+    const header = try parseZlibHeader(input, dictionary);
+    const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+
+    const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[header.data_offset..], raw_dictionary);
     errdefer raw.deinit(allocator);
-    const footer_offset = 2 + raw.input_read;
+    const footer_offset = header.data_offset + raw.input_read;
     if (input.len - footer_offset < 4) return error.TruncatedFrame;
     const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
     if (checksum.adler32(raw.bytes) != expected) return error.ChecksumMismatch;
@@ -1331,12 +1348,26 @@ pub fn decodeGzipAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return raw.bytes;
 }
 
-fn validateZlibHeader(cmf: u8, flg: u8) Error!void {
+const ZlibHeader = struct {
+    data_offset: usize,
+    uses_dictionary: bool,
+};
+
+fn parseZlibHeader(input: []const u8, dictionary: ?[]const u8) Error!ZlibHeader {
+    if (input.len < 2) return error.TruncatedFrame;
+    const cmf = input[0];
+    const flg = input[1];
     if ((cmf & 0x0f) != 8) return error.BadZlibHeader;
     if ((cmf >> 4) > 7) return error.BadZlibHeader;
     const combined: u16 = (@as(u16, cmf) << 8) | flg;
     if (combined % 31 != 0) return error.BadZlibHeader;
-    if ((flg & 0x20) != 0) return error.NeedDictionary;
+    if ((flg & 0x20) == 0) return .{ .data_offset = 2, .uses_dictionary = false };
+
+    if (input.len < 6) return error.TruncatedFrame;
+    const expected_dict_id = std.mem.readInt(u32, input[2..][0..4], .big);
+    const actual_dictionary = dictionary orelse return error.NeedDictionary;
+    if (checksum.adler32(actual_dictionary) != expected_dict_id) return error.ChecksumMismatch;
+    return .{ .data_offset = 6, .uses_dictionary = true };
 }
 
 const gzip_header = [_]u8{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03 };
@@ -2010,6 +2041,19 @@ test "zlib header rejects bad method window check and dictionary flag" {
     // capability error rather than conflating it with malformed FCHECK/CMF.
     try std.testing.expectError(error.NeedDictionary, decodeZlibStored(&.{ 0x78, 0x20, 0x00, 0x00, 0x00, 0x00 }, &out));
     try std.testing.expectError(error.NeedDictionary, decodeZlibAlloc(std.testing.allocator, &.{ 0x78, 0x20, 0x00, 0x00, 0x00, 0x00 }));
+}
+
+test "zlib preset dictionary streams decode with caller dictionary" {
+    const frame = &.{
+        0x78, 0xf9, 0x08, 0x61, 0x02, 0x35, 0xcb,
+        0x40, 0x27, 0x01, 0x3a, 0x2e, 0x06, 0x7d,
+    };
+    try std.testing.expectError(error.NeedDictionary, decodeZlibAlloc(std.testing.allocator, frame));
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibAllocWithDictionary(std.testing.allocator, frame, "wrong dictionary"));
+
+    const decoded = try decodeZlibAllocWithDictionary(std.testing.allocator, frame, "hello ");
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "hello hello hello", decoded);
 }
 
 test "gzip header rejects reserved flags and bad method" {
