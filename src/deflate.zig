@@ -85,34 +85,12 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
 }
 
 pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
-    const stored = try encodeRawStoredAlloc(allocator, input);
-    errdefer allocator.free(stored);
-    const fixed = try encodeRawFixedWithOptionsAlloc(allocator, input, options);
-    errdefer allocator.free(fixed);
-
-    if (options.block_selection == .stored_fixed) {
-        if (stored.len <= fixed.len) {
-            allocator.free(fixed);
-            return stored;
-        }
-        allocator.free(stored);
-        return fixed;
-    }
-
-    const dynamic = try encodeRawDynamicWithOptionsAlloc(allocator, input, options);
-    errdefer allocator.free(dynamic);
-    if (stored.len <= fixed.len and stored.len <= dynamic.len) {
-        allocator.free(fixed);
-        allocator.free(dynamic);
-        return stored;
-    }
-    allocator.free(stored);
-    if (fixed.len <= dynamic.len) {
-        allocator.free(dynamic);
-        return fixed;
-    }
-    allocator.free(fixed);
-    return dynamic;
+    const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeBestTokensBlock(allocator, &writer, input, plan.tokens, true, options);
+    return writer.toOwnedSlice(allocator);
 }
 
 pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
