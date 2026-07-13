@@ -237,7 +237,10 @@ See `docs/native-format.md` for the initial native Vort frame direction,
 for parser fuzzing entrypoints, `docs/external-differential.md` for competitor
 differential validation, `docs/checksum-dispatch.md` for checksum dispatch
 status, `docs/zstd-gap.md` for current zstd comparison limitations, and
-`docs/dynamic-encoder.md` for dynamic encoder status.
+`docs/dynamic-encoder.md` for dynamic encoder status. Local Rust deflate
+baselines such as `~/Work/fdeflate` and `~/Work/miniz_oxide` should be treated
+as required functionality/performance competitors once their executable harnesses
+are wired into Vort validation.
 
 Compatibility formats (`raw deflate`, `zlib`, `gzip`, and selected zstd-facing
 workflows) should be behavior-compatible where claimed. Native Vort formats may

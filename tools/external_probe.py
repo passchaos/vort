@@ -9,6 +9,8 @@ CHECKS = [
     ("zlib-ng-flate", shutil.which("zlib-ng-flate") or shutil.which("zlib-flate")),
     ("zlib-rs checkout", pathlib.Path.home() / "Work" / "zlib-rs"),
     ("zlib-ng checkout", pathlib.Path.home() / "Work" / "zlib-ng"),
+    ("fdeflate checkout", pathlib.Path.home() / "Work" / "fdeflate"),
+    ("miniz_oxide checkout", pathlib.Path.home() / "Work" / "miniz_oxide"),
     ("zstd", shutil.which("zstd")),
     ("zstd checkout", pathlib.Path.home() / "Work" / "zstd"),
 ]
