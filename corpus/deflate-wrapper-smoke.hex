@@ -57,3 +57,20 @@ cb402701 # expect: accept
 78f908610235cb4027013a2e067d # expect: accept
 78200861023525c421010000000090ffaf05820308610235 # expect: accept
 --dict-clear
+
+# Explicit output-limit samples: accept at exact size, reject below size.
+--limit=5
+--deflate
+cb48cdc9c90700 # expect: accept
+--zlib
+7801cb48cdc9c90700062c0215 # expect: accept
+--gzip
+1f8b0800000000000403cb48cdc9c9070086a6103605000000 # expect: accept
+--limit=4
+--deflate
+cb48cdc9c90700 # expect: reject
+--zlib
+7801cb48cdc9c90700062c0215 # expect: reject
+--gzip
+1f8b0800000000000403cb48cdc9c9070086a6103605000000 # expect: reject
+--limit-clear

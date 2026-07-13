@@ -108,6 +108,7 @@ architecture blindly.
 - [x] Hex-sample fuzz corpus harness can load deflate/zlib/gzip samples from corpus files.
 - [x] Hex-sample fuzz corpus harness enforces expected accept/reject outcomes.
 - [x] Hex-sample fuzz corpus harness supports preset dictionaries for raw/zlib samples.
+- [x] Hex-sample fuzz corpus harness supports explicit output limits for raw/zlib/gzip samples.
 - [x] Deflate wrapper hex corpus includes malformed dynamic-Huffman samples.
 - [x] libFuzzer-compatible exported entrypoint smoke.
 - [x] AFL-style file-input fuzz driver smoke.

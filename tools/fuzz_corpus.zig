@@ -68,6 +68,7 @@ const State = struct {
     // the expectation next to the sample that first needs it.
     expected: ?Expected = null,
     dictionary: ?[]u8 = null,
+    max_output_len: ?usize = null,
     saw_store: bool = false,
     saw_deflate: bool = false,
     saw_zlib: bool = false,
@@ -158,6 +159,15 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
         state.clearDictionary(allocator);
         return;
     }
+    if (std.mem.eql(u8, arg, "--limit-clear")) {
+        state.max_output_len = null;
+        return;
+    }
+    const limit_prefix = "--limit=";
+    if (std.mem.startsWith(u8, arg, limit_prefix)) {
+        state.max_output_len = try std.fmt.parseInt(usize, arg[limit_prefix.len..], 10);
+        return;
+    }
     const dict_prefix = "--dict=";
     if (std.mem.startsWith(u8, arg, dict_prefix)) {
         try state.setDictionary(allocator, arg[dict_prefix.len..]);
@@ -205,7 +215,7 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
         },
         .deflate => {
             state.saw_deflate = true;
-            const outcome: Outcome = if (decodeRawDeflateSample(allocator, state.dictionary, bytes)) |decoded| result: {
+            const outcome: Outcome = if (decodeRawDeflateSample(allocator, state.dictionary, state.max_output_len, bytes)) |decoded| result: {
                 defer allocator.free(decoded);
                 break :result .accepted;
             } else |err| switch (err) {
@@ -217,6 +227,7 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
                 error.InvalidMatch,
                 error.CorruptFrame,
                 error.TrailingData,
+                error.OutputLimitExceeded,
                 => .rejected,
                 else => return err,
             };
@@ -224,7 +235,7 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
         },
         .zlib => {
             state.saw_zlib = true;
-            const outcome: Outcome = if (decodeZlibSample(allocator, state.dictionary, bytes)) |decoded| result: {
+            const outcome: Outcome = if (decodeZlibSample(allocator, state.dictionary, state.max_output_len, bytes)) |decoded| result: {
                 defer allocator.free(decoded);
                 break :result .accepted;
             } else |err| switch (err) {
@@ -240,6 +251,7 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
                 error.NeedDictionary,
                 error.ChecksumMismatch,
                 error.SizeMismatch,
+                error.OutputLimitExceeded,
                 => .rejected,
                 else => return err,
             };
@@ -247,7 +259,7 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
         },
         .gzip => {
             state.saw_gzip = true;
-            const outcome: Outcome = if (vort.decodeGzipAlloc(allocator, bytes)) |decoded| result: {
+            const outcome: Outcome = if (decodeGzipSample(allocator, state.max_output_len, bytes)) |decoded| result: {
                 defer allocator.free(decoded);
                 break :result .accepted;
             } else |err| switch (err) {
@@ -262,6 +274,7 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
                 error.BadGzipHeader,
                 error.ChecksumMismatch,
                 error.SizeMismatch,
+                error.OutputLimitExceeded,
                 => .rejected,
                 else => return err,
             };
@@ -270,14 +283,27 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
     }
 }
 
-fn decodeRawDeflateSample(allocator: std.mem.Allocator, dictionary: ?[]const u8, bytes: []const u8) ![]u8 {
-    if (dictionary) |dict| return vort.decodeRawDeflateAllocWithDictionary(allocator, bytes, dict);
+fn decodeRawDeflateSample(allocator: std.mem.Allocator, dictionary: ?[]const u8, max_output_len: ?usize, bytes: []const u8) ![]u8 {
+    if (dictionary) |dict| {
+        if (max_output_len) |limit| return vort.decodeRawDeflateAllocWithDictionaryLimited(allocator, bytes, dict, limit);
+        return vort.decodeRawDeflateAllocWithDictionary(allocator, bytes, dict);
+    }
+    if (max_output_len) |limit| return vort.decodeRawDeflateAllocLimited(allocator, bytes, limit);
     return vort.decodeRawDeflateAlloc(allocator, bytes);
 }
 
-fn decodeZlibSample(allocator: std.mem.Allocator, dictionary: ?[]const u8, bytes: []const u8) ![]u8 {
-    if (dictionary) |dict| return vort.decodeZlibAllocWithDictionary(allocator, bytes, dict);
+fn decodeZlibSample(allocator: std.mem.Allocator, dictionary: ?[]const u8, max_output_len: ?usize, bytes: []const u8) ![]u8 {
+    if (dictionary) |dict| {
+        if (max_output_len) |limit| return vort.decodeZlibAllocWithDictionaryLimited(allocator, bytes, dict, limit);
+        return vort.decodeZlibAllocWithDictionary(allocator, bytes, dict);
+    }
+    if (max_output_len) |limit| return vort.decodeZlibAllocLimited(allocator, bytes, limit);
     return vort.decodeZlibAlloc(allocator, bytes);
+}
+
+fn decodeGzipSample(allocator: std.mem.Allocator, max_output_len: ?usize, bytes: []const u8) ![]u8 {
+    if (max_output_len) |limit| return vort.decodeGzipConcatenatedAllocLimited(allocator, bytes, limit);
+    return vort.decodeGzipAlloc(allocator, bytes);
 }
 
 fn processCommentDirective(state: *State, comment: []const u8) !void {
