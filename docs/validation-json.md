@@ -230,6 +230,8 @@ Top-level fields:
 - `producer_step_covered`
 - `producer_step_missing`
 - `producer_step_allowed_missing`
+- `smoke_gate_covered`
+- `smoke_gate_missing`
 - `artifacts`
 
 Each artifact includes:
@@ -252,6 +254,8 @@ Example:
   "producer_step_covered": 1,
   "producer_step_missing": [],
   "producer_step_allowed_missing": [],
+  "smoke_gate_covered": 1,
+  "smoke_gate_missing": [],
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",

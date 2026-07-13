@@ -174,6 +174,8 @@ def main() -> int:
     producer_step_missing = [record["name"] for record in records if not record["producer_step"] and not record["producer_missing_allowed"]]
     producer_step_allowed_missing = [record["name"] for record in records if not record["producer_step"] and record["producer_missing_allowed"]]
     producer_step_covered = len(records) - len(producer_step_missing)
+    smoke_gate_missing = [record["name"] for record in records if not record["smoke_gate"]]
+    smoke_gate_covered = len(records) - len(smoke_gate_missing)
 
     lines = [
         "# Vort dashboard index",
@@ -183,6 +185,7 @@ def main() -> int:
         f"- artifacts: {len(artifacts)}",
         f"- producer steps: {producer_step_covered}/{len(records)}",
         f"- allowed missing producer steps: {len(producer_step_allowed_missing)}",
+        f"- smoke gates: {smoke_gate_covered}/{len(records)}",
         "",
     ]
     for category in sorted(grouped):
@@ -215,6 +218,8 @@ def main() -> int:
                 "producer_step_covered": producer_step_covered,
                 "producer_step_allowed_missing": producer_step_allowed_missing,
                 "producer_step_missing": producer_step_missing,
+                "smoke_gate_covered": smoke_gate_covered,
+                "smoke_gate_missing": smoke_gate_missing,
                 "artifacts": records,
             },
             indent=2,

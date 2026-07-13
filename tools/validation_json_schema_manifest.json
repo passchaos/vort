@@ -10,7 +10,9 @@
         "producer_step_covered": "int",
         "producer_step_missing": "list",
         "schema": "str",
-        "schema_version": "int"
+        "schema_version": "int",
+        "smoke_gate_covered": "int",
+        "smoke_gate_missing": "list"
       },
       "item_collection": "artifacts",
       "item_enums": {
