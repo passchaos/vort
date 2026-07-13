@@ -818,30 +818,30 @@ pub fn encodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
 }
 
 pub fn decodeRawStored(input: []const u8, output: []u8) Error!DecodeResult {
-    var in_offset: usize = 0;
+    var reader = bitstream.BitReader.init(input);
     var out_offset: usize = 0;
 
     while (true) {
-        if (input.len - in_offset < 5) return error.TruncatedFrame;
-        const header = input[in_offset];
-        if (((header >> 1) & 0b11) != 0) return error.InvalidDeflateBlockType;
-        if ((header & 0b1111_1000) != 0) return error.CorruptFrame;
-        const final = (header & 1) != 0;
-        in_offset += 1;
+        const final = (try reader.readBits(u1, 1)) != 0;
+        const block_type = try reader.readBits(u2, 2);
+        if (block_type != 0) return error.InvalidDeflateBlockType;
 
-        const len = std.mem.readInt(u16, input[in_offset..][0..2], .little);
-        const nlen = std.mem.readInt(u16, input[in_offset + 2 ..][0..2], .little);
-        in_offset += 4;
+        reader.alignToByte();
+        const offset = reader.byte_index;
+        if (input.len - offset < 4) return error.TruncatedFrame;
+        const len = std.mem.readInt(u16, input[offset..][0..2], .little);
+        const nlen = std.mem.readInt(u16, input[offset + 2 ..][0..2], .little);
         if (nlen != ~len) return error.StoredLengthMismatch;
 
         const chunk_len: usize = len;
-        if (input.len - in_offset < chunk_len) return error.TruncatedFrame;
+        if (input.len - offset - 4 < chunk_len) return error.TruncatedFrame;
         if (output.len - out_offset < chunk_len) return error.OutputTooSmall;
-        @memcpy(output[out_offset..][0..chunk_len], input[in_offset..][0..chunk_len]);
-        in_offset += chunk_len;
+        @memcpy(output[out_offset..][0..chunk_len], input[offset + 4 ..][0..chunk_len]);
         out_offset += chunk_len;
+        reader.byte_index = offset + 4 + chunk_len;
+        reader.bit_index = 0;
 
-        if (final) return .{ .input_read = in_offset, .output_written = out_offset };
+        if (final) return .{ .input_read = reader.byteOffset(), .output_written = out_offset };
     }
 }
 
@@ -849,27 +849,27 @@ pub fn decodeRawStoredAllocPartial(allocator: std.mem.Allocator, input: []const 
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
-    var in_offset: usize = 0;
+    var reader = bitstream.BitReader.init(input);
     while (true) {
-        if (input.len - in_offset < 5) return error.TruncatedFrame;
-        const header = input[in_offset];
-        if (((header >> 1) & 0b11) != 0) return error.InvalidDeflateBlockType;
-        if ((header & 0b1111_1000) != 0) return error.CorruptFrame;
-        const final = (header & 1) != 0;
-        in_offset += 1;
+        const final = (try reader.readBits(u1, 1)) != 0;
+        const block_type = try reader.readBits(u2, 2);
+        if (block_type != 0) return error.InvalidDeflateBlockType;
 
-        const len = std.mem.readInt(u16, input[in_offset..][0..2], .little);
-        const nlen = std.mem.readInt(u16, input[in_offset + 2 ..][0..2], .little);
-        in_offset += 4;
+        reader.alignToByte();
+        const offset = reader.byte_index;
+        if (input.len - offset < 4) return error.TruncatedFrame;
+        const len = std.mem.readInt(u16, input[offset..][0..2], .little);
+        const nlen = std.mem.readInt(u16, input[offset + 2 ..][0..2], .little);
         if (nlen != ~len) return error.StoredLengthMismatch;
 
         const chunk_len: usize = len;
-        if (input.len - in_offset < chunk_len) return error.TruncatedFrame;
-        try out.appendSlice(allocator, input[in_offset..][0..chunk_len]);
-        in_offset += chunk_len;
+        if (input.len - offset - 4 < chunk_len) return error.TruncatedFrame;
+        try out.appendSlice(allocator, input[offset + 4 ..][0..chunk_len]);
+        reader.byte_index = offset + 4 + chunk_len;
+        reader.bit_index = 0;
 
         if (final) {
-            return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = in_offset };
+            return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
         }
     }
 }
@@ -1418,6 +1418,42 @@ test "raw stored deflate reports malformed blocks" {
 
     const valid = [_]u8{ 0x01, 0x04, 0x00, 0xfb, 0xff, 't', 'e', 's', 't' };
     try std.testing.expectError(error.OutputTooSmall, decodeRawStored(&valid, out[0..2]));
+}
+
+test "stored deflate decoders ignore byte-alignment padding bits" {
+    // RFC 1951 only assigns meaning to the first three stored-block header
+    // bits. The remaining bits before the LEN/NLEN byte boundary are padding
+    // and may be non-zero; zlib accepts such streams, so Vort must not treat
+    // them as frame corruption.
+    const raw = &.{ 0x09, 0x00, 0x00, 0xff, 0xff };
+    var out: [1]u8 = undefined;
+    const decoded = try decodeRawStored(raw, &out);
+    try std.testing.expectEqual(@as(usize, 0), decoded.output_written);
+    try std.testing.expectEqual(raw.len, decoded.input_read);
+
+    const stored_alloc = try decodeRawStoredAlloc(std.testing.allocator, raw);
+    defer std.testing.allocator.free(stored_alloc);
+    try std.testing.expectEqualSlices(u8, "", stored_alloc);
+
+    const auto_alloc = try decodeRawAutoAlloc(std.testing.allocator, raw);
+    defer std.testing.allocator.free(auto_alloc);
+    try std.testing.expectEqualSlices(u8, "", auto_alloc);
+
+    const zlib_frame = &.{ 0x78, 0x01, 0x09, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01 };
+    const zlib_stored = try decodeZlibStoredAlloc(std.testing.allocator, zlib_frame);
+    defer std.testing.allocator.free(zlib_stored);
+    try std.testing.expectEqualSlices(u8, "", zlib_stored);
+    const zlib_auto = try decodeZlibAlloc(std.testing.allocator, zlib_frame);
+    defer std.testing.allocator.free(zlib_auto);
+    try std.testing.expectEqualSlices(u8, "", zlib_auto);
+
+    const gzip_frame = &.{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03, 0x09, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    const gzip_stored = try decodeGzipStoredAlloc(std.testing.allocator, gzip_frame);
+    defer std.testing.allocator.free(gzip_stored);
+    try std.testing.expectEqualSlices(u8, "", gzip_stored);
+    const gzip_auto = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
+    defer std.testing.allocator.free(gzip_auto);
+    try std.testing.expectEqualSlices(u8, "", gzip_auto);
 }
 
 test "zlib stored wrapper matches level-0 vectors" {

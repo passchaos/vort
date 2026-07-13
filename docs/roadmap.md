@@ -119,6 +119,7 @@ architecture blindly.
 - [x] Canonical Huffman table construction rejects oversubscribed trees.
 - [x] LSB-first bit writer primitive.
 - [x] Stored deflate blocks.
+- [x] Stored deflate decoders ignore non-zero byte-alignment padding bits.
 - [x] Fixed-Huffman inflate for literals and back-references.
 - [x] Fixed-Huffman fast lookup decode path for literals and distances.
 - [x] Dynamic-Huffman header and code-length parser foundation.

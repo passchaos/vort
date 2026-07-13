@@ -1,17 +1,20 @@
 # Raw deflate samples: valid fixed "a", then non-final fixed/truncated.
 --deflate
 4b0400 # expect: accept
+090000ffff # expect: accept
 4a0400 # expect: reject
 
 # zlib-wrapped fixed "hello", then bad header.
 --zlib
 7801cb48cdc9c90700062c0215 # expect: accept
+7801090000ffff00000001 # expect: accept
 0000 # expect: reject
 782000000000 # expect: reject
 
 # gzip-wrapped fixed "hello", then bad header.
 --gzip
 1f8b0800000000000403cb48cdc9c9070086a6103605000000 # expect: accept
+1f8b0800000000000403090000ffff0000000000000000 # expect: accept
 0000 # expect: reject
 
 # Malformed dynamic Huffman: oversubscribed code-length alphabet.
