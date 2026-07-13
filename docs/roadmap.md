@@ -156,8 +156,10 @@ architecture blindly.
 - [x] zlib wrapper reports preset-dictionary streams as dictionary requirements.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
+- [x] zlib preset-dictionary encoders emit FDICT/DICTID frames for stored/fixed/dynamic/best modes.
 - [x] Raw/zlib preset-dictionary decode covers stored/fixed/dynamic block cases.
 - [x] CLI and Python differential smoke cover raw/zlib preset-dictionary decode.
+- [x] CLI and Python differential smoke cover zlib preset-dictionary encode through Vort and Python zlib decoders.
 - [x] File CLI and Python differential smoke cover zlib preset-dictionary decode.
 - [x] CLI decode commands expose optional output limits for raw/zlib/gzip workflows.
 - [x] README API sketch documents limited raw/zlib/gzip decode APIs.

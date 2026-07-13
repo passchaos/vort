@@ -108,6 +108,19 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeZlibFixedWithOptionsAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zlib-dict-stored-hex")) {
+        const payload = args.next() orelse "";
+        const dictionary = args.next() orelse "";
+        const encoded = try vort.encodeZlibStoredWithDictionaryAlloc(init.gpa, payload, dictionary);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zlib-dict-fixed-hex")) {
+        const payload = args.next() orelse "";
+        const dictionary = args.next() orelse "";
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibFixedWithDictionaryAlloc(init.gpa, payload, dictionary, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-gzip-fixed-hex")) {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());
@@ -350,6 +363,13 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeZlibBestAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zlib-dict-best-hex")) {
+        const payload = args.next() orelse "";
+        const dictionary = args.next() orelse "";
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibBestWithDictionaryAlloc(init.gpa, payload, dictionary, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-best-split-hex")) {
         const payload = args.next() orelse "";
         const block_len = try parseBlockLen(args.next(), 7);
@@ -397,6 +417,13 @@ pub fn main(init: std.process.Init) !void {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());
         const encoded = try vort.encodeZlibDynamicWithOptionsAlloc(init.gpa, payload, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zlib-dict-dynamic-hex")) {
+        const payload = args.next() orelse "";
+        const dictionary = args.next() orelse "";
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibDynamicWithDictionaryAlloc(init.gpa, payload, dictionary, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-gzip-dynamic-hex")) {
@@ -743,6 +770,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode gzip-wrapped deflate hex to text
         \\  decode-gzip-file <in> <out> [max_output]
         \\                              Decode a gzip file with an optional output limit
+        \\  encode-zlib-dict-best-hex [text] [dict] [level]
+        \\                              Encode a zlib FDICT/DICTID frame requiring a preset dictionary
         \\  encode-zlib-best-file <in> <out> [level]
         \\                              Encode a zlib-compatible file with best-block selection
         \\

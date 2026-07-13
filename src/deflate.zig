@@ -1198,14 +1198,30 @@ pub fn zlibStoredEncodedSize(input_len: usize) Error!usize {
     return std.math.add(usize, with_header, 4) catch error.IntegerOverflow;
 }
 
+pub fn zlibStoredWithDictionaryEncodedSize(input_len: usize) Error!usize {
+    const raw_len = try rawStoredEncodedSize(input_len);
+    const with_header = std.math.add(usize, 6, raw_len) catch return error.IntegerOverflow;
+    return std.math.add(usize, with_header, 4) catch error.IntegerOverflow;
+}
+
 pub fn encodeZlibStored(input: []const u8, output: []u8) Error!usize {
     const required = try zlibStoredEncodedSize(input.len);
     if (output.len < required) return error.OutputTooSmall;
 
-    output[0] = 0x78; // deflate, 32 KiB window
-    output[1] = 0x01; // fastest/no compression, valid FCHECK
+    writeZlibHeader(output[0..2], null);
     const raw_written = try encodeRawStored(input, output[2 .. required - 4]);
     const footer_offset = 2 + raw_written;
+    std.mem.writeInt(u32, output[footer_offset..][0..4], checksum.adler32(input), .big);
+    return footer_offset + 4;
+}
+
+pub fn encodeZlibStoredWithDictionary(input: []const u8, output: []u8, dictionary: []const u8) Error!usize {
+    const required = try zlibStoredWithDictionaryEncodedSize(input.len);
+    if (output.len < required) return error.OutputTooSmall;
+
+    writeZlibHeader(output[0..6], dictionary);
+    const raw_written = try encodeRawStored(input, output[6 .. required - 4]);
+    const footer_offset = 6 + raw_written;
     std.mem.writeInt(u32, output[footer_offset..][0..4], checksum.adler32(input), .big);
     return footer_offset + 4;
 }
@@ -1219,6 +1235,15 @@ pub fn encodeZlibStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return out;
 }
 
+pub fn encodeZlibStoredWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) ![]u8 {
+    const required = try zlibStoredWithDictionaryEncodedSize(input.len);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeZlibStoredWithDictionary(input, out, dictionary);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
 pub fn encodeZlibFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return encodeZlibFixedWithOptionsAlloc(allocator, input, .{});
 }
@@ -1226,13 +1251,13 @@ pub fn encodeZlibFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
 pub fn encodeZlibFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const raw = try encodeRawFixedWithOptionsAlloc(allocator, input, options);
     defer allocator.free(raw);
-    const out = try allocator.alloc(u8, 2 + raw.len + 4);
-    errdefer allocator.free(out);
-    out[0] = 0x78;
-    out[1] = 0x01;
-    @memcpy(out[2..][0..raw.len], raw);
-    std.mem.writeInt(u32, out[2 + raw.len ..][0..4], checksum.adler32(input), .big);
-    return out;
+    return encodeZlibRawAlloc(allocator, input, raw, null);
+}
+
+pub fn encodeZlibFixedWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawFixedWithOptionsAlloc(allocator, input, options);
+    defer allocator.free(raw);
+    return encodeZlibRawAlloc(allocator, input, raw, dictionary);
 }
 
 pub fn encodeZlibDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -1242,49 +1267,70 @@ pub fn encodeZlibDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []cons
 pub fn encodeZlibDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, options);
     defer allocator.free(raw);
-    const out = try allocator.alloc(u8, 2 + raw.len + 4);
-    errdefer allocator.free(out);
-    out[0] = 0x78;
-    out[1] = 0x01;
-    @memcpy(out[2..][0..raw.len], raw);
-    std.mem.writeInt(u32, out[2 + raw.len ..][0..4], checksum.adler32(input), .big);
-    return out;
+    return encodeZlibRawAlloc(allocator, input, raw, null);
+}
+
+pub fn encodeZlibDynamicWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, options);
+    defer allocator.free(raw);
+    return encodeZlibRawAlloc(allocator, input, raw, dictionary);
 }
 
 pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const raw = try encodeRawBestAlloc(allocator, input, options);
     defer allocator.free(raw);
-    const out = try allocator.alloc(u8, 2 + raw.len + 4);
-    errdefer allocator.free(out);
-    out[0] = 0x78;
-    out[1] = 0x01;
-    @memcpy(out[2..][0..raw.len], raw);
-    std.mem.writeInt(u32, out[2 + raw.len ..][0..4], checksum.adler32(input), .big);
-    return out;
+    return encodeZlibRawAlloc(allocator, input, raw, null);
+}
+
+pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawBestAlloc(allocator, input, options);
+    defer allocator.free(raw);
+    return encodeZlibRawAlloc(allocator, input, raw, dictionary);
 }
 
 pub fn encodeZlibBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     const raw = try encodeRawBestSplitAlloc(allocator, input, block_len, options);
     defer allocator.free(raw);
-    const out = try allocator.alloc(u8, 2 + raw.len + 4);
-    errdefer allocator.free(out);
-    out[0] = 0x78;
-    out[1] = 0x01;
-    @memcpy(out[2..][0..raw.len], raw);
-    std.mem.writeInt(u32, out[2 + raw.len ..][0..4], checksum.adler32(input), .big);
-    return out;
+    return encodeZlibRawAlloc(allocator, input, raw, null);
+}
+
+pub fn encodeZlibBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    const raw = try encodeRawBestSplitAlloc(allocator, input, block_len, options);
+    defer allocator.free(raw);
+    return encodeZlibRawAlloc(allocator, input, raw, dictionary);
 }
 
 pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     const raw = try encodeRawBestAdaptiveSplitAlloc(allocator, input, options, split_options);
     defer allocator.free(raw);
-    const out = try allocator.alloc(u8, 2 + raw.len + 4);
+    return encodeZlibRawAlloc(allocator, input, raw, null);
+}
+
+pub fn encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    const raw = try encodeRawBestAdaptiveSplitAlloc(allocator, input, options, split_options);
+    defer allocator.free(raw);
+    return encodeZlibRawAlloc(allocator, input, raw, dictionary);
+}
+
+fn encodeZlibRawAlloc(allocator: std.mem.Allocator, input: []const u8, raw: []const u8, dictionary: ?[]const u8) ![]u8 {
+    const header_len: usize = if (dictionary == null) 2 else 6;
+    const out = try allocator.alloc(u8, header_len + raw.len + 4);
     errdefer allocator.free(out);
-    out[0] = 0x78;
-    out[1] = 0x01;
-    @memcpy(out[2..][0..raw.len], raw);
-    std.mem.writeInt(u32, out[2 + raw.len ..][0..4], checksum.adler32(input), .big);
+    writeZlibHeader(out[0..header_len], dictionary);
+    @memcpy(out[header_len..][0..raw.len], raw);
+    std.mem.writeInt(u32, out[header_len + raw.len ..][0..4], checksum.adler32(input), .big);
     return out;
+}
+
+fn writeZlibHeader(output: []u8, dictionary: ?[]const u8) void {
+    output[0] = 0x78; // deflate, 32 KiB window
+    if (dictionary) |dict| {
+        // FDICT set, FLEVEL=0, FCHECK chosen so CMF*256+FLG is divisible by 31.
+        output[1] = 0x20;
+        std.mem.writeInt(u32, output[2..][0..4], checksum.adler32(dict), .big);
+    } else {
+        output[1] = 0x01; // fastest/no compression, valid FCHECK
+    }
 }
 
 pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
@@ -2414,6 +2460,36 @@ test "zlib preset dictionary streams cover stored and dynamic blocks" {
     const dynamic = try decodeZlibAllocWithDictionary(std.testing.allocator, dynamic_frame, "hello ");
     defer std.testing.allocator.free(dynamic);
     try std.testing.expectEqualSlices(u8, "hello ", dynamic);
+}
+
+test "zlib preset dictionary encoders set FDICT and DICTID" {
+    const dictionary = "hello ";
+    const input = "hello hello hello";
+
+    const stored = try encodeZlibStoredWithDictionaryAlloc(std.testing.allocator, input, dictionary);
+    defer std.testing.allocator.free(stored);
+    const fixed = try encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, input, dictionary, optionsForLevel(.fast));
+    defer std.testing.allocator.free(fixed);
+    const dynamic = try encodeZlibDynamicWithDictionaryAlloc(std.testing.allocator, input, dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(dynamic);
+    const best = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, input, dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(best);
+    const split = try encodeZlibBestSplitWithDictionaryAlloc(std.testing.allocator, input, dictionary, 7, optionsForLevel(.default));
+    defer std.testing.allocator.free(split);
+    const adaptive = try encodeZlibBestAdaptiveSplitWithDictionaryAlloc(std.testing.allocator, input, dictionary, optionsForLevel(.default), .{ .min_block_len = 8, .max_block_len = 16, .sample_len = 8, .search_step = 8 });
+    defer std.testing.allocator.free(adaptive);
+
+    for ([_][]const u8{ stored, fixed, dynamic, best, split, adaptive }) |frame| {
+        try std.testing.expectEqual(@as(u8, 0x78), frame[0]);
+        try std.testing.expect(frame[1] & 0x20 != 0);
+        try std.testing.expectEqual(@as(usize, 0), (@as(usize, frame[0]) * 256 + frame[1]) % 31);
+        try std.testing.expectEqual(checksum.adler32(dictionary), std.mem.readInt(u32, frame[2..6], .big));
+        try std.testing.expectError(error.NeedDictionary, decodeZlibAlloc(std.testing.allocator, frame));
+        try std.testing.expectError(error.ChecksumMismatch, decodeZlibAllocWithDictionary(std.testing.allocator, frame, "wrong dictionary"));
+        const decoded = try decodeZlibAllocWithDictionary(std.testing.allocator, frame, dictionary);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
 }
 
 test "raw deflate preset dictionary streams decode fixed and dynamic blocks" {

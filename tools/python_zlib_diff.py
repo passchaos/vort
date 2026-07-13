@@ -214,6 +214,21 @@ def main() -> int:
         assert limited_path.read_bytes() == dict_payload, out
         expect_cli_failure("decode-zlib-dict-file", str(compressed_path), str(tmp / "too-small.bin"), str(dictionary_path), str(len(dict_payload) - 1), error_name="OutputLimitExceeded")
 
+    for command in [
+        "encode-zlib-dict-stored-hex",
+        "encode-zlib-dict-fixed-hex",
+        "encode-zlib-dict-dynamic-hex",
+        "encode-zlib-dict-best-hex",
+    ]:
+        encoded = bytes.fromhex(run_cli(command, dict_payload.decode("ascii"), dictionary_text, "default"))
+        assert encoded[1] & 0x20, (command, encoded.hex())
+        assert int.from_bytes(encoded[2:6], "big") == (zlib.adler32(dictionary) & 0xFFFFFFFF), (command, encoded.hex())
+        expect_cli_failure("decode-zlib-hex", encoded.hex(), error_name="NeedDictionary")
+        out = run_cli("decode-zlib-dict-hex", encoded.hex(), dictionary_text)
+        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
+        do = zlib.decompressobj(wbits=zlib.MAX_WBITS, zdict=dictionary)
+        assert do.decompress(encoded) + do.flush() == dict_payload, command
+
     dynamic_payloads = [
         b"match-heavy:" + (b"abcabcabcabc" * 96) + (b"xyzxyzxyz" * 48),
         b"distance-heavy:" + (b"0123456789abcdef" * 512) + b"----" + (b"0123456789abcdef" * 64),
