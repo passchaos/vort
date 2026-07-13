@@ -1,0 +1,32 @@
+{
+  "schema": "vort.dashboard_producers",
+  "schema_version": 1,
+  "exact": {
+    "vort-dashboard-index.json": "zig build run-dashboard-index",
+    "vort-dashboard-index.md": "zig build run-dashboard-index",
+    "vort-dictionary-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard",
+    "vort-file-corpus-standard-dashboard.md": "zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard",
+    "vort-file-corpus-standard-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard",
+    "vort-native-parallel-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard",
+    "vort-native-thread-pool-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard",
+    "vort-sidecar-corrupt-smoke.json": "zig build run-sidecar-corrupt-dashboard",
+    "vort-sidecar-corrupt-smoke.md": "zig build run-sidecar-corrupt-dashboard",
+    "vort-standard-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-corpus-dashboard",
+    "vort-standard-corpus-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-corpus-full-dashboard",
+    "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard"
+  },
+  "contains": [
+    {
+      "match": "native-parallel",
+      "producer_step": "zig build -Doptimize=ReleaseFast bench-native-parallel"
+    },
+    {
+      "match": "path-dashboard",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- <paths>"
+    },
+    {
+      "match": "tar-dashboard",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --paths <tar>"
+    }
+  ]
+}

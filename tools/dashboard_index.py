@@ -20,9 +20,30 @@ def category_for(path: Path) -> str:
     return "other"
 
 
-def producer_step_for(path: Path) -> str:
+def load_producer_map(path: Path) -> dict:
+    data = read_json(path)
+    if data.get("schema") != "vort.dashboard_producers":
+        return {}
+    return data
+
+
+def producer_step_for(path: Path, producer_map: dict) -> str:
     name = path.name
-    exact = {
+    exact = producer_map.get("exact")
+    if isinstance(exact, dict) and name in exact:
+        return str(exact[name])
+
+    contains = producer_map.get("contains")
+    if isinstance(contains, list):
+        for item in contains:
+            if not isinstance(item, dict):
+                continue
+            match = item.get("match")
+            producer = item.get("producer_step")
+            if isinstance(match, str) and isinstance(producer, str) and match in name:
+                return producer
+
+    fallback_exact = {
         "vort-sidecar-corrupt-smoke.md": "zig build run-sidecar-corrupt-dashboard",
         "vort-sidecar-corrupt-smoke.json": "zig build run-sidecar-corrupt-dashboard",
         "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
@@ -36,8 +57,8 @@ def producer_step_for(path: Path) -> str:
         "vort-standard-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-corpus-dashboard",
         "vort-standard-corpus-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-corpus-full-dashboard",
     }
-    if name in exact:
-        return exact[name]
+    if name in fallback_exact:
+        return fallback_exact[name]
     if "native-parallel" in name:
         return "zig build -Doptimize=ReleaseFast bench-native-parallel"
     if "path-dashboard" in name:
@@ -78,7 +99,7 @@ def artifact_metadata(path: Path) -> str:
     return f"{stat.st_size} bytes, updated `{mtime}`"
 
 
-def artifact_record(path: Path, output_dir: Path) -> dict:
+def artifact_record(path: Path, output_dir: Path, producer_map: dict) -> dict:
     stat = path.stat()
     mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     data = read_json(path) if path.suffix == ".json" else {}
@@ -87,7 +108,7 @@ def artifact_record(path: Path, output_dir: Path) -> dict:
         "path": path.relative_to(output_dir).as_posix(),
         "category": category_for(path),
         "format": path.suffix.lstrip("."),
-        "producer_step": producer_step_for(path),
+        "producer_step": producer_step_for(path, producer_map),
         "size_bytes": stat.st_size,
         "mtime_utc": mtime,
         "schema": data.get("schema"),
@@ -102,11 +123,13 @@ def main() -> int:
     parser.add_argument("--dir", default="zig-out", help="dashboard artifact directory")
     parser.add_argument("--output", default="zig-out/vort-dashboard-index.md", help="Markdown index path")
     parser.add_argument("--manifest", default="zig-out/vort-dashboard-index.json", help="JSON artifact manifest path")
+    parser.add_argument("--producer-map", default="tools/dashboard_producers.json", help="JSON producer-step mapping path")
     args = parser.parse_args()
 
     root = Path(args.dir)
     output = Path(args.output)
     manifest = Path(args.manifest)
+    producer_map = load_producer_map(Path(args.producer_map))
     artifacts = sorted(
         path
         for path in root.glob("vort-*")
@@ -131,7 +154,7 @@ def main() -> int:
             note = json_summary(artifact) if artifact.suffix == ".json" else ""
             metadata = artifact_metadata(artifact)
             suffix = f" — {metadata}"
-            producer_step = producer_step_for(artifact)
+            producer_step = producer_step_for(artifact, producer_map)
             if producer_step:
                 suffix += f", `{producer_step}`"
             if note:
@@ -144,7 +167,7 @@ def main() -> int:
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines))
-    records = [artifact_record(path, output.parent) for path in artifacts]
+    records = [artifact_record(path, output.parent, producer_map) for path in artifacts]
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text(
         json.dumps(

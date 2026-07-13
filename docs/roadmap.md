@@ -68,6 +68,7 @@ architecture blindly.
 - [x] Dashboard index includes artifact sizes and UTC update timestamps.
 - [x] Dashboard index emits a JSON artifact manifest with schema, category, size, timestamp, and row metadata.
 - [x] Dashboard index records producer build steps for known artifacts.
+- [x] Dashboard index reads producer build-step mappings from an external JSON config.
 - [x] Validation diagnostics include readable frame mode names alongside numeric frame flags.
 - [x] Validation diagnostics include recoverability hints for corruption/index/dictionary failures.
 - [x] Sidecar corrupt-payload smoke verifies metadata mode accepts header-consistent streams while full mode rejects store/deflate/RLE/dictionary/LDM/self-contained/seekable sidecar/embedded-index payload corruption.
