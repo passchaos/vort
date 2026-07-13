@@ -577,6 +577,26 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  decode-raw-hex [hex]      Decode raw deflate hex to text
         \\  decode-zlib-hex [hex]     Decode zlib-wrapped deflate hex to text
         \\  decode-gzip-hex [hex]     Decode gzip-wrapped deflate hex to text
+        \\  encode-zlib-best-file <in> <out> [level]
+        \\                              Encode a zlib-compatible file with best-block selection
+        \\  encode-vort-sidecar-best-file <in> <stream> <sidecar> [block_len]
+        \\                              Encode native Vort stream plus external sidecar index
+        \\  verify-vort-sidecar-index-file <stream> <sidecar> [full|metadata]
+        \\                              Validate an external sidecar index against a stream
+        \\  decode-vort-sidecar-range-file <stream> <sidecar> <out> <offset> <len>
+        \\                              Decode an indexed range through an external sidecar
+        \\  encode-vort-embedded-best-file <in> <stream> [block_len]
+        \\                              Encode native Vort stream with embedded index
+        \\  verify-vort-embedded-index-file <stream> [full|metadata]
+        \\                              Validate an embedded-index stream
+        \\  decode-vort-embedded-range-file <stream> <out> <offset> <len>
+        \\                              Decode an indexed range from an embedded-index stream
+        \\  encode-vort-sidecar-dict-file <in> <stream> <sidecar> [block_len]
+        \\                              Encode self-contained dictionary stream plus sidecar index
+        \\  decode-vort-sidecar-auto-range-file <stream> <sidecar> <out> <offset> <len>
+        \\                              Decode sidecar range with embedded dictionary auto-detection
+        \\  encode-vort-sidecar-ldm-file <in> <stream> <sidecar> [block_len]
+        \\                              Encode LDM-aware native stream plus sidecar index
         \\
         \\This CLI is a smoke surface for the library-first Vort APIs.
         \\
