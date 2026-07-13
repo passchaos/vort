@@ -117,6 +117,7 @@ architecture blindly.
 - [x] Dynamic-Huffman header and code-length parser foundation.
 - [x] Dynamic-Huffman code-length parser rejects invalid repeat symbols and overrun repeats.
 - [x] Dynamic-Huffman inflate for single final blocks.
+- [x] Dynamic-Huffman inflate rejects matches when the distance alphabet has no usable codes.
 - [x] Single-block fixed/dynamic inflate rejects non-final blocks instead of accepting incomplete streams.
 - [x] Multi-block raw/zlib/gzip inflate across stored/fixed/dynamic block types.
 - [x] Raw auto inflate rejects truncated streams after non-final stored/fixed/dynamic blocks.

@@ -1604,6 +1604,43 @@ test "raw dynamic Huffman inflate decodes zlib dynamic vectors" {
     try std.testing.expectEqualSlices(u8, plain, auto_decoded);
 }
 
+test "dynamic Huffman decoder rejects matches without distance codes" {
+    var lit_lengths: [258]u4 = @splat(0);
+    lit_lengths['a'] = 2;
+    lit_lengths[256] = 2;
+    lit_lengths[257] = 2;
+    var code_len_lengths: [19]u4 = @splat(0);
+    code_len_lengths[0] = 1;
+    code_len_lengths[2] = 1;
+
+    const code_len_encoder = try huffman.CodeLengthTable.Encoder.init(&code_len_lengths);
+    const lit_encoder = try huffman.HuffmanTable(258).Encoder.init(&lit_lengths);
+
+    var writer = bitstream.BitWriter{};
+    defer writer.deinit(std.testing.allocator);
+    try writer.writeBits(std.testing.allocator, 1, 1);
+    try writer.writeBits(std.testing.allocator, 0b10, 2);
+    try writer.writeBits(std.testing.allocator, 1, 5);
+    try writer.writeBits(std.testing.allocator, 0, 5);
+    try writer.writeBits(std.testing.allocator, 12, 4);
+    for (huffman.code_length_order[0..16]) |symbol| {
+        try writer.writeBits(std.testing.allocator, code_len_lengths[symbol], 3);
+    }
+    for (&lit_lengths) |len| try code_len_encoder.writeSymbol(&writer, std.testing.allocator, len);
+    try code_len_encoder.writeSymbol(&writer, std.testing.allocator, 0);
+    try lit_encoder.writeSymbol(&writer, std.testing.allocator, 'a');
+    try lit_encoder.writeSymbol(&writer, std.testing.allocator, 257);
+    // The malformed distance alphabet has no symbols. Provide enough padding
+    // bits for the distance decoder to conclude InvalidHuffmanCode rather than
+    // merely running out of input.
+    try writer.writeBits(std.testing.allocator, 0, 15);
+    const encoded = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+
+    try std.testing.expectError(error.InvalidHuffmanCode, decodeRawDynamicAllocStrict(std.testing.allocator, encoded));
+    try std.testing.expectError(error.InvalidHuffmanCode, decodeRawAutoAlloc(std.testing.allocator, encoded));
+}
+
 test "zlib and gzip dynamic Huffman wrappers decode dynamic vectors" {
     const zlib_frame = &.{
         0x78, 0x01,
