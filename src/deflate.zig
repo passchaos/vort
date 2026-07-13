@@ -1656,6 +1656,31 @@ test "raw zlib and gzip decoders handle multi-block streams" {
     try std.testing.expectEqualSlices(u8, plain, gzip_decoded);
 }
 
+test "zlib and gzip wrappers reject truncated non-final raw deflate streams" {
+    const non_final_stored = [_]u8{ 0x00, 0x01, 0x00, 0xfe, 0xff, 'x' };
+    const non_final_fixed = [_]u8{ 0x4a, 0x04, 0x00 };
+    const dynamic = try encodeRawDynamicLiteralAlloc(std.testing.allocator, "wrapped dynamic truncated tail");
+    defer std.testing.allocator.free(dynamic);
+    const non_final_dynamic = try std.testing.allocator.dupe(u8, dynamic);
+    defer std.testing.allocator.free(non_final_dynamic);
+    non_final_dynamic[0] &= 0xfe;
+
+    const raws = [_][]const u8{ &non_final_stored, &non_final_fixed, non_final_dynamic };
+    for (raws) |raw| {
+        var zlib_frame: std.ArrayList(u8) = .empty;
+        defer zlib_frame.deinit(std.testing.allocator);
+        try zlib_frame.appendSlice(std.testing.allocator, &.{ 0x78, 0x01 });
+        try zlib_frame.appendSlice(std.testing.allocator, raw);
+        try std.testing.expectError(error.TruncatedFrame, decodeZlibAlloc(std.testing.allocator, zlib_frame.items));
+
+        var gzip_frame: std.ArrayList(u8) = .empty;
+        defer gzip_frame.deinit(std.testing.allocator);
+        try gzip_frame.appendSlice(std.testing.allocator, &gzip_header);
+        try gzip_frame.appendSlice(std.testing.allocator, raw);
+        try std.testing.expectError(error.TruncatedFrame, decodeGzipAlloc(std.testing.allocator, gzip_frame.items));
+    }
+}
+
 test "gzip decoder accepts optional extra name comment and header crc fields" {
     const with_options = &.{
         0x1f, 0x8b, 0x08, 0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
