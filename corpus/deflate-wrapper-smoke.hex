@@ -12,3 +12,19 @@
 --gzip
 1f8b0800000000000403cb48cdc9c9070086a6103605000000
 0000
+
+# Malformed dynamic Huffman: oversubscribed code-length alphabet.
+--deflate
+05009200
+--zlib
+78010500920000000000
+--gzip
+1f8b0800000000000403050092000000000000000000
+
+# Malformed dynamic Huffman: code-length repeat 16 without previous length.
+--deflate
+05000224
+--zlib
+78010500022400000000
+--gzip
+1f8b0800000000000403050002240000000000000000
