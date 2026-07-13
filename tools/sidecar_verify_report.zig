@@ -112,41 +112,98 @@ fn parseValidationMode(text: []const u8) !vort.SidecarValidationMode {
 }
 
 fn runCorruptSelfTest(init: std.process.Init) !void {
-    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
-    const sidecar = try vort.storeEncodeSidecarIndexedStreamAlloc(init.gpa, &payloads);
-    defer sidecar.deinit(init.gpa);
-
-    try vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, sidecar.stream, sidecar.sidecar_index, .{ .mode = .metadata });
-    try vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, sidecar.stream, sidecar.sidecar_index, .{ .mode = .full });
-
-    const entries = try vort.storeDecodeFrameIndexAlloc(init.gpa, sidecar.sidecar_index);
-    defer init.gpa.free(entries);
-    if (entries.len == 0) return error.CorruptFrame;
-
-    const tampered = try init.gpa.dupe(u8, sidecar.stream);
-    defer init.gpa.free(tampered);
-    // Flip a stored payload byte rather than the header or sidecar bytes. The
-    // metadata-only verifier should still accept this by contract, while full
-    // verification must reject it through frame checksum validation.
-    tampered[entries[0].frame_offset + vort.store.header_len] ^= 1;
-
-    try vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, tampered, sidecar.sidecar_index, .{ .mode = .metadata });
-    var full_error_name: []const u8 = "";
-    vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, tampered, sidecar.sidecar_index, .{ .mode = .full }) catch |err| {
-        full_error_name = @errorName(err);
-    };
-    if (full_error_name.len == 0) return error.CorruptFrame;
-
     var stdout_buffer: [512]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("corrupt_self_test=true metadata_ok=true full_rejected=true full_error={s} entries={d} stream_bytes={d} sidecar_bytes={d}\n", .{
-        full_error_name,
-        entries.len,
-        sidecar.stream.len,
-        sidecar.sidecar_index.len,
+
+    var cases: std.ArrayList(CorruptCase) = .empty;
+    defer {
+        for (cases.items) |case| case.deinit(init.gpa);
+        cases.deinit(init.gpa);
+    }
+    try appendCorruptCase(init.gpa, &cases, try makeCorruptCase(init.gpa, "store", try vort.storeEncodeAlloc(init.gpa, "alpha"), null));
+    try appendCorruptCase(init.gpa, &cases, try makeCorruptCase(init.gpa, "deflate", try vort.storeEncodeDeflateAlloc(init.gpa, ("hello hello hello hello " ** 16)), null));
+    try appendCorruptCase(init.gpa, &cases, try makeCorruptCase(init.gpa, "rle", try vort.storeEncodeRleAlloc(init.gpa, ("a" ** 96)), null));
+
+    const dict = "dictionary-only phrase with enough length to beat stored framing";
+    try appendCorruptCase(init.gpa, &cases, try makeCorruptCase(init.gpa, "dictionary", try vort.storeEncodeDictionaryPatchAlloc(init.gpa, dict, dict ++ "!", 8), dict));
+
+    const ldm_prefix = "abcd" ** 9000;
+    const ldm_input = ldm_prefix ++ "----" ++ ldm_prefix[0..64].*;
+    try appendCorruptCase(init.gpa, &cases, try makeCorruptCase(init.gpa, "ldm", try vort.storeEncodeLongDistanceAlloc(init.gpa, ldm_input, .{ .min_distance = 32769, .min_length = 16 }), null));
+
+    var metadata_ok: usize = 0;
+    var full_rejected: usize = 0;
+    for (cases.items) |case| {
+        const full_error_name = try validateCorruptCase(init.gpa, case);
+        metadata_ok += 1;
+        full_rejected += 1;
+        try stdout.print("corrupt_case={s} metadata_ok=true full_rejected=true full_error={s} stream_bytes={d} sidecar_bytes={d}\n", .{
+            case.name,
+            full_error_name,
+            case.stream.len,
+            case.sidecar_index.len,
+        });
+    }
+
+    try stdout.print("corrupt_self_test=true cases={d} metadata_ok={d} full_rejected={d}\n", .{
+        cases.items.len,
+        metadata_ok,
+        full_rejected,
     });
     try stdout.flush();
+}
+
+const CorruptCase = struct {
+    name: []const u8,
+    stream: []u8,
+    sidecar_index: []u8,
+    dictionary: ?[]const u8 = null,
+
+    fn deinit(self: CorruptCase, allocator: std.mem.Allocator) void {
+        allocator.free(self.stream);
+        allocator.free(self.sidecar_index);
+    }
+};
+
+fn makeCorruptCase(allocator: std.mem.Allocator, name: []const u8, frame: []u8, dictionary: ?[]const u8) !CorruptCase {
+    errdefer allocator.free(frame);
+    const index = try vort.storeBuildFrameIndexAlloc(allocator, frame);
+    defer allocator.free(index);
+    const sidecar_index = try vort.storeEncodeFrameIndexAlloc(allocator, index);
+    errdefer allocator.free(sidecar_index);
+    return .{ .name = name, .stream = frame, .sidecar_index = sidecar_index, .dictionary = dictionary };
+}
+
+fn appendCorruptCase(allocator: std.mem.Allocator, cases: *std.ArrayList(CorruptCase), case: CorruptCase) !void {
+    errdefer case.deinit(allocator);
+    try cases.append(allocator, case);
+}
+
+fn validateCorruptCase(allocator: std.mem.Allocator, case: CorruptCase) ![]const u8 {
+    try vort.storeValidateSidecarIndexWithOptionsAlloc(allocator, case.stream, case.sidecar_index, .{ .mode = .metadata, .dictionary = case.dictionary });
+    try vort.storeValidateSidecarIndexWithOptionsAlloc(allocator, case.stream, case.sidecar_index, .{ .mode = .full, .dictionary = case.dictionary });
+
+    const entries = try vort.storeDecodeFrameIndexAlloc(allocator, case.sidecar_index);
+    defer allocator.free(entries);
+    if (entries.len == 0) return error.CorruptFrame;
+
+    const tampered = try allocator.dupe(u8, case.stream);
+    defer allocator.free(tampered);
+    const payload_offset = entries[0].frame_offset + vort.store.header_len;
+    if (payload_offset >= tampered.len) return error.TruncatedFrame;
+    // Flip a payload byte rather than the header or sidecar bytes. The
+    // metadata-only verifier should still accept this by contract, while full
+    // verification must reject it through the frame's decode/checksum path.
+    tampered[payload_offset] ^= 1;
+
+    try vort.storeValidateSidecarIndexWithOptionsAlloc(allocator, tampered, case.sidecar_index, .{ .mode = .metadata, .dictionary = case.dictionary });
+    var full_error_name: []const u8 = "";
+    vort.storeValidateSidecarIndexWithOptionsAlloc(allocator, tampered, case.sidecar_index, .{ .mode = .full, .dictionary = case.dictionary }) catch |err| {
+        full_error_name = @errorName(err);
+    };
+    if (full_error_name.len == 0) return error.CorruptFrame;
+    return full_error_name;
 }
 
 fn appendDirectoryPairs(init: std.process.Init, pairs: *std.ArrayList(Pair), dir_path: []const u8) !void {
