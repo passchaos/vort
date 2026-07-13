@@ -626,6 +626,19 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("compressed_bytes={d} dictionary_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, dictionary.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "decode-gzip-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeGzipConcatenatedAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.decodeGzipConcatenatedAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
     } else if (std.mem.eql(u8, command, "decode-zlib-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -695,6 +708,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode a zlib file with a preset dictionary file
         \\  decode-gzip-hex [hex] [max_output]
         \\                              Decode gzip-wrapped deflate hex to text
+        \\  decode-gzip-file <in> <out> [max_output]
+        \\                              Decode a gzip file with an optional output limit
         \\  encode-zlib-best-file <in> <out> [level]
         \\                              Encode a zlib-compatible file with best-block selection
         \\

@@ -56,6 +56,18 @@ def main() -> int:
         out = run_cli("decode-gzip-hex", frame.hex())
         assert int(parse_field(out, "decoded_bytes")) == len(data), out
         assert int(parse_field(out, "crc32")) == (zlib.crc32(data) & 0xFFFFFFFF), out
+        with tempfile.TemporaryDirectory(prefix="vort-gzip-file-", dir=ROOT / ".zig-cache") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            compressed_path = tmp / "sample.gz"
+            decoded_path = tmp / "sample.out"
+            limited_path = tmp / "sample-limited.out"
+            compressed_path.write_bytes(frame)
+            out = run_cli("decode-gzip-file", str(compressed_path), str(decoded_path))
+            assert int(parse_field(out, "decoded_bytes")) == len(data), out
+            assert decoded_path.read_bytes() == data, out
+            out = run_cli("decode-gzip-file", str(compressed_path), str(limited_path), str(len(data)))
+            assert int(parse_field(out, "decoded_bytes")) == len(data), out
+            assert limited_path.read_bytes() == data, out
 
     # Vort fixed gzip known vector -> system gzip.
     vort_hello = bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a6103605000000")

@@ -90,6 +90,11 @@ PY
 zig build run -- decode-zlib-dict-file /tmp/vort-dict.zlib /tmp/vort-dict.out /tmp/vort.dict
 zig build run -- decode-zlib-dict-file /tmp/vort-dict.zlib /tmp/vort-dict-limited.out /tmp/vort.dict 17
 zig build run -- decode-gzip-hex 1f8b0800000000000403cb48cdc9c9070086a6103605000000
+python3 - <<'PY'
+import gzip
+open("/tmp/vort.gz", "wb").write(gzip.compress(b"hello", mtime=0))
+PY
+zig build run -- decode-gzip-file /tmp/vort.gz /tmp/vort-gzip.out 5
 zig build run -- encode-raw-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 fast
 zig build run -- encode-zlib-best-adaptive-hex "abcdefghijklmnopqrstuvwxyz" default
 zig build run -- encode-zlib-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 default
