@@ -1,0 +1,200 @@
+{
+  "schema": "vort.validation_json_schema_manifest",
+  "schema_version": 1,
+  "schemas": {
+    "vort.dashboard_index": {
+      "fields": {
+        "artifact_count": "int",
+        "artifacts": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "artifacts",
+      "item_enums": {
+        "category": [
+          "validation",
+          "corpus and ratio",
+          "native parallel",
+          "other"
+        ],
+        "format": [
+          "json",
+          "md"
+        ]
+      },
+      "item_fields": {
+        "category": "str",
+        "format": "str",
+        "mtime_utc": "str",
+        "name": "str",
+        "path": "str",
+        "producer_step": "str",
+        "schema": "str?",
+        "schema_version": "int?",
+        "size_bytes": "int"
+      }
+    },
+    "vort.dashboard_producers": {
+      "fields": {
+        "contains": "list",
+        "exact": "dict",
+        "schema": "str",
+        "schema_version": "int"
+      }
+    },
+    "vort.sidecar_corrupt_smoke_report": {
+      "fields": {
+        "full_rejected_rows": "int",
+        "items": "list",
+        "metadata_ok_rows": "int",
+        "rows": "int",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "items",
+      "item_fields": {
+        "case": "str",
+        "full_error": "str",
+        "full_rejected": "bool",
+        "metadata_ok": "bool",
+        "sidecar_bytes": "int",
+        "stream_bytes": "int"
+      }
+    },
+    "vort.sidecar_verify_report": {
+      "fields": {
+        "error_rows": "int",
+        "items": "list",
+        "ok_rows": "int",
+        "rows": "int",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "items",
+      "item_enums": {
+        "frame_mode": [
+          "",
+          "store",
+          "deflate",
+          "rle",
+          "dictionary_patch",
+          "dictionary_deflate",
+          "ldm",
+          "unknown"
+        ],
+        "mode": [
+          "metadata",
+          "full"
+        ],
+        "recoverability_hint": [
+          "",
+          "none",
+          "index_mismatch",
+          "payload_corrupt",
+          "retry_with_dictionary",
+          "truncated_input"
+        ],
+        "status": [
+          "ok",
+          "error"
+        ],
+        "validation_stage": [
+          "",
+          "index_decode",
+          "index_structure",
+          "dictionary_parse",
+          "frame_bounds",
+          "frame_header",
+          "frame_metadata",
+          "payload_decode"
+        ]
+      },
+      "item_fields": {
+        "error": "str",
+        "frame_index": "int?",
+        "frame_mode": "str",
+        "mode": "str",
+        "recoverability_hint": "str",
+        "sidecar": "str",
+        "status": "str",
+        "stream": "str",
+        "validation_stage": "str"
+      }
+    },
+    "vort.validation_json_smoke": {
+      "enums": {
+        "cli_failure_hint": [
+          "none",
+          "index_mismatch",
+          "payload_corrupt",
+          "retry_with_dictionary",
+          "truncated_input"
+        ]
+      },
+      "fields": {
+        "checked_schemas": "list",
+        "cli_failure_hint": "str",
+        "corrupt_rows": "int",
+        "ok": "bool",
+        "report_rows": "int",
+        "schema": "str",
+        "schema_version": "int"
+      }
+    },
+    "vort.validation_report": {
+      "enums": {
+        "frame_mode": [
+          "",
+          "store",
+          "deflate",
+          "rle",
+          "dictionary_patch",
+          "dictionary_deflate",
+          "ldm",
+          "unknown"
+        ],
+        "mode": [
+          "metadata",
+          "full"
+        ],
+        "recoverability_hint": [
+          "none",
+          "index_mismatch",
+          "payload_corrupt",
+          "retry_with_dictionary",
+          "truncated_input"
+        ],
+        "stage": [
+          "index_decode",
+          "index_structure",
+          "dictionary_parse",
+          "frame_bounds",
+          "frame_header",
+          "frame_metadata",
+          "payload_decode"
+        ],
+        "target": [
+          "sidecar",
+          "embedded"
+        ]
+      },
+      "fields": {
+        "error": "str",
+        "frame_flags": "int?",
+        "frame_index": "int?",
+        "frame_mode": "str",
+        "frame_offset": "int?",
+        "mode": "str",
+        "ok": "bool",
+        "recoverability_hint": "str",
+        "schema": "str",
+        "schema_version": "int",
+        "sidecar_bytes": "int?",
+        "stage": "str",
+        "stream_bytes": "int",
+        "target": "str",
+        "uncompressed_offset": "int?"
+      }
+    }
+  }
+}

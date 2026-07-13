@@ -314,3 +314,37 @@ Example:
   ]
 }
 ```
+
+## `vort.validation_json_schema_manifest`
+
+Consumed by:
+
+```sh
+zig build run-validation-json-docs-check
+python3 tools/validation_json_docs_check.py
+```
+
+This schema defines the fields, simple type checks, and enum values that the
+documentation checker applies to the examples in this file. It keeps the checker
+logic generic while allowing schema expectations to evolve in a data file.
+
+Top-level fields:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `schema` | string | Always `vort.validation_json_schema_manifest`. |
+| `schema_version` | integer | Currently `1`. |
+| `schemas` | object | Map from schema name to validation expectations. |
+
+Each schema entry can contain:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `fields` | object | Required top-level fields mapped to type names. |
+| `enums` | object | Optional top-level string enum constraints. |
+| `item_collection` | string | Optional nested list field to inspect. |
+| `item_fields` | object | Required fields for the first nested item. |
+| `item_enums` | object | Optional nested item enum constraints. |
+
+Supported type names are `str`, `int`, `bool`, `list`, `dict`, `str?`, and
+`int?`.
