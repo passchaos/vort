@@ -45,8 +45,11 @@ zig build run -- store-range-demo
 zig build run -- store-sidecar-range-demo
 zig build run -- store-sidecar-dict-range-demo
 zig build run -- encode-vort-sidecar-best-file README.md /tmp/readme.vort /tmp/readme.vidx 4096
+zig build run -- encode-vort-embedded-best-file README.md /tmp/readme-embedded.vort 4096
 zig build run -- verify-vort-sidecar-index-file /tmp/readme.vort /tmp/readme.vidx
 zig build run -- verify-vort-sidecar-index-file /tmp/readme.vort /tmp/readme.vidx metadata
+zig build run -- verify-vort-embedded-index-file /tmp/readme-embedded.vort
+zig build run -- verify-vort-embedded-index-file /tmp/readme-embedded.vort metadata
 zig build run-sidecar-verify-report -- /tmp/readme.vort /tmp/readme.vidx
 zig build run-sidecar-verify-report -- --mode metadata /tmp/readme.vort /tmp/readme.vidx
 zig build run-sidecar-corrupt-smoke

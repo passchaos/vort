@@ -435,6 +435,16 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = stream_path, .data = sidecar.stream });
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = sidecar_path, .data = sidecar.sidecar_index });
         try stdout.print("input_bytes={d} stream_bytes={d} sidecar_bytes={d} stream={s} sidecar={s}\n", .{ data.len, sidecar.stream.len, sidecar.sidecar_index.len, stream_path, sidecar_path });
+    } else if (std.mem.eql(u8, command, "encode-vort-embedded-best-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const stream_path = args.next() orelse return error.MissingCorpusPath;
+        const block_len = try parseBlockLen(args.next(), 8192);
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const stream = try vort.storeEncodeBlockedBestStreamAlloc(init.gpa, data, block_len);
+        defer init.gpa.free(stream);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = stream_path, .data = stream });
+        try stdout.print("input_bytes={d} stream_bytes={d} embedded_index=true stream={s}\n", .{ data.len, stream.len, stream_path });
     } else if (std.mem.eql(u8, command, "verify-vort-sidecar-index-file")) {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
         const sidecar_path = args.next() orelse return error.MissingCorpusPath;
@@ -445,6 +455,13 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(sidecar);
         try vort.storeValidateSidecarIndexWithOptionsAlloc(init.gpa, stream, sidecar, .{ .mode = validation_mode });
         try stdout.print("sidecar_ok=true mode={s} stream_bytes={d} sidecar_bytes={d}\n", .{ @tagName(validation_mode), stream.len, sidecar.len });
+    } else if (std.mem.eql(u8, command, "verify-vort-embedded-index-file")) {
+        const stream_path = args.next() orelse return error.MissingCorpusPath;
+        const validation_mode = try parseSidecarValidationMode(args.next());
+        const stream = try std.Io.Dir.cwd().readFileAlloc(init.io, stream_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(stream);
+        try vort.storeValidateEmbeddedIndexWithOptionsAlloc(init.gpa, stream, .{ .mode = validation_mode });
+        try stdout.print("embedded_index_ok=true mode={s} stream_bytes={d}\n", .{ @tagName(validation_mode), stream.len });
     } else if (std.mem.eql(u8, command, "decode-vort-sidecar-range-file")) {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
         const sidecar_path = args.next() orelse return error.MissingCorpusPath;

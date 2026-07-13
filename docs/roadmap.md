@@ -59,6 +59,7 @@ architecture blindly.
 - [x] Sidecar corrupt-payload smoke verifies metadata mode accepts header-consistent streams while full mode rejects store/deflate/RLE/dictionary/LDM/self-contained/seekable sidecar/embedded-index payload corruption.
 - [x] Sidecar corrupt-payload smoke can emit Markdown/JSON artifacts for dashboard retention.
 - [x] Sidecar corrupt-payload dashboard step writes fixed zig-out Markdown/JSON artifacts and runs in CI smoke.
+- [x] CLI smoke for embedded-index encode and metadata/full validation.
 - [x] CLI smoke for sidecar-index range decode.
 - [x] CLI smoke for sidecar-index dictionary auto range decode.
 - [x] Frame index monotonicity/gap validation before range decode.
