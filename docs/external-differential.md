@@ -83,4 +83,6 @@ zlib allocator and caller-buffer throughput ratios against the best Rust
 baseline. Gzip decode rows and decode allocation overhead are summarized
 separately because the Rust baseline harness measures zlib frames. The encode
 table also reports the Vort default/dynamic-default throughput ratio to expose
-best-selection overhead.
+best-selection overhead, plus split-default/adaptive-default speed and size
+ratios against Vort default to expose wrapper block-planning overhead and
+split-induced size changes.

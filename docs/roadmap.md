@@ -222,6 +222,7 @@ architecture blindly.
 - [x] Rust deflate decode benchmarks include stored binary payloads.
 - [x] Rust deflate benchmark Markdown summary highlights Vort vs Rust gaps.
 - [x] Rust deflate benchmark summary reports Vort default-vs-dynamic encode overhead.
+- [x] Rust deflate benchmark summary reports Vort split/adaptive encode speed and size ratios.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
 - [x] Dynamic Huffman encoder with LZ77 match support, verified by Python zlib.
 - [x] Dynamic Huffman encoder code-length RLE using symbols 16/17/18.
