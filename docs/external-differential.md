@@ -50,9 +50,12 @@ as local source checkouts, including their current git revision when available,
 and `run-rust-deflate-diff` builds a temporary Cargo runner with path
 dependencies to both checkouts. That smoke verifies Rust-generated zlib frames
 decode through Vort and Vort-generated zlib frames decode through both Rust
-implementations. Passing that smoke is compatibility evidence for its small
-payload set; it is not yet throughput or ratio evidence, so dedicated benchmark
-harnesses are still required before making performance claims. The
+implementations. It also covers raw deflate streams where the Rust APIs expose
+them: fdeflate and miniz_oxide raw encoders must decode through Vort, and
+miniz_oxide raw inflate must decode the wrapper-independent raw deflate payload
+inside Vort's zlib output. Passing that smoke is compatibility evidence for
+its small payload set; it is not yet throughput or ratio evidence, so dedicated
+benchmark harnesses are still required before making performance claims. The
 `run-rust-deflate-bench` step is the first such decode-throughput smoke: run it
 with `-Doptimize=ReleaseFast` so the Vort row is comparable to the release-mode
 temporary Cargo runner built against both Rust checkouts. It prints CSV rows

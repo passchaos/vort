@@ -204,6 +204,7 @@ architecture blindly.
 - [x] External probe discovers local fdeflate and miniz_oxide checkouts as Rust deflate baselines.
 - [x] External probe reports git revisions for local compressor checkouts.
 - [x] fdeflate/miniz_oxide path-dependency differential smoke runs through Cargo and Vort CLI.
+- [x] fdeflate/miniz_oxide differential smoke covers raw deflate encode/decode API directions where exposed.
 - [x] fdeflate/miniz_oxide decode-throughput smoke benchmark runs through Cargo.
 - [x] Rust deflate decode benchmark reports Vort/fdeflate/miniz_oxide rows in one CSV.
 - [x] Rust deflate decode benchmark documentation requires ReleaseFast Vort rows.
