@@ -118,13 +118,16 @@ def decode_stage_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Decode stage diagnostics",
         "",
-        "| case | raw MiB/s | zlib MiB/s | zlib/raw time | iterations | raw bytes | zlib bytes |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| case | raw alloc MiB/s | raw into MiB/s | zlib alloc MiB/s | zlib into MiB/s | wrapper/raw time | into wrapper/raw time | raw alloc/into time | zlib alloc/into time | iterations | raw bytes | zlib bytes |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         lines.append(
-            f"| {row['case']} | {fnum(row, 'raw_mib_s'):.2f} | {fnum(row, 'zlib_mib_s'):.2f} | "
-            f"{fnum(row, 'wrapper_time_ratio'):.3f} | {row['iterations']} | {row['raw_bytes']} | {row['zlib_bytes']} |"
+            f"| {row['case']} | {fnum(row, 'raw_mib_s'):.2f} | {fnum(row, 'raw_into_mib_s'):.2f} | "
+            f"{fnum(row, 'zlib_mib_s'):.2f} | {fnum(row, 'zlib_into_mib_s'):.2f} | "
+            f"{fnum(row, 'wrapper_time_ratio'):.3f} | {fnum(row, 'wrapper_into_time_ratio'):.3f} | "
+            f"{fnum(row, 'raw_alloc_into_time_ratio'):.3f} | {fnum(row, 'zlib_alloc_into_time_ratio'):.3f} | "
+            f"{row['iterations']} | {row['raw_bytes']} | {row['zlib_bytes']} |"
         )
     lines.append("")
     return lines

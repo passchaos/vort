@@ -16,8 +16,13 @@ const Row = struct {
     raw_bytes: usize,
     iterations: usize,
     raw_mib_s: f64,
+    raw_into_mib_s: f64,
     zlib_mib_s: f64,
+    zlib_into_mib_s: f64,
     wrapper_time_ratio: f64,
+    wrapper_into_time_ratio: f64,
+    raw_alloc_into_time_ratio: f64,
+    zlib_alloc_into_time_ratio: f64,
     mix: u64,
 };
 
@@ -121,6 +126,19 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
     }
     const raw_ns = raw_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 
+    const raw_scratch = try init.gpa.alloc(u8, case.payload.len);
+    defer init.gpa.free(raw_scratch);
+    const raw_into_warmup = try vort.decodeRawDeflate(raw, raw_scratch);
+    if (raw_into_warmup.output_written != case.payload.len or !std.mem.eql(u8, raw_scratch, case.payload)) return error.DecodeLengthMismatch;
+    const raw_into_start = std.Io.Clock.awake.now(init.io);
+    for (0..iterations) |_| {
+        const decoded = try vort.decodeRawDeflate(raw, raw_scratch);
+        if (decoded.output_written != case.payload.len) return error.DecodeLengthMismatch;
+        mix +%= decoded.output_written;
+        if (decoded.output_written != 0) mix +%= raw_scratch[0];
+    }
+    const raw_into_ns = raw_into_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+
     const zlib_warmup = try vort.decodeZlibAlloc(init.gpa, zlib_frame);
     init.gpa.free(zlib_warmup);
     const zlib_start = std.Io.Clock.awake.now(init.io);
@@ -133,6 +151,19 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
     }
     const zlib_ns = zlib_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 
+    const zlib_scratch = try init.gpa.alloc(u8, case.payload.len);
+    defer init.gpa.free(zlib_scratch);
+    const zlib_into_warmup = try vort.decodeZlib(zlib_frame, zlib_scratch);
+    if (zlib_into_warmup != case.payload.len or !std.mem.eql(u8, zlib_scratch, case.payload)) return error.DecodeLengthMismatch;
+    const zlib_into_start = std.Io.Clock.awake.now(init.io);
+    for (0..iterations) |_| {
+        const decoded = try vort.decodeZlib(zlib_frame, zlib_scratch);
+        if (decoded != case.payload.len) return error.DecodeLengthMismatch;
+        mix +%= decoded;
+        if (decoded != 0) mix +%= zlib_scratch[0];
+    }
+    const zlib_into_ns = zlib_into_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+
     return .{
         .name = case.name,
         .input_bytes = case.payload.len,
@@ -140,24 +171,34 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
         .raw_bytes = raw.len,
         .iterations = iterations,
         .raw_mib_s = throughput(case.payload.len, iterations, raw_ns),
+        .raw_into_mib_s = throughput(case.payload.len, iterations, raw_into_ns),
         .zlib_mib_s = throughput(case.payload.len, iterations, zlib_ns),
+        .zlib_into_mib_s = throughput(case.payload.len, iterations, zlib_into_ns),
         .wrapper_time_ratio = ratioSigned(zlib_ns, raw_ns),
+        .wrapper_into_time_ratio = ratioSigned(zlib_into_ns, raw_into_ns),
+        .raw_alloc_into_time_ratio = ratioSigned(raw_ns, raw_into_ns),
+        .zlib_alloc_into_time_ratio = ratioSigned(zlib_ns, zlib_into_ns),
         .mix = mix,
     };
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,input_bytes,zlib_bytes,raw_bytes,iterations,raw_mib_s,zlib_mib_s,wrapper_time_ratio,mix\n");
+    try writer.writeAll("case,input_bytes,zlib_bytes,raw_bytes,iterations,raw_mib_s,raw_into_mib_s,zlib_mib_s,zlib_into_mib_s,wrapper_time_ratio,wrapper_into_time_ratio,raw_alloc_into_time_ratio,zlib_alloc_into_time_ratio,mix\n");
     for (rows) |row| {
-        try writer.print("{s},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d}\n", .{
+        try writer.print("{s},{d},{d},{d},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d:.4},{d}\n", .{
             row.name,
             row.input_bytes,
             row.zlib_bytes,
             row.raw_bytes,
             row.iterations,
             row.raw_mib_s,
+            row.raw_into_mib_s,
             row.zlib_mib_s,
+            row.zlib_into_mib_s,
             row.wrapper_time_ratio,
+            row.wrapper_into_time_ratio,
+            row.raw_alloc_into_time_ratio,
+            row.zlib_alloc_into_time_ratio,
             row.mix,
         });
     }
@@ -167,20 +208,25 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
     try writer.writeAll(
         \\# Deflate decode stage report
         \\
-        \\| case | input bytes | zlib bytes | raw bytes | iterations | raw MiB/s | zlib MiB/s | wrapper/raw time |
-        \\| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+        \\| case | input bytes | zlib bytes | raw bytes | iterations | raw alloc MiB/s | raw into MiB/s | zlib alloc MiB/s | zlib into MiB/s | wrapper/raw time | into wrapper/raw time | raw alloc/into time | zlib alloc/into time |
+        \\| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
         \\
     );
     for (rows) |row| {
-        try writer.print("| {s} | {d} | {d} | {d} | {d} | {d:.2} | {d:.2} | {d:.3} |\n", .{
+        try writer.print("| {s} | {d} | {d} | {d} | {d} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.3} | {d:.3} | {d:.3} | {d:.3} |\n", .{
             row.name,
             row.input_bytes,
             row.zlib_bytes,
             row.raw_bytes,
             row.iterations,
             row.raw_mib_s,
+            row.raw_into_mib_s,
             row.zlib_mib_s,
+            row.zlib_into_mib_s,
             row.wrapper_time_ratio,
+            row.wrapper_into_time_ratio,
+            row.raw_alloc_into_time_ratio,
+            row.zlib_alloc_into_time_ratio,
         });
     }
 }
