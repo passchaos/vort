@@ -188,6 +188,7 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
 
 pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
+    if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     const effective_block_len = @min(block_len, max_stored_block_len);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
@@ -212,6 +213,7 @@ pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, 
 
 pub fn encodeRawBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
+    if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     const effective_block_len = @min(block_len, max_stored_block_len);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
@@ -246,6 +248,7 @@ pub const AdaptiveSplitOptions = struct {
 
 pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
+    if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     const max_block_len = @min(split_options.max_block_len, max_stored_block_len);
     const min_block_len = @min(split_options.min_block_len, max_block_len);
     const one_shot = try encodeRawBestAlloc(allocator, input, options);
@@ -275,6 +278,7 @@ pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []co
 
 pub fn encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
     if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
+    if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     const max_block_len = @min(split_options.max_block_len, max_stored_block_len);
     const min_block_len = @min(split_options.min_block_len, max_block_len);
     const one_shot = try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, options);
@@ -2937,6 +2941,14 @@ test "best encoder skips invalid single stored block for large inputs" {
     const raw_dict = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, &input, dictionary, optionsForLevel(.fastest));
     defer std.testing.allocator.free(raw_dict);
     try std.testing.expectEqual(stored.len, raw_dict.len);
+
+    const split = try encodeRawBestSplitAlloc(std.testing.allocator, &input, 16 * 1024, optionsForLevel(.fastest));
+    defer std.testing.allocator.free(split);
+    try std.testing.expectEqual(stored.len, split.len);
+
+    const adaptive = try encodeRawBestAdaptiveSplitAlloc(std.testing.allocator, &input, optionsForLevel(.fastest), optionsForLevel(.fastest).split_options);
+    defer std.testing.allocator.free(adaptive);
+    try std.testing.expectEqual(stored.len, adaptive.len);
 
     const zlib_dict = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, &input, dictionary, optionsForLevel(.fastest));
     defer std.testing.allocator.free(zlib_dict);
