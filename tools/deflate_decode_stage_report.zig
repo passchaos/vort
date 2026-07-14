@@ -13,16 +13,22 @@ const Row = struct {
     name: []const u8,
     input_bytes: usize,
     zlib_bytes: usize,
+    gzip_bytes: usize,
     raw_bytes: usize,
     iterations: usize,
     raw_mib_s: f64,
     raw_into_mib_s: f64,
     zlib_mib_s: f64,
     zlib_into_mib_s: f64,
-    wrapper_time_ratio: f64,
-    wrapper_into_time_ratio: f64,
+    gzip_mib_s: f64,
+    gzip_into_mib_s: f64,
+    zlib_wrapper_time_ratio: f64,
+    zlib_wrapper_into_time_ratio: f64,
+    gzip_wrapper_time_ratio: f64,
+    gzip_wrapper_into_time_ratio: f64,
     raw_alloc_into_time_ratio: f64,
     zlib_alloc_into_time_ratio: f64,
+    gzip_alloc_into_time_ratio: f64,
     mix: u64,
 };
 
@@ -109,6 +115,12 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
         .stored => try vort.encodeZlibStoredAlloc(init.gpa, case.payload),
     };
     defer init.gpa.free(zlib_frame);
+    const gzip_frame = switch (case.mode) {
+        .best => try vort.encodeGzipBestAlloc(init.gpa, case.payload, options),
+        .dynamic_literal => try vort.encodeGzipDynamicLiteralAlloc(init.gpa, case.payload),
+        .stored => try vort.encodeGzipStoredAlloc(init.gpa, case.payload),
+    };
+    defer init.gpa.free(gzip_frame);
 
     const raw = rawSliceFromZlib(zlib_frame);
     const iterations = iterations_override orelse iterationsFor(case.payload.len);
@@ -164,41 +176,78 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
     }
     const zlib_into_ns = zlib_into_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 
+    const gzip_warmup = try vort.decodeGzipAlloc(init.gpa, gzip_frame);
+    init.gpa.free(gzip_warmup);
+    const gzip_start = std.Io.Clock.awake.now(init.io);
+    for (0..iterations) |_| {
+        const decoded = try vort.decodeGzipAlloc(init.gpa, gzip_frame);
+        defer init.gpa.free(decoded);
+        if (decoded.len != case.payload.len) return error.DecodeLengthMismatch;
+        mix +%= decoded.len;
+        if (decoded.len != 0) mix +%= decoded[0];
+    }
+    const gzip_ns = gzip_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+
+    const gzip_scratch = try init.gpa.alloc(u8, case.payload.len);
+    defer init.gpa.free(gzip_scratch);
+    const gzip_into_warmup = try vort.decodeGzip(gzip_frame, gzip_scratch);
+    if (gzip_into_warmup != case.payload.len or !std.mem.eql(u8, gzip_scratch, case.payload)) return error.DecodeLengthMismatch;
+    const gzip_into_start = std.Io.Clock.awake.now(init.io);
+    for (0..iterations) |_| {
+        const decoded = try vort.decodeGzip(gzip_frame, gzip_scratch);
+        if (decoded != case.payload.len) return error.DecodeLengthMismatch;
+        mix +%= decoded;
+        if (decoded != 0) mix +%= gzip_scratch[0];
+    }
+    const gzip_into_ns = gzip_into_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+
     return .{
         .name = case.name,
         .input_bytes = case.payload.len,
         .zlib_bytes = zlib_frame.len,
+        .gzip_bytes = gzip_frame.len,
         .raw_bytes = raw.len,
         .iterations = iterations,
         .raw_mib_s = throughput(case.payload.len, iterations, raw_ns),
         .raw_into_mib_s = throughput(case.payload.len, iterations, raw_into_ns),
         .zlib_mib_s = throughput(case.payload.len, iterations, zlib_ns),
         .zlib_into_mib_s = throughput(case.payload.len, iterations, zlib_into_ns),
-        .wrapper_time_ratio = ratioSigned(zlib_ns, raw_ns),
-        .wrapper_into_time_ratio = ratioSigned(zlib_into_ns, raw_into_ns),
+        .gzip_mib_s = throughput(case.payload.len, iterations, gzip_ns),
+        .gzip_into_mib_s = throughput(case.payload.len, iterations, gzip_into_ns),
+        .zlib_wrapper_time_ratio = ratioSigned(zlib_ns, raw_ns),
+        .zlib_wrapper_into_time_ratio = ratioSigned(zlib_into_ns, raw_into_ns),
+        .gzip_wrapper_time_ratio = ratioSigned(gzip_ns, raw_ns),
+        .gzip_wrapper_into_time_ratio = ratioSigned(gzip_into_ns, raw_into_ns),
         .raw_alloc_into_time_ratio = ratioSigned(raw_ns, raw_into_ns),
         .zlib_alloc_into_time_ratio = ratioSigned(zlib_ns, zlib_into_ns),
+        .gzip_alloc_into_time_ratio = ratioSigned(gzip_ns, gzip_into_ns),
         .mix = mix,
     };
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,input_bytes,zlib_bytes,raw_bytes,iterations,raw_mib_s,raw_into_mib_s,zlib_mib_s,zlib_into_mib_s,wrapper_time_ratio,wrapper_into_time_ratio,raw_alloc_into_time_ratio,zlib_alloc_into_time_ratio,mix\n");
+    try writer.writeAll("case,input_bytes,zlib_bytes,gzip_bytes,raw_bytes,iterations,raw_mib_s,raw_into_mib_s,zlib_mib_s,zlib_into_mib_s,gzip_mib_s,gzip_into_mib_s,zlib_wrapper_time_ratio,zlib_wrapper_into_time_ratio,gzip_wrapper_time_ratio,gzip_wrapper_into_time_ratio,raw_alloc_into_time_ratio,zlib_alloc_into_time_ratio,gzip_alloc_into_time_ratio,mix\n");
     for (rows) |row| {
-        try writer.print("{s},{d},{d},{d},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d:.4},{d}\n", .{
+        try writer.print("{s},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d}\n", .{
             row.name,
             row.input_bytes,
             row.zlib_bytes,
+            row.gzip_bytes,
             row.raw_bytes,
             row.iterations,
             row.raw_mib_s,
             row.raw_into_mib_s,
             row.zlib_mib_s,
             row.zlib_into_mib_s,
-            row.wrapper_time_ratio,
-            row.wrapper_into_time_ratio,
+            row.gzip_mib_s,
+            row.gzip_into_mib_s,
+            row.zlib_wrapper_time_ratio,
+            row.zlib_wrapper_into_time_ratio,
+            row.gzip_wrapper_time_ratio,
+            row.gzip_wrapper_into_time_ratio,
             row.raw_alloc_into_time_ratio,
             row.zlib_alloc_into_time_ratio,
+            row.gzip_alloc_into_time_ratio,
             row.mix,
         });
     }
@@ -213,20 +262,26 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
         \\
     );
     for (rows) |row| {
-        try writer.print("| {s} | {d} | {d} | {d} | {d} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.3} | {d:.3} | {d:.3} | {d:.3} |\n", .{
+        try writer.print("| {s} | {d} | {d} | {d} | {d} | {d} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.3} | {d:.3} | {d:.3} | {d:.3} | {d:.3} | {d:.3} | {d:.3} |\n", .{
             row.name,
             row.input_bytes,
             row.zlib_bytes,
+            row.gzip_bytes,
             row.raw_bytes,
             row.iterations,
             row.raw_mib_s,
             row.raw_into_mib_s,
             row.zlib_mib_s,
             row.zlib_into_mib_s,
-            row.wrapper_time_ratio,
-            row.wrapper_into_time_ratio,
+            row.gzip_mib_s,
+            row.gzip_into_mib_s,
+            row.zlib_wrapper_time_ratio,
+            row.zlib_wrapper_into_time_ratio,
+            row.gzip_wrapper_time_ratio,
+            row.gzip_wrapper_into_time_ratio,
             row.raw_alloc_into_time_ratio,
             row.zlib_alloc_into_time_ratio,
+            row.gzip_alloc_into_time_ratio,
         });
     }
 }
