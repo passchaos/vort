@@ -29,13 +29,13 @@ def inum(row: dict[str, str], key: str) -> int:
 
 def decode_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
-        "## Decode throughput",
+        "## Decode throughput (zlib)",
         "",
         "| case | best Vort MiB/s | best Rust MiB/s | Vort / best Rust | best Rust engine |",
         "| --- | ---: | ---: | ---: | --- |",
     ]
     for case, items in sorted(by_case(rows).items()):
-        vort_rows = [row for row in items if row["engine"].startswith("vort")]
+        vort_rows = [row for row in items if row["engine"] in ("vort", "vort-into")]
         rust_rows = [row for row in items if not row["engine"].startswith("vort")]
         vort = max(vort_rows, key=lambda row: fnum(row, "throughput_mib_s"))
         rust = max(rust_rows, key=lambda row: fnum(row, "throughput_mib_s"))
@@ -43,6 +43,26 @@ def decode_lines(rows: list[dict[str, str]]) -> list[str]:
         rust_speed = fnum(rust, "throughput_mib_s")
         ratio = 0.0 if rust_speed == 0 else vort_speed / rust_speed
         lines.append(f"| {case} | {vort['engine']} {vort_speed:.2f} | {rust_speed:.2f} | {ratio:.3f} | {rust['engine']} |")
+    lines.append("")
+    return lines
+
+
+def gzip_decode_lines(rows: list[dict[str, str]]) -> list[str]:
+    lines = [
+        "## Vort gzip decode throughput",
+        "",
+        "| case | gzip alloc MiB/s | gzip into MiB/s | into / alloc |",
+        "| --- | ---: | ---: | ---: |",
+    ]
+    for case, items in sorted(by_case(rows).items()):
+        gzip = next((row for row in items if row["engine"] == "vort-gzip"), None)
+        gzip_into = next((row for row in items if row["engine"] == "vort-gzip-into"), None)
+        if gzip is None or gzip_into is None:
+            continue
+        alloc_speed = fnum(gzip, "throughput_mib_s")
+        into_speed = fnum(gzip_into, "throughput_mib_s")
+        ratio = 0.0 if alloc_speed == 0 else into_speed / alloc_speed
+        lines.append(f"| {case} | {alloc_speed:.2f} | {into_speed:.2f} | {ratio:.3f} |")
     lines.append("")
     return lines
 
@@ -161,6 +181,7 @@ def main() -> int:
         "",
     ]
     lines.extend(decode_lines(decode_rows))
+    lines.extend(gzip_decode_lines(decode_rows))
     lines.extend(encode_lines(encode_rows))
     if dynamic_plan_rows:
         lines.extend(dynamic_plan_lines(dynamic_plan_rows))
