@@ -1909,15 +1909,15 @@ pub fn encodeZlibFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
 }
 
 pub fn encodeZlibFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawFixedWithOptionsAlloc(allocator, input, options);
-    defer allocator.free(raw);
-    return encodeZlibRawAlloc(allocator, input, raw, null);
+    const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    return encodeZlibFixedTokensAlloc(allocator, input, null, plan.tokens);
 }
 
 pub fn encodeZlibFixedWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawFixedWithDictionaryAlloc(allocator, input, dictionary, options);
-    defer allocator.free(raw);
-    return encodeZlibRawAlloc(allocator, input, raw, dictionary);
+    const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
+    defer plan.deinit(allocator);
+    return encodeZlibFixedTokensAlloc(allocator, input, dictionary, plan.tokens);
 }
 
 pub fn encodeZlibDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -1925,29 +1925,29 @@ pub fn encodeZlibDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []cons
 }
 
 pub fn encodeZlibDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, options);
-    defer allocator.free(raw);
-    return encodeZlibRawAlloc(allocator, input, raw, null);
+    const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    return encodeZlibDynamicTokensAlloc(allocator, input, null, plan.tokens);
 }
 
 pub fn encodeZlibDynamicWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawDynamicWithDictionaryAlloc(allocator, input, dictionary, options);
-    defer allocator.free(raw);
-    return encodeZlibRawAlloc(allocator, input, raw, dictionary);
+    const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
+    defer plan.deinit(allocator);
+    return encodeZlibDynamicTokensAlloc(allocator, input, dictionary, plan.tokens);
 }
 
 pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
-    const raw = try encodeRawBestAlloc(allocator, input, options);
-    defer allocator.free(raw);
-    return encodeZlibRawAlloc(allocator, input, raw, null);
+    const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    return encodeZlibBestTokensAlloc(allocator, input, null, plan.tokens, options);
 }
 
 pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
-    const raw = try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, options);
-    defer allocator.free(raw);
-    return encodeZlibRawAlloc(allocator, input, raw, dictionary);
+    const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
+    defer plan.deinit(allocator);
+    return encodeZlibBestTokensAlloc(allocator, input, dictionary, plan.tokens, options);
 }
 
 pub fn encodeZlibBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
@@ -1983,6 +1983,51 @@ fn encodeZlibRawAlloc(allocator: std.mem.Allocator, input: []const u8, raw: []co
     writeZlibHeader(out[0..header_len], dictionary);
     @memcpy(out[header_len..][0..raw.len], raw);
     std.mem.writeInt(u32, out[header_len + raw.len ..][0..4], checksum.adler32(input), .big);
+    return out;
+}
+
+fn encodeZlibFixedTokensAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, tokens: []const lz77.Token) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    const header_len = try writeWrappedDeflatePrefix(allocator, &writer, dictionary);
+    try writeFixedTokens(allocator, &writer, tokens, true);
+    return finishZlibFrame(allocator, &writer, input, header_len);
+}
+
+fn encodeZlibDynamicTokensAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, tokens: []const lz77.Token) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    const header_len = try writeWrappedDeflatePrefix(allocator, &writer, dictionary);
+    const plan = try DynamicCodingPlan.init(tokens);
+    try writer.bytes.ensureTotalCapacity(allocator, header_len + (plan.bitCost(tokens) + 7) / 8 + 4);
+    try plan.write(allocator, &writer, tokens, true);
+    return finishZlibFrame(allocator, &writer, input, header_len);
+}
+
+fn encodeZlibBestTokensAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, tokens: []const lz77.Token, options: CompressionOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    const header_len = try writeWrappedDeflatePrefix(allocator, &writer, dictionary);
+    try writeBestTokensBlock(allocator, &writer, input, tokens, true, options);
+    return finishZlibFrame(allocator, &writer, input, header_len);
+}
+
+fn writeWrappedDeflatePrefix(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, dictionary: ?[]const u8) !usize {
+    const header_len: usize = if (dictionary == null) 2 else 6;
+    try writer.bytes.ensureTotalCapacity(allocator, header_len);
+    const header = try writer.bytes.addManyAsSlice(allocator, header_len);
+    writeZlibHeader(header, dictionary);
+    return header_len;
+}
+
+fn finishZlibFrame(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8, header_len: usize) ![]u8 {
+    try writer.alignToByte(allocator);
+    const footer_offset = writer.bytes.items.len;
+    try writer.bytes.appendNTimes(allocator, 0, 4);
+    std.mem.writeInt(u32, writer.bytes.items[footer_offset..][0..4], checksum.adler32(input), .big);
+    const out = try writer.bytes.toOwnedSlice(allocator);
+    std.debug.assert(out.len >= header_len + 4);
+    writer.* = .{};
     return out;
 }
 
@@ -2156,16 +2201,9 @@ pub fn encodeGzipFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
 }
 
 pub fn encodeGzipFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawFixedWithOptionsAlloc(allocator, input, options);
-    defer allocator.free(raw);
-    const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
-    errdefer allocator.free(out);
-    @memcpy(out[0..gzip_header.len], &gzip_header);
-    @memcpy(out[gzip_header.len..][0..raw.len], raw);
-    const footer = gzip_header.len + raw.len;
-    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
-    std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
-    return out;
+    const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    return encodeGzipFixedTokensAlloc(allocator, input, plan.tokens);
 }
 
 pub fn encodeGzipDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -2173,30 +2211,16 @@ pub fn encodeGzipDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []cons
 }
 
 pub fn encodeGzipDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, options);
-    defer allocator.free(raw);
-    const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
-    errdefer allocator.free(out);
-    @memcpy(out[0..gzip_header.len], &gzip_header);
-    @memcpy(out[gzip_header.len..][0..raw.len], raw);
-    const footer = gzip_header.len + raw.len;
-    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
-    std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
-    return out;
+    const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    return encodeGzipDynamicTokensAlloc(allocator, input, plan.tokens);
 }
 
 pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeGzipStoredAlloc(allocator, input);
-    const raw = try encodeRawBestAlloc(allocator, input, options);
-    defer allocator.free(raw);
-    const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
-    errdefer allocator.free(out);
-    @memcpy(out[0..gzip_header.len], &gzip_header);
-    @memcpy(out[gzip_header.len..][0..raw.len], raw);
-    const footer = gzip_header.len + raw.len;
-    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
-    std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
-    return out;
+    const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    return encodeGzipBestTokensAlloc(allocator, input, plan.tokens, options);
 }
 
 pub fn encodeGzipBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
@@ -2223,6 +2247,48 @@ pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
     const footer = gzip_header.len + raw.len;
     std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
     std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
+    return out;
+}
+
+fn encodeGzipFixedTokensAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeGzipPrefix(allocator, &writer);
+    try writeFixedTokens(allocator, &writer, tokens, true);
+    return finishGzipFrame(allocator, &writer, input);
+}
+
+fn encodeGzipDynamicTokensAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeGzipPrefix(allocator, &writer);
+    const plan = try DynamicCodingPlan.init(tokens);
+    try writer.bytes.ensureTotalCapacity(allocator, gzip_header.len + (plan.bitCost(tokens) + 7) / 8 + 8);
+    try plan.write(allocator, &writer, tokens, true);
+    return finishGzipFrame(allocator, &writer, input);
+}
+
+fn encodeGzipBestTokensAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token, options: CompressionOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeGzipPrefix(allocator, &writer);
+    try writeBestTokensBlock(allocator, &writer, input, tokens, true, options);
+    return finishGzipFrame(allocator, &writer, input);
+}
+
+fn writeGzipPrefix(allocator: std.mem.Allocator, writer: *bitstream.BitWriter) !void {
+    try writer.bytes.ensureTotalCapacity(allocator, gzip_header.len);
+    try writer.bytes.appendSlice(allocator, &gzip_header);
+}
+
+fn finishGzipFrame(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8) ![]u8 {
+    try writer.alignToByte(allocator);
+    const footer = writer.bytes.items.len;
+    try writer.bytes.appendNTimes(allocator, 0, 8);
+    std.mem.writeInt(u32, writer.bytes.items[footer..][0..4], checksum.crc32Best(input), .little);
+    std.mem.writeInt(u32, writer.bytes.items[footer + 4 ..][0..4], @truncate(input.len), .little);
+    const out = try writer.bytes.toOwnedSlice(allocator);
+    writer.* = .{};
     return out;
 }
 
