@@ -3239,6 +3239,24 @@ test "gzip decoder rejects truncated optional headers" {
     try std.testing.expectError(error.TruncatedFrame, decodeGzipAlloc(std.testing.allocator, &.{ 0x1f, 0x8b, 0x08, 0x08, 0, 0, 0, 0, 0, 3, 'n', 'o' }));
 }
 
+test "wrapper footer validators report exact boundary errors" {
+    const zlib_footer = [_]u8{ 0x00, 0x00, 0x00, 0x01 };
+    try validateZlibFooter(&zlib_footer, 0, 1);
+    try std.testing.expectError(error.TruncatedFrame, validateZlibFooter(&zlib_footer, 5, 1));
+    try std.testing.expectError(error.TruncatedFrame, validateZlibFooter(zlib_footer[0..3], 0, 1));
+    try std.testing.expectError(error.ChecksumMismatch, validateZlibFooter(&zlib_footer, 0, 2));
+    try std.testing.expectError(error.TrailingData, validateZlibFooter(&.{ 0x00, 0x00, 0x00, 0x01, 0xff }, 0, 1));
+
+    const gzip_footer = [_]u8{ 0x86, 0xa6, 0x10, 0x36, 0x05, 0x00, 0x00, 0x00 };
+    try validateGzipFooter(&gzip_footer, 0, 0x3610_a686, 5);
+    try validateGzipFooterPartial(&(gzip_footer ++ .{0xff}), 0, 0x3610_a686, 5);
+    try std.testing.expectError(error.TruncatedFrame, validateGzipFooter(&gzip_footer, 9, 0x3610_a686, 5));
+    try std.testing.expectError(error.TruncatedFrame, validateGzipFooter(gzip_footer[0..7], 0, 0x3610_a686, 5));
+    try std.testing.expectError(error.ChecksumMismatch, validateGzipFooter(&gzip_footer, 0, 0, 5));
+    try std.testing.expectError(error.SizeMismatch, validateGzipFooter(&gzip_footer, 0, 0x3610_a686, 4));
+    try std.testing.expectError(error.TrailingData, validateGzipFooter(&(gzip_footer ++ .{0xff}), 0, 0x3610_a686, 5));
+}
+
 test "raw fixed Huffman encoder round trips through decoder" {
     const cases = [_][]const u8{
         "",
