@@ -2408,16 +2408,24 @@ fn smallerWrappedAdaptiveOrOneShot(allocator: std.mem.Allocator, writer: *bitstr
     return one_shot;
 }
 
+fn validateGzipFooterPartial(input: []const u8, footer_offset: usize, actual_crc: u32, output_len: usize) Error!void {
+    if (footer_offset > input.len or input.len - footer_offset < 8) return error.TruncatedFrame;
+    const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
+    const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
+    if (actual_crc != expected_crc) return error.ChecksumMismatch;
+    if (@as(u32, @truncate(output_len)) != expected_size) return error.SizeMismatch;
+}
+
+fn validateGzipFooter(input: []const u8, footer_offset: usize, actual_crc: u32, output_len: usize) Error!void {
+    try validateGzipFooterPartial(input, footer_offset, actual_crc, output_len);
+    if (footer_offset + 8 != input.len) return error.TrailingData;
+}
+
 pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
     const data_offset = try parseGzipHeader(input);
     const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice16, input[data_offset..], output)) orelse return error.InvalidDeflateBlockType;
     const footer_offset = data_offset + stored.result.input_read;
-    if (input.len - footer_offset < 8) return error.TruncatedFrame;
-    const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
-    const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-    if (stored.digest != expected_crc) return error.ChecksumMismatch;
-    if (@as(u32, @truncate(stored.result.output_written)) != expected_size) return error.SizeMismatch;
-    if (footer_offset + 8 != input.len) return error.TrailingData;
+    try validateGzipFooter(input, footer_offset, stored.digest, stored.result.output_written);
     return stored.result.output_written;
 }
 
@@ -2426,24 +2434,14 @@ pub fn decodeGzip(input: []const u8, output: []u8) Error!usize {
 
     if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice16, input[data_offset..], output)) |stored| {
         const footer_offset = data_offset + stored.result.input_read;
-        if (input.len - footer_offset < 8) return error.TruncatedFrame;
-        const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
-        const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-        if (stored.digest != expected_crc) return error.ChecksumMismatch;
-        if (@as(u32, @truncate(stored.result.output_written)) != expected_size) return error.SizeMismatch;
-        if (footer_offset + 8 != input.len) return error.TrailingData;
+        try validateGzipFooter(input, footer_offset, stored.digest, stored.result.output_written);
         return stored.result.output_written;
     }
 
     const raw = try decodeRawAuto(input[data_offset..], output);
     const footer_offset = data_offset + raw.input_read;
-    if (input.len - footer_offset < 8) return error.TruncatedFrame;
-    const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
-    const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
     const payload = output[0..raw.output_written];
-    if (checksum.crc32Best(payload) != expected_crc) return error.ChecksumMismatch;
-    if (@as(u32, @truncate(raw.output_written)) != expected_size) return error.SizeMismatch;
-    if (footer_offset + 8 != input.len) return error.TrailingData;
+    try validateGzipFooter(input, footer_offset, checksum.crc32Best(payload), raw.output_written);
     return raw.output_written;
 }
 
@@ -2460,12 +2458,7 @@ fn decodeGzipStoredAllocLimitedInternal(allocator: std.mem.Allocator, input: []c
     const stored = (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice16, allocator, input[data_offset..], max_output_len)) orelse return error.InvalidDeflateBlockType;
     errdefer stored.deinit(allocator);
     const footer_offset = data_offset + stored.result.input_read;
-    if (input.len - footer_offset < 8) return error.TruncatedFrame;
-    const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
-    const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-    if (stored.digest != expected_crc) return error.ChecksumMismatch;
-    if (@as(u32, @truncate(stored.result.bytes.len)) != expected_size) return error.SizeMismatch;
-    if (footer_offset + 8 != input.len) return error.TrailingData;
+    try validateGzipFooter(input, footer_offset, stored.digest, stored.result.bytes.len);
     return stored.result.bytes;
 }
 
@@ -2486,12 +2479,8 @@ pub fn decodeGzipConcatenated(input: []const u8, output: []u8) Error!usize {
         const raw = try decodeRawAuto(input[offset + data_offset ..], output[out_offset..]);
         out_offset += raw.output_written;
         const footer_offset = offset + data_offset + raw.input_read;
-        if (input.len - footer_offset < 8) return error.TruncatedFrame;
-        const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
-        const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
         const member_payload = output[before_member..out_offset];
-        if (checksum.crc32Best(member_payload) != expected_crc) return error.ChecksumMismatch;
-        if (@as(u32, @truncate(member_payload.len)) != expected_size) return error.SizeMismatch;
+        try validateGzipFooterPartial(input, footer_offset, checksum.crc32Best(member_payload), member_payload.len);
         offset = footer_offset + 8;
     }
     return out_offset;
@@ -2506,12 +2495,8 @@ fn decodeGzipConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
         const before_member = out.items.len;
         const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, input[offset + data_offset ..], "", &out, max_output_len);
         const footer_offset = offset + data_offset + raw.input_read;
-        if (input.len - footer_offset < 8) return error.TruncatedFrame;
-        const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
-        const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
         const member_payload = out.items[before_member..];
-        if (checksum.crc32Best(member_payload) != expected_crc) return error.ChecksumMismatch;
-        if (@as(u32, @truncate(member_payload.len)) != expected_size) return error.SizeMismatch;
+        try validateGzipFooterPartial(input, footer_offset, checksum.crc32Best(member_payload), member_payload.len);
         offset = footer_offset + 8;
     }
     return out.toOwnedSlice(allocator);
@@ -2533,24 +2518,14 @@ fn decodeGzipAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u
     if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice16, allocator, input[data_offset..], max_output_len)) |stored| {
         errdefer stored.deinit(allocator);
         const footer_offset = data_offset + stored.result.input_read;
-        if (input.len - footer_offset < 8) return error.TruncatedFrame;
-        const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
-        const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-        if (stored.digest != expected_crc) return error.ChecksumMismatch;
-        if (@as(u32, @truncate(stored.result.bytes.len)) != expected_size) return error.SizeMismatch;
-        if (footer_offset + 8 != input.len) return error.TrailingData;
+        try validateGzipFooter(input, footer_offset, stored.digest, stored.result.bytes.len);
         return stored.result.bytes;
     }
 
     const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[data_offset..], "", max_output_len);
     errdefer raw.deinit(allocator);
     const footer_offset = data_offset + raw.input_read;
-    if (input.len - footer_offset < 8) return error.TruncatedFrame;
-    const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
-    const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-    if (checksum.crc32Best(raw.bytes) != expected_crc) return error.ChecksumMismatch;
-    if (@as(u32, @truncate(raw.bytes.len)) != expected_size) return error.SizeMismatch;
-    if (footer_offset + 8 != input.len) return error.TrailingData;
+    try validateGzipFooter(input, footer_offset, checksum.crc32Best(raw.bytes), raw.bytes.len);
     return raw.bytes;
 }
 
