@@ -343,7 +343,10 @@ fn uniqueByteCount(input: []const u8) usize {
 }
 
 fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions) !void {
-    const stored_len = storedBlockEncodedSizeFromState(writer.*, plain.len);
+    const stored_len = if (plain.len <= max_stored_block_len)
+        storedBlockEncodedSizeFromState(writer.*, plain.len)
+    else
+        std.math.maxInt(usize);
     const fixed_len = encodedBytesForBitsFromState(writer.*, lz77.fixedBitCost(tokens));
 
     if (options.block_selection == .stored_fixed) {
@@ -2849,6 +2852,17 @@ test "best encoder selects a valid smallest raw block" {
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, case, decoded);
     }
+}
+
+test "best encoder skips invalid single stored block for large inputs" {
+    var input: [64 * 1024]u8 = undefined;
+    for (&input, 0..) |*byte, i| byte.* = @intCast((i * 131 + (i >> 3) * 17 + 29) & 0xff);
+
+    const encoded = try encodeRawBestAlloc(std.testing.allocator, &input, optionsForLevel(.fastest));
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &input, decoded);
 }
 
 test "compression level presets round trip" {

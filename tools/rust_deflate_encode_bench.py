@@ -150,7 +150,7 @@ def main() -> int:
         ("dynamic-literal", b"literal-heavy dynamic huffman decode stage\n" * 512),
         ("text", b"the quick brown fox jumps over the lazy dog\n" * 1024),
         ("binary", bytes((i * 131 + (i >> 3) * 17 + 29) & 0xFF for i in range(64 * 1024))),
-        ("incompressible", deterministic_noise(32 * 1024)),
+        ("incompressible", deterministic_noise(64 * 1024)),
         ("readme", (ROOT / "README.md").read_bytes()),
         ("roadmap", (ROOT / "docs" / "roadmap.md").read_bytes()),
     ]
