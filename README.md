@@ -192,6 +192,7 @@ zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard -- --li
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report
+zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report -- --iterations 1000
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-dashboard
 zig build bench-corpus-decode -Doptimize=ReleaseFast

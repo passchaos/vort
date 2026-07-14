@@ -42,6 +42,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv_path: ?[]const u8 = null;
     var markdown_path: ?[]const u8 = null;
+    var iterations_override: ?usize = null;
     var file_cases: std.ArrayList(Case) = .empty;
     defer {
         for (file_cases.items) |case| init.gpa.free(case.payload);
@@ -56,6 +57,11 @@ pub fn main(init: std.process.Init) !void {
             markdown_path = args.next() orelse return error.MissingCorpusPath;
             continue;
         }
+        if (std.mem.eql(u8, path, "--iterations")) {
+            iterations_override = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+            if (iterations_override.? == 0) return error.InvalidBlockPlan;
+            continue;
+        }
         const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         errdefer init.gpa.free(payload);
         try file_cases.append(init.gpa, .{ .name = path, .payload = payload });
@@ -64,7 +70,7 @@ pub fn main(init: std.process.Init) !void {
     const cases = if (file_cases.items.len == 0) builtins[0..] else file_cases.items;
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(init.gpa);
-    for (cases) |case| try rows.append(init.gpa, try measureCase(init, case));
+    for (cases) |case| try rows.append(init.gpa, try measureCase(init, case, iterations_override));
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
@@ -85,13 +91,13 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
-fn measureCase(init: std.process.Init, case: Case) !Row {
+fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) !Row {
     const options = vort.optionsForCompressionLevel(.default);
     const zlib_frame = try vort.encodeZlibBestAlloc(init.gpa, case.payload, options);
     defer init.gpa.free(zlib_frame);
 
     const raw = rawSliceFromZlib(zlib_frame);
-    const iterations = iterationsFor(case.payload.len);
+    const iterations = iterations_override orelse iterationsFor(case.payload.len);
 
     var mix: u64 = 0;
     const raw_warmup = try vort.decodeRawDeflateAlloc(init.gpa, raw);
