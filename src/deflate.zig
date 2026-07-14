@@ -557,10 +557,9 @@ pub fn encodeRawFixedSplitAlloc(allocator: std.mem.Allocator, input: []const u8,
 }
 
 pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    var tokens: std.ArrayList(lz77.Token) = .empty;
-    defer tokens.deinit(allocator);
-    for (input) |byte| try tokens.append(allocator, .{ .literal = byte });
-    return encodeRawDynamicTokensAlloc(allocator, tokens.items);
+    const plan = try lz77.literalPlanAlloc(allocator, input);
+    defer plan.deinit(allocator);
+    return encodeRawDynamicTokensAlloc(allocator, plan.tokens);
 }
 
 pub fn encodeRawDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
