@@ -104,12 +104,12 @@ fn useTinyHashPlan(input: []const u8, options: CompressionOptions) bool {
     // Hash parser setup allocates and clears tens of KiB of tables. For tiny
     // and small one-shot payloads this fixed cost dominates compression time.
     // A stack-resident 4 Ki slot table preserves hash-parser behavior while
-    // avoiding the full 32 Ki table clear. Keep the threshold below normal
+    // avoiding the full 32 Ki table clear. Keep the threshold below most normal
     // split blocks so large inputs retain the production table size.
     return options.parser == .hash and
         options.strategy == .default and
         input.len > 256 and
-        input.len <= 8 * 1024 and
+        input.len <= 24 * 1024 and
         options.lz77_options.window_len <= 16 * 1024;
 }
 
