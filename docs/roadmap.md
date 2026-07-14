@@ -250,6 +250,7 @@ architecture blindly.
 - [x] Dynamic Huffman plan report breaks down header/literal/match/extra bit cost ratios.
 - [x] Dynamic Huffman plan report separates length-extra and distance-extra bit cost ratios.
 - [x] Dynamic Huffman plan report emits length/distance extra-bit bucket histograms.
+- [x] Rust deflate benchmark summary displays length/distance extra-bit bucket histograms.
 - [x] Huffman tree length builder uses sorted-leaf/internal-node queues instead of repeated full scans.
 - [x] Dynamic HCLEN trimming helper with boundary tests.
 - [x] Dynamic HLIT/HDIST trimming helpers with boundary tests.

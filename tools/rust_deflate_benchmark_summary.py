@@ -146,8 +146,8 @@ def dynamic_plan_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Dynamic plan diagnostics",
         "",
-        "| path | tokens | matches | matched bytes | avg match len | avg distance | short matches | fixed/dynamic size | best size/default | best tokens/default | best avg len/default | best avg dist/default | best header/default | best literal/default | best match-symbol/default | best len-extra/default | best dist-extra/default | best extra/default | best short matches | best/dynamic time | stats/dynamic time | code-length ops |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| path | tokens | matches | matched bytes | avg match len | avg distance | short matches | len extra hist | dist extra hist | fixed/dynamic size | best size/default | best tokens/default | best avg len/default | best avg dist/default | best header/default | best literal/default | best match-symbol/default | best len-extra/default | best dist-extra/default | best extra/default | best len extra hist | best dist extra hist | best short matches | best/dynamic time | stats/dynamic time | code-length ops |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         best_size_ratio = fnum(row, "best_preset_default_size_ratio") if "best_preset_default_size_ratio" in row else 0.0
@@ -155,6 +155,8 @@ def dynamic_plan_lines(rows: list[dict[str, str]]) -> list[str]:
         avg_len = fnum(row, "avg_match_len_x100") / 100.0 if "avg_match_len_x100" in row else 0.0
         avg_distance = fnum(row, "avg_match_distance") if "avg_match_distance" in row else 0.0
         short_matches = row.get("short_match_tokens", "")
+        length_extra_hist = row.get("length_extra_hist", "")
+        distance_extra_hist = row.get("distance_extra_hist", "")
         best_avg_len_ratio = fnum(row, "best_preset_default_avg_len_ratio") if "best_preset_default_avg_len_ratio" in row else 0.0
         best_avg_distance_ratio = fnum(row, "best_preset_default_avg_distance_ratio") if "best_preset_default_avg_distance_ratio" in row else 0.0
         best_header_ratio = fnum(row, "best_preset_default_header_ratio") if "best_preset_default_header_ratio" in row else 0.0
@@ -163,15 +165,17 @@ def dynamic_plan_lines(rows: list[dict[str, str]]) -> list[str]:
         best_length_extra_ratio = fnum(row, "best_preset_default_length_extra_ratio") if "best_preset_default_length_extra_ratio" in row else 0.0
         best_distance_extra_ratio = fnum(row, "best_preset_default_distance_extra_ratio") if "best_preset_default_distance_extra_ratio" in row else 0.0
         best_extra_ratio = fnum(row, "best_preset_default_extra_ratio") if "best_preset_default_extra_ratio" in row else 0.0
+        best_length_extra_hist = row.get("best_preset_length_extra_hist", "")
+        best_distance_extra_hist = row.get("best_preset_distance_extra_hist", "")
         best_short_matches = row.get("best_preset_short_match_tokens", "")
         lines.append(
             f"| {row['path']} | {row['token_count']} | {row['match_tokens']} | {row['matched_bytes']} | "
-            f"{avg_len:.2f} | {avg_distance:.0f} | {short_matches} | "
+            f"{avg_len:.2f} | {avg_distance:.0f} | {short_matches} | {length_extra_hist} | {distance_extra_hist} | "
             f"{fnum(row, 'fixed_dynamic_size_ratio'):.3f} | {best_size_ratio:.3f} | {best_token_ratio:.3f} | "
             f"{best_avg_len_ratio:.3f} | {best_avg_distance_ratio:.3f} | "
             f"{best_header_ratio:.3f} | {best_literal_ratio:.3f} | {best_match_symbol_ratio:.3f} | "
             f"{best_length_extra_ratio:.3f} | {best_distance_extra_ratio:.3f} | {best_extra_ratio:.3f} | "
-            f"{best_short_matches} | "
+            f"{best_length_extra_hist} | {best_distance_extra_hist} | {best_short_matches} | "
             f"{fnum(row, 'best_dynamic_time_ratio'):.3f} | "
             f"{fnum(row, 'stats_dynamic_time_ratio'):.3f} | {row['code_length_ops']} |"
         )

@@ -100,6 +100,7 @@ easier to distinguish “more but shorter matches” from genuinely longer or
 farther back-references. The same section breaks dynamic bit cost into header,
 literal, match-symbol, length-extra, distance-extra, and total extra-bit ratios
 for best versus default, which helps separate Huffman header overhead from
-payload coding improvements. The CSV also includes compact `;`-separated
-length-extra and distance-extra histograms for default and best-preset plans so
-parser experiments can target the exact extra-bit buckets that differ.
+payload coding improvements. The CSV and Markdown summary also include compact
+`;`-separated length-extra and distance-extra histograms for default and
+best-preset plans so parser experiments can target the exact extra-bit buckets
+that differ.
