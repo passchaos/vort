@@ -1185,21 +1185,26 @@ pub fn encodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
 
 fn encodeRawStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
-    const effective_block_len = @min(block_len, max_stored_block_len);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
+    try writeStoredSplitBlocks(allocator, &writer, input, block_len);
+    return writer.toOwnedSlice(allocator);
+}
+
+fn writeStoredSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8, block_len: usize) !void {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    const effective_block_len = @min(block_len, max_stored_block_len);
     if (input.len == 0) {
-        try writeStoredBlock(allocator, &writer, "", true);
-        return writer.toOwnedSlice(allocator);
+        try writeStoredBlock(allocator, writer, "", true);
+        return;
     }
     var offset: usize = 0;
     while (offset < input.len) {
         const n = @min(effective_block_len, input.len - offset);
         const final = offset + n == input.len;
-        try writeStoredBlock(allocator, &writer, input[offset..][0..n], final);
+        try writeStoredBlock(allocator, writer, input[offset..][0..n], final);
         offset += n;
     }
-    return writer.toOwnedSlice(allocator);
 }
 
 pub fn decodeRawStored(input: []const u8, output: []u8) Error!DecodeResult {
@@ -1902,17 +1907,20 @@ pub fn encodeZlibStoredWithDictionaryAlloc(allocator: std.mem.Allocator, input: 
 }
 
 fn encodeZlibStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
-    if (block_len == 0) return error.InvalidBlockPlan;
-    const raw = try encodeRawStoredSplitAlloc(allocator, input, block_len);
-    defer allocator.free(raw);
-    return encodeZlibRawAlloc(allocator, input, raw, null);
+    return encodeZlibStoredSplitDirectAlloc(allocator, input, null, block_len);
 }
 
 fn encodeZlibStoredSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize) ![]u8 {
+    return encodeZlibStoredSplitDirectAlloc(allocator, input, dictionary, block_len);
+}
+
+fn encodeZlibStoredSplitDirectAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, block_len: usize) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
-    const raw = try encodeRawStoredSplitAlloc(allocator, input, block_len);
-    defer allocator.free(raw);
-    return encodeZlibRawAlloc(allocator, input, raw, dictionary);
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    const header_len = try writeWrappedDeflatePrefix(allocator, &writer, dictionary);
+    try writeStoredSplitBlocks(allocator, &writer, input, block_len);
+    return finishZlibFrame(allocator, &writer, input, header_len);
 }
 
 pub fn encodeZlibFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -2225,16 +2233,11 @@ pub fn encodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
 
 fn encodeGzipStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
-    const raw = try encodeRawStoredSplitAlloc(allocator, input, block_len);
-    defer allocator.free(raw);
-    const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
-    errdefer allocator.free(out);
-    @memcpy(out[0..gzip_header.len], &gzip_header);
-    @memcpy(out[gzip_header.len..][0..raw.len], raw);
-    const footer = gzip_header.len + raw.len;
-    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
-    std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
-    return out;
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeGzipPrefix(allocator, &writer);
+    try writeStoredSplitBlocks(allocator, &writer, input, block_len);
+    return finishGzipFrame(allocator, &writer, input);
 }
 
 pub fn encodeGzipFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
