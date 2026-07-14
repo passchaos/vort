@@ -161,6 +161,7 @@ architecture blindly.
 - [x] zlib preset-dictionary fixed/dynamic/best encoders seed LZ77 matching from preset history.
 - [x] Raw/zlib preset-dictionary decode covers stored/fixed/dynamic block cases.
 - [x] CLI and Python differential smoke cover raw/zlib preset-dictionary decode.
+- [x] CLI and Python differential smoke cover raw preset-dictionary encode through Vort and Python zlib decoders.
 - [x] CLI and Python differential smoke cover zlib preset-dictionary encode through Vort and Python zlib decoders.
 - [x] File CLI and Python differential smoke cover zlib preset-dictionary decode.
 - [x] CLI decode commands expose optional output limits for raw/zlib/gzip workflows.

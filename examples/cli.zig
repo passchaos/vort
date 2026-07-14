@@ -102,6 +102,13 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeRawFixedWithOptionsAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-raw-dict-fixed-hex")) {
+        const payload = args.next() orelse "";
+        const dictionary = args.next() orelse "";
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawFixedWithDictionaryAlloc(init.gpa, payload, dictionary, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-fixed-hex")) {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());
@@ -344,6 +351,13 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeRawBestAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-raw-dict-best-hex")) {
+        const payload = args.next() orelse "";
+        const dictionary = args.next() orelse "";
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawBestWithDictionaryAlloc(init.gpa, payload, dictionary, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-raw-best-split-hex")) {
         const payload = args.next() orelse "";
         const block_len = try parseBlockLen(args.next(), 7);
@@ -411,6 +425,13 @@ pub fn main(init: std.process.Init) !void {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());
         const encoded = try vort.encodeRawDynamicWithOptionsAlloc(init.gpa, payload, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-raw-dict-dynamic-hex")) {
+        const payload = args.next() orelse "";
+        const dictionary = args.next() orelse "";
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawDynamicWithDictionaryAlloc(init.gpa, payload, dictionary, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-dynamic-hex")) {
@@ -770,6 +791,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode gzip-wrapped deflate hex to text
         \\  decode-gzip-file <in> <out> [max_output]
         \\                              Decode a gzip file with an optional output limit
+        \\  encode-raw-dict-best-hex [text] [dict] [level]
+        \\                              Encode raw deflate that may reference preset dictionary history
         \\  encode-zlib-dict-best-hex [text] [dict] [level]
         \\                              Encode a zlib FDICT/DICTID frame requiring a preset dictionary
         \\  encode-zlib-best-file <in> <out> [level]

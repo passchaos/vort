@@ -229,6 +229,18 @@ def main() -> int:
         do = zlib.decompressobj(wbits=zlib.MAX_WBITS, zdict=dictionary)
         assert do.decompress(encoded) + do.flush() == dict_payload, command
 
+    for command in [
+        "encode-raw-dict-fixed-hex",
+        "encode-raw-dict-dynamic-hex",
+        "encode-raw-dict-best-hex",
+    ]:
+        encoded = bytes.fromhex(run_cli(command, dict_payload.decode("ascii"), dictionary_text, "default"))
+        expect_cli_failure("decode-raw-hex", encoded.hex(), error_name="InvalidMatch")
+        out = run_cli("decode-raw-dict-hex", encoded.hex(), dictionary_text)
+        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
+        do = zlib.decompressobj(wbits=-zlib.MAX_WBITS, zdict=dictionary)
+        assert do.decompress(encoded) + do.flush() == dict_payload, command
+
     dynamic_payloads = [
         b"match-heavy:" + (b"abcabcabcabc" * 96) + (b"xyzxyzxyz" * 48),
         b"distance-heavy:" + (b"0123456789abcdef" * 512) + b"----" + (b"0123456789abcdef" * 64),

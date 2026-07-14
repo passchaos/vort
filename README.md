@@ -112,6 +112,8 @@ PY
 zig build run -- decode-gzip-file /tmp/vort.gz /tmp/vort-gzip.out 5
 zig build run -- decode-gzip-file /tmp/vort-cat.gz /tmp/vort-gzip-cat.out 11
 zig build run -- encode-raw-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 fast
+zig build run -- encode-raw-dict-best-hex "hello hello hello" "hello " default
+zig build run -- encode-zlib-dict-best-hex "hello hello hello" "hello " default
 zig build run -- encode-zlib-best-adaptive-hex "abcdefghijklmnopqrstuvwxyz" default
 zig build run -- encode-zlib-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 default
 zig build run -- encode-gzip-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 default
