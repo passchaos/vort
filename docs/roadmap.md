@@ -152,6 +152,7 @@ architecture blindly.
 - [x] Raw/zlib/gzip one-shot decode APIs support explicit output limits.
 - [x] File CLI and Python differential smoke cover raw deflate file decode with output limits.
 - [x] File CLI and Python differential smoke cover raw preset-dictionary file decode.
+- [x] File CLI and Python differential smoke cover raw preset-dictionary file encode.
 - [x] zlib/gzip wrappers reject truncated non-final raw deflate streams across stored/fixed/dynamic blocks.
 - [x] zlib wrapper and Adler verification for stored blocks.
 - [x] zlib wrapper reports preset-dictionary streams as dictionary requirements.
@@ -164,6 +165,7 @@ architecture blindly.
 - [x] CLI and Python differential smoke cover raw preset-dictionary encode through Vort and Python zlib decoders.
 - [x] CLI and Python differential smoke cover zlib preset-dictionary encode through Vort and Python zlib decoders.
 - [x] File CLI and Python differential smoke cover zlib preset-dictionary decode.
+- [x] File CLI and Python differential smoke cover zlib preset-dictionary file encode.
 - [x] CLI decode commands expose optional output limits for raw/zlib/gzip workflows.
 - [x] README API sketch documents limited raw/zlib/gzip decode APIs.
 - [x] File CLI and Python differential smoke cover zlib file decode with output limits.

@@ -471,6 +471,32 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(encoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
         try stdout.print("input_bytes={d} output_bytes={d} path={s}\n", .{ data.len, encoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "encode-raw-dict-best-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const dictionary_path = args.next() orelse return error.MissingCorpusPath;
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dictionary_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(dictionary);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawBestWithDictionaryAlloc(init.gpa, data, dictionary, options);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("input_bytes={d} dictionary_bytes={d} output_bytes={d} path={s}\n", .{ data.len, dictionary.len, encoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "encode-zlib-dict-best-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const dictionary_path = args.next() orelse return error.MissingCorpusPath;
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dictionary_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(dictionary);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibBestWithDictionaryAlloc(init.gpa, data, dictionary, options);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("input_bytes={d} dictionary_bytes={d} output_bytes={d} path={s}\n", .{ data.len, dictionary.len, encoded.len, output_path });
     } else if (std.mem.eql(u8, command, "encode-vort-sidecar-best-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const stream_path = args.next() orelse return error.MissingCorpusPath;
@@ -797,6 +823,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode a zlib FDICT/DICTID frame requiring a preset dictionary
         \\  encode-zlib-best-file <in> <out> [level]
         \\                              Encode a zlib-compatible file with best-block selection
+        \\  encode-raw-dict-best-file <in> <out> <dict> [level]
+        \\                              Encode raw deflate file bytes using preset dictionary history
+        \\  encode-zlib-dict-best-file <in> <out> <dict> [level]
+        \\                              Encode a zlib FDICT/DICTID file using preset dictionary history
         \\
         \\native indexed file workflows:
         \\  encode-vort-sidecar-best-file <in> <stream> <sidecar> [block_len]

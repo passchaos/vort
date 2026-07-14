@@ -241,6 +241,36 @@ def main() -> int:
         do = zlib.decompressobj(wbits=-zlib.MAX_WBITS, zdict=dictionary)
         assert do.decompress(encoded) + do.flush() == dict_payload, command
 
+    with tempfile.TemporaryDirectory(prefix="vort-dict-encode-file-", dir=ROOT / ".zig-cache") as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        input_path = tmp / "payload.bin"
+        dictionary_path = tmp / "dict.bin"
+        raw_path = tmp / "payload.raw"
+        zlib_path = tmp / "payload.zlib"
+        raw_decoded_path = tmp / "raw-decoded.bin"
+        zlib_decoded_path = tmp / "zlib-decoded.bin"
+        input_path.write_bytes(dict_payload)
+        dictionary_path.write_bytes(dictionary)
+
+        out = run_cli("encode-raw-dict-best-file", str(input_path), str(raw_path), str(dictionary_path), "default")
+        assert int(parse_field(out, "input_bytes")) == len(dict_payload), out
+        expect_cli_failure("decode-raw-file", str(raw_path), str(tmp / "raw-no-dict.bin"), error_name="InvalidMatch")
+        out = run_cli("decode-raw-dict-file", str(raw_path), str(raw_decoded_path), str(dictionary_path))
+        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
+        assert raw_decoded_path.read_bytes() == dict_payload, out
+        do = zlib.decompressobj(wbits=-zlib.MAX_WBITS, zdict=dictionary)
+        assert do.decompress(raw_path.read_bytes()) + do.flush() == dict_payload
+
+        out = run_cli("encode-zlib-dict-best-file", str(input_path), str(zlib_path), str(dictionary_path), "default")
+        assert int(parse_field(out, "input_bytes")) == len(dict_payload), out
+        assert int.from_bytes(zlib_path.read_bytes()[2:6], "big") == (zlib.adler32(dictionary) & 0xFFFFFFFF), out
+        expect_cli_failure("decode-zlib-file", str(zlib_path), str(tmp / "zlib-no-dict.bin"), error_name="NeedDictionary")
+        out = run_cli("decode-zlib-dict-file", str(zlib_path), str(zlib_decoded_path), str(dictionary_path))
+        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
+        assert zlib_decoded_path.read_bytes() == dict_payload, out
+        do = zlib.decompressobj(wbits=zlib.MAX_WBITS, zdict=dictionary)
+        assert do.decompress(zlib_path.read_bytes()) + do.flush() == dict_payload
+
     dynamic_payloads = [
         b"match-heavy:" + (b"abcabcabcabc" * 96) + (b"xyzxyzxyz" * 48),
         b"distance-heavy:" + (b"0123456789abcdef" * 512) + b"----" + (b"0123456789abcdef" * 64),
