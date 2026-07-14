@@ -127,6 +127,17 @@ def iterations_for(size: int) -> int:
     return max(32, min(5000, target // max(size, 1)))
 
 
+def iterations_for_vort_mode(size: int, mode: str) -> int:
+    iterations = iterations_for(size)
+    if mode == "best":
+        # Vort's current best preset uses the optimal parser and can be orders
+        # of magnitude slower than the production default/fast presets on real
+        # text. Keep the row in the CSV for strongest-size tracking without
+        # making the smoke benchmark impractically long.
+        return max(1, min(iterations, 8))
+    return iterations
+
+
 def throughput_mib_s(size: int, iterations: int, elapsed_ns: int) -> float:
     seconds = elapsed_ns / 1_000_000_000
     mib = (size * iterations) / (1024 * 1024)
@@ -162,22 +173,26 @@ def main() -> int:
             plain = tmp / f"{name}.bin"
             plain.write_bytes(payload)
             iterations = iterations_for(len(payload))
-            rows = [
-                ("vort-fastest", run_vort(plain, iterations, "fastest")),
-                ("vort-fast", run_vort(plain, iterations, "fast")),
-                ("vort-default", run_vort(plain, iterations, "default")),
-                ("vort-dynamic-default", run_vort(plain, iterations, "dynamic-default")),
-                ("vort-fixed-fast", run_vort(plain, iterations, "fixed-fast")),
-                ("vort-split-default", run_vort(plain, iterations, "split-default")),
-                ("vort-adaptive-default", run_vort(plain, iterations, "adaptive-default")),
-            ]
-            rows.extend((engine, run_rust(project, engine, plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))
-            for engine, fields in rows:
+            rows = []
+            for engine, mode in [
+                ("vort-fastest", "fastest"),
+                ("vort-fast", "fast"),
+                ("vort-default", "default"),
+                ("vort-best", "best"),
+                ("vort-dynamic-default", "dynamic-default"),
+                ("vort-fixed-fast", "fixed-fast"),
+                ("vort-split-default", "split-default"),
+                ("vort-adaptive-default", "adaptive-default"),
+            ]:
+                mode_iterations = iterations_for_vort_mode(len(payload), mode)
+                rows.append((engine, mode_iterations, run_vort(plain, mode_iterations, mode)))
+            rows.extend((engine, iterations, run_rust(project, engine, plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))
+            for engine, row_iterations, fields in rows:
                 output_rows.append(
                     f"{engine},{name},{len(payload)},{fields['zlib_bytes']},"
-                    f"{fields['zlib_bytes'] / max(len(payload), 1):.4f},{iterations},"
+                    f"{fields['zlib_bytes'] / max(len(payload), 1):.4f},{row_iterations},"
                     f"{fields['elapsed_ns'] / 1_000_000_000:.6f},"
-                    f"{throughput_mib_s(len(payload), iterations, fields['elapsed_ns']):.2f},{fields['mix']}"
+                    f"{throughput_mib_s(len(payload), row_iterations, fields['elapsed_ns']):.2f},{fields['mix']}"
                 )
     for row in output_rows:
         print(row)

@@ -70,10 +70,12 @@ wrapper format overhead, and per-iteration allocation overhead.
 `run-rust-deflate-encode-bench` provides the matching encode-side smoke. It
 prints CSV rows for zlib output size, ratio, and encode throughput for Vort,
 fdeflate, and miniz_oxide on the same generated payloads. Vort is reported at
-fastest, fast, default, dynamic-default, fixed-fast, split-default, and
+fastest, fast, default, best, dynamic-default, fixed-fast, split-default, and
 adaptive-default modes so speed/ratio tradeoffs, dynamic-only cost,
 best-selection overhead, and wrapper split/adaptive overhead are visible next to
-the Rust baselines. It also includes real project README/roadmap files. Run it with
+the Rust baselines. The best row uses fewer iterations because it currently
+exercises the slower optimal parser; each row records its actual iteration
+count. It also includes real project README/roadmap files. Run it with
 `-Doptimize=ReleaseFast` before interpreting the Vort rows. Use
 `run-rust-deflate-encode-bench-csv` to persist the same rows to
 `zig-out/vort-rust-deflate-encode-bench.csv`.
