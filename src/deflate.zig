@@ -136,6 +136,7 @@ fn looksIncompressible(input: []const u8) bool {
 }
 
 pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     var writer = bitstream.BitWriter{};
@@ -1496,6 +1497,7 @@ pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 }
 
 pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
     const raw = try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, options);
     defer allocator.free(raw);
     return encodeZlibRawAlloc(allocator, input, raw, dictionary);
@@ -2930,6 +2932,17 @@ test "best encoder skips invalid single stored block for large inputs" {
     const gzip_stored = try encodeGzipStoredAlloc(std.testing.allocator, &input);
     defer std.testing.allocator.free(gzip_stored);
     try std.testing.expectEqual(gzip_stored.len, gzip_best.len);
+
+    const dictionary = "preset dictionary that should not matter for high entropy";
+    const raw_dict = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, &input, dictionary, optionsForLevel(.fastest));
+    defer std.testing.allocator.free(raw_dict);
+    try std.testing.expectEqual(stored.len, raw_dict.len);
+
+    const zlib_dict = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, &input, dictionary, optionsForLevel(.fastest));
+    defer std.testing.allocator.free(zlib_dict);
+    const zlib_stored_dict = try encodeZlibStoredWithDictionaryAlloc(std.testing.allocator, &input, dictionary);
+    defer std.testing.allocator.free(zlib_stored_dict);
+    try std.testing.expectEqual(zlib_stored_dict.len, zlib_dict.len);
 }
 
 test "stored fast path does not mask repeated binary structure" {
