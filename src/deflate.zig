@@ -1877,14 +1877,13 @@ fn writeZlibHeader(output: []u8, dictionary: ?[]const u8) void {
 
 pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
     const header = try parseZlibHeader(input, null);
-
-    const raw = try decodeRawStored(input[header.data_offset..], output);
-    const footer_offset = header.data_offset + raw.input_read;
+    const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) orelse return error.InvalidDeflateBlockType;
+    const footer_offset = header.data_offset + stored.result.input_read;
     if (input.len - footer_offset < 4) return error.TruncatedFrame;
     const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-    if (checksum.adler32(output[0..raw.output_written]) != expected) return error.ChecksumMismatch;
+    if (stored.digest != expected) return error.ChecksumMismatch;
     if (footer_offset + 4 != input.len) return error.TrailingData;
-    return raw.output_written;
+    return stored.result.output_written;
 }
 
 pub fn decodeZlibStoredWithDictionary(input: []const u8, output: []u8, dictionary: []const u8) Error!usize {
@@ -1892,13 +1891,13 @@ pub fn decodeZlibStoredWithDictionary(input: []const u8, output: []u8, dictionar
 
     // Stored deflate blocks do not reference history, so the dictionary is only
     // used to satisfy and validate the zlib DICTID before the stored payload.
-    const raw = try decodeRawStored(input[header.data_offset..], output);
-    const footer_offset = header.data_offset + raw.input_read;
+    const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) orelse return error.InvalidDeflateBlockType;
+    const footer_offset = header.data_offset + stored.result.input_read;
     if (input.len - footer_offset < 4) return error.TruncatedFrame;
     const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-    if (checksum.adler32(output[0..raw.output_written]) != expected) return error.ChecksumMismatch;
+    if (stored.digest != expected) return error.ChecksumMismatch;
     if (footer_offset + 4 != input.len) return error.TrailingData;
-    return raw.output_written;
+    return stored.result.output_written;
 }
 
 pub fn decodeZlib(input: []const u8, output: []u8) Error!usize {
@@ -2107,17 +2106,15 @@ pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
 
 pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
     const data_offset = try parseGzipHeader(input);
-
-    const raw = try decodeRawStored(input[data_offset..], output);
-    const footer_offset = data_offset + raw.input_read;
+    const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice16, input[data_offset..], output)) orelse return error.InvalidDeflateBlockType;
+    const footer_offset = data_offset + stored.result.input_read;
     if (input.len - footer_offset < 8) return error.TruncatedFrame;
     const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
     const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-    const payload = output[0..raw.output_written];
-    if (checksum.crc32(payload) != expected_crc) return error.ChecksumMismatch;
-    if (@as(u32, @truncate(raw.output_written)) != expected_size) return error.SizeMismatch;
+    if (stored.digest != expected_crc) return error.ChecksumMismatch;
+    if (@as(u32, @truncate(stored.result.output_written)) != expected_size) return error.SizeMismatch;
     if (footer_offset + 8 != input.len) return error.TrailingData;
-    return raw.output_written;
+    return stored.result.output_written;
 }
 
 pub fn decodeGzip(input: []const u8, output: []u8) Error!usize {
