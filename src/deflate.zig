@@ -996,6 +996,8 @@ pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8
 
 fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: ?usize) !OwnedDecodeResult {
     if (input.len == 0) return error.TruncatedFrame;
+    if (try decodeRawStoredOnlyAllocMaybe(allocator, input, max_output_len)) |stored| return stored;
+
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     try reserveInflateOutputHint(allocator, &out, input.len, max_output_len);
@@ -1139,31 +1141,69 @@ pub fn decodeRawStoredAllocPartial(allocator: std.mem.Allocator, input: []const 
 }
 
 fn decodeRawStoredAllocPartialLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !OwnedDecodeResult {
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
+    if (try decodeRawStoredOnlyAllocMaybe(allocator, input, max_output_len)) |stored| return stored;
+    return error.InvalidDeflateBlockType;
+}
 
-    var reader = bitstream.BitReader.init(input);
+const StoredOnlyPlan = struct {
+    input_read: usize,
+    output_len: usize,
+};
+
+fn decodeRawStoredOnlyAllocMaybe(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?OwnedDecodeResult {
+    const plan = (try planRawStoredOnly(input)) orelse return null;
+    try ensureOutputLimit(0, plan.output_len, max_output_len);
+    const out = try allocator.alloc(u8, plan.output_len);
+    errdefer allocator.free(out);
+    copyRawStoredOnly(input[0..plan.input_read], out);
+    return .{ .bytes = out, .input_read = plan.input_read };
+}
+
+fn planRawStoredOnly(input: []const u8) Error!?StoredOnlyPlan {
+    if (input.len == 0) return error.TruncatedFrame;
+    var offset: usize = 0;
+    var output_len: usize = 0;
     while (true) {
-        const final = (try reader.readBits(u1, 1)) != 0;
-        const block_type = try reader.readBits(u2, 2);
-        if (block_type != 0) return error.InvalidDeflateBlockType;
+        if (input.len - offset < 1) return error.TruncatedFrame;
+        const header = input[offset];
+        const final = (header & 0x01) != 0;
+        const block_type = (header >> 1) & 0x03;
+        if (block_type != 0) return null;
 
-        reader.alignToByte();
-        const offset = reader.byte_index;
+        // Stored-block payloads start on the next byte boundary. Bits 3..7 of
+        // the header byte are padding and intentionally ignored, matching zlib
+        // and the existing BitReader-based stored decoder.
+        offset += 1;
         if (input.len - offset < 4) return error.TruncatedFrame;
         const len = std.mem.readInt(u16, input[offset..][0..2], .little);
         const nlen = std.mem.readInt(u16, input[offset + 2 ..][0..2], .little);
         if (nlen != ~len) return error.StoredLengthMismatch;
+        offset += 4;
 
         const chunk_len: usize = len;
-        if (input.len - offset - 4 < chunk_len) return error.TruncatedFrame;
-        try ensureOutputLimit(out.items.len, chunk_len, max_output_len);
-        try out.appendSlice(allocator, input[offset + 4 ..][0..chunk_len]);
-        reader.byte_index = offset + 4 + chunk_len;
-        reader.bit_index = 0;
+        if (input.len - offset < chunk_len) return error.TruncatedFrame;
+        output_len = std.math.add(usize, output_len, chunk_len) catch return error.IntegerOverflow;
+        offset += chunk_len;
+        if (final) return .{ .input_read = offset, .output_len = output_len };
+    }
+}
 
+fn copyRawStoredOnly(input: []const u8, output: []u8) void {
+    var in_offset: usize = 0;
+    var out_offset: usize = 0;
+    while (true) {
+        const final = (input[in_offset] & 0x01) != 0;
+        in_offset += 1;
+        const len = std.mem.readInt(u16, input[in_offset..][0..2], .little);
+        const chunk_len: usize = len;
+        in_offset += 4;
+        @memcpy(output[out_offset..][0..chunk_len], input[in_offset..][0..chunk_len]);
+        out_offset += chunk_len;
+        in_offset += chunk_len;
         if (final) {
-            return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
+            std.debug.assert(in_offset == input.len);
+            std.debug.assert(out_offset == output.len);
+            return;
         }
     }
 }
@@ -1603,45 +1643,31 @@ pub fn decodeZlibStoredWithDictionary(input: []const u8, output: []u8, dictionar
 }
 
 pub fn decodeZlibStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    const scratch = try allocator.alloc(u8, input.len);
-    defer allocator.free(scratch);
-    const written = try decodeZlibStored(input, scratch);
-    const out = try allocator.alloc(u8, written);
-    errdefer allocator.free(out);
-    @memcpy(out, scratch[0..written]);
-    return out;
+    return decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator, input, null, null);
 }
 
 pub fn decodeZlibStoredAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
-    const scratch = try allocator.alloc(u8, input.len);
-    defer allocator.free(scratch);
-    const written = try decodeZlibStored(input, scratch);
-    if (written > max_output_len) return error.OutputLimitExceeded;
-    const out = try allocator.alloc(u8, written);
-    errdefer allocator.free(out);
-    @memcpy(out, scratch[0..written]);
-    return out;
+    return decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator, input, null, max_output_len);
 }
 
 pub fn decodeZlibStoredAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) ![]u8 {
-    const scratch = try allocator.alloc(u8, input.len);
-    defer allocator.free(scratch);
-    const written = try decodeZlibStoredWithDictionary(input, scratch, dictionary);
-    const out = try allocator.alloc(u8, written);
-    errdefer allocator.free(out);
-    @memcpy(out, scratch[0..written]);
-    return out;
+    return decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator, input, dictionary, null);
 }
 
 pub fn decodeZlibStoredAllocWithDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
-    const scratch = try allocator.alloc(u8, input.len);
-    defer allocator.free(scratch);
-    const written = try decodeZlibStoredWithDictionary(input, scratch, dictionary);
-    if (written > max_output_len) return error.OutputLimitExceeded;
-    const out = try allocator.alloc(u8, written);
-    errdefer allocator.free(out);
-    @memcpy(out, scratch[0..written]);
-    return out;
+    return decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator, input, dictionary, max_output_len);
+}
+
+fn decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
+    const header = try parseZlibHeader(input, dictionary);
+    const raw = try decodeRawStoredAllocPartialLimitedInternal(allocator, input[header.data_offset..], max_output_len);
+    errdefer raw.deinit(allocator);
+    const footer_offset = header.data_offset + raw.input_read;
+    if (input.len - footer_offset < 4) return error.TruncatedFrame;
+    const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
+    if (checksum.adler32(raw.bytes) != expected) return error.ChecksumMismatch;
+    if (footer_offset + 4 != input.len) return error.TrailingData;
+    return raw.bytes;
 }
 
 pub fn decodeZlibAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -1796,24 +1822,25 @@ pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
 }
 
 pub fn decodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    const scratch = try allocator.alloc(u8, input.len);
-    defer allocator.free(scratch);
-    const written = try decodeGzipStored(input, scratch);
-    const out = try allocator.alloc(u8, written);
-    errdefer allocator.free(out);
-    @memcpy(out, scratch[0..written]);
-    return out;
+    return decodeGzipStoredAllocLimitedInternal(allocator, input, null);
 }
 
 pub fn decodeGzipStoredAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
-    const scratch = try allocator.alloc(u8, input.len);
-    defer allocator.free(scratch);
-    const written = try decodeGzipStored(input, scratch);
-    if (written > max_output_len) return error.OutputLimitExceeded;
-    const out = try allocator.alloc(u8, written);
-    errdefer allocator.free(out);
-    @memcpy(out, scratch[0..written]);
-    return out;
+    return decodeGzipStoredAllocLimitedInternal(allocator, input, max_output_len);
+}
+
+fn decodeGzipStoredAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
+    const data_offset = try parseGzipHeader(input);
+    const raw = try decodeRawStoredAllocPartialLimitedInternal(allocator, input[data_offset..], max_output_len);
+    errdefer raw.deinit(allocator);
+    const footer_offset = data_offset + raw.input_read;
+    if (input.len - footer_offset < 8) return error.TruncatedFrame;
+    const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
+    const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
+    if (checksum.crc32(raw.bytes) != expected_crc) return error.ChecksumMismatch;
+    if (@as(u32, @truncate(raw.bytes.len)) != expected_size) return error.SizeMismatch;
+    if (footer_offset + 8 != input.len) return error.TrailingData;
+    return raw.bytes;
 }
 
 pub fn decodeGzipConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -2063,6 +2090,7 @@ test "zlib stored wrapper validates checksum header and trailing data" {
     @memcpy(with_trailing[0..encoded.len], encoded);
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeZlibStored(with_trailing[0 .. encoded.len + 1], &out));
+    try std.testing.expectError(error.TrailingData, decodeZlibStoredAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]));
 }
 
 test "gzip stored wrapper matches level-0 vectors" {
@@ -2102,6 +2130,7 @@ test "gzip stored wrapper validates crc size header and trailing data" {
     @memcpy(with_trailing[0..encoded.len], encoded);
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeGzipStored(with_trailing[0 .. encoded.len + 1], &out));
+    try std.testing.expectError(error.TrailingData, decodeGzipStoredAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]));
 }
 
 test "raw fixed Huffman literal/match inflate matches zlib fixed vectors" {
