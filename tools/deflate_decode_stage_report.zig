@@ -131,10 +131,12 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
     const raw_start = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |_| {
         const decoded = try vort.decodeRawDeflateAlloc(init.gpa, raw);
-        defer init.gpa.free(decoded);
-        if (decoded.len != case.payload.len) return error.DecodeLengthMismatch;
-        mix +%= decoded.len;
-        if (decoded.len != 0) mix +%= decoded[0];
+        {
+            defer init.gpa.free(decoded);
+            if (decoded.len != case.payload.len) return error.DecodeLengthMismatch;
+            mix +%= decoded.len;
+            if (decoded.len != 0) mix +%= decoded[0];
+        }
     }
     const raw_ns = raw_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 
@@ -156,10 +158,12 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
     const zlib_start = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |_| {
         const decoded = try vort.decodeZlibAlloc(init.gpa, zlib_frame);
-        defer init.gpa.free(decoded);
-        if (decoded.len != case.payload.len) return error.DecodeLengthMismatch;
-        mix +%= decoded.len;
-        if (decoded.len != 0) mix +%= decoded[0];
+        {
+            defer init.gpa.free(decoded);
+            if (decoded.len != case.payload.len) return error.DecodeLengthMismatch;
+            mix +%= decoded.len;
+            if (decoded.len != 0) mix +%= decoded[0];
+        }
     }
     const zlib_ns = zlib_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 
@@ -181,10 +185,12 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
     const gzip_start = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |_| {
         const decoded = try vort.decodeGzipAlloc(init.gpa, gzip_frame);
-        defer init.gpa.free(decoded);
-        if (decoded.len != case.payload.len) return error.DecodeLengthMismatch;
-        mix +%= decoded.len;
-        if (decoded.len != 0) mix +%= decoded[0];
+        {
+            defer init.gpa.free(decoded);
+            if (decoded.len != case.payload.len) return error.DecodeLengthMismatch;
+            mix +%= decoded.len;
+            if (decoded.len != 0) mix +%= decoded[0];
+        }
     }
     const gzip_ns = gzip_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 

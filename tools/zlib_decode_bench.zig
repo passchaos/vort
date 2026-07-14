@@ -38,9 +38,11 @@ pub fn main(init: std.process.Init) !void {
         switch (mode) {
             .zlib_alloc => {
                 const decoded = try vort.decodeZlibAlloc(init.gpa, frame);
-                defer init.gpa.free(decoded);
-                mix +%= decoded.len;
-                if (decoded.len != 0) mix +%= decoded[0];
+                {
+                    defer init.gpa.free(decoded);
+                    mix +%= decoded.len;
+                    if (decoded.len != 0) mix +%= decoded[0];
+                }
             },
             .zlib_into => {
                 const written = try vort.decodeZlib(frame, scratch);
@@ -49,9 +51,11 @@ pub fn main(init: std.process.Init) !void {
             },
             .gzip_alloc => {
                 const decoded = try vort.decodeGzipAlloc(init.gpa, frame);
-                defer init.gpa.free(decoded);
-                mix +%= decoded.len;
-                if (decoded.len != 0) mix +%= decoded[0];
+                {
+                    defer init.gpa.free(decoded);
+                    mix +%= decoded.len;
+                    if (decoded.len != 0) mix +%= decoded[0];
+                }
             },
             .gzip_into => {
                 const written = try vort.decodeGzip(frame, scratch);

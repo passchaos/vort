@@ -63,9 +63,11 @@ fn timeRaw(init: std.process.Init, frame: []const u8, expected: []const u8, iter
     const start = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |_| {
         const decoded = try vort.decodeRawDeflateAlloc(init.gpa, frame);
-        defer init.gpa.free(decoded);
-        if (!std.mem.eql(u8, expected, decoded)) return error.RoundTripMismatch;
-        mix +%= vort.crc32(decoded);
+        {
+            defer init.gpa.free(decoded);
+            if (!std.mem.eql(u8, expected, decoded)) return error.RoundTripMismatch;
+            mix +%= vort.crc32(decoded);
+        }
     }
     return .{ .elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), .mix = mix };
 }
@@ -75,9 +77,11 @@ fn timeZlib(init: std.process.Init, frame: []const u8, expected: []const u8, ite
     const start = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |_| {
         const decoded = try vort.decodeZlibAlloc(init.gpa, frame);
-        defer init.gpa.free(decoded);
-        if (!std.mem.eql(u8, expected, decoded)) return error.RoundTripMismatch;
-        mix +%= vort.crc32(decoded);
+        {
+            defer init.gpa.free(decoded);
+            if (!std.mem.eql(u8, expected, decoded)) return error.RoundTripMismatch;
+            mix +%= vort.crc32(decoded);
+        }
     }
     return .{ .elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), .mix = mix };
 }
@@ -87,9 +91,11 @@ fn timeGzip(init: std.process.Init, frame: []const u8, expected: []const u8, ite
     const start = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |_| {
         const decoded = try vort.decodeGzipAlloc(init.gpa, frame);
-        defer init.gpa.free(decoded);
-        if (!std.mem.eql(u8, expected, decoded)) return error.RoundTripMismatch;
-        mix +%= vort.crc32(decoded);
+        {
+            defer init.gpa.free(decoded);
+            if (!std.mem.eql(u8, expected, decoded)) return error.RoundTripMismatch;
+            mix +%= vort.crc32(decoded);
+        }
     }
     return .{ .elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), .mix = mix };
 }

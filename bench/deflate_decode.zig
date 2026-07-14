@@ -32,9 +32,11 @@ pub fn main(init: std.process.Init) !void {
                 .zlib => try vort.decodeZlibAlloc(init.gpa, case.compressed),
                 .gzip => try vort.decodeGzipAlloc(init.gpa, case.compressed),
             };
-            defer init.gpa.free(decoded);
-            if (decoded.len != case.plain_len) return error.DecodeLengthMismatch;
-            mix +%= vort.crc32(decoded);
+            {
+                defer init.gpa.free(decoded);
+                if (decoded.len != case.plain_len) return error.DecodeLengthMismatch;
+                mix +%= vort.crc32(decoded);
+            }
         }
         const elapsed_ns_signed = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
         const elapsed_ns: f64 = @floatFromInt(elapsed_ns_signed);
