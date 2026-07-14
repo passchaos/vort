@@ -93,7 +93,7 @@ includes real project README/roadmap files. Run it with
 `run-rust-deflate-benchmark-summary` consumes both CSV files and writes
 `zig-out/vort-rust-deflate-benchmark-summary.md`. It starts with a geomean
 overview of the key throughput and size ratios so each run has an immediate
-whole-suite gap signal before the per-case tables. The detailed decode table
+whole-suite gap signal and weakest-case pointer before the per-case tables. The detailed decode table
 then highlights per-case Vort zlib allocator and caller-buffer throughput
 ratios against the best Rust baseline. Raw-deflate Vort/miniz_oxide rows, gzip
 decode rows, and decode allocation overhead are summarized separately because

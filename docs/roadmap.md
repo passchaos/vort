@@ -233,6 +233,7 @@ architecture blindly.
 - [x] Rust deflate decode benchmarks include overlap-RLE, distance-heavy, and dynamic-match payloads.
 - [x] Rust deflate decode benchmarks include stored binary payloads.
 - [x] Rust deflate benchmark Markdown summary includes geomean gap overview rows.
+- [x] Rust deflate benchmark Markdown summary highlights weakest cases in overview rows.
 - [x] Rust deflate benchmark Markdown summary highlights Vort vs Rust gaps.
 - [x] Rust deflate benchmark Markdown summary reports raw-deflate decode ratios against miniz_oxide.
 - [x] Rust deflate benchmark Markdown summary reports raw-deflate encode ratios against Rust baselines.
