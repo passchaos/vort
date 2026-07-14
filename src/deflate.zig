@@ -1214,6 +1214,10 @@ fn appendMatchWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u
         out.appendNTimesAssumeCapacity(byte, length);
         return;
     }
+    if (dictionary.len == 0 and distance <= 4 and out.items.len >= distance) {
+        appendSmallDistanceMatchAssumeCapacity(out, length, distance);
+        return;
+    }
     if (dictionary.len == 0 and distance >= length) {
         const start = out.items.len - distance;
         out.appendSliceAssumeCapacity(out.items[start..][0..length]);
@@ -1225,6 +1229,14 @@ fn appendMatchWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u
         const byte = if (absolute < dictionary.len) dictionary[absolute] else out.items[absolute - dictionary.len];
         out.appendAssumeCapacity(byte);
     }
+}
+
+fn appendSmallDistanceMatchAssumeCapacity(out: *std.ArrayList(u8), length: usize, distance: usize) void {
+    var pattern: [4]u8 = undefined;
+    const start = out.items.len - distance;
+    for (0..distance) |i| pattern[i] = out.items[start + i];
+    var i: usize = 0;
+    while (i < length) : (i += 1) out.appendAssumeCapacity(pattern[i % distance]);
 }
 
 fn ensureOutputLimit(current_len: usize, additional_len: usize, max_output_len: ?usize) Error!void {
