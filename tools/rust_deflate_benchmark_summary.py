@@ -27,6 +27,29 @@ def inum(row: dict[str, str], key: str) -> int:
     return int(row[key])
 
 
+def parse_histogram(value: str) -> list[int]:
+    if not value:
+        return []
+    return [int(part) for part in value.split(";")]
+
+
+def top_histogram_deltas(row: dict[str, str], key: str, best_key: str, symbol_base: int, limit: int = 3) -> str:
+    values = parse_histogram(row.get(key, ""))
+    best_values = parse_histogram(row.get(best_key, ""))
+    if not values or not best_values or len(values) != len(best_values):
+        return ""
+    deltas = sorted(
+        (
+            (best_values[i] - values[i], symbol_base + i)
+            for i in range(len(values))
+            if best_values[i] != values[i]
+        ),
+        key=lambda item: abs(item[0]),
+        reverse=True,
+    )
+    return ", ".join(f"{symbol}:{delta:+d}" for delta, symbol in deltas[:limit])
+
+
 def decode_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Decode throughput (zlib)",
@@ -146,8 +169,8 @@ def dynamic_plan_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Dynamic plan diagnostics",
         "",
-        "| path | tokens | matches | matched bytes | avg match len | avg distance | short matches | len extra hist | dist extra hist | fixed/dynamic size | best size/default | best tokens/default | best avg len/default | best avg dist/default | best header/default | best literal/default | best match-symbol/default | best len-extra/default | best dist-extra/default | best extra/default | best len extra hist | best dist extra hist | best short matches | best/dynamic time | stats/dynamic time | code-length ops |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: |",
+        "| path | tokens | matches | matched bytes | avg match len | avg distance | short matches | len symbol Δ | dist symbol Δ | len extra hist | dist extra hist | fixed/dynamic size | best size/default | best tokens/default | best avg len/default | best avg dist/default | best header/default | best literal/default | best match-symbol/default | best len-extra/default | best dist-extra/default | best extra/default | best len extra hist | best dist extra hist | best short matches | best/dynamic time | stats/dynamic time | code-length ops |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         best_size_ratio = fnum(row, "best_preset_default_size_ratio") if "best_preset_default_size_ratio" in row else 0.0
@@ -155,6 +178,8 @@ def dynamic_plan_lines(rows: list[dict[str, str]]) -> list[str]:
         avg_len = fnum(row, "avg_match_len_x100") / 100.0 if "avg_match_len_x100" in row else 0.0
         avg_distance = fnum(row, "avg_match_distance") if "avg_match_distance" in row else 0.0
         short_matches = row.get("short_match_tokens", "")
+        length_symbol_delta = top_histogram_deltas(row, "length_symbol_hist", "best_preset_length_symbol_hist", 257)
+        distance_symbol_delta = top_histogram_deltas(row, "distance_symbol_hist", "best_preset_distance_symbol_hist", 0)
         length_extra_hist = row.get("length_extra_hist", "")
         distance_extra_hist = row.get("distance_extra_hist", "")
         best_avg_len_ratio = fnum(row, "best_preset_default_avg_len_ratio") if "best_preset_default_avg_len_ratio" in row else 0.0
@@ -170,7 +195,8 @@ def dynamic_plan_lines(rows: list[dict[str, str]]) -> list[str]:
         best_short_matches = row.get("best_preset_short_match_tokens", "")
         lines.append(
             f"| {row['path']} | {row['token_count']} | {row['match_tokens']} | {row['matched_bytes']} | "
-            f"{avg_len:.2f} | {avg_distance:.0f} | {short_matches} | {length_extra_hist} | {distance_extra_hist} | "
+            f"{avg_len:.2f} | {avg_distance:.0f} | {short_matches} | {length_symbol_delta} | {distance_symbol_delta} | "
+            f"{length_extra_hist} | {distance_extra_hist} | "
             f"{fnum(row, 'fixed_dynamic_size_ratio'):.3f} | {best_size_ratio:.3f} | {best_token_ratio:.3f} | "
             f"{best_avg_len_ratio:.3f} | {best_avg_distance_ratio:.3f} | "
             f"{best_header_ratio:.3f} | {best_literal_ratio:.3f} | {best_match_symbol_ratio:.3f} | "

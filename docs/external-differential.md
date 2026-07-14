@@ -104,4 +104,5 @@ payload coding improvements. The CSV and Markdown summary also include compact
 `;`-separated length-extra and distance-extra histograms for default and
 best-preset plans so parser experiments can target the exact extra-bit buckets
 that differ. The dynamic-plan CSV additionally records length-symbol and
-distance-symbol histograms for exact RFC-code distribution analysis.
+distance-symbol histograms for exact RFC-code distribution analysis, and the
+Markdown summary calls out the largest best-minus-default symbol-count deltas.
