@@ -119,11 +119,11 @@ pub fn usesStoredFastPath(input: []const u8, options: CompressionOptions) bool {
 }
 
 fn looksIncompressible(input: []const u8) bool {
-    const sample_len = @min(input.len, 4096);
+    const sample_len = @min(input.len, 1024);
     if (uniqueByteCount(input[0..sample_len]) < 240) return false;
     const word_count = sample_len -| 3;
     if (word_count < 2) return false;
-    var words: [4096]u32 = undefined;
+    var words: [1024]u32 = undefined;
     for (words[0..word_count], 0..) |*word, i| {
         word.* = std.mem.readInt(u32, input[i..][0..4], .little);
     }
