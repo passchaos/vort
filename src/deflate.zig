@@ -1232,11 +1232,58 @@ fn appendMatchWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u
 }
 
 fn appendSmallDistanceMatchAssumeCapacity(out: *std.ArrayList(u8), length: usize, distance: usize) void {
-    var pattern: [4]u8 = undefined;
     const start = out.items.len - distance;
-    for (0..distance) |i| pattern[i] = out.items[start + i];
-    var i: usize = 0;
-    while (i < length) : (i += 1) out.appendAssumeCapacity(pattern[i % distance]);
+    switch (distance) {
+        2 => {
+            const a = out.items[start];
+            const b = out.items[start + 1];
+            var i: usize = 0;
+            while (i + 2 <= length) : (i += 2) {
+                out.appendAssumeCapacity(a);
+                out.appendAssumeCapacity(b);
+            }
+            if (i < length) out.appendAssumeCapacity(a);
+        },
+        3 => {
+            const a = out.items[start];
+            const b = out.items[start + 1];
+            const c = out.items[start + 2];
+            var i: usize = 0;
+            while (i + 3 <= length) : (i += 3) {
+                out.appendAssumeCapacity(a);
+                out.appendAssumeCapacity(b);
+                out.appendAssumeCapacity(c);
+            }
+            if (i < length) {
+                out.appendAssumeCapacity(a);
+                i += 1;
+            }
+            if (i < length) out.appendAssumeCapacity(b);
+        },
+        4 => {
+            const a = out.items[start];
+            const b = out.items[start + 1];
+            const c = out.items[start + 2];
+            const d = out.items[start + 3];
+            var i: usize = 0;
+            while (i + 4 <= length) : (i += 4) {
+                out.appendAssumeCapacity(a);
+                out.appendAssumeCapacity(b);
+                out.appendAssumeCapacity(c);
+                out.appendAssumeCapacity(d);
+            }
+            if (i < length) {
+                out.appendAssumeCapacity(a);
+                i += 1;
+            }
+            if (i < length) {
+                out.appendAssumeCapacity(b);
+                i += 1;
+            }
+            if (i < length) out.appendAssumeCapacity(c);
+        },
+        else => unreachable,
+    }
 }
 
 fn ensureOutputLimit(current_len: usize, additional_len: usize, max_output_len: ?usize) Error!void {
