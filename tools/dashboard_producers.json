@@ -54,6 +54,14 @@
     "vort-dictionary-deflate-report.md": {
       "expected_format": "md",
       "smoke_gate": "zig build run-dictionary-deflate-report-dashboard"
+    },
+    "vort-deflate-decode-stage-report.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-deflate-decode-stage-report-csv"
+    },
+    "vort-deflate-decode-stage-report.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard"
     }
   },
   "exact": {
@@ -61,6 +69,8 @@
     "vort-dashboard-index.md": "zig build run-dashboard-index",
     "vort-dictionary-deflate-report.csv": "zig build run-dictionary-deflate-report-csv",
     "vort-dictionary-deflate-report.md": "zig build run-dictionary-deflate-report-dashboard",
+    "vort-deflate-decode-stage-report.csv": "zig build run-deflate-decode-stage-report-csv",
+    "vort-deflate-decode-stage-report.md": "zig build run-deflate-decode-stage-report-dashboard",
     "vort-dictionary-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard",
     "vort-dynamic-plan-report.csv": "zig build run-dynamic-plan-report-csv",
     "vort-file-corpus-standard-dashboard.md": "zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard",

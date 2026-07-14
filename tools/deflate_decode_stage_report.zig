@@ -6,6 +6,18 @@ const Case = struct {
     payload: []const u8,
 };
 
+const Row = struct {
+    name: []const u8,
+    input_bytes: usize,
+    zlib_bytes: usize,
+    raw_bytes: usize,
+    iterations: usize,
+    raw_mib_s: f64,
+    zlib_mib_s: f64,
+    wrapper_time_ratio: f64,
+    mix: u64,
+};
+
 const builtins = [_]Case{
     .{ .name = "tiny", .payload = "hello rust deflate baselines" },
     .{ .name = "repetitive", .payload = "abcabcabcabc" ** 512 },
@@ -18,28 +30,52 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
 
+    var csv_path: ?[]const u8 = null;
+    var markdown_path: ?[]const u8 = null;
     var file_cases: std.ArrayList(Case) = .empty;
     defer {
         for (file_cases.items) |case| init.gpa.free(case.payload);
         file_cases.deinit(init.gpa);
     }
     while (args.next()) |path| {
+        if (std.mem.eql(u8, path, "--csv")) {
+            csv_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
+        if (std.mem.eql(u8, path, "--markdown")) {
+            markdown_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
         const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         errdefer init.gpa.free(payload);
         try file_cases.append(init.gpa, .{ .name = path, .payload = payload });
     }
 
+    const cases = if (file_cases.items.len == 0) builtins[0..] else file_cases.items;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(init.gpa);
+    for (cases) |case| try rows.append(init.gpa, try measureCase(init, case));
+
+    var csv = std.Io.Writer.Allocating.init(init.gpa);
+    defer csv.deinit();
+    try writeCsv(&csv.writer, rows.items);
+
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.writeAll("case,input_bytes,zlib_bytes,raw_bytes,iterations,raw_mib_s,zlib_mib_s,wrapper_time_ratio,mix\n");
-
-    const cases = if (file_cases.items.len == 0) builtins[0..] else file_cases.items;
-    for (cases) |case| try reportCase(init, stdout, case);
+    try stdout.writeAll(csv.written());
     try stdout.flush();
+
+    if (csv_path) |path| try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
+    if (markdown_path) |path| {
+        var markdown = std.Io.Writer.Allocating.init(init.gpa);
+        defer markdown.deinit();
+        try writeMarkdown(&markdown.writer, rows.items);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = markdown.written() });
+    }
 }
 
-fn reportCase(init: std.process.Init, stdout: *std.Io.Writer, case: Case) !void {
+fn measureCase(init: std.process.Init, case: Case) !Row {
     const options = vort.optionsForCompressionLevel(.default);
     const zlib_frame = try vort.encodeZlibBestAlloc(init.gpa, case.payload, options);
     defer init.gpa.free(zlib_frame);
@@ -72,17 +108,56 @@ fn reportCase(init: std.process.Init, stdout: *std.Io.Writer, case: Case) !void 
     }
     const zlib_ns = zlib_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 
-    try stdout.print("{s},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d}\n", .{
-        case.name,
-        case.payload.len,
-        zlib_frame.len,
-        raw.len,
-        iterations,
-        throughput(case.payload.len, iterations, raw_ns),
-        throughput(case.payload.len, iterations, zlib_ns),
-        ratioSigned(zlib_ns, raw_ns),
-        mix,
-    });
+    return .{
+        .name = case.name,
+        .input_bytes = case.payload.len,
+        .zlib_bytes = zlib_frame.len,
+        .raw_bytes = raw.len,
+        .iterations = iterations,
+        .raw_mib_s = throughput(case.payload.len, iterations, raw_ns),
+        .zlib_mib_s = throughput(case.payload.len, iterations, zlib_ns),
+        .wrapper_time_ratio = ratioSigned(zlib_ns, raw_ns),
+        .mix = mix,
+    };
+}
+
+fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
+    try writer.writeAll("case,input_bytes,zlib_bytes,raw_bytes,iterations,raw_mib_s,zlib_mib_s,wrapper_time_ratio,mix\n");
+    for (rows) |row| {
+        try writer.print("{s},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d}\n", .{
+            row.name,
+            row.input_bytes,
+            row.zlib_bytes,
+            row.raw_bytes,
+            row.iterations,
+            row.raw_mib_s,
+            row.zlib_mib_s,
+            row.wrapper_time_ratio,
+            row.mix,
+        });
+    }
+}
+
+fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
+    try writer.writeAll(
+        \\# Deflate decode stage report
+        \\
+        \\| case | input bytes | zlib bytes | raw bytes | iterations | raw MiB/s | zlib MiB/s | wrapper/raw time |
+        \\| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+        \\
+    );
+    for (rows) |row| {
+        try writer.print("| {s} | {d} | {d} | {d} | {d} | {d:.2} | {d:.2} | {d:.3} |\n", .{
+            row.name,
+            row.input_bytes,
+            row.zlib_bytes,
+            row.raw_bytes,
+            row.iterations,
+            row.raw_mib_s,
+            row.zlib_mib_s,
+            row.wrapper_time_ratio,
+        });
+    }
 }
 
 fn rawSliceFromZlib(frame: []const u8) []const u8 {

@@ -123,6 +123,16 @@ pub fn build(b: *std.Build) void {
     const deflate_decode_stage_report_step = b.step("run-deflate-decode-stage-report", "Report raw inflate vs zlib wrapper/checksum decode stages");
     deflate_decode_stage_report_step.dependOn(&run_deflate_decode_stage_report.step);
 
+    const run_deflate_decode_stage_report_csv = b.addRunArtifact(deflate_decode_stage_report_exe);
+    run_deflate_decode_stage_report_csv.addArgs(&.{ "--csv", "zig-out/vort-deflate-decode-stage-report.csv" });
+    const deflate_decode_stage_report_csv_step = b.step("run-deflate-decode-stage-report-csv", "Write raw inflate vs zlib wrapper/checksum stage CSV to zig-out");
+    deflate_decode_stage_report_csv_step.dependOn(&run_deflate_decode_stage_report_csv.step);
+
+    const run_deflate_decode_stage_report_dashboard = b.addRunArtifact(deflate_decode_stage_report_exe);
+    run_deflate_decode_stage_report_dashboard.addArgs(&.{ "--csv", "zig-out/vort-deflate-decode-stage-report.csv", "--markdown", "zig-out/vort-deflate-decode-stage-report.md" });
+    const deflate_decode_stage_report_dashboard_step = b.step("run-deflate-decode-stage-report-dashboard", "Write raw inflate vs zlib wrapper/checksum stage dashboard to zig-out");
+    deflate_decode_stage_report_dashboard_step.dependOn(&run_deflate_decode_stage_report_dashboard.step);
+
     const zlib_encode_bench_exe = b.addExecutable(.{
         .name = "vort-zlib-encode-bench",
         .root_module = b.createModule(.{
@@ -775,6 +785,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zstd_compare_step);
     ci_smoke_step.dependOn(compression_report_step);
     ci_smoke_step.dependOn(deflate_decode_stage_report_step);
+    ci_smoke_step.dependOn(deflate_decode_stage_report_dashboard_step);
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_dashboard_step);
