@@ -277,6 +277,7 @@ pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []co
     if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     const one_shot = try encodeRawBestAlloc(allocator, input, options);
     errdefer allocator.free(one_shot);
+    if (shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
     var writer = bitstream.BitWriter{};
     defer writer.deinit(allocator);
     try writeBestAdaptiveSplitBlocks(allocator, &writer, input, null, options, split_options);
@@ -288,6 +289,7 @@ pub fn encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocato
     if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     const one_shot = try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(one_shot);
+    if (shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
     var writer = bitstream.BitWriter{};
     defer writer.deinit(allocator);
     try writeBestAdaptiveSplitBlocks(allocator, &writer, input, dictionary, options, split_options);
@@ -335,6 +337,16 @@ fn smallerAdaptiveOrOneShot(allocator: std.mem.Allocator, writer: *bitstream.Bit
     }
     allocator.free(adaptive);
     return one_shot;
+}
+
+fn shouldSkipAdaptiveSplitSearch(input_len: usize, split_options: AdaptiveSplitOptions) bool {
+    // The production split presets use a full stored-block-sized max block.
+    // For one- or two-block inputs the adaptive search mostly redoes the
+    // already-computed one-shot plan several times before falling back to that
+    // one-shot frame. Keep small custom split experiments intact by only
+    // short-circuiting full-window policies.
+    return split_options.max_block_len >= max_stored_block_len and
+        input_len <= max_stored_block_len * 2;
 }
 
 fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8, min_block_len: usize, max_block_len: usize, sample_len: usize, search_step: usize, options: CompressionOptions) !usize {
@@ -1963,6 +1975,7 @@ pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
     if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
     const one_shot = try encodeZlibBestAlloc(allocator, input, options);
     errdefer allocator.free(one_shot);
+    if (shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
     return encodeZlibBestAdaptiveSplitDirectAlloc(allocator, input, null, options, split_options, one_shot);
 }
 
@@ -1970,6 +1983,7 @@ pub fn encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocat
     if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
     const one_shot = try encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(one_shot);
+    if (shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
     return encodeZlibBestAdaptiveSplitDirectAlloc(allocator, input, dictionary, options, split_options, one_shot);
 }
 
@@ -2259,6 +2273,7 @@ pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
     if (usesStoredFastPath(input, options)) return encodeGzipStoredAlloc(allocator, input);
     const one_shot = try encodeGzipBestAlloc(allocator, input, options);
     errdefer allocator.free(one_shot);
+    if (shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
     return encodeGzipBestAdaptiveSplitDirectAlloc(allocator, input, options, split_options, one_shot);
 }
 
@@ -3945,4 +3960,26 @@ test "adaptive split falls back to one-shot when smaller" {
     const decoded = try decodeRawAutoAlloc(std.testing.allocator, adaptive);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "adaptive split skips full-window search for small production inputs" {
+    const input = "the quick brown fox jumps over the lazy dog\n" ** 128;
+    const options = optionsForLevel(.default);
+    const raw_one_shot = try encodeRawBestAlloc(std.testing.allocator, input, options);
+    defer std.testing.allocator.free(raw_one_shot);
+    const raw_adaptive = try encodeRawBestAdaptiveSplitAlloc(std.testing.allocator, input, options, options.split_options);
+    defer std.testing.allocator.free(raw_adaptive);
+    try std.testing.expectEqualSlices(u8, raw_one_shot, raw_adaptive);
+
+    const zlib_one_shot = try encodeZlibBestAlloc(std.testing.allocator, input, options);
+    defer std.testing.allocator.free(zlib_one_shot);
+    const zlib_adaptive = try encodeZlibBestAdaptiveSplitAlloc(std.testing.allocator, input, options, options.split_options);
+    defer std.testing.allocator.free(zlib_adaptive);
+    try std.testing.expectEqualSlices(u8, zlib_one_shot, zlib_adaptive);
+
+    const gzip_one_shot = try encodeGzipBestAlloc(std.testing.allocator, input, options);
+    defer std.testing.allocator.free(gzip_one_shot);
+    const gzip_adaptive = try encodeGzipBestAdaptiveSplitAlloc(std.testing.allocator, input, options, options.split_options);
+    defer std.testing.allocator.free(gzip_adaptive);
+    try std.testing.expectEqualSlices(u8, gzip_one_shot, gzip_adaptive);
 }
