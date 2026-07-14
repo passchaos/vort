@@ -103,4 +103,5 @@ for best versus default, which helps separate Huffman header overhead from
 payload coding improvements. The CSV and Markdown summary also include compact
 `;`-separated length-extra and distance-extra histograms for default and
 best-preset plans so parser experiments can target the exact extra-bit buckets
-that differ.
+that differ. The dynamic-plan CSV additionally records length-symbol and
+distance-symbol histograms for exact RFC-code distribution analysis.

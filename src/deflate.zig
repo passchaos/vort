@@ -198,6 +198,8 @@ pub const DynamicPlanStats = struct {
     dynamic_length_extra_bits: usize,
     dynamic_distance_extra_bits: usize,
     dynamic_extra_bits: usize,
+    length_symbol_hist: [length_table.len]usize,
+    distance_symbol_hist: [distance_table.len]usize,
     length_extra_hist: [6]usize,
     distance_extra_hist: [14]usize,
     dynamic_bits: usize,
@@ -219,6 +221,8 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
     var dynamic_distance_bits: usize = 0;
     var dynamic_length_extra_bits: usize = 0;
     var dynamic_distance_extra_bits: usize = 0;
+    var length_symbol_hist: [length_table.len]usize = @splat(0);
+    var distance_symbol_hist: [distance_table.len]usize = @splat(0);
     var length_extra_hist: [6]usize = @splat(0);
     var distance_extra_hist: [14]usize = @splat(0);
     var match_distance_sum: usize = 0;
@@ -233,6 +237,8 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
             dynamic_distance_bits += dynamic_plan.dist_lengths_full[dist_code.symbol];
             dynamic_length_extra_bits += len_code.extra_bits;
             dynamic_distance_extra_bits += dist_code.extra_bits;
+            length_symbol_hist[len_code.symbol - 257] += 1;
+            distance_symbol_hist[dist_code.symbol] += 1;
             length_extra_hist[len_code.extra_bits] += 1;
             distance_extra_hist[dist_code.extra_bits] += 1;
             match_distance_sum += m.distance;
@@ -264,6 +270,8 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
         .dynamic_length_extra_bits = dynamic_length_extra_bits,
         .dynamic_distance_extra_bits = dynamic_distance_extra_bits,
         .dynamic_extra_bits = dynamic_extra_bits,
+        .length_symbol_hist = length_symbol_hist,
+        .distance_symbol_hist = distance_symbol_hist,
         .length_extra_hist = length_extra_hist,
         .distance_extra_hist = distance_extra_hist,
         .dynamic_bits = dynamic_bits,
