@@ -99,7 +99,7 @@ fn planTokensWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8
 }
 
 pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
-    if (shouldUseStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
+    if (usesStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     var writer = bitstream.BitWriter{};
@@ -108,7 +108,7 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
     return writer.toOwnedSlice(allocator);
 }
 
-fn shouldUseStoredFastPath(input: []const u8, options: CompressionOptions) bool {
+pub fn usesStoredFastPath(input: []const u8, options: CompressionOptions) bool {
     if (input.len < 8 * 1024) return false;
     const normalized = normalizeOptionsForStrategy(options);
     if (normalized.strategy != .default or normalized.parser != .hash or normalized.block_selection != .stored_fixed) return false;
@@ -2909,6 +2909,7 @@ test "best encoder skips invalid single stored block for large inputs" {
 
     const encoded = try encodeRawBestAlloc(std.testing.allocator, &input, optionsForLevel(.fastest));
     defer std.testing.allocator.free(encoded);
+    try std.testing.expect(usesStoredFastPath(&input, optionsForLevel(.fastest)));
     const stored = try encodeRawStoredAlloc(std.testing.allocator, &input);
     defer std.testing.allocator.free(stored);
     try std.testing.expectEqual(stored.len, encoded.len);
@@ -2923,6 +2924,7 @@ test "stored fast path does not mask repeated binary structure" {
 
     const encoded = try encodeRawBestAlloc(std.testing.allocator, &input, optionsForLevel(.fastest));
     defer std.testing.allocator.free(encoded);
+    try std.testing.expect(!usesStoredFastPath(&input, optionsForLevel(.fastest)));
     const stored = try encodeRawStoredAlloc(std.testing.allocator, &input);
     defer std.testing.allocator.free(stored);
     try std.testing.expect(encoded.len < stored.len);

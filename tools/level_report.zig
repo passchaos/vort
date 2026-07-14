@@ -56,7 +56,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("case,level,strategy,parser,block_selection,window_len,max_chain,nice_len,max_candidates,lazy_min_gain,min_match,max_match,min_savings_bits,split_min,split_max,split_step,tokens,fixed_bits,raw_best_bytes,adaptive_bytes,roundtrip_crc32\n", .{});
+    try stdout.print("case,level,strategy,parser,block_selection,window_len,max_chain,nice_len,max_candidates,lazy_min_gain,min_match,max_match,min_savings_bits,split_min,split_max,split_step,stored_fast_path,tokens,fixed_bits,raw_best_bytes,adaptive_bytes,roundtrip_crc32\n", .{});
 
     for (cases) |case| {
         for (levels) |level_case| {
@@ -89,7 +89,7 @@ pub fn main(init: std.process.Init) !void {
                 defer init.gpa.free(adaptive_decoded);
                 if (!std.mem.eql(u8, case.input, adaptive_decoded)) return error.RoundTripMismatch;
 
-                try stdout.print("{s},{s},{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
+                try stdout.print("{s},{s},{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{},{d},{d},{d},{d},{d}\n", .{
                     case.name,
                     level_case.name,
                     strategy_case.name,
@@ -106,6 +106,7 @@ pub fn main(init: std.process.Init) !void {
                     options.split_options.min_block_len,
                     options.split_options.max_block_len,
                     options.split_options.search_step,
+                    vort.usesStoredFastPath(case.input, options),
                     plan.stats.tokenCount(),
                     vort.fixedLz77BitCost(plan.tokens),
                     encoded.len,
