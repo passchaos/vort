@@ -221,54 +221,48 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
 pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     if (usesStoredFastPath(input, options)) return encodeRawStoredSplitAlloc(allocator, input, block_len);
-    const effective_block_len = @min(block_len, max_stored_block_len);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
-    if (input.len == 0) {
-        const plan = try planTokensAlloc(allocator, "", options);
-        defer plan.deinit(allocator);
-        try writeBestTokensBlock(allocator, &writer, "", plan.tokens, true, options);
-        return writer.toOwnedSlice(allocator);
-    }
-    var offset: usize = 0;
-    while (offset < input.len) {
-        const n = @min(effective_block_len, input.len - offset);
-        const chunk = input[offset..][0..n];
-        const final = offset + n == input.len;
-        const plan = try planTokensAlloc(allocator, chunk, options);
-        defer plan.deinit(allocator);
-        try writeBestTokensBlock(allocator, &writer, chunk, plan.tokens, final, options);
-        offset += n;
-    }
+    try writeBestSplitBlocks(allocator, &writer, input, null, block_len, options);
     return writer.toOwnedSlice(allocator);
 }
 
 pub fn encodeRawBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     if (usesStoredFastPath(input, options)) return encodeRawStoredSplitAlloc(allocator, input, block_len);
-    const effective_block_len = @min(block_len, max_stored_block_len);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
+    try writeBestSplitBlocks(allocator, &writer, input, dictionary, block_len, options);
+    return writer.toOwnedSlice(allocator);
+}
+
+fn writeBestSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8, dictionary: ?[]const u8, block_len: usize, options: CompressionOptions) !void {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    const effective_block_len = @min(block_len, max_stored_block_len);
     if (input.len == 0) {
-        const plan = try planTokensWithDictionaryAlloc(allocator, "", dictionary, options);
+        const plan = if (dictionary) |dict|
+            try planTokensWithDictionaryAlloc(allocator, "", dict, options)
+        else
+            try planTokensAlloc(allocator, "", options);
         defer plan.deinit(allocator);
-        try writeBestTokensBlock(allocator, &writer, "", plan.tokens, true, options);
-        return writer.toOwnedSlice(allocator);
+        return writeBestTokensBlock(allocator, writer, "", plan.tokens, true, options);
     }
     var offset: usize = 0;
     while (offset < input.len) {
         const n = @min(effective_block_len, input.len - offset);
         const chunk = input[offset..][0..n];
         const final = offset + n == input.len;
-        const plan = if (offset == 0)
-            try planTokensWithDictionaryAlloc(allocator, chunk, dictionary, options)
+        const plan = if (dictionary) |dict|
+            if (offset == 0)
+                try planTokensWithDictionaryAlloc(allocator, chunk, dict, options)
+            else
+                try planTokensAlloc(allocator, chunk, options)
         else
             try planTokensAlloc(allocator, chunk, options);
         defer plan.deinit(allocator);
-        try writeBestTokensBlock(allocator, &writer, chunk, plan.tokens, final, options);
+        try writeBestTokensBlock(allocator, writer, chunk, plan.tokens, final, options);
         offset += n;
     }
-    return writer.toOwnedSlice(allocator);
 }
 
 pub const AdaptiveSplitOptions = struct {
@@ -1904,6 +1898,20 @@ pub fn encodeZlibStoredWithDictionaryAlloc(allocator: std.mem.Allocator, input: 
     return out;
 }
 
+fn encodeZlibStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    const raw = try encodeRawStoredSplitAlloc(allocator, input, block_len);
+    defer allocator.free(raw);
+    return encodeZlibRawAlloc(allocator, input, raw, null);
+}
+
+fn encodeZlibStoredSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize) ![]u8 {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    const raw = try encodeRawStoredSplitAlloc(allocator, input, block_len);
+    defer allocator.free(raw);
+    return encodeZlibRawAlloc(allocator, input, raw, dictionary);
+}
+
 pub fn encodeZlibFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return encodeZlibFixedWithOptionsAlloc(allocator, input, .{});
 }
@@ -1951,15 +1959,13 @@ pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []
 }
 
 pub fn encodeZlibBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawBestSplitAlloc(allocator, input, block_len, options);
-    defer allocator.free(raw);
-    return encodeZlibRawAlloc(allocator, input, raw, null);
+    if (usesStoredFastPath(input, options)) return encodeZlibStoredSplitAlloc(allocator, input, block_len);
+    return encodeZlibBestSplitDirectAlloc(allocator, input, null, block_len, options);
 }
 
 pub fn encodeZlibBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawBestSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options);
-    defer allocator.free(raw);
-    return encodeZlibRawAlloc(allocator, input, raw, dictionary);
+    if (usesStoredFastPath(input, options)) return encodeZlibStoredSplitWithDictionaryAlloc(allocator, input, dictionary, block_len);
+    return encodeZlibBestSplitDirectAlloc(allocator, input, dictionary, block_len, options);
 }
 
 pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
@@ -2009,6 +2015,14 @@ fn encodeZlibBestTokensAlloc(allocator: std.mem.Allocator, input: []const u8, di
     errdefer writer.deinit(allocator);
     const header_len = try writeWrappedDeflatePrefix(allocator, &writer, dictionary);
     try writeBestTokensBlock(allocator, &writer, input, tokens, true, options);
+    return finishZlibFrame(allocator, &writer, input, header_len);
+}
+
+fn encodeZlibBestSplitDirectAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    const header_len = try writeWrappedDeflatePrefix(allocator, &writer, dictionary);
+    try writeBestSplitBlocks(allocator, &writer, input, dictionary, block_len, options);
     return finishZlibFrame(allocator, &writer, input, header_len);
 }
 
@@ -2196,6 +2210,20 @@ pub fn encodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return out;
 }
 
+fn encodeGzipStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    const raw = try encodeRawStoredSplitAlloc(allocator, input, block_len);
+    defer allocator.free(raw);
+    const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
+    errdefer allocator.free(out);
+    @memcpy(out[0..gzip_header.len], &gzip_header);
+    @memcpy(out[gzip_header.len..][0..raw.len], raw);
+    const footer = gzip_header.len + raw.len;
+    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
+    std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
+    return out;
+}
+
 pub fn encodeGzipFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return encodeGzipFixedWithOptionsAlloc(allocator, input, .{});
 }
@@ -2224,16 +2252,8 @@ pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 }
 
 pub fn encodeGzipBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawBestSplitAlloc(allocator, input, block_len, options);
-    defer allocator.free(raw);
-    const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
-    errdefer allocator.free(out);
-    @memcpy(out[0..gzip_header.len], &gzip_header);
-    @memcpy(out[gzip_header.len..][0..raw.len], raw);
-    const footer = gzip_header.len + raw.len;
-    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
-    std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
-    return out;
+    if (usesStoredFastPath(input, options)) return encodeGzipStoredSplitAlloc(allocator, input, block_len);
+    return encodeGzipBestSplitDirectAlloc(allocator, input, block_len, options);
 }
 
 pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
@@ -2273,6 +2293,14 @@ fn encodeGzipBestTokensAlloc(allocator: std.mem.Allocator, input: []const u8, to
     errdefer writer.deinit(allocator);
     try writeGzipPrefix(allocator, &writer);
     try writeBestTokensBlock(allocator, &writer, input, tokens, true, options);
+    return finishGzipFrame(allocator, &writer, input);
+}
+
+fn encodeGzipBestSplitDirectAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeGzipPrefix(allocator, &writer);
+    try writeBestSplitBlocks(allocator, &writer, input, null, block_len, options);
     return finishGzipFrame(allocator, &writer, input);
 }
 
