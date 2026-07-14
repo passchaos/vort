@@ -248,6 +248,8 @@ const gzip_bytes = try vort.encodeGzipFixedAlloc(allocator, "payload");
 defer allocator.free(gzip_bytes);
 const gzip_exact = try vort.decodeGzipAllocExactSize(allocator, gzip_bytes, "payload".len);
 defer allocator.free(gzip_exact);
+const gzip_cat_exact = try vort.decodeGzipConcatenatedAllocExactSize(allocator, gzip_bytes, "payload".len);
+defer allocator.free(gzip_cat_exact);
 const gzip_bounded = try vort.decodeGzipConcatenatedAllocLimited(allocator, gzip_bytes, 1024);
 defer allocator.free(gzip_bounded);
 var gzip_out: [1024]u8 = undefined;

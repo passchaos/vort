@@ -2527,6 +2527,17 @@ pub fn decodeGzipConcatenatedAllocLimited(allocator: std.mem.Allocator, input: [
     return decodeGzipConcatenatedAllocLimitedInternal(allocator, input, max_output_len);
 }
 
+pub fn decodeGzipConcatenatedAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    const out = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(out);
+    const written = decodeGzipConcatenated(input, out) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return out;
+}
+
 pub fn decodeGzipConcatenated(input: []const u8, output: []u8) Error!usize {
     var offset: usize = 0;
     var out_offset: usize = 0;
@@ -3941,6 +3952,12 @@ test "gzip concatenated members decode in sequence" {
     const limited = try decodeGzipConcatenatedAllocLimited(std.testing.allocator, cat.items, 10);
     defer std.testing.allocator.free(limited);
     try std.testing.expectEqualSlices(u8, "helloworld", limited);
+
+    const exact = try decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, 10);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, "helloworld", exact);
+    try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, 9));
+    try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, 11));
 }
 
 test "gzip concatenated members keep match history isolated" {

@@ -193,6 +193,7 @@ pub const decodeGzipAllocExactSize = deflate.decodeGzipAllocExactSize;
 pub const decodeGzipAllocLimited = deflate.decodeGzipAllocLimited;
 pub const decodeGzipConcatenated = deflate.decodeGzipConcatenated;
 pub const decodeGzipConcatenatedAlloc = deflate.decodeGzipConcatenatedAlloc;
+pub const decodeGzipConcatenatedAllocExactSize = deflate.decodeGzipConcatenatedAllocExactSize;
 pub const decodeGzipConcatenatedAllocLimited = deflate.decodeGzipConcatenatedAllocLimited;
 
 pub const Lz77Token = lz77.Token;
