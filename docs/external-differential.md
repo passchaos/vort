@@ -60,18 +60,21 @@ evidence for its small payload set; it is not yet throughput or ratio evidence,
 so dedicated benchmark harnesses are still required before making performance
 claims. The
 `run-rust-deflate-bench` step is the first such decode-throughput smoke: run it
-with `-Doptimize=ReleaseFast` so the Vort row is comparable to the release-mode
-temporary Cargo runner built against both Rust checkouts. It prints CSV rows
-comparing Vort, fdeflate, and miniz_oxide zlib decode throughput on generated
-tiny, repetitive, text, and binary payloads plus real project README/roadmap
-files. Each engine performs one warmup decode before timing to reduce cold-start
-noise. Use
+with `-Doptimize=ReleaseFast` so the Vort rows are comparable to the
+release-mode temporary Cargo runner built against both Rust checkouts. It prints
+CSV rows comparing Vort, fdeflate, and miniz_oxide zlib decode throughput on
+generated tiny, repetitive, text, and binary payloads plus real project
+README/roadmap files. It also reports raw-deflate rows for Vort and
+miniz_oxide, separating wrapper overhead from the inflate core where the Rust
+baseline exposes a public raw API. Each engine performs one warmup decode before
+timing to reduce cold-start noise. Use
 `run-rust-deflate-bench-csv` to persist the same rows to
-`zig-out/vort-rust-deflate-decode-bench.csv`. The Vort decode rows include the
-zlib allocator-returning API (`vort`), the zlib caller-owned output-buffer API
+`zig-out/vort-rust-deflate-decode-bench.csv`. The Vort decode rows include raw
+allocator/caller-buffer APIs (`vort-raw`, `vort-raw-into`), the zlib
+allocator-returning API (`vort`), the zlib caller-owned output-buffer API
 (`vort-into`), and matching gzip wrapper rows (`vort-gzip`,
-`vort-gzip-into`) so regressions can distinguish inflate/checksum work,
-wrapper format overhead, and per-iteration allocation overhead.
+`vort-gzip-into`) so regressions can distinguish inflate/checksum work, wrapper
+format overhead, and per-iteration allocation overhead.
 
 `run-rust-deflate-encode-bench` provides the matching encode-side smoke. It
 prints CSV rows for zlib output size, ratio, and encode throughput for Vort,
@@ -88,9 +91,10 @@ count. It also includes real project README/roadmap files. Run it with
 `run-rust-deflate-benchmark-summary` consumes both CSV files and writes
 `zig-out/vort-rust-deflate-benchmark-summary.md`, highlighting per-case Vort
 zlib allocator and caller-buffer throughput ratios against the best Rust
-baseline. Gzip decode rows and decode allocation overhead are summarized
-separately because the Rust baseline harness measures zlib frames. The encode
-table also reports the Vort default/dynamic-default throughput ratio to expose
+baseline. Raw-deflate Vort/miniz_oxide rows, gzip decode rows, and decode
+allocation overhead are summarized separately because the Rust baseline harness
+does not expose identical APIs for every wrapper. The encode table also reports
+the Vort default/dynamic-default throughput ratio to expose
 best-selection overhead, literal-only dynamic speed/size ratios against Vort
 default, plus split-default/adaptive-default speed and size ratios against Vort
 default to expose wrapper block-planning overhead and split-induced size

@@ -211,6 +211,7 @@ architecture blindly.
 - [x] Rust deflate decode benchmark reports Vort/fdeflate/miniz_oxide rows in one CSV.
 - [x] Rust deflate decode benchmark documentation requires ReleaseFast Vort rows.
 - [x] Rust deflate decode benchmark performs warmup decodes before timing.
+- [x] Rust deflate decode benchmark includes raw-deflate Vort/miniz_oxide rows to isolate wrapper overhead.
 - [x] Rust deflate encode benchmark reports Vort/fdeflate/miniz_oxide size and throughput rows.
 - [x] Rust deflate encode benchmark reports multiple Vort level presets.
 - [x] Rust deflate encode benchmark includes a Vort best preset row for strongest-size tracking.
@@ -229,6 +230,7 @@ architecture blindly.
 - [x] Rust deflate decode benchmarks include overlap-RLE, distance-heavy, and dynamic-match payloads.
 - [x] Rust deflate decode benchmarks include stored binary payloads.
 - [x] Rust deflate benchmark Markdown summary highlights Vort vs Rust gaps.
+- [x] Rust deflate benchmark Markdown summary reports raw-deflate decode ratios against miniz_oxide.
 - [x] Rust deflate benchmark summary reports Vort default-vs-dynamic encode overhead.
 - [x] Rust deflate benchmark summary reports Vort split/adaptive encode speed and size ratios.
 - [x] Rust deflate benchmark summary reports Vort default and best-preset size ratios against Rust.

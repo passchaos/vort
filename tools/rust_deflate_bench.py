@@ -2,8 +2,9 @@
 """Decode-throughput smoke for local Rust deflate baselines.
 
 This is intentionally a small, reproducible smoke benchmark rather than a final
-performance claim. It records fdeflate/miniz_oxide zlib decode throughput on the
-same generated frames so Vort can track the Rust baselines the user requested.
+performance claim. It records fdeflate/miniz_oxide zlib and raw DEFLATE decode
+throughput on the same generated frames so Vort can track the Rust baselines the
+user requested while separating wrapper cost from the inflate core.
 """
 import pathlib
 import shutil
@@ -47,35 +48,40 @@ def write_runner(workdir: pathlib.Path) -> pathlib.Path:
             """
             use std::{env, fs, process, time::Instant};
 
+            fn decode(engine: &str, format: &str, frame: &[u8]) -> Vec<u8> {
+                match (engine, format) {
+                    ("fdeflate", "zlib") => fdeflate::decompress_to_vec(frame).expect("fdeflate decode"),
+                    ("fdeflate", "raw") => {
+                        // fdeflate's public inflater in this checkout is zlib-framed. The
+                        // Python harness therefore omits a raw fdeflate row instead of
+                        // pretending to benchmark a private/internal raw API.
+                        eprintln!("fdeflate raw inflate unsupported by public API");
+                        process::exit(2);
+                    }
+                    ("miniz_oxide", "zlib") => miniz_oxide::inflate::decompress_to_vec_zlib(frame).expect("miniz_oxide decode"),
+                    ("miniz_oxide", "raw") => miniz_oxide::inflate::decompress_to_vec(frame).expect("miniz_oxide raw decode"),
+                    _ => {
+                        eprintln!("unknown engine/format: {engine} {format}");
+                        process::exit(2);
+                    }
+                }
+            }
+
             fn main() {
                 let args: Vec<String> = env::args().collect();
-                if args.len() != 4 {
-                    eprintln!("usage: <fdeflate|miniz_oxide> <zlib-frame> <iterations>");
+                if args.len() != 5 {
+                    eprintln!("usage: <fdeflate|miniz_oxide> <zlib|raw> <frame> <iterations>");
                     process::exit(2);
                 }
                 let engine = &args[1];
-                let frame = fs::read(&args[2]).expect("read frame");
-                let iterations: usize = args[3].parse().expect("iterations");
-                let warmup = match engine.as_str() {
-                    "fdeflate" => fdeflate::decompress_to_vec(&frame).expect("fdeflate decode"),
-                    "miniz_oxide" => miniz_oxide::inflate::decompress_to_vec_zlib(&frame).expect("miniz_oxide decode"),
-                    _ => {
-                        eprintln!("unknown engine: {engine}");
-                        process::exit(2);
-                    }
-                };
-                drop(warmup);
+                let format = &args[2];
+                let frame = fs::read(&args[3]).expect("read frame");
+                let iterations: usize = args[4].parse().expect("iterations");
+                drop(decode(engine, format, &frame));
                 let start = Instant::now();
                 let mut mix: u64 = 0;
                 for _ in 0..iterations {
-                    let decoded = match engine.as_str() {
-                        "fdeflate" => fdeflate::decompress_to_vec(&frame).expect("fdeflate decode"),
-                        "miniz_oxide" => miniz_oxide::inflate::decompress_to_vec_zlib(&frame).expect("miniz_oxide decode"),
-                        _ => {
-                            eprintln!("unknown engine: {engine}");
-                            process::exit(2);
-                        }
-                    };
+                    let decoded = decode(engine, format, &frame);
                     mix = mix.wrapping_add(decoded.len() as u64);
                     if let Some(first) = decoded.first() {
                         mix = mix.wrapping_add(u64::from(*first));
@@ -90,9 +96,9 @@ def write_runner(workdir: pathlib.Path) -> pathlib.Path:
     return workdir
 
 
-def run_bench(project: pathlib.Path, engine: str, frame: pathlib.Path, iterations: int) -> tuple[int, int]:
+def run_bench(project: pathlib.Path, engine: str, fmt: str, frame: pathlib.Path, iterations: int) -> tuple[int, int]:
     out = subprocess.run(
-        ["cargo", "run", "--release", "--quiet", "--", engine, str(frame), str(iterations)],
+        ["cargo", "run", "--release", "--quiet", "--", engine, fmt, str(frame), str(iterations)],
         cwd=project,
         check=True,
         text=True,
@@ -127,6 +133,17 @@ def throughput_mib_s(size: int, iterations: int, elapsed_ns: int) -> float:
     return 0.0 if seconds == 0 else mib / seconds
 
 
+def raw_from_zlib(frame: bytes) -> bytes:
+    if len(frame) < 6:
+        raise AssertionError(f"zlib frame too short: {len(frame)}")
+    cmf, flg = frame[0], frame[1]
+    if (cmf & 0x0F) != 8 or ((cmf << 8) + flg) % 31 != 0:
+        raise AssertionError(f"bad generated zlib header: {frame[:2].hex()}")
+    if flg & 0x20:
+        raise AssertionError("benchmark zlib frames must not require dictionaries")
+    return frame[2:-4]
+
+
 def main() -> int:
     if shutil.which("cargo") is None:
         print("rust deflate decode benchmark: skipped cargo=missing")
@@ -148,26 +165,31 @@ def main() -> int:
         ("readme", (ROOT / "README.md").read_bytes()),
         ("roadmap", (ROOT / "docs" / "roadmap.md").read_bytes()),
     ]
-    output_rows = ["engine,case,input_bytes,zlib_bytes,iterations,elapsed_s,throughput_mib_s,mix"]
+    output_rows = ["engine,format,case,input_bytes,frame_bytes,iterations,elapsed_s,throughput_mib_s,mix"]
     with tempfile.TemporaryDirectory(prefix="vort-rust-deflate-bench-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         project = write_runner(tmp / "runner")
         for name, payload in payloads:
-            frame = tmp / f"{name}.zlib"
-            frame.write_bytes(zlib.compress(payload, level=0 if name == "stored-binary" else 6))
+            zlib_frame = tmp / f"{name}.zlib"
+            zlib_frame.write_bytes(zlib.compress(payload, level=0 if name == "stored-binary" else 6))
+            raw_frame = tmp / f"{name}.raw"
+            raw_frame.write_bytes(raw_from_zlib(zlib_frame.read_bytes()))
             gzip_frame = tmp / f"{name}.gz"
             gzip_frame.write_bytes(zlib.compress(payload, level=0 if name == "stored-binary" else 6, wbits=31))
             iterations = iterations_for(len(payload))
             rows = [
-                ("vort", run_vort_bench(frame, iterations)),
-                ("vort-into", run_vort_bench(frame, iterations, "into")),
-                ("vort-gzip", run_vort_bench(gzip_frame, iterations, "gzip")),
-                ("vort-gzip-into", run_vort_bench(gzip_frame, iterations, "gzip-into")),
+                ("vort", "zlib", zlib_frame, run_vort_bench(zlib_frame, iterations)),
+                ("vort-into", "zlib", zlib_frame, run_vort_bench(zlib_frame, iterations, "into")),
+                ("vort-raw", "raw", raw_frame, run_vort_bench(raw_frame, iterations, "raw")),
+                ("vort-raw-into", "raw", raw_frame, run_vort_bench(raw_frame, iterations, "raw-into")),
+                ("vort-gzip", "gzip", gzip_frame, run_vort_bench(gzip_frame, iterations, "gzip")),
+                ("vort-gzip-into", "gzip", gzip_frame, run_vort_bench(gzip_frame, iterations, "gzip-into")),
             ]
-            rows.extend((engine, run_bench(project, engine, frame, iterations)) for engine in ("fdeflate", "miniz_oxide"))
-            for engine, (elapsed_ns, mix) in rows:
+            rows.extend((engine, "zlib", zlib_frame, run_bench(project, engine, "zlib", zlib_frame, iterations)) for engine in ("fdeflate", "miniz_oxide"))
+            rows.append(("miniz_oxide-raw", "raw", raw_frame, run_bench(project, "miniz_oxide", "raw", raw_frame, iterations)))
+            for engine, fmt, frame, (elapsed_ns, mix) in rows:
                 output_rows.append(
-                    f"{engine},{name},{len(payload)},{frame.stat().st_size},{iterations},"
+                    f"{engine},{fmt},{name},{len(payload)},{frame.stat().st_size},{iterations},"
                     f"{elapsed_ns / 1_000_000_000:.6f},{throughput_mib_s(len(payload), iterations, elapsed_ns):.2f},{mix}"
                 )
     for row in output_rows:

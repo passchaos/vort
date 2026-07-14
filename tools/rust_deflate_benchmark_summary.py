@@ -50,6 +50,10 @@ def top_histogram_deltas(row: dict[str, str], key: str, best_key: str, symbol_ba
     return ", ".join(f"{symbol}:{delta:+d}" for delta, symbol in deltas[:limit])
 
 
+def row_format(row: dict[str, str]) -> str:
+    return row.get("format", "zlib")
+
+
 def decode_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Decode throughput (zlib)",
@@ -58,9 +62,10 @@ def decode_lines(rows: list[dict[str, str]]) -> list[str]:
         "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for case, items in sorted(by_case(rows).items()):
-        vort_alloc = next(row for row in items if row["engine"] == "vort")
-        vort_into = next(row for row in items if row["engine"] == "vort-into")
-        rust_rows = [row for row in items if not row["engine"].startswith("vort")]
+        zlib_items = [row for row in items if row_format(row) == "zlib"]
+        vort_alloc = next(row for row in zlib_items if row["engine"] == "vort")
+        vort_into = next(row for row in zlib_items if row["engine"] == "vort-into")
+        rust_rows = [row for row in zlib_items if not row["engine"].startswith("vort")]
         rust = max(rust_rows, key=lambda row: fnum(row, "throughput_mib_s"))
         alloc_speed = fnum(vort_alloc, "throughput_mib_s")
         into_speed = fnum(vort_into, "throughput_mib_s")
@@ -68,6 +73,30 @@ def decode_lines(rows: list[dict[str, str]]) -> list[str]:
         alloc_ratio = 0.0 if rust_speed == 0 else alloc_speed / rust_speed
         into_ratio = 0.0 if rust_speed == 0 else into_speed / rust_speed
         lines.append(f"| {case} | {alloc_speed:.2f} | {into_speed:.2f} | {rust_speed:.2f} | {alloc_ratio:.3f} | {into_ratio:.3f} | {rust['engine']} |")
+    lines.append("")
+    return lines
+
+
+def raw_decode_lines(rows: list[dict[str, str]]) -> list[str]:
+    lines = [
+        "## Decode throughput (raw deflate)",
+        "",
+        "| case | Vort raw alloc MiB/s | Vort raw into MiB/s | miniz_oxide raw MiB/s | alloc / miniz raw | into / miniz raw |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for case, items in sorted(by_case(rows).items()):
+        raw_items = [row for row in items if row_format(row) == "raw"]
+        vort_raw = next((row for row in raw_items if row["engine"] == "vort-raw"), None)
+        vort_raw_into = next((row for row in raw_items if row["engine"] == "vort-raw-into"), None)
+        miniz_raw = next((row for row in raw_items if row["engine"] == "miniz_oxide-raw"), None)
+        if vort_raw is None or vort_raw_into is None or miniz_raw is None:
+            continue
+        alloc_speed = fnum(vort_raw, "throughput_mib_s")
+        into_speed = fnum(vort_raw_into, "throughput_mib_s")
+        rust_speed = fnum(miniz_raw, "throughput_mib_s")
+        alloc_ratio = 0.0 if rust_speed == 0 else alloc_speed / rust_speed
+        into_ratio = 0.0 if rust_speed == 0 else into_speed / rust_speed
+        lines.append(f"| {case} | {alloc_speed:.2f} | {into_speed:.2f} | {rust_speed:.2f} | {alloc_ratio:.3f} | {into_ratio:.3f} |")
     lines.append("")
     return lines
 
@@ -96,19 +125,22 @@ def decode_allocation_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Decode allocation overhead",
         "",
-        "| case | zlib alloc/into time | gzip alloc/into time |",
-        "| --- | ---: | ---: |",
+        "| case | raw alloc/into time | zlib alloc/into time | gzip alloc/into time |",
+        "| --- | ---: | ---: | ---: |",
     ]
     for case, items in sorted(by_case(rows).items()):
+        raw_alloc = next((row for row in items if row["engine"] == "vort-raw"), None)
+        raw_into = next((row for row in items if row["engine"] == "vort-raw-into"), None)
         zlib_alloc = next((row for row in items if row["engine"] == "vort"), None)
         zlib_into = next((row for row in items if row["engine"] == "vort-into"), None)
         gzip_alloc = next((row for row in items if row["engine"] == "vort-gzip"), None)
         gzip_into = next((row for row in items if row["engine"] == "vort-gzip-into"), None)
         if zlib_alloc is None or zlib_into is None or gzip_alloc is None or gzip_into is None:
             continue
+        raw_ratio = "" if raw_alloc is None or raw_into is None else f"{fnum(raw_alloc, 'elapsed_s') / fnum(raw_into, 'elapsed_s'):.3f}"
         zlib_ratio = fnum(zlib_alloc, "elapsed_s") / fnum(zlib_into, "elapsed_s")
         gzip_ratio = fnum(gzip_alloc, "elapsed_s") / fnum(gzip_into, "elapsed_s")
-        lines.append(f"| {case} | {zlib_ratio:.3f} | {gzip_ratio:.3f} |")
+        lines.append(f"| {case} | {raw_ratio} | {zlib_ratio:.3f} | {gzip_ratio:.3f} |")
     lines.append("")
     return lines
 
@@ -287,6 +319,7 @@ def main() -> int:
         "",
     ]
     lines.extend(decode_lines(decode_rows))
+    lines.extend(raw_decode_lines(decode_rows))
     lines.extend(gzip_decode_lines(decode_rows))
     lines.extend(decode_allocation_lines(decode_rows))
     lines.extend(encode_lines(encode_rows))
