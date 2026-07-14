@@ -1205,6 +1205,18 @@ fn decodeRawStoredOnlyIntoMaybe(input: []const u8, output: []u8) Error!?DecodeRe
     return .{ .input_read = plan.input_read, .output_written = plan.output_len };
 }
 
+fn decodeRawStoredOnlyIntoMaybeWithHash(comptime Hash: type, input: []const u8, output: []u8) Error!?struct { result: DecodeResult, digest: u32 } {
+    const plan = (try planRawStoredOnly(input)) orelse return null;
+    if (output.len < plan.output_len) return error.OutputTooSmall;
+
+    var hash = Hash.init();
+    copyRawStoredOnlyWithHash(Hash, input[0..plan.input_read], output[0..plan.output_len], &hash);
+    return .{
+        .result = .{ .input_read = plan.input_read, .output_written = plan.output_len },
+        .digest = hash.digest(),
+    };
+}
+
 fn decodeRawStoredOnlyAllocMaybeWithHash(comptime Hash: type, allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?StoredOnlyHashResult {
     const plan = (try planRawStoredOnly(input)) orelse return null;
     try ensureOutputLimit(0, plan.output_len, max_output_len);
@@ -1900,6 +1912,16 @@ pub fn decodeZlibWithDictionary(input: []const u8, output: []u8, dictionary: []c
 fn decodeZlibWithOptionalDictionary(input: []const u8, output: []u8, dictionary: ?[]const u8) Error!usize {
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+
+    if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) |stored| {
+        const footer_offset = header.data_offset + stored.result.input_read;
+        if (input.len - footer_offset < 4) return error.TruncatedFrame;
+        const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
+        if (stored.digest != expected) return error.ChecksumMismatch;
+        if (footer_offset + 4 != input.len) return error.TrailingData;
+        return stored.result.output_written;
+    }
+
     const raw = try decodeRawAutoWithDictionary(input[header.data_offset..], raw_dictionary, output);
     const footer_offset = header.data_offset + raw.input_read;
     if (input.len - footer_offset < 4) return error.TruncatedFrame;
@@ -2100,6 +2122,18 @@ pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
 
 pub fn decodeGzip(input: []const u8, output: []u8) Error!usize {
     const data_offset = try parseGzipHeader(input);
+
+    if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice16, input[data_offset..], output)) |stored| {
+        const footer_offset = data_offset + stored.result.input_read;
+        if (input.len - footer_offset < 8) return error.TruncatedFrame;
+        const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
+        const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
+        if (stored.digest != expected_crc) return error.ChecksumMismatch;
+        if (@as(u32, @truncate(stored.result.output_written)) != expected_size) return error.SizeMismatch;
+        if (footer_offset + 8 != input.len) return error.TrailingData;
+        return stored.result.output_written;
+    }
+
     const raw = try decodeRawAuto(input[data_offset..], output);
     const footer_offset = data_offset + raw.input_read;
     if (input.len - footer_offset < 8) return error.TruncatedFrame;
