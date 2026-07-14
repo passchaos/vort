@@ -128,6 +128,102 @@ pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     return hashLazyGreedyPlanAlloc(allocator, input, options);
 }
 
+pub fn hashGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !GreedyPlan {
+    const dict = activeDictionary(dictionary, options);
+    if (dict.len == 0) return hashGreedyPlanAlloc(allocator, input, options);
+
+    const table_size = 1 << 15;
+    const head = try allocator.alloc(isize, table_size);
+    defer allocator.free(head);
+    @memset(head, -1);
+    const total = dict.len + input.len;
+    const prev = try allocator.alloc(isize, total);
+    defer allocator.free(prev);
+    seedDictionaryHashes(dict, input, head, prev);
+
+    var tokens = try initTokenList(allocator, input.len);
+    errdefer tokens.deinit(allocator);
+    var stats = PlanStats{};
+
+    var pos: usize = 0;
+    while (pos < input.len) {
+        const current = dict.len + pos;
+        const best = findBestCombinedHashMatch(dict, input, current, options, head, prev);
+
+        if (acceptMatch(input, pos, best.length, best.distance, options)) {
+            try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+            stats.matches += 1;
+            stats.matched_bytes += best.length;
+            const end = @min(input.len, pos + best.length);
+            insertCombinedHash(dict, input, current, head, prev);
+            const tail_start = if (end > pos + 4) end - 4 else pos + 1;
+            pos += 1;
+            if (pos < tail_start) pos = tail_start;
+            while (pos < end) : (pos += 1) insertCombinedHash(dict, input, dict.len + pos, head, prev);
+        } else {
+            try tokens.append(allocator, .{ .literal = input[pos] });
+            stats.literals += 1;
+            insertCombinedHash(dict, input, current, head, prev);
+            pos += 1;
+        }
+    }
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+pub fn lazyGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !GreedyPlan {
+    const dict = activeDictionary(dictionary, options);
+    if (dict.len == 0) return lazyGreedyPlanAlloc(allocator, input, options);
+
+    const table_size = 1 << 15;
+    const head = try allocator.alloc(isize, table_size);
+    defer allocator.free(head);
+    @memset(head, -1);
+    const total = dict.len + input.len;
+    const prev = try allocator.alloc(isize, total);
+    defer allocator.free(prev);
+    seedDictionaryHashes(dict, input, head, prev);
+
+    var tokens = try initTokenList(allocator, input.len);
+    errdefer tokens.deinit(allocator);
+    var stats = PlanStats{};
+
+    var pos: usize = 0;
+    while (pos < input.len) {
+        const current = dict.len + pos;
+        const best = findBestCombinedHashMatch(dict, input, current, options, head, prev);
+        if (!acceptMatch(input, pos, best.length, best.distance, options)) {
+            try tokens.append(allocator, .{ .literal = input[pos] });
+            stats.literals += 1;
+            insertCombinedHash(dict, input, current, head, prev);
+            pos += 1;
+            continue;
+        }
+
+        var current_inserted = false;
+        if (pos + 1 < input.len) {
+            insertCombinedHash(dict, input, current, head, prev);
+            current_inserted = true;
+            const next = findBestCombinedHashMatch(dict, input, current + 1, options, head, prev);
+            if (next.length >= best.length + options.lazy_min_gain and acceptMatch(input, pos + 1, next.length, next.distance, options)) {
+                try tokens.append(allocator, .{ .literal = input[pos] });
+                stats.literals += 1;
+                pos += 1;
+                continue;
+            }
+        }
+
+        try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+        stats.matches += 1;
+        stats.matched_bytes += best.length;
+        var insert_pos = if (current_inserted) pos + 1 else pos;
+        const end = @min(input.len, pos + best.length);
+        while (insert_pos < end) : (insert_pos += 1) insertCombinedHash(dict, input, dict.len + insert_pos, head, prev);
+        pos += best.length;
+    }
+
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
 fn preferScanLazy(input: []const u8) bool {
     if (input.len < 1024) return true;
 
@@ -475,6 +571,36 @@ fn findBestHashMatch(input: []const u8, pos: usize, options: GreedyOptions, head
     return best;
 }
 
+fn findBestCombinedHashMatch(dict: []const u8, input: []const u8, current: usize, options: GreedyOptions, head: []const isize, prev: []const isize) MatchCandidate {
+    const minimum = minMatch(options);
+    const dict_len = dict.len;
+    const pos = current - dict_len;
+    if (pos + minimum > input.len) return .{};
+
+    const h = hash3At(dict, input, current) & (head.len - 1);
+    var candidate_i = head[h];
+    var checked: usize = 0;
+    const max_len = @min(maxMatch(options), input.len - pos);
+    var best = MatchCandidate{};
+    while (candidate_i >= 0 and checked < options.max_chain) : (checked += 1) {
+        const candidate: usize = @intCast(candidate_i);
+        const distance = current - candidate;
+        if (distance == 0 or distance > options.window_len) break;
+        if (best.length == max_len) break;
+        if (byteAt(dict, input, candidate + best.length) != input[pos + best.length]) {
+            candidate_i = prev[candidate];
+            continue;
+        }
+        const len = combinedMatchLength(dict, input, candidate, current, max_len);
+        if (len >= minimum and len > best.length) {
+            best = .{ .length = len, .distance = distance };
+            if (len >= options.nice_len) break;
+        }
+        candidate_i = prev[candidate];
+    }
+    return best;
+}
+
 fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
     var len: usize = 0;
     while (len + 8 <= max_len) : (len += 8) {
@@ -488,11 +614,49 @@ fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
     return len;
 }
 
+fn combinedMatchLength(dict: []const u8, input: []const u8, candidate: usize, current: usize, max_len: usize) usize {
+    const dict_len = dict.len;
+    const input_pos = current - dict_len;
+    var len: usize = 0;
+    while (len < max_len and byteAt(dict, input, candidate + len) == input[input_pos + len]) len += 1;
+    return len;
+}
+
 fn insertHash(input: []const u8, pos: usize, head: []isize, prev: []isize) void {
     if (pos + min_match_len > input.len) return;
     const h = hash3(input[pos..][0..3]) & (head.len - 1);
     prev[pos] = head[h];
     head[h] = @intCast(pos);
+}
+
+fn seedDictionaryHashes(dict: []const u8, input: []const u8, head: []isize, prev: []isize) void {
+    var pos: usize = 0;
+    while (pos + min_match_len <= dict.len) : (pos += 1) insertCombinedHash(dict, input, pos, head, prev);
+}
+
+fn insertCombinedHash(dict: []const u8, input: []const u8, pos: usize, head: []isize, prev: []isize) void {
+    if (pos + min_match_len > dict.len + input.len) return;
+    const h = hash3At(dict, input, pos) & (head.len - 1);
+    prev[pos] = head[h];
+    head[h] = @intCast(pos);
+}
+
+fn hash3At(dict: []const u8, input: []const u8, pos: usize) usize {
+    const bytes = [3]u8{
+        byteAt(dict, input, pos),
+        byteAt(dict, input, pos + 1),
+        byteAt(dict, input, pos + 2),
+    };
+    return hash3(&bytes);
+}
+
+fn byteAt(dict: []const u8, input: []const u8, pos: usize) u8 {
+    return if (pos < dict.len) dict[pos] else input[pos - dict.len];
+}
+
+fn activeDictionary(dictionary: []const u8, options: GreedyOptions) []const u8 {
+    const max_len = @min(options.window_len, default_window_len);
+    return dictionary[dictionary.len - @min(dictionary.len, max_len) ..];
 }
 
 fn hash3(bytes: *const [3]u8) usize {
@@ -715,6 +879,28 @@ test "hash greedy planner round trips repeated data" {
     const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
+test "dictionary-backed hash and lazy planners can emit preset-history matches" {
+    const dictionary = "hello ";
+    const input = "hello hello hello";
+    const options: GreedyOptions = .{ .min_savings_bits = 0, .nice_len = 258 };
+
+    const hash_plan = try hashGreedyPlanAllocWithDictionary(std.testing.allocator, input, dictionary, options);
+    defer hash_plan.deinit(std.testing.allocator);
+    const lazy_plan = try lazyGreedyPlanAllocWithDictionary(std.testing.allocator, input, dictionary, options);
+    defer lazy_plan.deinit(std.testing.allocator);
+
+    for ([_]GreedyPlan{ hash_plan, lazy_plan }) |plan| {
+        try std.testing.expect(plan.stats.matches > 0);
+        switch (plan.tokens[0]) {
+            .match => |m| {
+                try std.testing.expect(m.distance <= dictionary.len);
+                try std.testing.expect(m.length >= dictionary.len);
+            },
+            else => return error.TestExpectedEqual,
+        }
+    }
 }
 
 test "matchLength compares word chunks and tails" {

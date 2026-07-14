@@ -84,8 +84,31 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
     };
 }
 
+fn planTokensWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) !lz77.GreedyPlan {
+    const normalized = normalizeOptionsForStrategy(options);
+    if (dictionary.len == 0) return planTokensAlloc(allocator, input, normalized);
+    return switch (normalized.strategy) {
+        .default => switch (normalized.parser) {
+            .hash, .greedy => try lz77.hashGreedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
+            .lazy, .optimal => try lz77.lazyGreedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
+        },
+        .filtered => try lz77.lazyGreedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
+        .huffman_only => try lz77.literalPlanAlloc(allocator, input),
+        .rle => try lz77.runLengthPlanAlloc(allocator, input, normalized.lz77_options),
+    };
+}
+
 pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeBestTokensBlock(allocator, &writer, input, plan.tokens, true, options);
+    return writer.toOwnedSlice(allocator);
+}
+
+pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
@@ -158,6 +181,33 @@ pub fn encodeRawBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, 
     return writer.toOwnedSlice(allocator);
 }
 
+pub fn encodeRawBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (block_len == 0) return error.InvalidBlockPlan;
+    const effective_block_len = @min(block_len, max_stored_block_len);
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    if (input.len == 0) {
+        const plan = try planTokensWithDictionaryAlloc(allocator, "", dictionary, options);
+        defer plan.deinit(allocator);
+        try writeBestTokensBlock(allocator, &writer, "", plan.tokens, true, options);
+        return writer.toOwnedSlice(allocator);
+    }
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const n = @min(effective_block_len, input.len - offset);
+        const chunk = input[offset..][0..n];
+        const final = offset + n == input.len;
+        const plan = if (offset == 0)
+            try planTokensWithDictionaryAlloc(allocator, chunk, dictionary, options)
+        else
+            try planTokensAlloc(allocator, chunk, options);
+        defer plan.deinit(allocator);
+        try writeBestTokensBlock(allocator, &writer, chunk, plan.tokens, final, options);
+        offset += n;
+    }
+    return writer.toOwnedSlice(allocator);
+}
+
 pub const AdaptiveSplitOptions = struct {
     min_block_len: usize = 16 * 1024,
     max_block_len: usize = max_stored_block_len,
@@ -187,6 +237,38 @@ pub fn encodeRawBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []co
         const chunk = input[offset..][0..chunk_len];
         const final = offset + chunk_len == input.len;
         const plan = try planTokensAlloc(allocator, chunk, options);
+        defer plan.deinit(allocator);
+        try writeBestTokensBlock(allocator, &writer, chunk, plan.tokens, final, options);
+        offset += chunk_len;
+    }
+    return smallerAdaptiveOrOneShot(allocator, &writer, one_shot);
+}
+
+pub fn encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
+    const max_block_len = @min(split_options.max_block_len, max_stored_block_len);
+    const min_block_len = @min(split_options.min_block_len, max_block_len);
+    const one_shot = try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, options);
+    errdefer allocator.free(one_shot);
+    var writer = bitstream.BitWriter{};
+    defer writer.deinit(allocator);
+    if (input.len == 0) {
+        const plan = try planTokensWithDictionaryAlloc(allocator, "", dictionary, options);
+        defer plan.deinit(allocator);
+        try writeBestTokensBlock(allocator, &writer, "", plan.tokens, true, options);
+        return smallerAdaptiveOrOneShot(allocator, &writer, one_shot);
+    }
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const remaining = input.len - offset;
+        const n = try chooseCostedAdaptiveBlockLen(allocator, input[offset..], min_block_len, max_block_len, split_options.sample_len, split_options.search_step, options);
+        const chunk_len = @min(n, remaining);
+        const chunk = input[offset..][0..chunk_len];
+        const final = offset + chunk_len == input.len;
+        const plan = if (offset == 0)
+            try planTokensWithDictionaryAlloc(allocator, chunk, dictionary, options)
+        else
+            try planTokensAlloc(allocator, chunk, options);
         defer plan.deinit(allocator);
         try writeBestTokensBlock(allocator, &writer, chunk, plan.tokens, final, options);
         offset += chunk_len;
@@ -335,6 +417,12 @@ pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const
 
 pub fn encodeRawDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    return encodeRawDynamicTokensAlloc(allocator, plan.tokens);
+}
+
+pub fn encodeRawDynamicWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     return encodeRawDynamicTokensAlloc(allocator, plan.tokens);
 }
@@ -627,6 +715,12 @@ pub fn encodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u
 
 pub fn encodeRawFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    return encodeRawFixedTokensAlloc(allocator, plan.tokens);
+}
+
+pub fn encodeRawFixedWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+    const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     return encodeRawFixedTokensAlloc(allocator, plan.tokens);
 }
@@ -1255,7 +1349,7 @@ pub fn encodeZlibFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []co
 }
 
 pub fn encodeZlibFixedWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawFixedWithOptionsAlloc(allocator, input, options);
+    const raw = try encodeRawFixedWithDictionaryAlloc(allocator, input, dictionary, options);
     defer allocator.free(raw);
     return encodeZlibRawAlloc(allocator, input, raw, dictionary);
 }
@@ -1271,7 +1365,7 @@ pub fn encodeZlibDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []
 }
 
 pub fn encodeZlibDynamicWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawDynamicWithOptionsAlloc(allocator, input, options);
+    const raw = try encodeRawDynamicWithDictionaryAlloc(allocator, input, dictionary, options);
     defer allocator.free(raw);
     return encodeZlibRawAlloc(allocator, input, raw, dictionary);
 }
@@ -1283,7 +1377,7 @@ pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 }
 
 pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawBestAlloc(allocator, input, options);
+    const raw = try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, options);
     defer allocator.free(raw);
     return encodeZlibRawAlloc(allocator, input, raw, dictionary);
 }
@@ -1295,7 +1389,7 @@ pub fn encodeZlibBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8,
 }
 
 pub fn encodeZlibBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-    const raw = try encodeRawBestSplitAlloc(allocator, input, block_len, options);
+    const raw = try encodeRawBestSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options);
     defer allocator.free(raw);
     return encodeZlibRawAlloc(allocator, input, raw, dictionary);
 }
@@ -1307,7 +1401,7 @@ pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
 }
 
 pub fn encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
-    const raw = try encodeRawBestAdaptiveSplitAlloc(allocator, input, options, split_options);
+    const raw = try encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator, input, dictionary, options, split_options);
     defer allocator.free(raw);
     return encodeZlibRawAlloc(allocator, input, raw, dictionary);
 }
@@ -2489,6 +2583,27 @@ test "zlib preset dictionary encoders set FDICT and DICTID" {
         const decoded = try decodeZlibAllocWithDictionary(std.testing.allocator, frame, dictionary);
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, input, decoded);
+    }
+}
+
+test "raw preset dictionary encoders can reference preset history" {
+    const dictionary = "hello ";
+    const input = "hello hello hello";
+
+    const fixed = try encodeRawFixedWithDictionaryAlloc(std.testing.allocator, input, dictionary, optionsForLevel(.fast));
+    defer std.testing.allocator.free(fixed);
+    const dynamic = try encodeRawDynamicWithDictionaryAlloc(std.testing.allocator, input, dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(dynamic);
+    const best = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, input, dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(best);
+
+    for ([_][]const u8{ fixed, dynamic, best }) |raw| {
+        const decoded = try decodeRawAutoAllocWithDictionary(std.testing.allocator, raw, dictionary);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+        // These inputs begin with the preset phrase, so the dictionary-aware
+        // planners should produce a back-reference into the preset history.
+        try std.testing.expectError(error.InvalidMatch, decodeRawAutoAlloc(std.testing.allocator, raw));
     }
 }
 

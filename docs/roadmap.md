@@ -148,6 +148,7 @@ architecture blindly.
 - [x] Multi-block raw/zlib/gzip inflate across stored/fixed/dynamic block types.
 - [x] Raw auto inflate rejects truncated streams after non-final stored/fixed/dynamic blocks.
 - [x] Raw preset-dictionary decode API supports dictionary back-references.
+- [x] Raw preset-dictionary encode API can emit dictionary back-references for fixed/dynamic/best blocks.
 - [x] Raw/zlib/gzip one-shot decode APIs support explicit output limits.
 - [x] File CLI and Python differential smoke cover raw deflate file decode with output limits.
 - [x] File CLI and Python differential smoke cover raw preset-dictionary file decode.
@@ -157,6 +158,7 @@ architecture blindly.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
 - [x] zlib preset-dictionary encoders emit FDICT/DICTID frames for stored/fixed/dynamic/best modes.
+- [x] zlib preset-dictionary fixed/dynamic/best encoders seed LZ77 matching from preset history.
 - [x] Raw/zlib preset-dictionary decode covers stored/fixed/dynamic block cases.
 - [x] CLI and Python differential smoke cover raw/zlib preset-dictionary decode.
 - [x] CLI and Python differential smoke cover zlib preset-dictionary encode through Vort and Python zlib decoders.
