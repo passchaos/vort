@@ -199,11 +199,16 @@ def main() -> int:
                 mode_iterations = iterations_for_vort_mode(len(payload), mode)
                 rows.append((engine, "zlib", mode_iterations, run_vort(plain, mode_iterations, mode)))
             for engine, mode in [
+                ("vort-raw-fastest", "raw-fastest"),
+                ("vort-raw-fast", "raw-fast"),
                 ("vort-raw-default", "raw-default"),
+                ("vort-raw-best", "raw-best"),
                 ("vort-raw-dynamic-default", "raw-dynamic-default"),
                 ("vort-raw-fixed-fast", "raw-fixed-fast"),
+                ("vort-raw-split-default", "raw-split-default"),
+                ("vort-raw-adaptive-default", "raw-adaptive-default"),
             ]:
-                mode_iterations = iterations_for_vort_mode(len(payload), mode)
+                mode_iterations = iterations_for_vort_mode(len(payload), mode.removeprefix("raw-"))
                 rows.append((engine, "raw", mode_iterations, run_vort(plain, mode_iterations, mode)))
             rows.extend((engine, "zlib", iterations, run_rust(project, engine, "zlib", plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))
             rows.extend((f"{engine}-raw", "raw", iterations, run_rust(project, engine, "raw", plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))

@@ -227,6 +227,7 @@ architecture blindly.
 - [x] Rust deflate encode benchmark includes a Vort dynamic-literal row to isolate literal-only wrapper cost.
 - [x] Rust deflate encode benchmark includes Vort split/adaptive rows to isolate wrapper block-planning overhead.
 - [x] Rust deflate encode benchmark includes raw-deflate Vort/fdeflate/miniz_oxide rows to isolate wrapper overhead.
+- [x] Rust deflate encode benchmark includes raw fastest/fast/default/best and split/adaptive rows for fair raw core speed/size tracking.
 - [x] Rust deflate encode benchmarks include overlap-RLE, distance-heavy, and dynamic-match payloads.
 - [x] Rust deflate encode benchmarks include deterministic incompressible payloads.
 - [x] Vort zlib encode benchmark exposes a dynamic-literal mode for literal-only wrapper timing.

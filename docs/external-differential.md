@@ -83,10 +83,12 @@ prints CSV rows for zlib and raw-deflate frame size, ratio, and encode
 throughput for Vort, fdeflate, and miniz_oxide on the same generated payloads.
 Vort is reported at fastest, fast, default, best, dynamic-default,
 dynamic-literal, fixed-fast, split-default, and adaptive-default zlib modes, plus
-raw-default/raw-dynamic-default/raw-fixed-fast modes, so speed/ratio tradeoffs,
+raw fastest/fast/default/best, raw-dynamic-default, raw-fixed-fast,
+raw-split-default, and raw-adaptive-default modes, so speed/ratio tradeoffs,
 dynamic-only cost, literal-only wrapper cost, best-selection overhead, wrapper
-split/adaptive overhead, and raw core encode cost are visible next to the Rust
-baselines. The best row uses fewer iterations because it currently exercises the
+split/adaptive overhead, raw core encode cost, and raw strongest-size behavior
+are visible next to the Rust baselines. The best rows use fewer iterations
+because they currently exercise the
 slower optimal parser; each row records its actual iteration count. It also
 includes real project README/roadmap files. Run it with
 `-Doptimize=ReleaseFast` before interpreting the Vort rows. Use
