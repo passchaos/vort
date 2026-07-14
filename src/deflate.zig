@@ -73,7 +73,10 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
     const normalized = normalizeOptionsForStrategy(options);
     return switch (normalized.strategy) {
         .default => switch (normalized.parser) {
-            .hash => try lz77.hashGreedyPlanAlloc(allocator, input, normalized.lz77_options),
+            .hash => if (useSmallInputScanPlan(input, normalized))
+                try lz77.greedyPlanAlloc(allocator, input, normalized.lz77_options)
+            else
+                try lz77.hashGreedyPlanAlloc(allocator, input, normalized.lz77_options),
             .greedy => try lz77.greedyPlanAlloc(allocator, input, normalized.lz77_options),
             .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, normalized.lz77_options),
             .optimal => try lz77.optimalPlanAlloc(allocator, input, normalized.lz77_options),
@@ -82,6 +85,18 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
         .huffman_only => try lz77.literalPlanAlloc(allocator, input),
         .rle => try lz77.runLengthPlanAlloc(allocator, input, normalized.lz77_options),
     };
+}
+
+fn useSmallInputScanPlan(input: []const u8, options: CompressionOptions) bool {
+    // Hash parser setup allocates and clears tens of KiB of tables. For tiny
+    // one-shot payloads this fixed cost dominates compression time, while a
+    // direct scan over the short input has the same bounded search space and is
+    // much cheaper. Keep the threshold deliberately small so normal blocks keep
+    // the hash parser's asymptotic behavior.
+    return options.parser == .hash and
+        options.strategy == .default and
+        input.len <= 256 and
+        options.lz77_options.window_len <= 16 * 1024;
 }
 
 fn planTokensWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) !lz77.GreedyPlan {
