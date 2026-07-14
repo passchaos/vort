@@ -355,6 +355,7 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
     var rev_i: usize = n;
     const minimum = minMatch(options);
     const candidate_limit = normalizedMaxCandidates(options);
+    const distance_costs = fixedDistanceCostTable(options.window_len);
 
     while (rev_i > 0) {
         rev_i -= 1;
@@ -376,9 +377,10 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
 
             const length = matchLength(input, candidate, rev_i, max_len);
             if (length >= minimum) {
+                const distance_cost = distance_costs[distance];
                 var len = length;
                 while (len >= minimum) : (len -= 1) {
-                    const cost = fixedMatchCost(len, distance) + costs[rev_i + len];
+                    const cost = fixedLengthSymbolCost(len) + distance_cost + costs[rev_i + len];
                     if (cost < costs[rev_i]) {
                         costs[rev_i] = cost;
                         steps[rev_i] = .{ .match = .{ .length = @intCast(len), .distance = @intCast(distance) } };
@@ -479,6 +481,16 @@ fn fixedDistanceSymbolCost(distance: usize) usize {
 fn fixedDistanceExtraBitsFast(distance: usize) usize {
     if (distance <= 4) return 0;
     return std.math.log2_int(usize, distance - 1) - 1;
+}
+
+fn fixedDistanceCostTable(window_len: usize) [default_window_len + 1]u8 {
+    var table: [default_window_len + 1]u8 = @splat(0);
+    const limit = @min(window_len, default_window_len);
+    var distance: usize = 1;
+    while (distance <= limit) : (distance += 1) {
+        table[distance] = @intCast(fixedDistanceSymbolCost(distance));
+    }
+    return table;
 }
 
 fn lengthExtraBits(length: usize) usize {
