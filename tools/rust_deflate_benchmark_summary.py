@@ -257,22 +257,28 @@ def decode_allocation_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Decode allocation overhead",
         "",
-        "| case | raw alloc/into time | zlib alloc/into time | gzip alloc/into time |",
-        "| --- | ---: | ---: | ---: |",
+        "| case | raw alloc/exact time | raw alloc/into time | zlib alloc/exact time | zlib alloc/into time | gzip alloc/exact time | gzip alloc/into time |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for case, items in sorted(by_case(rows).items()):
         raw_alloc = next((row for row in items if row["engine"] == "vort-raw"), None)
+        raw_exact = next((row for row in items if row["engine"] == "vort-raw-exact"), None)
         raw_into = next((row for row in items if row["engine"] == "vort-raw-into"), None)
         zlib_alloc = next((row for row in items if row["engine"] == "vort"), None)
+        zlib_exact = next((row for row in items if row["engine"] == "vort-exact"), None)
         zlib_into = next((row for row in items if row["engine"] == "vort-into"), None)
         gzip_alloc = next((row for row in items if row["engine"] == "vort-gzip"), None)
+        gzip_exact = next((row for row in items if row["engine"] == "vort-gzip-exact"), None)
         gzip_into = next((row for row in items if row["engine"] == "vort-gzip-into"), None)
         if zlib_alloc is None or zlib_into is None or gzip_alloc is None or gzip_into is None:
             continue
-        raw_ratio = "" if raw_alloc is None or raw_into is None else f"{fnum(raw_alloc, 'elapsed_s') / fnum(raw_into, 'elapsed_s'):.3f}"
-        zlib_ratio = fnum(zlib_alloc, "elapsed_s") / fnum(zlib_into, "elapsed_s")
-        gzip_ratio = fnum(gzip_alloc, "elapsed_s") / fnum(gzip_into, "elapsed_s")
-        lines.append(f"| {case} | {raw_ratio} | {zlib_ratio:.3f} | {gzip_ratio:.3f} |")
+        raw_exact_ratio = "" if raw_alloc is None or raw_exact is None else f"{fnum(raw_alloc, 'elapsed_s') / fnum(raw_exact, 'elapsed_s'):.3f}"
+        raw_into_ratio = "" if raw_alloc is None or raw_into is None else f"{fnum(raw_alloc, 'elapsed_s') / fnum(raw_into, 'elapsed_s'):.3f}"
+        zlib_exact_ratio = "" if zlib_exact is None else f"{fnum(zlib_alloc, 'elapsed_s') / fnum(zlib_exact, 'elapsed_s'):.3f}"
+        zlib_into_ratio = f"{fnum(zlib_alloc, 'elapsed_s') / fnum(zlib_into, 'elapsed_s'):.3f}"
+        gzip_exact_ratio = "" if gzip_exact is None else f"{fnum(gzip_alloc, 'elapsed_s') / fnum(gzip_exact, 'elapsed_s'):.3f}"
+        gzip_into_ratio = f"{fnum(gzip_alloc, 'elapsed_s') / fnum(gzip_into, 'elapsed_s'):.3f}"
+        lines.append(f"| {case} | {raw_exact_ratio} | {raw_into_ratio} | {zlib_exact_ratio} | {zlib_into_ratio} | {gzip_exact_ratio} | {gzip_into_ratio} |")
     lines.append("")
     return lines
 
