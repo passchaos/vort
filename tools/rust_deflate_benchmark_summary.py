@@ -94,11 +94,30 @@ def dynamic_plan_lines(rows: list[dict[str, str]]) -> list[str]:
     return lines
 
 
+def dictionary_deflate_lines(rows: list[dict[str, str]]) -> list[str]:
+    lines = [
+        "## Dictionary deflate savings",
+        "",
+        "| case | input bytes | dict bytes | raw plain | raw dict | raw Δ | raw dict/plain | zlib plain | zlib dict | zlib Δ | zlib dict/plain |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['case']} | {row['input_bytes']} | {row['dict_bytes']} | "
+            f"{row['raw_plain_bytes']} | {row['raw_dict_bytes']} | {row['raw_dict_delta']} | "
+            f"{fnum(row, 'raw_dict_ratio'):.3f} | {row['zlib_plain_bytes']} | {row['zlib_dict_bytes']} | "
+            f"{row['zlib_dict_delta']} | {fnum(row, 'zlib_dict_ratio'):.3f} |"
+        )
+    lines.append("")
+    return lines
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--decode-csv", default="zig-out/vort-rust-deflate-decode-bench.csv")
     parser.add_argument("--encode-csv", default="zig-out/vort-rust-deflate-encode-bench.csv")
     parser.add_argument("--dynamic-plan-csv", default="zig-out/vort-dynamic-plan-report.csv")
+    parser.add_argument("--dictionary-deflate-csv", default="zig-out/vort-dictionary-deflate-report.csv")
     parser.add_argument("--output", default="zig-out/vort-rust-deflate-benchmark-summary.md")
     args = parser.parse_args()
 
@@ -106,6 +125,8 @@ def main() -> int:
     encode_rows = read_rows(Path(args.encode_csv))
     dynamic_plan_path = Path(args.dynamic_plan_csv)
     dynamic_plan_rows = read_rows(dynamic_plan_path) if dynamic_plan_path.exists() else []
+    dictionary_deflate_path = Path(args.dictionary_deflate_csv)
+    dictionary_deflate_rows = read_rows(dictionary_deflate_path) if dictionary_deflate_path.exists() else []
     lines = [
         "# Vort vs Rust deflate benchmark summary",
         "",
@@ -116,12 +137,15 @@ def main() -> int:
     lines.extend(encode_lines(encode_rows))
     if dynamic_plan_rows:
         lines.extend(dynamic_plan_lines(dynamic_plan_rows))
+    if dictionary_deflate_rows:
+        lines.extend(dictionary_deflate_lines(dictionary_deflate_rows))
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines))
     print(
         f"rust_deflate_benchmark_summary={output} "
-        f"decode_rows={len(decode_rows)} encode_rows={len(encode_rows)} dynamic_plan_rows={len(dynamic_plan_rows)}"
+        f"decode_rows={len(decode_rows)} encode_rows={len(encode_rows)} "
+        f"dynamic_plan_rows={len(dynamic_plan_rows)} dictionary_deflate_rows={len(dictionary_deflate_rows)}"
     )
     return 0
 
