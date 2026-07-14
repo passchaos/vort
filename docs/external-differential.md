@@ -79,6 +79,7 @@ Rust baselines. It also includes real project README/roadmap files. Run it with
 `run-rust-deflate-benchmark-summary` consumes both CSV files and writes
 `zig-out/vort-rust-deflate-benchmark-summary.md`, highlighting per-case Vort
 zlib allocator and caller-buffer throughput ratios against the best Rust
-baseline. Gzip decode rows are summarized separately because the Rust baseline
-harness measures zlib frames. The encode table also reports the Vort
-default/dynamic-default throughput ratio to expose best-selection overhead.
+baseline. Gzip decode rows and decode allocation overhead are summarized
+separately because the Rust baseline harness measures zlib frames. The encode
+table also reports the Vort default/dynamic-default throughput ratio to expose
+best-selection overhead.

@@ -69,6 +69,27 @@ def gzip_decode_lines(rows: list[dict[str, str]]) -> list[str]:
     return lines
 
 
+def decode_allocation_lines(rows: list[dict[str, str]]) -> list[str]:
+    lines = [
+        "## Decode allocation overhead",
+        "",
+        "| case | zlib alloc/into time | gzip alloc/into time |",
+        "| --- | ---: | ---: |",
+    ]
+    for case, items in sorted(by_case(rows).items()):
+        zlib_alloc = next((row for row in items if row["engine"] == "vort"), None)
+        zlib_into = next((row for row in items if row["engine"] == "vort-into"), None)
+        gzip_alloc = next((row for row in items if row["engine"] == "vort-gzip"), None)
+        gzip_into = next((row for row in items if row["engine"] == "vort-gzip-into"), None)
+        if zlib_alloc is None or zlib_into is None or gzip_alloc is None or gzip_into is None:
+            continue
+        zlib_ratio = fnum(zlib_alloc, "elapsed_s") / fnum(zlib_into, "elapsed_s")
+        gzip_ratio = fnum(gzip_alloc, "elapsed_s") / fnum(gzip_into, "elapsed_s")
+        lines.append(f"| {case} | {zlib_ratio:.3f} | {gzip_ratio:.3f} |")
+    lines.append("")
+    return lines
+
+
 def encode_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Encode speed and size",
@@ -184,6 +205,7 @@ def main() -> int:
     ]
     lines.extend(decode_lines(decode_rows))
     lines.extend(gzip_decode_lines(decode_rows))
+    lines.extend(decode_allocation_lines(decode_rows))
     lines.extend(encode_lines(encode_rows))
     if dynamic_plan_rows:
         lines.extend(dynamic_plan_lines(dynamic_plan_rows))
