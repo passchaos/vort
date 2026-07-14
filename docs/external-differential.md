@@ -53,9 +53,12 @@ decode through Vort and Vort-generated zlib frames decode through both Rust
 implementations. It also covers raw deflate streams where the Rust APIs expose
 them: fdeflate and miniz_oxide raw encoders must decode through Vort, and
 miniz_oxide raw inflate must decode the wrapper-independent raw deflate payload
-inside Vort's zlib output. Passing that smoke is compatibility evidence for
-its small payload set; it is not yet throughput or ratio evidence, so dedicated
-benchmark harnesses are still required before making performance claims. The
+inside Vort's raw/zlib output. The same smoke also checks Vort gzip file output
+through Python's gzip module so raw, zlib, and gzip file encoders stay covered
+by one Rust-baseline-oriented command. Passing that smoke is compatibility
+evidence for its small payload set; it is not yet throughput or ratio evidence,
+so dedicated benchmark harnesses are still required before making performance
+claims. The
 `run-rust-deflate-bench` step is the first such decode-throughput smoke: run it
 with `-Doptimize=ReleaseFast` so the Vort row is comparable to the release-mode
 temporary Cargo runner built against both Rust checkouts. It prints CSV rows

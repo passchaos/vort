@@ -173,6 +173,7 @@ architecture blindly.
 - [x] README API sketch documents limited raw/zlib/gzip decode APIs.
 - [x] File CLI and Python differential smoke cover zlib file decode with output limits.
 - [x] zlib dictionary-file differential smoke rejects too-small output limits.
+- [x] File CLI exposes non-dictionary raw/gzip best encoders for differential harnesses.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
 - [x] zlib wrapper integration for multi-block dynamic streams.
@@ -205,6 +206,7 @@ architecture blindly.
 - [x] External probe reports git revisions for local compressor checkouts.
 - [x] fdeflate/miniz_oxide path-dependency differential smoke runs through Cargo and Vort CLI.
 - [x] fdeflate/miniz_oxide differential smoke covers raw deflate encode/decode API directions where exposed.
+- [x] fdeflate/miniz_oxide differential smoke verifies Vort raw/gzip file encoder output.
 - [x] fdeflate/miniz_oxide decode-throughput smoke benchmark runs through Cargo.
 - [x] Rust deflate decode benchmark reports Vort/fdeflate/miniz_oxide rows in one CSV.
 - [x] Rust deflate decode benchmark documentation requires ReleaseFast Vort rows.

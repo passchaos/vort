@@ -8,11 +8,13 @@ through Vort, Vort-generated zlib frames must decode through both Rust
 implementations, and the raw deflate payload inside Vort zlib frames must
 decode through Rust implementations that expose raw inflate APIs.
 """
+import gzip
 import pathlib
 import subprocess
 import sys
 import tempfile
 import textwrap
+import zlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CLI = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "zig-out" / "bin" / "vort"
@@ -127,8 +129,16 @@ def main() -> int:
             plain.write_bytes(payload)
             vort_zlib = tmp / f"vort-{i}.zlib"
             vort_raw = tmp / f"vort-{i}.raw"
+            vort_gzip = tmp / f"vort-{i}.gz"
             run_cli("encode-zlib-best-file", str(plain), str(vort_zlib), "default")
-            write_raw_from_vort_zlib(vort_zlib, vort_raw)
+            run_cli("encode-raw-best-file", str(plain), str(vort_raw), "default")
+            run_cli("encode-gzip-best-file", str(plain), str(vort_gzip), "default")
+            assert zlib.decompress(vort_raw.read_bytes(), wbits=-15) == payload, (i, "vort raw->python")
+            assert gzip.decompress(vort_gzip.read_bytes()) == payload, (i, "vort gzip->python")
+            raw_from_zlib = tmp / f"vort-{i}.zlib.raw"
+            write_raw_from_vort_zlib(vort_zlib, raw_from_zlib)
+            assert raw_from_zlib.read_bytes() == vort_raw.read_bytes(), (i, "vort raw wrapper parity")
+            used += 3
             for engine in engines:
                 rust_zlib = tmp / f"{engine}-{i}.zlib"
                 rust_raw = tmp / f"{engine}-{i}.raw"
