@@ -51,8 +51,19 @@ pub const BitReader = struct {
         // bytes are intentionally treated as zero padding for fast lookup
         // probes; readBits/skipBits performs the strict availability check.
         const requested_bits = @as(usize, self.bit_index) + @as(usize, count);
-        const requested_bytes = (requested_bits + 7) / 8;
         const available_bytes = self.input.len - self.byte_index;
+        if (requested_bits <= 16 and available_bytes >= 2) {
+            const window = std.mem.readInt(u16, self.input[self.byte_index..][0..2], .little) >> self.bit_index;
+            const mask = (@as(u32, 1) << @intCast(count)) - 1;
+            return @intCast(@as(u32, window) & mask);
+        }
+        if (requested_bits <= 32 and available_bytes >= 4) {
+            const window = std.mem.readInt(u32, self.input[self.byte_index..][0..4], .little) >> self.bit_index;
+            const mask = (@as(u64, 1) << @intCast(count)) - 1;
+            return @intCast(@as(u64, window) & mask);
+        }
+
+        const requested_bytes = (requested_bits + 7) / 8;
         const bytes_to_read = @min(requested_bytes, available_bytes);
         var window: u128 = 0;
         var i: usize = 0;
