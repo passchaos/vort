@@ -70,11 +70,13 @@ baseline exposes a public raw API. Each engine performs one warmup decode before
 timing to reduce cold-start noise. Use
 `run-rust-deflate-bench-csv` to persist the same rows to
 `zig-out/vort-rust-deflate-decode-bench.csv`. The Vort decode rows include raw
-allocator/caller-buffer APIs (`vort-raw`, `vort-raw-into`), the zlib
-allocator-returning API (`vort`), the zlib caller-owned output-buffer API
-(`vort-into`), and matching gzip wrapper rows (`vort-gzip`,
+allocator/exact-size/caller-buffer APIs (`vort-raw`, `vort-raw-exact`,
+`vort-raw-into`), the zlib allocator-returning API (`vort`), the zlib
+exact-size and caller-owned output-buffer APIs (`vort-exact`, `vort-into`), and
+matching gzip wrapper rows (`vort-gzip`, `vort-gzip-exact`,
 `vort-gzip-into`) so regressions can distinguish inflate/checksum work, wrapper
-format overhead, and per-iteration allocation overhead.
+format overhead, exact allocation overhead, and per-iteration growable
+allocation overhead.
 
 `run-rust-deflate-encode-bench` provides the matching encode-side smoke. It
 prints CSV rows for zlib and raw-deflate frame size, ratio, and encode

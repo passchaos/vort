@@ -180,9 +180,12 @@ def main() -> int:
             rows = [
                 ("vort", "zlib", zlib_frame, run_vort_bench(zlib_frame, iterations)),
                 ("vort-into", "zlib", zlib_frame, run_vort_bench(zlib_frame, iterations, "into")),
+                ("vort-exact", "zlib", zlib_frame, run_vort_bench(zlib_frame, iterations, "zlib-exact")),
                 ("vort-raw", "raw", raw_frame, run_vort_bench(raw_frame, iterations, "raw")),
                 ("vort-raw-into", "raw", raw_frame, run_vort_bench(raw_frame, iterations, "raw-into")),
+                ("vort-raw-exact", "raw", raw_frame, run_vort_bench(raw_frame, iterations, "raw-exact")),
                 ("vort-gzip", "gzip", gzip_frame, run_vort_bench(gzip_frame, iterations, "gzip")),
+                ("vort-gzip-exact", "gzip", gzip_frame, run_vort_bench(gzip_frame, iterations, "gzip-exact")),
                 ("vort-gzip-into", "gzip", gzip_frame, run_vort_bench(gzip_frame, iterations, "gzip-into")),
             ]
             rows.extend((engine, "zlib", zlib_frame, run_bench(project, engine, "zlib", zlib_frame, iterations)) for engine in ("fdeflate", "miniz_oxide"))

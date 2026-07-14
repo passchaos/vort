@@ -155,6 +155,7 @@ architecture blindly.
 - [x] Raw preset-dictionary encode API can emit dictionary back-references for fixed/dynamic/best blocks.
 - [x] Raw/zlib/gzip one-shot decode APIs support explicit output limits.
 - [x] Allocator-returning raw/zlib/gzip decoders use larger capped output capacity hints for highly compressed frames.
+- [x] Raw/zlib/gzip alloc decoders expose exact-size variants for callers that know the output length.
 - [x] File CLI and Python differential smoke cover raw deflate file decode with output limits.
 - [x] File CLI and Python differential smoke cover raw preset-dictionary file decode.
 - [x] File CLI and Python differential smoke cover raw preset-dictionary one-shot/split/adaptive file encode.

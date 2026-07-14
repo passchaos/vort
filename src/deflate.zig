@@ -1177,6 +1177,22 @@ pub fn decodeRawAutoAllocWithDictionary(allocator: std.mem.Allocator, input: []c
     return result.bytes;
 }
 
+pub fn decodeRawAutoAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeRawAutoAllocWithDictionaryExactSize(allocator, input, "", expected_output_len);
+}
+
+pub fn decodeRawAutoAllocWithDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, expected_output_len: usize) ![]u8 {
+    const out = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(out);
+    const decoded = decodeRawAutoWithDictionary(input, dictionary, out) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (decoded.input_read != input.len) return error.TrailingData;
+    if (decoded.output_written != expected_output_len) return error.SizeMismatch;
+    return out;
+}
+
 pub fn decodeRawAutoAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
     const result = try decodeRawAutoAllocPartialWithDictionary(allocator, input, "", max_output_len);
     errdefer result.deinit(allocator);
@@ -2248,6 +2264,14 @@ pub fn decodeZlibAllocWithDictionary(allocator: std.mem.Allocator, input: []cons
     return decodeZlibAllocWithOptionalDictionary(allocator, input, dictionary);
 }
 
+pub fn decodeZlibAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryExactSize(allocator, input, null, expected_output_len);
+}
+
+pub fn decodeZlibAllocWithDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryExactSize(allocator, input, dictionary, expected_output_len);
+}
+
 pub fn decodeZlibAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
     return decodeZlibAllocWithOptionalDictionaryLimited(allocator, input, null, max_output_len);
 }
@@ -2276,6 +2300,17 @@ fn decodeZlibAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, in
     const footer_offset = header.data_offset + raw.input_read;
     try validateZlibFooter(input, footer_offset, checksum.adler32(raw.bytes));
     return raw.bytes;
+}
+
+fn decodeZlibAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, expected_output_len: usize) ![]u8 {
+    const out = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(out);
+    const written = decodeZlibWithOptionalDictionary(input, out, dictionary) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return out;
 }
 
 pub fn gzipStoredEncodedSize(input_len: usize) Error!usize {
@@ -2532,8 +2567,19 @@ pub fn decodeGzipAllocLimited(allocator: std.mem.Allocator, input: []const u8, m
     return decodeGzipAllocLimitedInternal(allocator, input, max_output_len);
 }
 
+pub fn decodeGzipAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    const out = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(out);
+    const written = decodeGzip(input, out) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return out;
+}
+
 fn decodeGzipAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
-    if (try decodeGzipAllocExactSize(allocator, input, max_output_len)) |decoded| return decoded;
+    if (try decodeGzipAllocFooterSize(allocator, input, max_output_len)) |decoded| return decoded;
 
     const data_offset = try parseGzipHeader(input);
 
@@ -2551,7 +2597,7 @@ fn decodeGzipAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u
     return raw.bytes;
 }
 
-fn decodeGzipAllocExactSize(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?[]u8 {
+fn decodeGzipAllocFooterSize(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?[]u8 {
     if (input.len < gzip_header.len + 8) return null;
     const expected_size: usize = std.mem.readInt(u32, input[input.len - 4 ..][0..4], .little);
     try ensureOutputLimit(0, expected_size, max_output_len);
@@ -3489,6 +3535,51 @@ test "raw preset dictionary encoders can reference preset history" {
         // planners should produce a back-reference into the preset history.
         try std.testing.expectError(error.InvalidMatch, decodeRawAutoAlloc(std.testing.allocator, raw));
     }
+}
+
+test "raw zlib gzip exact-size alloc decoders enforce declared output length" {
+    const input = "exact size decode payload";
+    const raw = try encodeRawDynamicWithOptionsAlloc(std.testing.allocator, input, optionsForLevel(.default));
+    defer std.testing.allocator.free(raw);
+    const raw_exact = try decodeRawAutoAllocExactSize(std.testing.allocator, raw, input.len);
+    defer std.testing.allocator.free(raw_exact);
+    try std.testing.expectEqualSlices(u8, input, raw_exact);
+    try std.testing.expectError(error.SizeMismatch, decodeRawAutoAllocExactSize(std.testing.allocator, raw, input.len - 1));
+    try std.testing.expectError(error.SizeMismatch, decodeRawAutoAllocExactSize(std.testing.allocator, raw, input.len + 1));
+
+    const zlib_frame = try encodeZlibDynamicWithOptionsAlloc(std.testing.allocator, input, optionsForLevel(.default));
+    defer std.testing.allocator.free(zlib_frame);
+    const zlib_exact = try decodeZlibAllocExactSize(std.testing.allocator, zlib_frame, input.len);
+    defer std.testing.allocator.free(zlib_exact);
+    try std.testing.expectEqualSlices(u8, input, zlib_exact);
+    try std.testing.expectError(error.SizeMismatch, decodeZlibAllocExactSize(std.testing.allocator, zlib_frame, input.len - 1));
+    try std.testing.expectError(error.SizeMismatch, decodeZlibAllocExactSize(std.testing.allocator, zlib_frame, input.len + 1));
+
+    const gzip_frame = try encodeGzipDynamicWithOptionsAlloc(std.testing.allocator, input, optionsForLevel(.default));
+    defer std.testing.allocator.free(gzip_frame);
+    const gzip_exact = try decodeGzipAllocExactSize(std.testing.allocator, gzip_frame, input.len);
+    defer std.testing.allocator.free(gzip_exact);
+    try std.testing.expectEqualSlices(u8, input, gzip_exact);
+    try std.testing.expectError(error.SizeMismatch, decodeGzipAllocExactSize(std.testing.allocator, gzip_frame, input.len - 1));
+    try std.testing.expectError(error.SizeMismatch, decodeGzipAllocExactSize(std.testing.allocator, gzip_frame, input.len + 1));
+}
+
+test "dictionary exact-size alloc decoders enforce declared output length" {
+    const dictionary = "hello ";
+    const input = "hello hello hello";
+    const raw = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, input, dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(raw);
+    const raw_exact = try decodeRawAutoAllocWithDictionaryExactSize(std.testing.allocator, raw, dictionary, input.len);
+    defer std.testing.allocator.free(raw_exact);
+    try std.testing.expectEqualSlices(u8, input, raw_exact);
+    try std.testing.expectError(error.SizeMismatch, decodeRawAutoAllocWithDictionaryExactSize(std.testing.allocator, raw, dictionary, input.len - 1));
+
+    const zlib_frame = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, input, dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(zlib_frame);
+    const zlib_exact = try decodeZlibAllocWithDictionaryExactSize(std.testing.allocator, zlib_frame, dictionary, input.len);
+    defer std.testing.allocator.free(zlib_exact);
+    try std.testing.expectEqualSlices(u8, input, zlib_exact);
+    try std.testing.expectError(error.SizeMismatch, decodeZlibAllocWithDictionaryExactSize(std.testing.allocator, zlib_frame, dictionary, input.len - 1));
 }
 
 test "raw deflate preset dictionary streams decode fixed and dynamic blocks" {

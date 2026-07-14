@@ -1,7 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 
-const Mode = enum { raw_alloc, raw_into, zlib_alloc, zlib_into, gzip_alloc, gzip_into };
+const Mode = enum { raw_alloc, raw_exact, raw_into, zlib_alloc, zlib_exact, zlib_into, gzip_alloc, gzip_exact, gzip_into };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -15,9 +15,9 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(frame);
 
     const warmup = switch (mode) {
-        .raw_alloc, .raw_into => try vort.decodeRawDeflateAlloc(init.gpa, frame),
-        .zlib_alloc, .zlib_into => try vort.decodeZlibAlloc(init.gpa, frame),
-        .gzip_alloc, .gzip_into => try vort.decodeGzipAlloc(init.gpa, frame),
+        .raw_alloc, .raw_exact, .raw_into => try vort.decodeRawDeflateAlloc(init.gpa, frame),
+        .zlib_alloc, .zlib_exact, .zlib_into => try vort.decodeZlibAlloc(init.gpa, frame),
+        .gzip_alloc, .gzip_exact, .gzip_into => try vort.decodeGzipAlloc(init.gpa, frame),
     };
     defer init.gpa.free(warmup);
     var empty_scratch: [0]u8 = .{};
@@ -46,6 +46,14 @@ pub fn main(init: std.process.Init) !void {
                     if (decoded.len != 0) mix +%= decoded[0];
                 }
             },
+            .raw_exact => {
+                const decoded = try vort.decodeRawDeflateAllocExactSize(init.gpa, frame, warmup.len);
+                {
+                    defer init.gpa.free(decoded);
+                    mix +%= decoded.len;
+                    if (decoded.len != 0) mix +%= decoded[0];
+                }
+            },
             .raw_into => {
                 const decoded = try vort.decodeRawDeflate(frame, scratch);
                 mix +%= decoded.output_written;
@@ -59,6 +67,14 @@ pub fn main(init: std.process.Init) !void {
                     if (decoded.len != 0) mix +%= decoded[0];
                 }
             },
+            .zlib_exact => {
+                const decoded = try vort.decodeZlibAllocExactSize(init.gpa, frame, warmup.len);
+                {
+                    defer init.gpa.free(decoded);
+                    mix +%= decoded.len;
+                    if (decoded.len != 0) mix +%= decoded[0];
+                }
+            },
             .zlib_into => {
                 const written = try vort.decodeZlib(frame, scratch);
                 mix +%= written;
@@ -66,6 +82,14 @@ pub fn main(init: std.process.Init) !void {
             },
             .gzip_alloc => {
                 const decoded = try vort.decodeGzipAlloc(init.gpa, frame);
+                {
+                    defer init.gpa.free(decoded);
+                    mix +%= decoded.len;
+                    if (decoded.len != 0) mix +%= decoded[0];
+                }
+            },
+            .gzip_exact => {
+                const decoded = try vort.decodeGzipAllocExactSize(init.gpa, frame, warmup.len);
                 {
                     defer init.gpa.free(decoded);
                     mix +%= decoded.len;
@@ -91,11 +115,14 @@ pub fn main(init: std.process.Init) !void {
 fn parseMode(text: ?[]const u8) Mode {
     const value = text orelse return .zlib_alloc;
     if (std.mem.eql(u8, value, "raw")) return .raw_alloc;
+    if (std.mem.eql(u8, value, "raw-exact")) return .raw_exact;
     if (std.mem.eql(u8, value, "raw-into")) return .raw_into;
     if (std.mem.eql(u8, value, "into")) return .zlib_into;
     if (std.mem.eql(u8, value, "zlib")) return .zlib_alloc;
+    if (std.mem.eql(u8, value, "zlib-exact")) return .zlib_exact;
     if (std.mem.eql(u8, value, "zlib-into")) return .zlib_into;
     if (std.mem.eql(u8, value, "gzip")) return .gzip_alloc;
+    if (std.mem.eql(u8, value, "gzip-exact")) return .gzip_exact;
     if (std.mem.eql(u8, value, "gzip-into")) return .gzip_into;
     return .zlib_alloc;
 }

@@ -230,11 +230,15 @@ defer allocator.free(decoded);
 
 const raw = try vort.encodeRawFixedDeflateAlloc(allocator, "payload");
 defer allocator.free(raw);
+const raw_exact = try vort.decodeRawDeflateAllocExactSize(allocator, raw, "payload".len);
+defer allocator.free(raw_exact);
 const bounded = try vort.decodeRawDeflateAllocLimited(allocator, raw, 1024);
 defer allocator.free(bounded);
 
 const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);
+const zlib_exact = try vort.decodeZlibAllocExactSize(allocator, zlib_bytes, "payload".len);
+defer allocator.free(zlib_exact);
 const zlib_bounded = try vort.decodeZlibAllocLimited(allocator, zlib_bytes, 1024);
 defer allocator.free(zlib_bounded);
 var zlib_out: [1024]u8 = undefined;
@@ -242,6 +246,8 @@ const zlib_written = try vort.decodeZlib(zlib_bytes, &zlib_out);
 
 const gzip_bytes = try vort.encodeGzipFixedAlloc(allocator, "payload");
 defer allocator.free(gzip_bytes);
+const gzip_exact = try vort.decodeGzipAllocExactSize(allocator, gzip_bytes, "payload".len);
+defer allocator.free(gzip_exact);
 const gzip_bounded = try vort.decodeGzipConcatenatedAllocLimited(allocator, gzip_bytes, 1024);
 defer allocator.free(gzip_bounded);
 var gzip_out: [1024]u8 = undefined;

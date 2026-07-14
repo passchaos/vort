@@ -79,12 +79,15 @@ def append_overview_row(lines: list[str], metric: str, samples: list[RatioSample
 
 def benchmark_overview_lines(decode_rows: list[dict[str, str]], encode_rows: list[dict[str, str]]) -> list[str]:
     zlib_decode_alloc: list[RatioSample] = []
+    zlib_decode_exact: list[RatioSample] = []
     zlib_decode_into: list[RatioSample] = []
     raw_decode_alloc: list[RatioSample] = []
+    raw_decode_exact: list[RatioSample] = []
     raw_decode_into: list[RatioSample] = []
     for case, items in sorted(by_case(decode_rows).items()):
         zlib_items = [row for row in items if row_format(row) == "zlib"]
         vort_alloc = next((row for row in zlib_items if row["engine"] == "vort"), None)
+        vort_exact = next((row for row in zlib_items if row["engine"] == "vort-exact"), None)
         vort_into = next((row for row in zlib_items if row["engine"] == "vort-into"), None)
         rust_rows = [row for row in zlib_items if not row["engine"].startswith("vort")]
         if vort_alloc is not None and vort_into is not None and rust_rows:
@@ -92,16 +95,21 @@ def benchmark_overview_lines(decode_rows: list[dict[str, str]], encode_rows: lis
             rust_speed = fnum(rust, "throughput_mib_s")
             if rust_speed > 0:
                 zlib_decode_alloc.append((case, fnum(vort_alloc, "throughput_mib_s") / rust_speed))
+                if vort_exact is not None:
+                    zlib_decode_exact.append((case, fnum(vort_exact, "throughput_mib_s") / rust_speed))
                 zlib_decode_into.append((case, fnum(vort_into, "throughput_mib_s") / rust_speed))
 
         raw_items = [row for row in items if row_format(row) == "raw"]
         vort_raw = next((row for row in raw_items if row["engine"] == "vort-raw"), None)
+        vort_raw_exact = next((row for row in raw_items if row["engine"] == "vort-raw-exact"), None)
         vort_raw_into = next((row for row in raw_items if row["engine"] == "vort-raw-into"), None)
         miniz_raw = next((row for row in raw_items if row["engine"] == "miniz_oxide-raw"), None)
         if vort_raw is not None and vort_raw_into is not None and miniz_raw is not None:
             rust_speed = fnum(miniz_raw, "throughput_mib_s")
             if rust_speed > 0:
                 raw_decode_alloc.append((case, fnum(vort_raw, "throughput_mib_s") / rust_speed))
+                if vort_raw_exact is not None:
+                    raw_decode_exact.append((case, fnum(vort_raw_exact, "throughput_mib_s") / rust_speed))
                 raw_decode_into.append((case, fnum(vort_raw_into, "throughput_mib_s") / rust_speed))
 
     zlib_encode_speed: list[RatioSample] = []
@@ -153,9 +161,11 @@ def benchmark_overview_lines(decode_rows: list[dict[str, str]], encode_rows: lis
         "| metric | cases | geomean ratio | weakest case | note |",
         "| --- | ---: | ---: | --- | --- |",
     ]
-    append_overview_row(lines, "zlib decode alloc / best Rust", zlib_decode_alloc, "Vort allocator-returning zlib decode vs best fdeflate/miniz_oxide zlib row")
+    append_overview_row(lines, "zlib decode alloc / best Rust", zlib_decode_alloc, "Vort growable allocator-returning zlib decode vs best fdeflate/miniz_oxide zlib row")
+    append_overview_row(lines, "zlib decode exact / best Rust", zlib_decode_exact, "Vort exact-size allocator-returning zlib decode vs best fdeflate/miniz_oxide zlib row")
     append_overview_row(lines, "zlib decode into / best Rust", zlib_decode_into, "Vort caller-buffer zlib decode vs best fdeflate/miniz_oxide zlib row")
-    append_overview_row(lines, "raw decode alloc / miniz_oxide", raw_decode_alloc, "Vort allocator-returning raw decode vs miniz_oxide raw inflate")
+    append_overview_row(lines, "raw decode alloc / miniz_oxide", raw_decode_alloc, "Vort growable allocator-returning raw decode vs miniz_oxide raw inflate")
+    append_overview_row(lines, "raw decode exact / miniz_oxide", raw_decode_exact, "Vort exact-size allocator-returning raw decode vs miniz_oxide raw inflate")
     append_overview_row(lines, "raw decode into / miniz_oxide", raw_decode_into, "Vort caller-buffer raw decode vs miniz_oxide raw inflate")
     append_overview_row(lines, "zlib encode best-speed / best Rust", zlib_encode_speed, "Fastest Vort zlib row per case vs fastest fdeflate/miniz_oxide zlib row")
     append_overview_row(lines, "zlib encode default size / best Rust", zlib_default_size, "Vort production default zlib size vs smallest Rust zlib size", lower_is_better=True)
@@ -171,21 +181,24 @@ def decode_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Decode throughput (zlib)",
         "",
-        "| case | Vort alloc MiB/s | Vort into MiB/s | best Rust MiB/s | alloc / Rust | into / Rust | best Rust engine |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| case | Vort alloc MiB/s | Vort exact MiB/s | Vort into MiB/s | best Rust MiB/s | alloc / Rust | exact / Rust | into / Rust | best Rust engine |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for case, items in sorted(by_case(rows).items()):
         zlib_items = [row for row in items if row_format(row) == "zlib"]
         vort_alloc = next(row for row in zlib_items if row["engine"] == "vort")
+        vort_exact = next((row for row in zlib_items if row["engine"] == "vort-exact"), None)
         vort_into = next(row for row in zlib_items if row["engine"] == "vort-into")
         rust_rows = [row for row in zlib_items if not row["engine"].startswith("vort")]
         rust = max(rust_rows, key=lambda row: fnum(row, "throughput_mib_s"))
         alloc_speed = fnum(vort_alloc, "throughput_mib_s")
+        exact_speed = fnum(vort_exact, "throughput_mib_s") if vort_exact is not None else 0.0
         into_speed = fnum(vort_into, "throughput_mib_s")
         rust_speed = fnum(rust, "throughput_mib_s")
         alloc_ratio = 0.0 if rust_speed == 0 else alloc_speed / rust_speed
+        exact_ratio = 0.0 if rust_speed == 0 else exact_speed / rust_speed
         into_ratio = 0.0 if rust_speed == 0 else into_speed / rust_speed
-        lines.append(f"| {case} | {alloc_speed:.2f} | {into_speed:.2f} | {rust_speed:.2f} | {alloc_ratio:.3f} | {into_ratio:.3f} | {rust['engine']} |")
+        lines.append(f"| {case} | {alloc_speed:.2f} | {exact_speed:.2f} | {into_speed:.2f} | {rust_speed:.2f} | {alloc_ratio:.3f} | {exact_ratio:.3f} | {into_ratio:.3f} | {rust['engine']} |")
     lines.append("")
     return lines
 
@@ -194,22 +207,25 @@ def raw_decode_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Decode throughput (raw deflate)",
         "",
-        "| case | Vort raw alloc MiB/s | Vort raw into MiB/s | miniz_oxide raw MiB/s | alloc / miniz raw | into / miniz raw |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| case | Vort raw alloc MiB/s | Vort raw exact MiB/s | Vort raw into MiB/s | miniz_oxide raw MiB/s | alloc / miniz raw | exact / miniz raw | into / miniz raw |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for case, items in sorted(by_case(rows).items()):
         raw_items = [row for row in items if row_format(row) == "raw"]
         vort_raw = next((row for row in raw_items if row["engine"] == "vort-raw"), None)
+        vort_raw_exact = next((row for row in raw_items if row["engine"] == "vort-raw-exact"), None)
         vort_raw_into = next((row for row in raw_items if row["engine"] == "vort-raw-into"), None)
         miniz_raw = next((row for row in raw_items if row["engine"] == "miniz_oxide-raw"), None)
         if vort_raw is None or vort_raw_into is None or miniz_raw is None:
             continue
         alloc_speed = fnum(vort_raw, "throughput_mib_s")
+        exact_speed = fnum(vort_raw_exact, "throughput_mib_s") if vort_raw_exact is not None else 0.0
         into_speed = fnum(vort_raw_into, "throughput_mib_s")
         rust_speed = fnum(miniz_raw, "throughput_mib_s")
         alloc_ratio = 0.0 if rust_speed == 0 else alloc_speed / rust_speed
+        exact_ratio = 0.0 if rust_speed == 0 else exact_speed / rust_speed
         into_ratio = 0.0 if rust_speed == 0 else into_speed / rust_speed
-        lines.append(f"| {case} | {alloc_speed:.2f} | {into_speed:.2f} | {rust_speed:.2f} | {alloc_ratio:.3f} | {into_ratio:.3f} |")
+        lines.append(f"| {case} | {alloc_speed:.2f} | {exact_speed:.2f} | {into_speed:.2f} | {rust_speed:.2f} | {alloc_ratio:.3f} | {exact_ratio:.3f} | {into_ratio:.3f} |")
     lines.append("")
     return lines
 
@@ -218,18 +234,21 @@ def gzip_decode_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Vort gzip decode throughput",
         "",
-        "| case | gzip alloc MiB/s | gzip into MiB/s | into / alloc |",
-        "| --- | ---: | ---: | ---: |",
+        "| case | gzip alloc MiB/s | gzip exact MiB/s | gzip into MiB/s | exact / alloc | into / alloc |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for case, items in sorted(by_case(rows).items()):
         gzip = next((row for row in items if row["engine"] == "vort-gzip"), None)
+        gzip_exact = next((row for row in items if row["engine"] == "vort-gzip-exact"), None)
         gzip_into = next((row for row in items if row["engine"] == "vort-gzip-into"), None)
         if gzip is None or gzip_into is None:
             continue
         alloc_speed = fnum(gzip, "throughput_mib_s")
+        exact_speed = fnum(gzip_exact, "throughput_mib_s") if gzip_exact is not None else 0.0
         into_speed = fnum(gzip_into, "throughput_mib_s")
-        ratio = 0.0 if alloc_speed == 0 else into_speed / alloc_speed
-        lines.append(f"| {case} | {alloc_speed:.2f} | {into_speed:.2f} | {ratio:.3f} |")
+        exact_ratio = 0.0 if alloc_speed == 0 else exact_speed / alloc_speed
+        into_ratio = 0.0 if alloc_speed == 0 else into_speed / alloc_speed
+        lines.append(f"| {case} | {alloc_speed:.2f} | {exact_speed:.2f} | {into_speed:.2f} | {exact_ratio:.3f} | {into_ratio:.3f} |")
     lines.append("")
     return lines
 
