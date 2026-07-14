@@ -1454,6 +1454,19 @@ fn decodeDistance(symbol: u16, reader: *bitstream.BitReader) Error!usize {
 fn copyMatch(history: []const u8, dest: []u8, length: usize, distance: usize) Error!void {
     if (distance == 0 or distance > history.len) return error.InvalidMatch;
     if (dest.len < length) return error.OutputTooSmall;
+    if (distance == 1 and history.len != 0) {
+        @memset(dest[0..length], history[history.len - 1]);
+        return;
+    }
+    if (distance <= 4 and history.len >= distance) {
+        copySmallDistanceMatch(dest[0..length], history[history.len - distance ..], distance);
+        return;
+    }
+    if (distance >= length) {
+        const start = history.len - distance;
+        @memcpy(dest[0..length], history[start..][0..length]);
+        return;
+    }
     var i: usize = 0;
     while (i < length) : (i += 1) {
         const absolute = history.len + i - distance;
@@ -1466,7 +1479,21 @@ fn copyMatchWithDictionary(history: []const u8, dictionary: []const u8, dest: []
     if (distance == 0 or distance > history.len + dictionary.len) return error.InvalidMatch;
     if (dest.len < length) return error.OutputTooSmall;
 
+    if (distance <= history.len) return copyMatch(history, dest, length, distance);
+
     const base_len = dictionary.len + history.len;
+    if (distance >= length) {
+        const absolute = base_len - distance;
+        if (absolute < dictionary.len) {
+            const dict_len = @min(length, dictionary.len - absolute);
+            @memcpy(dest[0..dict_len], dictionary[absolute..][0..dict_len]);
+            if (dict_len < length) @memcpy(dest[dict_len..length], history[0..][0 .. length - dict_len]);
+        } else {
+            @memcpy(dest[0..length], history[absolute - dictionary.len ..][0..length]);
+        }
+        return;
+    }
+
     var i: usize = 0;
     while (i < length) : (i += 1) {
         const absolute = base_len + i - distance;
@@ -1476,6 +1503,61 @@ fn copyMatchWithDictionary(history: []const u8, dictionary: []const u8, dest: []
             history[absolute - dictionary.len]
         else
             dest[absolute - base_len];
+    }
+}
+
+fn copySmallDistanceMatch(dest: []u8, pattern: []const u8, distance: usize) void {
+    switch (distance) {
+        1 => @memset(dest, pattern[0]),
+        2 => {
+            const a = pattern[0];
+            const b = pattern[1];
+            var i: usize = 0;
+            while (i + 2 <= dest.len) : (i += 2) {
+                dest[i] = a;
+                dest[i + 1] = b;
+            }
+            if (i < dest.len) dest[i] = a;
+        },
+        3 => {
+            const a = pattern[0];
+            const b = pattern[1];
+            const c = pattern[2];
+            var i: usize = 0;
+            while (i + 3 <= dest.len) : (i += 3) {
+                dest[i] = a;
+                dest[i + 1] = b;
+                dest[i + 2] = c;
+            }
+            if (i < dest.len) {
+                dest[i] = a;
+                i += 1;
+            }
+            if (i < dest.len) dest[i] = b;
+        },
+        4 => {
+            const a = pattern[0];
+            const b = pattern[1];
+            const c = pattern[2];
+            const d = pattern[3];
+            var i: usize = 0;
+            while (i + 4 <= dest.len) : (i += 4) {
+                dest[i] = a;
+                dest[i + 1] = b;
+                dest[i + 2] = c;
+                dest[i + 3] = d;
+            }
+            if (i < dest.len) {
+                dest[i] = a;
+                i += 1;
+            }
+            if (i < dest.len) {
+                dest[i] = b;
+                i += 1;
+            }
+            if (i < dest.len) dest[i] = c;
+        },
+        else => unreachable,
     }
 }
 
