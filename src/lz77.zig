@@ -125,6 +125,7 @@ pub fn greedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options:
 
 pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
     if (preferScanLazy(input)) return scanLazyGreedyPlanAlloc(allocator, input, options);
+    if (input.len <= 32 * 1024) return hashLazyGreedyPlanTinyAlloc(allocator, input, options);
     return hashLazyGreedyPlanAlloc(allocator, input, options);
 }
 
@@ -303,9 +304,24 @@ fn hashLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     @memset(head, -1);
     const prev = try allocator.alloc(isize, input.len);
     defer allocator.free(prev);
+    return hashLazyGreedyPlanWithTables(allocator, input, options, head, prev);
+}
+
+fn hashLazyGreedyPlanTinyAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    if (input.len > 32 * 1024) return hashLazyGreedyPlanAlloc(allocator, input, options);
+
+    var head: [4096]isize = @splat(-1);
+    var prev_stack: [32 * 1024]isize = undefined;
+    return hashLazyGreedyPlanWithTables(allocator, input, options, &head, prev_stack[0..input.len]);
+}
+
+fn hashLazyGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: []isize, prev: []isize) !GreedyPlan {
     // `prev` is intentionally left uninitialized: every position reachable
     // through `head` is written by `insertHash` before it can be followed.
-    // Avoiding a full-buffer clear removes one hot memory pass per block.
+    // Avoiding a full-buffer clear removes one hot memory pass per block. The
+    // stack-resident tiny path keeps the same invariant with a smaller head
+    // table to avoid heap allocation and a full 32 Ki-slot clear on source/text
+    // chunks below one deflate window.
 
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
@@ -727,6 +743,26 @@ test "lazy parser scan preference separates repetitive from source-like blocks" 
         \\
     ** 8;
     try std.testing.expect(!preferScanLazy(source_like));
+}
+
+test "tiny lazy hash planner round trips source-like blocks" {
+    const source_like =
+        \\const std = @import("std");
+        \\pub fn update(value: usize) usize {
+        \\    var hash = value;
+        \\    inline for (0..16) |i| {
+        \\        hash = (hash ^ i) *% 0x9e3779b1;
+        \\    }
+        \\    return hash;
+        \\}
+        \\
+    ** 8;
+    const plan = try hashLazyGreedyPlanTinyAlloc(std.testing.allocator, source_like, .{});
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expect(plan.stats.tokenCount() <= source_like.len);
+    const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, source_like, replayed);
 }
 
 fn insertHash(input: []const u8, pos: usize, head: []isize, prev: []isize) void {
