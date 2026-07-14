@@ -237,11 +237,15 @@ const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);
 const zlib_bounded = try vort.decodeZlibAllocLimited(allocator, zlib_bytes, 1024);
 defer allocator.free(zlib_bounded);
+var zlib_out: [1024]u8 = undefined;
+const zlib_written = try vort.decodeZlib(zlib_bytes, &zlib_out);
 
 const gzip_bytes = try vort.encodeGzipFixedAlloc(allocator, "payload");
 defer allocator.free(gzip_bytes);
 const gzip_bounded = try vort.decodeGzipConcatenatedAllocLimited(allocator, gzip_bytes, 1024);
 defer allocator.free(gzip_bounded);
+var gzip_out: [1024]u8 = undefined;
+const gzip_written = try vort.decodeGzip(gzip_bytes, &gzip_out);
 
 // Limited decode APIs return error.OutputLimitExceeded before allocating or
 // appending beyond the caller's declared uncompressed-size budget. Dictionary

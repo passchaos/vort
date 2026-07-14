@@ -31,16 +31,18 @@ def decode_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Decode throughput",
         "",
-        "| case | Vort MiB/s | best Rust MiB/s | Vort / best Rust | best Rust engine |",
+        "| case | best Vort MiB/s | best Rust MiB/s | Vort / best Rust | best Rust engine |",
         "| --- | ---: | ---: | ---: | --- |",
     ]
     for case, items in sorted(by_case(rows).items()):
-        vort = next(row for row in items if row["engine"] == "vort")
-        rust = max((row for row in items if row["engine"] != "vort"), key=lambda row: fnum(row, "throughput_mib_s"))
+        vort_rows = [row for row in items if row["engine"].startswith("vort")]
+        rust_rows = [row for row in items if not row["engine"].startswith("vort")]
+        vort = max(vort_rows, key=lambda row: fnum(row, "throughput_mib_s"))
+        rust = max(rust_rows, key=lambda row: fnum(row, "throughput_mib_s"))
         vort_speed = fnum(vort, "throughput_mib_s")
         rust_speed = fnum(rust, "throughput_mib_s")
         ratio = 0.0 if rust_speed == 0 else vort_speed / rust_speed
-        lines.append(f"| {case} | {vort_speed:.2f} | {rust_speed:.2f} | {ratio:.3f} | {rust['engine']} |")
+        lines.append(f"| {case} | {vort['engine']} {vort_speed:.2f} | {rust_speed:.2f} | {ratio:.3f} | {rust['engine']} |")
     lines.append("")
     return lines
 

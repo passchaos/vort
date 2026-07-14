@@ -102,11 +102,11 @@ def run_bench(project: pathlib.Path, engine: str, frame: pathlib.Path, iteration
     return int(fields["elapsed_ns"]), int(fields["mix"])
 
 
-def run_vort_bench(frame: pathlib.Path, iterations: int) -> tuple[int, int]:
+def run_vort_bench(frame: pathlib.Path, iterations: int, mode: str = "alloc") -> tuple[int, int]:
     if VORT_BENCH is None:
         raise RuntimeError("missing Vort zlib decode benchmark executable")
     out = subprocess.run(
-        [str(VORT_BENCH), str(frame), str(iterations)],
+        [str(VORT_BENCH), str(frame), str(iterations), mode],
         cwd=ROOT,
         check=True,
         text=True,
@@ -156,7 +156,10 @@ def main() -> int:
             frame = tmp / f"{name}.zlib"
             frame.write_bytes(zlib.compress(payload, level=0 if name == "stored-binary" else 6))
             iterations = iterations_for(len(payload))
-            rows = [("vort", run_vort_bench(frame, iterations))]
+            rows = [
+                ("vort", run_vort_bench(frame, iterations)),
+                ("vort-into", run_vort_bench(frame, iterations, "into")),
+            ]
             rows.extend((engine, run_bench(project, engine, frame, iterations)) for engine in ("fdeflate", "miniz_oxide"))
             for engine, (elapsed_ns, mix) in rows:
                 output_rows.append(
