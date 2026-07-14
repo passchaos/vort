@@ -109,7 +109,7 @@ fn useTinyHashPlan(input: []const u8, options: CompressionOptions) bool {
     return options.parser == .hash and
         options.strategy == .default and
         input.len > 256 and
-        (input.len <= 24 * 1024 or uniqueByteCount(input[0..@min(input.len, 1024)]) <= 8) and
+        (input.len <= 24 * 1024 or (input.len <= 32 * 1024 and uniqueByteCount(input[0..@min(input.len, 1024)]) <= 8)) and
         options.lz77_options.window_len <= 16 * 1024;
 }
 

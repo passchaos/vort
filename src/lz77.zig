@@ -544,9 +544,11 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 }
 
 pub fn hashGreedyPlanTinyAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    if (input.len > 32 * 1024) return hashGreedyPlanAlloc(allocator, input, options);
+
     var head: [4096]isize = @splat(-1);
-    const prev = try allocator.alloc(isize, input.len);
-    defer allocator.free(prev);
+    var prev_stack: [32 * 1024]isize = undefined;
+    const prev = prev_stack[0..input.len];
 
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
