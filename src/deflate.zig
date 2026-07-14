@@ -343,15 +343,12 @@ fn uniqueByteCount(input: []const u8) usize {
 }
 
 fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions) !void {
-    const stored_len = if (plain.len <= max_stored_block_len)
-        storedBlockEncodedSizeFromState(writer.*, plain.len)
-    else
-        std.math.maxInt(usize);
+    const stored_len = storedBlocksEncodedSizeFromState(writer.*, plain.len);
     const fixed_len = encodedBytesForBitsFromState(writer.*, lz77.fixedBitCost(tokens));
 
     if (options.block_selection == .stored_fixed) {
         if (stored_len <= fixed_len) {
-            return writeStoredBlock(allocator, writer, plain, final);
+            return writeStoredBlocks(allocator, writer, plain, final);
         }
         return writeFixedTokens(allocator, writer, tokens, final);
     }
@@ -359,7 +356,7 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
     const dynamic_plan = try DynamicCodingPlan.init(tokens);
     const dynamic_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.bitCost(tokens));
     if (stored_len <= fixed_len and stored_len <= dynamic_len) {
-        return writeStoredBlock(allocator, writer, plain, final);
+        return writeStoredBlocks(allocator, writer, plain, final);
     }
     if (fixed_len <= dynamic_len) {
         return writeFixedTokens(allocator, writer, tokens, final);
@@ -374,6 +371,24 @@ fn encodedBytesForBitsFromState(writer: bitstream.BitWriter, bit_count: usize) u
 fn storedBlockEncodedSizeFromState(writer: bitstream.BitWriter, input_len: usize) usize {
     const header_bytes: usize = (@as(usize, writer.bit_index) + 3 + 7) / 8;
     return input_len + 4 + header_bytes;
+}
+
+fn storedBlocksEncodedSizeFromState(writer: bitstream.BitWriter, input_len: usize) usize {
+    if (input_len <= max_stored_block_len) return storedBlockEncodedSizeFromState(writer, input_len);
+    const blocks = ((input_len - 1) / max_stored_block_len) + 1;
+    const first = storedBlockEncodedSizeFromState(writer, max_stored_block_len);
+    return first + (input_len - max_stored_block_len) + (blocks - 1) * 5;
+}
+
+fn writeStoredBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8, final: bool) !void {
+    if (input.len <= max_stored_block_len) return writeStoredBlock(allocator, writer, input, final);
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const n = @min(max_stored_block_len, input.len - offset);
+        const chunk_final = final and offset + n == input.len;
+        try writeStoredBlock(allocator, writer, input[offset..][0..n], chunk_final);
+        offset += n;
+    }
 }
 
 fn writeStoredBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8, final: bool) !void {
@@ -2856,10 +2871,19 @@ test "best encoder selects a valid smallest raw block" {
 
 test "best encoder skips invalid single stored block for large inputs" {
     var input: [64 * 1024]u8 = undefined;
-    for (&input, 0..) |*byte, i| byte.* = @intCast((i * 131 + (i >> 3) * 17 + 29) & 0xff);
+    var state: u32 = 0x1234abcd;
+    for (&input) |*byte| {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        byte.* = @truncate(state);
+    }
 
     const encoded = try encodeRawBestAlloc(std.testing.allocator, &input, optionsForLevel(.fastest));
     defer std.testing.allocator.free(encoded);
+    const stored = try encodeRawStoredAlloc(std.testing.allocator, &input);
+    defer std.testing.allocator.free(stored);
+    try std.testing.expectEqual(stored.len, encoded.len);
     const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &input, decoded);
