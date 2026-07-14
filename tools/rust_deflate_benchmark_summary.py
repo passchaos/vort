@@ -441,18 +441,19 @@ def decode_stage_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Decode stage diagnostics",
         "",
-        "| case | raw alloc MiB/s | raw into MiB/s | zlib alloc MiB/s | zlib into MiB/s | gzip alloc MiB/s | gzip into MiB/s | zlib/raw time | zlib/raw into time | gzip/raw time | gzip/raw into time | raw alloc/into time | zlib alloc/into time | gzip alloc/into time | iterations | raw bytes | zlib bytes | gzip bytes |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| case | raw alloc MiB/s | raw exact MiB/s | raw into MiB/s | zlib alloc MiB/s | zlib exact MiB/s | zlib into MiB/s | gzip alloc MiB/s | gzip exact MiB/s | gzip into MiB/s | zlib/raw alloc time | zlib/raw exact time | zlib/raw into time | gzip/raw alloc time | gzip/raw exact time | gzip/raw into time | raw alloc/exact time | raw alloc/into time | zlib alloc/exact time | zlib alloc/into time | gzip alloc/exact time | gzip alloc/into time | iterations | raw bytes | zlib bytes | gzip bytes |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         lines.append(
-            f"| {row['case']} | {fnum(row, 'raw_mib_s'):.2f} | {fnum(row, 'raw_into_mib_s'):.2f} | "
-            f"{fnum(row, 'zlib_mib_s'):.2f} | {fnum(row, 'zlib_into_mib_s'):.2f} | "
-            f"{fnum(row, 'gzip_mib_s'):.2f} | {fnum(row, 'gzip_into_mib_s'):.2f} | "
-            f"{fnum(row, 'zlib_wrapper_time_ratio'):.3f} | {fnum(row, 'zlib_wrapper_into_time_ratio'):.3f} | "
-            f"{fnum(row, 'gzip_wrapper_time_ratio'):.3f} | {fnum(row, 'gzip_wrapper_into_time_ratio'):.3f} | "
-            f"{fnum(row, 'raw_alloc_into_time_ratio'):.3f} | {fnum(row, 'zlib_alloc_into_time_ratio'):.3f} | "
-            f"{fnum(row, 'gzip_alloc_into_time_ratio'):.3f} | {row['iterations']} | "
+            f"| {row['case']} | {fnum(row, 'raw_mib_s'):.2f} | {fnum(row, 'raw_exact_mib_s'):.2f} | {fnum(row, 'raw_into_mib_s'):.2f} | "
+            f"{fnum(row, 'zlib_mib_s'):.2f} | {fnum(row, 'zlib_exact_mib_s'):.2f} | {fnum(row, 'zlib_into_mib_s'):.2f} | "
+            f"{fnum(row, 'gzip_mib_s'):.2f} | {fnum(row, 'gzip_exact_mib_s'):.2f} | {fnum(row, 'gzip_into_mib_s'):.2f} | "
+            f"{fnum(row, 'zlib_wrapper_time_ratio'):.3f} | {fnum(row, 'zlib_wrapper_exact_time_ratio'):.3f} | {fnum(row, 'zlib_wrapper_into_time_ratio'):.3f} | "
+            f"{fnum(row, 'gzip_wrapper_time_ratio'):.3f} | {fnum(row, 'gzip_wrapper_exact_time_ratio'):.3f} | {fnum(row, 'gzip_wrapper_into_time_ratio'):.3f} | "
+            f"{fnum(row, 'raw_alloc_exact_time_ratio'):.3f} | {fnum(row, 'raw_alloc_into_time_ratio'):.3f} | "
+            f"{fnum(row, 'zlib_alloc_exact_time_ratio'):.3f} | {fnum(row, 'zlib_alloc_into_time_ratio'):.3f} | "
+            f"{fnum(row, 'gzip_alloc_exact_time_ratio'):.3f} | {fnum(row, 'gzip_alloc_into_time_ratio'):.3f} | {row['iterations']} | "
             f"{row['raw_bytes']} | {row['zlib_bytes']} | {row['gzip_bytes']} |"
         )
     lines.append("")

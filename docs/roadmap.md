@@ -142,6 +142,7 @@ architecture blindly.
 - [x] BitReader skipBits advances directly for fast Huffman decode hot paths.
 - [x] BitReader read/peek use little-endian byte windows instead of per-bit loops.
 - [x] Deflate decode stage report isolates raw/zlib/gzip alloc and caller-buffer decode overhead, including wrapper/checksum costs.
+- [x] Deflate decode stage report includes exact-size alloc decode rows for raw/zlib/gzip APIs.
 - [x] Deflate decode stage report separates literal-only dynamic streams from dynamic streams with LZ77 matches.
 - [x] Dynamic-Huffman inflate rejects matches when the distance alphabet has no usable codes.
 - [x] Deflate fuzz smoke and hex corpus cover dynamic matches without distance codes.
