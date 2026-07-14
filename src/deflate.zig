@@ -1053,6 +1053,43 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
     }
 }
 
+fn decodeRawAutoAppendPartialWithDictionary(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary: []const u8,
+    out: *std.ArrayList(u8),
+    max_output_len: ?usize,
+) !DecodeResult {
+    if (input.len == 0) return error.TruncatedFrame;
+    const start_len = out.items.len;
+    if (try planRawStoredOnly(input)) |plan| {
+        try appendRawStoredOnlyPlanned(allocator, input[0..plan.input_read], out, plan, max_output_len);
+        return .{ .input_read = plan.input_read, .output_written = plan.output_len };
+    }
+
+    try reserveInflateAppendOutputHint(allocator, out, input.len, max_output_len);
+
+    var reader = bitstream.BitReader.init(input);
+    while (true) {
+        const final = (try reader.readBits(u1, 1)) != 0;
+        const block_type = try reader.readBits(u2, 2);
+        switch (block_type) {
+            0 => try decodeStoredBlockFromReader(allocator, &reader, out, max_output_len),
+            1 => try decodeFixedBlockFromReaderFromBase(allocator, &reader, out, dictionary, start_len, max_output_len),
+            2 => {
+                const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &reader);
+                const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+                const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+                const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+                const dist_decoder = huffman.FastDecoder(30, 10).init(dist_table);
+                try decodeCompressedBlockFromReaderFromBase(allocator, &reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
+            },
+            else => return error.InvalidDeflateBlockType,
+        }
+        if (final) return .{ .input_read = reader.byteOffset(), .output_written = out.items.len - start_len };
+    }
+}
+
 pub fn decodeRawAutoAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const result = try decodeRawAutoAllocPartial(allocator, input);
     errdefer result.deinit(allocator);
@@ -1332,6 +1369,26 @@ fn copyRawStoredOnly(input: []const u8, output: []u8) void {
     }
 }
 
+fn appendRawStoredOnlyPlanned(allocator: std.mem.Allocator, input: []const u8, out: *std.ArrayList(u8), plan: StoredOnlyPlan, max_output_len: ?usize) !void {
+    try ensureOutputLimit(out.items.len, plan.output_len, max_output_len);
+    try out.ensureUnusedCapacity(allocator, plan.output_len);
+
+    var in_offset: usize = 0;
+    while (true) {
+        const final = (input[in_offset] & 0x01) != 0;
+        in_offset += 1;
+        const len = std.mem.readInt(u16, input[in_offset..][0..2], .little);
+        const chunk_len: usize = len;
+        in_offset += 4;
+        out.appendSliceAssumeCapacity(input[in_offset..][0..chunk_len]);
+        in_offset += chunk_len;
+        if (final) {
+            std.debug.assert(in_offset == plan.input_read);
+            return;
+        }
+    }
+}
+
 pub fn decodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const result = try decodeRawStoredAllocPartial(allocator, input);
     errdefer result.deinit(allocator);
@@ -1383,7 +1440,20 @@ fn reserveInflateOutputHint(allocator: std.mem.Allocator, out: *std.ArrayList(u8
     if (capacity != 0) try out.ensureTotalCapacity(allocator, capacity);
 }
 
+fn reserveInflateAppendOutputHint(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input_len: usize, max_output_len: ?usize) !void {
+    const default_hint = @min(input_len *| 4, 1 << 20);
+    const capacity = if (max_output_len) |limit| blk: {
+        if (out.items.len >= limit) break :blk out.items.len;
+        break :blk out.items.len + @min(default_hint, limit - out.items.len);
+    } else out.items.len +| default_hint;
+    if (capacity != 0) try out.ensureTotalCapacity(allocator, capacity);
+}
+
 fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), dictionary: []const u8, max_output_len: ?usize) !void {
+    try decodeFixedBlockFromReaderFromBase(allocator, reader, out, dictionary, 0, max_output_len);
+}
+
+fn decodeFixedBlockFromReaderFromBase(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), dictionary: []const u8, history_start: usize, max_output_len: ?usize) !void {
     while (true) {
         const symbol = (try huffman.decodeFixedLiteralFast(reader)).value;
         if (symbol < 256) {
@@ -1395,7 +1465,7 @@ fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.B
             const length = try decodeLength(symbol, reader);
             const distance_symbol = (try huffman.decodeFixedDistanceFast(reader)).value;
             const distance = try decodeDistance(distance_symbol, reader);
-            try appendMatchWithDictionary(allocator, out, dictionary, length, distance, max_output_len);
+            try appendMatchWithDictionaryFromBase(allocator, out, dictionary, history_start, length, distance, max_output_len);
         } else {
             return error.InvalidHuffmanCode;
         }
@@ -1432,6 +1502,19 @@ fn decodeCompressedBlockFromReader(
     lit_table: anytype,
     dist_table: anytype,
 ) !void {
+    try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, 0, max_output_len, lit_table, dist_table);
+}
+
+fn decodeCompressedBlockFromReaderFromBase(
+    allocator: std.mem.Allocator,
+    reader: *bitstream.BitReader,
+    out: *std.ArrayList(u8),
+    dictionary: []const u8,
+    history_start: usize,
+    max_output_len: ?usize,
+    lit_table: anytype,
+    dist_table: anytype,
+) !void {
     while (true) {
         const symbol = (try lit_table.decode(reader)).value;
         if (symbol < 256) {
@@ -1443,7 +1526,7 @@ fn decodeCompressedBlockFromReader(
             const length = try decodeLength(symbol, reader);
             const distance_symbol = (try dist_table.decode(reader)).value;
             const distance = try decodeDistance(distance_symbol, reader);
-            try appendMatchWithDictionary(allocator, out, dictionary, length, distance, max_output_len);
+            try appendMatchWithDictionaryFromBase(allocator, out, dictionary, history_start, length, distance, max_output_len);
         } else {
             return error.InvalidHuffmanCode;
         }
@@ -1608,15 +1691,21 @@ fn appendMatch(allocator: std.mem.Allocator, out: *std.ArrayList(u8), length: us
 }
 
 fn appendMatchWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary: []const u8, length: usize, distance: usize, max_output_len: ?usize) !void {
-    if (distance == 0 or distance > out.items.len + dictionary.len) return error.InvalidMatch;
+    try appendMatchWithDictionaryFromBase(allocator, out, dictionary, 0, length, distance, max_output_len);
+}
+
+fn appendMatchWithDictionaryFromBase(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary: []const u8, history_start: usize, length: usize, distance: usize, max_output_len: ?usize) !void {
+    std.debug.assert(history_start <= out.items.len);
+    const history_len = out.items.len - history_start;
+    if (distance == 0 or distance > history_len + dictionary.len) return error.InvalidMatch;
     try ensureOutputLimit(out.items.len, length, max_output_len);
     try out.ensureUnusedCapacity(allocator, length);
-    if (distance == 1 and out.items.len != 0) {
+    if (distance == 1 and history_len != 0) {
         const byte = out.items[out.items.len - 1];
         out.appendNTimesAssumeCapacity(byte, length);
         return;
     }
-    if (dictionary.len == 0 and distance <= 4 and out.items.len >= distance) {
+    if (dictionary.len == 0 and distance <= 4 and history_len >= distance) {
         appendSmallDistanceMatchAssumeCapacity(out, length, distance);
         return;
     }
@@ -1627,8 +1716,11 @@ fn appendMatchWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u
     }
     var i: usize = 0;
     while (i < length) : (i += 1) {
-        const absolute = dictionary.len + out.items.len - distance;
-        const byte = if (absolute < dictionary.len) dictionary[absolute] else out.items[absolute - dictionary.len];
+        const absolute = dictionary.len + (out.items.len - history_start) - distance;
+        const byte = if (absolute < dictionary.len)
+            dictionary[absolute]
+        else
+            out.items[history_start + absolute - dictionary.len];
         out.appendAssumeCapacity(byte);
     }
 }
@@ -2229,17 +2321,15 @@ fn decodeGzipConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
     var offset: usize = 0;
     while (offset < input.len) {
         const data_offset = try parseGzipHeader(input[offset..]);
-        const member_limit = if (max_output_len) |limit| limit -| out.items.len else null;
-        const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[offset + data_offset ..], "", member_limit);
-        defer raw.deinit(allocator);
+        const before_member = out.items.len;
+        const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, input[offset + data_offset ..], "", &out, max_output_len);
         const footer_offset = offset + data_offset + raw.input_read;
         if (input.len - footer_offset < 8) return error.TruncatedFrame;
         const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
         const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-        if (checksum.crc32Best(raw.bytes) != expected_crc) return error.ChecksumMismatch;
-        if (@as(u32, @truncate(raw.bytes.len)) != expected_size) return error.SizeMismatch;
-        try ensureOutputLimit(out.items.len, raw.bytes.len, max_output_len);
-        try out.appendSlice(allocator, raw.bytes);
+        const member_payload = out.items[before_member..];
+        if (checksum.crc32Best(member_payload) != expected_crc) return error.ChecksumMismatch;
+        if (@as(u32, @truncate(member_payload.len)) != expected_size) return error.SizeMismatch;
         offset = footer_offset + 8;
     }
     return out.toOwnedSlice(allocator);
@@ -3549,6 +3639,36 @@ test "gzip concatenated members decode in sequence" {
     const limited = try decodeGzipConcatenatedAllocLimited(std.testing.allocator, cat.items, 10);
     defer std.testing.allocator.free(limited);
     try std.testing.expectEqualSlices(u8, "helloworld", limited);
+}
+
+test "gzip concatenated members keep match history isolated" {
+    const a = try encodeGzipStoredAlloc(std.testing.allocator, "abc");
+    defer std.testing.allocator.free(a);
+
+    const invalid_raw = try encodeRawFixedTokensAlloc(std.testing.allocator, &.{.{ .match = .{ .length = 3, .distance = 3 } }});
+    defer std.testing.allocator.free(invalid_raw);
+
+    var b: std.ArrayList(u8) = .empty;
+    defer b.deinit(std.testing.allocator);
+    try b.appendSlice(std.testing.allocator, &gzip_header);
+    try b.appendSlice(std.testing.allocator, invalid_raw);
+    // If a concatenated decoder accidentally allowed member 2 to reference
+    // member 1's output, this footer would make the malformed member appear
+    // checksum-valid. Each gzip member owns an independent deflate stream, so
+    // the first token in member 2 must still be rejected as an invalid match.
+    var footer: [8]u8 = undefined;
+    std.mem.writeInt(u32, footer[0..4], checksum.crc32Best("abc"), .little);
+    std.mem.writeInt(u32, footer[4..8], 3, .little);
+    try b.appendSlice(std.testing.allocator, &footer);
+
+    var cat: std.ArrayList(u8) = .empty;
+    defer cat.deinit(std.testing.allocator);
+    try cat.appendSlice(std.testing.allocator, a);
+    try cat.appendSlice(std.testing.allocator, b.items);
+
+    try std.testing.expectError(error.InvalidMatch, decodeGzipConcatenatedAlloc(std.testing.allocator, cat.items));
+    var out: [6]u8 = undefined;
+    try std.testing.expectError(error.InvalidMatch, decodeGzipConcatenated(cat.items, &out));
 }
 
 test "fast level skips dynamic block candidate" {
