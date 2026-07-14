@@ -88,7 +88,9 @@ table also reports the Vort default/dynamic-default throughput ratio to expose
 best-selection overhead, literal-only dynamic speed/size ratios against Vort
 default, plus split-default/adaptive-default speed and size ratios against Vort
 default to expose wrapper block-planning overhead and split-induced size
-changes. It also reports Vort default and Vort best-preset
+changes. The same table adds notes when literal-only, split, or adaptive rows
+are much larger than the default row, making benchmark-only modes harder to
+mistake for production compression choices. It also reports Vort default and Vort best-preset
 compressed-size ratios against the best Rust size so the production preset and
 strongest-size preset can be tracked separately.
 
