@@ -1,7 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 
-const EncodeMode = enum { best, dynamic, fixed, split, adaptive };
+const EncodeMode = enum { best, dynamic, dynamic_literal, fixed, split, adaptive };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -46,6 +46,11 @@ fn parseMode(text: ?[]const u8) Mode {
     if (std.mem.startsWith(u8, value, "fixed-")) {
         return .{ .kind = .fixed, .level = parseLevel(value["fixed-".len..]) };
     }
+    if (std.mem.startsWith(u8, value, "dynamic-literal")) {
+        const suffix = value["dynamic-literal".len..];
+        const level_text = if (std.mem.startsWith(u8, suffix, "-")) suffix[1..] else "";
+        return .{ .kind = .dynamic_literal, .level = parseLevel(level_text) };
+    }
     if (std.mem.startsWith(u8, value, "dynamic-")) {
         return .{ .kind = .dynamic, .level = parseLevel(value["dynamic-".len..]) };
     }
@@ -70,6 +75,7 @@ fn encode(allocator: std.mem.Allocator, input: []const u8, mode: Mode) ![]u8 {
     return switch (mode.kind) {
         .best => vort.encodeZlibBestAlloc(allocator, input, options),
         .dynamic => vort.encodeZlibDynamicWithOptionsAlloc(allocator, input, options),
+        .dynamic_literal => vort.encodeZlibDynamicLiteralAlloc(allocator, input),
         .fixed => vort.encodeZlibFixedWithOptionsAlloc(allocator, input, options),
         .split => vort.encodeZlibBestSplitAlloc(allocator, input, options.split_options.min_block_len, options),
         .adaptive => vort.encodeZlibBestAdaptiveSplitAlloc(allocator, input, options, options.split_options),

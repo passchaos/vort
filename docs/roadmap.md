@@ -217,6 +217,7 @@ architecture blindly.
 - [x] Rust deflate encode benchmark includes Vort split/adaptive rows to isolate wrapper block-planning overhead.
 - [x] Rust deflate encode benchmarks include overlap-RLE, distance-heavy, and dynamic-match payloads.
 - [x] Rust deflate encode benchmarks include deterministic incompressible payloads.
+- [x] Vort zlib encode benchmark exposes a dynamic-literal mode for literal-only wrapper timing.
 - [x] Rust deflate benchmark CSV artifact steps write decode and encode rows to zig-out.
 - [x] Dashboard index tracks Rust deflate benchmark CSV artifacts.
 - [x] Dashboard index reports CSV benchmark row counts.
