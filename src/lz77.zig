@@ -617,9 +617,33 @@ fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
 fn combinedMatchLength(dict: []const u8, input: []const u8, candidate: usize, current: usize, max_len: usize) usize {
     const dict_len = dict.len;
     const input_pos = current - dict_len;
+    if (candidate >= dict_len) return matchLength(input, candidate - dict_len, input_pos, max_len);
+
     var len: usize = 0;
-    while (len < max_len and byteAt(dict, input, candidate + len) == input[input_pos + len]) len += 1;
-    return len;
+    const dict_part_len = @min(max_len, dict_len - candidate);
+    while (len + 8 <= dict_part_len) : (len += 8) {
+        const left = std.mem.readInt(u64, dict[candidate + len ..][0..8], .little);
+        const right = std.mem.readInt(u64, input[input_pos + len ..][0..8], .little);
+        if (left != right) return len + @ctz(left ^ right) / 8;
+    }
+    while (len < dict_part_len and dict[candidate + len] == input[input_pos + len]) len += 1;
+    if (len < dict_part_len or len == max_len) return len;
+
+    const input_candidate = candidate + len - dict_len;
+    return len + matchLength(input, input_candidate, input_pos + len, max_len - len);
+}
+
+test "combined dictionary/input match length uses word and tail paths" {
+    const dict = "abcdefghijklmnop";
+    const input = "abcdefghijklmnopABC";
+    try std.testing.expectEqual(@as(usize, 16), combinedMatchLength(dict, input, 0, dict.len, 19));
+
+    const crossing_dict = "prefix-abc";
+    const crossing_input = "abcabcXYZ";
+    try std.testing.expectEqual(@as(usize, 6), combinedMatchLength(crossing_dict, crossing_input, 7, crossing_dict.len, 6));
+
+    const input_only = "zzzzabcabc";
+    try std.testing.expectEqual(@as(usize, 3), combinedMatchLength(dict, input_only, dict.len + 4, dict.len + 7, 3));
 }
 
 fn insertHash(input: []const u8, pos: usize, head: []isize, prev: []isize) void {
