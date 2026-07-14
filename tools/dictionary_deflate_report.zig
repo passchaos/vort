@@ -8,6 +8,24 @@ const Case = struct {
     owned: bool = false,
 };
 
+const ReportStats = struct {
+    input_bytes: usize = 0,
+    dict_bytes: usize = 0,
+    raw_plain_bytes: usize = 0,
+    raw_dict_bytes: usize = 0,
+    zlib_plain_bytes: usize = 0,
+    zlib_dict_bytes: usize = 0,
+
+    fn add(self: *ReportStats, other: ReportStats) void {
+        self.input_bytes += other.input_bytes;
+        self.dict_bytes += other.dict_bytes;
+        self.raw_plain_bytes += other.raw_plain_bytes;
+        self.raw_dict_bytes += other.raw_dict_bytes;
+        self.zlib_plain_bytes += other.zlib_plain_bytes;
+        self.zlib_dict_bytes += other.zlib_dict_bytes;
+    }
+};
+
 const builtins = [_]Case{
     .{
         .name = "hello-repeat",
@@ -63,7 +81,9 @@ pub fn main(init: std.process.Init) !void {
     try writer.writeAll("case,input_bytes,dict_bytes,raw_plain_bytes,raw_dict_bytes,zlib_plain_bytes,zlib_dict_bytes,raw_dict_delta,zlib_dict_delta,raw_dict_ratio,zlib_dict_ratio\n");
 
     const cases = if (file_cases.items.len == 0) builtins[0..] else file_cases.items;
-    for (cases) |case| try reportCase(init.gpa, writer, case);
+    var totals = ReportStats{};
+    for (cases) |case| totals.add(try reportCase(init.gpa, writer, case));
+    if (cases.len > 1) try writeStatsRow(writer, "TOTAL", totals);
 
     const bytes = output.written();
     var stdout_buffer: [1024]u8 = undefined;
@@ -77,7 +97,7 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
-fn reportCase(allocator: std.mem.Allocator, writer: *std.Io.Writer, case: Case) !void {
+fn reportCase(allocator: std.mem.Allocator, writer: *std.Io.Writer, case: Case) !ReportStats {
     const options = vort.optionsForCompressionLevel(.default);
 
     const raw_plain = try vort.encodeRawBestAlloc(allocator, case.payload, options);
@@ -96,20 +116,31 @@ fn reportCase(allocator: std.mem.Allocator, writer: *std.Io.Writer, case: Case) 
     defer allocator.free(zlib_decoded);
     if (!std.mem.eql(u8, case.payload, zlib_decoded)) return error.RoundTripMismatch;
 
-    const raw_delta = signedDelta(raw_plain.len, raw_dict.len);
-    const zlib_delta = signedDelta(zlib_plain.len, zlib_dict.len);
+    const stats = ReportStats{
+        .input_bytes = case.payload.len,
+        .dict_bytes = case.dictionary.len,
+        .raw_plain_bytes = raw_plain.len,
+        .raw_dict_bytes = raw_dict.len,
+        .zlib_plain_bytes = zlib_plain.len,
+        .zlib_dict_bytes = zlib_dict.len,
+    };
+    try writeStatsRow(writer, case.name, stats);
+    return stats;
+}
+
+fn writeStatsRow(writer: *std.Io.Writer, name: []const u8, stats: ReportStats) !void {
     try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d:.4},{d:.4}\n", .{
-        case.name,
-        case.payload.len,
-        case.dictionary.len,
-        raw_plain.len,
-        raw_dict.len,
-        zlib_plain.len,
-        zlib_dict.len,
-        raw_delta,
-        zlib_delta,
-        ratio(raw_dict.len, raw_plain.len),
-        ratio(zlib_dict.len, zlib_plain.len),
+        name,
+        stats.input_bytes,
+        stats.dict_bytes,
+        stats.raw_plain_bytes,
+        stats.raw_dict_bytes,
+        stats.zlib_plain_bytes,
+        stats.zlib_dict_bytes,
+        signedDelta(stats.raw_plain_bytes, stats.raw_dict_bytes),
+        signedDelta(stats.zlib_plain_bytes, stats.zlib_dict_bytes),
+        ratio(stats.raw_dict_bytes, stats.raw_plain_bytes),
+        ratio(stats.zlib_dict_bytes, stats.zlib_plain_bytes),
     });
 }
 
