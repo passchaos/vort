@@ -358,6 +358,21 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeRawBestWithDictionaryAlloc(init.gpa, payload, dictionary, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-raw-dict-best-split-hex")) {
+        const payload = args.next() orelse "";
+        const dictionary = args.next() orelse "";
+        const block_len = try parseBlockLen(args.next(), 7);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawBestSplitWithDictionaryAlloc(init.gpa, payload, dictionary, block_len, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-raw-dict-best-adaptive-hex")) {
+        const payload = args.next() orelse "";
+        const dictionary = args.next() orelse "";
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawBestAdaptiveSplitWithDictionaryAlloc(init.gpa, payload, dictionary, options, options.split_options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-raw-best-split-hex")) {
         const payload = args.next() orelse "";
         const block_len = try parseBlockLen(args.next(), 7);
@@ -382,6 +397,21 @@ pub fn main(init: std.process.Init) !void {
         const dictionary = args.next() orelse "";
         const options = parseCompressionOptions(args.next());
         const encoded = try vort.encodeZlibBestWithDictionaryAlloc(init.gpa, payload, dictionary, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zlib-dict-best-split-hex")) {
+        const payload = args.next() orelse "";
+        const dictionary = args.next() orelse "";
+        const block_len = try parseBlockLen(args.next(), 7);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibBestSplitWithDictionaryAlloc(init.gpa, payload, dictionary, block_len, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zlib-dict-best-adaptive-hex")) {
+        const payload = args.next() orelse "";
+        const dictionary = args.next() orelse "";
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibBestAdaptiveSplitWithDictionaryAlloc(init.gpa, payload, dictionary, options, options.split_options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-best-split-hex")) {
@@ -484,6 +514,33 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(encoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
         try stdout.print("input_bytes={d} dictionary_bytes={d} output_bytes={d} path={s}\n", .{ data.len, dictionary.len, encoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "encode-raw-dict-best-split-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const dictionary_path = args.next() orelse return error.MissingCorpusPath;
+        const block_len = try parseBlockLen(args.next(), 7);
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dictionary_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(dictionary);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawBestSplitWithDictionaryAlloc(init.gpa, data, dictionary, block_len, options);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("input_bytes={d} dictionary_bytes={d} block_len={d} output_bytes={d} path={s}\n", .{ data.len, dictionary.len, block_len, encoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "encode-raw-dict-best-adaptive-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const dictionary_path = args.next() orelse return error.MissingCorpusPath;
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dictionary_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(dictionary);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawBestAdaptiveSplitWithDictionaryAlloc(init.gpa, data, dictionary, options, options.split_options);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("input_bytes={d} dictionary_bytes={d} output_bytes={d} path={s}\n", .{ data.len, dictionary.len, encoded.len, output_path });
     } else if (std.mem.eql(u8, command, "encode-zlib-dict-best-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -494,6 +551,33 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(dictionary);
         const options = parseCompressionOptions(args.next());
         const encoded = try vort.encodeZlibBestWithDictionaryAlloc(init.gpa, data, dictionary, options);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("input_bytes={d} dictionary_bytes={d} output_bytes={d} path={s}\n", .{ data.len, dictionary.len, encoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "encode-zlib-dict-best-split-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const dictionary_path = args.next() orelse return error.MissingCorpusPath;
+        const block_len = try parseBlockLen(args.next(), 7);
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dictionary_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(dictionary);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibBestSplitWithDictionaryAlloc(init.gpa, data, dictionary, block_len, options);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("input_bytes={d} dictionary_bytes={d} block_len={d} output_bytes={d} path={s}\n", .{ data.len, dictionary.len, block_len, encoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "encode-zlib-dict-best-adaptive-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const dictionary_path = args.next() orelse return error.MissingCorpusPath;
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dictionary_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(dictionary);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeZlibBestAdaptiveSplitWithDictionaryAlloc(init.gpa, data, dictionary, options, options.split_options);
         defer init.gpa.free(encoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
         try stdout.print("input_bytes={d} dictionary_bytes={d} output_bytes={d} path={s}\n", .{ data.len, dictionary.len, encoded.len, output_path });
@@ -825,8 +909,16 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode a zlib-compatible file with best-block selection
         \\  encode-raw-dict-best-file <in> <out> <dict> [level]
         \\                              Encode raw deflate file bytes using preset dictionary history
+        \\  encode-raw-dict-best-split-file <in> <out> <dict> <block_len> [level]
+        \\                              Encode split raw deflate file bytes using preset dictionary history
+        \\  encode-raw-dict-best-adaptive-file <in> <out> <dict> [level]
+        \\                              Encode adaptive-split raw deflate file bytes using preset dictionary history
         \\  encode-zlib-dict-best-file <in> <out> <dict> [level]
         \\                              Encode a zlib FDICT/DICTID file using preset dictionary history
+        \\  encode-zlib-dict-best-split-file <in> <out> <dict> <block_len> [level]
+        \\                              Encode split zlib FDICT/DICTID file using preset dictionary history
+        \\  encode-zlib-dict-best-adaptive-file <in> <out> <dict> [level]
+        \\                              Encode adaptive-split zlib FDICT/DICTID file using preset dictionary history
         \\
         \\native indexed file workflows:
         \\  encode-vort-sidecar-best-file <in> <stream> <sidecar> [block_len]

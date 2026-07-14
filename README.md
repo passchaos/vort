@@ -104,7 +104,11 @@ PY
 zig build run -- decode-zlib-dict-file /tmp/vort-dict.zlib /tmp/vort-dict.out /tmp/vort.dict
 zig build run -- decode-zlib-dict-file /tmp/vort-dict.zlib /tmp/vort-dict-limited.out /tmp/vort.dict 17
 zig build run -- encode-raw-dict-best-file /tmp/vort-dict.out /tmp/vort-dict.raw /tmp/vort.dict default
+zig build run -- encode-raw-dict-best-split-file /tmp/vort-dict.out /tmp/vort-dict-split.raw /tmp/vort.dict 7 default
+zig build run -- encode-raw-dict-best-adaptive-file /tmp/vort-dict.out /tmp/vort-dict-adaptive.raw /tmp/vort.dict default
 zig build run -- encode-zlib-dict-best-file /tmp/vort-dict.out /tmp/vort-dict-encoded.zlib /tmp/vort.dict default
+zig build run -- encode-zlib-dict-best-split-file /tmp/vort-dict.out /tmp/vort-dict-split.zlib /tmp/vort.dict 7 default
+zig build run -- encode-zlib-dict-best-adaptive-file /tmp/vort-dict.out /tmp/vort-dict-adaptive.zlib /tmp/vort.dict default
 zig build run -- decode-gzip-hex 1f8b0800000000000403cb48cdc9c9070086a6103605000000
 python3 - <<'PY'
 import gzip

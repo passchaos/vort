@@ -214,13 +214,16 @@ def main() -> int:
         assert limited_path.read_bytes() == dict_payload, out
         expect_cli_failure("decode-zlib-dict-file", str(compressed_path), str(tmp / "too-small.bin"), str(dictionary_path), str(len(dict_payload) - 1), error_name="OutputLimitExceeded")
 
-    for command in [
-        "encode-zlib-dict-stored-hex",
-        "encode-zlib-dict-fixed-hex",
-        "encode-zlib-dict-dynamic-hex",
-        "encode-zlib-dict-best-hex",
-    ]:
-        encoded = bytes.fromhex(run_cli(command, dict_payload.decode("ascii"), dictionary_text, "default"))
+    zlib_dict_encode_cases = [
+        ("encode-zlib-dict-stored-hex", ["default"]),
+        ("encode-zlib-dict-fixed-hex", ["default"]),
+        ("encode-zlib-dict-dynamic-hex", ["default"]),
+        ("encode-zlib-dict-best-hex", ["default"]),
+        ("encode-zlib-dict-best-split-hex", ["7", "default"]),
+        ("encode-zlib-dict-best-adaptive-hex", ["default"]),
+    ]
+    for command, extra_args in zlib_dict_encode_cases:
+        encoded = bytes.fromhex(run_cli(command, dict_payload.decode("ascii"), dictionary_text, *extra_args))
         assert encoded[1] & 0x20, (command, encoded.hex())
         assert int.from_bytes(encoded[2:6], "big") == (zlib.adler32(dictionary) & 0xFFFFFFFF), (command, encoded.hex())
         expect_cli_failure("decode-zlib-hex", encoded.hex(), error_name="NeedDictionary")
@@ -229,12 +232,15 @@ def main() -> int:
         do = zlib.decompressobj(wbits=zlib.MAX_WBITS, zdict=dictionary)
         assert do.decompress(encoded) + do.flush() == dict_payload, command
 
-    for command in [
-        "encode-raw-dict-fixed-hex",
-        "encode-raw-dict-dynamic-hex",
-        "encode-raw-dict-best-hex",
-    ]:
-        encoded = bytes.fromhex(run_cli(command, dict_payload.decode("ascii"), dictionary_text, "default"))
+    raw_dict_encode_cases = [
+        ("encode-raw-dict-fixed-hex", ["default"]),
+        ("encode-raw-dict-dynamic-hex", ["default"]),
+        ("encode-raw-dict-best-hex", ["default"]),
+        ("encode-raw-dict-best-split-hex", ["7", "default"]),
+        ("encode-raw-dict-best-adaptive-hex", ["default"]),
+    ]
+    for command, extra_args in raw_dict_encode_cases:
+        encoded = bytes.fromhex(run_cli(command, dict_payload.decode("ascii"), dictionary_text, *extra_args))
         expect_cli_failure("decode-raw-hex", encoded.hex(), error_name="InvalidMatch")
         out = run_cli("decode-raw-dict-hex", encoded.hex(), dictionary_text)
         assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
@@ -245,31 +251,43 @@ def main() -> int:
         tmp = pathlib.Path(tmpdir)
         input_path = tmp / "payload.bin"
         dictionary_path = tmp / "dict.bin"
-        raw_path = tmp / "payload.raw"
-        zlib_path = tmp / "payload.zlib"
-        raw_decoded_path = tmp / "raw-decoded.bin"
-        zlib_decoded_path = tmp / "zlib-decoded.bin"
         input_path.write_bytes(dict_payload)
         dictionary_path.write_bytes(dictionary)
 
-        out = run_cli("encode-raw-dict-best-file", str(input_path), str(raw_path), str(dictionary_path), "default")
-        assert int(parse_field(out, "input_bytes")) == len(dict_payload), out
-        expect_cli_failure("decode-raw-file", str(raw_path), str(tmp / "raw-no-dict.bin"), error_name="InvalidMatch")
-        out = run_cli("decode-raw-dict-file", str(raw_path), str(raw_decoded_path), str(dictionary_path))
-        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
-        assert raw_decoded_path.read_bytes() == dict_payload, out
-        do = zlib.decompressobj(wbits=-zlib.MAX_WBITS, zdict=dictionary)
-        assert do.decompress(raw_path.read_bytes()) + do.flush() == dict_payload
+        raw_file_cases = [
+            ("encode-raw-dict-best-file", "payload.raw", ["default"]),
+            ("encode-raw-dict-best-split-file", "payload-split.raw", ["7", "default"]),
+            ("encode-raw-dict-best-adaptive-file", "payload-adaptive.raw", ["default"]),
+        ]
+        for command, filename, extra_args in raw_file_cases:
+            raw_path = tmp / filename
+            raw_decoded_path = tmp / f"{filename}.decoded"
+            out = run_cli(command, str(input_path), str(raw_path), str(dictionary_path), *extra_args)
+            assert int(parse_field(out, "input_bytes")) == len(dict_payload), out
+            expect_cli_failure("decode-raw-file", str(raw_path), str(tmp / f"{filename}.no-dict"), error_name="InvalidMatch")
+            out = run_cli("decode-raw-dict-file", str(raw_path), str(raw_decoded_path), str(dictionary_path))
+            assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
+            assert raw_decoded_path.read_bytes() == dict_payload, out
+            do = zlib.decompressobj(wbits=-zlib.MAX_WBITS, zdict=dictionary)
+            assert do.decompress(raw_path.read_bytes()) + do.flush() == dict_payload, command
 
-        out = run_cli("encode-zlib-dict-best-file", str(input_path), str(zlib_path), str(dictionary_path), "default")
-        assert int(parse_field(out, "input_bytes")) == len(dict_payload), out
-        assert int.from_bytes(zlib_path.read_bytes()[2:6], "big") == (zlib.adler32(dictionary) & 0xFFFFFFFF), out
-        expect_cli_failure("decode-zlib-file", str(zlib_path), str(tmp / "zlib-no-dict.bin"), error_name="NeedDictionary")
-        out = run_cli("decode-zlib-dict-file", str(zlib_path), str(zlib_decoded_path), str(dictionary_path))
-        assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
-        assert zlib_decoded_path.read_bytes() == dict_payload, out
-        do = zlib.decompressobj(wbits=zlib.MAX_WBITS, zdict=dictionary)
-        assert do.decompress(zlib_path.read_bytes()) + do.flush() == dict_payload
+        zlib_file_cases = [
+            ("encode-zlib-dict-best-file", "payload.zlib", ["default"]),
+            ("encode-zlib-dict-best-split-file", "payload-split.zlib", ["7", "default"]),
+            ("encode-zlib-dict-best-adaptive-file", "payload-adaptive.zlib", ["default"]),
+        ]
+        for command, filename, extra_args in zlib_file_cases:
+            zlib_path = tmp / filename
+            zlib_decoded_path = tmp / f"{filename}.decoded"
+            out = run_cli(command, str(input_path), str(zlib_path), str(dictionary_path), *extra_args)
+            assert int(parse_field(out, "input_bytes")) == len(dict_payload), out
+            assert int.from_bytes(zlib_path.read_bytes()[2:6], "big") == (zlib.adler32(dictionary) & 0xFFFFFFFF), out
+            expect_cli_failure("decode-zlib-file", str(zlib_path), str(tmp / f"{filename}.no-dict"), error_name="NeedDictionary")
+            out = run_cli("decode-zlib-dict-file", str(zlib_path), str(zlib_decoded_path), str(dictionary_path))
+            assert int(parse_field(out, "decoded_bytes")) == len(dict_payload), out
+            assert zlib_decoded_path.read_bytes() == dict_payload, out
+            do = zlib.decompressobj(wbits=zlib.MAX_WBITS, zdict=dictionary)
+            assert do.decompress(zlib_path.read_bytes()) + do.flush() == dict_payload, command
 
     dynamic_payloads = [
         b"match-heavy:" + (b"abcabcabcabc" * 96) + (b"xyzxyzxyz" * 48),
