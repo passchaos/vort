@@ -204,11 +204,12 @@ pub fn parseDynamicLengthsAfterHeader(final: bool, reader: *bitstream.BitReader)
 
 fn parseDynamicLengthsBody(header: DynamicHeader, reader: *bitstream.BitReader) Error!DynamicLengths {
     const code_lengths = try CodeLengthTable.init(&header.code_length_lengths);
+    const code_decoder = FastDecoder(19, 7).init(code_lengths);
     var combined: [286 + 30]u4 = @splat(0);
     const total = header.hlit + header.hdist;
     var pos: usize = 0;
     while (pos < total) {
-        const symbol = (try code_lengths.decode(reader)).value;
+        const symbol = (try code_decoder.decode(reader)).value;
         switch (symbol) {
             0...15 => {
                 combined[pos] = @intCast(symbol);
