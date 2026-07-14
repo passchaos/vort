@@ -2015,7 +2015,7 @@ pub fn encodeGzipStored(input: []const u8, output: []u8) Error!usize {
     @memcpy(output[0..10], &gzip_header);
     const raw_written = try encodeRawStored(input, output[10 .. required - 8]);
     const footer_offset = 10 + raw_written;
-    std.mem.writeInt(u32, output[footer_offset..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, output[footer_offset..][0..4], checksum.crc32Best(input), .little);
     std.mem.writeInt(u32, output[footer_offset + 4 ..][0..4], @truncate(input.len), .little);
     return footer_offset + 8;
 }
@@ -2041,7 +2041,7 @@ pub fn encodeGzipFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []co
     @memcpy(out[0..gzip_header.len], &gzip_header);
     @memcpy(out[gzip_header.len..][0..raw.len], raw);
     const footer = gzip_header.len + raw.len;
-    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
     std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
     return out;
 }
@@ -2058,7 +2058,7 @@ pub fn encodeGzipDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []
     @memcpy(out[0..gzip_header.len], &gzip_header);
     @memcpy(out[gzip_header.len..][0..raw.len], raw);
     const footer = gzip_header.len + raw.len;
-    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
     std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
     return out;
 }
@@ -2072,7 +2072,7 @@ pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     @memcpy(out[0..gzip_header.len], &gzip_header);
     @memcpy(out[gzip_header.len..][0..raw.len], raw);
     const footer = gzip_header.len + raw.len;
-    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
     std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
     return out;
 }
@@ -2085,7 +2085,7 @@ pub fn encodeGzipBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8,
     @memcpy(out[0..gzip_header.len], &gzip_header);
     @memcpy(out[gzip_header.len..][0..raw.len], raw);
     const footer = gzip_header.len + raw.len;
-    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
     std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
     return out;
 }
@@ -2099,7 +2099,7 @@ pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
     @memcpy(out[0..gzip_header.len], &gzip_header);
     @memcpy(out[gzip_header.len..][0..raw.len], raw);
     const footer = gzip_header.len + raw.len;
-    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32(input), .little);
+    std.mem.writeInt(u32, out[footer..][0..4], checksum.crc32Best(input), .little);
     std.mem.writeInt(u32, out[footer + 4 ..][0..4], @truncate(input.len), .little);
     return out;
 }
@@ -2137,7 +2137,7 @@ pub fn decodeGzip(input: []const u8, output: []u8) Error!usize {
     const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
     const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
     const payload = output[0..raw.output_written];
-    if (checksum.crc32(payload) != expected_crc) return error.ChecksumMismatch;
+    if (checksum.crc32Best(payload) != expected_crc) return error.ChecksumMismatch;
     if (@as(u32, @truncate(raw.output_written)) != expected_size) return error.SizeMismatch;
     if (footer_offset + 8 != input.len) return error.TrailingData;
     return raw.output_written;
@@ -2186,7 +2186,7 @@ fn decodeGzipConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
         if (input.len - footer_offset < 8) return error.TruncatedFrame;
         const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
         const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-        if (checksum.crc32(raw.bytes) != expected_crc) return error.ChecksumMismatch;
+        if (checksum.crc32Best(raw.bytes) != expected_crc) return error.ChecksumMismatch;
         if (@as(u32, @truncate(raw.bytes.len)) != expected_size) return error.SizeMismatch;
         try ensureOutputLimit(out.items.len, raw.bytes.len, max_output_len);
         try out.appendSlice(allocator, raw.bytes);
@@ -2224,7 +2224,7 @@ fn decodeGzipAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u
     if (input.len - footer_offset < 8) return error.TruncatedFrame;
     const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
     const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-    if (checksum.crc32(raw.bytes) != expected_crc) return error.ChecksumMismatch;
+    if (checksum.crc32Best(raw.bytes) != expected_crc) return error.ChecksumMismatch;
     if (@as(u32, @truncate(raw.bytes.len)) != expected_size) return error.SizeMismatch;
     if (footer_offset + 8 != input.len) return error.TrailingData;
     return raw.bytes;
@@ -2274,7 +2274,7 @@ fn parseGzipHeader(input: []const u8) Error!usize {
     if ((flags & 0x02) != 0) {
         if (input.len - offset < 2) return error.TruncatedFrame;
         const expected = std.mem.readInt(u16, input[offset..][0..2], .little);
-        const actual: u16 = @truncate(checksum.crc32(input[0..offset]));
+        const actual: u16 = @truncate(checksum.crc32Best(input[0..offset]));
         if (actual != expected) return error.BadGzipHeader;
         offset += 2;
     }
