@@ -438,6 +438,11 @@ pub fn build(b: *std.Build) void {
     const dictionary_deflate_report_step = b.step("run-dictionary-deflate-report", "Report raw/zlib preset-dictionary deflate encode savings");
     dictionary_deflate_report_step.dependOn(&run_dictionary_deflate_report.step);
 
+    const run_dictionary_deflate_report_csv = b.addRunArtifact(dictionary_deflate_report_exe);
+    run_dictionary_deflate_report_csv.addArgs(&.{ "--csv", "zig-out/vort-dictionary-deflate-report.csv" });
+    const dictionary_deflate_report_csv_step = b.step("run-dictionary-deflate-report-csv", "Write raw/zlib preset-dictionary deflate savings CSV to zig-out");
+    dictionary_deflate_report_csv_step.dependOn(&run_dictionary_deflate_report_csv.step);
+
     const dictionary_corpus_report = b.addSystemCommand(&.{ "python3", "tools/dictionary_corpus_report.py" });
     dictionary_corpus_report.addArtifactArg(dictionary_report_exe);
     if (b.args) |args| dictionary_corpus_report.addArgs(args);

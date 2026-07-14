@@ -46,11 +46,16 @@
     "vort-dynamic-plan-report.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build run-dynamic-plan-report-csv"
+    },
+    "vort-dictionary-deflate-report.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-dictionary-deflate-report-csv"
     }
   },
   "exact": {
     "vort-dashboard-index.json": "zig build run-dashboard-index",
     "vort-dashboard-index.md": "zig build run-dashboard-index",
+    "vort-dictionary-deflate-report.csv": "zig build run-dictionary-deflate-report-csv",
     "vort-dictionary-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard",
     "vort-dynamic-plan-report.csv": "zig build run-dynamic-plan-report-csv",
     "vort-file-corpus-standard-dashboard.md": "zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard",

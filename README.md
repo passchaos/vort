@@ -165,6 +165,7 @@ zig build run-dictionary-report -- README.md docs/roadmap.md
 zig build run-dictionary-report -- --target 512 README.md docs/roadmap.md
 zig build run-dictionary-deflate-report
 zig build run-dictionary-deflate-report -- /tmp/vort.dict /tmp/vort-dict.out
+zig build run-dictionary-deflate-report-csv
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-report
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-report -- --per-file
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard
