@@ -91,12 +91,14 @@ includes real project README/roadmap files. Run it with
 `run-rust-deflate-encode-bench-csv` to persist the same rows to
 `zig-out/vort-rust-deflate-encode-bench.csv`.
 `run-rust-deflate-benchmark-summary` consumes both CSV files and writes
-`zig-out/vort-rust-deflate-benchmark-summary.md`, highlighting per-case Vort
-zlib allocator and caller-buffer throughput ratios against the best Rust
-baseline. Raw-deflate Vort/miniz_oxide rows, gzip decode rows, and decode
-allocation overhead are summarized separately because the Rust baseline harness
-does not expose identical APIs for every wrapper. The zlib encode table also
-reports the Vort default/dynamic-default throughput ratio to expose
+`zig-out/vort-rust-deflate-benchmark-summary.md`. It starts with a geomean
+overview of the key throughput and size ratios so each run has an immediate
+whole-suite gap signal before the per-case tables. The detailed decode table
+then highlights per-case Vort zlib allocator and caller-buffer throughput
+ratios against the best Rust baseline. Raw-deflate Vort/miniz_oxide rows, gzip
+decode rows, and decode allocation overhead are summarized separately because
+the Rust baseline harness does not expose identical APIs for every wrapper. The
+zlib encode table also reports the Vort default/dynamic-default throughput ratio to expose
 best-selection overhead, literal-only dynamic speed/size ratios against Vort
 default, plus split-default/adaptive-default speed and size ratios against Vort
 default to expose wrapper block-planning overhead and split-induced size

@@ -3,6 +3,7 @@
 
 import argparse
 import csv
+import math
 from collections import defaultdict
 from pathlib import Path
 
@@ -56,6 +57,109 @@ def top_histogram_deltas(row: dict[str, str], key: str, best_key: str, symbol_ba
 
 def row_format(row: dict[str, str]) -> str:
     return row.get("format", "zlib")
+
+
+def geomean(values: list[float]) -> float:
+    positive = [value for value in values if value > 0.0]
+    if not positive:
+        return 0.0
+    return math.exp(sum(math.log(value) for value in positive) / len(positive))
+
+
+def append_overview_row(lines: list[str], metric: str, values: list[float], note: str) -> None:
+    if not values:
+        return
+    lines.append(f"| {metric} | {len(values)} | {geomean(values):.3f} | {note} |")
+
+
+def benchmark_overview_lines(decode_rows: list[dict[str, str]], encode_rows: list[dict[str, str]]) -> list[str]:
+    zlib_decode_alloc: list[float] = []
+    zlib_decode_into: list[float] = []
+    raw_decode_alloc: list[float] = []
+    raw_decode_into: list[float] = []
+    for _case, items in sorted(by_case(decode_rows).items()):
+        zlib_items = [row for row in items if row_format(row) == "zlib"]
+        vort_alloc = next((row for row in zlib_items if row["engine"] == "vort"), None)
+        vort_into = next((row for row in zlib_items if row["engine"] == "vort-into"), None)
+        rust_rows = [row for row in zlib_items if not row["engine"].startswith("vort")]
+        if vort_alloc is not None and vort_into is not None and rust_rows:
+            rust = max(rust_rows, key=lambda row: fnum(row, "throughput_mib_s"))
+            rust_speed = fnum(rust, "throughput_mib_s")
+            if rust_speed > 0:
+                zlib_decode_alloc.append(fnum(vort_alloc, "throughput_mib_s") / rust_speed)
+                zlib_decode_into.append(fnum(vort_into, "throughput_mib_s") / rust_speed)
+
+        raw_items = [row for row in items if row_format(row) == "raw"]
+        vort_raw = next((row for row in raw_items if row["engine"] == "vort-raw"), None)
+        vort_raw_into = next((row for row in raw_items if row["engine"] == "vort-raw-into"), None)
+        miniz_raw = next((row for row in raw_items if row["engine"] == "miniz_oxide-raw"), None)
+        if vort_raw is not None and vort_raw_into is not None and miniz_raw is not None:
+            rust_speed = fnum(miniz_raw, "throughput_mib_s")
+            if rust_speed > 0:
+                raw_decode_alloc.append(fnum(vort_raw, "throughput_mib_s") / rust_speed)
+                raw_decode_into.append(fnum(vort_raw_into, "throughput_mib_s") / rust_speed)
+
+    zlib_encode_speed: list[float] = []
+    zlib_default_size: list[float] = []
+    zlib_best_size: list[float] = []
+    raw_encode_speed: list[float] = []
+    raw_default_size: list[float] = []
+    raw_best_size: list[float] = []
+    for _case, items in sorted(by_case(encode_rows).items()):
+        zlib_items = [row for row in items if row_format(row) == "zlib"]
+        vort_rows = [row for row in zlib_items if row["engine"].startswith("vort")]
+        rust_rows = [row for row in zlib_items if not row["engine"].startswith("vort")]
+        if vort_rows and rust_rows:
+            best_vort_speed = max(vort_rows, key=lambda row: fnum(row, "throughput_mib_s"))
+            best_rust_speed = max(rust_rows, key=lambda row: fnum(row, "throughput_mib_s"))
+            rust_speed = fnum(best_rust_speed, "throughput_mib_s")
+            if rust_speed > 0:
+                zlib_encode_speed.append(fnum(best_vort_speed, "throughput_mib_s") / rust_speed)
+            best_rust_size = min(rust_rows, key=size_bytes)
+            rust_size = max(size_bytes(best_rust_size), 1)
+            vort_default = next((row for row in vort_rows if row["engine"] == "vort-default"), None)
+            if vort_default is not None:
+                zlib_default_size.append(size_bytes(vort_default) / rust_size)
+            best_vort_size = min(vort_rows, key=size_bytes)
+            zlib_best_size.append(size_bytes(best_vort_size) / rust_size)
+
+        raw_items = [row for row in items if row_format(row) == "raw"]
+        vort_rows = [row for row in raw_items if row["engine"].startswith("vort")]
+        rust_rows = [row for row in raw_items if not row["engine"].startswith("vort")]
+        if vort_rows and rust_rows:
+            best_vort_speed = max(vort_rows, key=lambda row: fnum(row, "throughput_mib_s"))
+            best_rust_speed = max(rust_rows, key=lambda row: fnum(row, "throughput_mib_s"))
+            rust_speed = fnum(best_rust_speed, "throughput_mib_s")
+            if rust_speed > 0:
+                raw_encode_speed.append(fnum(best_vort_speed, "throughput_mib_s") / rust_speed)
+            best_rust_size = min(rust_rows, key=size_bytes)
+            rust_size = max(size_bytes(best_rust_size), 1)
+            vort_default = next((row for row in vort_rows if row["engine"] == "vort-raw-default"), None)
+            if vort_default is not None:
+                raw_default_size.append(size_bytes(vort_default) / rust_size)
+            best_vort_size = min(vort_rows, key=size_bytes)
+            raw_best_size.append(size_bytes(best_vort_size) / rust_size)
+
+    lines = [
+        "## Benchmark gap overview",
+        "",
+        "Geomean ratios summarize the detailed per-case tables below. Throughput ratios above 1.0 are faster than the Rust baseline; size ratios below 1.0 are smaller.",
+        "",
+        "| metric | cases | geomean ratio | note |",
+        "| --- | ---: | ---: | --- |",
+    ]
+    append_overview_row(lines, "zlib decode alloc / best Rust", zlib_decode_alloc, "Vort allocator-returning zlib decode vs best fdeflate/miniz_oxide zlib row")
+    append_overview_row(lines, "zlib decode into / best Rust", zlib_decode_into, "Vort caller-buffer zlib decode vs best fdeflate/miniz_oxide zlib row")
+    append_overview_row(lines, "raw decode alloc / miniz_oxide", raw_decode_alloc, "Vort allocator-returning raw decode vs miniz_oxide raw inflate")
+    append_overview_row(lines, "raw decode into / miniz_oxide", raw_decode_into, "Vort caller-buffer raw decode vs miniz_oxide raw inflate")
+    append_overview_row(lines, "zlib encode best-speed / best Rust", zlib_encode_speed, "Fastest Vort zlib row per case vs fastest fdeflate/miniz_oxide zlib row")
+    append_overview_row(lines, "zlib encode default size / best Rust", zlib_default_size, "Vort production default zlib size vs smallest Rust zlib size")
+    append_overview_row(lines, "zlib encode best size / best Rust", zlib_best_size, "Smallest Vort zlib row vs smallest Rust zlib row")
+    append_overview_row(lines, "raw encode best-speed / best Rust", raw_encode_speed, "Fastest Vort raw row per case vs fastest fdeflate/miniz_oxide raw row")
+    append_overview_row(lines, "raw encode default size / best Rust", raw_default_size, "Vort raw default size vs smallest Rust raw size")
+    append_overview_row(lines, "raw encode best size / best Rust", raw_best_size, "Smallest Vort raw row vs smallest Rust raw row")
+    lines.append("")
+    return lines
 
 
 def decode_lines(rows: list[dict[str, str]]) -> list[str]:
@@ -355,6 +459,7 @@ def main() -> int:
         "Derived from the fdeflate/miniz_oxide benchmark CSV artifacts. Ratios above 1.0 are better for throughput; ratios below 1.0 are better for compressed size.",
         "",
     ]
+    lines.extend(benchmark_overview_lines(decode_rows, encode_rows))
     lines.extend(decode_lines(decode_rows))
     lines.extend(raw_decode_lines(decode_rows))
     lines.extend(gzip_decode_lines(decode_rows))
