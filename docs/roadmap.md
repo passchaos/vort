@@ -211,6 +211,7 @@ architecture blindly.
 - [x] Rust deflate encode benchmark includes a Vort fixed-fast row to isolate best-selection overhead.
 - [x] Rust deflate encode benchmark includes a Vort dynamic-default row to isolate dynamic encoder cost.
 - [x] Rust deflate encode benchmarks include overlap-RLE, distance-heavy, and dynamic-literal payloads.
+- [x] Rust deflate encode benchmarks include deterministic incompressible payloads.
 - [x] Rust deflate benchmark CSV artifact steps write decode and encode rows to zig-out.
 - [x] Dashboard index tracks Rust deflate benchmark CSV artifacts.
 - [x] Dashboard index reports CSV benchmark row counts.

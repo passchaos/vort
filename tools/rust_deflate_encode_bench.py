@@ -110,6 +110,18 @@ def run_vort(input_path: pathlib.Path, iterations: int, level: str) -> dict[str,
     return parse_fields(out)
 
 
+
+
+def deterministic_noise(size: int) -> bytes:
+    state = 0x1234ABCD
+    out = bytearray(size)
+    for i in range(size):
+        state ^= (state << 13) & 0xFFFFFFFF
+        state ^= state >> 17
+        state ^= (state << 5) & 0xFFFFFFFF
+        out[i] = state & 0xFF
+    return bytes(out)
+
 def iterations_for(size: int) -> int:
     target = 16 * 1024 * 1024
     return max(32, min(5000, target // max(size, 1)))
@@ -138,6 +150,7 @@ def main() -> int:
         ("dynamic-literal", b"literal-heavy dynamic huffman decode stage\n" * 512),
         ("text", b"the quick brown fox jumps over the lazy dog\n" * 1024),
         ("binary", bytes((i * 131 + (i >> 3) * 17 + 29) & 0xFF for i in range(64 * 1024))),
+        ("incompressible", deterministic_noise(32 * 1024)),
         ("readme", (ROOT / "README.md").read_bytes()),
         ("roadmap", (ROOT / "docs" / "roadmap.md").read_bytes()),
     ]
