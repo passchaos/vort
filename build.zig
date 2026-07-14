@@ -534,6 +534,8 @@ pub fn build(b: *std.Build) void {
         "zig-out/vort-dynamic-plan-report.csv",
         "--dictionary-deflate-csv",
         "zig-out/vort-dictionary-deflate-report.csv",
+        "--decode-stage-csv",
+        "zig-out/vort-deflate-decode-stage-report.csv",
         "--output",
         "zig-out/vort-rust-deflate-benchmark-summary.md",
     });
@@ -541,6 +543,7 @@ pub fn build(b: *std.Build) void {
     rust_deflate_benchmark_summary.step.dependOn(rust_deflate_encode_bench_csv_step);
     rust_deflate_benchmark_summary.step.dependOn(dynamic_plan_report_csv_step);
     rust_deflate_benchmark_summary.step.dependOn(dictionary_deflate_report_csv_step);
+    rust_deflate_benchmark_summary.step.dependOn(deflate_decode_stage_report_csv_step);
     const rust_deflate_benchmark_summary_step = b.step("run-rust-deflate-benchmark-summary", "Write Vort/fdeflate/miniz_oxide benchmark Markdown summary to zig-out");
     rust_deflate_benchmark_summary_step.dependOn(&rust_deflate_benchmark_summary.step);
 

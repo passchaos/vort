@@ -112,12 +112,29 @@ def dictionary_deflate_lines(rows: list[dict[str, str]]) -> list[str]:
     return lines
 
 
+def decode_stage_lines(rows: list[dict[str, str]]) -> list[str]:
+    lines = [
+        "## Decode stage diagnostics",
+        "",
+        "| case | raw MiB/s | zlib MiB/s | zlib/raw time | iterations | raw bytes | zlib bytes |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['case']} | {fnum(row, 'raw_mib_s'):.2f} | {fnum(row, 'zlib_mib_s'):.2f} | "
+            f"{fnum(row, 'wrapper_time_ratio'):.3f} | {row['iterations']} | {row['raw_bytes']} | {row['zlib_bytes']} |"
+        )
+    lines.append("")
+    return lines
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--decode-csv", default="zig-out/vort-rust-deflate-decode-bench.csv")
     parser.add_argument("--encode-csv", default="zig-out/vort-rust-deflate-encode-bench.csv")
     parser.add_argument("--dynamic-plan-csv", default="zig-out/vort-dynamic-plan-report.csv")
     parser.add_argument("--dictionary-deflate-csv", default="zig-out/vort-dictionary-deflate-report.csv")
+    parser.add_argument("--decode-stage-csv", default="zig-out/vort-deflate-decode-stage-report.csv")
     parser.add_argument("--output", default="zig-out/vort-rust-deflate-benchmark-summary.md")
     args = parser.parse_args()
 
@@ -127,6 +144,8 @@ def main() -> int:
     dynamic_plan_rows = read_rows(dynamic_plan_path) if dynamic_plan_path.exists() else []
     dictionary_deflate_path = Path(args.dictionary_deflate_csv)
     dictionary_deflate_rows = read_rows(dictionary_deflate_path) if dictionary_deflate_path.exists() else []
+    decode_stage_path = Path(args.decode_stage_csv)
+    decode_stage_rows = read_rows(decode_stage_path) if decode_stage_path.exists() else []
     lines = [
         "# Vort vs Rust deflate benchmark summary",
         "",
@@ -137,6 +156,8 @@ def main() -> int:
     lines.extend(encode_lines(encode_rows))
     if dynamic_plan_rows:
         lines.extend(dynamic_plan_lines(dynamic_plan_rows))
+    if decode_stage_rows:
+        lines.extend(decode_stage_lines(decode_stage_rows))
     if dictionary_deflate_rows:
         lines.extend(dictionary_deflate_lines(dictionary_deflate_rows))
     output = Path(args.output)
@@ -145,7 +166,8 @@ def main() -> int:
     print(
         f"rust_deflate_benchmark_summary={output} "
         f"decode_rows={len(decode_rows)} encode_rows={len(encode_rows)} "
-        f"dynamic_plan_rows={len(dynamic_plan_rows)} dictionary_deflate_rows={len(dictionary_deflate_rows)}"
+        f"dynamic_plan_rows={len(dynamic_plan_rows)} decode_stage_rows={len(decode_stage_rows)} "
+        f"dictionary_deflate_rows={len(dictionary_deflate_rows)}"
     )
     return 0
 
