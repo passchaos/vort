@@ -1054,7 +1054,7 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
     const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
     const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
     const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
-    const dist_decoder = huffman.FastDecoder(30, 10).init(dist_table);
+    const dist_decoder = makeDynamicDistanceDecoder(dist_table);
 
     while (true) {
         const symbol = (try lit_decoder.decode(&reader)).value;
@@ -1081,6 +1081,18 @@ pub fn decodeRawDynamicAllocStrict(allocator: std.mem.Allocator, input: []const 
     return result.bytes;
 }
 
+const DynamicDistanceDecoder = huffman.FastDecoder(30, 8);
+
+fn makeDynamicDistanceDecoder(table: huffman.HuffmanTable(30)) DynamicDistanceDecoder {
+    // Dynamic distance alphabets have at most 30 symbols. A 10-bit lookup table
+    // made every dynamic block pay to initialize 1024 entries even though most
+    // distance codes are short and infrequent compared with literals. An 8-bit
+    // table keeps the common fast path while cutting per-block setup/cache
+    // pressure, which shows up in the raw decode benchmark for many small
+    // dynamic frames and wrapper benchmarks.
+    return DynamicDistanceDecoder.init(table);
+}
+
 pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
     return decodeRawAutoAllocPartialWithDictionary(allocator, input, "", null);
 }
@@ -1105,7 +1117,7 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
-                const dist_decoder = huffman.FastDecoder(30, 10).init(dist_table);
+                const dist_decoder = makeDynamicDistanceDecoder(dist_table);
                 try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
             },
             else => return error.InvalidDeflateBlockType,
@@ -1142,7 +1154,7 @@ fn decodeRawAutoAppendPartialWithDictionary(
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
-                const dist_decoder = huffman.FastDecoder(30, 10).init(dist_table);
+                const dist_decoder = makeDynamicDistanceDecoder(dist_table);
                 try decodeCompressedBlockFromReaderFromBase(allocator, &reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
             },
             else => return error.InvalidDeflateBlockType,
@@ -1200,7 +1212,7 @@ pub fn decodeRawAutoWithDictionary(input: []const u8, dictionary: []const u8, ou
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
-                const dist_decoder = huffman.FastDecoder(30, 10).init(dist_table);
+                const dist_decoder = makeDynamicDistanceDecoder(dist_table);
                 try decodeCompressedBlockIntoReader(&reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
             },
             else => return error.InvalidDeflateBlockType,
