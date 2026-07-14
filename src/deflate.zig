@@ -1532,9 +1532,9 @@ fn inflateOutputCapacityHint(input_len: usize) usize {
     // expand by hundreds of times (for example repeated/RLE payloads). The
     // previous 4x hint made allocator-returning decode repeatedly grow the
     // output ArrayList while the caller-buffer API avoided that cost entirely.
-    // A 32x hint is still capped at 1 MiB, so it improves common compressed
+    // A 64x hint is still capped at 1 MiB, so it improves common compressed
     // frames without over-reserving unbounded memory for hostile streams.
-    return @min(input_len *| 32, 1 << 20);
+    return @min(input_len *| 64, 1 << 20);
 }
 
 fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), dictionary: []const u8, max_output_len: ?usize) !void {
@@ -3947,8 +3947,8 @@ test "dynamic bit cost model predicts dynamic token byte length" {
 
 test "inflate output capacity hint expands compressed frames but stays capped" {
     try std.testing.expectEqual(@as(usize, 0), inflateOutputCapacityHint(0));
-    try std.testing.expectEqual(@as(usize, 32), inflateOutputCapacityHint(1));
-    try std.testing.expectEqual(@as(usize, 1024), inflateOutputCapacityHint(32));
+    try std.testing.expectEqual(@as(usize, 64), inflateOutputCapacityHint(1));
+    try std.testing.expectEqual(@as(usize, 2048), inflateOutputCapacityHint(32));
     try std.testing.expectEqual(@as(usize, 1 << 20), inflateOutputCapacityHint(64 * 1024));
     try std.testing.expectEqual(@as(usize, 1 << 20), inflateOutputCapacityHint(std.math.maxInt(usize)));
 }
