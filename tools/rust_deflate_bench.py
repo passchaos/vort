@@ -144,6 +144,7 @@ def main() -> int:
         ("dynamic-literal", b"literal-heavy dynamic huffman decode stage\n" * 512),
         ("text", b"the quick brown fox jumps over the lazy dog\n" * 1024),
         ("binary", bytes((i * 131 + (i >> 3) * 17 + 29) & 0xFF for i in range(64 * 1024))),
+        ("stored-binary", bytes((i * 131 + (i >> 3) * 17 + 29) & 0xFF for i in range(64 * 1024))),
         ("readme", (ROOT / "README.md").read_bytes()),
         ("roadmap", (ROOT / "docs" / "roadmap.md").read_bytes()),
     ]
@@ -153,7 +154,7 @@ def main() -> int:
         project = write_runner(tmp / "runner")
         for name, payload in payloads:
             frame = tmp / f"{name}.zlib"
-            frame.write_bytes(zlib.compress(payload, level=6))
+            frame.write_bytes(zlib.compress(payload, level=0 if name == "stored-binary" else 6))
             iterations = iterations_for(len(payload))
             rows = [("vort", run_vort_bench(frame, iterations))]
             rows.extend((engine, run_bench(project, engine, frame, iterations)) for engine in ("fdeflate", "miniz_oxide"))
