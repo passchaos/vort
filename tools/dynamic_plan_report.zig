@@ -20,7 +20,7 @@ pub fn main(init: std.process.Init) !void {
     var output = std.Io.Writer.Allocating.init(init.gpa);
     defer output.deinit();
     const writer = &output.writer;
-    try writer.print("path,input_bytes,token_count,literal_tokens,match_tokens,matched_bytes,stored_bytes,fixed_bytes,dynamic_bytes,hlit,hdist,hclen,code_length_ops,stats_ns,dynamic_encode_ns,best_encode_ns,dynamic_zlib_bytes,best_zlib_bytes,fixed_dynamic_size_ratio,best_dynamic_time_ratio,stats_dynamic_time_ratio\n", .{});
+    try writer.print("path,input_bytes,token_count,literal_tokens,match_tokens,matched_bytes,stored_bytes,fixed_bytes,dynamic_bytes,hlit,hdist,hclen,code_length_ops,stats_ns,dynamic_encode_ns,best_encode_ns,dynamic_zlib_bytes,best_zlib_bytes,best_preset_token_count,best_preset_literal_tokens,best_preset_match_tokens,best_preset_matched_bytes,best_preset_zlib_bytes,best_preset_default_size_ratio,best_preset_default_token_ratio,fixed_dynamic_size_ratio,best_dynamic_time_ratio,stats_dynamic_time_ratio\n", .{});
 
     if (paths.items.len == 0) {
         try reportPath(init, writer, "README.md");
@@ -60,11 +60,18 @@ fn reportPath(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8) 
     defer init.gpa.free(best_zlib);
     const best_encode_ns = best_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 
+    const best_preset_options = vort.optionsForCompressionLevel(.best);
+    const best_preset_stats = try vort.dynamicDeflatePlanStatsAlloc(init.gpa, data, best_preset_options);
+    const best_preset_zlib = try vort.encodeZlibBestAlloc(init.gpa, data, best_preset_options);
+    defer init.gpa.free(best_preset_zlib);
+
     const fixed_dynamic_size_ratio = ratio(stats.fixed_bytes, stats.dynamic_bytes);
     const best_dynamic_time_ratio = ratioSigned(best_encode_ns, dynamic_encode_ns);
     const stats_dynamic_time_ratio = ratioSigned(stats_ns, dynamic_encode_ns);
+    const best_preset_default_size_ratio = ratio(best_preset_zlib.len, best_zlib.len);
+    const best_preset_default_token_ratio = ratio(best_preset_stats.token_count, stats.token_count);
 
-    try stdout.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.4},{d:.4},{d:.4}\n", .{
+    try stdout.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
         path,
         stats.input_bytes,
         stats.token_count,
@@ -83,6 +90,13 @@ fn reportPath(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8) 
         best_encode_ns,
         dynamic_zlib.len,
         best_zlib.len,
+        best_preset_stats.token_count,
+        best_preset_stats.literal_tokens,
+        best_preset_stats.match_tokens,
+        best_preset_stats.matched_bytes,
+        best_preset_zlib.len,
+        best_preset_default_size_ratio,
+        best_preset_default_token_ratio,
         fixed_dynamic_size_ratio,
         best_dynamic_time_ratio,
         stats_dynamic_time_ratio,

@@ -90,3 +90,8 @@ ratios against Vort default to expose wrapper block-planning overhead and
 split-induced size changes. It also reports Vort default and Vort best-preset
 compressed-size ratios against the best Rust size so the production preset and
 strongest-size preset can be tracked separately.
+
+The dynamic plan report section compares the default dynamic plan with the
+best-preset plan on the same files, including best/default compressed-size and
+token-count ratios. Those fields are intended to identify which best-preset
+parser improvements are worth moving into production presets.

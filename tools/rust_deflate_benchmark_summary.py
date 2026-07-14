@@ -146,13 +146,16 @@ def dynamic_plan_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Dynamic plan diagnostics",
         "",
-        "| path | tokens | matches | matched bytes | fixed/dynamic size | best/dynamic time | stats/dynamic time | code-length ops |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| path | tokens | matches | matched bytes | fixed/dynamic size | best preset size/default | best preset tokens/default | best/dynamic time | stats/dynamic time | code-length ops |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
+        best_size_ratio = fnum(row, "best_preset_default_size_ratio") if "best_preset_default_size_ratio" in row else 0.0
+        best_token_ratio = fnum(row, "best_preset_default_token_ratio") if "best_preset_default_token_ratio" in row else 0.0
         lines.append(
             f"| {row['path']} | {row['token_count']} | {row['match_tokens']} | {row['matched_bytes']} | "
-            f"{fnum(row, 'fixed_dynamic_size_ratio'):.3f} | {fnum(row, 'best_dynamic_time_ratio'):.3f} | "
+            f"{fnum(row, 'fixed_dynamic_size_ratio'):.3f} | {best_size_ratio:.3f} | {best_token_ratio:.3f} | "
+            f"{fnum(row, 'best_dynamic_time_ratio'):.3f} | "
             f"{fnum(row, 'stats_dynamic_time_ratio'):.3f} | {row['code_length_ops']} |"
         )
     lines.append("")
