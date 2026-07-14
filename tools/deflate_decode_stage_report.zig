@@ -6,7 +6,7 @@ const Case = struct {
     payload: []const u8,
     mode: Mode = .best,
 
-    const Mode = enum { best, dynamic_literal };
+    const Mode = enum { best, dynamic_literal, stored };
 };
 
 const Row = struct {
@@ -36,6 +36,7 @@ const builtins = [_]Case{
     .{ .name = "text", .payload = "the quick brown fox jumps over the lazy dog\n" ** 1024 },
     .{ .name = "dynamic-literal", .payload = "literal-heavy dynamic huffman decode stage\n" ** 512, .mode = .dynamic_literal },
     .{ .name = "binary", .payload = &binary_payload },
+    .{ .name = "stored-binary", .payload = &binary_payload, .mode = .stored },
     .{ .name = "structured", .payload = "{\"service\":\"vort\",\"level\":\"default\",\"message\":\"decode stage\"}\n" ** 512 },
 };
 
@@ -100,6 +101,7 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
     const zlib_frame = switch (case.mode) {
         .best => try vort.encodeZlibBestAlloc(init.gpa, case.payload, options),
         .dynamic_literal => try vort.encodeZlibDynamicLiteralAlloc(init.gpa, case.payload),
+        .stored => try vort.encodeZlibStoredAlloc(init.gpa, case.payload),
     };
     defer init.gpa.free(zlib_frame);
 
