@@ -75,6 +75,8 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
         .default => switch (normalized.parser) {
             .hash => if (useSmallInputScanPlan(input, normalized))
                 try lz77.greedyPlanAlloc(allocator, input, normalized.lz77_options)
+            else if (useTinyHashPlan(input, normalized))
+                try lz77.hashGreedyPlanTinyAlloc(allocator, input, normalized.lz77_options)
             else
                 try lz77.hashGreedyPlanAlloc(allocator, input, normalized.lz77_options),
             .greedy => try lz77.greedyPlanAlloc(allocator, input, normalized.lz77_options),
@@ -88,14 +90,26 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
 }
 
 fn useSmallInputScanPlan(input: []const u8, options: CompressionOptions) bool {
-    // Hash parser setup allocates and clears tens of KiB of tables. For tiny
-    // one-shot payloads this fixed cost dominates compression time, while a
-    // direct scan over the short input has the same bounded search space and is
-    // much cheaper. Keep the threshold deliberately small so normal blocks keep
-    // the hash parser's asymptotic behavior.
+    // The greedy scan is fastest for truly tiny inputs because it avoids even a
+    // small hash-table clear. It still sees the entire bounded search space at
+    // these sizes, so it preserves the practical parsing behavior for the
+    // small CLI/API payloads where fixed parser overhead dominates.
     return options.parser == .hash and
         options.strategy == .default and
         input.len <= 256 and
+        options.lz77_options.window_len <= 16 * 1024;
+}
+
+fn useTinyHashPlan(input: []const u8, options: CompressionOptions) bool {
+    // Hash parser setup allocates and clears tens of KiB of tables. For tiny
+    // and small one-shot payloads this fixed cost dominates compression time.
+    // A stack-resident 4 Ki slot table preserves hash-parser behavior while
+    // avoiding the full 32 Ki table clear. Keep the threshold below normal
+    // split blocks so large inputs retain the production table size.
+    return options.parser == .hash and
+        options.strategy == .default and
+        input.len > 256 and
+        input.len <= 8 * 1024 and
         options.lz77_options.window_len <= 16 * 1024;
 }
 

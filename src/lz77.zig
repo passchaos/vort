@@ -543,6 +543,39 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
 }
 
+pub fn hashGreedyPlanTinyAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    var head: [4096]isize = @splat(-1);
+    const prev = try allocator.alloc(isize, input.len);
+    defer allocator.free(prev);
+
+    var tokens = try initTokenList(allocator, input.len);
+    errdefer tokens.deinit(allocator);
+    var stats = PlanStats{};
+
+    var pos: usize = 0;
+    while (pos < input.len) {
+        const best = findBestHashMatch(input, pos, options, &head, prev);
+
+        if (acceptMatch(input, pos, best.length, best.distance, options)) {
+            try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+            stats.matches += 1;
+            stats.matched_bytes += best.length;
+            const end = @min(input.len, pos + best.length);
+            insertHash(input, pos, &head, prev);
+            const tail_start = if (end > pos + 4) end - 4 else pos + 1;
+            pos += 1;
+            if (pos < tail_start) pos = tail_start;
+            while (pos < end) : (pos += 1) insertHash(input, pos, &head, prev);
+        } else {
+            try tokens.append(allocator, .{ .literal = input[pos] });
+            stats.literals += 1;
+            insertHash(input, pos, &head, prev);
+            pos += 1;
+        }
+    }
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
 fn findBestHashMatch(input: []const u8, pos: usize, options: GreedyOptions, head: []const isize, prev: []const isize) MatchCandidate {
     const minimum = minMatch(options);
     if (pos + minimum > input.len) return .{};
@@ -898,6 +931,16 @@ test "fixed bit cost accounts for literals matches and end marker" {
 test "hash greedy planner round trips repeated data" {
     const input = "abcabcabcabc xyz xyz xyz aaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const plan = try hashGreedyPlanAlloc(std.testing.allocator, input, .{});
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expect(plan.stats.matches > 0);
+    const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
+test "tiny hash greedy planner round trips small repeated data" {
+    const input = "abcabcabcabc" ** 16;
+    const plan = try hashGreedyPlanTinyAlloc(std.testing.allocator, input, .{ .window_len = 8 * 1024, .max_chain = 4, .nice_len = 8, .max_candidates = 1, .min_match = 4, .max_match = 64, .min_savings_bits = 8 });
     defer plan.deinit(std.testing.allocator);
     try std.testing.expect(plan.stats.matches > 0);
     const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
