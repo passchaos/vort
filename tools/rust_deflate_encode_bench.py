@@ -168,6 +168,8 @@ def main() -> int:
                 ("vort-default", run_vort(plain, iterations, "default")),
                 ("vort-dynamic-default", run_vort(plain, iterations, "dynamic-default")),
                 ("vort-fixed-fast", run_vort(plain, iterations, "fixed-fast")),
+                ("vort-split-default", run_vort(plain, iterations, "split-default")),
+                ("vort-adaptive-default", run_vort(plain, iterations, "adaptive-default")),
             ]
             rows.extend((engine, run_rust(project, engine, plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))
             for engine, fields in rows:

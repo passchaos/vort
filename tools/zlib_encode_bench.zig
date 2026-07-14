@@ -1,7 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 
-const EncodeMode = enum { best, dynamic, fixed };
+const EncodeMode = enum { best, dynamic, fixed, split, adaptive };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -49,6 +49,12 @@ fn parseMode(text: ?[]const u8) Mode {
     if (std.mem.startsWith(u8, value, "dynamic-")) {
         return .{ .kind = .dynamic, .level = parseLevel(value["dynamic-".len..]) };
     }
+    if (std.mem.startsWith(u8, value, "split-")) {
+        return .{ .kind = .split, .level = parseLevel(value["split-".len..]) };
+    }
+    if (std.mem.startsWith(u8, value, "adaptive-")) {
+        return .{ .kind = .adaptive, .level = parseLevel(value["adaptive-".len..]) };
+    }
     return .{ .kind = .best, .level = parseLevel(value) };
 }
 
@@ -65,5 +71,7 @@ fn encode(allocator: std.mem.Allocator, input: []const u8, mode: Mode) ![]u8 {
         .best => vort.encodeZlibBestAlloc(allocator, input, options),
         .dynamic => vort.encodeZlibDynamicWithOptionsAlloc(allocator, input, options),
         .fixed => vort.encodeZlibFixedWithOptionsAlloc(allocator, input, options),
+        .split => vort.encodeZlibBestSplitAlloc(allocator, input, options.split_options.min_block_len, options),
+        .adaptive => vort.encodeZlibBestAdaptiveSplitAlloc(allocator, input, options, options.split_options),
     };
 }
