@@ -18,12 +18,20 @@ const Row = struct {
     mix: u64,
 };
 
+const binary_payload = blk: {
+    @setEvalBranchQuota(200000);
+    var data: [64 * 1024]u8 = undefined;
+    for (&data, 0..) |*byte, i| byte.* = @intCast((i * 131 + (i >> 3) * 17 + 29) & 0xff);
+    break :blk data;
+};
+
 const builtins = [_]Case{
     .{ .name = "tiny", .payload = "hello rust deflate baselines" },
     .{ .name = "repetitive", .payload = "abcabcabcabc" ** 512 },
     .{ .name = "overlap-rle", .payload = "a" ** 32768 },
     .{ .name = "distance-heavy", .payload = ("0123456789abcdef" ** 1024) ++ "----" ++ ("0123456789abcdef" ** 1024) },
     .{ .name = "text", .payload = "the quick brown fox jumps over the lazy dog\n" ** 1024 },
+    .{ .name = "binary", .payload = &binary_payload },
     .{ .name = "structured", .payload = "{\"service\":\"vort\",\"level\":\"default\",\"message\":\"decode stage\"}\n" ** 512 },
 };
 
