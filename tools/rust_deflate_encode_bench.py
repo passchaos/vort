@@ -133,6 +133,9 @@ def main() -> int:
     payloads = [
         ("tiny", b"hello rust deflate baselines"),
         ("repetitive", b"abcabcabcabc" * 512),
+        ("overlap-rle", b"a" * (32 * 1024)),
+        ("distance-heavy", (b"0123456789abcdef" * 1024) + b"----" + (b"0123456789abcdef" * 1024)),
+        ("dynamic-literal", b"literal-heavy dynamic huffman decode stage\n" * 512),
         ("text", b"the quick brown fox jumps over the lazy dog\n" * 1024),
         ("binary", bytes((i * 131 + (i >> 3) * 17 + 29) & 0xFF for i in range(64 * 1024))),
         ("readme", (ROOT / "README.md").read_bytes()),
