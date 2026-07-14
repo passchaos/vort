@@ -180,6 +180,7 @@ def main() -> int:
                 ("vort-default", "default"),
                 ("vort-best", "best"),
                 ("vort-dynamic-default", "dynamic-default"),
+                ("vort-dynamic-literal", "dynamic-literal-default"),
                 ("vort-fixed-fast", "fixed-fast"),
                 ("vort-split-default", "split-default"),
                 ("vort-adaptive-default", "adaptive-default"),

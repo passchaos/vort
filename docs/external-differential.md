@@ -70,10 +70,10 @@ wrapper format overhead, and per-iteration allocation overhead.
 `run-rust-deflate-encode-bench` provides the matching encode-side smoke. It
 prints CSV rows for zlib output size, ratio, and encode throughput for Vort,
 fdeflate, and miniz_oxide on the same generated payloads. Vort is reported at
-fastest, fast, default, best, dynamic-default, fixed-fast, split-default, and
-adaptive-default modes so speed/ratio tradeoffs, dynamic-only cost,
-best-selection overhead, and wrapper split/adaptive overhead are visible next to
-the Rust baselines. The best row uses fewer iterations because it currently
+fastest, fast, default, best, dynamic-default, dynamic-literal, fixed-fast,
+split-default, and adaptive-default modes so speed/ratio tradeoffs, dynamic-only
+cost, literal-only wrapper cost, best-selection overhead, and wrapper
+split/adaptive overhead are visible next to the Rust baselines. The best row uses fewer iterations because it currently
 exercises the slower optimal parser; each row records its actual iteration
 count. It also includes real project README/roadmap files. Run it with
 `-Doptimize=ReleaseFast` before interpreting the Vort rows. Use
@@ -85,9 +85,10 @@ zlib allocator and caller-buffer throughput ratios against the best Rust
 baseline. Gzip decode rows and decode allocation overhead are summarized
 separately because the Rust baseline harness measures zlib frames. The encode
 table also reports the Vort default/dynamic-default throughput ratio to expose
-best-selection overhead, plus split-default/adaptive-default speed and size
-ratios against Vort default to expose wrapper block-planning overhead and
-split-induced size changes. It also reports Vort default and Vort best-preset
+best-selection overhead, literal-only dynamic speed/size ratios against Vort
+default, plus split-default/adaptive-default speed and size ratios against Vort
+default to expose wrapper block-planning overhead and split-induced size
+changes. It also reports Vort default and Vort best-preset
 compressed-size ratios against the best Rust size so the production preset and
 strongest-size preset can be tracked separately.
 

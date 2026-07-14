@@ -117,8 +117,8 @@ def encode_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Encode speed and size",
         "",
-        "| case | best Vort speed MiB/s | best Rust speed MiB/s | Vort speed / Rust | Vort default / dynamic speed | split/default speed | adaptive/default speed | split/default size | adaptive/default size | Vort default size / Rust | Vort best preset size / Rust | best Vort size | best Rust size | Vort size / Rust |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| case | best Vort speed MiB/s | best Rust speed MiB/s | Vort speed / Rust | Vort default / dynamic speed | literal/default speed | literal/default size | split/default speed | adaptive/default speed | split/default size | adaptive/default size | Vort default size / Rust | Vort best preset size / Rust | best Vort size | best Rust size | Vort size / Rust |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for case, items in sorted(by_case(rows).items()):
         vort_rows = [row for row in items if row["engine"].startswith("vort")]
@@ -132,18 +132,22 @@ def encode_lines(rows: list[dict[str, str]]) -> list[str]:
         vort_default = next((row for row in vort_rows if row["engine"] == "vort-default"), None)
         vort_best = next((row for row in vort_rows if row["engine"] == "vort-best"), None)
         vort_dynamic = next((row for row in vort_rows if row["engine"] == "vort-dynamic-default"), None)
+        vort_dynamic_literal = next((row for row in vort_rows if row["engine"] == "vort-dynamic-literal"), None)
         vort_split = next((row for row in vort_rows if row["engine"] == "vort-split-default"), None)
         vort_adaptive = next((row for row in vort_rows if row["engine"] == "vort-adaptive-default"), None)
         dynamic_overhead = ""
         if vort_default is not None and vort_dynamic is not None and fnum(vort_dynamic, "throughput_mib_s") != 0:
             dynamic_overhead = f"{fnum(vort_default, 'throughput_mib_s') / fnum(vort_dynamic, 'throughput_mib_s'):.3f}"
-        split_speed = split_size = adaptive_speed = adaptive_size = ""
+        literal_speed = literal_size = split_speed = split_size = adaptive_speed = adaptive_size = ""
         default_size_ratio = best_preset_size_ratio = ""
         rust_size = max(inum(best_rust_size, "zlib_bytes"), 1)
         if vort_default is not None:
             default_speed = fnum(vort_default, "throughput_mib_s")
             default_size = max(inum(vort_default, "zlib_bytes"), 1)
             default_size_ratio = f"{inum(vort_default, 'zlib_bytes') / rust_size:.3f}"
+            if vort_dynamic_literal is not None:
+                literal_speed = "" if default_speed == 0 else f"{fnum(vort_dynamic_literal, 'throughput_mib_s') / default_speed:.3f}"
+                literal_size = f"{inum(vort_dynamic_literal, 'zlib_bytes') / default_size:.3f}"
             if vort_split is not None:
                 split_speed = "" if default_speed == 0 else f"{fnum(vort_split, 'throughput_mib_s') / default_speed:.3f}"
                 split_size = f"{inum(vort_split, 'zlib_bytes') / default_size:.3f}"
@@ -156,6 +160,7 @@ def encode_lines(rows: list[dict[str, str]]) -> list[str]:
             f"| {case} | {best_vort_speed['engine']} {fnum(best_vort_speed, 'throughput_mib_s'):.2f} | "
             f"{best_rust_speed['engine']} {fnum(best_rust_speed, 'throughput_mib_s'):.2f} | {speed_ratio:.3f} | "
             f"{dynamic_overhead} | "
+            f"{literal_speed} | {literal_size} | "
             f"{split_speed} | {adaptive_speed} | {split_size} | {adaptive_size} | "
             f"{default_size_ratio} | {best_preset_size_ratio} | "
             f"{best_vort_size['engine']} {inum(best_vort_size, 'zlib_bytes')} | "
