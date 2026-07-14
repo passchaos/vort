@@ -5,8 +5,8 @@ const builtin = @import("builtin");
 /// This is the zlib-compatible NMAX bound that keeps the running sums within u32.
 pub const adler32_nmax = 5552;
 pub const adler32_modulus = 65521;
-const adler32_vector_len = 32;
-const adler32_vector_weights: @Vector(adler32_vector_len, u32) = .{ 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 };
+const adler32_vector_len = 64;
+const adler32_vector_weights: @Vector(adler32_vector_len, u32) = .{ 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 };
 
 /// Streaming Adler-32 state compatible with zlib's checksum definition.
 pub const Adler32 = struct {
@@ -32,9 +32,9 @@ pub const Adler32 = struct {
                 const sum = @reduce(.Add, values);
                 const weighted = @reduce(.Add, values * adler32_vector_weights);
                 // Adler-32's second sum is a weighted prefix sum. Folding
-                // thirty-two bytes at a time preserves the scalar recurrence:
-                //   b' = b + 32*a + 32*x0 + 31*x1 + ... + 1*x31
-                //   a' = a + x0 + x1 + ... + 1*x31
+                // sixty-four bytes at a time preserves the scalar recurrence:
+                //   b' = b + 64*a + 64*x0 + 63*x1 + ... + 1*x63
+                //   a' = a + x0 + x1 + ... + x63
                 // NMAX still bounds a/b before reduction, so the vectorized
                 // arithmetic remains within u32 just like zlib's scalar loop.
                 b += a * adler32_vector_len + weighted;
