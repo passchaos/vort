@@ -52,6 +52,7 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
 
     var csv_path: ?[]const u8 = null;
+    var markdown_path: ?[]const u8 = null;
     var shared_dictionary: ?[]u8 = null;
     var file_cases: std.ArrayList(Case) = .empty;
     defer {
@@ -69,6 +70,10 @@ pub fn main(init: std.process.Init) !void {
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--csv")) {
             csv_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--markdown")) {
+            markdown_path = args.next() orelse return error.MissingCorpusPath;
             continue;
         }
         if (std.mem.eql(u8, arg, "--dict")) {
@@ -98,8 +103,17 @@ pub fn main(init: std.process.Init) !void {
 
     const cases = if (file_cases.items.len == 0) builtins[0..] else file_cases.items;
     var totals = ReportStats{};
-    for (cases) |case| totals.add(try reportCase(init.gpa, writer, case));
-    if (cases.len > 1) try writeStatsRow(writer, "TOTAL", totals);
+    var rows: std.ArrayList(ReportRow) = .empty;
+    defer rows.deinit(init.gpa);
+    for (cases) |case| {
+        const stats = try reportCase(init.gpa, writer, case);
+        totals.add(stats);
+        try rows.append(init.gpa, .{ .name = case.name, .stats = stats });
+    }
+    if (cases.len > 1) {
+        try writeStatsRow(writer, "TOTAL", totals);
+        try rows.append(init.gpa, .{ .name = "TOTAL", .stats = totals });
+    }
 
     const bytes = output.written();
     var stdout_buffer: [1024]u8 = undefined;
@@ -110,6 +124,42 @@ pub fn main(init: std.process.Init) !void {
 
     if (csv_path) |path| {
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = bytes });
+    }
+    if (markdown_path) |path| {
+        var markdown = std.Io.Writer.Allocating.init(init.gpa);
+        defer markdown.deinit();
+        try writeMarkdown(&markdown.writer, rows.items);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = markdown.written() });
+    }
+}
+
+const ReportRow = struct {
+    name: []const u8,
+    stats: ReportStats,
+};
+
+fn writeMarkdown(writer: *std.Io.Writer, rows: []const ReportRow) !void {
+    try writer.writeAll(
+        \\# Dictionary deflate savings
+        \\
+        \\| case | input bytes | dict bytes | raw plain | raw dict | raw Δ | raw dict/plain | zlib plain | zlib dict | zlib Δ | zlib dict/plain |
+        \\| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+        \\
+    );
+    for (rows) |row| {
+        try writer.print("| {s} | {d} | {d} | {d} | {d} | {d} | {d:.3} | {d} | {d} | {d} | {d:.3} |\n", .{
+            row.name,
+            row.stats.input_bytes,
+            row.stats.dict_bytes,
+            row.stats.raw_plain_bytes,
+            row.stats.raw_dict_bytes,
+            signedDelta(row.stats.raw_plain_bytes, row.stats.raw_dict_bytes),
+            ratio(row.stats.raw_dict_bytes, row.stats.raw_plain_bytes),
+            row.stats.zlib_plain_bytes,
+            row.stats.zlib_dict_bytes,
+            signedDelta(row.stats.zlib_plain_bytes, row.stats.zlib_dict_bytes),
+            ratio(row.stats.zlib_dict_bytes, row.stats.zlib_plain_bytes),
+        });
     }
 }
 

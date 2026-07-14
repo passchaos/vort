@@ -443,6 +443,11 @@ pub fn build(b: *std.Build) void {
     const dictionary_deflate_report_csv_step = b.step("run-dictionary-deflate-report-csv", "Write raw/zlib preset-dictionary deflate savings CSV to zig-out");
     dictionary_deflate_report_csv_step.dependOn(&run_dictionary_deflate_report_csv.step);
 
+    const run_dictionary_deflate_report_dashboard = b.addRunArtifact(dictionary_deflate_report_exe);
+    run_dictionary_deflate_report_dashboard.addArgs(&.{ "--csv", "zig-out/vort-dictionary-deflate-report.csv", "--markdown", "zig-out/vort-dictionary-deflate-report.md" });
+    const dictionary_deflate_report_dashboard_step = b.step("run-dictionary-deflate-report-dashboard", "Write raw/zlib preset-dictionary deflate savings dashboard to zig-out");
+    dictionary_deflate_report_dashboard_step.dependOn(&run_dictionary_deflate_report_dashboard.step);
+
     const dictionary_corpus_report = b.addSystemCommand(&.{ "python3", "tools/dictionary_corpus_report.py" });
     dictionary_corpus_report.addArtifactArg(dictionary_report_exe);
     if (b.args) |args| dictionary_corpus_report.addArgs(args);
@@ -754,6 +759,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(compression_report_step);
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_step);
+    ci_smoke_step.dependOn(dictionary_deflate_report_dashboard_step);
     ci_smoke_step.dependOn(level_report_step);
     ci_smoke_step.dependOn(dynamic_plan_report_step);
     ci_smoke_step.dependOn(split_policy_report_step);

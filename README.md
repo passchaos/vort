@@ -168,6 +168,7 @@ zig build run-dictionary-deflate-report -- /tmp/vort.dict /tmp/vort-dict.out
 zig build run-dictionary-deflate-report -- --dict /tmp/vort.dict README.md docs/roadmap.md
 zig build run-dictionary-deflate-report -- --dict /tmp/vort.dict docs
 zig build run-dictionary-deflate-report-csv
+zig build run-dictionary-deflate-report-dashboard
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-report
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-report -- --per-file
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard
