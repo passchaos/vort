@@ -246,6 +246,7 @@ const gzip_bounded = try vort.decodeGzipConcatenatedAllocLimited(allocator, gzip
 defer allocator.free(gzip_bounded);
 var gzip_out: [1024]u8 = undefined;
 const gzip_written = try vort.decodeGzip(gzip_bytes, &gzip_out);
+const gzip_cat_written = try vort.decodeGzipConcatenated(gzip_bytes, &gzip_out);
 
 // Limited decode APIs return error.OutputLimitExceeded before allocating or
 // appending beyond the caller's declared uncompressed-size budget. Dictionary

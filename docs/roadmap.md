@@ -182,6 +182,7 @@ architecture blindly.
 - [x] gzip wrapper integration for multi-block dynamic streams.
 - [x] gzip concatenated member decode support.
 - [x] gzip concatenated member decode supports explicit total output limits.
+- [x] gzip concatenated member decode supports caller-owned output buffers.
 - [x] File CLI and gzip differential smoke cover gzip file decode with output limits.
 - [x] File CLI and gzip differential smoke cover concatenated gzip file decode.
 - [x] gzip differential smoke rejects too-small file output limits.

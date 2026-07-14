@@ -186,6 +186,7 @@ pub const decodeGzipStoredAllocLimited = deflate.decodeGzipStoredAllocLimited;
 pub const decodeGzip = deflate.decodeGzip;
 pub const decodeGzipAlloc = deflate.decodeGzipAlloc;
 pub const decodeGzipAllocLimited = deflate.decodeGzipAllocLimited;
+pub const decodeGzipConcatenated = deflate.decodeGzipConcatenated;
 pub const decodeGzipConcatenatedAlloc = deflate.decodeGzipConcatenatedAlloc;
 pub const decodeGzipConcatenatedAllocLimited = deflate.decodeGzipConcatenatedAllocLimited;
 
