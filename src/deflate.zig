@@ -902,6 +902,7 @@ pub fn decodeRawFixedAllocStrict(allocator: std.mem.Allocator, input: []const u8
 pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
+    try reserveInflateOutputHint(allocator, &out, input.len, null);
 
     var reader = bitstream.BitReader.init(input);
     const parsed = try huffman.parseDynamicLengths(&reader);
@@ -943,6 +944,7 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
     if (input.len == 0) return error.TruncatedFrame;
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
+    try reserveInflateOutputHint(allocator, &out, input.len, max_output_len);
 
     var reader = bitstream.BitReader.init(input);
     while (true) {
@@ -1120,6 +1122,12 @@ fn decodeStoredBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.
     try out.appendSlice(allocator, reader.input[offset + 4 ..][0..chunk_len]);
     reader.byte_index = offset + 4 + chunk_len;
     reader.bit_index = 0;
+}
+
+fn reserveInflateOutputHint(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input_len: usize, max_output_len: ?usize) !void {
+    const default_hint = @min(input_len *| 4, 1 << 20);
+    const capacity = if (max_output_len) |limit| @min(default_hint, limit) else default_hint;
+    if (capacity != 0) try out.ensureTotalCapacity(allocator, capacity);
 }
 
 fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), dictionary: []const u8, max_output_len: ?usize) !void {
