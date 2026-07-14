@@ -3,6 +3,7 @@ const vort = @import("vort");
 
 const Case = struct {
     name: []const u8,
+    owned_name: bool = false,
     dictionary: []const u8,
     shared_dictionary: bool = false,
     payload: []const u8,
@@ -56,6 +57,7 @@ pub fn main(init: std.process.Init) !void {
     defer {
         for (file_cases.items) |case| {
             if (case.owned) {
+                if (case.owned_name) init.gpa.free(case.name);
                 if (!case.shared_dictionary) init.gpa.free(case.dictionary);
                 init.gpa.free(case.payload);
             }
@@ -76,10 +78,7 @@ pub fn main(init: std.process.Init) !void {
             continue;
         }
         if (shared_dictionary) |dictionary| {
-            const payload_path = arg;
-            const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, payload_path, init.gpa, .limited(128 * 1024 * 1024));
-            errdefer init.gpa.free(payload);
-            try file_cases.append(init.gpa, .{ .name = payload_path, .dictionary = dictionary, .shared_dictionary = true, .payload = payload, .owned = true });
+            try appendSharedDictionaryPath(init, &file_cases, dictionary, arg);
             continue;
         }
         const dict_path = arg;
@@ -112,6 +111,38 @@ pub fn main(init: std.process.Init) !void {
     if (csv_path) |path| {
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = bytes });
     }
+}
+
+fn appendSharedDictionaryPath(init: std.process.Init, cases: *std.ArrayList(Case), dictionary: []const u8, path: []const u8) !void {
+    const stat = std.Io.Dir.cwd().statFile(init.io, path, .{}) catch {
+        try appendSharedDictionaryFile(init, cases, dictionary, path, false);
+        return;
+    };
+    if (stat.kind == .directory) {
+        try appendSharedDictionaryDirectory(init, cases, dictionary, path);
+        return;
+    }
+    try appendSharedDictionaryFile(init, cases, dictionary, path, false);
+}
+
+fn appendSharedDictionaryDirectory(init: std.process.Init, cases: *std.ArrayList(Case), path_dictionary: []const u8, dir_path: []const u8) !void {
+    var dir = try std.Io.Dir.cwd().openDir(init.io, dir_path, .{ .iterate = true });
+    defer dir.close(init.io);
+    var walker = try dir.walk(init.gpa);
+    defer walker.deinit();
+    while (try walker.next(init.io)) |entry| {
+        if (entry.kind != .file) continue;
+        const joined = try std.fs.path.join(init.gpa, &.{ dir_path, entry.path });
+        errdefer init.gpa.free(joined);
+        try appendSharedDictionaryFile(init, cases, path_dictionary, joined, true);
+    }
+}
+
+fn appendSharedDictionaryFile(init: std.process.Init, cases: *std.ArrayList(Case), dictionary: []const u8, payload_path: []const u8, owned_name: bool) !void {
+    const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, payload_path, init.gpa, .limited(128 * 1024 * 1024));
+    errdefer init.gpa.free(payload);
+    errdefer if (owned_name) init.gpa.free(payload_path);
+    try cases.append(init.gpa, .{ .name = payload_path, .owned_name = owned_name, .dictionary = dictionary, .shared_dictionary = true, .payload = payload, .owned = true });
 }
 
 fn reportCase(allocator: std.mem.Allocator, writer: *std.Io.Writer, case: Case) !ReportStats {
