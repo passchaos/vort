@@ -1214,6 +1214,11 @@ fn appendMatchWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u
         out.appendNTimesAssumeCapacity(byte, length);
         return;
     }
+    if (dictionary.len == 0 and distance >= length) {
+        const start = out.items.len - distance;
+        out.appendSliceAssumeCapacity(out.items[start..][0..length]);
+        return;
+    }
     var i: usize = 0;
     while (i < length) : (i += 1) {
         const absolute = dictionary.len + out.items.len - distance;
