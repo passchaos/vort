@@ -99,12 +99,40 @@ fn planTokensWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8
 }
 
 pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (shouldUseStoredFastPath(input, options)) return encodeRawStoredAlloc(allocator, input);
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
     try writeBestTokensBlock(allocator, &writer, input, plan.tokens, true, options);
     return writer.toOwnedSlice(allocator);
+}
+
+fn shouldUseStoredFastPath(input: []const u8, options: CompressionOptions) bool {
+    if (input.len < 8 * 1024) return false;
+    const normalized = normalizeOptionsForStrategy(options);
+    if (normalized.strategy != .default or normalized.parser != .hash or normalized.block_selection != .stored_fixed) return false;
+    return looksIncompressible(input);
+}
+
+fn looksIncompressible(input: []const u8) bool {
+    const sample_len = @min(input.len, 4096);
+    if (uniqueByteCount(input[0..sample_len]) < 240) return false;
+    const word_count = sample_len -| 3;
+    if (word_count < 2) return false;
+    var words: [4096]u32 = undefined;
+    for (words[0..word_count], 0..) |*word, i| {
+        word.* = std.mem.readInt(u32, input[i..][0..4], .little);
+    }
+    std.mem.sort(u32, words[0..word_count], {}, std.sort.asc(u32));
+    var repeats: usize = 0;
+    for (words[1..word_count], 1..) |word, i| {
+        if (word == words[i - 1]) {
+            repeats += 1;
+            if (repeats >= 4) return false;
+        }
+    }
+    return true;
 }
 
 pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
@@ -2887,6 +2915,17 @@ test "best encoder skips invalid single stored block for large inputs" {
     const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &input, decoded);
+}
+
+test "stored fast path does not mask repeated binary structure" {
+    var input: [64 * 1024]u8 = undefined;
+    for (&input, 0..) |*byte, i| byte.* = @intCast((i * 131 + (i >> 3) * 17 + 29) & 0xff);
+
+    const encoded = try encodeRawBestAlloc(std.testing.allocator, &input, optionsForLevel(.fastest));
+    defer std.testing.allocator.free(encoded);
+    const stored = try encodeRawStoredAlloc(std.testing.allocator, &input);
+    defer std.testing.allocator.free(stored);
+    try std.testing.expect(encoded.len < stored.len);
 }
 
 test "compression level presets round trip" {
