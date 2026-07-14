@@ -21,6 +21,8 @@ const Row = struct {
 const builtins = [_]Case{
     .{ .name = "tiny", .payload = "hello rust deflate baselines" },
     .{ .name = "repetitive", .payload = "abcabcabcabc" ** 512 },
+    .{ .name = "overlap-rle", .payload = "a" ** 32768 },
+    .{ .name = "distance-heavy", .payload = ("0123456789abcdef" ** 1024) ++ "----" ++ ("0123456789abcdef" ** 1024) },
     .{ .name = "text", .payload = "the quick brown fox jumps over the lazy dog\n" ** 1024 },
     .{ .name = "structured", .payload = "{\"service\":\"vort\",\"level\":\"default\",\"message\":\"decode stage\"}\n" ** 512 },
 };
