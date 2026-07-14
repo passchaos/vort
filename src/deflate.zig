@@ -2005,7 +2005,9 @@ pub fn encodeZlibFixedWithDictionaryAlloc(allocator: std.mem.Allocator, input: [
 }
 
 pub fn encodeZlibDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    return encodeZlibDynamicWithOptionsAlloc(allocator, input, .{});
+    const plan = try lz77.literalPlanAlloc(allocator, input);
+    defer plan.deinit(allocator);
+    return encodeZlibDynamicTokensAlloc(allocator, input, null, plan.tokens);
 }
 
 pub fn encodeZlibDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
@@ -2316,7 +2318,9 @@ pub fn encodeGzipFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []co
 }
 
 pub fn encodeGzipDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    return encodeGzipDynamicWithOptionsAlloc(allocator, input, .{});
+    const plan = try lz77.literalPlanAlloc(allocator, input);
+    defer plan.deinit(allocator);
+    return encodeGzipDynamicTokensAlloc(allocator, input, plan.tokens);
 }
 
 pub fn encodeGzipDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
@@ -3624,6 +3628,20 @@ test "dynamic literal encoder round trips through raw zlib and gzip decoders" {
         defer std.testing.allocator.free(gzip_decoded);
         try std.testing.expectEqualSlices(u8, case, gzip_decoded);
     }
+}
+
+test "zlib and gzip dynamic literal wrappers preserve literal-only raw stream" {
+    const input = "abcabcabcabc abcabcabcabc";
+    const raw = try encodeRawDynamicLiteralAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(raw);
+
+    const zlib_frame = try encodeZlibDynamicLiteralAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(zlib_frame);
+    try std.testing.expectEqualSlices(u8, raw, zlib_frame[2 .. zlib_frame.len - 4]);
+
+    const gzip_frame = try encodeGzipDynamicLiteralAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(gzip_frame);
+    try std.testing.expectEqualSlices(u8, raw, gzip_frame[gzip_header.len .. gzip_frame.len - 8]);
 }
 
 test "single-block dynamic Huffman decoder rejects non-final blocks" {
