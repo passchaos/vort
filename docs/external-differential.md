@@ -94,4 +94,7 @@ strongest-size preset can be tracked separately.
 The dynamic plan report section compares the default dynamic plan with the
 best-preset plan on the same files, including best/default compressed-size and
 token-count ratios. Those fields are intended to identify which best-preset
-parser improvements are worth moving into production presets.
+parser improvements are worth moving into production presets. It also includes
+average match length/distance and short-match counts for both plans, making it
+easier to distinguish “more but shorter matches” from genuinely longer or
+farther back-references.

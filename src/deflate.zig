@@ -183,6 +183,11 @@ pub const DynamicPlanStats = struct {
     literal_tokens: usize,
     match_tokens: usize,
     matched_bytes: usize,
+    match_distance_sum: usize,
+    short_match_tokens: usize,
+    far_match_tokens: usize,
+    avg_match_len_x100: usize,
+    avg_match_distance: usize,
     stored_bytes: usize,
     fixed_bits: usize,
     fixed_bytes: usize,
@@ -200,12 +205,28 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
     const dynamic_plan = try DynamicCodingPlan.init(plan.tokens);
     const fixed_bits = lz77.fixedBitCost(plan.tokens);
     const dynamic_bits = dynamic_plan.bitCost(plan.tokens);
+    var match_distance_sum: usize = 0;
+    var short_match_tokens: usize = 0;
+    var far_match_tokens: usize = 0;
+    for (plan.tokens) |token| switch (token) {
+        .literal => {},
+        .match => |m| {
+            match_distance_sum += m.distance;
+            if (m.length <= 8) short_match_tokens += 1;
+            if (m.distance > 8 * 1024) far_match_tokens += 1;
+        },
+    };
     return .{
         .input_bytes = input.len,
         .token_count = plan.stats.tokenCount(),
         .literal_tokens = plan.stats.literals,
         .match_tokens = plan.stats.matches,
         .matched_bytes = plan.stats.matched_bytes,
+        .match_distance_sum = match_distance_sum,
+        .short_match_tokens = short_match_tokens,
+        .far_match_tokens = far_match_tokens,
+        .avg_match_len_x100 = if (plan.stats.matches == 0) 0 else (plan.stats.matched_bytes * 100) / plan.stats.matches,
+        .avg_match_distance = if (plan.stats.matches == 0) 0 else match_distance_sum / plan.stats.matches,
         .stored_bytes = try rawStoredEncodedSize(input.len),
         .fixed_bits = fixed_bits,
         .fixed_bytes = (fixed_bits + 7) / 8,
