@@ -1489,6 +1489,7 @@ pub fn encodeZlibDynamicWithDictionaryAlloc(allocator: std.mem.Allocator, input:
 }
 
 pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
     const raw = try encodeRawBestAlloc(allocator, input, options);
     defer allocator.free(raw);
     return encodeZlibRawAlloc(allocator, input, raw, null);
@@ -1709,6 +1710,7 @@ pub fn encodeGzipDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []
 }
 
 pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeGzipStoredAlloc(allocator, input);
     const raw = try encodeRawBestAlloc(allocator, input, options);
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
@@ -2916,6 +2918,18 @@ test "best encoder skips invalid single stored block for large inputs" {
     const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &input, decoded);
+
+    const zlib_best = try encodeZlibBestAlloc(std.testing.allocator, &input, optionsForLevel(.fastest));
+    defer std.testing.allocator.free(zlib_best);
+    const zlib_stored = try encodeZlibStoredAlloc(std.testing.allocator, &input);
+    defer std.testing.allocator.free(zlib_stored);
+    try std.testing.expectEqual(zlib_stored.len, zlib_best.len);
+
+    const gzip_best = try encodeGzipBestAlloc(std.testing.allocator, &input, optionsForLevel(.fastest));
+    defer std.testing.allocator.free(gzip_best);
+    const gzip_stored = try encodeGzipStoredAlloc(std.testing.allocator, &input);
+    defer std.testing.allocator.free(gzip_stored);
+    try std.testing.expectEqual(gzip_stored.len, gzip_best.len);
 }
 
 test "stored fast path does not mask repeated binary structure" {
