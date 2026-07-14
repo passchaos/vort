@@ -318,6 +318,7 @@ architecture blindly.
 - [x] Compression-level report accepts ad-hoc file corpora.
 - [x] Level-specific optimal parser match-candidate limits.
 - [x] Level-specific lazy parser gain thresholds.
+- [x] Default lazy parser accepts one-byte lazy gains to improve binary/source default-size competitiveness against Rust fdeflate/miniz_oxide baselines.
 - [x] Level-specific minimum match length parser setting.
 - [x] Level-specific minimum match savings parser setting.
 - [x] Level-specific maximum match length parser setting.
