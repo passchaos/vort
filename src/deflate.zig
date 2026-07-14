@@ -191,6 +191,11 @@ pub const DynamicPlanStats = struct {
     stored_bytes: usize,
     fixed_bits: usize,
     fixed_bytes: usize,
+    dynamic_header_bits: usize,
+    dynamic_literal_bits: usize,
+    dynamic_length_bits: usize,
+    dynamic_distance_bits: usize,
+    dynamic_extra_bits: usize,
     dynamic_bits: usize,
     dynamic_bytes: usize,
     hlit: usize,
@@ -205,17 +210,28 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
     const dynamic_plan = try DynamicCodingPlan.init(plan.tokens);
     const fixed_bits = lz77.fixedBitCost(plan.tokens);
     const dynamic_bits = dynamic_plan.bitCost(plan.tokens);
+    var dynamic_literal_bits: usize = 0;
+    var dynamic_length_bits: usize = 0;
+    var dynamic_distance_bits: usize = 0;
+    var dynamic_extra_bits: usize = 0;
     var match_distance_sum: usize = 0;
     var short_match_tokens: usize = 0;
     var far_match_tokens: usize = 0;
     for (plan.tokens) |token| switch (token) {
-        .literal => {},
+        .literal => |byte| dynamic_literal_bits += dynamic_plan.lit_lengths_full[byte],
         .match => |m| {
+            const len_code = lengthCode(m.length);
+            const dist_code = distanceCode(m.distance);
+            dynamic_length_bits += dynamic_plan.lit_lengths_full[len_code.symbol];
+            dynamic_distance_bits += dynamic_plan.dist_lengths_full[dist_code.symbol];
+            dynamic_extra_bits += len_code.extra_bits + dist_code.extra_bits;
             match_distance_sum += m.distance;
             if (m.length <= 8) short_match_tokens += 1;
             if (m.distance > 8 * 1024) far_match_tokens += 1;
         },
     };
+    dynamic_literal_bits += dynamic_plan.lit_lengths_full[256];
+    const dynamic_payload_bits = dynamic_literal_bits + dynamic_length_bits + dynamic_distance_bits + dynamic_extra_bits;
     return .{
         .input_bytes = input.len,
         .token_count = plan.stats.tokenCount(),
@@ -230,6 +246,11 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
         .stored_bytes = try rawStoredEncodedSize(input.len),
         .fixed_bits = fixed_bits,
         .fixed_bytes = (fixed_bits + 7) / 8,
+        .dynamic_header_bits = dynamic_bits - dynamic_payload_bits,
+        .dynamic_literal_bits = dynamic_literal_bits,
+        .dynamic_length_bits = dynamic_length_bits,
+        .dynamic_distance_bits = dynamic_distance_bits,
+        .dynamic_extra_bits = dynamic_extra_bits,
         .dynamic_bits = dynamic_bits,
         .dynamic_bytes = (dynamic_bits + 7) / 8,
         .hlit = dynamic_plan.hlit,

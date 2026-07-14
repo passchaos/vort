@@ -97,4 +97,6 @@ token-count ratios. Those fields are intended to identify which best-preset
 parser improvements are worth moving into production presets. It also includes
 average match length/distance and short-match counts for both plans, making it
 easier to distinguish “more but shorter matches” from genuinely longer or
-farther back-references.
+farther back-references. The same section breaks dynamic bit cost into header,
+literal, match-symbol, and extra-bit ratios for best versus default, which helps
+separate Huffman header overhead from payload coding improvements.
