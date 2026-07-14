@@ -1508,24 +1508,28 @@ pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []
 }
 
 pub fn encodeZlibBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
     const raw = try encodeRawBestSplitAlloc(allocator, input, block_len, options);
     defer allocator.free(raw);
     return encodeZlibRawAlloc(allocator, input, raw, null);
 }
 
 pub fn encodeZlibBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
     const raw = try encodeRawBestSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options);
     defer allocator.free(raw);
     return encodeZlibRawAlloc(allocator, input, raw, dictionary);
 }
 
 pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
     const raw = try encodeRawBestAdaptiveSplitAlloc(allocator, input, options, split_options);
     defer allocator.free(raw);
     return encodeZlibRawAlloc(allocator, input, raw, null);
 }
 
 pub fn encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
     const raw = try encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator, input, dictionary, options, split_options);
     defer allocator.free(raw);
     return encodeZlibRawAlloc(allocator, input, raw, dictionary);
@@ -1730,6 +1734,7 @@ pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
 }
 
 pub fn encodeGzipBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeGzipStoredAlloc(allocator, input);
     const raw = try encodeRawBestSplitAlloc(allocator, input, block_len, options);
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
@@ -1743,6 +1748,7 @@ pub fn encodeGzipBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8,
 }
 
 pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeGzipStoredAlloc(allocator, input);
     const raw = try encodeRawBestAdaptiveSplitAlloc(allocator, input, options, split_options);
     defer allocator.free(raw);
     const out = try allocator.alloc(u8, gzip_header.len + raw.len + 8);
@@ -2930,12 +2936,24 @@ test "best encoder skips invalid single stored block for large inputs" {
     const zlib_stored = try encodeZlibStoredAlloc(std.testing.allocator, &input);
     defer std.testing.allocator.free(zlib_stored);
     try std.testing.expectEqual(zlib_stored.len, zlib_best.len);
+    const zlib_split = try encodeZlibBestSplitAlloc(std.testing.allocator, &input, 16 * 1024, optionsForLevel(.fastest));
+    defer std.testing.allocator.free(zlib_split);
+    try std.testing.expectEqual(zlib_stored.len, zlib_split.len);
+    const zlib_adaptive = try encodeZlibBestAdaptiveSplitAlloc(std.testing.allocator, &input, optionsForLevel(.fastest), optionsForLevel(.fastest).split_options);
+    defer std.testing.allocator.free(zlib_adaptive);
+    try std.testing.expectEqual(zlib_stored.len, zlib_adaptive.len);
 
     const gzip_best = try encodeGzipBestAlloc(std.testing.allocator, &input, optionsForLevel(.fastest));
     defer std.testing.allocator.free(gzip_best);
     const gzip_stored = try encodeGzipStoredAlloc(std.testing.allocator, &input);
     defer std.testing.allocator.free(gzip_stored);
     try std.testing.expectEqual(gzip_stored.len, gzip_best.len);
+    const gzip_split = try encodeGzipBestSplitAlloc(std.testing.allocator, &input, 16 * 1024, optionsForLevel(.fastest));
+    defer std.testing.allocator.free(gzip_split);
+    try std.testing.expectEqual(gzip_stored.len, gzip_split.len);
+    const gzip_adaptive = try encodeGzipBestAdaptiveSplitAlloc(std.testing.allocator, &input, optionsForLevel(.fastest), optionsForLevel(.fastest).split_options);
+    defer std.testing.allocator.free(gzip_adaptive);
+    try std.testing.expectEqual(gzip_stored.len, gzip_adaptive.len);
 
     const dictionary = "preset dictionary that should not matter for high entropy";
     const raw_dict = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, &input, dictionary, optionsForLevel(.fastest));
@@ -2955,6 +2973,12 @@ test "best encoder skips invalid single stored block for large inputs" {
     const zlib_stored_dict = try encodeZlibStoredWithDictionaryAlloc(std.testing.allocator, &input, dictionary);
     defer std.testing.allocator.free(zlib_stored_dict);
     try std.testing.expectEqual(zlib_stored_dict.len, zlib_dict.len);
+    const zlib_dict_split = try encodeZlibBestSplitWithDictionaryAlloc(std.testing.allocator, &input, dictionary, 16 * 1024, optionsForLevel(.fastest));
+    defer std.testing.allocator.free(zlib_dict_split);
+    try std.testing.expectEqual(zlib_stored_dict.len, zlib_dict_split.len);
+    const zlib_dict_adaptive = try encodeZlibBestAdaptiveSplitWithDictionaryAlloc(std.testing.allocator, &input, dictionary, optionsForLevel(.fastest), optionsForLevel(.fastest).split_options);
+    defer std.testing.allocator.free(zlib_dict_adaptive);
+    try std.testing.expectEqual(zlib_stored_dict.len, zlib_dict_adaptive.len);
 }
 
 test "stored fast path does not mask repeated binary structure" {
