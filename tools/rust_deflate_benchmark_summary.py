@@ -31,18 +31,20 @@ def decode_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Decode throughput (zlib)",
         "",
-        "| case | best Vort MiB/s | best Rust MiB/s | Vort / best Rust | best Rust engine |",
-        "| --- | ---: | ---: | ---: | --- |",
+        "| case | Vort alloc MiB/s | Vort into MiB/s | best Rust MiB/s | alloc / Rust | into / Rust | best Rust engine |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for case, items in sorted(by_case(rows).items()):
-        vort_rows = [row for row in items if row["engine"] in ("vort", "vort-into")]
+        vort_alloc = next(row for row in items if row["engine"] == "vort")
+        vort_into = next(row for row in items if row["engine"] == "vort-into")
         rust_rows = [row for row in items if not row["engine"].startswith("vort")]
-        vort = max(vort_rows, key=lambda row: fnum(row, "throughput_mib_s"))
         rust = max(rust_rows, key=lambda row: fnum(row, "throughput_mib_s"))
-        vort_speed = fnum(vort, "throughput_mib_s")
+        alloc_speed = fnum(vort_alloc, "throughput_mib_s")
+        into_speed = fnum(vort_into, "throughput_mib_s")
         rust_speed = fnum(rust, "throughput_mib_s")
-        ratio = 0.0 if rust_speed == 0 else vort_speed / rust_speed
-        lines.append(f"| {case} | {vort['engine']} {vort_speed:.2f} | {rust_speed:.2f} | {ratio:.3f} | {rust['engine']} |")
+        alloc_ratio = 0.0 if rust_speed == 0 else alloc_speed / rust_speed
+        into_ratio = 0.0 if rust_speed == 0 else into_speed / rust_speed
+        lines.append(f"| {case} | {alloc_speed:.2f} | {into_speed:.2f} | {rust_speed:.2f} | {alloc_ratio:.3f} | {into_ratio:.3f} | {rust['engine']} |")
     lines.append("")
     return lines
 
