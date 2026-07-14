@@ -87,4 +87,6 @@ separately because the Rust baseline harness measures zlib frames. The encode
 table also reports the Vort default/dynamic-default throughput ratio to expose
 best-selection overhead, plus split-default/adaptive-default speed and size
 ratios against Vort default to expose wrapper block-planning overhead and
-split-induced size changes.
+split-induced size changes. It also reports Vort default and Vort best-preset
+compressed-size ratios against the best Rust size so the production preset and
+strongest-size preset can be tracked separately.
