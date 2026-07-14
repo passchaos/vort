@@ -20,7 +20,7 @@ pub fn main(init: std.process.Init) !void {
     var output = std.Io.Writer.Allocating.init(init.gpa);
     defer output.deinit();
     const writer = &output.writer;
-    try writer.print("path,input_bytes,token_count,literal_tokens,match_tokens,matched_bytes,avg_match_len_x100,avg_match_distance,short_match_tokens,far_match_tokens,stored_bytes,fixed_bytes,dynamic_bytes,dynamic_header_bits,dynamic_literal_bits,dynamic_length_bits,dynamic_distance_bits,dynamic_extra_bits,hlit,hdist,hclen,code_length_ops,stats_ns,dynamic_encode_ns,best_encode_ns,dynamic_zlib_bytes,best_zlib_bytes,best_preset_token_count,best_preset_literal_tokens,best_preset_match_tokens,best_preset_matched_bytes,best_preset_avg_match_len_x100,best_preset_avg_match_distance,best_preset_short_match_tokens,best_preset_far_match_tokens,best_preset_zlib_bytes,best_preset_header_bits,best_preset_literal_bits,best_preset_length_bits,best_preset_distance_bits,best_preset_extra_bits,best_preset_default_size_ratio,best_preset_default_token_ratio,best_preset_default_avg_len_ratio,best_preset_default_avg_distance_ratio,best_preset_default_header_ratio,best_preset_default_literal_ratio,best_preset_default_match_symbol_ratio,best_preset_default_extra_ratio,fixed_dynamic_size_ratio,best_dynamic_time_ratio,stats_dynamic_time_ratio\n", .{});
+    try writer.print("path,input_bytes,token_count,literal_tokens,match_tokens,matched_bytes,avg_match_len_x100,avg_match_distance,short_match_tokens,far_match_tokens,stored_bytes,fixed_bytes,dynamic_bytes,dynamic_header_bits,dynamic_literal_bits,dynamic_length_bits,dynamic_distance_bits,dynamic_length_extra_bits,dynamic_distance_extra_bits,dynamic_extra_bits,hlit,hdist,hclen,code_length_ops,stats_ns,dynamic_encode_ns,best_encode_ns,dynamic_zlib_bytes,best_zlib_bytes,best_preset_token_count,best_preset_literal_tokens,best_preset_match_tokens,best_preset_matched_bytes,best_preset_avg_match_len_x100,best_preset_avg_match_distance,best_preset_short_match_tokens,best_preset_far_match_tokens,best_preset_zlib_bytes,best_preset_header_bits,best_preset_literal_bits,best_preset_length_bits,best_preset_distance_bits,best_preset_length_extra_bits,best_preset_distance_extra_bits,best_preset_extra_bits,best_preset_default_size_ratio,best_preset_default_token_ratio,best_preset_default_avg_len_ratio,best_preset_default_avg_distance_ratio,best_preset_default_header_ratio,best_preset_default_literal_ratio,best_preset_default_match_symbol_ratio,best_preset_default_length_extra_ratio,best_preset_default_distance_extra_ratio,best_preset_default_extra_ratio,fixed_dynamic_size_ratio,best_dynamic_time_ratio,stats_dynamic_time_ratio\n", .{});
 
     if (paths.items.len == 0) {
         try reportPath(init, writer, "README.md");
@@ -75,9 +75,11 @@ fn reportPath(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8) 
     const best_preset_default_header_ratio = ratio(best_preset_stats.dynamic_header_bits, stats.dynamic_header_bits);
     const best_preset_default_literal_ratio = ratio(best_preset_stats.dynamic_literal_bits, stats.dynamic_literal_bits);
     const best_preset_default_match_symbol_ratio = ratio(best_preset_stats.dynamic_length_bits + best_preset_stats.dynamic_distance_bits, stats.dynamic_length_bits + stats.dynamic_distance_bits);
+    const best_preset_default_length_extra_ratio = ratio(best_preset_stats.dynamic_length_extra_bits, stats.dynamic_length_extra_bits);
+    const best_preset_default_distance_extra_ratio = ratio(best_preset_stats.dynamic_distance_extra_bits, stats.dynamic_distance_extra_bits);
     const best_preset_default_extra_ratio = ratio(best_preset_stats.dynamic_extra_bits, stats.dynamic_extra_bits);
 
-    try stdout.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}", .{
+    try stdout.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}", .{
         path,
         stats.input_bytes,
         stats.token_count,
@@ -95,6 +97,8 @@ fn reportPath(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8) 
         stats.dynamic_literal_bits,
         stats.dynamic_length_bits,
         stats.dynamic_distance_bits,
+        stats.dynamic_length_extra_bits,
+        stats.dynamic_distance_extra_bits,
         stats.dynamic_extra_bits,
         stats.hlit,
         stats.hdist,
@@ -106,7 +110,7 @@ fn reportPath(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8) 
         dynamic_zlib.len,
         best_zlib.len,
     });
-    try stdout.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
+    try stdout.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
         best_preset_stats.token_count,
         best_preset_stats.literal_tokens,
         best_preset_stats.match_tokens,
@@ -120,6 +124,8 @@ fn reportPath(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8) 
         best_preset_stats.dynamic_literal_bits,
         best_preset_stats.dynamic_length_bits,
         best_preset_stats.dynamic_distance_bits,
+        best_preset_stats.dynamic_length_extra_bits,
+        best_preset_stats.dynamic_distance_extra_bits,
         best_preset_stats.dynamic_extra_bits,
         best_preset_default_size_ratio,
         best_preset_default_token_ratio,
@@ -128,6 +134,8 @@ fn reportPath(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8) 
         best_preset_default_header_ratio,
         best_preset_default_literal_ratio,
         best_preset_default_match_symbol_ratio,
+        best_preset_default_length_extra_ratio,
+        best_preset_default_distance_extra_ratio,
         best_preset_default_extra_ratio,
         fixed_dynamic_size_ratio,
         best_dynamic_time_ratio,

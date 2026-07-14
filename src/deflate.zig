@@ -195,6 +195,8 @@ pub const DynamicPlanStats = struct {
     dynamic_literal_bits: usize,
     dynamic_length_bits: usize,
     dynamic_distance_bits: usize,
+    dynamic_length_extra_bits: usize,
+    dynamic_distance_extra_bits: usize,
     dynamic_extra_bits: usize,
     dynamic_bits: usize,
     dynamic_bytes: usize,
@@ -213,7 +215,8 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
     var dynamic_literal_bits: usize = 0;
     var dynamic_length_bits: usize = 0;
     var dynamic_distance_bits: usize = 0;
-    var dynamic_extra_bits: usize = 0;
+    var dynamic_length_extra_bits: usize = 0;
+    var dynamic_distance_extra_bits: usize = 0;
     var match_distance_sum: usize = 0;
     var short_match_tokens: usize = 0;
     var far_match_tokens: usize = 0;
@@ -224,13 +227,15 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
             const dist_code = distanceCode(m.distance);
             dynamic_length_bits += dynamic_plan.lit_lengths_full[len_code.symbol];
             dynamic_distance_bits += dynamic_plan.dist_lengths_full[dist_code.symbol];
-            dynamic_extra_bits += len_code.extra_bits + dist_code.extra_bits;
+            dynamic_length_extra_bits += len_code.extra_bits;
+            dynamic_distance_extra_bits += dist_code.extra_bits;
             match_distance_sum += m.distance;
             if (m.length <= 8) short_match_tokens += 1;
             if (m.distance > 8 * 1024) far_match_tokens += 1;
         },
     };
     dynamic_literal_bits += dynamic_plan.lit_lengths_full[256];
+    const dynamic_extra_bits = dynamic_length_extra_bits + dynamic_distance_extra_bits;
     const dynamic_payload_bits = dynamic_literal_bits + dynamic_length_bits + dynamic_distance_bits + dynamic_extra_bits;
     return .{
         .input_bytes = input.len,
@@ -250,6 +255,8 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
         .dynamic_literal_bits = dynamic_literal_bits,
         .dynamic_length_bits = dynamic_length_bits,
         .dynamic_distance_bits = dynamic_distance_bits,
+        .dynamic_length_extra_bits = dynamic_length_extra_bits,
+        .dynamic_distance_extra_bits = dynamic_distance_extra_bits,
         .dynamic_extra_bits = dynamic_extra_bits,
         .dynamic_bits = dynamic_bits,
         .dynamic_bytes = (dynamic_bits + 7) / 8,
