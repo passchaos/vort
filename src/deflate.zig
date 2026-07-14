@@ -111,7 +111,10 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
 pub fn usesStoredFastPath(input: []const u8, options: CompressionOptions) bool {
     if (input.len < 8 * 1024) return false;
     const normalized = normalizeOptionsForStrategy(options);
-    if (normalized.strategy != .default or normalized.parser != .hash or normalized.block_selection != .stored_fixed) return false;
+    if (normalized.strategy != .default) return false;
+    if (normalized.parser != .hash and normalized.parser != .lazy) return false;
+    if (normalized.parser == .lazy and normalized.block_selection != .stored_fixed_dynamic) return false;
+    if (normalized.parser == .hash and normalized.block_selection != .stored_fixed) return false;
     return looksIncompressible(input);
 }
 
@@ -2924,6 +2927,8 @@ test "best encoder skips invalid single stored block for large inputs" {
     const encoded = try encodeRawBestAlloc(std.testing.allocator, &input, optionsForLevel(.fastest));
     defer std.testing.allocator.free(encoded);
     try std.testing.expect(usesStoredFastPath(&input, optionsForLevel(.fastest)));
+    try std.testing.expect(usesStoredFastPath(&input, optionsForLevel(.default)));
+    try std.testing.expect(!usesStoredFastPath(&input, optionsForLevel(.best)));
     const stored = try encodeRawStoredAlloc(std.testing.allocator, &input);
     defer std.testing.allocator.free(stored);
     try std.testing.expectEqual(stored.len, encoded.len);
@@ -2968,6 +2973,10 @@ test "best encoder skips invalid single stored block for large inputs" {
     defer std.testing.allocator.free(adaptive);
     try std.testing.expectEqual(stored.len, adaptive.len);
 
+    const default_encoded = try encodeRawBestAlloc(std.testing.allocator, &input, optionsForLevel(.default));
+    defer std.testing.allocator.free(default_encoded);
+    try std.testing.expectEqual(stored.len, default_encoded.len);
+
     const zlib_dict = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, &input, dictionary, optionsForLevel(.fastest));
     defer std.testing.allocator.free(zlib_dict);
     const zlib_stored_dict = try encodeZlibStoredWithDictionaryAlloc(std.testing.allocator, &input, dictionary);
@@ -2988,6 +2997,7 @@ test "stored fast path does not mask repeated binary structure" {
     const encoded = try encodeRawBestAlloc(std.testing.allocator, &input, optionsForLevel(.fastest));
     defer std.testing.allocator.free(encoded);
     try std.testing.expect(!usesStoredFastPath(&input, optionsForLevel(.fastest)));
+    try std.testing.expect(!usesStoredFastPath(&input, optionsForLevel(.default)));
     const stored = try encodeRawStoredAlloc(std.testing.allocator, &input);
     defer std.testing.allocator.free(stored);
     try std.testing.expect(encoded.len < stored.len);
