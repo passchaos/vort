@@ -773,10 +773,7 @@ fn findBestMatch(input: []const u8, pos: usize, options: GreedyOptions) MatchCan
         candidate -= 1;
         if (input[candidate] != input[pos]) continue;
         checked += 1;
-        var length: usize = 1;
-        while (length < max_len and input[candidate + length] == input[pos + length]) {
-            length += 1;
-        }
+        const length = matchLength(input, candidate, pos, max_len);
         if (length >= minimum and length > best.length) {
             best = .{ .length = length, .distance = pos - candidate };
             if (length >= options.nice_len) break;

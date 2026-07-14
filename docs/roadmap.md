@@ -309,6 +309,7 @@ architecture blindly.
 - [x] Level-specific maximum match length parser setting.
 - [x] Level-specific match window parser setting.
 - [x] Production optimal parser with full level/strategy configs.
+- [x] Backward-scan LZ77 parser uses word-at-a-time match length for repeated/text payload speed.
 - [x] Huffman code generation, simple length building, and canonical-code validation.
 - [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
