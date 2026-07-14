@@ -415,6 +415,7 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
         if (stored_len <= fixed_len) {
             return writeStoredBlocks(allocator, writer, plain, final);
         }
+        try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + fixed_len);
         return writeFixedTokens(allocator, writer, tokens, final);
     }
 
@@ -424,8 +425,10 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
         return writeStoredBlocks(allocator, writer, plain, final);
     }
     if (fixed_len <= dynamic_len) {
+        try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + fixed_len);
         return writeFixedTokens(allocator, writer, tokens, final);
     }
+    try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + dynamic_len);
     return dynamic_plan.write(allocator, writer, tokens, final);
 }
 
@@ -680,7 +683,9 @@ pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const
 fn encodeRawDynamicTokensFinalAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token, final: bool) ![]u8 {
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
-    try writeDynamicTokens(allocator, &writer, tokens, final);
+    const plan = try DynamicCodingPlan.init(tokens);
+    try writer.bytes.ensureTotalCapacity(allocator, (plan.bitCost(tokens) + 7) / 8);
+    try plan.write(allocator, &writer, tokens, final);
     return writer.toOwnedSlice(allocator);
 }
 
