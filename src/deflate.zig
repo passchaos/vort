@@ -2143,14 +2143,18 @@ fn writeZlibHeader(output: []u8, dictionary: ?[]const u8) void {
     }
 }
 
+fn validateZlibFooter(input: []const u8, footer_offset: usize, actual: u32) Error!void {
+    if (footer_offset > input.len or input.len - footer_offset < 4) return error.TruncatedFrame;
+    const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
+    if (actual != expected) return error.ChecksumMismatch;
+    if (footer_offset + 4 != input.len) return error.TrailingData;
+}
+
 pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
     const header = try parseZlibHeader(input, null);
     const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) orelse return error.InvalidDeflateBlockType;
     const footer_offset = header.data_offset + stored.result.input_read;
-    if (input.len - footer_offset < 4) return error.TruncatedFrame;
-    const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-    if (stored.digest != expected) return error.ChecksumMismatch;
-    if (footer_offset + 4 != input.len) return error.TrailingData;
+    try validateZlibFooter(input, footer_offset, stored.digest);
     return stored.result.output_written;
 }
 
@@ -2161,10 +2165,7 @@ pub fn decodeZlibStoredWithDictionary(input: []const u8, output: []u8, dictionar
     // used to satisfy and validate the zlib DICTID before the stored payload.
     const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) orelse return error.InvalidDeflateBlockType;
     const footer_offset = header.data_offset + stored.result.input_read;
-    if (input.len - footer_offset < 4) return error.TruncatedFrame;
-    const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-    if (stored.digest != expected) return error.ChecksumMismatch;
-    if (footer_offset + 4 != input.len) return error.TrailingData;
+    try validateZlibFooter(input, footer_offset, stored.digest);
     return stored.result.output_written;
 }
 
@@ -2182,19 +2183,13 @@ fn decodeZlibWithOptionalDictionary(input: []const u8, output: []u8, dictionary:
 
     if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) |stored| {
         const footer_offset = header.data_offset + stored.result.input_read;
-        if (input.len - footer_offset < 4) return error.TruncatedFrame;
-        const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-        if (stored.digest != expected) return error.ChecksumMismatch;
-        if (footer_offset + 4 != input.len) return error.TrailingData;
+        try validateZlibFooter(input, footer_offset, stored.digest);
         return stored.result.output_written;
     }
 
     const raw = try decodeRawAutoWithDictionary(input[header.data_offset..], raw_dictionary, output);
     const footer_offset = header.data_offset + raw.input_read;
-    if (input.len - footer_offset < 4) return error.TruncatedFrame;
-    const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-    if (checksum.adler32(output[0..raw.output_written]) != expected) return error.ChecksumMismatch;
-    if (footer_offset + 4 != input.len) return error.TrailingData;
+    try validateZlibFooter(input, footer_offset, checksum.adler32(output[0..raw.output_written]));
     return raw.output_written;
 }
 
@@ -2219,10 +2214,7 @@ fn decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocat
     const stored = (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, input[header.data_offset..], max_output_len)) orelse return error.InvalidDeflateBlockType;
     errdefer stored.deinit(allocator);
     const footer_offset = header.data_offset + stored.result.input_read;
-    if (input.len - footer_offset < 4) return error.TruncatedFrame;
-    const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-    if (stored.digest != expected) return error.ChecksumMismatch;
-    if (footer_offset + 4 != input.len) return error.TrailingData;
+    try validateZlibFooter(input, footer_offset, stored.digest);
     return stored.result.bytes;
 }
 
@@ -2253,20 +2245,14 @@ fn decodeZlibAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, in
     if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, input[header.data_offset..], max_output_len)) |stored| {
         errdefer stored.deinit(allocator);
         const footer_offset = header.data_offset + stored.result.input_read;
-        if (input.len - footer_offset < 4) return error.TruncatedFrame;
-        const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-        if (stored.digest != expected) return error.ChecksumMismatch;
-        if (footer_offset + 4 != input.len) return error.TrailingData;
+        try validateZlibFooter(input, footer_offset, stored.digest);
         return stored.result.bytes;
     }
 
     const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[header.data_offset..], raw_dictionary, max_output_len);
     errdefer raw.deinit(allocator);
     const footer_offset = header.data_offset + raw.input_read;
-    if (input.len - footer_offset < 4) return error.TruncatedFrame;
-    const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-    if (checksum.adler32(raw.bytes) != expected) return error.ChecksumMismatch;
-    if (footer_offset + 4 != input.len) return error.TrailingData;
+    try validateZlibFooter(input, footer_offset, checksum.adler32(raw.bytes));
     return raw.bytes;
 }
 
