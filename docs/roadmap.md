@@ -214,6 +214,7 @@ architecture blindly.
 - [x] Dashboard index tracks Rust deflate benchmark CSV artifacts.
 - [x] Dashboard index reports CSV benchmark row counts.
 - [x] Rust deflate benchmarks include real README/roadmap payloads.
+- [x] Rust deflate decode benchmarks include overlap-RLE, distance-heavy, and dynamic-literal payloads.
 - [x] Rust deflate benchmark Markdown summary highlights Vort vs Rust gaps.
 - [x] Rust deflate benchmark summary reports Vort default-vs-dynamic encode overhead.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
