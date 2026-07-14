@@ -422,6 +422,22 @@ pub fn build(b: *std.Build) void {
     const dictionary_report_step = b.step("run-dictionary-report", "Report deterministic dictionary training metadata");
     dictionary_report_step.dependOn(&run_dictionary_report.step);
 
+    const dictionary_deflate_report_exe = b.addExecutable(.{
+        .name = "vort-dictionary-deflate-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/dictionary_deflate_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_dictionary_deflate_report = b.addRunArtifact(dictionary_deflate_report_exe);
+    if (b.args) |args| run_dictionary_deflate_report.addArgs(args);
+    const dictionary_deflate_report_step = b.step("run-dictionary-deflate-report", "Report raw/zlib preset-dictionary deflate encode savings");
+    dictionary_deflate_report_step.dependOn(&run_dictionary_deflate_report.step);
+
     const dictionary_corpus_report = b.addSystemCommand(&.{ "python3", "tools/dictionary_corpus_report.py" });
     dictionary_corpus_report.addArtifactArg(dictionary_report_exe);
     if (b.args) |args| dictionary_corpus_report.addArgs(args);
@@ -699,6 +715,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&gzip_diff_exe.step);
     check_step.dependOn(&compression_report_exe.step);
     check_step.dependOn(&dictionary_report_exe.step);
+    check_step.dependOn(&dictionary_deflate_report_exe.step);
     check_step.dependOn(&level_report_exe.step);
     check_step.dependOn(&dynamic_plan_report_exe.step);
     check_step.dependOn(&split_policy_report_exe.step);
@@ -728,6 +745,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zstd_compare_step);
     ci_smoke_step.dependOn(compression_report_step);
     ci_smoke_step.dependOn(dictionary_report_step);
+    ci_smoke_step.dependOn(dictionary_deflate_report_step);
     ci_smoke_step.dependOn(level_report_step);
     ci_smoke_step.dependOn(dynamic_plan_report_step);
     ci_smoke_step.dependOn(split_policy_report_step);

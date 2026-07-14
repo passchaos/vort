@@ -160,6 +160,7 @@ architecture blindly.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
 - [x] zlib preset-dictionary encoders emit FDICT/DICTID frames for stored/fixed/dynamic/best modes.
 - [x] zlib preset-dictionary fixed/dynamic/best encoders seed LZ77 matching from preset history.
+- [x] Dictionary deflate report quantifies raw/zlib preset-dictionary encode savings.
 - [x] Raw/zlib preset-dictionary decode covers stored/fixed/dynamic block cases.
 - [x] CLI and Python differential smoke cover raw/zlib preset-dictionary decode.
 - [x] CLI and Python differential smoke cover raw preset-dictionary encode through Vort and Python zlib decoders.
