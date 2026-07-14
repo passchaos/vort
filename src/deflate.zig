@@ -1150,6 +1150,15 @@ const StoredOnlyPlan = struct {
     output_len: usize,
 };
 
+const StoredOnlyHashResult = struct {
+    result: OwnedDecodeResult,
+    digest: u32,
+
+    fn deinit(self: StoredOnlyHashResult, allocator: std.mem.Allocator) void {
+        self.result.deinit(allocator);
+    }
+};
+
 fn decodeRawStoredOnlyAllocMaybe(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?OwnedDecodeResult {
     const plan = (try planRawStoredOnly(input)) orelse return null;
     try ensureOutputLimit(0, plan.output_len, max_output_len);
@@ -1157,6 +1166,20 @@ fn decodeRawStoredOnlyAllocMaybe(allocator: std.mem.Allocator, input: []const u8
     errdefer allocator.free(out);
     copyRawStoredOnly(input[0..plan.input_read], out);
     return .{ .bytes = out, .input_read = plan.input_read };
+}
+
+fn decodeRawStoredOnlyAllocMaybeWithHash(comptime Hash: type, allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?StoredOnlyHashResult {
+    const plan = (try planRawStoredOnly(input)) orelse return null;
+    try ensureOutputLimit(0, plan.output_len, max_output_len);
+    const out = try allocator.alloc(u8, plan.output_len);
+    errdefer allocator.free(out);
+
+    var hash = Hash.init();
+    copyRawStoredOnlyWithHash(Hash, input[0..plan.input_read], out, &hash);
+    return .{
+        .result = .{ .bytes = out, .input_read = plan.input_read },
+        .digest = hash.digest(),
+    };
 }
 
 fn planRawStoredOnly(input: []const u8) Error!?StoredOnlyPlan {
@@ -1185,6 +1208,28 @@ fn planRawStoredOnly(input: []const u8) Error!?StoredOnlyPlan {
         output_len = std.math.add(usize, output_len, chunk_len) catch return error.IntegerOverflow;
         offset += chunk_len;
         if (final) return .{ .input_read = offset, .output_len = output_len };
+    }
+}
+
+fn copyRawStoredOnlyWithHash(comptime Hash: type, input: []const u8, output: []u8, hash: *Hash) void {
+    var in_offset: usize = 0;
+    var out_offset: usize = 0;
+    while (true) {
+        const final = (input[in_offset] & 0x01) != 0;
+        in_offset += 1;
+        const len = std.mem.readInt(u16, input[in_offset..][0..2], .little);
+        const chunk_len: usize = len;
+        in_offset += 4;
+        const chunk = input[in_offset..][0..chunk_len];
+        @memcpy(output[out_offset..][0..chunk_len], chunk);
+        hash.update(chunk);
+        out_offset += chunk_len;
+        in_offset += chunk_len;
+        if (final) {
+            std.debug.assert(in_offset == input.len);
+            std.debug.assert(out_offset == output.len);
+            return;
+        }
     }
 }
 
@@ -1660,14 +1705,14 @@ pub fn decodeZlibStoredAllocWithDictionaryLimited(allocator: std.mem.Allocator, 
 
 fn decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
     const header = try parseZlibHeader(input, dictionary);
-    const raw = try decodeRawStoredAllocPartialLimitedInternal(allocator, input[header.data_offset..], max_output_len);
-    errdefer raw.deinit(allocator);
-    const footer_offset = header.data_offset + raw.input_read;
+    const stored = (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, input[header.data_offset..], max_output_len)) orelse return error.InvalidDeflateBlockType;
+    errdefer stored.deinit(allocator);
+    const footer_offset = header.data_offset + stored.result.input_read;
     if (input.len - footer_offset < 4) return error.TruncatedFrame;
     const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-    if (checksum.adler32(raw.bytes) != expected) return error.ChecksumMismatch;
+    if (stored.digest != expected) return error.ChecksumMismatch;
     if (footer_offset + 4 != input.len) return error.TrailingData;
-    return raw.bytes;
+    return stored.result.bytes;
 }
 
 pub fn decodeZlibAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -1693,6 +1738,16 @@ fn decodeZlibAllocWithOptionalDictionary(allocator: std.mem.Allocator, input: []
 fn decodeZlibAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+
+    if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, input[header.data_offset..], max_output_len)) |stored| {
+        errdefer stored.deinit(allocator);
+        const footer_offset = header.data_offset + stored.result.input_read;
+        if (input.len - footer_offset < 4) return error.TruncatedFrame;
+        const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
+        if (stored.digest != expected) return error.ChecksumMismatch;
+        if (footer_offset + 4 != input.len) return error.TrailingData;
+        return stored.result.bytes;
+    }
 
     const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[header.data_offset..], raw_dictionary, max_output_len);
     errdefer raw.deinit(allocator);
@@ -1831,16 +1886,16 @@ pub fn decodeGzipStoredAllocLimited(allocator: std.mem.Allocator, input: []const
 
 fn decodeGzipStoredAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
     const data_offset = try parseGzipHeader(input);
-    const raw = try decodeRawStoredAllocPartialLimitedInternal(allocator, input[data_offset..], max_output_len);
-    errdefer raw.deinit(allocator);
-    const footer_offset = data_offset + raw.input_read;
+    const stored = (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice16, allocator, input[data_offset..], max_output_len)) orelse return error.InvalidDeflateBlockType;
+    errdefer stored.deinit(allocator);
+    const footer_offset = data_offset + stored.result.input_read;
     if (input.len - footer_offset < 8) return error.TruncatedFrame;
     const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
     const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-    if (checksum.crc32(raw.bytes) != expected_crc) return error.ChecksumMismatch;
-    if (@as(u32, @truncate(raw.bytes.len)) != expected_size) return error.SizeMismatch;
+    if (stored.digest != expected_crc) return error.ChecksumMismatch;
+    if (@as(u32, @truncate(stored.result.bytes.len)) != expected_size) return error.SizeMismatch;
     if (footer_offset + 8 != input.len) return error.TrailingData;
-    return raw.bytes;
+    return stored.result.bytes;
 }
 
 pub fn decodeGzipConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -1883,6 +1938,18 @@ pub fn decodeGzipAllocLimited(allocator: std.mem.Allocator, input: []const u8, m
 
 fn decodeGzipAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
     const data_offset = try parseGzipHeader(input);
+
+    if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice16, allocator, input[data_offset..], max_output_len)) |stored| {
+        errdefer stored.deinit(allocator);
+        const footer_offset = data_offset + stored.result.input_read;
+        if (input.len - footer_offset < 8) return error.TruncatedFrame;
+        const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
+        const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
+        if (stored.digest != expected_crc) return error.ChecksumMismatch;
+        if (@as(u32, @truncate(stored.result.bytes.len)) != expected_size) return error.SizeMismatch;
+        if (footer_offset + 8 != input.len) return error.TrailingData;
+        return stored.result.bytes;
+    }
 
     const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[data_offset..], "", max_output_len);
     errdefer raw.deinit(allocator);
