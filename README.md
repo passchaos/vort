@@ -191,6 +191,7 @@ zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard -- --limit 3
 zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard -- --limit 3
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast
+zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report
 zig build bench-corpus-decode -Doptimize=ReleaseFast
 zig build bench-deflate-encode -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-rust-deflate-bench

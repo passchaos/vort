@@ -107,6 +107,22 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    const deflate_decode_stage_report_exe = b.addExecutable(.{
+        .name = "vort-deflate-decode-stage-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate_decode_stage_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_deflate_decode_stage_report = b.addRunArtifact(deflate_decode_stage_report_exe);
+    if (b.args) |args| run_deflate_decode_stage_report.addArgs(args);
+    const deflate_decode_stage_report_step = b.step("run-deflate-decode-stage-report", "Report raw inflate vs zlib wrapper/checksum decode stages");
+    deflate_decode_stage_report_step.dependOn(&run_deflate_decode_stage_report.step);
+
     const zlib_encode_bench_exe = b.addExecutable(.{
         .name = "vort-zlib-encode-bench",
         .root_module = b.createModule(.{
@@ -715,6 +731,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_bench_exe.step);
     check_step.dependOn(&corpus_decode_bench_exe.step);
     check_step.dependOn(&zlib_decode_bench_exe.step);
+    check_step.dependOn(&deflate_decode_stage_report_exe.step);
     check_step.dependOn(&zlib_encode_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
@@ -757,6 +774,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(cpu_features_step);
     ci_smoke_step.dependOn(zstd_compare_step);
     ci_smoke_step.dependOn(compression_report_step);
+    ci_smoke_step.dependOn(deflate_decode_stage_report_step);
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_dashboard_step);
