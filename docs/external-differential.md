@@ -62,9 +62,10 @@ files. Each engine performs one warmup decode before timing to reduce cold-start
 noise. Use
 `run-rust-deflate-bench-csv` to persist the same rows to
 `zig-out/vort-rust-deflate-decode-bench.csv`. The Vort decode rows include the
-allocator-returning API (`vort`) and the caller-owned output-buffer API
-(`vort-into`) so regressions can distinguish inflate/checksum work from
-per-iteration allocation overhead.
+zlib allocator-returning API (`vort`), the zlib caller-owned output-buffer API
+(`vort-into`), and matching gzip wrapper rows (`vort-gzip`,
+`vort-gzip-into`) so regressions can distinguish inflate/checksum work,
+wrapper format overhead, and per-iteration allocation overhead.
 
 `run-rust-deflate-encode-bench` provides the matching encode-side smoke. It
 prints CSV rows for zlib output size, ratio, and encode throughput for Vort,

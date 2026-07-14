@@ -155,10 +155,14 @@ def main() -> int:
         for name, payload in payloads:
             frame = tmp / f"{name}.zlib"
             frame.write_bytes(zlib.compress(payload, level=0 if name == "stored-binary" else 6))
+            gzip_frame = tmp / f"{name}.gz"
+            gzip_frame.write_bytes(zlib.compress(payload, level=0 if name == "stored-binary" else 6, wbits=31))
             iterations = iterations_for(len(payload))
             rows = [
                 ("vort", run_vort_bench(frame, iterations)),
                 ("vort-into", run_vort_bench(frame, iterations, "into")),
+                ("vort-gzip", run_vort_bench(gzip_frame, iterations, "gzip")),
+                ("vort-gzip-into", run_vort_bench(gzip_frame, iterations, "gzip-into")),
             ]
             rows.extend((engine, run_bench(project, engine, frame, iterations)) for engine in ("fdeflate", "miniz_oxide"))
             for engine, (elapsed_ns, mix) in rows:

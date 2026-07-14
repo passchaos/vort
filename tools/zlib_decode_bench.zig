@@ -1,7 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 
-const Mode = enum { alloc, into };
+const Mode = enum { zlib_alloc, zlib_into, gzip_alloc, gzip_into };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -14,13 +14,21 @@ pub fn main(init: std.process.Init) !void {
     const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, frame_path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(frame);
 
-    const warmup = try vort.decodeZlibAlloc(init.gpa, frame);
+    const warmup = switch (mode) {
+        .zlib_alloc, .zlib_into => try vort.decodeZlibAlloc(init.gpa, frame),
+        .gzip_alloc, .gzip_into => try vort.decodeGzipAlloc(init.gpa, frame),
+    };
     defer init.gpa.free(warmup);
     var empty_scratch: [0]u8 = .{};
-    const scratch = if (mode == .into) try init.gpa.alloc(u8, warmup.len) else empty_scratch[0..];
-    defer if (mode == .into) init.gpa.free(scratch);
-    if (mode == .into) {
-        const written = try vort.decodeZlib(frame, scratch);
+    const uses_scratch = mode == .zlib_into or mode == .gzip_into;
+    const scratch = if (uses_scratch) try init.gpa.alloc(u8, warmup.len) else empty_scratch[0..];
+    defer if (uses_scratch) init.gpa.free(scratch);
+    if (uses_scratch) {
+        const written = switch (mode) {
+            .zlib_into => try vort.decodeZlib(frame, scratch),
+            .gzip_into => try vort.decodeGzip(frame, scratch),
+            else => unreachable,
+        };
         if (written != warmup.len or !std.mem.eql(u8, scratch, warmup)) return error.DecodeLengthMismatch;
     }
 
@@ -28,14 +36,25 @@ pub fn main(init: std.process.Init) !void {
     const start = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |_| {
         switch (mode) {
-            .alloc => {
+            .zlib_alloc => {
                 const decoded = try vort.decodeZlibAlloc(init.gpa, frame);
                 defer init.gpa.free(decoded);
                 mix +%= decoded.len;
                 if (decoded.len != 0) mix +%= decoded[0];
             },
-            .into => {
+            .zlib_into => {
                 const written = try vort.decodeZlib(frame, scratch);
+                mix +%= written;
+                if (written != 0) mix +%= scratch[0];
+            },
+            .gzip_alloc => {
+                const decoded = try vort.decodeGzipAlloc(init.gpa, frame);
+                defer init.gpa.free(decoded);
+                mix +%= decoded.len;
+                if (decoded.len != 0) mix +%= decoded[0];
+            },
+            .gzip_into => {
+                const written = try vort.decodeGzip(frame, scratch);
                 mix +%= written;
                 if (written != 0) mix +%= scratch[0];
             },
@@ -51,7 +70,11 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn parseMode(text: ?[]const u8) Mode {
-    const value = text orelse return .alloc;
-    if (std.mem.eql(u8, value, "into")) return .into;
-    return .alloc;
+    const value = text orelse return .zlib_alloc;
+    if (std.mem.eql(u8, value, "into")) return .zlib_into;
+    if (std.mem.eql(u8, value, "zlib")) return .zlib_alloc;
+    if (std.mem.eql(u8, value, "zlib-into")) return .zlib_into;
+    if (std.mem.eql(u8, value, "gzip")) return .gzip_alloc;
+    if (std.mem.eql(u8, value, "gzip-into")) return .gzip_into;
+    return .zlib_alloc;
 }
