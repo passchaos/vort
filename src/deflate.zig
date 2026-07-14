@@ -1513,18 +1513,28 @@ fn decodeStoredBlockIntoReader(reader: *bitstream.BitReader, output: []u8, out_o
 }
 
 fn reserveInflateOutputHint(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input_len: usize, max_output_len: ?usize) !void {
-    const default_hint = @min(input_len *| 4, 1 << 20);
+    const default_hint = inflateOutputCapacityHint(input_len);
     const capacity = if (max_output_len) |limit| @min(default_hint, limit) else default_hint;
     if (capacity != 0) try out.ensureTotalCapacity(allocator, capacity);
 }
 
 fn reserveInflateAppendOutputHint(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input_len: usize, max_output_len: ?usize) !void {
-    const default_hint = @min(input_len *| 4, 1 << 20);
+    const default_hint = inflateOutputCapacityHint(input_len);
     const capacity = if (max_output_len) |limit| blk: {
         if (out.items.len >= limit) break :blk out.items.len;
         break :blk out.items.len + @min(default_hint, limit - out.items.len);
     } else out.items.len +| default_hint;
     if (capacity != 0) try out.ensureTotalCapacity(allocator, capacity);
+}
+
+fn inflateOutputCapacityHint(input_len: usize) usize {
+    // Highly compressible DEFLATE frames in the Rust baseline corpus often
+    // expand by hundreds of times (for example repeated/RLE payloads). The
+    // previous 4x hint made allocator-returning decode repeatedly grow the
+    // output ArrayList while the caller-buffer API avoided that cost entirely.
+    // A 32x hint is still capped at 1 MiB, so it improves common compressed
+    // frames without over-reserving unbounded memory for hostile streams.
+    return @min(input_len *| 32, 1 << 20);
 }
 
 fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), dictionary: []const u8, max_output_len: ?usize) !void {
@@ -3933,6 +3943,14 @@ test "dynamic bit cost model predicts dynamic token byte length" {
     const dynamic = try encodeRawDynamicTokensFinalAlloc(std.testing.allocator, plan.tokens, true);
     defer std.testing.allocator.free(dynamic);
     try std.testing.expectEqual((try dynamicTokenBitCost(plan.tokens) + 7) / 8, dynamic.len);
+}
+
+test "inflate output capacity hint expands compressed frames but stays capped" {
+    try std.testing.expectEqual(@as(usize, 0), inflateOutputCapacityHint(0));
+    try std.testing.expectEqual(@as(usize, 32), inflateOutputCapacityHint(1));
+    try std.testing.expectEqual(@as(usize, 1024), inflateOutputCapacityHint(32));
+    try std.testing.expectEqual(@as(usize, 1 << 20), inflateOutputCapacityHint(64 * 1024));
+    try std.testing.expectEqual(@as(usize, 1 << 20), inflateOutputCapacityHint(std.math.maxInt(usize)));
 }
 
 test "dynamic code-length alphabet uses weighted tree lengths" {
