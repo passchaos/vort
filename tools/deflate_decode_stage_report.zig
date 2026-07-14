@@ -4,6 +4,9 @@ const vort = @import("vort");
 const Case = struct {
     name: []const u8,
     payload: []const u8,
+    mode: Mode = .best,
+
+    const Mode = enum { best, dynamic_literal };
 };
 
 const Row = struct {
@@ -31,6 +34,7 @@ const builtins = [_]Case{
     .{ .name = "overlap-rle", .payload = "a" ** 32768 },
     .{ .name = "distance-heavy", .payload = ("0123456789abcdef" ** 1024) ++ "----" ++ ("0123456789abcdef" ** 1024) },
     .{ .name = "text", .payload = "the quick brown fox jumps over the lazy dog\n" ** 1024 },
+    .{ .name = "dynamic-literal", .payload = "literal-heavy dynamic huffman decode stage\n" ** 512, .mode = .dynamic_literal },
     .{ .name = "binary", .payload = &binary_payload },
     .{ .name = "structured", .payload = "{\"service\":\"vort\",\"level\":\"default\",\"message\":\"decode stage\"}\n" ** 512 },
 };
@@ -93,7 +97,10 @@ pub fn main(init: std.process.Init) !void {
 
 fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) !Row {
     const options = vort.optionsForCompressionLevel(.default);
-    const zlib_frame = try vort.encodeZlibBestAlloc(init.gpa, case.payload, options);
+    const zlib_frame = switch (case.mode) {
+        .best => try vort.encodeZlibBestAlloc(init.gpa, case.payload, options),
+        .dynamic_literal => try vort.encodeZlibDynamicLiteralAlloc(init.gpa, case.payload),
+    };
     defer init.gpa.free(zlib_frame);
 
     const raw = rawSliceFromZlib(zlib_frame);
