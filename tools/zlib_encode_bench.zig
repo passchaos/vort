@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 
 const EncodeMode = enum { best, dynamic, dynamic_literal, fixed, split, adaptive };
+const Wrapper = enum { zlib, raw };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -32,17 +33,23 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("elapsed_ns={d} zlib_bytes={d} mix={d}\n", .{ elapsed_ns, last_size, mix });
+    try stdout.print("elapsed_ns={d} frame_bytes={d} zlib_bytes={d} mix={d}\n", .{ elapsed_ns, last_size, last_size, mix });
     try stdout.flush();
 }
 
 const Mode = struct {
     kind: EncodeMode,
     level: vort.CompressionLevel,
+    wrapper: Wrapper = .zlib,
 };
 
 fn parseMode(text: ?[]const u8) Mode {
     const value = text orelse return .{ .kind = .best, .level = .default };
+    if (std.mem.startsWith(u8, value, "raw-")) {
+        var mode = parseMode(value["raw-".len..]);
+        mode.wrapper = .raw;
+        return mode;
+    }
     if (std.mem.startsWith(u8, value, "fixed-")) {
         return .{ .kind = .fixed, .level = parseLevel(value["fixed-".len..]) };
     }
@@ -72,12 +79,22 @@ fn parseLevel(value: []const u8) vort.CompressionLevel {
 
 fn encode(allocator: std.mem.Allocator, input: []const u8, mode: Mode) ![]u8 {
     const options = vort.optionsForCompressionLevel(mode.level);
-    return switch (mode.kind) {
-        .best => vort.encodeZlibBestAlloc(allocator, input, options),
-        .dynamic => vort.encodeZlibDynamicWithOptionsAlloc(allocator, input, options),
-        .dynamic_literal => vort.encodeZlibDynamicLiteralAlloc(allocator, input),
-        .fixed => vort.encodeZlibFixedWithOptionsAlloc(allocator, input, options),
-        .split => vort.encodeZlibBestSplitAlloc(allocator, input, options.split_options.min_block_len, options),
-        .adaptive => vort.encodeZlibBestAdaptiveSplitAlloc(allocator, input, options, options.split_options),
+    return switch (mode.wrapper) {
+        .zlib => switch (mode.kind) {
+            .best => vort.encodeZlibBestAlloc(allocator, input, options),
+            .dynamic => vort.encodeZlibDynamicWithOptionsAlloc(allocator, input, options),
+            .dynamic_literal => vort.encodeZlibDynamicLiteralAlloc(allocator, input),
+            .fixed => vort.encodeZlibFixedWithOptionsAlloc(allocator, input, options),
+            .split => vort.encodeZlibBestSplitAlloc(allocator, input, options.split_options.min_block_len, options),
+            .adaptive => vort.encodeZlibBestAdaptiveSplitAlloc(allocator, input, options, options.split_options),
+        },
+        .raw => switch (mode.kind) {
+            .best => vort.encodeRawBestAlloc(allocator, input, options),
+            .dynamic => vort.encodeRawDynamicWithOptionsAlloc(allocator, input, options),
+            .dynamic_literal => vort.encodeRawDynamicLiteralAlloc(allocator, input),
+            .fixed => vort.encodeRawFixedWithOptionsAlloc(allocator, input, options),
+            .split => vort.encodeRawBestSplitAlloc(allocator, input, options.split_options.min_block_len, options),
+            .adaptive => vort.encodeRawBestAdaptiveSplitAlloc(allocator, input, options, options.split_options),
+        },
     };
 }

@@ -77,14 +77,16 @@ allocator-returning API (`vort`), the zlib caller-owned output-buffer API
 format overhead, and per-iteration allocation overhead.
 
 `run-rust-deflate-encode-bench` provides the matching encode-side smoke. It
-prints CSV rows for zlib output size, ratio, and encode throughput for Vort,
-fdeflate, and miniz_oxide on the same generated payloads. Vort is reported at
-fastest, fast, default, best, dynamic-default, dynamic-literal, fixed-fast,
-split-default, and adaptive-default modes so speed/ratio tradeoffs, dynamic-only
-cost, literal-only wrapper cost, best-selection overhead, and wrapper
-split/adaptive overhead are visible next to the Rust baselines. The best row uses fewer iterations because it currently
-exercises the slower optimal parser; each row records its actual iteration
-count. It also includes real project README/roadmap files. Run it with
+prints CSV rows for zlib and raw-deflate frame size, ratio, and encode
+throughput for Vort, fdeflate, and miniz_oxide on the same generated payloads.
+Vort is reported at fastest, fast, default, best, dynamic-default,
+dynamic-literal, fixed-fast, split-default, and adaptive-default zlib modes, plus
+raw-default/raw-dynamic-default/raw-fixed-fast modes, so speed/ratio tradeoffs,
+dynamic-only cost, literal-only wrapper cost, best-selection overhead, wrapper
+split/adaptive overhead, and raw core encode cost are visible next to the Rust
+baselines. The best row uses fewer iterations because it currently exercises the
+slower optimal parser; each row records its actual iteration count. It also
+includes real project README/roadmap files. Run it with
 `-Doptimize=ReleaseFast` before interpreting the Vort rows. Use
 `run-rust-deflate-encode-bench-csv` to persist the same rows to
 `zig-out/vort-rust-deflate-encode-bench.csv`.
@@ -93,8 +95,8 @@ count. It also includes real project README/roadmap files. Run it with
 zlib allocator and caller-buffer throughput ratios against the best Rust
 baseline. Raw-deflate Vort/miniz_oxide rows, gzip decode rows, and decode
 allocation overhead are summarized separately because the Rust baseline harness
-does not expose identical APIs for every wrapper. The encode table also reports
-the Vort default/dynamic-default throughput ratio to expose
+does not expose identical APIs for every wrapper. The zlib encode table also
+reports the Vort default/dynamic-default throughput ratio to expose
 best-selection overhead, literal-only dynamic speed/size ratios against Vort
 default, plus split-default/adaptive-default speed and size ratios against Vort
 default to expose wrapper block-planning overhead and split-induced size
@@ -102,7 +104,9 @@ changes. The same table adds notes when literal-only, split, or adaptive rows
 are much larger than the default row, making benchmark-only modes harder to
 mistake for production compression choices. It also reports Vort default and Vort best-preset
 compressed-size ratios against the best Rust size so the production preset and
-strongest-size preset can be tracked separately.
+strongest-size preset can be tracked separately. A separate raw encode table
+compares Vort raw modes with fdeflate/miniz_oxide raw modes so wrapper bytes and
+checksum work do not hide core encoder gaps.
 
 The dynamic plan report section compares the default dynamic plan with the
 best-preset plan on the same files, including best/default compressed-size and

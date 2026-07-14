@@ -27,6 +27,10 @@ def inum(row: dict[str, str], key: str) -> int:
     return int(row[key])
 
 
+def size_bytes(row: dict[str, str]) -> int:
+    return int(row.get("frame_bytes", row.get("zlib_bytes", "0")))
+
+
 def parse_histogram(value: str) -> list[int]:
     if not value:
         return []
@@ -153,14 +157,15 @@ def encode_lines(rows: list[dict[str, str]]) -> list[str]:
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for case, items in sorted(by_case(rows).items()):
-        vort_rows = [row for row in items if row["engine"].startswith("vort")]
-        rust_rows = [row for row in items if not row["engine"].startswith("vort")]
+        zlib_items = [row for row in items if row_format(row) == "zlib"]
+        vort_rows = [row for row in zlib_items if row["engine"].startswith("vort")]
+        rust_rows = [row for row in zlib_items if not row["engine"].startswith("vort")]
         best_vort_speed = max(vort_rows, key=lambda row: fnum(row, "throughput_mib_s"))
         best_rust_speed = max(rust_rows, key=lambda row: fnum(row, "throughput_mib_s"))
-        best_vort_size = min(vort_rows, key=lambda row: inum(row, "zlib_bytes"))
-        best_rust_size = min(rust_rows, key=lambda row: inum(row, "zlib_bytes"))
+        best_vort_size = min(vort_rows, key=size_bytes)
+        best_rust_size = min(rust_rows, key=size_bytes)
         speed_ratio = fnum(best_vort_speed, "throughput_mib_s") / fnum(best_rust_speed, "throughput_mib_s")
-        size_ratio = inum(best_vort_size, "zlib_bytes") / max(inum(best_rust_size, "zlib_bytes"), 1)
+        size_ratio = size_bytes(best_vort_size) / max(size_bytes(best_rust_size), 1)
         vort_default = next((row for row in vort_rows if row["engine"] == "vort-default"), None)
         vort_best = next((row for row in vort_rows if row["engine"] == "vort-best"), None)
         vort_dynamic = next((row for row in vort_rows if row["engine"] == "vort-dynamic-default"), None)
@@ -172,22 +177,22 @@ def encode_lines(rows: list[dict[str, str]]) -> list[str]:
             dynamic_overhead = f"{fnum(vort_default, 'throughput_mib_s') / fnum(vort_dynamic, 'throughput_mib_s'):.3f}"
         literal_speed = literal_size = split_speed = split_size = adaptive_speed = adaptive_size = ""
         default_size_ratio = best_preset_size_ratio = ""
-        rust_size = max(inum(best_rust_size, "zlib_bytes"), 1)
+        rust_size = max(size_bytes(best_rust_size), 1)
         if vort_default is not None:
             default_speed = fnum(vort_default, "throughput_mib_s")
-            default_size = max(inum(vort_default, "zlib_bytes"), 1)
-            default_size_ratio = f"{inum(vort_default, 'zlib_bytes') / rust_size:.3f}"
+            default_size = max(size_bytes(vort_default), 1)
+            default_size_ratio = f"{size_bytes(vort_default) / rust_size:.3f}"
             if vort_dynamic_literal is not None:
                 literal_speed = "" if default_speed == 0 else f"{fnum(vort_dynamic_literal, 'throughput_mib_s') / default_speed:.3f}"
-                literal_size = f"{inum(vort_dynamic_literal, 'zlib_bytes') / default_size:.3f}"
+                literal_size = f"{size_bytes(vort_dynamic_literal) / default_size:.3f}"
             if vort_split is not None:
                 split_speed = "" if default_speed == 0 else f"{fnum(vort_split, 'throughput_mib_s') / default_speed:.3f}"
-                split_size = f"{inum(vort_split, 'zlib_bytes') / default_size:.3f}"
+                split_size = f"{size_bytes(vort_split) / default_size:.3f}"
             if vort_adaptive is not None:
                 adaptive_speed = "" if default_speed == 0 else f"{fnum(vort_adaptive, 'throughput_mib_s') / default_speed:.3f}"
-                adaptive_size = f"{inum(vort_adaptive, 'zlib_bytes') / default_size:.3f}"
+                adaptive_size = f"{size_bytes(vort_adaptive) / default_size:.3f}"
         if vort_best is not None:
-            best_preset_size_ratio = f"{inum(vort_best, 'zlib_bytes') / rust_size:.3f}"
+            best_preset_size_ratio = f"{size_bytes(vort_best) / rust_size:.3f}"
         notes = []
         if literal_size and float(literal_size) > 2.0:
             notes.append("literal-only size high")
@@ -202,9 +207,41 @@ def encode_lines(rows: list[dict[str, str]]) -> list[str]:
             f"{literal_speed} | {literal_size} | "
             f"{split_speed} | {adaptive_speed} | {split_size} | {adaptive_size} | "
             f"{default_size_ratio} | {best_preset_size_ratio} | "
-            f"{best_vort_size['engine']} {inum(best_vort_size, 'zlib_bytes')} | "
-            f"{best_rust_size['engine']} {inum(best_rust_size, 'zlib_bytes')} | {size_ratio:.3f} | "
+            f"{best_vort_size['engine']} {size_bytes(best_vort_size)} | "
+            f"{best_rust_size['engine']} {size_bytes(best_rust_size)} | {size_ratio:.3f} | "
             f"{'; '.join(notes)} |"
+        )
+    lines.append("")
+    return lines
+
+
+def raw_encode_lines(rows: list[dict[str, str]]) -> list[str]:
+    lines = [
+        "## Raw deflate encode speed and size",
+        "",
+        "| case | best Vort raw speed MiB/s | best Rust raw speed MiB/s | Vort raw speed / Rust raw | Vort raw default size / Rust raw | best Vort raw size | best Rust raw size | Vort raw size / Rust raw |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for case, items in sorted(by_case(rows).items()):
+        raw_items = [row for row in items if row_format(row) == "raw"]
+        vort_rows = [row for row in raw_items if row["engine"].startswith("vort")]
+        rust_rows = [row for row in raw_items if not row["engine"].startswith("vort")]
+        if not vort_rows or not rust_rows:
+            continue
+        best_vort_speed = max(vort_rows, key=lambda row: fnum(row, "throughput_mib_s"))
+        best_rust_speed = max(rust_rows, key=lambda row: fnum(row, "throughput_mib_s"))
+        best_vort_size = min(vort_rows, key=size_bytes)
+        best_rust_size = min(rust_rows, key=size_bytes)
+        vort_default = next((row for row in vort_rows if row["engine"] == "vort-raw-default"), None)
+        rust_size = max(size_bytes(best_rust_size), 1)
+        default_size_ratio = "" if vort_default is None else f"{size_bytes(vort_default) / rust_size:.3f}"
+        speed_ratio = fnum(best_vort_speed, "throughput_mib_s") / fnum(best_rust_speed, "throughput_mib_s")
+        size_ratio = size_bytes(best_vort_size) / rust_size
+        lines.append(
+            f"| {case} | {best_vort_speed['engine']} {fnum(best_vort_speed, 'throughput_mib_s'):.2f} | "
+            f"{best_rust_speed['engine']} {fnum(best_rust_speed, 'throughput_mib_s'):.2f} | {speed_ratio:.3f} | "
+            f"{default_size_ratio} | {best_vort_size['engine']} {size_bytes(best_vort_size)} | "
+            f"{best_rust_size['engine']} {size_bytes(best_rust_size)} | {size_ratio:.3f} |"
         )
     lines.append("")
     return lines
@@ -323,6 +360,7 @@ def main() -> int:
     lines.extend(gzip_decode_lines(decode_rows))
     lines.extend(decode_allocation_lines(decode_rows))
     lines.extend(encode_lines(encode_rows))
+    lines.extend(raw_encode_lines(encode_rows))
     if dynamic_plan_rows:
         lines.extend(dynamic_plan_lines(dynamic_plan_rows))
     if decode_stage_rows:

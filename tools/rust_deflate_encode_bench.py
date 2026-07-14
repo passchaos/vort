@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Encode-throughput and size smoke for Vort vs Rust deflate baselines."""
+"""Encode-throughput and size smoke for Vort vs Rust deflate baselines.
+
+Rows include both zlib-wrapped and raw DEFLATE encoders so wrapper/checksum
+costs can be separated from the core LZ77/Huffman encode work.
+"""
 import pathlib
 import shutil
 import subprocess
@@ -41,12 +45,18 @@ def write_runner(workdir: pathlib.Path) -> pathlib.Path:
             """
             use std::{env, fs, process, time::Instant};
 
-            fn encode(engine: &str, input: &[u8]) -> Vec<u8> {
-                match engine {
-                    "fdeflate" => fdeflate::compress_to_vec(input),
-                    "miniz_oxide" => miniz_oxide::deflate::compress_to_vec_zlib(input, 6),
+            fn encode(engine: &str, format: &str, input: &[u8]) -> Vec<u8> {
+                match (engine, format) {
+                    ("fdeflate", "zlib") => fdeflate::compress_to_vec(input),
+                    ("fdeflate", "raw") => {
+                        let mut compressor = fdeflate::Compressor::new(Vec::with_capacity(input.len() / 4), 1, false).expect("fdeflate raw compressor");
+                        compressor.write_data(input).expect("fdeflate raw write");
+                        compressor.finish().expect("fdeflate raw finish")
+                    },
+                    ("miniz_oxide", "zlib") => miniz_oxide::deflate::compress_to_vec_zlib(input, 6),
+                    ("miniz_oxide", "raw") => miniz_oxide::deflate::compress_to_vec(input, 6),
                     _ => {
-                        eprintln!("unknown engine: {engine}");
+                        eprintln!("unknown engine/format: {engine} {format}");
                         process::exit(2);
                     }
                 }
@@ -54,19 +64,20 @@ def write_runner(workdir: pathlib.Path) -> pathlib.Path:
 
             fn main() {
                 let args: Vec<String> = env::args().collect();
-                if args.len() != 4 {
-                    eprintln!("usage: <fdeflate|miniz_oxide> <input> <iterations>");
+                if args.len() != 5 {
+                    eprintln!("usage: <fdeflate|miniz_oxide> <zlib|raw> <input> <iterations>");
                     process::exit(2);
                 }
                 let engine = &args[1];
-                let input = fs::read(&args[2]).expect("read input");
-                let iterations: usize = args[3].parse().expect("iterations");
-                drop(encode(engine, &input));
+                let format = &args[2];
+                let input = fs::read(&args[3]).expect("read input");
+                let iterations: usize = args[4].parse().expect("iterations");
+                drop(encode(engine, format, &input));
                 let start = Instant::now();
                 let mut mix: u64 = 0;
                 let mut last_size: usize = 0;
                 for _ in 0..iterations {
-                    let encoded = encode(engine, &input);
+                    let encoded = encode(engine, format, &input);
                     last_size = encoded.len();
                     mix = mix.wrapping_add(encoded.len() as u64);
                     if let Some(first) = encoded.first() {
@@ -74,7 +85,7 @@ def write_runner(workdir: pathlib.Path) -> pathlib.Path:
                     }
                 }
                 let elapsed_ns = start.elapsed().as_nanos();
-                println!("elapsed_ns={elapsed_ns} zlib_bytes={last_size} mix={mix}");
+                println!("elapsed_ns={elapsed_ns} frame_bytes={last_size} mix={mix}");
             }
             """
         ).lstrip()
@@ -86,9 +97,9 @@ def parse_fields(output: str) -> dict[str, int]:
     return {key: int(value) for key, value in (item.split("=", 1) for item in output.split())}
 
 
-def run_rust(project: pathlib.Path, engine: str, input_path: pathlib.Path, iterations: int) -> dict[str, int]:
+def run_rust(project: pathlib.Path, engine: str, fmt: str, input_path: pathlib.Path, iterations: int) -> dict[str, int]:
     out = subprocess.run(
-        ["cargo", "run", "--release", "--quiet", "--", engine, str(input_path), str(iterations)],
+        ["cargo", "run", "--release", "--quiet", "--", engine, fmt, str(input_path), str(iterations)],
         cwd=project,
         check=True,
         text=True,
@@ -165,7 +176,7 @@ def main() -> int:
         ("readme", (ROOT / "README.md").read_bytes()),
         ("roadmap", (ROOT / "docs" / "roadmap.md").read_bytes()),
     ]
-    output_rows = ["engine,case,input_bytes,zlib_bytes,ratio,iterations,elapsed_s,throughput_mib_s,mix"]
+    output_rows = ["engine,format,case,input_bytes,frame_bytes,ratio,iterations,elapsed_s,throughput_mib_s,mix"]
     with tempfile.TemporaryDirectory(prefix="vort-rust-deflate-encode-bench-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         project = write_runner(tmp / "runner")
@@ -186,12 +197,21 @@ def main() -> int:
                 ("vort-adaptive-default", "adaptive-default"),
             ]:
                 mode_iterations = iterations_for_vort_mode(len(payload), mode)
-                rows.append((engine, mode_iterations, run_vort(plain, mode_iterations, mode)))
-            rows.extend((engine, iterations, run_rust(project, engine, plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))
-            for engine, row_iterations, fields in rows:
+                rows.append((engine, "zlib", mode_iterations, run_vort(plain, mode_iterations, mode)))
+            for engine, mode in [
+                ("vort-raw-default", "raw-default"),
+                ("vort-raw-dynamic-default", "raw-dynamic-default"),
+                ("vort-raw-fixed-fast", "raw-fixed-fast"),
+            ]:
+                mode_iterations = iterations_for_vort_mode(len(payload), mode)
+                rows.append((engine, "raw", mode_iterations, run_vort(plain, mode_iterations, mode)))
+            rows.extend((engine, "zlib", iterations, run_rust(project, engine, "zlib", plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))
+            rows.extend((f"{engine}-raw", "raw", iterations, run_rust(project, engine, "raw", plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))
+            for engine, fmt, row_iterations, fields in rows:
+                frame_bytes = fields.get("frame_bytes", fields.get("zlib_bytes"))
                 output_rows.append(
-                    f"{engine},{name},{len(payload)},{fields['zlib_bytes']},"
-                    f"{fields['zlib_bytes'] / max(len(payload), 1):.4f},{row_iterations},"
+                    f"{engine},{fmt},{name},{len(payload)},{frame_bytes},"
+                    f"{frame_bytes / max(len(payload), 1):.4f},{row_iterations},"
                     f"{fields['elapsed_ns'] / 1_000_000_000:.6f},"
                     f"{throughput_mib_s(len(payload), row_iterations, fields['elapsed_ns']):.2f},{fields['mix']}"
                 )
