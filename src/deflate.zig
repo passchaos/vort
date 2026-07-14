@@ -2234,6 +2234,8 @@ pub fn decodeGzipAllocLimited(allocator: std.mem.Allocator, input: []const u8, m
 }
 
 fn decodeGzipAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
+    if (try decodeGzipAllocExactSize(allocator, input, max_output_len)) |decoded| return decoded;
+
     const data_offset = try parseGzipHeader(input);
 
     if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice16, allocator, input[data_offset..], max_output_len)) |stored| {
@@ -2258,6 +2260,20 @@ fn decodeGzipAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u
     if (@as(u32, @truncate(raw.bytes.len)) != expected_size) return error.SizeMismatch;
     if (footer_offset + 8 != input.len) return error.TrailingData;
     return raw.bytes;
+}
+
+fn decodeGzipAllocExactSize(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?[]u8 {
+    if (input.len < gzip_header.len + 8) return null;
+    const expected_size: usize = std.mem.readInt(u32, input[input.len - 4 ..][0..4], .little);
+    try ensureOutputLimit(0, expected_size, max_output_len);
+    const out = try allocator.alloc(u8, expected_size);
+    errdefer allocator.free(out);
+    const written = decodeGzip(input, out) catch |err| switch (err) {
+        error.OutputTooSmall => return null,
+        else => return err,
+    };
+    if (written != expected_size) return error.SizeMismatch;
+    return out;
 }
 
 const ZlibHeader = struct {
