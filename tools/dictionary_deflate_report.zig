@@ -4,6 +4,7 @@ const vort = @import("vort");
 const Case = struct {
     name: []const u8,
     dictionary: []const u8,
+    shared_dictionary: bool = false,
     payload: []const u8,
     owned: bool = false,
 };
@@ -50,20 +51,35 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
 
     var csv_path: ?[]const u8 = null;
+    var shared_dictionary: ?[]u8 = null;
     var file_cases: std.ArrayList(Case) = .empty;
     defer {
         for (file_cases.items) |case| {
             if (case.owned) {
-                init.gpa.free(case.dictionary);
+                if (!case.shared_dictionary) init.gpa.free(case.dictionary);
                 init.gpa.free(case.payload);
             }
         }
+        if (shared_dictionary) |dictionary| init.gpa.free(dictionary);
         file_cases.deinit(init.gpa);
     }
 
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--csv")) {
             csv_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--dict")) {
+            const dict_path = args.next() orelse return error.MissingCorpusPath;
+            if (shared_dictionary != null) return error.InvalidDictionaryTraining;
+            shared_dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dict_path, init.gpa, .limited(128 * 1024 * 1024));
+            continue;
+        }
+        if (shared_dictionary) |dictionary| {
+            const payload_path = arg;
+            const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, payload_path, init.gpa, .limited(128 * 1024 * 1024));
+            errdefer init.gpa.free(payload);
+            try file_cases.append(init.gpa, .{ .name = payload_path, .dictionary = dictionary, .shared_dictionary = true, .payload = payload, .owned = true });
             continue;
         }
         const dict_path = arg;
@@ -74,6 +90,7 @@ pub fn main(init: std.process.Init) !void {
         errdefer init.gpa.free(payload);
         try file_cases.append(init.gpa, .{ .name = payload_path, .dictionary = dictionary, .payload = payload, .owned = true });
     }
+    if (shared_dictionary != null and file_cases.items.len == 0) return error.MissingCorpusPath;
 
     var output = std.Io.Writer.Allocating.init(init.gpa);
     defer output.deinit();
