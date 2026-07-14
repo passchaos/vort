@@ -236,11 +236,30 @@ fn preferScanLazy(input: []const u8) bool {
             unique += 1;
         }
     }
+    if (unique > 48) return false;
+
+    var trigrams: [256]bool = @splat(false);
+    var trigram_count: usize = 0;
+    if (sample_len >= 3) {
+        const limit = sample_len - 2;
+        var i: usize = 0;
+        while (i < limit) : (i += 1) {
+            const bucket: u8 = @truncate(hash3(input[i..][0..3]));
+            if (!trigrams[bucket]) {
+                trigrams[bucket] = true;
+                trigram_count += 1;
+                if (trigram_count > 96) return false;
+            }
+        }
+    }
     // The backwards scanner wins on tiny and low-entropy inputs because it has
     // no table allocation/clear cost and quickly finds long repeated runs.
-    // Hash chains pay off on natural text/source where a blind backward scan
-    // spends most of its time stepping over non-candidates.
-    return unique <= 48;
+    // Byte diversity alone is a weak proxy: Markdown/source often has fewer
+    // than 48 distinct bytes in the first KiB but hundreds of distinct 3-byte
+    // anchors, so a blind backward scan burns time on non-candidates. Use a
+    // small 256-bucket trigram sketch to keep RLE/repetitive text on the scan
+    // path while routing natural text/source blocks to the hash-chain parser.
+    return true;
 }
 
 fn scanLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
@@ -691,6 +710,23 @@ test "combined dictionary/input match length uses word and tail paths" {
 
     const input_only = "zzzzabcabc";
     try std.testing.expectEqual(@as(usize, 3), combinedMatchLength(dict, input_only, dict.len + 4, dict.len + 7, 3));
+}
+
+test "lazy parser scan preference separates repetitive from source-like blocks" {
+    try std.testing.expect(preferScanLazy("abcabcabcabc" ** 128));
+    try std.testing.expect(preferScanLazy("0123456789abcdef" ** 128));
+
+    const source_like =
+        \\const std = @import("std");
+        \\pub fn main() !void {
+        \\    var checksum: usize = 0;
+        \\    while (checksum < 1024) : (checksum += 1) {
+        \\        checksum = checksum *% 33 + 17;
+        \\    }
+        \\}
+        \\
+    ** 8;
+    try std.testing.expect(!preferScanLazy(source_like));
 }
 
 fn insertHash(input: []const u8, pos: usize, head: []isize, prev: []isize) void {
