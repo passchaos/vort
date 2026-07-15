@@ -1089,6 +1089,16 @@ fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     try printOptionalJson(u8, stdout, info.dynamic_code_length_count);
     try stdout.print(" dynamic_code_length_lengths=", .{});
     try printCodeLengthArray(stdout, &info.dynamic_code_length_lengths);
+    try stdout.print(" dynamic_literal_nonzero=", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_literal_nonzero);
+    try stdout.print(" dynamic_distance_nonzero=", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_distance_nonzero);
+    try stdout.print(" dynamic_has_eob=", .{});
+    try printOptionalBoolJson(stdout, info.dynamic_has_eob);
+    try stdout.print(" dynamic_lengths_bit_offset=", .{});
+    try printOptionalJson(usize, stdout, info.dynamic_lengths_bit_offset);
+    try stdout.print(" dynamic_lengths_byte_offset=", .{});
+    try printOptionalJson(usize, stdout, info.dynamic_lengths_byte_offset);
     try stdout.print("\n", .{});
 }
 
@@ -1178,6 +1188,16 @@ fn printRawHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     try printOptionalJson(u8, stdout, info.dynamic_code_length_count);
     try stdout.print(",\"dynamic_code_length_lengths\":", .{});
     try printCodeLengthArray(stdout, &info.dynamic_code_length_lengths);
+    try stdout.print(",\"dynamic_literal_nonzero\":", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_literal_nonzero);
+    try stdout.print(",\"dynamic_distance_nonzero\":", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_distance_nonzero);
+    try stdout.print(",\"dynamic_has_eob\":", .{});
+    try printOptionalBoolJson(stdout, info.dynamic_has_eob);
+    try stdout.print(",\"dynamic_lengths_bit_offset\":", .{});
+    try printOptionalJson(usize, stdout, info.dynamic_lengths_bit_offset);
+    try stdout.print(",\"dynamic_lengths_byte_offset\":", .{});
+    try printOptionalJson(usize, stdout, info.dynamic_lengths_byte_offset);
     try stdout.print("}}\n", .{});
 }
 
@@ -1312,6 +1332,14 @@ fn printValidationJson(stdout: *std.Io.Writer, label: []const u8, report: vort.V
 fn printOptionalJson(comptime T: type, stdout: *std.Io.Writer, value: ?T) !void {
     if (value) |payload| {
         try stdout.print("{d}", .{payload});
+    } else {
+        try stdout.print("null", .{});
+    }
+}
+
+fn printOptionalBoolJson(stdout: *std.Io.Writer, value: ?bool) !void {
+    if (value) |payload| {
+        try stdout.print("{}", .{payload});
     } else {
         try stdout.print("null", .{});
     }

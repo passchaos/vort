@@ -71,6 +71,16 @@ pub const RawDeflateHeaderInfo = struct {
     /// Code-length-code lengths indexed by symbol 0..18. Entries outside the
     /// HCLEN prefix order remain zero, matching RFC 1951 semantics.
     dynamic_code_length_lengths: [19]u4 = @splat(0),
+    /// Number of non-zero literal/length code lengths in the dynamic header.
+    dynamic_literal_nonzero: ?u16 = null,
+    /// Number of non-zero distance code lengths in the dynamic header.
+    dynamic_distance_nonzero: ?u16 = null,
+    /// Whether literal/length symbol 256 (end-of-block) is present.
+    dynamic_has_eob: ?bool = null,
+    /// Bit position after reading the full dynamic code-length sequences.
+    dynamic_lengths_bit_offset: ?usize = null,
+    /// Byte offset corresponding to dynamic_lengths_bit_offset.
+    dynamic_lengths_byte_offset: ?usize = null,
 };
 
 pub const GzipHeaderOptions = struct {
@@ -1263,6 +1273,11 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
     var dynamic_hclen: ?u8 = null;
     var dynamic_code_length_count: ?u8 = null;
     var dynamic_code_length_lengths: [19]u4 = @splat(0);
+    var dynamic_literal_nonzero: ?u16 = null;
+    var dynamic_distance_nonzero: ?u16 = null;
+    var dynamic_has_eob: ?bool = null;
+    var dynamic_lengths_bit_offset: ?usize = null;
+    var dynamic_lengths_byte_offset: ?usize = null;
     if (block_type == .stored) {
         reader.alignToByte();
         const offset = reader.byteOffset();
@@ -1286,6 +1301,26 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         dynamic_hdist = hdist;
         dynamic_hclen = hclen;
         dynamic_code_length_count = hclen;
+        const parsed = try huffman.parseDynamicLengthsBody(.{
+            .final = final,
+            .hlit = hlit,
+            .hdist = hdist,
+            .hclen = hclen,
+            .code_length_lengths = dynamic_code_length_lengths,
+        }, &reader);
+        var lit_nonzero: u16 = 0;
+        for (parsed.literal_lengths[0..hlit]) |length| {
+            if (length != 0) lit_nonzero += 1;
+        }
+        var dist_nonzero: u16 = 0;
+        for (parsed.distance_lengths[0..hdist]) |length| {
+            if (length != 0) dist_nonzero += 1;
+        }
+        dynamic_literal_nonzero = lit_nonzero;
+        dynamic_distance_nonzero = dist_nonzero;
+        dynamic_has_eob = parsed.literal_lengths[256] != 0;
+        dynamic_lengths_bit_offset = reader.bitPosition();
+        dynamic_lengths_byte_offset = reader.byteOffset();
     }
     const header_bits_consumed = reader.bitPosition();
     const header_bytes_consumed = reader.byteOffset();
@@ -1304,6 +1339,11 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         .dynamic_hclen = dynamic_hclen,
         .dynamic_code_length_count = dynamic_code_length_count,
         .dynamic_code_length_lengths = dynamic_code_length_lengths,
+        .dynamic_literal_nonzero = dynamic_literal_nonzero,
+        .dynamic_distance_nonzero = dynamic_distance_nonzero,
+        .dynamic_has_eob = dynamic_has_eob,
+        .dynamic_lengths_bit_offset = dynamic_lengths_bit_offset,
+        .dynamic_lengths_byte_offset = dynamic_lengths_byte_offset,
     };
 }
 
@@ -3111,8 +3151,12 @@ test "raw deflate header parser exposes first block metadata" {
     try std.testing.expect(dynamic_info.dynamic_hdist.? >= 1);
     try std.testing.expect(dynamic_info.dynamic_hclen.? >= 4);
     try std.testing.expectEqual(dynamic_info.dynamic_hclen.?, dynamic_info.dynamic_code_length_count.?);
-    try std.testing.expectEqual(@as(usize, 17 + @as(usize, dynamic_info.dynamic_hclen.?) * 3), dynamic_info.header_bits_consumed);
-    try std.testing.expect(dynamic_info.header_bytes_consumed >= 4);
+    try std.testing.expect(dynamic_info.dynamic_literal_nonzero.? >= 1);
+    try std.testing.expect(dynamic_info.dynamic_distance_nonzero.? >= 1);
+    try std.testing.expect(dynamic_info.dynamic_has_eob.?);
+    try std.testing.expectEqual(dynamic_info.header_bits_consumed, dynamic_info.dynamic_lengths_bit_offset.?);
+    try std.testing.expectEqual(dynamic_info.header_bytes_consumed, dynamic_info.dynamic_lengths_byte_offset.?);
+    try std.testing.expect(dynamic_info.header_bits_consumed > 17 + @as(usize, dynamic_info.dynamic_hclen.?) * 3);
 
     try std.testing.expectError(error.TruncatedFrame, parseRawDeflateHeaderInfo(""));
     try std.testing.expectError(error.InvalidDeflateBlockType, parseRawDeflateHeaderInfo(&.{0x07}));

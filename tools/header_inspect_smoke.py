@@ -305,7 +305,12 @@ def main(argv: list[str]) -> int:
     assert raw_dynamic_json["dynamic_hclen"] >= 4
     assert raw_dynamic_json["dynamic_code_length_count"] == raw_dynamic_json["dynamic_hclen"]
     assert len(raw_dynamic_json["dynamic_code_length_lengths"]) == 19
-    assert raw_dynamic_json["header_bits_consumed"] == 17 + raw_dynamic_json["dynamic_hclen"] * 3
+    assert raw_dynamic_json["dynamic_literal_nonzero"] >= 1
+    assert raw_dynamic_json["dynamic_distance_nonzero"] >= 1
+    assert raw_dynamic_json["dynamic_has_eob"] is True
+    assert raw_dynamic_json["dynamic_lengths_bit_offset"] == raw_dynamic_json["header_bits_consumed"]
+    assert raw_dynamic_json["dynamic_lengths_byte_offset"] == raw_dynamic_json["header_bytes_consumed"]
+    assert raw_dynamic_json["header_bits_consumed"] > 17 + raw_dynamic_json["dynamic_hclen"] * 3
     validate_value_against_manifest(raw_dynamic_json, schemas_def)
 
     zlib_hex = run(cli, "inspect-zlib-header-hex", zlib_frame.hex())

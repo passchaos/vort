@@ -16,6 +16,7 @@ DASHBOARD_PRODUCERS = ROOT / "tools" / "dashboard_producers.json"
 
 TYPE_MAP: dict[str, type | tuple[type, ...]] = {
     "bool": bool,
+    "bool?": (bool, type(None)),
     "dict": dict,
     "int": int,
     "int?": (int, type(None)),
