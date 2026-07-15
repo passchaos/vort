@@ -182,8 +182,8 @@ Produced by:
 zig build run-header-inspect-dashboard
 ```
 
-This schema summarizes the CLI smoke that inspects zlib and gzip wrapper
-headers through both hex and file workflows. It is intended to keep wrapper
+This schema summarizes the CLI smoke that inspects raw DEFLATE, zlib, and gzip
+headers through both hex and file workflows. It is intended to keep format
 metadata diagnostics covered by CI and dashboard artifacts.
 
 Important fields:
@@ -191,7 +191,7 @@ Important fields:
 - `schema`: `vort.header_inspect_smoke`
 - `schema_version`: `1`
 - `ok`: whether the smoke passed
-- `case_count`, `zlib_cases`, `gzip_cases`
+- `case_count`, `raw_cases`, `zlib_cases`, `gzip_cases`
 - `dictionary_cases`: zlib FDICT/DICTID cases covered
 - `optional_header_cases`, `fhcrc_cases`: gzip optional-header/FHCRC cases covered
 - `cases`: case-level metadata including format, byte size, data offset, and
@@ -204,7 +204,8 @@ Example:
   "schema": "vort.header_inspect_smoke",
   "schema_version": 1,
   "ok": true,
-  "case_count": 4,
+  "case_count": 5,
+  "raw_cases": 1,
   "zlib_cases": 2,
   "gzip_cases": 2,
   "dictionary_cases": 1,
@@ -221,6 +222,32 @@ Example:
       "header_crc": false
     }
   ]
+}
+```
+
+## `vort.raw_deflate_header_info`
+
+Produced by:
+
+```sh
+zig build run -- inspect-raw-header-hex cb48cdc9c90700 json
+```
+
+This schema is the machine-readable form of raw DEFLATE first-block header
+inspection. It reports BFINAL, BTYPE, and the bit/byte offsets where the
+block-specific payload begins.
+
+Example:
+
+```json
+{
+  "schema": "vort.raw_deflate_header_info",
+  "schema_version": 1,
+  "compressed_bytes": 7,
+  "final": true,
+  "block_type": "fixed",
+  "data_bit_offset": 3,
+  "data_byte_offset": 1
 }
 ```
 
@@ -322,6 +349,7 @@ Example:
     "vort.sidecar_verify_report",
     "vort.sidecar_corrupt_smoke_report",
     "vort.header_inspect_smoke",
+    "vort.raw_deflate_header_info",
     "vort.zlib_header_info",
     "vort.gzip_header_info"
   ],

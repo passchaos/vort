@@ -155,6 +155,8 @@ architecture blindly.
 - [x] Raw preset-dictionary decode API supports dictionary back-references.
 - [x] Raw preset-dictionary encode API can emit dictionary back-references for fixed/dynamic/best blocks.
 - [x] Raw/zlib/gzip one-shot decode APIs support explicit output limits.
+- [x] Public raw deflate first-block header parser exposes BFINAL/BTYPE and payload offsets.
+- [x] CLI raw deflate header inspection supports text and schema-checked JSON output.
 - [x] Allocator-returning raw/zlib/gzip decoders use larger capped output capacity hints for highly compressed frames.
 - [x] Raw/zlib/gzip alloc decoders expose exact-size variants for callers that know the output length.
 - [x] Concatenated gzip alloc decoder exposes an exact-size variant.

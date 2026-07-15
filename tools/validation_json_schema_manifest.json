@@ -68,6 +68,7 @@
         "gzip_cases": "int",
         "ok": "bool",
         "optional_header_cases": "int",
+        "raw_cases": "int",
         "schema": "str",
         "schema_version": "int",
         "zlib_cases": "int"
@@ -75,6 +76,7 @@
       "item_collection": "cases",
       "item_enums": {
         "format": [
+          "raw",
           "zlib",
           "gzip"
         ]
@@ -87,6 +89,24 @@
         "has_optional_fields": "bool",
         "header_crc": "bool",
         "name": "str"
+      }
+    },
+    "vort.raw_deflate_header_info": {
+      "fields": {
+        "block_type": "str",
+        "compressed_bytes": "int",
+        "data_bit_offset": "int",
+        "data_byte_offset": "int",
+        "final": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "enums": {
+        "block_type": [
+          "stored",
+          "fixed",
+          "dynamic"
+        ]
       }
     },
     "vort.zlib_header_info": {

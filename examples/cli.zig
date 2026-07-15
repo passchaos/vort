@@ -804,6 +804,13 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("compressed_bytes={d} dictionary_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, dictionary.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "inspect-raw-header-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const info = try vort.parseRawDeflateHeaderInfo(compressed);
+        try printRawHeaderInfo(stdout, compressed.len, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -871,6 +878,13 @@ pub fn main(init: std.process.Init) !void {
             try vort.decodeZlibAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "zlib", compressed.len, decoded);
+    } else if (std.mem.eql(u8, command, "inspect-raw-header-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const info = try vort.parseRawDeflateHeaderInfo(compressed);
+        try printRawHeaderInfo(stdout, compressed.len, info, output_format);
     } else if (std.mem.eql(u8, command, "inspect-zlib-header-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const output_format = try parseHeaderInspectOutputFormat(args.next());
@@ -937,6 +951,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode raw deflate file bytes with an optional output limit
         \\  decode-raw-dict-file <in> <out> <dict> [max_output]
         \\                              Decode raw deflate file bytes with a preset dictionary file
+        \\  inspect-raw-header-hex [hex] [text|json]
+        \\                              Print parsed raw deflate first-block metadata for hex input
+        \\  inspect-raw-header-file <in> [text|json]
+        \\                              Print parsed raw deflate first-block metadata for a file
         \\  decode-zlib-hex [hex] [max_output]
         \\                              Decode zlib-wrapped deflate hex to text
         \\  decode-zlib-dict-hex [hex] [dict] [max_output]
@@ -1041,6 +1059,21 @@ fn printHexInline(stdout: *std.Io.Writer, bytes: []const u8) !void {
 
 const HeaderInspectOutputFormat = enum { text, json };
 
+fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.RawDeflateHeaderInfo, output_format: HeaderInspectOutputFormat) !void {
+    if (output_format == .json) return printRawHeaderJson(stdout, compressed_len, info);
+
+    try stdout.print(
+        "raw_header compressed_bytes={d} final={} block_type={s} data_bit_offset={d} data_byte_offset={d}\n",
+        .{
+            compressed_len,
+            info.final,
+            @tagName(info.block_type),
+            info.data_bit_offset,
+            info.data_byte_offset,
+        },
+    );
+}
+
 fn printZlibHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.ZlibHeaderInfo, output_format: HeaderInspectOutputFormat) !void {
     if (output_format == .json) return printZlibHeaderJson(stdout, compressed_len, info);
 
@@ -1097,6 +1130,19 @@ fn printGzipHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort
     } else {
         try stdout.print(" header_crc=null\n", .{});
     }
+}
+
+fn printRawHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.RawDeflateHeaderInfo) !void {
+    try stdout.print(
+        "{{\"schema\":\"vort.raw_deflate_header_info\",\"schema_version\":1,\"compressed_bytes\":{d},\"final\":{},\"block_type\":\"{s}\",\"data_bit_offset\":{d},\"data_byte_offset\":{d}}}\n",
+        .{
+            compressed_len,
+            info.final,
+            @tagName(info.block_type),
+            info.data_bit_offset,
+            info.data_byte_offset,
+        },
+    );
 }
 
 fn printZlibHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.ZlibHeaderInfo) !void {

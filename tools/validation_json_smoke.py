@@ -123,6 +123,11 @@ def main() -> int:
         validate_value_against_manifest(dashboard, schemas_def)
 
         header_summary_path = root / "vort-header-inspect-smoke.json"
+        raw_header = json.loads(run([cli, "inspect-raw-header-hex", "cb48cdc9c90700", "json"]).stdout)
+        assert raw_header["schema"] == "vort.raw_deflate_header_info"
+        assert raw_header["schema_version"] == 1
+        assert raw_header["block_type"] == "fixed"
+        validate_value_against_manifest(raw_header, schemas_def)
         zlib_header = json.loads(run([cli, "inspect-zlib-header-hex", "7801cb48cdc9c90700062c0215", "json"]).stdout)
         assert zlib_header["schema"] == "vort.zlib_header_info"
         assert zlib_header["schema_version"] == 1
@@ -140,6 +145,7 @@ def main() -> int:
         assert header_summary["schema"] == "vort.header_inspect_smoke"
         assert header_summary["schema_version"] == 1
         assert header_summary["ok"] is True
+        assert header_summary["raw_cases"] >= 1
         assert header_summary["dictionary_cases"] >= 1
         assert header_summary["optional_header_cases"] >= 1
         validate_value_against_manifest(header_summary, schemas_def)
@@ -153,6 +159,7 @@ def main() -> int:
                 corrupt["schema"],
                 dashboard["schema"],
                 header_summary["schema"],
+                raw_header["schema"],
                 zlib_header["schema"],
                 gzip_header["schema"],
             ],

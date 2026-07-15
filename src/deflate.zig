@@ -28,6 +28,24 @@ pub const CompressionOptions = struct {
 
 pub const CompressionLevel = enum { fastest, fast, default, best };
 
+pub const RawDeflateBlockType = enum(u2) {
+    stored = 0,
+    fixed = 1,
+    dynamic = 2,
+};
+
+pub const RawDeflateHeaderInfo = struct {
+    /// True when BFINAL is set for the first block.
+    final: bool,
+    /// First block type decoded from BTYPE.
+    block_type: RawDeflateBlockType,
+    /// Number of header bits consumed before the block-specific payload starts.
+    data_bit_offset: usize,
+    /// Byte containing the block-specific payload start. For fixed/dynamic
+    /// blocks this may still contain unread bits because DEFLATE is bit-packed.
+    data_byte_offset: usize,
+};
+
 pub const GzipHeaderOptions = struct {
     /// Set the advisory FTEXT flag. Decoders must not rely on this bit for
     /// correctness, but exposing it keeps Vort able to reproduce metadata-rich
@@ -1195,6 +1213,25 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
         }
         if (final) return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
     }
+}
+
+pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
+    if (input.len == 0) return error.TruncatedFrame;
+    var reader = bitstream.BitReader.init(input);
+    const final = (try reader.readBits(u1, 1)) != 0;
+    const btype = try reader.readBits(u2, 2);
+    const block_type: RawDeflateBlockType = switch (btype) {
+        0 => .stored,
+        1 => .fixed,
+        2 => .dynamic,
+        else => return error.InvalidDeflateBlockType,
+    };
+    return .{
+        .final = final,
+        .block_type = block_type,
+        .data_bit_offset = reader.bitPosition(),
+        .data_byte_offset = reader.byteOffset(),
+    };
 }
 
 fn decodeRawAutoAppendPartialWithDictionary(
@@ -2971,6 +3008,27 @@ test "raw stored deflate matches zlib level-0 vectors" {
     const hello = try encodeRawStoredAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(hello);
     try std.testing.expectEqualSlices(u8, &.{ 0x01, 0x05, 0x00, 0xfa, 0xff, 'h', 'e', 'l', 'l', 'o' }, hello);
+}
+
+test "raw deflate header parser exposes first block metadata" {
+    const stored = try parseRawDeflateHeaderInfo(&.{ 0x01, 0x00, 0x00, 0xff, 0xff });
+    try std.testing.expect(stored.final);
+    try std.testing.expectEqual(RawDeflateBlockType.stored, stored.block_type);
+    try std.testing.expectEqual(@as(usize, 3), stored.data_bit_offset);
+    try std.testing.expectEqual(@as(usize, 1), stored.data_byte_offset);
+
+    const fixed = try parseRawDeflateHeaderInfo(&.{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 });
+    try std.testing.expect(fixed.final);
+    try std.testing.expectEqual(RawDeflateBlockType.fixed, fixed.block_type);
+
+    const dynamic = try encodeRawDynamicLiteralAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(dynamic);
+    const dynamic_info = try parseRawDeflateHeaderInfo(dynamic);
+    try std.testing.expect(dynamic_info.final);
+    try std.testing.expectEqual(RawDeflateBlockType.dynamic, dynamic_info.block_type);
+
+    try std.testing.expectError(error.TruncatedFrame, parseRawDeflateHeaderInfo(""));
+    try std.testing.expectError(error.InvalidDeflateBlockType, parseRawDeflateHeaderInfo(&.{0x07}));
 }
 
 test "raw stored deflate round trips across block boundary" {

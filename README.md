@@ -77,6 +77,8 @@ zig build run -- zlib-fixed-roundtrip "hello vort"
 zig build run -- gzip-fixed-roundtrip "hello vort"
 zig build run -- decode-raw-hex cb48cdc9c90700
 zig build run -- decode-raw-hex cb48cdc9c90700 5
+zig build run -- inspect-raw-header-hex cb48cdc9c90700
+zig build run -- inspect-raw-header-hex cb48cdc9c90700 json
 zig build run -- decode-raw-dict-hex cb402701 "hello "
 python3 - <<'PY'
 import zlib
