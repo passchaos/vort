@@ -172,6 +172,8 @@ def main() -> int:
     zlib_file_frame = zlib.compress(zlib_file_payload, level=6)
     zlib_file_missing_footer = zlib_file_frame[:-4]
     expect_cli_failure("decode-zlib-hex", zlib_file_missing_footer.hex(), error_name="TruncatedFrame")
+    zlib_file_trailing = zlib_file_frame + b"garbage"
+    expect_cli_failure("decode-zlib-hex", zlib_file_trailing.hex(), error_name="TrailingData")
     with tempfile.TemporaryDirectory(prefix="vort-zlib-file-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         compressed_path = tmp / "sample.zlib"
@@ -194,10 +196,15 @@ def main() -> int:
         missing_footer_path = tmp / "missing-footer.zlib"
         missing_footer_path.write_bytes(zlib_file_missing_footer)
         expect_cli_failure("decode-zlib-file", str(missing_footer_path), str(tmp / "missing-footer.out"), error_name="TruncatedFrame")
+        trailing_path = tmp / "trailing.zlib"
+        trailing_path.write_bytes(zlib_file_trailing)
+        expect_cli_failure("decode-zlib-file", str(trailing_path), str(tmp / "trailing.out"), error_name="TrailingData")
 
     raw_file_payload = b"raw deflate file output limit smoke"
     co = zlib.compressobj(level=6, wbits=-15)
     raw_file_frame = co.compress(raw_file_payload) + co.flush()
+    raw_file_trailing = raw_file_frame + b"garbage"
+    expect_cli_failure("decode-raw-hex", raw_file_trailing.hex(), error_name="TrailingData")
     with tempfile.TemporaryDirectory(prefix="vort-raw-file-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         compressed_path = tmp / "sample.raw"
@@ -217,6 +224,9 @@ def main() -> int:
         header_only_path = tmp / "header-only.raw"
         header_only_path.write_bytes(bytes.fromhex("01"))
         expect_cli_failure("decode-raw-file", str(header_only_path), str(tmp / "header-only.out"), error_name="TruncatedFrame")
+        trailing_path = tmp / "trailing.raw"
+        trailing_path.write_bytes(raw_file_trailing)
+        expect_cli_failure("decode-raw-file", str(trailing_path), str(tmp / "trailing.out"), error_name="TrailingData")
 
     co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, zdict=dictionary)
     zlib_dict_file = co.compress(dict_payload) + co.flush()

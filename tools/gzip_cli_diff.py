@@ -86,6 +86,8 @@ def main() -> int:
     concatenated_plain = b"hello world"
     missing_trailer = gzip_compress(b"footer truncation smoke")[:-8]
     expect_cli_failure("decode-gzip-hex", missing_trailer.hex(), error_name="TruncatedFrame")
+    trailing_garbage = gzip_compress(b"trailing garbage smoke") + b"garbage"
+    expect_cli_failure("decode-gzip-hex", trailing_garbage.hex(), error_name="TruncatedFrame")
     with tempfile.TemporaryDirectory(prefix="vort-gzip-cat-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         compressed_path = tmp / "cat.gz"
@@ -108,6 +110,9 @@ def main() -> int:
         missing_trailer_path = tmp / "missing-trailer.gz"
         missing_trailer_path.write_bytes(missing_trailer)
         expect_cli_failure("decode-gzip-file", str(missing_trailer_path), str(tmp / "missing-trailer.out"), error_name="TruncatedFrame")
+        trailing_path = tmp / "trailing.gz"
+        trailing_path.write_bytes(trailing_garbage)
+        expect_cli_failure("decode-gzip-file", str(trailing_path), str(tmp / "trailing.out"), error_name="TruncatedFrame")
 
     # Vort fixed gzip known vector -> system gzip.
     vort_hello = bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a6103605000000")
