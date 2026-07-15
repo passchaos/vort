@@ -126,6 +126,32 @@ def build_mode_counts(checks: list[dict[str, object]]) -> list[dict[str, object]
     ]
 
 
+EXPECTED_MODE_COUNTS = [
+    {"mode": "all", "min_checks": 1, "min_expected_failures": 0, "min_matched": 1},
+    {"mode": "strict-producers", "min_checks": 1, "min_expected_failures": 1, "min_matched": 1},
+    {"mode": "strict-smoke-gates", "min_checks": 1, "min_expected_failures": 1, "min_matched": 1},
+    {"mode": "strict-header-inspect", "min_checks": 3, "min_expected_failures": 3, "min_matched": 3},
+    {"mode": "synthetic", "min_checks": 1, "min_expected_failures": 0, "min_matched": 1},
+]
+
+
+def missing_expected_modes(mode_counts: list[dict[str, object]]) -> list[dict[str, object]]:
+    counts = {str(row["mode"]): row for row in mode_counts}
+    missing: list[dict[str, object]] = []
+    for expected in EXPECTED_MODE_COUNTS:
+        row = counts.get(str(expected["mode"]))
+        if row is None:
+            missing.append(expected)
+            continue
+        if (
+            int(row["checks"]) < int(expected["min_checks"])
+            or int(row["expected_failures"]) < int(expected["min_expected_failures"])
+            or int(row["matched"]) < int(expected["min_matched"])
+        ):
+            missing.append(expected)
+    return missing
+
+
 def write_markdown(path: Path, summary: dict[str, object]) -> None:
     lines = [
         "# Vort dashboard strict smoke",
@@ -140,6 +166,17 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
     ]
     for row in summary["mode_counts"]:
         lines.append(f"| `{row['mode']}` | {row['checks']} | {row['expected_failures']} | {row['matched']} |")
+    lines.extend([
+        "",
+        "### Expected mode matrix",
+        "",
+        f"- expected modes: {summary['expected_mode_count']}",
+        f"- missing modes: {summary['missing_mode_count']}",
+    ])
+    if summary["missing_modes"]:
+        lines.extend(["", "| mode | min checks | min expected failures | min matched |", "| --- | ---: | ---: | ---: |"])
+        for row in summary["missing_modes"]:
+            lines.append(f"| `{row['mode']}` | {row['min_checks']} | {row['min_expected_failures']} | {row['min_matched']} |")
     lines.extend([
         "",
         "## Checks",
@@ -226,6 +263,9 @@ def main() -> int:
             raise AssertionError("synthetic long-output check did not exercise truncation")
 
     mode_counts = build_mode_counts(checks)
+    missing_modes = missing_expected_modes(mode_counts)
+    if missing_modes:
+        raise AssertionError(f"missing dashboard strict mode coverage: {missing_modes!r}")
     summary = {
         "schema": "vort.dashboard_strict_smoke",
         "schema_version": 1,
@@ -234,6 +274,10 @@ def main() -> int:
         "checks": checks,
         "mode_count": len(mode_counts),
         "mode_counts": mode_counts,
+        "expected_mode_count": len(EXPECTED_MODE_COUNTS),
+        "expected_modes": EXPECTED_MODE_COUNTS,
+        "missing_mode_count": len(missing_modes),
+        "missing_modes": missing_modes,
     }
     if args.summary:
         path = Path(args.summary)

@@ -81,6 +81,10 @@
         "checks": "list",
         "mode_count": "int",
         "mode_counts": "list",
+        "expected_mode_count": "int",
+        "expected_modes": "list",
+        "missing_mode_count": "int",
+        "missing_modes": "list",
         "ok": "bool",
         "schema": "str",
         "schema_version": "int"
@@ -91,6 +95,12 @@
         },
         "mode_count": {
           "collection": "mode_counts"
+        },
+        "expected_mode_count": {
+          "collection": "expected_modes"
+        },
+        "missing_mode_count": {
+          "collection": "missing_modes"
         }
       },
       "collection_sum_rules": {
@@ -147,6 +157,41 @@
               "synthetic"
             ]
           }
+        },
+        "expected_modes": {
+          "fields": {
+            "min_checks": "int",
+            "min_expected_failures": "int",
+            "min_matched": "int",
+            "mode": "str"
+          },
+          "enums": {
+            "mode": [
+              "all",
+              "strict-producers",
+              "strict-smoke-gates",
+              "strict-header-inspect",
+              "synthetic"
+            ]
+          }
+        },
+        "missing_modes": {
+          "fields": {
+            "min_checks": "int",
+            "min_expected_failures": "int",
+            "min_matched": "int",
+            "mode": "str"
+          },
+          "enums": {
+            "mode": [
+              "all",
+              "strict-producers",
+              "strict-smoke-gates",
+              "strict-header-inspect",
+              "synthetic"
+            ]
+          },
+          "allow_empty": true
         }
       }
     },

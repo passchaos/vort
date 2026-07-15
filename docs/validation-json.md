@@ -725,8 +725,10 @@ This schema summarizes positive and negative smoke checks for dashboard strict
 modes: producer coverage, smoke-gate coverage, and header-inspection health. Each
 check records the expected output marker, actual truncated output, original output
 length, truncation limit/flag, and process return code for CI diagnostics. `mode_counts` groups checks by strict mode for a
-compact dashboard overview. A synthetic long-output check keeps the truncation path
-covered so `actual_output_truncated=true` is exercised in CI.
+compact dashboard overview, while `expected_modes` defines the minimum required
+coverage per strict mode and `missing_modes` reports unmet requirements. A
+synthetic long-output check keeps the truncation path covered so
+`actual_output_truncated=true` is exercised in CI.
 
 Example:
 
@@ -737,6 +739,17 @@ Example:
   "ok": true,
   "check_count": 1,
   "mode_count": 1,
+  "expected_mode_count": 1,
+  "missing_mode_count": 0,
+  "expected_modes": [
+    {
+      "mode": "all",
+      "min_checks": 1,
+      "min_expected_failures": 0,
+      "min_matched": 1
+    }
+  ],
+  "missing_modes": [],
   "mode_counts": [
     {
       "mode": "all",

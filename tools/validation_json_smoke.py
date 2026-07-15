@@ -119,6 +119,9 @@ def main() -> int:
         assert dashboard_strict["ok"] is True
         assert dashboard_strict["check_count"] >= 1
         assert dashboard_strict["mode_count"] >= 1
+        assert dashboard_strict["expected_mode_count"] >= 1
+        assert dashboard_strict["missing_mode_count"] == 0
+        assert dashboard_strict["missing_modes"] == []
         assert sum(row["checks"] for row in dashboard_strict["mode_counts"]) == dashboard_strict["check_count"]
         assert any(row["mode"] == "strict-header-inspect" and row["checks"] >= 1 for row in dashboard_strict["mode_counts"])
         assert all(
