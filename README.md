@@ -88,12 +88,14 @@ printf "hello " > /tmp/vort.dict
 printf "cb402701" | xxd -r -p > /tmp/vort-dict.raw
 zig build run -- decode-raw-dict-file /tmp/vort-dict.raw /tmp/vort-raw-dict.out /tmp/vort.dict 17
 zig build run -- decode-zlib-hex 7801cb48cdc9c90700062c0215
+zig build run -- inspect-zlib-header-hex 7801cb48cdc9c90700062c0215
 zig build run -- decode-zlib-dict-hex 78f908610235cb4027013a2e067d "hello "
 python3 - <<'PY'
 import zlib
 open("/tmp/vort.zlib", "wb").write(zlib.compress(b"hello"))
 PY
 zig build run -- decode-zlib-file /tmp/vort.zlib /tmp/vort-zlib.out 5
+zig build run -- inspect-zlib-header-file /tmp/vort.zlib
 printf "hello " > /tmp/vort.dict && python3 - <<'PY'
 import zlib
 d = b"hello "
