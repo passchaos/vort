@@ -8,6 +8,8 @@ pub fn main(init: std.process.Init) !void {
 
     var state = State{};
     defer state.deinit(init.gpa);
+    var json_path: ?[]const u8 = null;
+    var markdown_path: ?[]const u8 = null;
 
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--file")) {
@@ -15,6 +17,14 @@ pub fn main(init: std.process.Init) !void {
             const contents = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(16 * 1024 * 1024));
             defer init.gpa.free(contents);
             try processFileTokens(init.gpa, &state, contents);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--json")) {
+            json_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--markdown")) {
+            markdown_path = args.next() orelse return error.MissingCorpusPath;
             continue;
         }
         try processToken(init.gpa, &state, arg);
@@ -37,6 +47,9 @@ pub fn main(init: std.process.Init) !void {
         try stdout.flush();
         return;
     }
+
+    if (json_path) |path| try writeJson(init, path, state);
+    if (markdown_path) |path| try writeMarkdown(init, path, state);
 
     var stdout_buffer: [512]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
@@ -61,6 +74,17 @@ const Expected = enum {
     }
 };
 
+const ReportRow = struct {
+    index: usize,
+    mode: Mode,
+    input_bytes: usize,
+    expected: ?Expected,
+    expected_error: []const u8,
+    outcome: Outcome,
+    actual_error: []const u8,
+    matched: bool,
+};
+
 const State = struct {
     mode: Mode = .store,
     // Expected outcomes are sticky on purpose: corpus files often group many
@@ -77,6 +101,7 @@ const State = struct {
     cases: usize = 0,
     accepted: usize = 0,
     rejected: usize = 0,
+    rows: std.ArrayList(ReportRow) = .empty,
 
     fn modeLabel(self: State) []const u8 {
         const mode_count = @as(usize, @intFromBool(self.saw_store)) +
@@ -86,25 +111,69 @@ const State = struct {
         return if (mode_count > 1) "mixed" else if (self.saw_gzip) "gzip" else if (self.saw_zlib) "zlib" else if (self.saw_deflate) "deflate" else "store";
     }
 
-    fn recordOutcome(self: *State, outcome: Outcome, actual_error: ?[]const u8) !void {
+    fn exactErrorExpectationCount(self: State) usize {
+        var count: usize = 0;
+        for (self.rows.items) |row| {
+            if (row.expected_error.len != 0) count += 1;
+        }
+        return count;
+    }
+
+    fn matchedRows(self: State) usize {
+        var count: usize = 0;
+        for (self.rows.items) |row| {
+            if (row.matched) count += 1;
+        }
+        return count;
+    }
+
+    fn recordOutcome(self: *State, allocator: std.mem.Allocator, input_bytes: usize, outcome: Outcome, actual_error: ?[]const u8) !void {
+        var expected_matched = true;
+        if (self.expected) |expected| {
+            if (!expected.matches(outcome)) {
+                expected_matched = false;
+            }
+        }
+        var error_matched = true;
+        if (self.expected_error) |expected_error| {
+            if (outcome == .accepted) {
+                error_matched = false;
+            } else {
+                const actual = actual_error orelse return error.MissingActualError;
+                error_matched = std.mem.eql(u8, actual, expected_error);
+            }
+        }
+        if (!expected_matched) {
+            return switch (outcome) {
+                .accepted => error.UnexpectedAccept,
+                .rejected => error.UnexpectedReject,
+            };
+        }
+        if (!error_matched) {
+            if (outcome == .accepted) return error.ExpectedErrorButAccepted;
+            return error.UnexpectedErrorName;
+        }
+
+        const index = self.cases;
         self.cases += 1;
         switch (outcome) {
             .accepted => self.accepted += 1,
             .rejected => self.rejected += 1,
         }
-        if (self.expected) |expected| {
-            if (!expected.matches(outcome)) {
-                return switch (outcome) {
-                    .accepted => error.UnexpectedAccept,
-                    .rejected => error.UnexpectedReject,
-                };
-            }
-        }
-        if (self.expected_error) |expected_error| {
-            if (outcome == .accepted) return error.ExpectedErrorButAccepted;
-            const actual = actual_error orelse return error.MissingActualError;
-            if (!std.mem.eql(u8, actual, expected_error)) return error.UnexpectedErrorName;
-        }
+        const expected_error_copy = try allocator.dupe(u8, self.expected_error orelse "");
+        errdefer allocator.free(expected_error_copy);
+        const actual_error_copy = try allocator.dupe(u8, actual_error orelse "");
+        errdefer allocator.free(actual_error_copy);
+        try self.rows.append(allocator, .{
+            .index = index,
+            .mode = self.mode,
+            .input_bytes = input_bytes,
+            .expected = self.expected,
+            .expected_error = expected_error_copy,
+            .outcome = outcome,
+            .actual_error = actual_error_copy,
+            .matched = expected_matched and error_matched,
+        });
     }
 
     fn setExpected(self: *State, allocator: std.mem.Allocator, expected: ?Expected) void {
@@ -147,6 +216,11 @@ const State = struct {
     }
 
     fn deinit(self: *State, allocator: std.mem.Allocator) void {
+        for (self.rows.items) |row| {
+            allocator.free(row.expected_error);
+            allocator.free(row.actual_error);
+        }
+        self.rows.deinit(allocator);
         self.clearExpectedError(allocator);
         self.clearDictionary(allocator);
     }
@@ -249,14 +323,14 @@ fn processSample(allocator: std.mem.Allocator, state: *State, bytes: []const u8)
         .store => {
             state.saw_store = true;
             if (vort.store.parseHeader(bytes)) |_| {
-                try state.recordOutcome(.accepted, null);
+                try state.recordOutcome(allocator, bytes.len, .accepted, null);
             } else |err| {
                 switch (err) {
                     error.TruncatedFrame,
                     error.InvalidMagic,
                     error.UnsupportedVersion,
                     error.CorruptFrame,
-                    => try state.recordOutcome(.rejected, @errorName(err)),
+                    => try state.recordOutcome(allocator, bytes.len, .rejected, @errorName(err)),
                     else => return err,
                 }
             }
@@ -265,7 +339,7 @@ fn processSample(allocator: std.mem.Allocator, state: *State, bytes: []const u8)
             state.saw_deflate = true;
             if (decodeRawDeflateSample(allocator, state.dictionary, state.max_output_len, bytes)) |decoded| {
                 defer allocator.free(decoded);
-                try state.recordOutcome(.accepted, null);
+                try state.recordOutcome(allocator, bytes.len, .accepted, null);
             } else |err| {
                 switch (err) {
                     error.TruncatedFrame,
@@ -277,7 +351,7 @@ fn processSample(allocator: std.mem.Allocator, state: *State, bytes: []const u8)
                     error.CorruptFrame,
                     error.TrailingData,
                     error.OutputLimitExceeded,
-                    => try state.recordOutcome(.rejected, @errorName(err)),
+                    => try state.recordOutcome(allocator, bytes.len, .rejected, @errorName(err)),
                     else => return err,
                 }
             }
@@ -286,7 +360,7 @@ fn processSample(allocator: std.mem.Allocator, state: *State, bytes: []const u8)
             state.saw_zlib = true;
             if (decodeZlibSample(allocator, state.dictionary, state.max_output_len, bytes)) |decoded| {
                 defer allocator.free(decoded);
-                try state.recordOutcome(.accepted, null);
+                try state.recordOutcome(allocator, bytes.len, .accepted, null);
             } else |err| {
                 switch (err) {
                     error.TruncatedFrame,
@@ -302,7 +376,7 @@ fn processSample(allocator: std.mem.Allocator, state: *State, bytes: []const u8)
                     error.ChecksumMismatch,
                     error.SizeMismatch,
                     error.OutputLimitExceeded,
-                    => try state.recordOutcome(.rejected, @errorName(err)),
+                    => try state.recordOutcome(allocator, bytes.len, .rejected, @errorName(err)),
                     else => return err,
                 }
             }
@@ -311,7 +385,7 @@ fn processSample(allocator: std.mem.Allocator, state: *State, bytes: []const u8)
             state.saw_gzip = true;
             if (decodeGzipSample(allocator, state.max_output_len, bytes)) |decoded| {
                 defer allocator.free(decoded);
-                try state.recordOutcome(.accepted, null);
+                try state.recordOutcome(allocator, bytes.len, .accepted, null);
             } else |err| {
                 switch (err) {
                     error.TruncatedFrame,
@@ -326,7 +400,7 @@ fn processSample(allocator: std.mem.Allocator, state: *State, bytes: []const u8)
                     error.ChecksumMismatch,
                     error.SizeMismatch,
                     error.OutputLimitExceeded,
-                    => try state.recordOutcome(.rejected, @errorName(err)),
+                    => try state.recordOutcome(allocator, bytes.len, .rejected, @errorName(err)),
                     else => return err,
                 }
             }
@@ -392,4 +466,83 @@ fn hexToOwnedBytes(allocator: std.mem.Allocator, hex: []const u8) ![]u8 {
         bytes[i] = try std.fmt.parseInt(u8, hex[i * 2 .. i * 2 + 2], 16);
     }
     return bytes;
+}
+
+fn writeJson(init: std.process.Init, path: []const u8, state: State) !void {
+    var writer = std.Io.Writer.Allocating.init(init.gpa);
+    defer writer.deinit();
+    const w = &writer.writer;
+    try w.print(
+        "{{\n  \"schema\": \"vort.fuzz_corpus_report\",\n  \"schema_version\": 1,\n  \"ok\": {},\n  \"mode\": \"{s}\",\n  \"cases\": {d},\n  \"accepted\": {d},\n  \"rejected\": {d},\n  \"exact_error_expectations\": {d},\n  \"matched_rows\": {d},\n  \"items\": [\n",
+        .{
+            state.matchedRows() == state.rows.items.len,
+            state.modeLabel(),
+            state.cases,
+            state.accepted,
+            state.rejected,
+            state.exactErrorExpectationCount(),
+            state.matchedRows(),
+        },
+    );
+    for (state.rows.items, 0..) |row, i| {
+        try w.print("    {{\"index\": {d}, \"mode\": \"{s}\", \"input_bytes\": {d}, \"expected\": \"{s}\", \"expected_error\": ", .{
+            row.index,
+            @tagName(row.mode),
+            row.input_bytes,
+            expectedLabel(row.expected),
+        });
+        try std.json.Stringify.value(row.expected_error, .{}, w);
+        try w.print(", \"outcome\": \"{s}\", \"actual_error\": ", .{@tagName(row.outcome)});
+        try std.json.Stringify.value(row.actual_error, .{}, w);
+        try w.print(", \"matched\": {}}}{s}\n", .{
+            row.matched,
+            if (i + 1 == state.rows.items.len) "" else ",",
+        });
+    }
+    try w.print("  ]\n}}\n", .{});
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
+}
+
+fn writeMarkdown(init: std.process.Init, path: []const u8, state: State) !void {
+    var writer = std.Io.Writer.Allocating.init(init.gpa);
+    defer writer.deinit();
+    const w = &writer.writer;
+    try w.print(
+        \\# Deflate wrapper fuzz corpus report
+        \\
+        \\- mode: `{s}`
+        \\- cases: {d}
+        \\- accepted: {d}
+        \\- rejected: {d}
+        \\- exact error expectations: {d}
+        \\- matched rows: {d}
+        \\
+        \\| index | mode | input bytes | expected | expected error | outcome | actual error | matched |
+        \\| ---: | --- | ---: | --- | --- | --- | --- | --- |
+        \\
+    , .{
+        state.modeLabel(),
+        state.cases,
+        state.accepted,
+        state.rejected,
+        state.exactErrorExpectationCount(),
+        state.matchedRows(),
+    });
+    for (state.rows.items) |row| {
+        try w.print("| {d} | {s} | {d} | {s} | `{s}` | {s} | `{s}` | {} |\n", .{
+            row.index,
+            @tagName(row.mode),
+            row.input_bytes,
+            expectedLabel(row.expected),
+            row.expected_error,
+            @tagName(row.outcome),
+            row.actual_error,
+            row.matched,
+        });
+    }
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
+}
+
+fn expectedLabel(expected: ?Expected) []const u8 {
+    return if (expected) |value| @tagName(value) else "any";
 }

@@ -65,6 +65,7 @@ architecture blindly.
 - [x] Validation JSON schema smoke parses CLI/report/corrupt JSON outputs and runs in CI smoke.
 - [x] Validation JSON schema smoke validates generated JSON against the shared schema manifest.
 - [x] Validation JSON schema smoke validates generated dashboard index manifests against the shared schema manifest.
+- [x] Validation JSON schema smoke validates raw/zlib/gzip wrapper fuzz corpus dashboard artifacts.
 - [x] Validation JSON schema smoke can write a fixed zig-out summary artifact.
 - [x] Validation JSON schema reference documents field meanings and compatibility rules.
 - [x] Validation JSON schema reference includes example objects for every validation/dashboard schema.
@@ -115,15 +116,18 @@ architecture blindly.
 - [x] Hex-sample fuzz corpus harness supports exact expected error-name assertions.
 - [x] Hex-sample fuzz corpus harness supports preset dictionaries for raw/zlib samples.
 - [x] Hex-sample fuzz corpus harness supports explicit output limits for raw/zlib/gzip samples.
+- [x] Hex-sample fuzz corpus harness can emit schema-checked JSON and Markdown dashboard artifacts.
 - [x] Deflate wrapper hex corpus includes malformed dynamic-Huffman samples.
 - [x] Deflate wrapper hex corpus includes raw/zlib/gzip repeat17 and repeat18 overrun samples.
 - [x] Deflate wrapper hex corpus includes header-only, missing-footer, and trailing-garbage boundary samples.
 - [x] Deflate wrapper hex corpus pins representative raw/zlib/gzip boundary samples to exact expected errors.
+- [x] Deflate wrapper hex corpus dashboard records per-sample expected/actual error matches.
 - [x] Deflate wrapper hex corpus covers concatenated gzip second-member corruption.
 - [x] libFuzzer-compatible exported entrypoint smoke.
 - [x] AFL-style file-input fuzz driver smoke.
 - [x] Local CI smoke runner wiring for fuzz entrypoints.
 - [x] Local CI smoke runs the raw/zlib/gzip wrapper hex corpus file, including exact error-name checks.
+- [x] Local CI smoke retains raw/zlib/gzip wrapper fuzz corpus JSON/Markdown artifacts in the dashboard index.
 - [x] Hosted CI fuzz runner wiring.
 
 ## Milestone 3: deflate/zlib/gzip compatibility

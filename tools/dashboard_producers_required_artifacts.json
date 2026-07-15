@@ -78,6 +78,20 @@
       "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard"
     },
     {
+      "expected_format": "json",
+      "name": "vort-deflate-wrapper-fuzz-corpus.json",
+      "producer_step": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-deflate-wrapper-fuzz-corpus.md",
+      "producer_step": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
+    },
+    {
       "expected_format": "md",
       "name": "vort-dictionary-corpus-dashboard.md",
       "producer_step": "zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard",

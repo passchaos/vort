@@ -124,8 +124,14 @@ def require_count_rules(value: dict[str, Any], count_rules: dict[str, Any], labe
             field = rule.get("field")
             if not isinstance(field, str):
                 raise AssertionError(f"{label}.{count_field} count rule field must be a string")
-            match_value = rule.get("equals")
-            expected = sum(1 for item in items if isinstance(item, dict) and item.get(field) == match_value)
+            if "equals" in rule:
+                match_value = rule.get("equals")
+                expected = sum(1 for item in items if isinstance(item, dict) and item.get(field) == match_value)
+            elif "not_equals" in rule:
+                match_value = rule.get("not_equals")
+                expected = sum(1 for item in items if isinstance(item, dict) and item.get(field) != match_value)
+            else:
+                raise AssertionError(f"{label}.{count_field} count rule with field must define equals or not_equals")
         actual = value.get(count_field)
         if actual != expected:
             raise AssertionError(f"{label}.{count_field}={actual!r} does not match count rule; expected {expected!r}")

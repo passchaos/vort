@@ -131,6 +131,14 @@
     "vort-standard-multi-corpus-full-dashboard.md": {
       "expected_format": "md",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-dashboard"
+    },
+    "vort-deflate-wrapper-fuzz-corpus.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
+    },
+    "vort-deflate-wrapper-fuzz-corpus.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     }
   },
   "contains": [
@@ -179,7 +187,9 @@
     "vort-standard-multi-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-multi-corpus-dashboard",
     "vort-standard-multi-corpus-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-dashboard",
     "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
-    "vort-validation-json-docs-negative-smoke.json": "zig build run-validation-json-docs-negative-smoke"
+    "vort-validation-json-docs-negative-smoke.json": "zig build run-validation-json-docs-negative-smoke",
+    "vort-deflate-wrapper-fuzz-corpus.json": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
+    "vort-deflate-wrapper-fuzz-corpus.md": "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
   },
   "required_smoke_gates": [
     "vort-sidecar-corrupt-smoke.json",

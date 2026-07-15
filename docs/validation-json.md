@@ -618,6 +618,7 @@ Example:
     "vort.dashboard_producers_negative_smoke",
     "vort.dashboard_producers_required_artifacts",
     "vort.dashboard_producers_required_smoke",
+    "vort.fuzz_corpus_report",
     "vort.dashboard_category_expected_artifacts",
     "vort.dashboard_category_negative_smoke",
     "vort.dashboard_config_index",
@@ -933,6 +934,69 @@ Example:
       "expected_format": "json",
       "smoke_gate": "zig build run-validation-json-dashboard",
       "required_smoke_gate": true
+    }
+  ]
+}
+```
+
+## `vort.fuzz_corpus_report`
+
+Produced by:
+
+```sh
+zig build run-deflate-wrapper-fuzz-corpus-dashboard
+```
+
+This schema summarizes the hex-sample fuzz corpus harness when it is run in
+artifact mode. The fixed dashboard step currently retains the raw/zlib/gzip
+wrapper corpus so exact malformed-input error expectations are visible in the
+main dashboard index.
+
+Important fields:
+
+- `schema`: `vort.fuzz_corpus_report`
+- `schema_version`: `1`
+- `ok`: whether every recorded row matched its expected outcome/error
+- `mode`: single mode name or `mixed` when the corpus switches modes
+- `cases`, `accepted`, `rejected`
+- `exact_error_expectations`: rows with a non-empty `expected_error`
+- `matched_rows`: rows whose outcome and exact error matched expectations
+- `items`: per-sample rows with mode, input size, expected outcome/error,
+  actual outcome/error, and `matched`
+
+Example:
+
+```json
+{
+  "schema": "vort.fuzz_corpus_report",
+  "schema_version": 1,
+  "ok": true,
+  "mode": "mixed",
+  "cases": 2,
+  "accepted": 1,
+  "rejected": 1,
+  "exact_error_expectations": 1,
+  "matched_rows": 2,
+  "items": [
+    {
+      "index": 0,
+      "mode": "deflate",
+      "input_bytes": 3,
+      "expected": "accept",
+      "expected_error": "",
+      "outcome": "accepted",
+      "actual_error": "",
+      "matched": true
+    },
+    {
+      "index": 1,
+      "mode": "deflate",
+      "input_bytes": 4,
+      "expected": "reject",
+      "expected_error": "TrailingData",
+      "outcome": "rejected",
+      "actual_error": "TrailingData",
+      "matched": true
     }
   ]
 }

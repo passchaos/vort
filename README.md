@@ -147,6 +147,7 @@ zig build run-fuzz-corpus -- --deflate --expect-error=TrailingData 4b040058
 zig build run-fuzz-corpus -- --zlib 7801cb48cdc9c90700062c0215 0000 --gzip 1f8b0800000000000403cb48cdc9c9070086a6103605000000 0000
 zig build run-fuzz-corpus -- --file corpus/deflate-wrapper-smoke.hex
 zig build run-deflate-wrapper-fuzz-corpus
+zig build run-deflate-wrapper-fuzz-corpus-dashboard
 zig build run-fuzz-target
 zig build run-libfuzzer-smoke
 zig build run-afl-smoke

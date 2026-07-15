@@ -542,7 +542,6 @@
         "validation_step": "str"
       }
     },
-
     "vort.dashboard_config_index_negative_smoke": {
       "fields": {
         "case_count": "int",
@@ -707,6 +706,82 @@
         "producer_step": "str",
         "required_smoke_gate": "bool",
         "smoke_gate": "str"
+      }
+    },
+    "vort.fuzz_corpus_report": {
+      "fields": {
+        "accepted": "int",
+        "cases": "int",
+        "exact_error_expectations": "int",
+        "items": "list",
+        "matched_rows": "int",
+        "mode": "str",
+        "ok": "bool",
+        "rejected": "int",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "cases": {
+          "collection": "items"
+        },
+        "accepted": {
+          "collection": "items",
+          "field": "outcome",
+          "equals": "accepted"
+        },
+        "rejected": {
+          "collection": "items",
+          "field": "outcome",
+          "equals": "rejected"
+        },
+        "matched_rows": {
+          "collection": "items",
+          "field": "matched",
+          "equals": true
+        },
+        "exact_error_expectations": {
+          "collection": "items",
+          "field": "expected_error",
+          "not_equals": ""
+        }
+      },
+      "enums": {
+        "mode": [
+          "store",
+          "deflate",
+          "zlib",
+          "gzip",
+          "mixed"
+        ]
+      },
+      "item_collection": "items",
+      "item_fields": {
+        "actual_error": "str",
+        "expected": "str",
+        "expected_error": "str",
+        "index": "int",
+        "input_bytes": "int",
+        "matched": "bool",
+        "mode": "str",
+        "outcome": "str"
+      },
+      "item_enums": {
+        "expected": [
+          "any",
+          "accept",
+          "reject"
+        ],
+        "mode": [
+          "store",
+          "deflate",
+          "zlib",
+          "gzip"
+        ],
+        "outcome": [
+          "accepted",
+          "rejected"
+        ]
       }
     },
     "vort.header_inspect_required_workflows": {
@@ -1562,6 +1637,7 @@
           "vort.dashboard_producers_negative_smoke",
           "vort.dashboard_producers_required_artifacts",
           "vort.dashboard_producers_required_smoke",
+          "vort.fuzz_corpus_report",
           "vort.dashboard_category_expected_artifacts",
           "vort.dashboard_category_negative_smoke",
           "vort.dashboard_config_index",

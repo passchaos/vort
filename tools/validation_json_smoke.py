@@ -66,6 +66,7 @@ def main() -> int:
         dashboard_category_negative_path = root / "vort-dashboard-category-negative-smoke.json"
         dashboard_config_index_path = root / "vort-dashboard-config-index-smoke.json"
         dashboard_config_index_negative_path = root / "vort-dashboard-config-index-negative-smoke.json"
+        fuzz_report_path = ROOT / "zig-out" / "vort-deflate-wrapper-fuzz-corpus.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -115,6 +116,14 @@ def main() -> int:
         dashboard_producers = json.loads((ROOT / "tools" / "dashboard_producers.json").read_text())
         assert dashboard_producers["schema"] == "vort.dashboard_producers"
         validate_value_against_manifest(dashboard_producers, schemas_def)
+        fuzz_report = json.loads(fuzz_report_path.read_text())
+        assert fuzz_report["schema"] == "vort.fuzz_corpus_report"
+        assert fuzz_report["schema_version"] == 1
+        assert fuzz_report["ok"] is True
+        assert fuzz_report["cases"] >= 1
+        assert fuzz_report["exact_error_expectations"] >= 1
+        assert fuzz_report["matched_rows"] == fuzz_report["cases"]
+        validate_value_against_manifest(fuzz_report, schemas_def)
         run([
             "python3",
             str(ROOT / "tools" / "dashboard_config_index_smoke.py"),
@@ -476,6 +485,7 @@ def main() -> int:
                 dashboard_producers_negative["schema"],
                 dashboard_producers_required["schema"],
                 dashboard_producers_required_smoke["schema"],
+                fuzz_report["schema"],
                 dashboard_category_expected["schema"],
                 dashboard_category_negative["schema"],
                 dashboard_config_index["schema"],
