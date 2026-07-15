@@ -867,20 +867,36 @@ pub fn decodeRangesWithSummaryAlloc(allocator: std.mem.Allocator, input: []const
 }
 
 pub fn decodeRangesWithDictionarySummaryAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeRequest) !RangeBatchDecodeResult {
-    // Validate once up front so callers issuing many range reads do not pay the
-    // structural index-validation cost for every request. Each individual range
-    // still reuses the normal decode path, preserving frame checksum and
-    // dictionary behavior exactly.
-    try validateFrameIndex(index);
     const ranges = try allocator.alloc(RangeDecodeResult, requests.len);
     errdefer allocator.free(ranges);
     var initialized: usize = 0;
     errdefer {
         for (ranges[0..initialized]) |range| range.deinit(allocator);
     }
+
+    const into_requests = try allocator.alloc(RangeIntoRequest, requests.len);
+    defer allocator.free(into_requests);
+    const into_results = try allocator.alloc(RangeDecodeIntoResult, requests.len);
+    defer allocator.free(into_results);
+
     for (requests, 0..) |request, i| {
-        ranges[i] = try decodeRangeWithDictionarySummaryAlloc(allocator, dict, input, index, request.offset, request.length);
+        const bytes = try allocator.alloc(u8, request.length);
+        ranges[i] = .{
+            .bytes = bytes,
+            .offset = request.offset,
+            .crc32 = 0,
+        };
         initialized += 1;
+        into_requests[i] = .{
+            .offset = request.offset,
+            .length = request.length,
+            .output = bytes,
+        };
+    }
+    try decodeRangesWithDictionaryInto(allocator, dict, input, index, into_requests, into_results);
+    for (into_results, 0..) |result, i| {
+        ranges[i].offset = result.offset;
+        ranges[i].crc32 = result.crc32;
     }
     return .{ .ranges = ranges };
 }
@@ -2673,6 +2689,10 @@ test "frame index supports seek and range decode" {
     try std.testing.expectEqual(checksum.crc32("habetaga"), batch.ranges[1].crc32);
     try std.testing.expectEqualSlices(u8, "gamma", batch.ranges[2].bytes);
     try std.testing.expectEqual(checksum.crc32("gamma"), batch.ranges[2].crc32);
+    try std.testing.expectError(error.RangeOutOfBounds, decodeRangesWithSummaryAlloc(std.testing.allocator, combined.items, index, &.{
+        .{ .offset = 0, .length = 5 },
+        .{ .offset = 12, .length = 8 },
+    }));
     var buffer: [8]u8 = undefined;
     const into = try decodeRangeInto(std.testing.allocator, combined.items, index, 3, buffer.len, buffer[0..]);
     try std.testing.expectEqual(buffer.len, into.output_written);
