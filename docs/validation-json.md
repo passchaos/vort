@@ -572,7 +572,8 @@ Each schema entry can contain:
 | `item_fields` | object | Required fields for the first nested item. |
 | `item_enums` | object | Optional nested item enum constraints. |
 | `item_field_pairs` | object | Optional nested item cross-field equality constraints driven by an allowed map. |
-| `collections` | object | Optional map of additional nested list fields to per-item `fields`/`enums` checks. |
+| `item_list_field_pairs` | object | Optional nested item list fields that must equal values from named scalar fields. |
+| `collections` | object | Optional map of additional nested list fields to per-item `fields`/`enums`/pair checks. |
 
 Supported type names are `str`, `int`, `bool`, `list`, `dict`, `str?`, and
 `int?`.

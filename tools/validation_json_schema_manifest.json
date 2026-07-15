@@ -133,6 +133,12 @@
           }
         }
       },
+      "item_list_field_pairs": {
+        "argv": [
+          "command",
+          "sample"
+        ]
+      },
       "collections": {
         "negative_items": {
           "fields": {
@@ -155,6 +161,12 @@
               "InvalidDeflateBlockType",
               "StoredLengthMismatch",
               "TruncatedFrame"
+            ]
+          },
+          "list_field_pairs": {
+            "argv": [
+              "command",
+              "sample"
             ]
           }
         }

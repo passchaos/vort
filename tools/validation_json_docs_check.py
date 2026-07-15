@@ -78,6 +78,16 @@ def require_field_pairs(value: dict[str, Any], field_pairs: dict[str, Any], labe
             )
 
 
+def require_list_field_pairs(value: dict[str, Any], list_field_pairs: dict[str, Any], label: str) -> None:
+    for list_field, source_fields in list_field_pairs.items():
+        if not isinstance(source_fields, list) or not all(isinstance(field, str) for field in source_fields):
+            raise AssertionError(f"{label}.{list_field} list pair rule must be a list of field names")
+        expected = [value.get(field) for field in source_fields]
+        actual = value.get(list_field)
+        if actual != expected:
+            raise AssertionError(f"{label}.{list_field}={actual!r} does not match fields {source_fields!r}; expected {expected!r}")
+
+
 def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str, Any]) -> None:
     schema = value.get("schema")
     schema_def = schemas_def.get(schema)
@@ -101,6 +111,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
             item_fields,
             schema_def.get("item_enums", {}),
             schema_def.get("item_field_pairs", {}),
+            schema_def.get("item_list_field_pairs", {}),
             schema,
         )
 
@@ -120,6 +131,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
                 item_fields,
                 collection_def.get("enums", {}),
                 collection_def.get("field_pairs", {}),
+                collection_def.get("list_field_pairs", {}),
                 schema,
             )
 
@@ -130,6 +142,7 @@ def validate_item_collection(
     item_fields: dict[str, str],
     item_enums: dict[str, list[str]],
     item_field_pairs: dict[str, Any],
+    item_list_field_pairs: dict[str, Any],
     schema: str,
 ) -> None:
     items = value.get(collection_name)
@@ -143,6 +156,7 @@ def validate_item_collection(
         require_types(item, item_fields, label)
         require_enums(item, item_enums, label)
         require_field_pairs(item, item_field_pairs, label)
+        require_list_field_pairs(item, item_list_field_pairs, label)
 
 
 def main() -> int:
