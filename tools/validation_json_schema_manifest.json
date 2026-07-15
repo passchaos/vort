@@ -13,6 +13,9 @@
         "header_inspect_required_workflow_count": "int",
         "dashboard_strict_check_count": "int",
         "dashboard_strict_mode_count": "int",
+        "dashboard_strict_expected_mode_count": "int",
+        "dashboard_strict_missing_mode_count": "int",
+        "dashboard_strict_missing_modes": "list",
         "dashboard_strict_ok": "bool",
         "dashboard_strict_present": "bool",
         "producer_step_allowed_missing": "list",
@@ -40,6 +43,24 @@
             "workflow": [
               "hex",
               "file"
+            ]
+          },
+          "allow_empty": true
+        },
+        "dashboard_strict_missing_modes": {
+          "fields": {
+            "min_checks": "int",
+            "min_expected_failures": "int",
+            "min_matched": "int",
+            "mode": "str"
+          },
+          "enums": {
+            "mode": [
+              "all",
+              "strict-producers",
+              "strict-smoke-gates",
+              "strict-header-inspect",
+              "synthetic"
             ]
           },
           "allow_empty": true

@@ -653,7 +653,9 @@ Top-level fields:
   `header_inspect_missing_workflow_count`,
   `header_inspect_missing_workflows`
 - `dashboard_strict_present`, `dashboard_strict_ok`,
-  `dashboard_strict_check_count`, `dashboard_strict_mode_count`
+  `dashboard_strict_check_count`, `dashboard_strict_mode_count`,
+  `dashboard_strict_expected_mode_count`, `dashboard_strict_missing_mode_count`,
+  `dashboard_strict_missing_modes`
 - `artifacts`
 
 Each artifact includes:
@@ -690,6 +692,9 @@ Example:
   "dashboard_strict_ok": false,
   "dashboard_strict_check_count": 0,
   "dashboard_strict_mode_count": 0,
+  "dashboard_strict_expected_mode_count": 0,
+  "dashboard_strict_missing_mode_count": 0,
+  "dashboard_strict_missing_modes": [],
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",
