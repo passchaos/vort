@@ -680,6 +680,8 @@ Each schema entry can contain:
 | `fields` | object | Required top-level fields mapped to type names. |
 | `enums` | object | Optional top-level string enum constraints. |
 | `field_pairs` | object | Optional top-level cross-field equality constraints driven by an allowed map. |
+| `conditional_fields` | list | Optional conditional null/non-null constraints, currently driven by simple field equality predicates. |
+| `numeric_relations` | list | Optional conditional integer comparisons between two fields, with an optional right-hand offset. |
 | `count_rules` | object | Optional top-level count fields that must match list lengths or filtered item counts. |
 | `dict_sum_rules` | object | Optional top-level count fields that must equal the sum of values in a dict field. |
 | `dict_key_enums` | object | Optional dict fields whose keys must be in an allowed string set. |
@@ -692,4 +694,6 @@ Each schema entry can contain:
 | `collections` | object | Optional map of additional nested list fields to per-item `fields`/`enums`/pair checks. |
 
 Supported type names are `str`, `int`, `bool`, `list`, `dict`, `str?`,
-`int?`, and `bool?`.
+`int?`, and `bool?`. Conditional predicates support `equals`/`not_equals` on a
+named field. Numeric relation operators are `eq`, `ne`, `lt`, `le`, `gt`, and
+`ge`; `offset` is added to the right-hand field before comparison.

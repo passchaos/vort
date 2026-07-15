@@ -366,6 +366,58 @@
           }
         }
       },
+      "conditional_fields": [
+        {
+          "when": {
+            "field": "wrapper",
+            "equals": "zlib"
+          },
+          "null": [
+            "member_footer_offset",
+            "member_end_offset"
+          ]
+        },
+        {
+          "when": {
+            "field": "wrapper",
+            "equals": "gzip"
+          },
+          "non_null": [
+            "member_footer_offset",
+            "member_end_offset"
+          ]
+        }
+      ],
+      "numeric_relations": [
+        {
+          "when": {
+            "field": "wrapper",
+            "equals": "gzip"
+          },
+          "left": "member_footer_offset",
+          "op": "gt",
+          "right": "deflate_offset"
+        },
+        {
+          "when": {
+            "field": "wrapper",
+            "equals": "gzip"
+          },
+          "left": "member_end_offset",
+          "op": "eq",
+          "right": "member_footer_offset",
+          "offset": 8
+        },
+        {
+          "when": {
+            "field": "wrapper",
+            "equals": "gzip"
+          },
+          "left": "member_end_offset",
+          "op": "le",
+          "right": "wrapper_bytes"
+        }
+      ],
       "nested_schema_fields": {
         "raw_header": "vort.raw_deflate_header_info"
       }

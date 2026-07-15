@@ -143,6 +143,84 @@ def require_dict_key_enums(value: dict[str, Any], dict_key_enums: dict[str, list
             raise AssertionError(f"{label}.{dict_field} has unexpected keys {unexpected!r}; allowed={sorted(allowed)}")
 
 
+def condition_matches(value: dict[str, Any], condition: Any, label: str) -> bool:
+    if condition is None:
+        return True
+    if not isinstance(condition, dict):
+        raise AssertionError(f"{label} condition must be an object")
+    field = condition.get("field")
+    if not isinstance(field, str):
+        raise AssertionError(f"{label} condition must define a string field")
+    if "equals" in condition:
+        return value.get(field) == condition["equals"]
+    if "not_equals" in condition:
+        return value.get(field) != condition["not_equals"]
+    raise AssertionError(f"{label} condition must define equals or not_equals")
+
+
+def require_conditional_fields(value: dict[str, Any], conditional_fields: Any, label: str) -> None:
+    if not conditional_fields:
+        return
+    if not isinstance(conditional_fields, list):
+        raise AssertionError(f"{label}.conditional_fields must be a list")
+    for index, rule in enumerate(conditional_fields):
+        rule_label = f"{label}.conditional_fields[{index}]"
+        if not isinstance(rule, dict):
+            raise AssertionError(f"{rule_label} must be an object")
+        if not condition_matches(value, rule.get("when"), rule_label):
+            continue
+        for key, expected_null in (("null", True), ("non_null", False)):
+            fields = rule.get(key, [])
+            if not isinstance(fields, list) or not all(isinstance(field, str) for field in fields):
+                raise AssertionError(f"{rule_label}.{key} must be a list of field names")
+            for field in fields:
+                actual_is_null = value.get(field) is None
+                if actual_is_null != expected_null:
+                    state = "null" if expected_null else "non-null"
+                    raise AssertionError(f"{label}.{field} must be {state} for {rule_label}")
+
+
+def require_numeric_relations(value: dict[str, Any], numeric_relations: Any, label: str) -> None:
+    if not numeric_relations:
+        return
+    if not isinstance(numeric_relations, list):
+        raise AssertionError(f"{label}.numeric_relations must be a list")
+    operators = {
+        "eq": lambda left, right: left == right,
+        "ne": lambda left, right: left != right,
+        "lt": lambda left, right: left < right,
+        "le": lambda left, right: left <= right,
+        "gt": lambda left, right: left > right,
+        "ge": lambda left, right: left >= right,
+    }
+    for index, rule in enumerate(numeric_relations):
+        rule_label = f"{label}.numeric_relations[{index}]"
+        if not isinstance(rule, dict):
+            raise AssertionError(f"{rule_label} must be an object")
+        if not condition_matches(value, rule.get("when"), rule_label):
+            continue
+        left_field = rule.get("left")
+        right_field = rule.get("right")
+        op_name = rule.get("op")
+        offset = rule.get("offset", 0)
+        if not isinstance(left_field, str) or not isinstance(right_field, str):
+            raise AssertionError(f"{rule_label} must define string left and right fields")
+        if op_name not in operators:
+            raise AssertionError(f"{rule_label} has unsupported op {op_name!r}")
+        if not isinstance(offset, int) or isinstance(offset, bool):
+            raise AssertionError(f"{rule_label}.offset must be an integer")
+        left = value.get(left_field)
+        right = value.get(right_field)
+        if not isinstance(left, int) or isinstance(left, bool):
+            raise AssertionError(f"{label}.{left_field} must be an integer for {rule_label}")
+        if not isinstance(right, int) or isinstance(right, bool):
+            raise AssertionError(f"{label}.{right_field} must be an integer for {rule_label}")
+        expected_right = right + offset
+        if not operators[op_name](left, expected_right):
+            suffix = f"{right_field}{offset:+d}" if offset else right_field
+            raise AssertionError(f"{label}.{left_field}={left!r} violates {op_name} {suffix} ({expected_right!r})")
+
+
 def require_nested_schema_fields(
     value: dict[str, Any],
     nested_schema_fields: dict[str, str],
@@ -173,6 +251,8 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     require_count_rules(value, schema_def.get("count_rules", {}), schema)
     require_dict_sum_rules(value, schema_def.get("dict_sum_rules", {}), schema)
     require_dict_key_enums(value, schema_def.get("dict_key_enums", {}), schema)
+    require_conditional_fields(value, schema_def.get("conditional_fields", []), schema)
+    require_numeric_relations(value, schema_def.get("numeric_relations", []), schema)
     require_nested_schema_fields(value, schema_def.get("nested_schema_fields", {}), schemas_def, schema)
 
     item_collection = schema_def.get("item_collection")
