@@ -203,6 +203,10 @@ def main(argv: list[str]) -> int:
         ("raw_dynamic_repeat16_without_previous", "inspect-raw-header-hex", "05000224", "InvalidDynamicBlockHeader"),
         ("raw_dynamic_repeat17_overrun", "inspect-raw-header-hex", "050010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", "InvalidDynamicBlockHeader"),
         ("raw_dynamic_missing_eob", "inspect-raw-header-hex", "05c001040000000010000000000000000000000000010000000000000000000000000000000000000000", "InvalidDynamicBlockHeader"),
+        ("zlib_dynamic_repeat16_without_previous", "inspect-zlib-deflate-header-hex", "78010500022400000000", "InvalidDynamicBlockHeader"),
+        ("zlib_dynamic_missing_eob", "inspect-zlib-deflate-header-hex", "780105c00104000000001000000000000000000000000001000000000000000000000000000000000000000000000000", "InvalidDynamicBlockHeader"),
+        ("gzip_dynamic_repeat16_without_previous", "inspect-gzip-deflate-header-hex", "1f8b0800000000000403050002240000000000000000", "InvalidDynamicBlockHeader"),
+        ("gzip_dynamic_missing_eob", "inspect-gzip-deflate-header-hex", "1f8b080000000000040305c0010400000000100000000000000000000000000100000000000000000000000000000000000000000000000000000000", "InvalidDynamicBlockHeader"),
         ("zlib_bad_fcheck", "inspect-zlib-header-hex", "7802", "BadZlibHeader"),
         ("gzip_bad_fhcrc", "inspect-gzip-header-hex", "1f8b0802000000000403a2b2", "BadGzipHeader"),
     ]

@@ -215,7 +215,9 @@
             "command": [
               "inspect-raw-header-hex",
               "inspect-zlib-header-hex",
-              "inspect-gzip-header-hex"
+              "inspect-zlib-deflate-header-hex",
+              "inspect-gzip-header-hex",
+              "inspect-gzip-deflate-header-hex"
             ],
             "format": [
               "raw",
@@ -243,8 +245,14 @@
               "target": "command",
               "allowed": {
                 "raw": "inspect-raw-header-hex",
-                "zlib": "inspect-zlib-header-hex",
-                "gzip": "inspect-gzip-header-hex"
+                "zlib": [
+                  "inspect-zlib-header-hex",
+                  "inspect-zlib-deflate-header-hex"
+                ],
+                "gzip": [
+                  "inspect-gzip-header-hex",
+                  "inspect-gzip-deflate-header-hex"
+                ]
               }
             }
           }

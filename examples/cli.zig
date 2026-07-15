@@ -831,6 +831,14 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(compressed);
         const info = try vort.parseZlibHeaderInfo(compressed);
         try printZlibHeaderInfo(stdout, compressed.len, info, output_format);
+    } else if (std.mem.eql(u8, command, "inspect-zlib-deflate-header-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const wrapper = try vort.parseZlibHeaderInfo(compressed);
+        const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
+        try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -867,6 +875,14 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(compressed);
         const info = try vort.parseGzipHeaderInfo(compressed);
         try printGzipHeaderInfo(stdout, compressed.len, info, output_format);
+    } else if (std.mem.eql(u8, command, "inspect-gzip-deflate-header-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const wrapper = try vort.parseGzipHeaderInfo(compressed);
+        const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
+        try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -892,6 +908,14 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(compressed);
         const info = try vort.parseZlibHeaderInfo(compressed);
         try printZlibHeaderInfo(stdout, compressed.len, info, output_format);
+    } else if (std.mem.eql(u8, command, "inspect-zlib-deflate-header-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const wrapper = try vort.parseZlibHeaderInfo(compressed);
+        const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
+        try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const dictionary = args.next() orelse "";
@@ -922,6 +946,14 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(compressed);
         const info = try vort.parseGzipHeaderInfo(compressed);
         try printGzipHeaderInfo(stdout, compressed.len, info, output_format);
+    } else if (std.mem.eql(u8, command, "inspect-gzip-deflate-header-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const wrapper = try vort.parseGzipHeaderInfo(compressed);
+        const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
+        try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else {
         try stdout.print("unknown command: {s}\n\n", .{command});
         try printHelp(stdout);
@@ -967,6 +999,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Print parsed zlib header metadata for hex input
         \\  inspect-zlib-header-file <in> [text|json]
         \\                              Print parsed zlib header metadata for a file
+        \\  inspect-zlib-deflate-header-hex [hex] [text|json]
+        \\                              Inspect the raw deflate header inside a zlib stream
+        \\  inspect-zlib-deflate-header-file <in> [text|json]
+        \\                              Inspect the raw deflate header inside a zlib file
         \\  decode-gzip-hex [hex] [max_output]
         \\                              Decode gzip-wrapped deflate hex to text
         \\  decode-gzip-file <in> <out> [max_output]
@@ -975,6 +1011,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Print parsed gzip header metadata for hex input
         \\  inspect-gzip-header-file <in> [text|json]
         \\                              Print parsed gzip header metadata for a file
+        \\  inspect-gzip-deflate-header-hex [hex] [text|json]
+        \\                              Inspect the raw deflate header inside a gzip stream
+        \\  inspect-gzip-deflate-header-file <in> [text|json]
+        \\                              Inspect the raw deflate header inside a gzip file
         \\  encode-raw-dict-best-hex [text] [dict] [level]
         \\                              Encode raw deflate that may reference preset dictionary history
         \\  encode-zlib-dict-best-hex [text] [dict] [level]

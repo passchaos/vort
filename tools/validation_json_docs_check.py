@@ -73,6 +73,12 @@ def require_field_pairs(value: dict[str, Any], field_pairs: dict[str, Any], labe
         if expected_target is None:
             raise AssertionError(f"{label}.{source_field} has no pair rule for {source_value!r}")
         actual_target = value.get(target_field)
+        if isinstance(expected_target, list):
+            if actual_target not in expected_target:
+                raise AssertionError(
+                    f"{label}.{target_field}={actual_target!r} does not match {source_field}={source_value!r}; expected one of {expected_target!r}"
+                )
+            continue
         if actual_target != expected_target:
             raise AssertionError(
                 f"{label}.{target_field}={actual_target!r} does not match {source_field}={source_value!r}; expected {expected_target!r}"
