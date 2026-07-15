@@ -174,6 +174,14 @@ def main() -> int:
     expect_cli_failure("decode-zlib-hex", zlib_file_missing_footer.hex(), error_name="TruncatedFrame")
     zlib_file_trailing = zlib_file_frame + b"garbage"
     expect_cli_failure("decode-zlib-hex", zlib_file_trailing.hex(), error_name="TrailingData")
+    zlib_concat_payload = zlib_file_payload + b" + second zlib member"
+    zlib_concat_frame = zlib_file_frame + zlib.compress(b" + second zlib member", level=1)
+    out = run_cli("decode-zlib-concat-hex", zlib_concat_frame.hex())
+    assert int(parse_field(out, "decoded_bytes")) == len(zlib_concat_payload), out
+    assert int(parse_field(out, "crc32")) == (zlib.crc32(zlib_concat_payload) & 0xFFFFFFFF), out
+    limited = run_cli("decode-zlib-concat-hex", zlib_concat_frame.hex(), str(len(zlib_concat_payload)))
+    assert int(parse_field(limited, "decoded_bytes")) == len(zlib_concat_payload), limited
+    expect_cli_failure("decode-zlib-concat-hex", zlib_concat_frame.hex(), str(len(zlib_concat_payload) - 1), error_name="OutputLimitExceeded")
     with tempfile.TemporaryDirectory(prefix="vort-zlib-file-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         compressed_path = tmp / "sample.zlib"
@@ -199,6 +207,17 @@ def main() -> int:
         trailing_path = tmp / "trailing.zlib"
         trailing_path.write_bytes(zlib_file_trailing)
         expect_cli_failure("decode-zlib-file", str(trailing_path), str(tmp / "trailing.out"), error_name="TrailingData")
+        concat_path = tmp / "concat.zlib"
+        concat_decoded_path = tmp / "concat-decoded.bin"
+        concat_limited_path = tmp / "concat-limited.bin"
+        concat_path.write_bytes(zlib_concat_frame)
+        out = run_cli("decode-zlib-concat-file", str(concat_path), str(concat_decoded_path))
+        assert int(parse_field(out, "decoded_bytes")) == len(zlib_concat_payload), out
+        assert concat_decoded_path.read_bytes() == zlib_concat_payload, out
+        out = run_cli("decode-zlib-concat-file", str(concat_path), str(concat_limited_path), str(len(zlib_concat_payload)))
+        assert int(parse_field(out, "decoded_bytes")) == len(zlib_concat_payload), out
+        assert concat_limited_path.read_bytes() == zlib_concat_payload, out
+        expect_cli_failure("decode-zlib-concat-file", str(concat_path), str(tmp / "concat-too-small.bin"), str(len(zlib_concat_payload) - 1), error_name="OutputLimitExceeded")
 
     raw_file_payload = b"raw deflate file output limit smoke"
     co = zlib.compressobj(level=6, wbits=-15)

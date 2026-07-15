@@ -90,6 +90,7 @@ printf "hello " > /tmp/vort.dict
 printf "cb402701" | xxd -r -p > /tmp/vort-dict.raw
 zig build run -- decode-raw-dict-file /tmp/vort-dict.raw /tmp/vort-raw-dict.out /tmp/vort.dict 17
 zig build run -- decode-zlib-hex 7801cb48cdc9c90700062c0215
+zig build run -- decode-zlib-concat-hex 7801cb48cdc9c90700062c02157801cb48cdc9c90700062c0215
 zig build run -- inspect-zlib-header-hex 7801cb48cdc9c90700062c0215
 zig build run -- inspect-zlib-header-hex 7801cb48cdc9c90700062c0215 json
 zig build run -- inspect-zlib-deflate-header-hex 7801cb48cdc9c90700062c0215 json
@@ -100,6 +101,8 @@ import zlib
 open("/tmp/vort.zlib", "wb").write(zlib.compress(b"hello"))
 PY
 zig build run -- decode-zlib-file /tmp/vort.zlib /tmp/vort-zlib.out 5
+cat /tmp/vort.zlib /tmp/vort.zlib > /tmp/vort-cat.zlib
+zig build run -- decode-zlib-concat-file /tmp/vort-cat.zlib /tmp/vort-zlib-cat.out 10
 zig build run -- inspect-zlib-header-file /tmp/vort.zlib
 zig build run -- inspect-zlib-deflate-header-file /tmp/vort.zlib json
 printf "hello " > /tmp/vort.dict && python3 - <<'PY'

@@ -824,6 +824,19 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "decode-zlib-concat-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeZlibConcatenatedAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.decodeZlibConcatenatedAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
     } else if (std.mem.eql(u8, command, "inspect-zlib-header-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_format = try parseHeaderInspectOutputFormat(args.next());
@@ -919,6 +932,17 @@ pub fn main(init: std.process.Init) !void {
             try vort.decodeZlibAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "zlib", compressed.len, decoded);
+    } else if (std.mem.eql(u8, command, "decode-zlib-concat-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.decodeZlibConcatenatedAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.decodeZlibConcatenatedAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try printDecoded(stdout, "zlib_concat", compressed.len, decoded);
     } else if (std.mem.eql(u8, command, "inspect-raw-header-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const output_format = try parseHeaderInspectOutputFormat(args.next());
@@ -1037,10 +1061,14 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Print parsed raw deflate first-block metadata for a file
         \\  decode-zlib-hex [hex] [max_output]
         \\                              Decode zlib-wrapped deflate hex to text
+        \\  decode-zlib-concat-hex [hex] [max_output]
+        \\                              Decode concatenated zlib stream hex to text
         \\  decode-zlib-dict-hex [hex] [dict] [max_output]
         \\                              Decode zlib-wrapped deflate hex with a preset dictionary
         \\  decode-zlib-file <in> <out> [max_output]
         \\                              Decode a zlib file with an optional output limit
+        \\  decode-zlib-concat-file <in> <out> [max_output]
+        \\                              Decode a concatenated zlib file with an optional output limit
         \\  decode-zlib-dict-file <in> <out> <dict> [max_output]
         \\                              Decode a zlib file with a preset dictionary file
         \\  inspect-zlib-header-hex [hex] [text|json]
