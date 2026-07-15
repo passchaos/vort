@@ -12,7 +12,7 @@ from pathlib import Path
 
 def category_for(path: Path) -> str:
     name = path.name
-    if "validation" in name or "sidecar-corrupt" in name or "header-inspect" in name:
+    if "validation" in name or "sidecar-corrupt" in name or "header-inspect" in name or "dashboard-strict" in name:
         return "validation"
     if "bench" in name or "benchmark" in name:
         return "benchmark"

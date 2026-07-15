@@ -86,6 +86,7 @@
       },
       "item_collection": "checks",
       "item_fields": {
+        "actual_output": "str",
         "expected_failure": "bool",
         "expected_output": "str",
         "matched": "bool",

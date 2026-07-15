@@ -77,7 +77,23 @@ def expect_failure(args: list[str], needle: str) -> subprocess.CompletedProcess[
     return result
 
 
-def check_row(name: str, mode: str, expected_failure: bool, matched: bool, returncode: int, expected_output: str) -> dict[str, object]:
+def truncate_output(text: str, limit: int = 240) -> str:
+    normalized = text.replace("\n", "\
+")
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 1] + "…"
+
+
+def check_row(
+    name: str,
+    mode: str,
+    expected_failure: bool,
+    matched: bool,
+    returncode: int,
+    expected_output: str,
+    actual_output: str,
+) -> dict[str, object]:
     return {
         "name": name,
         "mode": mode,
@@ -85,6 +101,7 @@ def check_row(name: str, mode: str, expected_failure: bool, matched: bool, retur
         "matched": matched,
         "returncode": returncode,
         "expected_output": expected_output,
+        "actual_output": truncate_output(actual_output),
     }
 
 
@@ -95,12 +112,12 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
         f"- ok: `{summary['ok']}`",
         f"- checks: {summary['check_count']}",
         "",
-        "| name | mode | expected failure | returncode | expected output | matched |",
-        "| --- | --- | --- | ---: | --- | --- |",
+        "| name | mode | expected failure | returncode | expected output | actual output | matched |",
+        "| --- | --- | --- | ---: | --- | --- | --- |",
     ]
     for row in summary["checks"]:
         lines.append(
-            f"| `{row['name']}` | `{row['mode']}` | `{row['expected_failure']}` | {row['returncode']} | `{row['expected_output']}` | `{row['matched']}` |"
+            f"| `{row['name']}` | `{row['mode']}` | `{row['expected_failure']}` | {row['returncode']} | `{row['expected_output']}` | `{row['actual_output']}` | `{row['matched']}` |"
         )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
@@ -126,17 +143,17 @@ def main() -> int:
         assert manifest["header_inspect_present"] is True
         assert manifest["header_inspect_ok"] is True
         assert manifest["header_inspect_missing_workflow_count"] == 0
-        checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index="))
+        checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
 
         no_producer = root / "no-producer.json"
         write_producer_map(no_producer, include_exact=False)
         no_producer_result = expect_failure(dashboard_args(root, no_producer, "--strict-producers"), "dashboard_index_missing_producers=vort-header-inspect-smoke.json")
-        checks.append(check_row("missing_producer", "strict-producers", True, True, no_producer_result.returncode, "dashboard_index_missing_producers=vort-header-inspect-smoke.json"))
+        checks.append(check_row("missing_producer", "strict-producers", True, True, no_producer_result.returncode, "dashboard_index_missing_producers=vort-header-inspect-smoke.json", no_producer_result.stdout))
 
         no_smoke = root / "no-smoke.json"
         write_producer_map(no_smoke, include_smoke=False, required_name="vort-header-inspect-smoke.json")
         no_smoke_result = expect_failure(dashboard_args(root, no_smoke, "--strict-smoke-gates"), "dashboard_index_missing_smoke_gates=vort-header-inspect-smoke.json")
-        checks.append(check_row("missing_smoke_gate", "strict-smoke-gates", True, True, no_smoke_result.returncode, "dashboard_index_missing_smoke_gates=vort-header-inspect-smoke.json"))
+        checks.append(check_row("missing_smoke_gate", "strict-smoke-gates", True, True, no_smoke_result.returncode, "dashboard_index_missing_smoke_gates=vort-header-inspect-smoke.json", no_smoke_result.stdout))
 
         missing_root = root / "missing-header"
         missing_root.mkdir()
@@ -145,7 +162,7 @@ def main() -> int:
             dashboard_args(missing_root, missing_root / "producers.json", "--strict-header-inspect"),
             "dashboard_index_missing_header_inspect=1",
         )
-        checks.append(check_row("missing_header_inspect", "strict-header-inspect", True, True, missing_header_result.returncode, "dashboard_index_missing_header_inspect=1"))
+        checks.append(check_row("missing_header_inspect", "strict-header-inspect", True, True, missing_header_result.returncode, "dashboard_index_missing_header_inspect=1", missing_header_result.stdout))
 
         bad_root = root / "bad-header"
         bad_root.mkdir()
@@ -154,7 +171,7 @@ def main() -> int:
         write_producer_map(bad_producer)
         write_header_summary(bad_artifact, ok=False)
         bad_header_result = expect_failure(dashboard_args(bad_root, bad_producer, "--strict-header-inspect"), "dashboard_index_header_inspect_failed=1")
-        checks.append(check_row("failed_header_inspect", "strict-header-inspect", True, True, bad_header_result.returncode, "dashboard_index_header_inspect_failed=1"))
+        checks.append(check_row("failed_header_inspect", "strict-header-inspect", True, True, bad_header_result.returncode, "dashboard_index_header_inspect_failed=1", bad_header_result.stdout))
 
         missing_workflow_root = root / "missing-workflow"
         missing_workflow_root.mkdir()
@@ -169,7 +186,7 @@ def main() -> int:
             dashboard_args(missing_workflow_root, missing_workflow_producer, "--strict-header-inspect"),
             "dashboard_index_header_inspect_missing_workflows=1:inspect-raw-header-file:file",
         )
-        checks.append(check_row("missing_header_workflow", "strict-header-inspect", True, True, missing_workflow_result.returncode, "dashboard_index_header_inspect_missing_workflows=1:inspect-raw-header-file:file"))
+        checks.append(check_row("missing_header_workflow", "strict-header-inspect", True, True, missing_workflow_result.returncode, "dashboard_index_header_inspect_missing_workflows=1:inspect-raw-header-file:file", missing_workflow_result.stdout))
 
     summary = {
         "schema": "vort.dashboard_strict_smoke",
