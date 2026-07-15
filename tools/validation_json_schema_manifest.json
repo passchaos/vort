@@ -100,6 +100,20 @@
             "matched": "bool",
             "name": "str",
             "sample": "str"
+          },
+          "enums": {
+            "command": [
+              "inspect-raw-header-hex",
+              "inspect-zlib-header-hex",
+              "inspect-gzip-header-hex"
+            ],
+            "expected_error": [
+              "BadGzipHeader",
+              "BadZlibHeader",
+              "InvalidDeflateBlockType",
+              "StoredLengthMismatch",
+              "TruncatedFrame"
+            ]
           }
         }
       }

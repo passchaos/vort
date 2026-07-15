@@ -194,6 +194,7 @@ Important fields:
 - `case_count`, `raw_cases`, `zlib_cases`, `gzip_cases`
 - `negative_cases`: malformed header cases expected to fail inspection
 - `negative_items`: case-level command/sample/error matches for malformed headers
+  (`command` and `expected_error` are enum-checked by the schema manifest)
 - `dictionary_cases`: zlib FDICT/DICTID cases covered
 - `optional_header_cases`, `fhcrc_cases`: gzip optional-header/FHCRC cases covered
 - `cases`: case-level metadata including format, byte size, data offset, and
