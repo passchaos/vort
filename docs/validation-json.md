@@ -930,6 +930,7 @@ Each schema entry can contain:
 | `field_pairs` | object | Optional top-level cross-field equality constraints driven by an allowed map. |
 | `conditional_fields` | list | Optional conditional null/non-null constraints, currently driven by simple field equality predicates. |
 | `numeric_relations` | list | Optional conditional integer comparisons between two fields, with an optional right-hand offset. |
+| `boolean_formula_rules` | object | Optional top-level boolean fields derived from `all` boolean fields and `zero` integer fields. |
 | `difference_relations` | list | Optional conditional checks that one integer field equals the difference of two other integer fields. |
 | `equality_flag_relations` | list | Optional conditional checks that a boolean field equals the equality result of two integer fields. |
 | `count_rules` | object | Optional top-level count fields that must match list lengths or filtered item counts. |
@@ -947,5 +948,7 @@ Supported type names are `str`, `int`, `bool`, `list`, `dict`, `str?`,
 `int?`, and `bool?`. Conditional predicates support `equals`/`not_equals` on a
 named field. Numeric relation operators are `eq`, `ne`, `lt`, `le`, `gt`, and
 `ge`; `offset` is added to the right-hand field before comparison. Difference
-relations compare `left == minuend - subtrahend`, and equality-flag relations
-compare `flag == (left == right)`.
+relations compare `left == minuend - subtrahend`, equality-flag relations
+compare `flag == (left == right)`, and boolean formula rules compare a target
+boolean to the conjunction of named boolean fields plus zero-valued integer
+fields.

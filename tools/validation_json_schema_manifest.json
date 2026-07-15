@@ -31,6 +31,26 @@
         "smoke_gate_missing": "list",
         "smoke_gate_required_missing": "list"
       },
+      "boolean_formula_rules": {
+        "header_inspect_healthy": {
+          "all": [
+            "header_inspect_present",
+            "header_inspect_ok"
+          ],
+          "zero": [
+            "header_inspect_missing_workflow_count"
+          ]
+        },
+        "dashboard_strict_healthy": {
+          "all": [
+            "dashboard_strict_present",
+            "dashboard_strict_ok"
+          ],
+          "zero": [
+            "dashboard_strict_missing_mode_count"
+          ]
+        }
+      },
       "collections": {
         "header_inspect_missing_workflows": {
           "fields": {

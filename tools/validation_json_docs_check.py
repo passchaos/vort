@@ -316,6 +316,34 @@ def require_equality_flag_relations(value: dict[str, Any], equality_flag_relatio
             raise AssertionError(f"{label}.{flag_field}={flag!r} does not match ({left_field} == {right_field})={expected!r}")
 
 
+def require_boolean_formula_rules(value: dict[str, Any], boolean_formula_rules: dict[str, Any], label: str) -> None:
+    for target_field, rule in boolean_formula_rules.items():
+        if not isinstance(rule, dict):
+            raise AssertionError(f"{label}.{target_field} boolean formula rule must be an object")
+        all_fields = rule.get("all", [])
+        zero_fields = rule.get("zero", [])
+        if not isinstance(all_fields, list) or not all(isinstance(field, str) for field in all_fields):
+            raise AssertionError(f"{label}.{target_field}.all must be a list of field names")
+        if not isinstance(zero_fields, list) or not all(isinstance(field, str) for field in zero_fields):
+            raise AssertionError(f"{label}.{target_field}.zero must be a list of field names")
+        expected = True
+        for field in all_fields:
+            field_value = value.get(field)
+            if not isinstance(field_value, bool):
+                raise AssertionError(f"{label}.{field} must be a boolean for {target_field} formula")
+            expected = expected and field_value
+        for field in zero_fields:
+            field_value = value.get(field)
+            if not isinstance(field_value, int) or isinstance(field_value, bool):
+                raise AssertionError(f"{label}.{field} must be an integer for {target_field} formula")
+            expected = expected and field_value == 0
+        actual = value.get(target_field)
+        if not isinstance(actual, bool):
+            raise AssertionError(f"{label}.{target_field} must be a boolean for formula validation")
+        if actual != expected:
+            raise AssertionError(f"{label}.{target_field}={actual!r} does not match boolean formula; expected {expected!r}")
+
+
 def require_nested_schema_fields(
     value: dict[str, Any],
     nested_schema_fields: dict[str, str],
@@ -394,6 +422,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     require_numeric_relations(value, schema_def.get("numeric_relations", []), schema)
     require_difference_relations(value, schema_def.get("difference_relations", []), schema)
     require_equality_flag_relations(value, schema_def.get("equality_flag_relations", []), schema)
+    require_boolean_formula_rules(value, schema_def.get("boolean_formula_rules", {}), schema)
     require_nested_schema_fields(value, schema_def.get("nested_schema_fields", {}), schemas_def, schema)
 
     item_collection = schema_def.get("item_collection")
