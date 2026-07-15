@@ -198,6 +198,9 @@ Important fields:
 - `ok`: whether the smoke passed
 - `case_count`, `raw_cases`, `zlib_cases`, `gzip_cases`
   (checked against the `cases` array by the schema manifest)
+- `command_coverage`, `command_count`, `command_successes`, `command_failures`:
+  per-command success/failure rows and totals, checked against `cases` and
+  `negative_items` by the schema manifest
 - `negative_cases`, `raw_negative_cases`, `zlib_negative_cases`,
   `gzip_negative_cases`: malformed header cases expected to fail inspection
 - `negative_error_counts`: malformed header failures grouped by expected error
@@ -223,6 +226,23 @@ Example:
   "raw_cases": 0,
   "zlib_cases": 1,
   "gzip_cases": 0,
+  "command_count": 2,
+  "command_successes": 1,
+  "command_failures": 1,
+  "command_coverage": [
+    {
+      "command": "inspect-raw-header-hex",
+      "format": "raw",
+      "successes": 0,
+      "failures": 1
+    },
+    {
+      "command": "inspect-zlib-header-hex",
+      "format": "zlib",
+      "successes": 1,
+      "failures": 0
+    }
+  ],
   "negative_cases": 1,
   "negative_error_counts": {
     "InvalidDeflateBlockType": 1

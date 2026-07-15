@@ -63,6 +63,10 @@
       "fields": {
         "case_count": "int",
         "cases": "list",
+        "command_count": "int",
+        "command_coverage": "list",
+        "command_failures": "int",
+        "command_successes": "int",
         "dictionary_cases": "int",
         "fhcrc_cases": "int",
         "gzip_cases": "int",
@@ -82,6 +86,15 @@
       "count_rules": {
         "case_count": {
           "collection": "cases"
+        },
+        "command_count": {
+          "collection": "command_coverage"
+        },
+        "command_successes": {
+          "collection": "cases"
+        },
+        "command_failures": {
+          "collection": "negative_items"
         },
         "raw_cases": {
           "collection": "cases",
@@ -223,6 +236,29 @@
         }
       },
       "collections": {
+        "command_coverage": {
+          "fields": {
+            "command": "str",
+            "failures": "int",
+            "format": "str",
+            "successes": "int"
+          },
+          "enums": {
+            "command": [
+              "inspect-raw-header-hex",
+              "inspect-zlib-header-hex",
+              "inspect-zlib-deflate-header-hex",
+              "inspect-zlib-dict-deflate-header-hex",
+              "inspect-gzip-header-hex",
+              "inspect-gzip-deflate-header-hex"
+            ],
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ]
+          }
+        },
         "negative_items": {
           "fields": {
             "argv": "list",

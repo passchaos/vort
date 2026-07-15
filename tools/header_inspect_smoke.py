@@ -62,6 +62,19 @@ def format_for_command(command: str) -> str:
     return "unknown"
 
 
+def build_command_coverage(cases: list[dict[str, object]], negative_items: list[dict[str, object]]) -> list[dict[str, object]]:
+    commands = sorted({str(case["command"]) for case in cases} | {str(item["command"]) for item in negative_items})
+    return [
+        {
+            "command": command,
+            "format": format_for_command(command),
+            "successes": sum(1 for case in cases if case["command"] == command),
+            "failures": sum(1 for item in negative_items if item["command"] == command),
+        }
+        for command in commands
+    ]
+
+
 def write_markdown(path: Path, summary: dict[str, object]) -> None:
     lines = [
         "# Vort header inspect smoke",
@@ -90,6 +103,17 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
                 fhcrc=sum(1 for case in cases if case["header_crc"]),
             )
         )
+    lines.extend(
+        [
+            "",
+            "## Command coverage",
+            "",
+            "| command | format | successes | failures |",
+            "| --- | --- | ---: | ---: |",
+        ]
+    )
+    for row in summary["command_coverage"]:
+        lines.append(f"| `{md(row['command'])}` | {md(row['format'])} | {row['successes']} | {row['failures']} |")
     lines.extend(
         [
             "",
@@ -835,6 +859,7 @@ def main(argv: list[str]) -> int:
     for item in negative_items:
         error_name = str(item["expected_error"])
         negative_error_counts[error_name] = negative_error_counts.get(error_name, 0) + 1
+    command_coverage = build_command_coverage(cases, negative_items)
 
     summary = {
         "schema": "vort.header_inspect_smoke",
@@ -854,6 +879,10 @@ def main(argv: list[str]) -> int:
         "gzip_negative_cases": sum(1 for item in negative_items if item["format"] == "gzip"),
         "negative_error_counts": negative_error_counts,
         "negative_items": negative_items,
+        "command_coverage": command_coverage,
+        "command_count": len(command_coverage),
+        "command_successes": sum(row["successes"] for row in command_coverage),
+        "command_failures": sum(row["failures"] for row in command_coverage),
     }
     if summary_path is not None:
         summary_path.parent.mkdir(parents=True, exist_ok=True)
