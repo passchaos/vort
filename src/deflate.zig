@@ -81,6 +81,24 @@ pub const GzipHeaderInfo = struct {
     header_crc: ?u16 = null,
 };
 
+pub const ZlibHeaderInfo = struct {
+    /// Offset where the raw deflate payload starts. This is 2 for ordinary
+    /// zlib streams and 6 when FDICT/DICTID is present.
+    data_offset: usize,
+    cmf: u8,
+    flg: u8,
+    compression_method: u8,
+    window_bits: u8,
+    window_size: usize,
+    fcheck: u8,
+    uses_dictionary: bool,
+    flevel: u2,
+    /// Adler-32 dictionary identifier stored after CMF/FLG when FDICT is set.
+    /// The slice parser only reports the ID; dictionary byte validation remains
+    /// in the decode APIs that accept caller-provided preset dictionaries.
+    dictionary_id: ?u32 = null,
+};
+
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
         .fastest => .{ .parser = .hash, .lz77_options = .{ .window_len = 8 * 1024, .max_chain = 4, .nice_len = 8, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4, .max_match = 64, .min_savings_bits = 8 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
@@ -2749,21 +2767,43 @@ const ZlibHeader = struct {
     uses_dictionary: bool,
 };
 
-fn parseZlibHeader(input: []const u8, dictionary: ?[]const u8) Error!ZlibHeader {
+pub fn parseZlibHeaderInfo(input: []const u8) Error!ZlibHeaderInfo {
     if (input.len < 2) return error.TruncatedFrame;
     const cmf = input[0];
     const flg = input[1];
     if ((cmf & 0x0f) != 8) return error.BadZlibHeader;
-    if ((cmf >> 4) > 7) return error.BadZlibHeader;
+    const cinfo = cmf >> 4;
+    if (cinfo > 7) return error.BadZlibHeader;
     const combined: u16 = (@as(u16, cmf) << 8) | flg;
     if (combined % 31 != 0) return error.BadZlibHeader;
-    if ((flg & 0x20) == 0) return .{ .data_offset = 2, .uses_dictionary = false };
+
+    const uses_dictionary = (flg & 0x20) != 0;
+    var info = ZlibHeaderInfo{
+        .data_offset = if (uses_dictionary) 6 else 2,
+        .cmf = cmf,
+        .flg = flg,
+        .compression_method = cmf & 0x0f,
+        .window_bits = cinfo + 8,
+        .window_size = @as(usize, 1) << @intCast(cinfo + 8),
+        .fcheck = flg & 0x1f,
+        .uses_dictionary = uses_dictionary,
+        .flevel = @intCast(flg >> 6),
+    };
+
+    if (!uses_dictionary) return info;
 
     if (input.len < 6) return error.TruncatedFrame;
-    const expected_dict_id = std.mem.readInt(u32, input[2..][0..4], .big);
+    info.dictionary_id = std.mem.readInt(u32, input[2..][0..4], .big);
+    return info;
+}
+
+fn parseZlibHeader(input: []const u8, dictionary: ?[]const u8) Error!ZlibHeader {
+    const info = try parseZlibHeaderInfo(input);
+    if (!info.uses_dictionary) return .{ .data_offset = info.data_offset, .uses_dictionary = false };
+
     const actual_dictionary = dictionary orelse return error.NeedDictionary;
-    if (checksum.adler32(actual_dictionary) != expected_dict_id) return error.ChecksumMismatch;
-    return .{ .data_offset = 6, .uses_dictionary = true };
+    if (checksum.adler32(actual_dictionary) != info.dictionary_id.?) return error.ChecksumMismatch;
+    return .{ .data_offset = info.data_offset, .uses_dictionary = true };
 }
 
 const gzip_header = [_]u8{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03 };
@@ -3023,6 +3063,34 @@ test "zlib stored wrapper matches level-0 vectors" {
     const hello = try encodeZlibStoredAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(hello);
     try std.testing.expectEqualSlices(u8, &.{ 0x78, 0x01, 0x01, 0x05, 0x00, 0xfa, 0xff, 'h', 'e', 'l', 'l', 'o', 0x06, 0x2c, 0x02, 0x15 }, hello);
+}
+
+test "zlib header metadata parser exposes wrapper fields" {
+    const plain = "hello hello hello";
+    const dictionary = "hello ";
+    const encoded = try encodeZlibStoredWithDictionaryAlloc(std.testing.allocator, plain, dictionary);
+    defer std.testing.allocator.free(encoded);
+
+    const info = try parseZlibHeaderInfo(encoded);
+    try std.testing.expectEqual(@as(usize, 6), info.data_offset);
+    try std.testing.expectEqual(@as(u8, 0x78), info.cmf);
+    try std.testing.expectEqual(@as(u8, 0x20), info.flg);
+    try std.testing.expectEqual(@as(u8, 8), info.compression_method);
+    try std.testing.expectEqual(@as(u8, 15), info.window_bits);
+    try std.testing.expectEqual(@as(usize, 32 * 1024), info.window_size);
+    try std.testing.expectEqual(@as(u8, 0), info.fcheck);
+    try std.testing.expect(info.uses_dictionary);
+    try std.testing.expectEqual(@as(u2, 0), info.flevel);
+    try std.testing.expectEqual(checksum.adler32(dictionary), info.dictionary_id.?);
+
+    const no_dict = try parseZlibHeaderInfo(&.{ 0x78, 0x01 });
+    try std.testing.expectEqual(@as(usize, 2), no_dict.data_offset);
+    try std.testing.expect(!no_dict.uses_dictionary);
+    try std.testing.expectEqual(@as(?u32, null), no_dict.dictionary_id);
+
+    try std.testing.expectError(error.TruncatedFrame, parseZlibHeaderInfo(&.{0x78}));
+    try std.testing.expectError(error.TruncatedFrame, parseZlibHeaderInfo(&.{ 0x78, 0x20 }));
+    try std.testing.expectError(error.BadZlibHeader, parseZlibHeaderInfo(&.{ 0x78, 0x02 }));
 }
 
 test "zlib stored wrapper validates checksum header and trailing data" {

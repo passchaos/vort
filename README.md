@@ -239,6 +239,8 @@ defer allocator.free(bounded);
 
 const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);
+const zlib_header = try vort.parseZlibHeaderInfo(zlib_bytes);
+_ = zlib_header.window_bits; // 15 for the default 32 KiB deflate window
 const zlib_exact = try vort.decodeZlibAllocExactSize(allocator, zlib_bytes, "payload".len);
 defer allocator.free(zlib_exact);
 const zlib_bounded = try vort.decodeZlibAllocLimited(allocator, zlib_bytes, 1024);
