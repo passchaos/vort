@@ -336,7 +336,8 @@ def main(argv: list[str]) -> int:
         f"HLIT={raw_dynamic_json['dynamic_hlit']} HDIST={raw_dynamic_json['dynamic_hdist']} "
         f"HCLEN={raw_dynamic_json['dynamic_hclen']} lit_nonzero={raw_dynamic_json['dynamic_literal_nonzero']} "
         f"dist_nonzero={raw_dynamic_json['dynamic_distance_nonzero']} max={raw_dynamic_json['dynamic_literal_max_bits']}/"
-        f"{raw_dynamic_json['dynamic_distance_max_bits']} rle18={raw_dynamic_json['dynamic_code_length_repeat_zero_long']}"
+        f"{raw_dynamic_json['dynamic_distance_max_bits']} rle16/17/18={raw_dynamic_json['dynamic_code_length_repeat_prev']}/"
+        f"{raw_dynamic_json['dynamic_code_length_repeat_zero_short']}/{raw_dynamic_json['dynamic_code_length_repeat_zero_long']}"
     )
     validate_value_against_manifest(raw_dynamic_json, schemas_def)
 

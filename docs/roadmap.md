@@ -193,6 +193,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection Markdown dashboard includes per-format summary totals.
 - [x] raw/zlib/gzip header inspection Markdown dashboard groups successful inspections by format.
 - [x] raw/zlib/gzip header inspection Markdown dashboard surfaces human-readable success-case details.
+- [x] raw/zlib/gzip header inspection Markdown dashboard shows dynamic RLE16/RLE17/RLE18 counts.
 - [x] raw/zlib/gzip header inspection Markdown dashboard shortens long hex samples while JSON keeps full replay data.
 - [x] raw/zlib/gzip header inspection smoke verifies Markdown sample shortening without losing JSON replay data.
 - [x] raw/zlib/gzip header inspection Markdown dashboard groups malformed-header failures by format.

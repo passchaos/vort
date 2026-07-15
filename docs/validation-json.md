@@ -187,7 +187,8 @@ headers through both hex and file workflows. It is intended to keep format
 metadata diagnostics covered by CI and dashboard artifacts. The same build step
 also writes `zig-out/vort-header-inspect-smoke.md` for human-readable review,
 including per-format success totals plus grouped success and malformed-header
-tables. Long hex samples are shortened in Markdown only; JSON `sample` and
+tables. Raw dynamic rows include compact RLE16/RLE17/RLE18 counts in their
+human-readable detail. Long hex samples are shortened in Markdown only; JSON `sample` and
 `argv` fields remain complete for replay.
 
 Important fields:
