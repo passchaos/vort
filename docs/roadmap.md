@@ -56,6 +56,7 @@ architecture blindly.
 - [x] Concatenated native auto decode uses embedded dictionaries for self-contained dictionary streams.
 - [x] Concatenated native caller-owned decode reports bytes, data-frame count, and CRC-32.
 - [x] Embedded dictionary inspection validates dictionary metadata without allocating dictionary bytes.
+- [x] Embedded dictionary inspection options enforce expected dictionary ID and content length.
 - [x] Deterministic malformed-header/frame smoke corpus.
 - [x] Skippable native frames.
 - [x] In-memory frame indexes for concatenated native store streams.

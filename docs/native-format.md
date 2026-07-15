@@ -167,7 +167,9 @@ CRC-32 of the concatenated logical payload while avoiding the final output
 allocation.
 `inspectEmbeddedDictionary` validates the embedded dictionary skippable metadata
 without allocating dictionary bytes and reports the dictionary ID, content length,
-and skippable-frame offset for auto-decode preflight.
+and skippable-frame offset for auto-decode preflight. Its options variant can
+enforce an expected dictionary ID and content length before any decode path
+allocates or copies dictionary bytes.
 
 ## Batch range summary APIs
 

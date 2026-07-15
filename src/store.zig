@@ -1848,6 +1848,11 @@ pub const EmbeddedDictionaryInspection = struct {
     skippable_offset: usize,
 };
 
+pub const EmbeddedDictionaryInspectionOptions = struct {
+    expected_id: ?dictionary.DictionaryId = null,
+    expected_content_len: ?usize = null,
+};
+
 pub fn inspectEmbeddedDictionary(input: []const u8) Error!EmbeddedDictionaryInspection {
     var offset: usize = 0;
     var found: ?EmbeddedDictionaryInspection = null;
@@ -1880,6 +1885,17 @@ pub fn inspectEmbeddedDictionary(input: []const u8) Error!EmbeddedDictionaryInsp
         }
     }
     return found orelse error.InvalidMagic;
+}
+
+pub fn inspectEmbeddedDictionaryWithOptions(input: []const u8, options: EmbeddedDictionaryInspectionOptions) Error!EmbeddedDictionaryInspection {
+    const inspection = try inspectEmbeddedDictionary(input);
+    if (options.expected_id) |expected| {
+        if (inspection.id.asInt() != expected.asInt()) return error.ChecksumMismatch;
+    }
+    if (options.expected_content_len) |expected| {
+        if (inspection.content_len != expected) return error.SizeMismatch;
+    }
+    return inspection;
 }
 
 pub fn parseEmbeddedDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -4650,6 +4666,13 @@ test "self-contained dictionary stream embeds dictionary and supports range deco
     try std.testing.expectEqual(dict.len, inspection.content_len);
     try std.testing.expectEqual(dictionary.DictionaryId.fromBytes(dict).asInt(), inspection.id.asInt());
     try std.testing.expectEqual(@as(usize, 0), inspection.skippable_offset);
+    const checked = try inspectEmbeddedDictionaryWithOptions(stream, .{
+        .expected_id = dictionary.DictionaryId.fromBytes(dict),
+        .expected_content_len = dict.len,
+    });
+    try std.testing.expectEqual(inspection.id.asInt(), checked.id.asInt());
+    try std.testing.expectError(error.SizeMismatch, inspectEmbeddedDictionaryWithOptions(stream, .{ .expected_content_len = dict.len + 1 }));
+    try std.testing.expectError(error.ChecksumMismatch, inspectEmbeddedDictionaryWithOptions(stream, .{ .expected_id = dictionary.DictionaryId.fromBytes("wrong") }));
     const summary = try summarizeModes(stream);
     try std.testing.expect(summary.dictionary_patch + summary.dictionary_deflate > 0);
     const range = try decodeSelfContainedDictionaryRangeAlloc(std.testing.allocator, stream, 7, 64);
