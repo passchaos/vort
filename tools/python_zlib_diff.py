@@ -170,6 +170,8 @@ def main() -> int:
 
     zlib_file_payload = b"zlib file output limit smoke"
     zlib_file_frame = zlib.compress(zlib_file_payload, level=6)
+    zlib_file_missing_footer = zlib_file_frame[:-4]
+    expect_cli_failure("decode-zlib-hex", zlib_file_missing_footer.hex(), error_name="TruncatedFrame")
     with tempfile.TemporaryDirectory(prefix="vort-zlib-file-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         compressed_path = tmp / "sample.zlib"
@@ -189,6 +191,9 @@ def main() -> int:
         header_only_path = tmp / "header-only.zlib"
         header_only_path.write_bytes(bytes.fromhex("7801"))
         expect_cli_failure("decode-zlib-file", str(header_only_path), str(tmp / "header-only.out"), error_name="TruncatedFrame")
+        missing_footer_path = tmp / "missing-footer.zlib"
+        missing_footer_path.write_bytes(zlib_file_missing_footer)
+        expect_cli_failure("decode-zlib-file", str(missing_footer_path), str(tmp / "missing-footer.out"), error_name="TruncatedFrame")
 
     raw_file_payload = b"raw deflate file output limit smoke"
     co = zlib.compressobj(level=6, wbits=-15)
