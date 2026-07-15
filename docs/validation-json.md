@@ -224,6 +224,72 @@ Example:
 }
 ```
 
+## `vort.zlib_header_info`
+
+Produced by:
+
+```sh
+zig build run -- inspect-zlib-header-hex 7801cb48cdc9c90700062c0215 json
+```
+
+This schema is the machine-readable form of zlib wrapper header inspection.
+It reports CMF/FLG-derived fields and an optional DICTID without validating the
+caller-provided dictionary bytes.
+
+Example:
+
+```json
+{
+  "schema": "vort.zlib_header_info",
+  "schema_version": 1,
+  "compressed_bytes": 13,
+  "data_offset": 2,
+  "cmf": 120,
+  "flg": 1,
+  "compression_method": 8,
+  "window_bits": 15,
+  "window_size": 32768,
+  "fcheck": 1,
+  "uses_dictionary": false,
+  "flevel": 0,
+  "dictionary_id": null
+}
+```
+
+## `vort.gzip_header_info`
+
+Produced by:
+
+```sh
+zig build run -- inspect-gzip-header-hex 1f8b0800000000000403cb48cdc9c9070086a6103605000000 json
+```
+
+This schema is the machine-readable form of gzip wrapper header inspection.
+It includes base header fields and optional FEXTRA/FNAME/FCOMMENT/FHCRC
+metadata after FHCRC validation when present.
+
+Example:
+
+```json
+{
+  "schema": "vort.gzip_header_info",
+  "schema_version": 1,
+  "compressed_bytes": 25,
+  "data_offset": 10,
+  "flags": 0,
+  "text": false,
+  "mtime": 0,
+  "xfl": 4,
+  "os": 3,
+  "extra_present": false,
+  "extra_len": 0,
+  "extra_hex": null,
+  "filename": null,
+  "comment": null,
+  "header_crc": null
+}
+```
+
 ## `vort.validation_json_smoke`
 
 Produced by:
@@ -255,7 +321,9 @@ Example:
     "vort.validation_report",
     "vort.sidecar_verify_report",
     "vort.sidecar_corrupt_smoke_report",
-    "vort.header_inspect_smoke"
+    "vort.header_inspect_smoke",
+    "vort.zlib_header_info",
+    "vort.gzip_header_info"
   ],
   "cli_failure_hint": "payload_corrupt",
   "report_rows": 1,

@@ -123,7 +123,18 @@ def main() -> int:
         validate_value_against_manifest(dashboard, schemas_def)
 
         header_summary_path = root / "vort-header-inspect-smoke.json"
-        run([cli, "inspect-zlib-header-hex", "7801cb48cdc9c90700062c0215"])
+        zlib_header = json.loads(run([cli, "inspect-zlib-header-hex", "7801cb48cdc9c90700062c0215", "json"]).stdout)
+        assert zlib_header["schema"] == "vort.zlib_header_info"
+        assert zlib_header["schema_version"] == 1
+        assert zlib_header["window_bits"] == 15
+        validate_value_against_manifest(zlib_header, schemas_def)
+        gzip_header = json.loads(
+            run([cli, "inspect-gzip-header-hex", "1f8b0800000000000403cb48cdc9c9070086a6103605000000", "json"]).stdout
+        )
+        assert gzip_header["schema"] == "vort.gzip_header_info"
+        assert gzip_header["schema_version"] == 1
+        assert gzip_header["mtime"] == 0
+        validate_value_against_manifest(gzip_header, schemas_def)
         run(["python3", str(ROOT / "tools" / "header_inspect_smoke.py"), cli, "--summary", str(header_summary_path)])
         header_summary = json.loads(header_summary_path.read_text())
         assert header_summary["schema"] == "vort.header_inspect_smoke"
@@ -142,6 +153,8 @@ def main() -> int:
                 corrupt["schema"],
                 dashboard["schema"],
                 header_summary["schema"],
+                zlib_header["schema"],
+                gzip_header["schema"],
             ],
             "cli_success_ok": ok["ok"],
             "cli_failure_ok": failure["ok"],

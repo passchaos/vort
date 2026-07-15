@@ -9,6 +9,8 @@ import tempfile
 import zlib
 from pathlib import Path
 
+from validation_json_docs_check import load_manifest, validate_value_against_manifest
+
 
 def run(cli: str, *args: str) -> str:
     return subprocess.check_output([cli, *args], text=True).strip()
@@ -43,6 +45,7 @@ def main(argv: list[str]) -> int:
     payload = b"hello"
     zlib_frame = zlib.compress(payload, level=6)
     gzip_frame = gzip.compress(payload, compresslevel=6, mtime=0)
+    schemas_def = load_manifest()
     dictionary = b"hello "
     dict_payload = b"hello hello hello"
     dict_compressor = zlib.compressobj(level=6, wbits=zlib.MAX_WBITS, zdict=dictionary)
@@ -80,6 +83,11 @@ def main(argv: list[str]) -> int:
             "header_crc": False,
         }
     ]
+    zlib_json = json.loads(run(cli, "inspect-zlib-header-hex", zlib_frame.hex(), "json"))
+    assert zlib_json["schema"] == "vort.zlib_header_info"
+    assert zlib_json["uses_dictionary"] is False
+    assert zlib_json["data_offset"] == 2
+    validate_value_against_manifest(zlib_json, schemas_def)
     zlib_dict_hex = run(cli, "inspect-zlib-header-hex", zlib_dict_frame.hex())
     require_fields(
         zlib_dict_hex,
@@ -103,6 +111,11 @@ def main(argv: list[str]) -> int:
             "header_crc": False,
         }
     )
+    zlib_dict_json = json.loads(run(cli, "inspect-zlib-header-hex", zlib_dict_frame.hex(), "json"))
+    assert zlib_dict_json["schema"] == "vort.zlib_header_info"
+    assert zlib_dict_json["uses_dictionary"] is True
+    assert zlib_dict_json["dictionary_id"] == (zlib.adler32(dictionary) & 0xFFFFFFFF)
+    validate_value_against_manifest(zlib_dict_json, schemas_def)
 
     gzip_hex = run(cli, "inspect-gzip-header-hex", gzip_frame.hex())
     require_fields(
@@ -130,6 +143,11 @@ def main(argv: list[str]) -> int:
             "header_crc": False,
         }
     )
+    gzip_json = json.loads(run(cli, "inspect-gzip-header-hex", gzip_frame.hex(), "json"))
+    assert gzip_json["schema"] == "vort.gzip_header_info"
+    assert gzip_json["extra_present"] is False
+    assert gzip_json["header_crc"] is None
+    validate_value_against_manifest(gzip_json, schemas_def)
     gzip_optional_hex = run(cli, "inspect-gzip-header-hex", gzip_optional_frame.hex())
     require_fields(
         gzip_optional_hex,
@@ -156,6 +174,13 @@ def main(argv: list[str]) -> int:
             "header_crc": True,
         }
     )
+    gzip_optional_json = json.loads(run(cli, "inspect-gzip-header-hex", gzip_optional_frame.hex(), "json"))
+    assert gzip_optional_json["schema"] == "vort.gzip_header_info"
+    assert gzip_optional_json["extra_hex"] == "61626364"
+    assert gzip_optional_json["filename"] == "name"
+    assert gzip_optional_json["comment"] == "comment"
+    assert gzip_optional_json["header_crc"] == 18658
+    validate_value_against_manifest(gzip_optional_json, schemas_def)
 
     with tempfile.TemporaryDirectory(prefix="vort-header-inspect-") as tmp:
         tmp_path = Path(tmp)
@@ -172,6 +197,8 @@ def main(argv: list[str]) -> int:
         zlib_dict_file = run(cli, "inspect-zlib-header-file", str(zlib_dict_path))
         gzip_file = run(cli, "inspect-gzip-header-file", str(gzip_path))
         gzip_optional_file = run(cli, "inspect-gzip-header-file", str(gzip_optional_path))
+        zlib_file_json = json.loads(run(cli, "inspect-zlib-header-file", str(zlib_path), "json"))
+        gzip_optional_file_json = json.loads(run(cli, "inspect-gzip-header-file", str(gzip_optional_path), "json"))
         if zlib_file != zlib_hex:
             raise AssertionError(f"zlib file/hex inspection mismatch: {zlib_file!r} != {zlib_hex!r}")
         if zlib_dict_file != zlib_dict_hex:
@@ -180,6 +207,10 @@ def main(argv: list[str]) -> int:
             raise AssertionError(f"gzip file/hex inspection mismatch: {gzip_file!r} != {gzip_hex!r}")
         if gzip_optional_file != gzip_optional_hex:
             raise AssertionError(f"gzip optional file/hex inspection mismatch: {gzip_optional_file!r} != {gzip_optional_hex!r}")
+        if zlib_file_json != zlib_json:
+            raise AssertionError(f"zlib JSON file/hex inspection mismatch: {zlib_file_json!r} != {zlib_json!r}")
+        if gzip_optional_file_json != gzip_optional_json:
+            raise AssertionError(f"gzip optional JSON file/hex inspection mismatch: {gzip_optional_file_json!r} != {gzip_optional_json!r}")
 
     summary = {
         "schema": "vort.header_inspect_smoke",

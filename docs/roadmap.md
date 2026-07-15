@@ -166,6 +166,7 @@ architecture blindly.
 - [x] zlib wrapper reports preset-dictionary streams as dictionary requirements.
 - [x] Public zlib header metadata parser exposes CMF/FLG, window, FDICT/DICTID, and FLEVEL fields.
 - [x] CLI zlib header inspection prints parsed metadata for hex/file workflows.
+- [x] CLI zlib header inspection supports schema-checked JSON output.
 - [x] zlib/gzip header inspection CLI smoke runs in local CI aggregate.
 - [x] zlib/gzip header inspection smoke writes a schema-checked dashboard JSON artifact.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
@@ -192,6 +193,7 @@ architecture blindly.
 - [x] gzip encoders can emit configurable MTIME/XFL/OS plus FEXTRA/FNAME/FCOMMENT/FHCRC metadata while preserving deterministic defaults.
 - [x] Public gzip header metadata parser exposes MTIME/XFL/OS/FEXTRA/FNAME/FCOMMENT/FHCRC slices for library callers.
 - [x] CLI gzip header inspection prints parsed metadata for hex/file workflows.
+- [x] CLI gzip header inspection supports schema-checked JSON output.
 - [x] gzip wrapper integration for fixed-Huffman blocks.
 - [x] gzip wrapper integration for single final dynamic-Huffman blocks.
 - [x] gzip wrapper integration for multi-block dynamic streams.

@@ -89,6 +89,42 @@
         "name": "str"
       }
     },
+    "vort.zlib_header_info": {
+      "fields": {
+        "cmf": "int",
+        "compressed_bytes": "int",
+        "compression_method": "int",
+        "data_offset": "int",
+        "dictionary_id": "int?",
+        "fcheck": "int",
+        "flevel": "int",
+        "flg": "int",
+        "schema": "str",
+        "schema_version": "int",
+        "uses_dictionary": "bool",
+        "window_bits": "int",
+        "window_size": "int"
+      }
+    },
+    "vort.gzip_header_info": {
+      "fields": {
+        "comment": "str?",
+        "compressed_bytes": "int",
+        "data_offset": "int",
+        "extra_hex": "str?",
+        "extra_len": "int",
+        "extra_present": "bool",
+        "filename": "str?",
+        "flags": "int",
+        "header_crc": "int?",
+        "mtime": "int",
+        "os": "int",
+        "schema": "str",
+        "schema_version": "int",
+        "text": "bool",
+        "xfl": "int"
+      }
+    },
     "vort.sidecar_corrupt_smoke_report": {
       "fields": {
         "full_rejected_rows": "int",
