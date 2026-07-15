@@ -19,6 +19,7 @@ DASHBOARD_STRICT_ARTIFACT = "vort-dashboard-strict-smoke.json"
 HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
+DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -38,6 +39,8 @@ def write_producer_map(
     include_fuzz_corpus_smoke: bool = True,
     include_fuzz_coverage_exact: bool = True,
     include_fuzz_coverage_smoke: bool = True,
+    include_decode_stage_exact: bool = True,
+    include_decode_stage_smoke: bool = True,
     required_names: list[str] | None = None,
 ) -> None:
     artifact_metadata = {}
@@ -66,6 +69,11 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-fuzz-corpus-coverage-smoke",
         }
+    if include_decode_stage_smoke:
+        artifact_metadata[DECODE_STAGE_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard",
+        }
     exact = {}
     if include_header_exact:
         exact[HEADER_INSPECT_ARTIFACT] = "zig build run-header-inspect-dashboard"
@@ -77,6 +85,8 @@ def write_producer_map(
         exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     if include_fuzz_coverage_exact:
         exact[FUZZ_COVERAGE_ARTIFACT] = "zig build run-fuzz-corpus-coverage-smoke"
+    if include_decode_stage_exact:
+        exact[DECODE_STAGE_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
     payload = {
         "schema": "vort.dashboard_producers",
         "schema_version": 1,
@@ -340,12 +350,84 @@ def write_fuzz_coverage_report(path: Path, *, ok: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_decode_stage_report(path: Path, *, ok: bool = True) -> None:
+    payload = {
+        "schema": "vort.deflate_decode_stage_report",
+        "schema_version": 1,
+        "ok": ok,
+        "rows": 1,
+        "error_rows": 3,
+        "matched_error_rows": 3 if ok else 2,
+        "unmatched_error_rows": 0 if ok else 1,
+        "items": [
+            {
+                "case": "strict-smoke",
+                "input_bytes": 3,
+                "zlib_bytes": 11,
+                "gzip_bytes": 23,
+                "raw_bytes": 5,
+                "iterations": 1,
+                "raw_mib_s": 1.0,
+                "raw_exact_mib_s": 1.0,
+                "raw_into_mib_s": 1.0,
+                "zlib_mib_s": 1.0,
+                "zlib_exact_mib_s": 1.0,
+                "zlib_into_mib_s": 1.0,
+                "gzip_mib_s": 1.0,
+                "gzip_exact_mib_s": 1.0,
+                "gzip_into_mib_s": 1.0,
+                "zlib_wrapper_time_ratio": 1.0,
+                "zlib_wrapper_exact_time_ratio": 1.0,
+                "zlib_wrapper_into_time_ratio": 1.0,
+                "gzip_wrapper_time_ratio": 1.0,
+                "gzip_wrapper_exact_time_ratio": 1.0,
+                "gzip_wrapper_into_time_ratio": 1.0,
+                "raw_alloc_exact_time_ratio": 1.0,
+                "raw_alloc_into_time_ratio": 1.0,
+                "zlib_alloc_exact_time_ratio": 1.0,
+                "zlib_alloc_into_time_ratio": 1.0,
+                "gzip_alloc_exact_time_ratio": 1.0,
+                "gzip_alloc_into_time_ratio": 1.0,
+                "mix": 3,
+            }
+        ],
+        "error_items": [
+            {
+                "case": "raw-empty",
+                "wrapper": "raw",
+                "input_bytes": 0,
+                "expected_error": "TruncatedFrame",
+                "actual_error": "TruncatedFrame",
+                "matched": True,
+            },
+            {
+                "case": "zlib-bad-adler",
+                "wrapper": "zlib",
+                "input_bytes": 11,
+                "expected_error": "ChecksumMismatch",
+                "actual_error": "ChecksumMismatch" if ok else "TrailingData",
+                "matched": ok,
+            },
+            {
+                "case": "gzip-bad-crc",
+                "wrapper": "gzip",
+                "input_bytes": 23,
+                "expected_error": "ChecksumMismatch",
+                "actual_error": "ChecksumMismatch",
+                "matched": True,
+            },
+        ],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def write_healthy_artifacts(root: Path) -> None:
     write_header_summary(root / HEADER_INSPECT_ARTIFACT)
     write_dashboard_strict_summary(root / DASHBOARD_STRICT_ARTIFACT)
     write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
+    write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
 
 
 def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
@@ -740,6 +822,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "fuzz_coverage_failed":
                 write_fuzz_coverage_report(fixture_root / FUZZ_COVERAGE_ARTIFACT, ok=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_decode_stage_artifact":
+                (fixture_root / DECODE_STAGE_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "decode_stage_failed":
+                write_decode_stage_report(fixture_root / DECODE_STAGE_ARTIFACT, ok=False)
                 write_producer_map(producer_map)
             else:
                 raise AssertionError(f"unsupported validation reason fixture {fixture!r}")

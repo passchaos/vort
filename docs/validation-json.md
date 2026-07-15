@@ -1119,6 +1119,76 @@ Example:
 }
 ```
 
+## `vort.deflate_decode_stage_report`
+
+Produced by:
+
+```sh
+zig build run-deflate-decode-stage-report-dashboard
+```
+
+This schema summarizes the decode-stage dashboard as machine-readable JSON. It
+keeps the throughput rows and the representative malformed/truncated/checksum
+error-path smoke rows under the same schema checker used by the dashboard index.
+`ok=true` requires at least one timing row, at least one error-path row, and all
+error-path rows to match their expected error names.
+
+Example:
+
+```json
+{
+  "schema": "vort.deflate_decode_stage_report",
+  "schema_version": 1,
+  "ok": true,
+  "rows": 1,
+  "error_rows": 1,
+  "matched_error_rows": 1,
+  "unmatched_error_rows": 0,
+  "items": [
+    {
+      "case": "tiny",
+      "input_bytes": 28,
+      "zlib_bytes": 36,
+      "gzip_bytes": 48,
+      "raw_bytes": 30,
+      "iterations": 10000,
+      "raw_mib_s": 1.0,
+      "raw_exact_mib_s": 1.0,
+      "raw_into_mib_s": 1.0,
+      "zlib_mib_s": 1.0,
+      "zlib_exact_mib_s": 1.0,
+      "zlib_into_mib_s": 1.0,
+      "gzip_mib_s": 1.0,
+      "gzip_exact_mib_s": 1.0,
+      "gzip_into_mib_s": 1.0,
+      "zlib_wrapper_time_ratio": 1.0,
+      "zlib_wrapper_exact_time_ratio": 1.0,
+      "zlib_wrapper_into_time_ratio": 1.0,
+      "gzip_wrapper_time_ratio": 1.0,
+      "gzip_wrapper_exact_time_ratio": 1.0,
+      "gzip_wrapper_into_time_ratio": 1.0,
+      "raw_alloc_exact_time_ratio": 1.0,
+      "raw_alloc_into_time_ratio": 1.0,
+      "zlib_alloc_exact_time_ratio": 1.0,
+      "zlib_alloc_into_time_ratio": 1.0,
+      "gzip_alloc_exact_time_ratio": 1.0,
+      "gzip_alloc_into_time_ratio": 1.0,
+      "mix": 123
+    }
+  ],
+  "error_items": [
+    {
+      "case": "zlib-bad-adler",
+      "wrapper": "zlib",
+      "input_bytes": 11,
+      "expected_error": "ChecksumMismatch",
+      "actual_error": "ChecksumMismatch",
+      "matched": true
+    }
+  ]
+}
+```
+
 ## `vort.dashboard_producers_required_smoke`
 
 Produced by:
@@ -1191,6 +1261,8 @@ Current unhealthy reason values are:
 - `fuzz_corpus_failed`
 - `missing_fuzz_coverage_artifact`
 - `fuzz_coverage_failed`
+- `missing_decode_stage_artifact`
+- `decode_stage_failed`
 
 Top-level fields:
 
@@ -1232,6 +1304,9 @@ Top-level fields:
   `fuzz_corpus_mode_count_rows`, `fuzz_corpus_error_count_rows`,
   `fuzz_corpus_coverage_mode_requirements`,
   `fuzz_corpus_coverage_error_requirements`
+- `decode_stage_present`, `decode_stage_ok`, `decode_stage_healthy`,
+  `decode_stage_rows`, `decode_stage_error_rows`,
+  `decode_stage_matched_error_rows`, `decode_stage_unmatched_error_rows`
 - `artifacts`
 
 Each artifact includes:
@@ -1267,7 +1342,8 @@ Example:
     "missing_dashboard_strict_artifact",
     "missing_huffman_length_artifact",
     "missing_fuzz_corpus_artifact",
-    "missing_fuzz_coverage_artifact"
+    "missing_fuzz_coverage_artifact",
+    "missing_decode_stage_artifact"
   ],
   "header_inspect_present": false,
   "header_inspect_ok": false,
@@ -1311,6 +1387,13 @@ Example:
   "fuzz_corpus_error_count_rows": 0,
   "fuzz_corpus_coverage_mode_requirements": 0,
   "fuzz_corpus_coverage_error_requirements": 0,
+  "decode_stage_present": false,
+  "decode_stage_ok": false,
+  "decode_stage_healthy": false,
+  "decode_stage_rows": 0,
+  "decode_stage_error_rows": 0,
+  "decode_stage_matched_error_rows": 0,
+  "decode_stage_unmatched_error_rows": 0,
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",
@@ -1622,8 +1705,8 @@ Each schema entry can contain:
 | `item_list_field_pairs` | object | Optional nested item list fields that must equal values from named scalar fields. |
 | `collections` | object | Optional map of additional nested list fields to per-item `fields`/`enums`/pair checks. |
 
-Supported type names are `str`, `int`, `bool`, `list`, `dict`, `str?`,
-`int?`, and `bool?`. Conditional predicates support `equals`/`not_equals` on a
+Supported type names are `str`, `int`, `float`, `bool`, `list`, `dict`,
+`str?`, `int?`, `float?`, and `bool?`. Conditional predicates support `equals`/`not_equals` on a
 named field. Numeric relation operators are `eq`, `ne`, `lt`, `le`, `gt`, and
 `ge`; `offset` is added to the right-hand field before comparison. Difference
 relations compare `left == minuend - subtrahend`, equality-flag relations

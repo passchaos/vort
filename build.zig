@@ -129,7 +129,7 @@ pub fn build(b: *std.Build) void {
     deflate_decode_stage_report_csv_step.dependOn(&run_deflate_decode_stage_report_csv.step);
 
     const run_deflate_decode_stage_report_dashboard = b.addRunArtifact(deflate_decode_stage_report_exe);
-    run_deflate_decode_stage_report_dashboard.addArgs(&.{ "--csv", "zig-out/vort-deflate-decode-stage-report.csv", "--markdown", "zig-out/vort-deflate-decode-stage-report.md" });
+    run_deflate_decode_stage_report_dashboard.addArgs(&.{ "--csv", "zig-out/vort-deflate-decode-stage-report.csv", "--markdown", "zig-out/vort-deflate-decode-stage-report.md", "--json", "zig-out/vort-deflate-decode-stage-report.json" });
     const deflate_decode_stage_report_dashboard_step = b.step("run-deflate-decode-stage-report-dashboard", "Write raw inflate vs zlib wrapper/checksum stage dashboard to zig-out");
     deflate_decode_stage_report_dashboard_step.dependOn(&run_deflate_decode_stage_report_dashboard.step);
 
@@ -695,6 +695,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.addArtifactArg(sidecar_verify_report_exe);
     validation_json_smoke.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     validation_json_smoke.step.dependOn(fuzz_corpus_coverage_smoke_step);
+    validation_json_smoke.step.dependOn(deflate_decode_stage_report_dashboard_step);
     const validation_json_smoke_step = b.step("run-validation-json-smoke", "Validate CLI and report JSON schema outputs");
     validation_json_smoke_step.dependOn(&validation_json_smoke.step);
 
@@ -704,6 +705,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.addArgs(&.{ "--summary", "zig-out/vort-validation-json-smoke.json" });
     validation_json_dashboard.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     validation_json_dashboard.step.dependOn(fuzz_corpus_coverage_smoke_step);
+    validation_json_dashboard.step.dependOn(deflate_decode_stage_report_dashboard_step);
     const validation_json_dashboard_step = b.step("run-validation-json-dashboard", "Write validation JSON schema smoke summary to zig-out");
     validation_json_dashboard_step.dependOn(&validation_json_dashboard.step);
 
@@ -754,6 +756,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(dashboard_category_negative_smoke_step);
     dashboard_index.step.dependOn(header_inspect_dashboard_step);
     dashboard_index.step.dependOn(dashboard_strict_dashboard_step);
+    dashboard_index.step.dependOn(deflate_decode_stage_report_dashboard_step);
     dashboard_index.step.dependOn(level_report_dashboard_step);
     dashboard_index.step.dependOn(huffman_length_report_dashboard_step);
     dashboard_index.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);

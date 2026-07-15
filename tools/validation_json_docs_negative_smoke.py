@@ -211,6 +211,13 @@ def main() -> int:
                 "fuzz_corpus_error_count_rows": 1,
                 "fuzz_corpus_coverage_mode_requirements": 1,
                 "fuzz_corpus_coverage_error_requirements": 1,
+                "decode_stage_present": True,
+                "decode_stage_ok": True,
+                "decode_stage_healthy": True,
+                "decode_stage_rows": 1,
+                "decode_stage_error_rows": 1,
+                "decode_stage_matched_error_rows": 1,
+                "decode_stage_unmatched_error_rows": 0,
                 "artifacts": [
                     {
                         "name": "vort-huffman-length-report.csv",

@@ -94,6 +94,7 @@ def main() -> int:
         fuzz_report_path = ROOT / "zig-out" / "vort-deflate-wrapper-fuzz-corpus.json"
         fuzz_coverage_path = ROOT / "tools" / "fuzz_corpus_expected_coverage.json"
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
+        decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -162,6 +163,15 @@ def main() -> int:
         assert fuzz_coverage_smoke["mode_requirement_count"] == len(fuzz_coverage["mode_requirements"])
         assert fuzz_coverage_smoke["error_requirement_count"] == len(fuzz_coverage["error_requirements"])
         validate_value_against_manifest(fuzz_coverage_smoke, schemas_def)
+        decode_stage = json.loads(decode_stage_path.read_text())
+        assert decode_stage["schema"] == "vort.deflate_decode_stage_report"
+        assert decode_stage["schema_version"] == 1
+        assert decode_stage["ok"] is True
+        assert decode_stage["rows"] >= 1
+        assert decode_stage["error_rows"] >= 1
+        assert decode_stage["matched_error_rows"] == decode_stage["error_rows"]
+        assert decode_stage["unmatched_error_rows"] == 0
+        validate_value_against_manifest(decode_stage, schemas_def)
         run([
             "python3",
             str(ROOT / "tools" / "dashboard_config_index_smoke.py"),
@@ -445,6 +455,7 @@ def main() -> int:
         huffman_length_markdown_path.write_text("# Huffman length smoke\n\nAll rows are optimal.\n")
         shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
+        shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
 
         run(
             [
@@ -507,6 +518,13 @@ def main() -> int:
         assert dashboard["fuzz_corpus_error_count_rows"] == fuzz_report["error_count_rows"]
         assert dashboard["fuzz_corpus_coverage_mode_requirements"] == fuzz_coverage_smoke["mode_requirement_count"]
         assert dashboard["fuzz_corpus_coverage_error_requirements"] == fuzz_coverage_smoke["error_requirement_count"]
+        assert dashboard["decode_stage_present"] is True
+        assert dashboard["decode_stage_ok"] is True
+        assert dashboard["decode_stage_healthy"] is True
+        assert dashboard["decode_stage_rows"] == decode_stage["rows"]
+        assert dashboard["decode_stage_error_rows"] == decode_stage["error_rows"]
+        assert dashboard["decode_stage_matched_error_rows"] == decode_stage["matched_error_rows"]
+        assert dashboard["decode_stage_unmatched_error_rows"] == decode_stage["unmatched_error_rows"]
         assert dashboard["validation_healthy"] == (
             dashboard["producer_healthy"]
             and dashboard["smoke_gate_healthy"]
@@ -514,6 +532,7 @@ def main() -> int:
             and dashboard["dashboard_strict_healthy"]
             and dashboard["huffman_length_healthy"]
             and dashboard["fuzz_corpus_healthy"]
+            and dashboard["decode_stage_healthy"]
         )
         assert dashboard["validation_unhealthy_reasons"] == ([] if dashboard["validation_healthy"] else dashboard["validation_unhealthy_reasons"])
         validate_value_against_manifest(dashboard, schemas_def)
@@ -552,6 +571,7 @@ def main() -> int:
                 dashboard_producers_negative["schema"],
                 dashboard_producers_required["schema"],
                 dashboard_producers_required_smoke["schema"],
+                decode_stage["schema"],
                 fuzz_report["schema"],
                 fuzz_coverage["schema"],
                 fuzz_coverage_smoke["schema"],

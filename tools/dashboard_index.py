@@ -21,6 +21,7 @@ def category_for(path: Path) -> str:
         or "dashboard-category" in name
         or "dashboard-config" in name
         or "huffman-length" in name
+        or "deflate-decode-stage" in name
         or "fuzz" in name
     ):
         return "validation"
@@ -260,6 +261,35 @@ def fuzz_corpus_health(artifacts: list[Path]) -> dict:
     }
 
 
+def decode_stage_health(artifacts: list[Path]) -> dict:
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") != "vort.deflate_decode_stage_report":
+            continue
+        rows = int(data.get("rows") or 0)
+        error_rows = int(data.get("error_rows") or 0)
+        matched_error_rows = int(data.get("matched_error_rows") or 0)
+        unmatched_error_rows = int(data.get("unmatched_error_rows") or 0)
+        return {
+            "present": True,
+            "ok": bool(data.get("ok")),
+            "rows": rows,
+            "error_rows": error_rows,
+            "matched_error_rows": matched_error_rows,
+            "unmatched_error_rows": unmatched_error_rows,
+            "healthy": bool(data.get("ok")) and rows > 0 and error_rows > 0 and matched_error_rows == error_rows and unmatched_error_rows == 0,
+        }
+    return {
+        "present": False,
+        "ok": False,
+        "rows": 0,
+        "error_rows": 0,
+        "matched_error_rows": 0,
+        "unmatched_error_rows": 0,
+        "healthy": False,
+    }
+
+
 def artifact_metadata(path: Path) -> str:
     stat = path.stat()
     mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
@@ -405,13 +435,15 @@ def main() -> int:
     strict_health = dashboard_strict_health(artifacts)
     huffman_health = huffman_length_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
+    decode_stage_health_summary = decode_stage_health(artifacts)
     producer_healthy = len(producer_step_missing) == 0
     smoke_gate_healthy = len(smoke_gate_required_missing) == 0
     header_healthy = header_health["present"] and header_health["ok"] and header_health["missing_workflow_count"] == 0
     strict_healthy = strict_health["present"] and strict_health["ok"] and strict_health["missing_mode_count"] == 0
     huffman_healthy = huffman_health["healthy"]
     fuzz_healthy = fuzz_health["healthy"]
-    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and huffman_healthy and fuzz_healthy
+    decode_stage_healthy = decode_stage_health_summary["healthy"]
+    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy
     validation_unhealthy_reasons = []
     if not producer_healthy:
         validation_unhealthy_reasons.append("missing_producer_steps")
@@ -441,6 +473,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_fuzz_coverage_artifact")
     elif not fuzz_health["coverage_healthy"]:
         validation_unhealthy_reasons.append("fuzz_coverage_failed")
+    if not decode_stage_health_summary["present"]:
+        validation_unhealthy_reasons.append("missing_decode_stage_artifact")
+    elif not decode_stage_healthy:
+        validation_unhealthy_reasons.append("decode_stage_failed")
 
     lines = [
         "# Vort dashboard index",
@@ -458,6 +494,7 @@ def main() -> int:
         f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing modes, checks/expected/matched deltas {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']}), healthy `{strict_healthy}`",
         f"- huffman length oracle: {huffman_health['optimal_rows']}/{huffman_health['row_count']} production optimal rows, {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} package-merge optimal rows, gaps {huffman_health['worst_gap_bits']}/{huffman_health['package_merge_worst_gap_bits']}, malformed rows {huffman_health['malformed_rows']}, healthy `{huffman_healthy}`",
         f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
+        f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
         "",
     ]
     if strict_health["missing_modes"]:
@@ -555,6 +592,13 @@ def main() -> int:
                 "fuzz_corpus_error_count_rows": fuzz_health["error_count_rows"],
                 "fuzz_corpus_coverage_mode_requirements": fuzz_health["coverage_mode_requirements"],
                 "fuzz_corpus_coverage_error_requirements": fuzz_health["coverage_error_requirements"],
+                "decode_stage_present": decode_stage_health_summary["present"],
+                "decode_stage_ok": decode_stage_health_summary["ok"],
+                "decode_stage_healthy": decode_stage_healthy,
+                "decode_stage_rows": decode_stage_health_summary["rows"],
+                "decode_stage_error_rows": decode_stage_health_summary["error_rows"],
+                "decode_stage_matched_error_rows": decode_stage_health_summary["matched_error_rows"],
+                "decode_stage_unmatched_error_rows": decode_stage_health_summary["unmatched_error_rows"],
                 "artifacts": records,
             },
             indent=2,

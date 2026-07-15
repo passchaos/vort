@@ -159,6 +159,10 @@
     "vort-fuzz-corpus-coverage-smoke.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-fuzz-corpus-coverage-smoke"
+    },
+    "vort-deflate-decode-stage-report.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard"
     }
   },
   "contains": [
@@ -214,7 +218,8 @@
     "vort-validation-json-docs-negative-smoke.json": "zig build run-validation-json-docs-negative-smoke",
     "vort-deflate-wrapper-fuzz-corpus.json": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
     "vort-deflate-wrapper-fuzz-corpus.md": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
-    "vort-fuzz-corpus-coverage-smoke.json": "zig build run-fuzz-corpus-coverage-smoke"
+    "vort-fuzz-corpus-coverage-smoke.json": "zig build run-fuzz-corpus-coverage-smoke",
+    "vort-deflate-decode-stage-report.json": "zig build run-deflate-decode-stage-report-dashboard"
   },
   "required_smoke_gates": [
     "vort-sidecar-corrupt-smoke.json",
@@ -234,7 +239,8 @@
     "vort-huffman-length-report.md",
     "vort-deflate-wrapper-fuzz-corpus.json",
     "vort-deflate-wrapper-fuzz-corpus.md",
-    "vort-fuzz-corpus-coverage-smoke.json"
+    "vort-fuzz-corpus-coverage-smoke.json",
+    "vort-deflate-decode-stage-report.json"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1

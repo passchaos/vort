@@ -48,6 +48,13 @@
         "fuzz_corpus_error_count_rows": "int",
         "fuzz_corpus_coverage_mode_requirements": "int",
         "fuzz_corpus_coverage_error_requirements": "int",
+        "decode_stage_present": "bool",
+        "decode_stage_ok": "bool",
+        "decode_stage_healthy": "bool",
+        "decode_stage_rows": "int",
+        "decode_stage_error_rows": "int",
+        "decode_stage_matched_error_rows": "int",
+        "decode_stage_unmatched_error_rows": "int",
         "producer_healthy": "bool",
         "producer_step_allowed_missing": "list",
         "producer_step_covered": "int",
@@ -79,7 +86,8 @@
             "header_inspect_healthy",
             "dashboard_strict_healthy",
             "huffman_length_healthy",
-            "fuzz_corpus_healthy"
+            "fuzz_corpus_healthy",
+            "decode_stage_healthy"
           ]
         },
         "header_inspect_healthy": {
@@ -132,6 +140,20 @@
             "fuzz_corpus_error_count_rows",
             "fuzz_corpus_coverage_mode_requirements",
             "fuzz_corpus_coverage_error_requirements"
+          ]
+        },
+        "decode_stage_healthy": {
+          "all": [
+            "decode_stage_present",
+            "decode_stage_ok"
+          ],
+          "zero": [
+            "decode_stage_unmatched_error_rows"
+          ],
+          "positive": [
+            "decode_stage_rows",
+            "decode_stage_error_rows",
+            "decode_stage_matched_error_rows"
           ]
         }
       },
@@ -190,7 +212,9 @@
           "missing_fuzz_corpus_artifact",
           "fuzz_corpus_failed",
           "missing_fuzz_coverage_artifact",
-          "fuzz_coverage_failed"
+          "fuzz_coverage_failed",
+          "missing_decode_stage_artifact",
+          "decode_stage_failed"
         ]
       },
       "item_collection": "artifacts",
@@ -276,7 +300,9 @@
           "validation_missing_fuzz_corpus_artifact",
           "validation_fuzz_corpus_failed",
           "validation_missing_fuzz_coverage_artifact",
-          "validation_fuzz_coverage_failed"
+          "validation_fuzz_coverage_failed",
+          "validation_missing_decode_stage_artifact",
+          "validation_decode_stage_failed"
         ],
         "fixture": [
           "missing_producer_steps",
@@ -292,7 +318,9 @@
           "missing_fuzz_corpus_artifact",
           "fuzz_corpus_failed",
           "missing_fuzz_coverage_artifact",
-          "fuzz_coverage_failed"
+          "fuzz_coverage_failed",
+          "missing_decode_stage_artifact",
+          "decode_stage_failed"
         ],
         "reason": [
           "missing_producer_steps",
@@ -308,7 +336,9 @@
           "missing_fuzz_corpus_artifact",
           "fuzz_corpus_failed",
           "missing_fuzz_coverage_artifact",
-          "fuzz_coverage_failed"
+          "fuzz_coverage_failed",
+          "missing_decode_stage_artifact",
+          "decode_stage_failed"
         ]
       },
       "item_field_pairs": {
@@ -328,7 +358,9 @@
             "validation_missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
             "validation_fuzz_corpus_failed": "fuzz_corpus_failed",
             "validation_missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
-            "validation_fuzz_coverage_failed": "fuzz_coverage_failed"
+            "validation_fuzz_coverage_failed": "fuzz_coverage_failed",
+            "validation_missing_decode_stage_artifact": "missing_decode_stage_artifact",
+            "validation_decode_stage_failed": "decode_stage_failed"
           }
         },
         "fixture": {
@@ -347,7 +379,9 @@
             "missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
             "fuzz_corpus_failed": "fuzz_corpus_failed",
             "missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
-            "fuzz_coverage_failed": "fuzz_coverage_failed"
+            "fuzz_coverage_failed": "fuzz_coverage_failed",
+            "missing_decode_stage_artifact": "missing_decode_stage_artifact",
+            "decode_stage_failed": "decode_stage_failed"
           }
         }
       }
@@ -435,6 +469,8 @@
           "validation_fuzz_corpus_failed",
           "validation_missing_fuzz_coverage_artifact",
           "validation_fuzz_coverage_failed",
+          "validation_missing_decode_stage_artifact",
+          "validation_decode_stage_failed",
           "truncated_output"
         ]
       },
@@ -539,7 +575,9 @@
               "validation_missing_fuzz_corpus_artifact",
               "validation_fuzz_corpus_failed",
               "validation_missing_fuzz_coverage_artifact",
-              "validation_fuzz_coverage_failed"
+              "validation_fuzz_coverage_failed",
+              "validation_missing_decode_stage_artifact",
+              "validation_decode_stage_failed"
             ],
             "reason": [
               "missing_producer_steps",
@@ -555,7 +593,9 @@
               "missing_fuzz_corpus_artifact",
               "fuzz_corpus_failed",
               "missing_fuzz_coverage_artifact",
-              "fuzz_coverage_failed"
+              "fuzz_coverage_failed",
+              "missing_decode_stage_artifact",
+              "decode_stage_failed"
             ]
           },
           "field_pairs": {
@@ -575,7 +615,9 @@
                 "validation_missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
                 "validation_fuzz_corpus_failed": "fuzz_corpus_failed",
                 "validation_missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
-                "validation_fuzz_coverage_failed": "fuzz_coverage_failed"
+                "validation_fuzz_coverage_failed": "fuzz_coverage_failed",
+                "validation_missing_decode_stage_artifact": "missing_decode_stage_artifact",
+                "validation_decode_stage_failed": "decode_stage_failed"
               }
             }
           }
@@ -826,6 +868,99 @@
         "producer_step": "str",
         "required_smoke_gate": "bool",
         "smoke_gate": "str"
+      }
+    },
+    "vort.deflate_decode_stage_report": {
+      "fields": {
+        "schema": "str",
+        "schema_version": "int",
+        "ok": "bool",
+        "rows": "int",
+        "error_rows": "int",
+        "matched_error_rows": "int",
+        "unmatched_error_rows": "int",
+        "items": "list",
+        "error_items": "list"
+      },
+      "boolean_formula_rules": {
+        "ok": {
+          "zero": [
+            "unmatched_error_rows"
+          ],
+          "positive": [
+            "rows",
+            "error_rows",
+            "matched_error_rows"
+          ]
+        }
+      },
+      "count_rules": {
+        "rows": {
+          "collection": "items"
+        },
+        "error_rows": {
+          "collection": "error_items"
+        },
+        "matched_error_rows": {
+          "collection": "error_items",
+          "field": "matched",
+          "equals": true
+        },
+        "unmatched_error_rows": {
+          "collection": "error_items",
+          "field": "matched",
+          "equals": false
+        }
+      },
+      "item_collection": "items",
+      "item_fields": {
+        "case": "str",
+        "input_bytes": "int",
+        "zlib_bytes": "int",
+        "gzip_bytes": "int",
+        "raw_bytes": "int",
+        "iterations": "int",
+        "raw_mib_s": "float",
+        "raw_exact_mib_s": "float",
+        "raw_into_mib_s": "float",
+        "zlib_mib_s": "float",
+        "zlib_exact_mib_s": "float",
+        "zlib_into_mib_s": "float",
+        "gzip_mib_s": "float",
+        "gzip_exact_mib_s": "float",
+        "gzip_into_mib_s": "float",
+        "zlib_wrapper_time_ratio": "float",
+        "zlib_wrapper_exact_time_ratio": "float",
+        "zlib_wrapper_into_time_ratio": "float",
+        "gzip_wrapper_time_ratio": "float",
+        "gzip_wrapper_exact_time_ratio": "float",
+        "gzip_wrapper_into_time_ratio": "float",
+        "raw_alloc_exact_time_ratio": "float",
+        "raw_alloc_into_time_ratio": "float",
+        "zlib_alloc_exact_time_ratio": "float",
+        "zlib_alloc_into_time_ratio": "float",
+        "gzip_alloc_exact_time_ratio": "float",
+        "gzip_alloc_into_time_ratio": "float",
+        "mix": "int"
+      },
+      "collections": {
+        "error_items": {
+          "fields": {
+            "case": "str",
+            "wrapper": "str",
+            "input_bytes": "int",
+            "expected_error": "str",
+            "actual_error": "str",
+            "matched": "bool"
+          },
+          "enums": {
+            "wrapper": [
+              "raw",
+              "zlib",
+              "gzip"
+            ]
+          }
+        }
       }
     },
     "vort.fuzz_corpus_report": {
@@ -1927,6 +2062,7 @@
           "vort.dashboard_producers_negative_smoke",
           "vort.dashboard_producers_required_artifacts",
           "vort.dashboard_producers_required_smoke",
+          "vort.deflate_decode_stage_report",
           "vort.fuzz_corpus_report",
           "vort.fuzz_corpus_coverage_smoke",
           "vort.fuzz_corpus_expected_coverage",

@@ -24,6 +24,8 @@ TYPE_MAP: dict[str, type | tuple[type, ...]] = {
     "bool": bool,
     "bool?": (bool, type(None)),
     "dict": dict,
+    "float": (int, float),
+    "float?": (int, float, type(None)),
     "int": int,
     "int?": (int, type(None)),
     "list": list,
@@ -56,6 +58,10 @@ def require_types(value: dict[str, Any], field_types: dict[str, str], label: str
         if expected is None:
             raise AssertionError(f"{label}.{field} has unknown type spec {type_name!r}")
         if not isinstance(value[field], expected):
+            raise AssertionError(f"{label}.{field} expected {type_name}, got {type(value[field])}")
+        if type_name.startswith("float") and isinstance(value[field], bool):
+            raise AssertionError(f"{label}.{field} expected {type_name}, got {type(value[field])}")
+        if type_name.startswith("int") and isinstance(value[field], bool):
             raise AssertionError(f"{label}.{field} expected {type_name}, got {type(value[field])}")
 
 

@@ -71,6 +71,16 @@
       "reason": "fuzz_coverage_failed",
       "check": "validation_fuzz_coverage_failed",
       "fixture": "fuzz_coverage_failed"
+    },
+    {
+      "reason": "missing_decode_stage_artifact",
+      "check": "validation_missing_decode_stage_artifact",
+      "fixture": "missing_decode_stage_artifact"
+    },
+    {
+      "reason": "decode_stage_failed",
+      "check": "validation_decode_stage_failed",
+      "fixture": "decode_stage_failed"
     }
   ]
 }

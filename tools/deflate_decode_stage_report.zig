@@ -132,6 +132,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv_path: ?[]const u8 = null;
     var markdown_path: ?[]const u8 = null;
+    var json_path: ?[]const u8 = null;
     var iterations_override: ?usize = null;
     var file_cases: std.ArrayList(Case) = .empty;
     defer {
@@ -145,6 +146,10 @@ pub fn main(init: std.process.Init) !void {
         }
         if (std.mem.eql(u8, path, "--markdown")) {
             markdown_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
+        if (std.mem.eql(u8, path, "--json")) {
+            json_path = args.next() orelse return error.MissingCorpusPath;
             continue;
         }
         if (std.mem.eql(u8, path, "--iterations")) {
@@ -182,6 +187,7 @@ pub fn main(init: std.process.Init) !void {
         try writeMarkdown(&markdown.writer, rows.items, error_rows.items);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = markdown.written() });
     }
+    if (json_path) |path| try writeJson(init, path, rows.items, error_rows.items);
     try assertErrorRowsMatched(error_rows.items);
 }
 
@@ -485,6 +491,71 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row, error_rows: []const 
             row.matched,
         });
     }
+}
+
+fn writeJson(init: std.process.Init, path: []const u8, rows: []const Row, error_rows: []const ErrorRow) !void {
+    var writer = std.Io.Writer.Allocating.init(init.gpa);
+    defer writer.deinit();
+    const w = &writer.writer;
+    var matched_error_rows: usize = 0;
+    for (error_rows) |row| {
+        if (row.matched) matched_error_rows += 1;
+    }
+    const unmatched_error_rows = error_rows.len - matched_error_rows;
+    const ok = rows.len > 0 and matched_error_rows == error_rows.len;
+    try w.print(
+        "{{\n  \"schema\": \"vort.deflate_decode_stage_report\",\n  \"schema_version\": 1,\n  \"ok\": {},\n  \"rows\": {d},\n  \"error_rows\": {d},\n  \"matched_error_rows\": {d},\n  \"unmatched_error_rows\": {d},\n  \"items\": [\n",
+        .{ ok, rows.len, error_rows.len, matched_error_rows, unmatched_error_rows },
+    );
+    for (rows, 0..) |row, i| {
+        try w.writeAll("    {\"case\": ");
+        try std.json.Stringify.value(row.name, .{}, w);
+        try w.print(", \"input_bytes\": {d}, \"zlib_bytes\": {d}, \"gzip_bytes\": {d}, \"raw_bytes\": {d}, \"iterations\": {d}, \"raw_mib_s\": {d:.6}, \"raw_exact_mib_s\": {d:.6}, \"raw_into_mib_s\": {d:.6}, \"zlib_mib_s\": {d:.6}, \"zlib_exact_mib_s\": {d:.6}, \"zlib_into_mib_s\": {d:.6}, \"gzip_mib_s\": {d:.6}, \"gzip_exact_mib_s\": {d:.6}, \"gzip_into_mib_s\": {d:.6}, \"zlib_wrapper_time_ratio\": {d:.6}, \"zlib_wrapper_exact_time_ratio\": {d:.6}, \"zlib_wrapper_into_time_ratio\": {d:.6}, \"gzip_wrapper_time_ratio\": {d:.6}, \"gzip_wrapper_exact_time_ratio\": {d:.6}, \"gzip_wrapper_into_time_ratio\": {d:.6}, \"raw_alloc_exact_time_ratio\": {d:.6}, \"raw_alloc_into_time_ratio\": {d:.6}, \"zlib_alloc_exact_time_ratio\": {d:.6}, \"zlib_alloc_into_time_ratio\": {d:.6}, \"gzip_alloc_exact_time_ratio\": {d:.6}, \"gzip_alloc_into_time_ratio\": {d:.6}, \"mix\": {d}}}{s}\n", .{
+            row.input_bytes,
+            row.zlib_bytes,
+            row.gzip_bytes,
+            row.raw_bytes,
+            row.iterations,
+            row.raw_mib_s,
+            row.raw_exact_mib_s,
+            row.raw_into_mib_s,
+            row.zlib_mib_s,
+            row.zlib_exact_mib_s,
+            row.zlib_into_mib_s,
+            row.gzip_mib_s,
+            row.gzip_exact_mib_s,
+            row.gzip_into_mib_s,
+            row.zlib_wrapper_time_ratio,
+            row.zlib_wrapper_exact_time_ratio,
+            row.zlib_wrapper_into_time_ratio,
+            row.gzip_wrapper_time_ratio,
+            row.gzip_wrapper_exact_time_ratio,
+            row.gzip_wrapper_into_time_ratio,
+            row.raw_alloc_exact_time_ratio,
+            row.raw_alloc_into_time_ratio,
+            row.zlib_alloc_exact_time_ratio,
+            row.zlib_alloc_into_time_ratio,
+            row.gzip_alloc_exact_time_ratio,
+            row.gzip_alloc_into_time_ratio,
+            row.mix,
+            if (i + 1 == rows.len) "" else ",",
+        });
+    }
+    try w.writeAll("  ],\n  \"error_items\": [\n");
+    for (error_rows, 0..) |row, i| {
+        try w.writeAll("    {\"case\": ");
+        try std.json.Stringify.value(row.name, .{}, w);
+        try w.print(", \"wrapper\": \"{s}\", \"input_bytes\": {d}, \"expected_error\": ", .{ @tagName(row.wrapper), row.input_bytes });
+        try std.json.Stringify.value(row.expected_error, .{}, w);
+        try w.writeAll(", \"actual_error\": ");
+        try std.json.Stringify.value(row.actual_error, .{}, w);
+        try w.print(", \"matched\": {}}}{s}\n", .{
+            row.matched,
+            if (i + 1 == error_rows.len) "" else ",",
+        });
+    }
+    try w.writeAll("  ]\n}\n");
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
 }
 
 fn rawSliceFromZlib(frame: []const u8) []const u8 {
