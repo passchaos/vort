@@ -303,7 +303,7 @@ fn decodeZlibSample(allocator: std.mem.Allocator, dictionary: ?[]const u8, max_o
 
 fn decodeGzipSample(allocator: std.mem.Allocator, max_output_len: ?usize, bytes: []const u8) ![]u8 {
     if (max_output_len) |limit| return vort.decodeGzipConcatenatedAllocLimited(allocator, bytes, limit);
-    return vort.decodeGzipAlloc(allocator, bytes);
+    return vort.decodeGzipConcatenatedAlloc(allocator, bytes);
 }
 
 fn processCommentDirective(state: *State, comment: []const u8) !void {
