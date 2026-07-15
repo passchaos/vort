@@ -62,16 +62,29 @@ def format_for_command(command: str) -> str:
     return "unknown"
 
 
-def build_command_coverage(cases: list[dict[str, object]], negative_items: list[dict[str, object]]) -> list[dict[str, object]]:
-    commands = sorted({str(case["command"]) for case in cases} | {str(item["command"]) for item in negative_items})
+def build_command_coverage(success_items: list[dict[str, object]], negative_items: list[dict[str, object]]) -> list[dict[str, object]]:
+    commands = sorted({str(item["command"]) for item in success_items} | {str(item["command"]) for item in negative_items})
     return [
         {
             "command": command,
             "format": format_for_command(command),
-            "successes": sum(1 for case in cases if case["command"] == command),
+            "successes": sum(1 for item in success_items if item["command"] == command),
             "failures": sum(1 for item in negative_items if item["command"] == command),
         }
         for command in commands
+    ]
+
+
+def build_workflow_coverage(success_items: list[dict[str, object]]) -> list[dict[str, object]]:
+    pairs = sorted({(str(item["command"]), str(item["workflow"])) for item in success_items})
+    return [
+        {
+            "command": command,
+            "workflow": workflow,
+            "format": format_for_command(command),
+            "successes": sum(1 for item in success_items if item["command"] == command and item["workflow"] == workflow),
+        }
+        for command, workflow in pairs
     ]
 
 
@@ -114,6 +127,17 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
     )
     for row in summary["command_coverage"]:
         lines.append(f"| `{md(row['command'])}` | {md(row['format'])} | {row['successes']} | {row['failures']} |")
+    lines.extend(
+        [
+            "",
+            "## Workflow coverage",
+            "",
+            "| command | workflow | format | successes |",
+            "| --- | --- | --- | ---: |",
+        ]
+    )
+    for row in summary["workflow_coverage"]:
+        lines.append(f"| `{md(row['command'])}` | {md(row['workflow'])} | {md(row['format'])} | {row['successes']} |")
     lines.extend(
         [
             "",
@@ -293,6 +317,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-raw-header-hex",
             "sample": raw_frame.hex(),
             "argv": ["inspect-raw-header-hex", raw_frame.hex()],
+            "workflow": "hex",
             "detail": "fixed",
             "format": "raw",
             "bytes": len(raw_frame),
@@ -329,6 +354,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-raw-header-hex",
             "sample": raw_stored_frame.hex(),
             "argv": ["inspect-raw-header-hex", raw_stored_frame.hex()],
+            "workflow": "hex",
             "detail": "LEN=5",
             "format": "raw",
             "bytes": len(raw_stored_frame),
@@ -366,6 +392,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-raw-header-hex",
             "sample": raw_dynamic_frame_hex,
             "argv": ["inspect-raw-header-hex", raw_dynamic_frame_hex],
+            "workflow": "hex",
             "detail": "dynamic",
             "format": "raw",
             "bytes": len(raw_dynamic_frame),
@@ -427,6 +454,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-zlib-header-hex",
             "sample": zlib_frame.hex(),
             "argv": ["inspect-zlib-header-hex", zlib_frame.hex()],
+            "workflow": "hex",
             "detail": "-",
             "format": "zlib",
             "bytes": len(zlib_frame),
@@ -486,6 +514,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-zlib-deflate-header-hex",
             "sample": zlib_frame.hex(),
             "argv": ["inspect-zlib-deflate-header-hex", zlib_frame.hex()],
+            "workflow": "hex",
             "detail": "inner fixed",
             "format": "zlib",
             "bytes": len(zlib_frame),
@@ -514,6 +543,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-zlib-header-hex",
             "sample": zlib_dict_frame.hex(),
             "argv": ["inspect-zlib-header-hex", zlib_dict_frame.hex()],
+            "workflow": "hex",
             "detail": "FDICT",
             "format": "zlib",
             "bytes": len(zlib_dict_frame),
@@ -560,6 +590,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-zlib-dict-deflate-header-hex",
             "sample": zlib_dict_frame.hex(),
             "argv": ["inspect-zlib-dict-deflate-header-hex", zlib_dict_frame.hex(), dictionary.decode("ascii")],
+            "workflow": "hex",
             "detail": "inner fixed with preset dictionary",
             "format": "zlib",
             "bytes": len(zlib_dict_frame),
@@ -606,6 +637,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-gzip-header-hex",
             "sample": gzip_frame.hex(),
             "argv": ["inspect-gzip-header-hex", gzip_frame.hex()],
+            "workflow": "hex",
             "detail": "-",
             "format": "gzip",
             "bytes": len(gzip_frame),
@@ -673,6 +705,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-gzip-deflate-header-hex",
             "sample": gzip_frame.hex(),
             "argv": ["inspect-gzip-deflate-header-hex", gzip_frame.hex()],
+            "workflow": "hex",
             "detail": "inner fixed",
             "format": "gzip",
             "bytes": len(gzip_frame),
@@ -710,6 +743,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-gzip-deflate-header-hex",
             "sample": gzip_concat_frame.hex(),
             "argv": ["inspect-gzip-deflate-header-hex", gzip_concat_frame.hex()],
+            "workflow": "hex",
             "detail": "first member inner fixed",
             "format": "gzip",
             "bytes": len(gzip_concat_frame),
@@ -761,6 +795,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-gzip-header-hex",
             "sample": gzip_optional_frame.hex(),
             "argv": ["inspect-gzip-header-hex", gzip_optional_frame.hex()],
+            "workflow": "hex",
             "detail": "FEXTRA/FNAME/FCOMMENT/FHCRC",
             "format": "gzip",
             "bytes": len(gzip_optional_frame),
@@ -778,6 +813,7 @@ def main(argv: list[str]) -> int:
     assert gzip_optional_json["header_crc"] == 18658
     validate_value_against_manifest(gzip_optional_json, schemas_def)
 
+    file_success_items: list[dict[str, object]] = []
     with tempfile.TemporaryDirectory(prefix="vort-header-inspect-") as tmp:
         tmp_path = Path(tmp)
         raw_path = tmp_path / "sample.raw"
@@ -854,12 +890,30 @@ def main(argv: list[str]) -> int:
             raise AssertionError(f"gzip concatenated inner JSON file/hex inspection mismatch: {gzip_concat_inner_file_json!r} != {gzip_concat_inner_json!r}")
         if gzip_second_inner_file_json != gzip_second_inner_json:
             raise AssertionError(f"gzip second member inner JSON file/hex inspection mismatch: {gzip_second_inner_file_json!r} != {gzip_second_inner_json!r}")
+        file_success_items.extend(
+            [
+                {"command": "inspect-raw-header-file", "workflow": "file", "format": "raw"},
+                {"command": "inspect-raw-header-file", "workflow": "file", "format": "raw"},
+                {"command": "inspect-raw-header-file", "workflow": "file", "format": "raw"},
+                {"command": "inspect-zlib-header-file", "workflow": "file", "format": "zlib"},
+                {"command": "inspect-zlib-header-file", "workflow": "file", "format": "zlib"},
+                {"command": "inspect-zlib-deflate-header-file", "workflow": "file", "format": "zlib"},
+                {"command": "inspect-zlib-dict-deflate-header-file", "workflow": "file", "format": "zlib"},
+                {"command": "inspect-gzip-header-file", "workflow": "file", "format": "gzip"},
+                {"command": "inspect-gzip-header-file", "workflow": "file", "format": "gzip"},
+                {"command": "inspect-gzip-deflate-header-file", "workflow": "file", "format": "gzip"},
+                {"command": "inspect-gzip-deflate-header-file", "workflow": "file", "format": "gzip"},
+                {"command": "inspect-gzip-deflate-header-file", "workflow": "file", "format": "gzip"},
+            ]
+        )
 
     negative_error_counts: dict[str, int] = {}
     for item in negative_items:
         error_name = str(item["expected_error"])
         negative_error_counts[error_name] = negative_error_counts.get(error_name, 0) + 1
-    command_coverage = build_command_coverage(cases, negative_items)
+    success_items = [{"command": case["command"], "workflow": case["workflow"], "format": case["format"]} for case in cases] + file_success_items
+    command_coverage = build_command_coverage(success_items, negative_items)
+    workflow_coverage = build_workflow_coverage(success_items)
 
     summary = {
         "schema": "vort.header_inspect_smoke",
@@ -883,6 +937,9 @@ def main(argv: list[str]) -> int:
         "command_count": len(command_coverage),
         "command_successes": sum(row["successes"] for row in command_coverage),
         "command_failures": sum(row["failures"] for row in command_coverage),
+        "workflow_coverage": workflow_coverage,
+        "workflow_count": len(workflow_coverage),
+        "workflow_successes": sum(row["successes"] for row in workflow_coverage),
     }
     if summary_path is not None:
         summary_path.parent.mkdir(parents=True, exist_ok=True)

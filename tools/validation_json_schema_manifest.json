@@ -80,6 +80,9 @@
         "schema": "str",
         "schema_version": "int",
         "gzip_negative_cases": "int",
+        "workflow_count": "int",
+        "workflow_coverage": "list",
+        "workflow_successes": "int",
         "zlib_negative_cases": "int",
         "zlib_cases": "int"
       },
@@ -90,11 +93,11 @@
         "command_count": {
           "collection": "command_coverage"
         },
-        "command_successes": {
-          "collection": "cases"
-        },
         "command_failures": {
           "collection": "negative_items"
+        },
+        "workflow_count": {
+          "collection": "workflow_coverage"
         },
         "raw_cases": {
           "collection": "cases",
@@ -147,6 +150,20 @@
       },
       "dict_sum_rules": {
         "negative_cases": "negative_error_counts"
+      },
+      "collection_sum_rules": {
+        "command_successes": {
+          "collection": "command_coverage",
+          "field": "successes"
+        },
+        "command_failures": {
+          "collection": "command_coverage",
+          "field": "failures"
+        },
+        "workflow_successes": {
+          "collection": "workflow_coverage",
+          "field": "successes"
+        }
       },
       "item_collection": "cases",
       "item_enums": {
@@ -246,16 +263,41 @@
           "enums": {
             "command": [
               "inspect-raw-header-hex",
+              "inspect-raw-header-file",
               "inspect-zlib-header-hex",
+              "inspect-zlib-header-file",
               "inspect-zlib-deflate-header-hex",
+              "inspect-zlib-deflate-header-file",
               "inspect-zlib-dict-deflate-header-hex",
+              "inspect-zlib-dict-deflate-header-file",
               "inspect-gzip-header-hex",
-              "inspect-gzip-deflate-header-hex"
+              "inspect-gzip-header-file",
+              "inspect-gzip-deflate-header-hex",
+              "inspect-gzip-deflate-header-file"
             ],
             "format": [
               "raw",
               "zlib",
               "gzip"
+            ]
+          }
+        },
+        "workflow_coverage": {
+          "fields": {
+            "command": "str",
+            "format": "str",
+            "successes": "int",
+            "workflow": "str"
+          },
+          "enums": {
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ],
+            "workflow": [
+              "hex",
+              "file"
             ]
           }
         },
@@ -272,11 +314,17 @@
           "enums": {
             "command": [
               "inspect-raw-header-hex",
+              "inspect-raw-header-file",
               "inspect-zlib-header-hex",
+              "inspect-zlib-header-file",
               "inspect-zlib-deflate-header-hex",
+              "inspect-zlib-deflate-header-file",
               "inspect-zlib-dict-deflate-header-hex",
+              "inspect-zlib-dict-deflate-header-file",
               "inspect-gzip-header-hex",
-              "inspect-gzip-deflate-header-hex"
+              "inspect-gzip-header-file",
+              "inspect-gzip-deflate-header-hex",
+              "inspect-gzip-deflate-header-file"
             ],
             "format": [
               "raw",

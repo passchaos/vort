@@ -140,6 +140,29 @@ def require_dict_sum_rules(value: dict[str, Any], dict_sum_rules: dict[str, str]
             raise AssertionError(f"{label}.{count_field}={actual!r} does not match sum({dict_field}); expected {expected!r}")
 
 
+def require_collection_sum_rules(value: dict[str, Any], collection_sum_rules: dict[str, Any], label: str) -> None:
+    for total_field, rule in collection_sum_rules.items():
+        if not isinstance(rule, dict):
+            raise AssertionError(f"{label}.{total_field} collection sum rule must be an object")
+        collection_name = rule.get("collection")
+        field = rule.get("field")
+        if not isinstance(collection_name, str) or not isinstance(field, str):
+            raise AssertionError(f"{label}.{total_field} collection sum rule must define collection and field")
+        items = value.get(collection_name)
+        if not isinstance(items, list):
+            raise AssertionError(f"{label}.{collection_name} must be a list for collection sum rule {total_field}")
+        total = 0
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                raise AssertionError(f"{label}.{collection_name}[{index}] must be an object for collection sum rule")
+            item_value = item.get(field)
+            if not isinstance(item_value, int) or isinstance(item_value, bool):
+                raise AssertionError(f"{label}.{collection_name}[{index}].{field} must be an integer for collection sum rule")
+            total += item_value
+        if value.get(total_field) != total:
+            raise AssertionError(f"{label}.{total_field}={value.get(total_field)!r} does not match sum({collection_name}.{field}); expected {total!r}")
+
+
 def require_dict_key_enums(value: dict[str, Any], dict_key_enums: dict[str, list[str]], label: str) -> None:
     for dict_field, allowed_values in dict_key_enums.items():
         payload = value.get(dict_field)
@@ -320,6 +343,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     require_field_pairs(value, schema_def.get("field_pairs", {}), schema)
     require_count_rules(value, schema_def.get("count_rules", {}), schema)
     require_dict_sum_rules(value, schema_def.get("dict_sum_rules", {}), schema)
+    require_collection_sum_rules(value, schema_def.get("collection_sum_rules", {}), schema)
     require_dict_key_enums(value, schema_def.get("dict_key_enums", {}), schema)
     require_conditional_fields(value, schema_def.get("conditional_fields", []), schema)
     require_numeric_relations(value, schema_def.get("numeric_relations", []), schema)

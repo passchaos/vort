@@ -211,6 +211,7 @@ architecture blindly.
 - [x] zlib/gzip inner-deflate header inspection schema-validates nested raw headers.
 - [x] raw/zlib/gzip header inspection smoke records and schema-checks malformed case formats and per-format negative counts.
 - [x] raw/zlib/gzip header inspection smoke reports schema-checked per-command success/failure coverage.
+- [x] raw/zlib/gzip header inspection smoke reports hex/file workflow coverage per inspect command.
 - [x] raw/zlib/gzip header inspection smoke records the schema name for each successful case.
 - [x] raw/zlib/gzip header inspection smoke enum-checks successful case names.
 - [x] raw/zlib/gzip header inspection smoke records replayable command/sample fields for each successful case.

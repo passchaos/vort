@@ -229,6 +229,16 @@ Example:
   "command_count": 2,
   "command_successes": 1,
   "command_failures": 1,
+  "workflow_count": 1,
+  "workflow_successes": 1,
+  "workflow_coverage": [
+    {
+      "command": "inspect-zlib-header-hex",
+      "workflow": "hex",
+      "format": "zlib",
+      "successes": 1
+    }
+  ],
   "command_coverage": [
     {
       "command": "inspect-raw-header-hex",
