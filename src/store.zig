@@ -924,17 +924,21 @@ pub fn encodeFrameIndexAlloc(allocator: std.mem.Allocator, entries: []const Fram
     return out;
 }
 
-pub fn decodeFrameIndexAlloc(allocator: std.mem.Allocator, input: []const u8) ![]FrameIndexEntry {
+pub fn frameIndexEntryCount(input: []const u8) Error!usize {
     if (input.len < serialized_index_header_len) return error.TruncatedFrame;
     if (!std.mem.eql(u8, input[0..4], &serialized_index_magic)) return error.InvalidMagic;
     const count: usize = std.mem.readInt(u32, input[4..8], .little);
     const required = try serializedFrameIndexSize(count);
     if (input.len < required) return error.TruncatedFrame;
     if (input.len != required) return error.TrailingData;
-    const entries = try allocator.alloc(FrameIndexEntry, count);
-    errdefer allocator.free(entries);
+    return count;
+}
+
+pub fn decodeFrameIndex(input: []const u8, output: []FrameIndexEntry) Error!usize {
+    const count = try frameIndexEntryCount(input);
+    if (output.len < count) return error.OutputTooSmall;
     var offset: usize = serialized_index_header_len;
-    for (entries) |*entry| {
+    for (output[0..count]) |*entry| {
         const frame_offset = std.mem.readInt(u64, input[offset..][0..8], .little);
         const frame_len = std.mem.readInt(u64, input[offset + 8 ..][0..8], .little);
         entry.* = .{
@@ -947,6 +951,15 @@ pub fn decodeFrameIndexAlloc(allocator: std.mem.Allocator, input: []const u8) ![
         if (std.mem.readInt(u32, input[offset + 36 ..][0..4], .little) != 0) return error.CorruptFrame;
         offset += serialized_index_entry_len;
     }
+    return count;
+}
+
+pub fn decodeFrameIndexAlloc(allocator: std.mem.Allocator, input: []const u8) ![]FrameIndexEntry {
+    const count = try frameIndexEntryCount(input);
+    const entries = try allocator.alloc(FrameIndexEntry, count);
+    errdefer allocator.free(entries);
+    const written = try decodeFrameIndex(input, entries);
+    std.debug.assert(written == entries.len);
     return entries;
 }
 
@@ -3420,6 +3433,21 @@ test "frame index serializes and decodes as sidecar" {
     defer std.testing.allocator.free(index);
     const encoded = try encodeFrameIndexAlloc(std.testing.allocator, index);
     defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(index.len, try frameIndexEntryCount(encoded));
+    const into_entries = try std.testing.allocator.alloc(FrameIndexEntry, index.len);
+    defer std.testing.allocator.free(into_entries);
+    try std.testing.expectEqual(index.len, try decodeFrameIndex(encoded, into_entries));
+    for (index, into_entries) |expected, actual| {
+        try std.testing.expectEqual(expected.frame_offset, actual.frame_offset);
+        try std.testing.expectEqual(expected.frame_len, actual.frame_len);
+        try std.testing.expectEqual(expected.uncompressed_offset, actual.uncompressed_offset);
+        try std.testing.expectEqual(expected.uncompressed_len, actual.uncompressed_len);
+        try std.testing.expectEqual(expected.checksum, actual.checksum);
+    }
+    var short_entries: [1]FrameIndexEntry = undefined;
+    if (index.len > short_entries.len) {
+        try std.testing.expectError(error.OutputTooSmall, decodeFrameIndex(encoded, &short_entries));
+    }
     const decoded = try decodeFrameIndexAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqual(index.len, decoded.len);

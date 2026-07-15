@@ -75,6 +75,7 @@ architecture blindly.
 - [x] In-memory frame indexes for concatenated native store streams.
 - [x] Serialized/sidecar frame indexes.
 - [x] Serialized frame indexes carry per-frame checksums validated by range decode.
+- [x] Serialized frame indexes expose entry-count preflight and caller-owned decode APIs.
 - [x] Frame indexes can compose per-frame CRC-32 values into a whole-stream checksum without rereading payload bytes.
 - [x] Public frame-index summary API exposes frame count, total uncompressed length, and combined checksum.
 - [x] Validation reports expose frame-count, total-uncompressed, and combined-checksum summaries for successful indexed streams.

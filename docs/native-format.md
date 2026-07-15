@@ -129,6 +129,9 @@ through `SidecarValidationOptions` to reject mismatched sidecar/index metadata.
 `summarizeFrameIndex` exposes the same frame count, total uncompressed length,
 and combined checksum directly for callers that already have trusted index
 entries and do not need a full validation report.
+Serialized frame indexes also expose `frameIndexEntryCount` and caller-owned
+`decodeFrameIndex`, so callers can preflight sidecar buffer sizes and decode
+index entries without forcing an allocation.
 
 ## Range decode summary APIs
 
