@@ -181,6 +181,7 @@
         "checks": "list",
         "mode_count": "int",
         "mode_counts": "list",
+        "mode_requirements": "list",
         "expected_mode_count": "int",
         "expected_modes": "list",
         "missing_mode_count": "int",
@@ -266,6 +267,30 @@
             "min_checks": "int",
             "min_expected_failures": "int",
             "min_matched": "int",
+            "mode": "str"
+          },
+          "enums": {
+            "mode": [
+              "all",
+              "strict-producers",
+              "strict-smoke-gates",
+              "strict-header-inspect",
+              "strict-validation-health",
+              "synthetic"
+            ]
+          }
+        },
+        "mode_requirements": {
+          "fields": {
+            "checks": "int",
+            "expected_failures": "int",
+            "matched": "int",
+            "min_checks": "int",
+            "min_expected_failures": "int",
+            "min_matched": "int",
+            "missing_checks": "int",
+            "missing_expected_failures": "int",
+            "missing_matched": "int",
             "mode": "str"
           },
           "enums": {

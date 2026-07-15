@@ -782,7 +782,8 @@ modes: producer coverage, smoke-gate coverage, and header-inspection health. Eac
 check records the expected output marker, actual truncated output, original output
 length, truncation limit/flag, and process return code for CI diagnostics. `mode_counts` groups checks by strict mode for a
 compact dashboard overview, while `expected_modes` defines the minimum required
-coverage per strict mode and `missing_modes` reports unmet requirements. A
+coverage per strict mode, `mode_requirements` reports actual/minimum/delta values,
+and `missing_modes` reports unmet requirements. A
 synthetic long-output check keeps the truncation path covered so
 `actual_output_truncated=true` is exercised in CI.
 
@@ -806,6 +807,20 @@ Example:
     }
   ],
   "missing_modes": [],
+  "mode_requirements": [
+    {
+      "mode": "all",
+      "checks": 1,
+      "min_checks": 1,
+      "missing_checks": 0,
+      "expected_failures": 0,
+      "min_expected_failures": 0,
+      "missing_expected_failures": 0,
+      "matched": 1,
+      "min_matched": 1,
+      "missing_matched": 0
+    }
+  ],
   "mode_counts": [
     {
       "mode": "all",

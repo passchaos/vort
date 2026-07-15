@@ -158,21 +158,45 @@ def load_expected_modes() -> list[dict[str, object]]:
     return normalized
 
 
-def missing_expected_modes(mode_counts: list[dict[str, object]], expected_modes: list[dict[str, object]]) -> list[dict[str, object]]:
+def mode_requirements(mode_counts: list[dict[str, object]], expected_modes: list[dict[str, object]]) -> list[dict[str, object]]:
     counts = {str(row["mode"]): row for row in mode_counts}
-    missing: list[dict[str, object]] = []
+    rows: list[dict[str, object]] = []
     for expected in expected_modes:
-        row = counts.get(str(expected["mode"]))
-        if row is None:
-            missing.append(expected)
-            continue
-        if (
-            int(row["checks"]) < int(expected["min_checks"])
-            or int(row["expected_failures"]) < int(expected["min_expected_failures"])
-            or int(row["matched"]) < int(expected["min_matched"])
-        ):
-            missing.append(expected)
-    return missing
+        actual = counts.get(str(expected["mode"]), {})
+        checks = int(actual.get("checks") or 0)
+        expected_failures = int(actual.get("expected_failures") or 0)
+        matched = int(actual.get("matched") or 0)
+        min_checks = int(expected["min_checks"])
+        min_expected_failures = int(expected["min_expected_failures"])
+        min_matched = int(expected["min_matched"])
+        rows.append(
+            {
+                "mode": expected["mode"],
+                "checks": checks,
+                "min_checks": min_checks,
+                "missing_checks": max(0, min_checks - checks),
+                "expected_failures": expected_failures,
+                "min_expected_failures": min_expected_failures,
+                "missing_expected_failures": max(0, min_expected_failures - expected_failures),
+                "matched": matched,
+                "min_matched": min_matched,
+                "missing_matched": max(0, min_matched - matched),
+            }
+        )
+    return rows
+
+
+def missing_expected_modes(requirements: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [
+        {
+            "mode": row["mode"],
+            "min_checks": row["min_checks"],
+            "min_expected_failures": row["min_expected_failures"],
+            "min_matched": row["min_matched"],
+        }
+        for row in requirements
+        if row["missing_checks"] or row["missing_expected_failures"] or row["missing_matched"]
+    ]
 
 
 def write_markdown(path: Path, summary: dict[str, object]) -> None:
@@ -195,7 +219,14 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
         "",
         f"- expected modes: {summary['expected_mode_count']}",
         f"- missing modes: {summary['missing_mode_count']}",
+        "",
+        "| mode | checks | min checks | missing checks | expected failures | min expected failures | missing expected failures | matched | min matched | missing matched |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ])
+    for row in summary["mode_requirements"]:
+        lines.append(
+            f"| `{row['mode']}` | {row['checks']} | {row['min_checks']} | {row['missing_checks']} | {row['expected_failures']} | {row['min_expected_failures']} | {row['missing_expected_failures']} | {row['matched']} | {row['min_matched']} | {row['missing_matched']} |"
+        )
     if summary["missing_modes"]:
         lines.extend(["", "| mode | min checks | min expected failures | min matched |", "| --- | ---: | ---: | ---: |"])
         for row in summary["missing_modes"]:
@@ -292,7 +323,8 @@ def main() -> int:
 
     mode_counts = build_mode_counts(checks)
     expected_modes = load_expected_modes()
-    missing_modes = missing_expected_modes(mode_counts, expected_modes)
+    mode_requirement_rows = mode_requirements(mode_counts, expected_modes)
+    missing_modes = missing_expected_modes(mode_requirement_rows)
     if missing_modes:
         raise AssertionError(f"missing dashboard strict mode coverage: {missing_modes!r}")
     summary = {
@@ -305,6 +337,7 @@ def main() -> int:
         "mode_counts": mode_counts,
         "expected_mode_count": len(expected_modes),
         "expected_modes": expected_modes,
+        "mode_requirements": mode_requirement_rows,
         "missing_mode_count": len(missing_modes),
         "missing_modes": missing_modes,
     }

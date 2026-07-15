@@ -247,6 +247,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke records actual-output fields and dashboard category smoke verifies strict artifacts are validation artifacts.
 - [x] Dashboard strict-mode smoke reports per-mode check counts in JSON and Markdown artifacts.
 - [x] Dashboard strict-mode smoke enforces an expected per-mode coverage matrix.
+- [x] Dashboard strict-mode smoke reports actual/minimum/delta coverage per expected mode.
 - [x] Dashboard strict-mode expected coverage matrix is stored in a schema-checked external JSON config.
 - [x] Validation docs checker cross-checks dashboard strict expected modes against schema mode enums.
 - [x] Dashboard index surfaces dashboard strict-mode check and mode counts.
