@@ -339,6 +339,15 @@
           "gzip"
         ]
       },
+      "field_pairs": {
+        "wrapper": {
+          "target": "scope",
+          "allowed": {
+            "zlib": "zlib_stream",
+            "gzip": "gzip_member"
+          }
+        }
+      },
       "nested_schema_fields": {
         "raw_header": "vort.raw_deflate_header_info"
       }

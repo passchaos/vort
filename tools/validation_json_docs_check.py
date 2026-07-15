@@ -158,6 +158,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     require_fields(value, set(fields), schema)
     require_types(value, fields, schema)
     require_enums(value, schema_def.get("enums", {}), schema)
+    require_field_pairs(value, schema_def.get("field_pairs", {}), schema)
     require_count_rules(value, schema_def.get("count_rules", {}), schema)
     require_dict_sum_rules(value, schema_def.get("dict_sum_rules", {}), schema)
     require_nested_schema_fields(value, schema_def.get("nested_schema_fields", {}), schemas_def, schema)
