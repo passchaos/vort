@@ -4,16 +4,38 @@
   "mode_requirements": [
     {
       "mode": "native",
-      "min_cases": 5,
-      "min_accepted": 2,
-      "min_rejected": 3,
-      "min_exact_error_expectations": 3,
-      "min_matched_rows": 5
+      "min_cases": 11,
+      "min_accepted": 5,
+      "min_rejected": 6,
+      "min_exact_error_expectations": 6,
+      "min_matched_rows": 11
     }
   ],
   "error_requirements": [
-    { "mode": "native", "error": "ChecksumMismatch", "min_count": 1 },
-    { "mode": "native", "error": "InvalidDictionaryTraining", "min_count": 1 },
-    { "mode": "native", "error": "OutputLimitExceeded", "min_count": 1 }
+    {
+      "mode": "native",
+      "error": "ChecksumMismatch",
+      "min_count": 1
+    },
+    {
+      "mode": "native",
+      "error": "InvalidDictionaryTraining",
+      "min_count": 1
+    },
+    {
+      "mode": "native",
+      "error": "OutputLimitExceeded",
+      "min_count": 1
+    },
+    {
+      "mode": "native",
+      "error": "CorruptFrame",
+      "min_count": 1
+    },
+    {
+      "mode": "native",
+      "error": "InvalidMatch",
+      "min_count": 1
+    }
   ]
 }
