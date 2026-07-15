@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke-test Vort zlib/gzip header inspection CLI commands."""
+"""Smoke-test Vort raw/zlib/gzip header inspection CLI commands."""
 
 import gzip
 import json
