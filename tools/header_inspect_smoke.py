@@ -556,6 +556,14 @@ def main(argv: list[str]) -> int:
         summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     if markdown_path is not None:
         write_markdown(markdown_path, summary)
+        markdown = markdown_path.read_text()
+        if "…" not in markdown:
+            raise AssertionError("markdown output did not shorten any long samples")
+        for long_sample in (raw_dynamic_frame_hex, gzip_optional_frame.hex()):
+            if long_sample in markdown:
+                raise AssertionError("markdown output leaked an unshortened long sample")
+        if raw_dynamic_frame_hex not in json.dumps(summary):
+            raise AssertionError("JSON summary lost the full raw dynamic replay sample")
     print("header inspect smoke: raw=ok zlib=ok zlib_dict=ok gzip=ok gzip_optional=ok negatives=ok")
     return 0
 
