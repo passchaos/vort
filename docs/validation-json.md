@@ -201,6 +201,10 @@ Important fields:
 - `command_coverage`, `command_count`, `command_successes`, `command_failures`:
   per-command success/failure rows and totals, checked against `cases` and
   `negative_items` by the schema manifest
+- `workflow_coverage`, `workflow_count`, `workflow_successes`,
+  `required_workflows`, `required_workflow_count`, `missing_workflows`,
+  `missing_workflow_count`: hex/file coverage rows plus the required coverage
+  matrix; smoke fails if any required workflow is missing
 - `negative_cases`, `raw_negative_cases`, `zlib_negative_cases`,
   `gzip_negative_cases`: malformed header cases expected to fail inspection
 - `negative_error_counts`: malformed header failures grouped by expected error
@@ -231,6 +235,16 @@ Example:
   "command_failures": 1,
   "workflow_count": 1,
   "workflow_successes": 1,
+  "required_workflow_count": 1,
+  "missing_workflow_count": 0,
+  "required_workflows": [
+    {
+      "command": "inspect-zlib-header-hex",
+      "workflow": "hex",
+      "format": "zlib"
+    }
+  ],
+  "missing_workflows": [],
   "workflow_coverage": [
     {
       "command": "inspect-zlib-header-hex",

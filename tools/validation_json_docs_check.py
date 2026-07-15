@@ -384,6 +384,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
                 collection_def.get("field_pairs", {}),
                 collection_def.get("list_field_pairs", {}),
                 schema,
+                bool(collection_def.get("allow_empty", False)),
             )
 
 
@@ -395,9 +396,12 @@ def validate_item_collection(
     item_field_pairs: dict[str, Any],
     item_list_field_pairs: dict[str, Any],
     schema: str,
+    allow_empty: bool = False,
 ) -> None:
     items = value.get(collection_name)
-    if not isinstance(items, list) or not items:
+    if not isinstance(items, list):
+        raise AssertionError(f"{schema}.{collection_name} must be a list")
+    if not items and not allow_empty:
         raise AssertionError(f"{schema} must include non-empty {collection_name}")
     for index, item in enumerate(items):
         if not isinstance(item, dict):

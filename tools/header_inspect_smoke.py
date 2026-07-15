@@ -88,6 +88,38 @@ def build_workflow_coverage(success_items: list[dict[str, object]]) -> list[dict
     ]
 
 
+REQUIRED_WORKFLOW_COVERAGE = [
+    ("inspect-raw-header-hex", "hex"),
+    ("inspect-raw-header-file", "file"),
+    ("inspect-zlib-header-hex", "hex"),
+    ("inspect-zlib-header-file", "file"),
+    ("inspect-zlib-deflate-header-hex", "hex"),
+    ("inspect-zlib-deflate-header-file", "file"),
+    ("inspect-zlib-dict-deflate-header-hex", "hex"),
+    ("inspect-zlib-dict-deflate-header-file", "file"),
+    ("inspect-gzip-header-hex", "hex"),
+    ("inspect-gzip-header-file", "file"),
+    ("inspect-gzip-deflate-header-hex", "hex"),
+    ("inspect-gzip-deflate-header-file", "file"),
+]
+
+
+def build_required_workflow_rows() -> list[dict[str, object]]:
+    return [
+        {
+            "command": command,
+            "workflow": workflow,
+            "format": format_for_command(command),
+        }
+        for command, workflow in REQUIRED_WORKFLOW_COVERAGE
+    ]
+
+
+def missing_required_workflows(workflow_coverage: list[dict[str, object]]) -> list[dict[str, object]]:
+    covered = {(str(row["command"]), str(row["workflow"])) for row in workflow_coverage if int(row["successes"]) > 0}
+    return [row for row in build_required_workflow_rows() if (str(row["command"]), str(row["workflow"])) not in covered]
+
+
 def write_markdown(path: Path, summary: dict[str, object]) -> None:
     lines = [
         "# Vort header inspect smoke",
@@ -138,6 +170,19 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
     )
     for row in summary["workflow_coverage"]:
         lines.append(f"| `{md(row['command'])}` | {md(row['workflow'])} | {md(row['format'])} | {row['successes']} |")
+    lines.extend(
+        [
+            "",
+            "### Required workflow coverage",
+            "",
+            f"- required rows: {summary['required_workflow_count']}",
+            f"- missing rows: {summary['missing_workflow_count']}",
+        ]
+    )
+    if summary["missing_workflows"]:
+        lines.extend(["", "| command | workflow | format |", "| --- | --- | --- |"])
+        for row in summary["missing_workflows"]:
+            lines.append(f"| `{md(row['command'])}` | {md(row['workflow'])} | {md(row['format'])} |")
     lines.extend(
         [
             "",
@@ -914,6 +959,10 @@ def main(argv: list[str]) -> int:
     success_items = [{"command": case["command"], "workflow": case["workflow"], "format": case["format"]} for case in cases] + file_success_items
     command_coverage = build_command_coverage(success_items, negative_items)
     workflow_coverage = build_workflow_coverage(success_items)
+    required_workflows = build_required_workflow_rows()
+    missing_workflows = missing_required_workflows(workflow_coverage)
+    if missing_workflows:
+        raise AssertionError(f"missing required header inspect workflow coverage: {missing_workflows!r}")
 
     summary = {
         "schema": "vort.header_inspect_smoke",
@@ -940,6 +989,10 @@ def main(argv: list[str]) -> int:
         "workflow_coverage": workflow_coverage,
         "workflow_count": len(workflow_coverage),
         "workflow_successes": sum(row["successes"] for row in workflow_coverage),
+        "required_workflows": required_workflows,
+        "required_workflow_count": len(required_workflows),
+        "missing_workflows": missing_workflows,
+        "missing_workflow_count": len(missing_workflows),
     }
     if summary_path is not None:
         summary_path.parent.mkdir(parents=True, exist_ok=True)

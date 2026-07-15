@@ -77,6 +77,10 @@
         "optional_header_cases": "int",
         "raw_negative_cases": "int",
         "raw_cases": "int",
+        "required_workflow_count": "int",
+        "required_workflows": "list",
+        "missing_workflow_count": "int",
+        "missing_workflows": "list",
         "schema": "str",
         "schema_version": "int",
         "gzip_negative_cases": "int",
@@ -98,6 +102,12 @@
         },
         "workflow_count": {
           "collection": "workflow_coverage"
+        },
+        "required_workflow_count": {
+          "collection": "required_workflows"
+        },
+        "missing_workflow_count": {
+          "collection": "missing_workflows"
         },
         "raw_cases": {
           "collection": "cases",
@@ -300,6 +310,43 @@
               "file"
             ]
           }
+        },
+        "required_workflows": {
+          "fields": {
+            "command": "str",
+            "format": "str",
+            "workflow": "str"
+          },
+          "enums": {
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ],
+            "workflow": [
+              "hex",
+              "file"
+            ]
+          }
+        },
+        "missing_workflows": {
+          "fields": {
+            "command": "str",
+            "format": "str",
+            "workflow": "str"
+          },
+          "enums": {
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ],
+            "workflow": [
+              "hex",
+              "file"
+            ]
+          },
+          "allow_empty": true
         },
         "negative_items": {
           "fields": {
