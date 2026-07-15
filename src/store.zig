@@ -3209,6 +3209,14 @@ test "indexed long-distance stream supports embedded range decode" {
     try std.testing.expectEqual(checksum.crc32(&first), results[0].crc32);
     try std.testing.expectEqualSlices(u8, prefix[16..32], &second);
     try std.testing.expectEqual(checksum.crc32(&second), results[1].crc32);
+    @memset(first[0..], '!');
+    @memset(second[0..], '!');
+    try std.testing.expectError(error.RangeOutOfBounds, decodeIndexedRangesInto(std.testing.allocator, stream, &.{
+        .{ .offset = prefix.len + 4, .length = first.len, .output = first[0..] },
+        .{ .offset = @as(u64, prefix.len + 2048), .length = second.len, .output = second[0..] },
+    }, results[0..]));
+    try std.testing.expectEqualSlices(u8, "!!!!!!!!!!!!!!!!", &first);
+    try std.testing.expectEqualSlices(u8, "!!!!!!!!!!!!!!!!", &second);
 }
 
 test "blocked deflate stream splits input and supports range decode" {
@@ -3459,6 +3467,18 @@ test "dictionary deflate indexed stream supports batch range summaries" {
     try std.testing.expectEqual(checksum.crc32(&first), results[0].crc32);
     try std.testing.expectEqualSlices(u8, input[9..41], &second);
     try std.testing.expectEqual(checksum.crc32(&second), results[1].crc32);
+    try std.testing.expectError(error.InvalidDictionaryTraining, decodeIndexedRangesWithSummaryAlloc(std.testing.allocator, stream.items, &.{
+        .{ .offset = 0, .length = 16 },
+        .{ .offset = 9, .length = 32 },
+    }));
+    @memset(first[0..], '!');
+    @memset(second[0..], '!');
+    try std.testing.expectError(error.InvalidDictionaryTraining, decodeIndexedRangesInto(std.testing.allocator, stream.items, &.{
+        .{ .offset = 0, .length = first.len, .output = first[0..] },
+        .{ .offset = 9, .length = second.len, .output = second[0..] },
+    }, results[0..]));
+    try std.testing.expectEqualSlices(u8, "!!!!!!!!!!!!!!!!", &first);
+    try std.testing.expectEqualSlices(u8, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", &second);
 }
 
 test "native dictionary best encoder chooses patch only when smaller" {
