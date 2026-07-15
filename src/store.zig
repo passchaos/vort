@@ -895,17 +895,40 @@ pub fn decodeRangesInto(allocator: std.mem.Allocator, input: []const u8, index: 
 
 pub fn decodeRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
     if (results.len < requests.len) return error.OutputTooSmall;
-    // Decode many ranges with one structural index validation. The individual
-    // range path is still used for frame/header/checksum/dictionary behavior so
-    // batch and single-range calls remain byte-for-byte equivalent.
+    // Decode many ranges with one structural index validation and one decoded
+    // copy per referenced frame. This matters for small random reads over
+    // indexed streams where several logical ranges often land in the same
+    // compressed frame.
     try validateFrameIndex(index);
+    const decoded_cache = try allocator.alloc(?[]u8, index.len);
+    defer {
+        for (decoded_cache) |maybe_decoded| {
+            if (maybe_decoded) |decoded| allocator.free(decoded);
+        }
+        allocator.free(decoded_cache);
+    }
+    @memset(decoded_cache, null);
     for (requests, 0..) |request, i| {
-        results[i] = try decodeRangeWithDictionaryInto(allocator, dict, input, index, request.offset, request.length, request.output);
+        results[i] = try decodeRangeWithDictionaryIntoValidated(allocator, dict, input, index, request.offset, request.length, request.output, decoded_cache);
     }
 }
 
 pub fn decodeRangeWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
     if (output.len < length) return error.OutputTooSmall;
+    try validateFrameIndex(index);
+    return decodeRangeWithDictionaryIntoValidated(allocator, dict, input, index, offset, length, output, null);
+}
+
+fn decodeRangeWithDictionaryIntoValidated(
+    allocator: std.mem.Allocator,
+    dict: ?[]const u8,
+    input: []const u8,
+    index: []const FrameIndexEntry,
+    offset: u64,
+    length: usize,
+    output: []u8,
+    decoded_cache: ?[]?[]u8,
+) !RangeDecodeIntoResult {
     var crc = checksum.Crc32.init();
     if (length == 0) {
         return .{
@@ -914,7 +937,6 @@ pub fn decodeRangeWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]cons
             .crc32 = crc.digest(),
         };
     }
-    try validateFrameIndex(index);
     const end = std.math.add(u64, offset, length) catch return error.IntegerOverflow;
     const start_i = findFrameForOffset(index, offset) orelse return error.RangeOutOfBounds;
     var written: usize = 0;
@@ -922,17 +944,8 @@ pub fn decodeRangeWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]cons
     while (i < index.len and written < length) : (i += 1) {
         const entry = index[i];
         if (entry.uncompressed_offset >= end) break;
-        if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
-        const frame = input[entry.frame_offset..][0..entry.frame_len];
-        const frame_info = try parseHeader(frame);
-        if (entry.frame_len != try frameLenFromInfo(frame_info)) return error.CorruptFrame;
-        if (entry.checksum != frame_info.checksum) return error.ChecksumMismatch;
-        if (entry.uncompressed_len != frame_info.uncompressed_size) return error.CorruptFrame;
-        const decoded = if (frame_info.flags == flags_dictionary_patch or frame_info.flags == flags_dictionary_deflate) blk: {
-            const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
-            break :blk try decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame);
-        } else try decodeAnyAlloc(allocator, frame);
-        defer allocator.free(decoded);
+        const decoded = try decodedFrameForRange(allocator, dict, input, entry, i, decoded_cache);
+        defer if (decoded_cache == null) allocator.free(decoded);
         const frame_start = entry.uncompressed_offset;
         const frame_end = entry.uncompressed_offset + entry.uncompressed_len;
         const copy_start = if (offset > frame_start) offset - frame_start else 0;
@@ -951,6 +964,36 @@ pub fn decodeRangeWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]cons
         .offset = offset,
         .crc32 = crc.digest(),
     };
+}
+
+fn decodedFrameForRange(
+    allocator: std.mem.Allocator,
+    dict: ?[]const u8,
+    input: []const u8,
+    entry: FrameIndexEntry,
+    index_position: usize,
+    decoded_cache: ?[]?[]u8,
+) ![]u8 {
+    if (decoded_cache) |cache| {
+        if (cache[index_position]) |decoded| return decoded;
+        const decoded = try decodeIndexedFramePayloadAlloc(allocator, dict, input, entry);
+        cache[index_position] = decoded;
+        return decoded;
+    }
+    return decodeIndexedFramePayloadAlloc(allocator, dict, input, entry);
+}
+
+fn decodeIndexedFramePayloadAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, entry: FrameIndexEntry) ![]u8 {
+    if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
+    const frame = input[entry.frame_offset..][0..entry.frame_len];
+    const frame_info = try parseHeader(frame);
+    if (entry.frame_len != try frameLenFromInfo(frame_info)) return error.CorruptFrame;
+    if (entry.checksum != frame_info.checksum) return error.ChecksumMismatch;
+    if (entry.uncompressed_len != frame_info.uncompressed_size) return error.CorruptFrame;
+    return if (frame_info.flags == flags_dictionary_patch or frame_info.flags == flags_dictionary_deflate) blk: {
+        const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
+        break :blk try decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame);
+    } else try decodeAnyAlloc(allocator, frame);
 }
 
 pub fn decodeRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize) ![]u8 {

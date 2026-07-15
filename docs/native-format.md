@@ -133,7 +133,9 @@ index parse/validation step. Each returned `RangeDecodeResult` carries its own
 bytes, offset, and CRC-32 summary. Batch `Into` variants such as
 `decodeRangesInto`, `decodeIndexedRangesInto`, and
 `decodeSidecarIndexedRangesAutoInto` fill caller-owned buffers and return per-
-range write counts plus CRC-32 summaries. The batch APIs are intended for
-workloads such as data-lake readers or archive manifests that need several small
-slices from the same indexed stream without reparsing the embedded or sidecar
-index for each request.
+range write counts plus CRC-32 summaries. The batch-into implementation caches
+decoded frame payloads for the duration of one batch, so overlapping or nearby
+ranges in the same indexed frame do not repeatedly decode that frame. The batch
+APIs are intended for workloads such as data-lake readers or archive manifests
+that need several small slices from the same indexed stream without reparsing
+the embedded or sidecar index for each request.
