@@ -1072,18 +1072,40 @@ pub fn decodeRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]con
     // compressed frame.
     try validateFrameIndex(index);
     try validateBatchRangeIntoRequests(index, requests, results);
-    const decoded_cache = try allocator.alloc(?[]u8, index.len);
-    defer {
-        for (decoded_cache) |maybe_decoded| {
-            if (maybe_decoded) |decoded| allocator.free(decoded);
-        }
-        allocator.free(decoded_cache);
-    }
-    @memset(decoded_cache, null);
+    var decoded_cache = LazyDecodedFrameCache.init(allocator, index.len);
+    defer decoded_cache.deinit();
     for (requests, 0..) |request, i| {
-        results[i] = try decodeRangeWithDictionaryIntoValidated(allocator, dict, input, index, request.offset, request.length, request.output, decoded_cache);
+        results[i] = try decodeRangeWithDictionaryIntoValidated(allocator, dict, input, index, request.offset, request.length, request.output, &decoded_cache);
     }
 }
+
+const LazyDecodedFrameCache = struct {
+    allocator: std.mem.Allocator,
+    frame_count: usize,
+    entries: ?[]?[]u8 = null,
+
+    fn init(allocator: std.mem.Allocator, frame_count: usize) LazyDecodedFrameCache {
+        return .{ .allocator = allocator, .frame_count = frame_count };
+    }
+
+    fn deinit(self: *LazyDecodedFrameCache) void {
+        if (self.entries) |entries| {
+            for (entries) |maybe_decoded| {
+                if (maybe_decoded) |decoded| self.allocator.free(decoded);
+            }
+            self.allocator.free(entries);
+            self.entries = null;
+        }
+    }
+
+    fn slice(self: *LazyDecodedFrameCache) ![]?[]u8 {
+        if (self.entries) |entries| return entries;
+        const entries = try self.allocator.alloc(?[]u8, self.frame_count);
+        @memset(entries, null);
+        self.entries = entries;
+        return entries;
+    }
+};
 
 fn validateBatchRangeIntoRequests(index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) Error!void {
     if (results.len < requests.len) return error.OutputTooSmall;
@@ -1111,7 +1133,7 @@ fn decodeRangeWithDictionaryIntoValidated(
     offset: u64,
     length: usize,
     output: []u8,
-    decoded_cache: ?[]?[]u8,
+    decoded_cache: ?*LazyDecodedFrameCache,
 ) !RangeDecodeIntoResult {
     var crc = checksum.Crc32.init();
     if (length == 0) {
@@ -1346,9 +1368,10 @@ fn decodedFrameForRange(
     input: []const u8,
     entry: FrameIndexEntry,
     index_position: usize,
-    decoded_cache: ?[]?[]u8,
+    decoded_cache: ?*LazyDecodedFrameCache,
 ) ![]u8 {
-    if (decoded_cache) |cache| {
+    if (decoded_cache) |lazy_cache| {
+        const cache = try lazy_cache.slice();
         if (cache[index_position]) |decoded| return decoded;
         const decoded = try decodeIndexedFramePayloadAlloc(allocator, dict, input, entry);
         cache[index_position] = decoded;
@@ -3531,6 +3554,35 @@ test "range alloc reuses range-into fast path for full deflate frames" {
     defer failing.allocator().free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
     try std.testing.expectEqual(@as(usize, 1), failing.allocations);
+}
+
+test "batch range into avoids cache allocation when fast paths satisfy requests" {
+    const first_input = "hello hello hello hello";
+    const second_input = "bye bye bye bye bye";
+    const first = try encodeDeflateAlloc(std.testing.allocator, first_input);
+    defer std.testing.allocator.free(first);
+    const second = try encodeDeflateAlloc(std.testing.allocator, second_input);
+    defer std.testing.allocator.free(second);
+
+    var stream = std.ArrayList(u8).empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, first);
+    try stream.appendSlice(std.testing.allocator, second);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, stream.items);
+    defer std.testing.allocator.free(index);
+    try std.testing.expectEqual(@as(usize, 2), index.len);
+
+    var first_out: [first_input.len]u8 = undefined;
+    var second_out: [second_input.len]u8 = undefined;
+    var results: [2]RangeDecodeIntoResult = undefined;
+    try decodeRangesInto(std.testing.failing_allocator, stream.items, index, &.{
+        .{ .offset = 0, .length = first_out.len, .output = first_out[0..] },
+        .{ .offset = first_input.len, .length = second_out.len, .output = second_out[0..] },
+    }, results[0..]);
+    try std.testing.expectEqualSlices(u8, first_input, &first_out);
+    try std.testing.expectEqualSlices(u8, second_input, &second_out);
+    try std.testing.expectEqual(checksum.crc32(first_input), results[0].crc32);
+    try std.testing.expectEqual(checksum.crc32(second_input), results[1].crc32);
 }
 
 test "decodeAnyAlloc preserves old store frames" {

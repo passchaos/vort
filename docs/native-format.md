@@ -158,6 +158,8 @@ then reuse the same into/cache path before wrapping the buffers in
 data-lake readers or archive manifests that need several small slices from the
 same indexed stream without reparsing the embedded or sidecar index for each
 request.
+The decoded-frame cache is allocated lazily, so batches fully satisfied by
+store/RLE/full-frame compressed fast paths do not pay an extra cache allocation.
 
 ## Store-frame range fast path
 

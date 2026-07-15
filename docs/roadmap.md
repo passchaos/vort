@@ -62,6 +62,7 @@ architecture blindly.
 - [x] Indexed and sidecar batch range-decode summary APIs reuse one parsed index for multiple logical ranges.
 - [x] Indexed and sidecar batch range-decode into APIs fill caller-owned buffers after one parsed index.
 - [x] Batch range-decode into APIs cache decoded frames within a batch to avoid repeated same-frame decode work.
+- [x] Batch range-decode into APIs allocate decoded-frame caches lazily so fast-path-only batches avoid cache allocation.
 - [x] Batch range-decode summary APIs reuse the cached batch-into path and preflight invalid requests.
 - [x] Batch range-decode summary APIs preflight invalid requests before allocating range buffers.
 - [x] Batch range-decode APIs cover LDM and dictionary-deflate indexed frame modes.
