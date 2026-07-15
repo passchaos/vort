@@ -66,6 +66,9 @@ architecture blindly.
 - [x] Batch range-decode error tests cover LDM out-of-bounds and dictionary-deflate missing-dictionary requests without buffer mutation.
 - [x] Range-decode into paths copy directly from checksum-validated store-frame payloads without whole-frame decode allocation.
 - [x] Full-frame native deflate range-decode into path writes directly to caller buffers without temporary decode allocation.
+- [x] Dictionary patch codec exposes caller-owned decode-into and decoded-size helpers.
+- [x] Full-frame native dictionary-patch range-decode into path writes directly to caller buffers without temporary decoded-frame allocation.
+- [x] Native dictionary-deflate frame decode-into uses caller buffers after inflating the patch payload.
 - [x] Sidecar-indexed stream encoder keeps index external.
 - [x] Sidecar frame-index bytes can drive range decode without embedded index.
 - [x] Sidecar frame-index bytes can drive dictionary range decode.

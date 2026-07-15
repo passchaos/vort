@@ -149,7 +149,8 @@ Caller-owned range decode paths copy directly from store-frame payload slices wh
 the indexed frame is uncompressed. The fast path still validates the frame
 header, size metadata, and full payload CRC-32 before copying the requested
 subrange, but it avoids allocating and materializing a decoded copy of the whole
-store frame. Compressed, dictionary, and LDM frames continue through the normal
+store frame. Non-store frames have their own mode-specific fast paths when a
+caller range covers a whole frame; otherwise they continue through the normal
 decode/cache path.
 
 ## Deflate full-frame range fast path
@@ -160,3 +161,15 @@ buffer and validates the resulting CRC-32 against the frame header. This avoids
 allocating a temporary whole-frame decoded buffer for common block-aligned range
 reads. Partial deflate-frame ranges still use the decoded-frame cache path so
 subranges can be copied safely after the frame checksum has been verified.
+
+## Dictionary decode-into and full-frame range fast path
+
+The dictionary patch codec now exposes caller-owned decode helpers
+(`decodePatchInto`/`decodedPatchSize`) in addition to the allocator-returning
+variant. Native dictionary-patch frames can use this path directly, so full-frame
+dictionary range reads can materialize into the caller's target buffer and then
+validate the frame CRC-32 without allocating a whole decoded frame. Native
+dictionary-deflate frames use the same final patch decode-into step after
+inflating the compressed patch payload; partial dictionary ranges continue to use
+the decoded-frame cache path so subranges share one verified decoded copy within
+batch requests.

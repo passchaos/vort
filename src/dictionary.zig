@@ -201,7 +201,12 @@ pub fn encodePatchAlloc(allocator: std.mem.Allocator, dict: []const u8, sample: 
     return out.toOwnedSlice(allocator);
 }
 
-pub fn decodePatchAlloc(allocator: std.mem.Allocator, dict: []const u8, patch: []const u8) ![]u8 {
+const PatchHeader = struct {
+    min_match_len: u32,
+    expected_len: usize,
+};
+
+fn parsePatchHeader(patch: []const u8) !PatchHeader {
     if (patch.len < patch_header_len) return error.TruncatedFrame;
     if (!std.mem.eql(u8, patch[0..4], &patch_magic)) return error.InvalidMagic;
     if (patch[4] != patch_version) return error.UnsupportedVersion;
@@ -209,9 +214,21 @@ pub fn decodePatchAlloc(allocator: std.mem.Allocator, dict: []const u8, patch: [
     if (min_match_len == 0) return error.InvalidDictionaryTraining;
     const expected_len = std.mem.readInt(u64, patch[9..17], .little);
     const expected_usize = std.math.cast(usize, expected_len) orelse return error.IntegerOverflow;
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
-    try out.ensureTotalCapacity(allocator, expected_usize);
+    return .{ .min_match_len = min_match_len, .expected_len = expected_usize };
+}
+
+pub fn decodedPatchSize(patch: []const u8) !usize {
+    return (try parsePatchHeader(patch)).expected_len;
+}
+
+pub fn decodePatch(dict: []const u8, patch: []const u8, output: []u8) !usize {
+    return decodePatchInto(dict, patch, output);
+}
+
+pub fn decodePatchInto(dict: []const u8, patch: []const u8, output: []u8) !usize {
+    const header = try parsePatchHeader(patch);
+    if (output.len < header.expected_len) return error.OutputTooSmall;
+    var written: usize = 0;
     var offset: usize = patch_header_len;
     while (offset < patch.len) {
         const tag = patch[offset];
@@ -222,7 +239,7 @@ pub fn decodePatchAlloc(allocator: std.mem.Allocator, dict: []const u8, patch: [
                 const len: usize = std.mem.readInt(u16, patch[offset..][0..2], .little);
                 offset += 2;
                 if (patch.len - offset < len) return error.TruncatedFrame;
-                try out.appendSlice(allocator, patch[offset..][0..len]);
+                try copyDecodedPatchBytes(output, &written, header.expected_len, patch[offset..][0..len]);
                 offset += len;
             },
             op_match => {
@@ -230,16 +247,35 @@ pub fn decodePatchAlloc(allocator: std.mem.Allocator, dict: []const u8, patch: [
                 const dict_offset: usize = std.mem.readInt(u16, patch[offset..][0..2], .little);
                 const len: usize = std.mem.readInt(u16, patch[offset + 2 ..][0..2], .little);
                 offset += 4;
-                if (len < min_match_len) return error.CorruptFrame;
+                if (len < header.min_match_len) return error.CorruptFrame;
                 if (dict_offset > dict.len or dict.len - dict_offset < len) return error.TruncatedFrame;
-                try out.appendSlice(allocator, dict[dict_offset..][0..len]);
+                try copyDecodedPatchBytes(output, &written, header.expected_len, dict[dict_offset..][0..len]);
             },
             else => return error.CorruptFrame,
         }
-        if (out.items.len > expected_usize) return error.SizeMismatch;
     }
-    if (out.items.len != expected_usize) return error.SizeMismatch;
-    return out.toOwnedSlice(allocator);
+    if (written != header.expected_len) return error.SizeMismatch;
+    return written;
+}
+
+fn copyDecodedPatchBytes(output: []u8, written: *usize, expected_len: usize, source: []const u8) !void {
+    // Decode-into callers often hand us a larger scratch/output buffer. The
+    // patch header remains the authority for the logical result length, so
+    // reject overlong opcode streams before they can write beyond that length.
+    if (written.* > expected_len) return error.SizeMismatch;
+    if (source.len > expected_len - written.*) return error.SizeMismatch;
+    if (output.len - written.* < source.len) return error.OutputTooSmall;
+    @memcpy(output[written.*..][0..source.len], source);
+    written.* += source.len;
+}
+
+pub fn decodePatchAlloc(allocator: std.mem.Allocator, dict: []const u8, patch: []const u8) ![]u8 {
+    const expected_usize = try decodedPatchSize(patch);
+    const out = try allocator.alloc(u8, expected_usize);
+    errdefer allocator.free(out);
+    const written = try decodePatchInto(dict, patch, out);
+    std.debug.assert(written == expected_usize);
+    return out;
 }
 
 fn appendInt(comptime T: type, allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: T) !void {
@@ -335,9 +371,13 @@ test "dictionary patch codec round trips matched and literal bytes" {
     const sample = "zz alpha beta yy gamma";
     const patch = try encodePatchAlloc(std.testing.allocator, dict, sample, 5);
     defer std.testing.allocator.free(patch);
+    try std.testing.expectEqual(sample.len, try decodedPatchSize(patch));
     const decoded = try decodePatchAlloc(std.testing.allocator, dict, patch);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, sample, decoded);
+    var out: [sample.len]u8 = undefined;
+    try std.testing.expectEqual(sample.len, try decodePatchInto(dict, patch, &out));
+    try std.testing.expectEqualSlices(u8, sample, &out);
     try std.testing.expect(patch.len < sample.len + patch_header_len + 16);
 }
 
@@ -350,4 +390,20 @@ test "dictionary patch uses compact match op encoding" {
     const decoded = try decodePatchAlloc(std.testing.allocator, dict, patch);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, sample, decoded);
+}
+
+test "dictionary patch decode into rejects short output and overlong op streams" {
+    const dict = "alpha beta gamma";
+    const sample = "alpha beta";
+    const patch = try encodePatchAlloc(std.testing.allocator, dict, sample, 5);
+    defer std.testing.allocator.free(patch);
+
+    var short: [sample.len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodePatchInto(dict, patch, &short));
+
+    const corrupt = try std.testing.allocator.dupe(u8, patch);
+    defer std.testing.allocator.free(corrupt);
+    std.mem.writeInt(u16, corrupt[patch_header_len + 3 ..][0..2], @intCast(sample.len + 1), .little);
+    var out: [sample.len + 1]u8 = undefined;
+    try std.testing.expectError(error.SizeMismatch, decodePatchInto(dict, corrupt, &out));
 }

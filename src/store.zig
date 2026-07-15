@@ -386,17 +386,52 @@ pub fn decodeDictionaryPatchAlloc(allocator: std.mem.Allocator, dict: []const u8
     const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
     const total_len = try encodedSize(payload_len);
     if (input.len < total_len) return error.TruncatedFrame;
+    const payload = input[header_len..total_len];
+    var inflated_patch: ?[]u8 = null;
+    defer if (inflated_patch) |patch| allocator.free(patch);
     const patch = switch (info.flags) {
-        flags_dictionary_patch => try allocator.dupe(u8, input[header_len..total_len]),
-        flags_dictionary_deflate => try deflate.decodeRawAutoAlloc(allocator, input[header_len..total_len]),
+        flags_dictionary_patch => payload,
+        flags_dictionary_deflate => blk: {
+            inflated_patch = try deflate.decodeRawAutoAlloc(allocator, payload);
+            break :blk inflated_patch.?;
+        },
         else => return error.CorruptFrame,
     };
-    defer allocator.free(patch);
     const decoded = try dictionary.decodePatchAlloc(allocator, dict, patch);
     errdefer allocator.free(decoded);
     if (decoded.len != info.uncompressed_size) return error.SizeMismatch;
     if (checksum.crc32(decoded) != info.checksum) return error.ChecksumMismatch;
     return decoded;
+}
+
+pub fn decodeDictionaryPatchInto(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, output: []u8) !usize {
+    const info = try parseHeader(input);
+    const output_len = std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow;
+    if (output.len < output_len) return error.OutputTooSmall;
+    const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
+    const total_len = try encodedSize(payload_len);
+    if (input.len < total_len) return error.TruncatedFrame;
+    const payload = input[header_len..total_len];
+    switch (info.flags) {
+        flags_dictionary_patch => {
+            const written = try dictionary.decodePatchInto(dict, payload, output[0..output_len]);
+            if (written != output_len) return error.SizeMismatch;
+        },
+        flags_dictionary_deflate => {
+            // A deflate-wrapped dictionary frame still has to inflate the patch
+            // payload first because the patch header is inside the compressed
+            // stream. The final patch materialization nevertheless writes into
+            // the caller-owned frame output buffer instead of allocating the
+            // decoded user payload.
+            const patch = try deflate.decodeRawAutoAlloc(allocator, payload);
+            defer allocator.free(patch);
+            const written = try dictionary.decodePatchInto(dict, patch, output[0..output_len]);
+            if (written != output_len) return error.SizeMismatch;
+        },
+        else => return error.CorruptFrame,
+    }
+    if (checksum.crc32(output[0..output_len]) != info.checksum) return error.ChecksumMismatch;
+    return output_len;
 }
 
 pub fn decode(input: []const u8, output: []u8) Error!usize {
@@ -986,6 +1021,7 @@ fn decodeRangeWithDictionaryIntoValidated(
         if (entry.uncompressed_offset >= end) break;
         if (try copyStoredRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
         if (try copyFullDeflateRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
+        if (try copyFullDictionaryRangeIntoIfPossible(allocator, dict, input, entry, offset, end, output, &written, &crc)) continue;
         const decoded = try decodedFrameForRange(allocator, dict, input, entry, i, decoded_cache);
         defer if (decoded_cache == null) allocator.free(decoded);
         const frame_start = entry.uncompressed_offset;
@@ -1071,6 +1107,37 @@ fn copyFullDeflateRangeIntoIfPossible(
     if (decoded.input_read != payload.len) return error.TrailingData;
     const actual_crc = checksum.crc32(target);
     if (actual_crc != frame_info.checksum) return error.ChecksumMismatch;
+    crc.update(target);
+    written.* += target.len;
+    return true;
+}
+
+fn copyFullDictionaryRangeIntoIfPossible(
+    allocator: std.mem.Allocator,
+    dict: ?[]const u8,
+    input: []const u8,
+    entry: FrameIndexEntry,
+    range_offset: u64,
+    range_end: u64,
+    output: []u8,
+    written: *usize,
+    crc: *checksum.Crc32,
+) !bool {
+    if (range_offset > entry.uncompressed_offset) return false;
+    if (range_end < entry.uncompressed_offset + entry.uncompressed_len) return false;
+    if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
+    const frame = input[entry.frame_offset..][0..entry.frame_len];
+    const frame_info = try parseHeader(frame);
+    if (frame_info.flags != flags_dictionary_patch and frame_info.flags != flags_dictionary_deflate) return false;
+    const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
+    if (entry.frame_len != try frameLenFromInfo(frame_info)) return error.CorruptFrame;
+    if (entry.checksum != frame_info.checksum) return error.ChecksumMismatch;
+    if (entry.uncompressed_len != frame_info.uncompressed_size) return error.CorruptFrame;
+
+    const output_len = std.math.cast(usize, entry.uncompressed_len) orelse return error.IntegerOverflow;
+    const target = output[written.*..][0..output_len];
+    const decoded = try decodeDictionaryPatchInto(allocator, dictionary_bytes, frame, target);
+    if (decoded != output_len) return error.SizeMismatch;
     crc.update(target);
     written.* += target.len;
     return true;
@@ -3506,6 +3573,38 @@ test "native dictionary patch frame decodes with caller dictionary" {
     try std.testing.expectError(error.InvalidDictionaryTraining, decodeAnyAlloc(std.testing.allocator, frame));
 }
 
+test "native dictionary patch frame decodes into caller buffer without allocation" {
+    const dict = "alpha beta gamma";
+    const input = "zz alpha beta yy gamma";
+    const frame = try encodeDictionaryPatchAlloc(std.testing.allocator, dict, input, 5);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_dictionary_patch, info.flags);
+
+    var out: [input.len]u8 = undefined;
+    const written = try decodeDictionaryPatchInto(std.testing.failing_allocator, dict, frame, &out);
+    try std.testing.expectEqual(out.len, written);
+    try std.testing.expectEqualSlices(u8, input, &out);
+}
+
+test "full dictionary patch frame range decodes into caller buffer without allocation" {
+    const dict = "alpha beta gamma";
+    const input = "zz alpha beta yy gamma";
+    const frame = try encodeDictionaryPatchAlloc(std.testing.allocator, dict, input, 5);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_dictionary_patch, info.flags);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+
+    var out: [input.len]u8 = undefined;
+    const result = try decodeRangeWithDictionaryInto(std.testing.failing_allocator, dict, frame, index, 0, out.len, out[0..]);
+    try std.testing.expectEqual(out.len, result.output_written);
+    try std.testing.expectEqual(@as(u64, 0), result.offset);
+    try std.testing.expectEqualSlices(u8, input, &out);
+    try std.testing.expectEqual(checksum.crc32(input), result.crc32);
+}
+
 test "native dictionary deflate frame decodes with caller dictionary" {
     const dict = "alpha beta gamma";
     const input = "zz alpha beta yy gamma";
@@ -3516,6 +3615,38 @@ test "native dictionary deflate frame decodes with caller dictionary" {
     const decoded = try decodeDictionaryPatchAlloc(std.testing.allocator, dict, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "native dictionary deflate frame decodes into caller buffer" {
+    const dict = "alpha beta gamma";
+    const input = "zz alpha beta yy gamma";
+    const frame = try encodeDictionaryDeflateAlloc(std.testing.allocator, dict, input, 5);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_dictionary_deflate, info.flags);
+
+    var out: [input.len]u8 = undefined;
+    const written = try decodeDictionaryPatchInto(std.testing.allocator, dict, frame, &out);
+    try std.testing.expectEqual(out.len, written);
+    try std.testing.expectEqualSlices(u8, input, &out);
+}
+
+test "full dictionary deflate frame range decodes into caller buffer" {
+    const dict = "alpha beta gamma";
+    const input = "zz alpha beta yy gamma";
+    const frame = try encodeDictionaryDeflateAlloc(std.testing.allocator, dict, input, 5);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_dictionary_deflate, info.flags);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+
+    var out: [input.len]u8 = undefined;
+    const result = try decodeRangeWithDictionaryInto(std.testing.allocator, dict, frame, index, 0, out.len, out[0..]);
+    try std.testing.expectEqual(out.len, result.output_written);
+    try std.testing.expectEqual(@as(u64, 0), result.offset);
+    try std.testing.expectEqualSlices(u8, input, &out);
+    try std.testing.expectEqual(checksum.crc32(input), result.crc32);
 }
 
 test "dictionary deflate indexed stream supports batch range summaries" {
