@@ -85,6 +85,7 @@ architecture blindly.
 - [x] Dashboard index build step fails when producer-step coverage is incomplete.
 - [x] Dashboard producer config supports allowlisted temporary artifacts without producer mappings.
 - [x] Dashboard producer config records expected artifact formats and smoke gates in the manifest.
+- [x] Dashboard producer config covers standard multi-corpus dashboard artifacts.
 - [x] Dashboard manifest reports smoke-gate coverage and missing smoke gates.
 - [x] Dashboard index build step fails when required smoke gates are missing.
 - [x] Validation diagnostics include readable frame mode names alongside numeric frame flags.
@@ -111,15 +112,18 @@ architecture blindly.
 - [x] Hex-sample fuzz corpus harness supports zlib/gzip wrapper samples.
 - [x] Hex-sample fuzz corpus harness can load deflate/zlib/gzip samples from corpus files.
 - [x] Hex-sample fuzz corpus harness enforces expected accept/reject outcomes.
+- [x] Hex-sample fuzz corpus harness supports exact expected error-name assertions.
 - [x] Hex-sample fuzz corpus harness supports preset dictionaries for raw/zlib samples.
 - [x] Hex-sample fuzz corpus harness supports explicit output limits for raw/zlib/gzip samples.
 - [x] Deflate wrapper hex corpus includes malformed dynamic-Huffman samples.
 - [x] Deflate wrapper hex corpus includes raw/zlib/gzip repeat17 and repeat18 overrun samples.
 - [x] Deflate wrapper hex corpus includes header-only, missing-footer, and trailing-garbage boundary samples.
+- [x] Deflate wrapper hex corpus pins representative raw/zlib/gzip boundary samples to exact expected errors.
 - [x] Deflate wrapper hex corpus covers concatenated gzip second-member corruption.
 - [x] libFuzzer-compatible exported entrypoint smoke.
 - [x] AFL-style file-input fuzz driver smoke.
 - [x] Local CI smoke runner wiring for fuzz entrypoints.
+- [x] Local CI smoke runs the raw/zlib/gzip wrapper hex corpus file, including exact error-name checks.
 - [x] Hosted CI fuzz runner wiring.
 
 ## Milestone 3: deflate/zlib/gzip compatibility

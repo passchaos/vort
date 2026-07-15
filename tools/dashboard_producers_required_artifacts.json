@@ -197,6 +197,20 @@
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-standard-corpus-full-dashboard"
     },
     {
+      "expected_format": "md",
+      "name": "vort-standard-multi-corpus-dashboard.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-standard-multi-corpus-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-standard-multi-corpus-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-standard-multi-corpus-full-dashboard.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-dashboard"
+    },
+    {
       "expected_format": "json",
       "name": "vort-validation-json-docs-negative-smoke.json",
       "producer_step": "zig build run-validation-json-docs-negative-smoke",

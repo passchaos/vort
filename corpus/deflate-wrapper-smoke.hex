@@ -5,26 +5,29 @@
  # Stored-block header only and valid fixed stream with trailing garbage. These
  # mirror CLI differential boundary checks so reducers keep low-level decoder
  # behavior covered even when CLI-only smoke is not running.
-4a0400 # expect: reject
-01 # expect: reject
-4b040058 # expect: reject
-4b043e00 # expect: reject
-1b03 # expect: reject
-cb402701 # expect: reject
+--empty # expect-error: TruncatedFrame
+4a0400 # expect-error: TruncatedFrame
+01 # expect-error: TruncatedFrame
+4b040058 # expect-error: TrailingData
+4b043e00 # expect-error: InvalidHuffmanCode
+1b03 # expect-error: InvalidHuffmanCode
+cb402701 # expect-error: InvalidMatch
 
 # zlib-wrapped fixed "hello", stored empty with non-zero stored padding, then bad header/preset dictionaries.
 --zlib
 7801cb48cdc9c90700062c0215 # expect: accept
 7801090000ffff00000001 # expect: accept
-7801 # expect: reject
-7801090000ffff # expect: reject
-7801090000ffff0000000158 # expect: reject
-0000 # expect: reject
-782000000000 # expect: reject
-78f908610235cb4027013a2e067d # expect: reject
-78014b043e0000000000 # expect: reject
-78011b0300000000 # expect: reject
-7801cb40270100000000 # expect: reject
+--empty # expect-error: TruncatedFrame
+7801 # expect-error: TruncatedFrame
+7801090000ffff # expect-error: TruncatedFrame
+7801090000ffff00000002 # expect-error: ChecksumMismatch
+7801090000ffff0000000158 # expect-error: TrailingData
+0000 # expect-error: BadZlibHeader
+782000000000 # expect-error: NeedDictionary
+78f908610235cb4027013a2e067d # expect-error: NeedDictionary
+78014b043e0000000000 # expect-error: InvalidHuffmanCode
+78011b0300000000 # expect-error: InvalidHuffmanCode
+7801cb40270100000000 # expect-error: InvalidMatch
 
 # gzip-wrapped fixed "hello", then bad header.
 --gzip
@@ -32,19 +35,22 @@ cb402701 # expect: reject
 1f8b0800000000000403090000ffff0000000000000000 # expect: accept
 1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b08000000000002032bcf2fca4901004311773a05000000 # expect: accept
 1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b0800000000000203030000000000000000001f8b08000000000002032bcf2fca4901004311773a05000000 # expect: accept
-1f8b0800000000000403 # expect: reject
-1f8b0800000000000403090000ffff # expect: reject
-1f8b0800000000000403090000ffff000000000000000058 # expect: reject
-1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b08000000000002032bcf2fca490100 # expect: reject
-1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b08000000000002032bcf2fca4901004211773a05000000 # expect: reject
-1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b08000000000002032bcf2fca4901004311773a04000000 # expect: reject
-1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b0800000000000203030000000000000000001f8b08000000000002032bcf2fca490100 # expect: reject
-1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b0800000000000203030000000000000000001f8b08000000000002032bcf2fca4901004211773a05000000 # expect: reject
-1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b0800000000000203030000000000000000001f8b08000000000002032bcf2fca4901004311773a04000000 # expect: reject
-0000 # expect: reject
-1f8b08000000000004034b043e000000000000000000 # expect: reject
-1f8b08000000000004031b030000000000000000 # expect: reject
-1f8b0800000000000403cb4027010000000000000000 # expect: reject
+--empty # expect-error: TruncatedFrame
+1f8b0800000000000403 # expect-error: TruncatedFrame
+1f8b0800000000000403090000ffff # expect-error: TruncatedFrame
+1f8b0800000000000403090000ffff0100000000000000 # expect-error: ChecksumMismatch
+1f8b0800000000000403090000ffff0000000001000000 # expect-error: SizeMismatch
+1f8b0800000000000403090000ffff000000000000000058 # expect-error: TruncatedFrame
+1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b08000000000002032bcf2fca490100 # expect-error: TruncatedFrame
+1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b08000000000002032bcf2fca4901004211773a05000000 # expect-error: ChecksumMismatch
+1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b08000000000002032bcf2fca4901004311773a04000000 # expect-error: SizeMismatch
+1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b0800000000000203030000000000000000001f8b08000000000002032bcf2fca490100 # expect-error: TruncatedFrame
+1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b0800000000000203030000000000000000001f8b08000000000002032bcf2fca4901004211773a05000000 # expect-error: ChecksumMismatch
+1f8b0800000000000203cb48cdc9c9570000f6f981ed060000001f8b0800000000000203030000000000000000001f8b08000000000002032bcf2fca4901004311773a04000000 # expect-error: SizeMismatch
+0000 # expect-error: TruncatedFrame
+1f8b08000000000004034b043e000000000000000000 # expect-error: InvalidHuffmanCode
+1f8b08000000000004031b030000000000000000 # expect-error: InvalidHuffmanCode
+1f8b0800000000000403cb4027010000000000000000 # expect-error: InvalidMatch
 
 # Malformed dynamic Huffman: oversubscribed code-length alphabet.
 --deflate

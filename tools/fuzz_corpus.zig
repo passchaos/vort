@@ -67,6 +67,7 @@ const State = struct {
     // related samples under one directive, while inline comments can still set
     // the expectation next to the sample that first needs it.
     expected: ?Expected = null,
+    expected_error: ?[]u8 = null,
     dictionary: ?[]u8 = null,
     max_output_len: ?usize = null,
     saw_store: bool = false,
@@ -85,7 +86,7 @@ const State = struct {
         return if (mode_count > 1) "mixed" else if (self.saw_gzip) "gzip" else if (self.saw_zlib) "zlib" else if (self.saw_deflate) "deflate" else "store";
     }
 
-    fn recordOutcome(self: *State, outcome: Outcome) !void {
+    fn recordOutcome(self: *State, outcome: Outcome, actual_error: ?[]const u8) !void {
         self.cases += 1;
         switch (outcome) {
             .accepted => self.accepted += 1,
@@ -99,6 +100,29 @@ const State = struct {
                 };
             }
         }
+        if (self.expected_error) |expected_error| {
+            if (outcome == .accepted) return error.ExpectedErrorButAccepted;
+            const actual = actual_error orelse return error.MissingActualError;
+            if (!std.mem.eql(u8, actual, expected_error)) return error.UnexpectedErrorName;
+        }
+    }
+
+    fn setExpected(self: *State, allocator: std.mem.Allocator, expected: ?Expected) void {
+        self.expected = expected;
+        self.clearExpectedError(allocator);
+    }
+
+    fn setExpectedError(self: *State, allocator: std.mem.Allocator, expected_error: []const u8) !void {
+        const trimmed = std.mem.trim(u8, expected_error, " \t\r");
+        if (trimmed.len == 0) return error.InvalidExpectedError;
+        const owned = try allocator.dupe(u8, trimmed);
+        errdefer allocator.free(owned);
+        self.clearExpectedError(allocator);
+        // An exact error expectation is necessarily a rejection. Keeping the
+        // coarse outcome sticky preserves the older accept/reject counters and
+        // also catches an unexpected successful decode.
+        self.expected = .reject;
+        self.expected_error = owned;
     }
 
     fn setDictionary(self: *State, allocator: std.mem.Allocator, bytes: []const u8) !void {
@@ -115,7 +139,15 @@ const State = struct {
         }
     }
 
+    fn clearExpectedError(self: *State, allocator: std.mem.Allocator) void {
+        if (self.expected_error) |expected_error| {
+            allocator.free(expected_error);
+            self.expected_error = null;
+        }
+    }
+
     fn deinit(self: *State, allocator: std.mem.Allocator) void {
+        self.clearExpectedError(allocator);
         self.clearDictionary(allocator);
     }
 };
@@ -129,7 +161,7 @@ fn processFileTokens(allocator: std.mem.Allocator, state: *State, contents: []co
         // a plain hex token with optional human-readable expectations.
         const hash_index = std.mem.indexOfScalar(u8, line, '#');
         const sample_part = if (hash_index) |index| line[0..index] else line;
-        if (hash_index) |index| try processCommentDirective(state, line[index + 1 ..]);
+        if (hash_index) |index| try processCommentDirective(allocator, state, line[index + 1 ..]);
 
         const trimmed = std.mem.trim(u8, sample_part, " \t\r");
         if (trimmed.len == 0) continue;
@@ -163,6 +195,10 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
         state.max_output_len = null;
         return;
     }
+    if (std.mem.eql(u8, arg, "--empty")) {
+        try processSample(allocator, state, "");
+        return;
+    }
     const limit_prefix = "--limit=";
     if (std.mem.startsWith(u8, arg, limit_prefix)) {
         state.max_output_len = try std.fmt.parseInt(usize, arg[limit_prefix.len..], 10);
@@ -181,104 +217,119 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
         return;
     }
     if (std.mem.eql(u8, arg, "--expect-accept")) {
-        state.expected = .accept;
+        state.setExpected(allocator, .accept);
         return;
     }
     if (std.mem.eql(u8, arg, "--expect-reject")) {
-        state.expected = .reject;
+        state.setExpected(allocator, .reject);
         return;
     }
     if (std.mem.eql(u8, arg, "--expect-any")) {
-        state.expected = null;
+        state.setExpected(allocator, null);
         return;
     }
     const expect_prefix = "--expect=";
     if (std.mem.startsWith(u8, arg, expect_prefix)) {
-        state.expected = try parseExpected(arg[expect_prefix.len..]);
+        state.setExpected(allocator, try parseExpected(arg[expect_prefix.len..]));
+        return;
+    }
+    const expect_error_prefix = "--expect-error=";
+    if (std.mem.startsWith(u8, arg, expect_error_prefix)) {
+        try state.setExpectedError(allocator, arg[expect_error_prefix.len..]);
         return;
     }
 
     const bytes = try hexToOwnedBytes(allocator, arg);
     defer allocator.free(bytes);
+    try processSample(allocator, state, bytes);
+}
+
+fn processSample(allocator: std.mem.Allocator, state: *State, bytes: []const u8) !void {
     switch (state.mode) {
         .store => {
             state.saw_store = true;
-            const outcome: Outcome = if (vort.store.parseHeader(bytes)) |_| .accepted else |err| switch (err) {
-                error.TruncatedFrame,
-                error.InvalidMagic,
-                error.UnsupportedVersion,
-                error.CorruptFrame,
-                => .rejected,
-                else => return err,
-            };
-            try state.recordOutcome(outcome);
+            if (vort.store.parseHeader(bytes)) |_| {
+                try state.recordOutcome(.accepted, null);
+            } else |err| {
+                switch (err) {
+                    error.TruncatedFrame,
+                    error.InvalidMagic,
+                    error.UnsupportedVersion,
+                    error.CorruptFrame,
+                    => try state.recordOutcome(.rejected, @errorName(err)),
+                    else => return err,
+                }
+            }
         },
         .deflate => {
             state.saw_deflate = true;
-            const outcome: Outcome = if (decodeRawDeflateSample(allocator, state.dictionary, state.max_output_len, bytes)) |decoded| result: {
+            if (decodeRawDeflateSample(allocator, state.dictionary, state.max_output_len, bytes)) |decoded| {
                 defer allocator.free(decoded);
-                break :result .accepted;
-            } else |err| switch (err) {
-                error.TruncatedFrame,
-                error.InvalidDeflateBlockType,
-                error.StoredLengthMismatch,
-                error.InvalidDynamicBlockHeader,
-                error.InvalidHuffmanCode,
-                error.InvalidMatch,
-                error.CorruptFrame,
-                error.TrailingData,
-                error.OutputLimitExceeded,
-                => .rejected,
-                else => return err,
-            };
-            try state.recordOutcome(outcome);
+                try state.recordOutcome(.accepted, null);
+            } else |err| {
+                switch (err) {
+                    error.TruncatedFrame,
+                    error.InvalidDeflateBlockType,
+                    error.StoredLengthMismatch,
+                    error.InvalidDynamicBlockHeader,
+                    error.InvalidHuffmanCode,
+                    error.InvalidMatch,
+                    error.CorruptFrame,
+                    error.TrailingData,
+                    error.OutputLimitExceeded,
+                    => try state.recordOutcome(.rejected, @errorName(err)),
+                    else => return err,
+                }
+            }
         },
         .zlib => {
             state.saw_zlib = true;
-            const outcome: Outcome = if (decodeZlibSample(allocator, state.dictionary, state.max_output_len, bytes)) |decoded| result: {
+            if (decodeZlibSample(allocator, state.dictionary, state.max_output_len, bytes)) |decoded| {
                 defer allocator.free(decoded);
-                break :result .accepted;
-            } else |err| switch (err) {
-                error.TruncatedFrame,
-                error.InvalidDeflateBlockType,
-                error.StoredLengthMismatch,
-                error.InvalidDynamicBlockHeader,
-                error.InvalidHuffmanCode,
-                error.InvalidMatch,
-                error.CorruptFrame,
-                error.TrailingData,
-                error.BadZlibHeader,
-                error.NeedDictionary,
-                error.ChecksumMismatch,
-                error.SizeMismatch,
-                error.OutputLimitExceeded,
-                => .rejected,
-                else => return err,
-            };
-            try state.recordOutcome(outcome);
+                try state.recordOutcome(.accepted, null);
+            } else |err| {
+                switch (err) {
+                    error.TruncatedFrame,
+                    error.InvalidDeflateBlockType,
+                    error.StoredLengthMismatch,
+                    error.InvalidDynamicBlockHeader,
+                    error.InvalidHuffmanCode,
+                    error.InvalidMatch,
+                    error.CorruptFrame,
+                    error.TrailingData,
+                    error.BadZlibHeader,
+                    error.NeedDictionary,
+                    error.ChecksumMismatch,
+                    error.SizeMismatch,
+                    error.OutputLimitExceeded,
+                    => try state.recordOutcome(.rejected, @errorName(err)),
+                    else => return err,
+                }
+            }
         },
         .gzip => {
             state.saw_gzip = true;
-            const outcome: Outcome = if (decodeGzipSample(allocator, state.max_output_len, bytes)) |decoded| result: {
+            if (decodeGzipSample(allocator, state.max_output_len, bytes)) |decoded| {
                 defer allocator.free(decoded);
-                break :result .accepted;
-            } else |err| switch (err) {
-                error.TruncatedFrame,
-                error.InvalidDeflateBlockType,
-                error.StoredLengthMismatch,
-                error.InvalidDynamicBlockHeader,
-                error.InvalidHuffmanCode,
-                error.InvalidMatch,
-                error.CorruptFrame,
-                error.TrailingData,
-                error.BadGzipHeader,
-                error.ChecksumMismatch,
-                error.SizeMismatch,
-                error.OutputLimitExceeded,
-                => .rejected,
-                else => return err,
-            };
-            try state.recordOutcome(outcome);
+                try state.recordOutcome(.accepted, null);
+            } else |err| {
+                switch (err) {
+                    error.TruncatedFrame,
+                    error.InvalidDeflateBlockType,
+                    error.StoredLengthMismatch,
+                    error.InvalidDynamicBlockHeader,
+                    error.InvalidHuffmanCode,
+                    error.InvalidMatch,
+                    error.CorruptFrame,
+                    error.TrailingData,
+                    error.BadGzipHeader,
+                    error.ChecksumMismatch,
+                    error.SizeMismatch,
+                    error.OutputLimitExceeded,
+                    => try state.recordOutcome(.rejected, @errorName(err)),
+                    else => return err,
+                }
+            }
         },
     }
 }
@@ -306,11 +357,21 @@ fn decodeGzipSample(allocator: std.mem.Allocator, max_output_len: ?usize, bytes:
     return vort.decodeGzipConcatenatedAlloc(allocator, bytes);
 }
 
-fn processCommentDirective(state: *State, comment: []const u8) !void {
+fn processCommentDirective(allocator: std.mem.Allocator, state: *State, comment: []const u8) !void {
     const trimmed = std.mem.trim(u8, comment, " \t\r");
+    const expect_error_prefix = "expect-error:";
+    if (std.mem.startsWith(u8, trimmed, expect_error_prefix)) {
+        try state.setExpectedError(allocator, trimmed[expect_error_prefix.len..]);
+        return;
+    }
+    const error_prefix = "error:";
+    if (std.mem.startsWith(u8, trimmed, error_prefix)) {
+        try state.setExpectedError(allocator, trimmed[error_prefix.len..]);
+        return;
+    }
     const expect_prefix = "expect:";
     if (std.mem.startsWith(u8, trimmed, expect_prefix)) {
-        state.expected = try parseExpected(trimmed[expect_prefix.len..]);
+        state.setExpected(allocator, try parseExpected(trimmed[expect_prefix.len..]));
     }
 }
 
