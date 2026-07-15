@@ -113,3 +113,12 @@ index entries match. Successful `ValidationReport` values expose the combined
 checksum, frame count, and total indexed uncompressed byte count for callers that
 need a whole-stream summary; callers can also feed those expected values back
 through `SidecarValidationOptions` to reject mismatched sidecar/index metadata.
+
+## Range decode summary APIs
+
+`decodeRangeWithSummaryAlloc`, `decodeIndexedRangeWithSummaryAlloc`, and the
+sidecar range summary variants return both the decoded bytes and a CRC-32 of the
+returned logical range. This lets callers that need range-level integrity or
+cache keys avoid immediately rescanning the output bytes after a range decode.
+The summary variants preserve the same index, dictionary, and bounds validation
+behavior as the byte-slice range APIs.
