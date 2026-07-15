@@ -264,13 +264,13 @@ fn lengthsLess(lhs: *const [max_symbols]u4, rhs: *const [max_symbols]u4, symbol_
 
 const Package = struct {
     weight: u64,
-    counts: [max_symbols]u4,
+    counts: [max_symbols]u8,
 };
 
 fn packageMergeCandidate(case: Case) [max_symbols]u4 {
     var leaves: [max_symbols]Package = undefined;
     for (0..case.symbol_count) |i| {
-        var counts: [max_symbols]u4 = @splat(0);
+        var counts: [max_symbols]u8 = @splat(0);
         counts[i] = 1;
         leaves[i] = .{ .weight = case.freqs[i], .counts = counts };
     }
@@ -294,9 +294,14 @@ fn packageMergeCandidate(case: Case) [max_symbols]u4 {
     }
 
     const selected_count = 2 * case.symbol_count - 2;
-    var lengths: [max_symbols]u4 = @splat(0);
+    var length_counts: [max_symbols]u8 = @splat(0);
     for (current[0..selected_count]) |package| {
-        for (package.counts[0..case.symbol_count], 0..) |count, symbol| lengths[symbol] += count;
+        for (package.counts[0..case.symbol_count], 0..) |count, symbol| length_counts[symbol] += count;
+    }
+    var lengths: [max_symbols]u4 = @splat(0);
+    for (length_counts[0..case.symbol_count], 0..) |count, symbol| {
+        std.debug.assert(count <= case.max_bits);
+        lengths[symbol] = @intCast(count);
     }
     return lengths;
 }

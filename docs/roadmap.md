@@ -427,6 +427,7 @@ architecture blindly.
 - [x] Huffman length-limit report compares a package-merge candidate against brute-force oracles.
 - [x] Production Huffman length builder uses package-merge length-limited code generation.
 - [x] Production package-merge Huffman builder has large DEFLATE-alphabet regression coverage.
+- [x] Production package-merge Huffman builder uses widened internal counters with final length assertions.
 - [x] Huffman length-limit dashboard summarizes production-sized alphabet Kraft and determinism checks.
 - [x] Huffman length-limit dashboard records production-sized alphabet generation timing.
 - [x] Dynamic HCLEN trimming helper with boundary tests.

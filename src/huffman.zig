@@ -336,7 +336,7 @@ fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4
     var leaf_count: usize = 0;
     for (freqs.*, 0..) |freq, symbol| {
         if (freq == 0) continue;
-        var counts: [n]u4 = @splat(0);
+        var counts: [n]u8 = @splat(0);
         counts[symbol] = 1;
         leaves[leaf_count] = .{ .weight = freq, .counts = counts };
         leaf_count += 1;
@@ -369,9 +369,14 @@ fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4
 
     const selected_count = 2 * active - 2;
     std.debug.assert(selected_count <= current_len);
-    var lengths: [n]u4 = @splat(0);
+    var length_counts: [n]u8 = @splat(0);
     for (current[0..selected_count]) |package| {
-        for (package.counts, 0..) |count, symbol| lengths[symbol] += count;
+        for (package.counts, 0..) |count, symbol| length_counts[symbol] += count;
+    }
+    var lengths: [n]u4 = @splat(0);
+    for (length_counts, 0..) |count, symbol| {
+        std.debug.assert(count <= max_bits);
+        lengths[symbol] = @intCast(count);
     }
     return lengths;
 }
@@ -379,7 +384,7 @@ fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4
 fn LengthPackage(comptime n: usize) type {
     return struct {
         weight: u64,
-        counts: [n]u4,
+        counts: [n]u8,
     };
 }
 
