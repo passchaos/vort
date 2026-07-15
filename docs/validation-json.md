@@ -648,11 +648,11 @@ Top-level fields:
 - `smoke_gate_covered`
 - `smoke_gate_missing`
 - `smoke_gate_required_missing`
-- `header_inspect_present`, `header_inspect_ok`,
+- `header_inspect_present`, `header_inspect_ok`, `header_inspect_healthy`,
   `header_inspect_required_workflow_count`,
   `header_inspect_missing_workflow_count`,
   `header_inspect_missing_workflows`
-- `dashboard_strict_present`, `dashboard_strict_ok`,
+- `dashboard_strict_present`, `dashboard_strict_ok`, `dashboard_strict_healthy`,
   `dashboard_strict_check_count`, `dashboard_strict_mode_count`,
   `dashboard_strict_expected_failure_count`, `dashboard_strict_matched_count`,
   `dashboard_strict_expected_mode_count`, `dashboard_strict_missing_mode_count`,
@@ -686,11 +686,13 @@ Example:
   "smoke_gate_required_missing": [],
   "header_inspect_present": false,
   "header_inspect_ok": false,
+  "header_inspect_healthy": false,
   "header_inspect_required_workflow_count": 0,
   "header_inspect_missing_workflow_count": 0,
   "header_inspect_missing_workflows": [],
   "dashboard_strict_present": false,
   "dashboard_strict_ok": false,
+  "dashboard_strict_healthy": false,
   "dashboard_strict_check_count": 0,
   "dashboard_strict_mode_count": 0,
   "dashboard_strict_expected_failure_count": 0,

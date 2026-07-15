@@ -297,11 +297,13 @@ def main() -> int:
         assert dashboard["artifact_count"] >= 3
         assert dashboard["header_inspect_present"] is True
         assert dashboard["header_inspect_ok"] is True
+        assert dashboard["header_inspect_healthy"] is True
         assert dashboard["header_inspect_required_workflow_count"] == header_summary["required_workflow_count"]
         assert dashboard["header_inspect_missing_workflow_count"] == header_summary["missing_workflow_count"]
         assert dashboard["header_inspect_missing_workflows"] == header_summary["missing_workflows"]
         assert dashboard["dashboard_strict_present"] is True
         assert dashboard["dashboard_strict_ok"] is True
+        assert dashboard["dashboard_strict_healthy"] is True
         assert dashboard["dashboard_strict_check_count"] == dashboard_strict["check_count"]
         assert dashboard["dashboard_strict_mode_count"] == dashboard_strict["mode_count"]
         assert dashboard["dashboard_strict_expected_failure_count"] == sum(row["expected_failures"] for row in dashboard_strict["mode_counts"])

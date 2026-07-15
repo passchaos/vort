@@ -266,6 +266,8 @@ def main() -> int:
     ]
     header_health = header_inspect_health(artifacts)
     strict_health = dashboard_strict_health(artifacts)
+    header_healthy = header_health["present"] and header_health["ok"] and header_health["missing_workflow_count"] == 0
+    strict_healthy = strict_health["present"] and strict_health["ok"] and strict_health["missing_mode_count"] == 0
 
     lines = [
         "# Vort dashboard index",
@@ -277,8 +279,8 @@ def main() -> int:
         f"- allowed missing producer steps: {len(producer_step_allowed_missing)}",
         f"- smoke gates: {smoke_gate_covered}/{len(records)}",
         f"- required smoke gates missing: {len(smoke_gate_required_missing)}",
-        f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing",
-        f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing)",
+        f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing, healthy `{header_healthy}`",
+        f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing), healthy `{strict_healthy}`",
         "",
     ]
     if strict_health["missing_modes"]:
@@ -332,11 +334,13 @@ def main() -> int:
                 "smoke_gate_required_missing": smoke_gate_required_missing,
                 "header_inspect_present": header_health["present"],
                 "header_inspect_ok": header_health["ok"],
+                "header_inspect_healthy": header_healthy,
                 "header_inspect_required_workflow_count": header_health["required_workflow_count"],
                 "header_inspect_missing_workflow_count": header_health["missing_workflow_count"],
                 "header_inspect_missing_workflows": header_health["missing_workflows"],
                 "dashboard_strict_present": strict_health["present"],
                 "dashboard_strict_ok": strict_health["ok"],
+                "dashboard_strict_healthy": strict_healthy,
                 "dashboard_strict_check_count": strict_health["check_count"],
                 "dashboard_strict_mode_count": strict_health["mode_count"],
                 "dashboard_strict_expected_failure_count": strict_health["expected_failure_count"],
