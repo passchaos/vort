@@ -129,6 +129,7 @@ zig build run -- decode-gzip-file /tmp/vort.gz /tmp/vort-gzip.out 5
 zig build run -- inspect-gzip-header-file /tmp/vort.gz
 zig build run -- inspect-gzip-deflate-header-file /tmp/vort.gz json
 zig build run -- inspect-gzip-deflate-header-file /tmp/vort-cat.gz json  # first member
+zig build run -- inspect-gzip-deflate-header-file /tmp/vort-cat.gz json 1
 zig build run -- decode-gzip-file /tmp/vort-cat.gz /tmp/vort-gzip-cat.out 11
 zig build run -- encode-raw-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 fast
 zig build run -- encode-raw-dict-best-hex "hello hello hello" "hello " default

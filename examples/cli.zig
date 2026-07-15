@@ -839,7 +839,7 @@ pub fn main(init: std.process.Init) !void {
         const wrapper = try vort.parseZlibHeaderInfo(compressed);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
         if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, "zlib", compressed.len, wrapper.data_offset, info)
+            try printWrappedDeflateHeaderJson(stdout, "zlib", compressed.len, 0, wrapper.data_offset, 0, info)
         else
             try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-file")) {
@@ -881,14 +881,15 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, command, "inspect-gzip-deflate-header-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const member_index = try parseOptionalMemberIndex(args.next());
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
-        const wrapper = try vort.parseGzipHeaderInfo(compressed);
-        const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
+        const member = try locateGzipMember(init.gpa, compressed, member_index);
+        const info = try vort.parseRawDeflateHeaderInfo(compressed[member.deflate_offset..]);
         if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, "gzip", compressed.len, wrapper.data_offset, info)
+            try printWrappedDeflateHeaderJson(stdout, "gzip", compressed.len, member.member_offset, member.deflate_offset, member_index, info)
         else
-            try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
+            try printRawHeaderInfo(stdout, compressed.len - member.deflate_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -922,7 +923,7 @@ pub fn main(init: std.process.Init) !void {
         const wrapper = try vort.parseZlibHeaderInfo(compressed);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
         if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, "zlib", compressed.len, wrapper.data_offset, info)
+            try printWrappedDeflateHeaderJson(stdout, "zlib", compressed.len, 0, wrapper.data_offset, 0, info)
         else
             try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-hex")) {
@@ -958,14 +959,15 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, command, "inspect-gzip-deflate-header-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const member_index = try parseOptionalMemberIndex(args.next());
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
-        const wrapper = try vort.parseGzipHeaderInfo(compressed);
-        const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
+        const member = try locateGzipMember(init.gpa, compressed, member_index);
+        const info = try vort.parseRawDeflateHeaderInfo(compressed[member.deflate_offset..]);
         if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, "gzip", compressed.len, wrapper.data_offset, info)
+            try printWrappedDeflateHeaderJson(stdout, "gzip", compressed.len, member.member_offset, member.deflate_offset, member_index, info)
         else
-            try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
+            try printRawHeaderInfo(stdout, compressed.len - member.deflate_offset, info, output_format);
     } else {
         try stdout.print("unknown command: {s}\n\n", .{command});
         try printHelp(stdout);
@@ -1023,10 +1025,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Print parsed gzip header metadata for hex input
         \\  inspect-gzip-header-file <in> [text|json]
         \\                              Print parsed gzip header metadata for a file
-        \\  inspect-gzip-deflate-header-hex [hex] [text|json]
-        \\                              Inspect the raw deflate header inside a gzip stream
-        \\  inspect-gzip-deflate-header-file <in> [text|json]
-        \\                              Inspect the raw deflate header inside a gzip file
+        \\  inspect-gzip-deflate-header-hex [hex] [text|json] [member_index]
+        \\                              Inspect the raw deflate header inside a gzip stream member
+        \\  inspect-gzip-deflate-header-file <in> [text|json] [member_index]
+        \\                              Inspect the raw deflate header inside a gzip file member
         \\  encode-raw-dict-best-hex [text] [dict] [level]
         \\                              Encode raw deflate that may reference preset dictionary history
         \\  encode-zlib-dict-best-hex [text] [dict] [level]
@@ -1110,6 +1112,28 @@ fn printHexInline(stdout: *std.Io.Writer, bytes: []const u8) !void {
 }
 
 const HeaderInspectOutputFormat = enum { text, json };
+
+const GzipMemberLocation = struct {
+    member_offset: usize,
+    deflate_offset: usize,
+};
+
+fn locateGzipMember(allocator: std.mem.Allocator, compressed: []const u8, member_index: usize) !GzipMemberLocation {
+    _ = allocator;
+    var offset: usize = 0;
+    var index: usize = 0;
+    while (offset < compressed.len) {
+        const header = try vort.parseGzipHeaderInfo(compressed[offset..]);
+        if (index == member_index) {
+            return .{ .member_offset = offset, .deflate_offset = offset + header.data_offset };
+        }
+        const search_start = offset + header.data_offset;
+        const next_rel = std.mem.indexOfPos(u8, compressed, search_start, "\x1f\x8b\x08") orelse return error.RangeOutOfBounds;
+        offset = next_rel;
+        index += 1;
+    }
+    return error.RangeOutOfBounds;
+}
 
 fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.RawDeflateHeaderInfo, output_format: HeaderInspectOutputFormat) !void {
     if (output_format == .json) return printRawHeaderJson(stdout, compressed_len, info);
@@ -1298,13 +1322,15 @@ fn printWrappedDeflateHeaderJson(
     stdout: *std.Io.Writer,
     wrapper: []const u8,
     wrapper_bytes: usize,
+    member_offset: usize,
     deflate_offset: usize,
+    member_index: usize,
     info: vort.RawDeflateHeaderInfo,
 ) !void {
     const scope = if (std.mem.eql(u8, wrapper, "gzip")) "gzip_member" else "zlib_stream";
     try stdout.print(
-        "{{\"schema\":\"vort.wrapped_deflate_header_info\",\"schema_version\":1,\"wrapper\":\"{s}\",\"scope\":\"{s}\",\"member_index\":0,\"wrapper_bytes\":{d},\"deflate_offset\":{d},\"deflate_bytes\":{d},\"deflate_span_kind\":\"header_tail\",\"raw_header\":",
-        .{ wrapper, scope, wrapper_bytes, deflate_offset, wrapper_bytes - deflate_offset },
+        "{{\"schema\":\"vort.wrapped_deflate_header_info\",\"schema_version\":1,\"wrapper\":\"{s}\",\"scope\":\"{s}\",\"member_index\":{d},\"member_offset\":{d},\"wrapper_bytes\":{d},\"deflate_offset\":{d},\"deflate_bytes\":{d},\"deflate_span_kind\":\"header_tail\",\"raw_header\":",
+        .{ wrapper, scope, member_index, member_offset, wrapper_bytes, deflate_offset, wrapper_bytes - deflate_offset },
     );
     try printRawHeaderJsonObject(stdout, wrapper_bytes - deflate_offset, info);
     try stdout.print("}}\n", .{});
@@ -1486,6 +1512,11 @@ fn parseBlockLen(text: ?[]const u8, default: usize) !usize {
 
 fn parseOptionalLimit(text: ?[]const u8) !?usize {
     const value = text orelse return null;
+    return try std.fmt.parseInt(usize, value, 10);
+}
+
+fn parseOptionalMemberIndex(text: ?[]const u8) !usize {
+    const value = text orelse return 0;
     return try std.fmt.parseInt(usize, value, 10);
 }
 

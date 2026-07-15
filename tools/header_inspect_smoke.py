@@ -555,6 +555,12 @@ def main(argv: list[str]) -> int:
             "header_crc": False,
         }
     )
+    gzip_second_inner_json = json.loads(run(cli, "inspect-gzip-deflate-header-hex", gzip_concat_frame.hex(), "json", "1"))
+    assert gzip_second_inner_json["schema"] == "vort.wrapped_deflate_header_info"
+    assert gzip_second_inner_json["wrapper"] == "gzip"
+    assert gzip_second_inner_json["member_index"] == 1
+    assert gzip_second_inner_json["member_offset"] > gzip_concat_inner_json["member_offset"]
+    assert gzip_second_inner_json["raw_header"]["block_type"] == "fixed"
 
     gzip_optional_hex = run(cli, "inspect-gzip-header-hex", gzip_optional_frame.hex())
     require_fields(
@@ -622,6 +628,7 @@ def main(argv: list[str]) -> int:
         gzip_file = run(cli, "inspect-gzip-header-file", str(gzip_path))
         gzip_optional_file = run(cli, "inspect-gzip-header-file", str(gzip_optional_path))
         gzip_concat_inner_file_json = json.loads(run(cli, "inspect-gzip-deflate-header-file", str(gzip_concat_path), "json"))
+        gzip_second_inner_file_json = json.loads(run(cli, "inspect-gzip-deflate-header-file", str(gzip_concat_path), "json", "1"))
         raw_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_path), "json"))
         raw_stored_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_stored_path), "json"))
         raw_dynamic_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_dynamic_path), "json"))
@@ -659,6 +666,8 @@ def main(argv: list[str]) -> int:
             raise AssertionError(f"gzip optional JSON file/hex inspection mismatch: {gzip_optional_file_json!r} != {gzip_optional_json!r}")
         if gzip_concat_inner_file_json != gzip_concat_inner_json:
             raise AssertionError(f"gzip concatenated inner JSON file/hex inspection mismatch: {gzip_concat_inner_file_json!r} != {gzip_concat_inner_json!r}")
+        if gzip_second_inner_file_json != gzip_second_inner_json:
+            raise AssertionError(f"gzip second member inner JSON file/hex inspection mismatch: {gzip_second_inner_file_json!r} != {gzip_second_inner_json!r}")
 
     negative_error_counts: dict[str, int] = {}
     for item in negative_items:

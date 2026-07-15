@@ -334,6 +334,7 @@
         "deflate_offset": "int",
         "deflate_span_kind": "str",
         "member_index": "int",
+        "member_offset": "int",
         "raw_header": "dict",
         "schema": "str",
         "schema_version": "int",
