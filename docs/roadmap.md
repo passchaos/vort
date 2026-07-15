@@ -184,6 +184,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection smoke records successful zlib/gzip inner-deflate inspection cases.
 - [x] raw/zlib/gzip header inspection smoke covers zlib/gzip inner-deflate file workflows.
 - [x] gzip inner-deflate header inspection smoke covers concatenated gzip first-member behavior.
+- [x] README documents concatenated gzip inner-deflate inspection as first-member behavior.
 - [x] zlib/gzip inner-deflate header inspection JSON includes wrapper offset context.
 - [x] zlib/gzip inner-deflate header inspection JSON reports wrapper scope and member index.
 - [x] zlib/gzip inner-deflate header inspection schema cross-checks wrapper type and scope.
