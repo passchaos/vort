@@ -286,6 +286,7 @@ architecture blindly.
 - [x] File CLI and Python differential smoke cover zlib preset-dictionary one-shot/split/adaptive file encode.
 - [x] CLI decode commands expose optional output limits for raw/zlib/gzip workflows.
 - [x] README API sketch documents limited raw/zlib/gzip decode APIs.
+- [x] raw/zlib CLI differential smoke rejects empty hex/file inputs.
 - [x] File CLI and Python differential smoke cover zlib file decode with output limits.
 - [x] zlib dictionary-file differential smoke rejects too-small output limits.
 - [x] File CLI exposes non-dictionary raw/gzip best encoders for differential harnesses.

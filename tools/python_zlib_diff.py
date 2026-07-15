@@ -39,6 +39,9 @@ def main() -> int:
     if not CLI.exists():
         raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
 
+    expect_cli_failure("decode-raw-hex", "", error_name="TruncatedFrame")
+    expect_cli_failure("decode-zlib-hex", "", error_name="TruncatedFrame")
+
     payloads = [
         "",
         "hello",
@@ -178,6 +181,9 @@ def main() -> int:
         assert int(parse_field(out, "decoded_bytes")) == len(zlib_file_payload), out
         assert limited_path.read_bytes() == zlib_file_payload, out
         expect_cli_failure("decode-zlib-file", str(compressed_path), str(tmp / "too-small.bin"), str(len(zlib_file_payload) - 1), error_name="OutputLimitExceeded")
+        empty_path = tmp / "empty.zlib"
+        empty_path.write_bytes(b"")
+        expect_cli_failure("decode-zlib-file", str(empty_path), str(tmp / "empty.out"), error_name="TruncatedFrame")
 
     raw_file_payload = b"raw deflate file output limit smoke"
     co = zlib.compressobj(level=6, wbits=-15)
@@ -195,6 +201,9 @@ def main() -> int:
         assert int(parse_field(out, "decoded_bytes")) == len(raw_file_payload), out
         assert limited_path.read_bytes() == raw_file_payload, out
         expect_cli_failure("decode-raw-file", str(compressed_path), str(tmp / "too-small.bin"), str(len(raw_file_payload) - 1), error_name="OutputLimitExceeded")
+        empty_path = tmp / "empty.raw"
+        empty_path.write_bytes(b"")
+        expect_cli_failure("decode-raw-file", str(empty_path), str(tmp / "empty.out"), error_name="TruncatedFrame")
 
     co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, zdict=dictionary)
     zlib_dict_file = co.compress(dict_payload) + co.flush()
