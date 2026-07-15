@@ -48,11 +48,10 @@ pub const FrameInspection = struct {
     requires_dictionary: bool,
 };
 
-pub fn inspectFrame(input: []const u8) Error!FrameInspection {
+pub fn inspectHeader(input: []const u8) Error!FrameInspection {
     const info = try parseHeader(input);
     const payload_len = try storedPayloadLenFromInfo(info);
     const frame_len = try encodedSize(payload_len);
-    if (input.len < frame_len) return error.TruncatedFrame;
     return .{
         .info = info,
         .frame_len = frame_len,
@@ -60,6 +59,12 @@ pub fn inspectFrame(input: []const u8) Error!FrameInspection {
         .mode = frameModeName(info.flags),
         .requires_dictionary = info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate,
     };
+}
+
+pub fn inspectFrame(input: []const u8) Error!FrameInspection {
+    const inspection = try inspectHeader(input);
+    if (input.len < inspection.frame_len) return error.TruncatedFrame;
+    return inspection;
 }
 
 pub fn skippableEncodedSize(payload_len: usize) Error!usize {
@@ -2825,6 +2830,10 @@ test "native frame inspection exposes mode sizes and dictionary requirement" {
     try std.testing.expectEqual(@as(usize, "inspect".len), store_inspection.payload_len);
     try std.testing.expect(!store_inspection.requires_dictionary);
     try std.testing.expectEqual(@as(u64, "inspect".len), store_inspection.info.uncompressed_size);
+    const header_inspection = try inspectHeader(store_frame[0..header_len]);
+    try std.testing.expectEqual(store_inspection.frame_len, header_inspection.frame_len);
+    try std.testing.expectEqual(store_inspection.payload_len, header_inspection.payload_len);
+    try std.testing.expectEqualStrings(store_inspection.mode, header_inspection.mode);
 
     const dict = "alpha beta gamma";
     const input = "zz alpha beta yy gamma";
