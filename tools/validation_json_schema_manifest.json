@@ -70,9 +70,12 @@
         "negative_items": "list",
         "ok": "bool",
         "optional_header_cases": "int",
+        "raw_negative_cases": "int",
         "raw_cases": "int",
         "schema": "str",
         "schema_version": "int",
+        "gzip_negative_cases": "int",
+        "zlib_negative_cases": "int",
         "zlib_cases": "int"
       },
       "count_rules": {
@@ -111,6 +114,21 @@
         },
         "negative_cases": {
           "collection": "negative_items"
+        },
+        "raw_negative_cases": {
+          "collection": "negative_items",
+          "field": "format",
+          "equals": "raw"
+        },
+        "zlib_negative_cases": {
+          "collection": "negative_items",
+          "field": "format",
+          "equals": "zlib"
+        },
+        "gzip_negative_cases": {
+          "collection": "negative_items",
+          "field": "format",
+          "equals": "gzip"
         }
       },
       "item_collection": "cases",
@@ -184,6 +202,7 @@
             "argv": "list",
             "command": "str",
             "expected_error": "str",
+            "format": "str",
             "matched": "bool",
             "name": "str",
             "sample": "str"
@@ -193,6 +212,11 @@
               "inspect-raw-header-hex",
               "inspect-zlib-header-hex",
               "inspect-gzip-header-hex"
+            ],
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
             ],
             "expected_error": [
               "BadGzipHeader",
@@ -209,6 +233,16 @@
               "command",
               "sample"
             ]
+          },
+          "field_pairs": {
+            "format": {
+              "target": "command",
+              "allowed": {
+                "raw": "inspect-raw-header-hex",
+                "zlib": "inspect-zlib-header-hex",
+                "gzip": "inspect-gzip-header-hex"
+              }
+            }
           }
         }
       }

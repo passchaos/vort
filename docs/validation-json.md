@@ -198,8 +198,9 @@ Important fields:
 - `ok`: whether the smoke passed
 - `case_count`, `raw_cases`, `zlib_cases`, `gzip_cases`
   (checked against the `cases` array by the schema manifest)
-- `negative_cases`: malformed header cases expected to fail inspection
-- `negative_items`: case-level command/sample/argv/error matches for malformed headers
+- `negative_cases`, `raw_negative_cases`, `zlib_negative_cases`,
+  `gzip_negative_cases`: malformed header cases expected to fail inspection
+- `negative_items`: case-level format/command/sample/argv/error matches for malformed headers
   (`command` and `expected_error` are enum-checked by the schema manifest)
 - `dictionary_cases`: zlib FDICT/DICTID cases covered
 - `optional_header_cases`, `fhcrc_cases`: gzip optional-header/FHCRC cases covered
@@ -220,9 +221,13 @@ Example:
   "zlib_cases": 1,
   "gzip_cases": 0,
   "negative_cases": 1,
+  "raw_negative_cases": 1,
+  "zlib_negative_cases": 0,
+  "gzip_negative_cases": 0,
   "negative_items": [
     {
       "name": "raw_reserved_btype",
+      "format": "raw",
       "command": "inspect-raw-header-hex",
       "sample": "07",
       "argv": ["inspect-raw-header-hex", "07"],

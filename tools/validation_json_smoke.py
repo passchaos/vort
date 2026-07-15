@@ -159,6 +159,7 @@ def main() -> int:
             header_summary["cases"][0]["sample"],
         ]
         assert header_summary["negative_cases"] >= 1
+        assert header_summary["raw_negative_cases"] >= 1
         assert len(header_summary["negative_items"]) == header_summary["negative_cases"]
         assert header_summary["negative_items"][0]["matched"] is True
         assert header_summary["negative_items"][0]["argv"] == [

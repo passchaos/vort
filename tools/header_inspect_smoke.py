@@ -114,11 +114,11 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
         ]
     )
     for format_name in ("raw", "zlib", "gzip"):
-        items = [item for item in summary["negative_items"] if format_for_command(item["command"]) == format_name]
+        items = [item for item in summary["negative_items"] if item["format"] == format_name]
         lines.append(f"| {md(format_name)} | {len(items)} |")
     lines.extend([""])
     for format_name in ("raw", "zlib", "gzip"):
-        items = [item for item in summary["negative_items"] if format_for_command(item["command"]) == format_name]
+        items = [item for item in summary["negative_items"] if item["format"] == format_name]
         if not items:
             continue
         lines.extend(
@@ -200,9 +200,11 @@ def main(argv: list[str]) -> int:
         failed = expect_failure(cli, command, sample)
         if expected_error not in failed:
             raise AssertionError(f"expected {expected_error!r} in failure output for {command} {sample}, got {failed!r}")
+        format_name = format_for_command(command)
         negative_items.append(
             {
                 "name": name,
+                "format": format_name,
                 "command": command,
                 "sample": sample,
                 "argv": [command, sample],
@@ -555,6 +557,9 @@ def main(argv: list[str]) -> int:
         "optional_header_cases": sum(1 for case in cases if case["has_optional_fields"]),
         "fhcrc_cases": sum(1 for case in cases if case["header_crc"]),
         "negative_cases": len(negative_cases),
+        "raw_negative_cases": sum(1 for item in negative_items if item["format"] == "raw"),
+        "zlib_negative_cases": sum(1 for item in negative_items if item["format"] == "zlib"),
+        "gzip_negative_cases": sum(1 for item in negative_items if item["format"] == "gzip"),
         "negative_items": negative_items,
     }
     if summary_path is not None:
