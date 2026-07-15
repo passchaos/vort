@@ -717,7 +717,7 @@ test "tree Huffman length builder favors frequent symbols and decodes" {
     try std.testing.expectEqual(@as(usize, 4), table.len);
 }
 
-test "tree Huffman length repair preserves canonical code space" {
+test "package-merge Huffman length builder preserves canonical code space" {
     var freqs: [32]u32 = undefined;
     for (&freqs, 0..) |*freq, i| freq.* = @intCast(i + 1);
     const lengths = treeCodeLengths(freqs.len, &freqs, 5);
@@ -725,6 +725,65 @@ test "tree Huffman length repair preserves canonical code space" {
     const Table = HuffmanTable(freqs.len);
     const table = try Table.init(&lengths);
     try std.testing.expectEqual(@as(usize, 32), table.len);
+}
+
+test "package-merge Huffman lengths match small optimal costs" {
+    {
+        const freqs = [_]u32{ 5, 7, 10, 15 };
+        const lengths = treeCodeLengths(freqs.len, &freqs, 3);
+        try std.testing.expectEqual(@as(usize, 71), codeLengthCost(freqs.len, &freqs, &lengths));
+        try std.testing.expect(kraftCost(freqs.len, &lengths, 3) <= (@as(usize, 1) << 3));
+    }
+    {
+        const freqs = [_]u32{ 100, 50, 25, 1 };
+        const lengths = treeCodeLengths(freqs.len, &freqs, 3);
+        try std.testing.expectEqual(@as(usize, 278), codeLengthCost(freqs.len, &freqs, &lengths));
+        try std.testing.expect(kraftCost(freqs.len, &lengths, 3) <= (@as(usize, 1) << 3));
+    }
+    {
+        const freqs = [_]u32{ 1, 2, 3, 4, 5 };
+        const lengths = treeCodeLengths(freqs.len, &freqs, 3);
+        try std.testing.expectEqual(@as(usize, 33), codeLengthCost(freqs.len, &freqs, &lengths));
+        try std.testing.expect(kraftCost(freqs.len, &lengths, 3) <= (@as(usize, 1) << 3));
+    }
+    {
+        const freqs = [_]u32{ 10_000, 1_000, 1, 1, 1, 1, 1 };
+        const lengths = treeCodeLengths(freqs.len, &freqs, 4);
+        try std.testing.expectEqual(@as(usize, 13_019), codeLengthCost(freqs.len, &freqs, &lengths));
+        try std.testing.expect(kraftCost(freqs.len, &lengths, 4) <= (@as(usize, 1) << 4));
+    }
+}
+
+test "package-merge Huffman length builder covers deflate alphabet sizes" {
+    {
+        var freqs: [286]u32 = @splat(0);
+        for (&freqs, 0..) |*freq, i| {
+            // Deterministic non-uniform shape that exercises all literal/length
+            // symbols without depending on corpus data. Symbol 256 is not
+            // special here: dynamic block planning separately ensures EOB is
+            // present before calling the length builder.
+            freq.* = @intCast(1 + ((i * 17 + (i / 7) * 31) % 251));
+        }
+        const first = treeCodeLengths(freqs.len, &freqs, max_code_bits);
+        const second = treeCodeLengths(freqs.len, &freqs, max_code_bits);
+        try std.testing.expectEqual(first, second);
+        try std.testing.expect(kraftCost(freqs.len, &first, max_code_bits) <= (@as(usize, 1) << max_code_bits));
+        for (first) |bits| try std.testing.expect(bits > 0 and bits <= max_code_bits);
+    }
+    {
+        var freqs: [30]u32 = @splat(0);
+        for (&freqs, 0..) |*freq, i| freq.* = @intCast(1 + ((i * 11 + 3) % 29));
+        const lengths = treeCodeLengths(freqs.len, &freqs, max_code_bits);
+        try std.testing.expect(kraftCost(freqs.len, &lengths, max_code_bits) <= (@as(usize, 1) << max_code_bits));
+        for (lengths) |bits| try std.testing.expect(bits > 0 and bits <= max_code_bits);
+    }
+    {
+        var freqs: [19]u32 = @splat(0);
+        for (&freqs, 0..) |*freq, i| freq.* = @intCast(1 + ((i * 5 + 7) % 23));
+        const lengths = treeCodeLengths(freqs.len, &freqs, 7);
+        try std.testing.expect(kraftCost(freqs.len, &lengths, 7) <= (@as(usize, 1) << 7));
+        for (lengths) |bits| try std.testing.expect(bits > 0 and bits <= 7);
+    }
 }
 
 test "tree Huffman length limiter preserves skewed short codes" {
@@ -742,6 +801,12 @@ test "tree Huffman length limiter preserves skewed short codes" {
     const Table = HuffmanTable(freqs.len);
     const table = try Table.init(&lengths);
     try std.testing.expectEqual(@as(usize, freqs.len), table.len);
+}
+
+fn codeLengthCost(comptime n: usize, freqs: *const [n]u32, lengths: *const [n]u4) usize {
+    var cost: usize = 0;
+    for (freqs.*, lengths.*) |freq, bits| cost += @as(usize, freq) * bits;
+    return cost;
 }
 
 test "fixed literal fast lookup matches table decoder" {
