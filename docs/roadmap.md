@@ -182,6 +182,7 @@ architecture blindly.
 - [x] CLI zlib header inspection supports schema-checked JSON output.
 - [x] raw/zlib/gzip header inspection CLI smoke runs in local CI aggregate.
 - [x] raw/zlib/gzip header inspection smoke covers malformed-header failure paths.
+- [x] raw/zlib/gzip header inspection smoke covers header-only and missing-trailer wrapper boundaries.
 - [x] raw/zlib/gzip header inspection smoke covers multiple malformed dynamic code-length failure paths.
 - [x] raw/zlib/gzip header inspection smoke checks malformed dynamic samples stay mirrored in the shared hex corpus.
 - [x] raw/zlib/gzip header inspection smoke covers malformed dynamic code-length failures through zlib/gzip inner-deflate inspection.

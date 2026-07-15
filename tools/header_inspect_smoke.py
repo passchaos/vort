@@ -338,6 +338,7 @@ def main(argv: list[str]) -> int:
     negative_cases = [
         ("raw_reserved_btype", "inspect-raw-header-hex", "07", "InvalidDeflateBlockType"),
         ("raw_bad_stored_nlen", "inspect-raw-header-hex", "010100ffff78", "StoredLengthMismatch"),
+        ("raw_stored_header_only", "inspect-raw-header-hex", "01", "TruncatedFrame"),
         ("raw_truncated_dynamic_header", "inspect-raw-header-hex", "05", "TruncatedFrame"),
         ("raw_dynamic_oversubscribed_cl", "inspect-raw-header-hex", "05009200", "InvalidHuffmanCode"),
         ("raw_dynamic_repeat16_without_previous", "inspect-raw-header-hex", "05000224", "InvalidDynamicBlockHeader"),
@@ -349,11 +350,14 @@ def main(argv: list[str]) -> int:
         ("zlib_dynamic_repeat17_overrun", "inspect-zlib-deflate-header-hex", "780105001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", "InvalidDynamicBlockHeader"),
         ("zlib_dynamic_repeat18_overrun", "inspect-zlib-deflate-header-hex", "7801050080c0df1f00000000", "InvalidDynamicBlockHeader"),
         ("zlib_dynamic_missing_eob", "inspect-zlib-deflate-header-hex", "780105c00104000000001000000000000000000000000001000000000000000000000000000000000000000000000000", "InvalidDynamicBlockHeader"),
+        ("zlib_inner_empty_payload", "inspect-zlib-deflate-header-hex", "7801", "TruncatedFrame"),
         ("gzip_dynamic_oversubscribed_cl", "inspect-gzip-deflate-header-hex", "1f8b0800000000000403050092000000000000000000", "InvalidHuffmanCode"),
         ("gzip_dynamic_repeat16_without_previous", "inspect-gzip-deflate-header-hex", "1f8b0800000000000403050002240000000000000000", "InvalidDynamicBlockHeader"),
         ("gzip_dynamic_repeat17_overrun", "inspect-gzip-deflate-header-hex", "1f8b08000000000004030500100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", "InvalidDynamicBlockHeader"),
         ("gzip_dynamic_repeat18_overrun", "inspect-gzip-deflate-header-hex", "1f8b0800000000000403050080c0df1f0000000000000000", "InvalidDynamicBlockHeader"),
         ("gzip_dynamic_missing_eob", "inspect-gzip-deflate-header-hex", "1f8b080000000000040305c0010400000000100000000000000000000000000100000000000000000000000000000000000000000000000000000000", "InvalidDynamicBlockHeader"),
+        ("gzip_inner_empty_payload", "inspect-gzip-deflate-header-hex", "1f8b0800000000000403", "TruncatedFrame"),
+        ("gzip_missing_trailer", "inspect-gzip-deflate-header-hex", "1f8b0800000000000403090000ffff", "TruncatedFrame"),
         ("zlib_bad_fcheck", "inspect-zlib-header-hex", "7802", "BadZlibHeader"),
         ("gzip_bad_fhcrc", "inspect-gzip-header-hex", "1f8b0802000000000403a2b2", "BadGzipHeader"),
     ]
