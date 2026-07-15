@@ -188,6 +188,10 @@ def main(argv: list[str]) -> int:
         ("raw_reserved_btype", "inspect-raw-header-hex", "07", "InvalidDeflateBlockType"),
         ("raw_bad_stored_nlen", "inspect-raw-header-hex", "010100ffff78", "StoredLengthMismatch"),
         ("raw_truncated_dynamic_header", "inspect-raw-header-hex", "05", "TruncatedFrame"),
+        ("raw_dynamic_oversubscribed_cl", "inspect-raw-header-hex", "05009200", "InvalidHuffmanCode"),
+        ("raw_dynamic_repeat16_without_previous", "inspect-raw-header-hex", "05000224", "InvalidDynamicBlockHeader"),
+        ("raw_dynamic_repeat17_overrun", "inspect-raw-header-hex", "050010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", "InvalidDynamicBlockHeader"),
+        ("raw_dynamic_missing_eob", "inspect-raw-header-hex", "05c001040000000010000000000000000000000000010000000000000000000000000000000000000000", "InvalidDynamicBlockHeader"),
         ("zlib_bad_fcheck", "inspect-zlib-header-hex", "7802", "BadZlibHeader"),
         ("gzip_bad_fhcrc", "inspect-gzip-header-hex", "1f8b0802000000000403a2b2", "BadGzipHeader"),
     ]

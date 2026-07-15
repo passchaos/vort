@@ -198,6 +198,8 @@
               "BadGzipHeader",
               "BadZlibHeader",
               "InvalidDeflateBlockType",
+              "InvalidDynamicBlockHeader",
+              "InvalidHuffmanCode",
               "StoredLengthMismatch",
               "TruncatedFrame"
             ]
