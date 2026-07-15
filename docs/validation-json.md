@@ -200,6 +200,7 @@ Important fields:
   (checked against the `cases` array by the schema manifest)
 - `negative_cases`, `raw_negative_cases`, `zlib_negative_cases`,
   `gzip_negative_cases`: malformed header cases expected to fail inspection
+- `negative_error_counts`: malformed header failures grouped by expected error
 - `negative_items`: case-level format/command/sample/argv/error matches for malformed headers
   (`command` and `expected_error` are enum-checked by the schema manifest)
 - `dictionary_cases`: zlib FDICT/DICTID cases covered
@@ -221,6 +222,9 @@ Example:
   "zlib_cases": 1,
   "gzip_cases": 0,
   "negative_cases": 1,
+  "negative_error_counts": {
+    "InvalidDeflateBlockType": 1
+  },
   "raw_negative_cases": 1,
   "zlib_negative_cases": 0,
   "gzip_negative_cases": 0,

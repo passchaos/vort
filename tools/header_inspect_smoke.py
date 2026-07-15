@@ -116,6 +116,17 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
     for format_name in ("raw", "zlib", "gzip"):
         items = [item for item in summary["negative_items"] if item["format"] == format_name]
         lines.append(f"| {md(format_name)} | {len(items)} |")
+    lines.extend(
+        [
+            "",
+            "### Error summary",
+            "",
+            "| expected error | failures |",
+            "| --- | ---: |",
+        ]
+    )
+    for error_name, count in sorted(summary["negative_error_counts"].items()):
+        lines.append(f"| `{md(error_name)}` | {count} |")
     lines.extend([""])
     for format_name in ("raw", "zlib", "gzip"):
         items = [item for item in summary["negative_items"] if item["format"] == format_name]
@@ -544,6 +555,11 @@ def main(argv: list[str]) -> int:
         if gzip_optional_file_json != gzip_optional_json:
             raise AssertionError(f"gzip optional JSON file/hex inspection mismatch: {gzip_optional_file_json!r} != {gzip_optional_json!r}")
 
+    negative_error_counts: dict[str, int] = {}
+    for item in negative_items:
+        error_name = str(item["expected_error"])
+        negative_error_counts[error_name] = negative_error_counts.get(error_name, 0) + 1
+
     summary = {
         "schema": "vort.header_inspect_smoke",
         "schema_version": 1,
@@ -560,6 +576,7 @@ def main(argv: list[str]) -> int:
         "raw_negative_cases": sum(1 for item in negative_items if item["format"] == "raw"),
         "zlib_negative_cases": sum(1 for item in negative_items if item["format"] == "zlib"),
         "gzip_negative_cases": sum(1 for item in negative_items if item["format"] == "gzip"),
+        "negative_error_counts": negative_error_counts,
         "negative_items": negative_items,
     }
     if summary_path is not None:
