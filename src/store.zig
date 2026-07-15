@@ -770,12 +770,35 @@ pub fn validateFrameIndex(index: []const FrameIndexEntry) Error!void {
 /// index/frame validation paths when they need to prove the stream bytes match
 /// the index; this helper is purely the checksum-composition primitive.
 pub fn frameIndexCombinedChecksum(index: []const FrameIndexEntry) Error!u32 {
+    return (try frameIndexSummary(index)).combined_checksum;
+}
+
+const FrameIndexSummary = struct {
+    frame_count: usize,
+    total_uncompressed: u64,
+    combined_checksum: u32,
+};
+
+fn frameIndexSummary(index: []const FrameIndexEntry) Error!FrameIndexSummary {
     try validateFrameIndex(index);
     var combined = checksum.crc32("");
     for (index) |entry| {
         combined = checksum.crc32Combine(combined, entry.checksum, entry.uncompressed_len);
     }
-    return combined;
+    return .{
+        .frame_count = index.len,
+        .total_uncompressed = if (index.len == 0) 0 else index[index.len - 1].uncompressed_offset + index[index.len - 1].uncompressed_len,
+        .combined_checksum = combined,
+    };
+}
+
+fn validateFrameIndexSummaryExpectations(summary: FrameIndexSummary, options: SidecarValidationOptions) Error!void {
+    if (options.expected_total_uncompressed) |expected| {
+        if (summary.total_uncompressed != expected) return error.SizeMismatch;
+    }
+    if (options.expected_checksum) |expected| {
+        if (summary.combined_checksum != expected) return error.ChecksumMismatch;
+    }
 }
 
 pub fn findFrameForOffset(index: []const FrameIndexEntry, uncompressed_offset: u64) ?usize {
@@ -1592,6 +1615,15 @@ pub const SidecarValidationMode = enum {
 pub const SidecarValidationOptions = struct {
     mode: SidecarValidationMode = .full,
     dictionary: ?[]const u8 = null,
+    /// Optional logical payload byte count expected from the frame index.
+    /// This is checked from metadata before optional full payload decoding.
+    expected_total_uncompressed: ?u64 = null,
+    /// Optional CRC-32 of the logical concatenated payload expected from the
+    /// frame index. The value is computed with frameIndexCombinedChecksum, so
+    /// metadata mode can validate whole-stream checksum policy without reading
+    /// every payload byte. Full mode still decodes frames to prove the indexed
+    /// frame bytes match their headers.
+    expected_checksum: ?u32 = null,
 };
 
 pub const ValidationStage = enum {
@@ -1641,25 +1673,25 @@ pub fn validateSidecarIndexWithDictionaryAlloc(allocator: std.mem.Allocator, dic
 }
 
 pub fn validateSidecarIndexWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, options: SidecarValidationOptions) !void {
-    if (options.mode == .metadata) return validateSidecarIndexInternalAlloc(allocator, options.dictionary, input, sidecar_index, .metadata);
-    if (options.dictionary) |dict| return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index, options.mode);
+    if (options.mode == .metadata) return validateSidecarIndexInternalAlloc(allocator, options.dictionary, input, sidecar_index, options);
+    if (options.dictionary) |dict| return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index, options);
     if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
         defer allocator.free(dict);
-        return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index, options.mode);
+        return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index, options);
     } else |err| switch (err) {
-        error.InvalidMagic => return validateSidecarIndexInternalAlloc(allocator, null, input, sidecar_index, options.mode),
+        error.InvalidMagic => return validateSidecarIndexInternalAlloc(allocator, null, input, sidecar_index, options),
         else => return err,
     }
 }
 
 pub fn validateSidecarIndexReportAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, options: SidecarValidationOptions) ValidationReport {
-    if (options.mode == .metadata) return validateSidecarIndexReportInternalAlloc(allocator, options.dictionary, input, sidecar_index, .metadata);
-    if (options.dictionary) |dict| return validateSidecarIndexReportInternalAlloc(allocator, dict, input, sidecar_index, options.mode);
+    if (options.mode == .metadata) return validateSidecarIndexReportInternalAlloc(allocator, options.dictionary, input, sidecar_index, options);
+    if (options.dictionary) |dict| return validateSidecarIndexReportInternalAlloc(allocator, dict, input, sidecar_index, options);
     if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
         defer allocator.free(dict);
-        return validateSidecarIndexReportInternalAlloc(allocator, dict, input, sidecar_index, options.mode);
+        return validateSidecarIndexReportInternalAlloc(allocator, dict, input, sidecar_index, options);
     } else |err| switch (err) {
-        error.InvalidMagic => return validateSidecarIndexReportInternalAlloc(allocator, null, input, sidecar_index, options.mode),
+        error.InvalidMagic => return validateSidecarIndexReportInternalAlloc(allocator, null, input, sidecar_index, options),
         else => return validationFailure(options.mode, .dictionary_parse, err, null, null, null),
     }
 }
@@ -1675,13 +1707,13 @@ pub fn validateEmbeddedIndexMetadataAlloc(allocator: std.mem.Allocator, input: [
 pub fn validateEmbeddedIndexWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: SidecarValidationOptions) !void {
     const embedded = try parseEmbeddedIndexAlloc(allocator, input);
     defer embedded.deinit(allocator);
-    if (options.mode == .metadata) return validateFrameIndexEntriesInternalAlloc(allocator, options.dictionary, input, embedded.entries, .metadata);
-    if (options.dictionary) |dict| return validateFrameIndexEntriesInternalAlloc(allocator, dict, input, embedded.entries, options.mode);
+    if (options.mode == .metadata) return validateFrameIndexEntriesInternalAlloc(allocator, options.dictionary, input, embedded.entries, options);
+    if (options.dictionary) |dict| return validateFrameIndexEntriesInternalAlloc(allocator, dict, input, embedded.entries, options);
     if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
         defer allocator.free(dict);
-        return validateFrameIndexEntriesInternalAlloc(allocator, dict, input, embedded.entries, options.mode);
+        return validateFrameIndexEntriesInternalAlloc(allocator, dict, input, embedded.entries, options);
     } else |err| switch (err) {
-        error.InvalidMagic => return validateFrameIndexEntriesInternalAlloc(allocator, null, input, embedded.entries, options.mode),
+        error.InvalidMagic => return validateFrameIndexEntriesInternalAlloc(allocator, null, input, embedded.entries, options),
         else => return err,
     }
 }
@@ -1691,25 +1723,27 @@ pub fn validateEmbeddedIndexReportAlloc(allocator: std.mem.Allocator, input: []c
         return validationFailure(options.mode, .index_decode, err, null, null, null);
     };
     defer embedded.deinit(allocator);
-    if (options.mode == .metadata) return validateFrameIndexEntriesReportInternalAlloc(allocator, options.dictionary, input, embedded.entries, .metadata);
-    if (options.dictionary) |dict| return validateFrameIndexEntriesReportInternalAlloc(allocator, dict, input, embedded.entries, options.mode);
+    if (options.mode == .metadata) return validateFrameIndexEntriesReportInternalAlloc(allocator, options.dictionary, input, embedded.entries, options);
+    if (options.dictionary) |dict| return validateFrameIndexEntriesReportInternalAlloc(allocator, dict, input, embedded.entries, options);
     if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
         defer allocator.free(dict);
-        return validateFrameIndexEntriesReportInternalAlloc(allocator, dict, input, embedded.entries, options.mode);
+        return validateFrameIndexEntriesReportInternalAlloc(allocator, dict, input, embedded.entries, options);
     } else |err| switch (err) {
-        error.InvalidMagic => return validateFrameIndexEntriesReportInternalAlloc(allocator, null, input, embedded.entries, options.mode),
+        error.InvalidMagic => return validateFrameIndexEntriesReportInternalAlloc(allocator, null, input, embedded.entries, options),
         else => return validationFailure(options.mode, .dictionary_parse, err, null, null, null),
     }
 }
 
-fn validateSidecarIndexInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, sidecar_index: []const u8, mode: SidecarValidationMode) !void {
+fn validateSidecarIndexInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, sidecar_index: []const u8, options: SidecarValidationOptions) !void {
     const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
     defer allocator.free(index);
-    return validateFrameIndexEntriesInternalAlloc(allocator, dict, input, index, mode);
+    return validateFrameIndexEntriesInternalAlloc(allocator, dict, input, index, options);
 }
 
-fn validateFrameIndexEntriesInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, mode: SidecarValidationMode) !void {
+fn validateFrameIndexEntriesInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, options: SidecarValidationOptions) !void {
     try validateFrameIndex(index);
+    const summary = try frameIndexSummary(index);
+    try validateFrameIndexSummaryExpectations(summary, options);
     for (index) |entry| {
         if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
         const frame = input[entry.frame_offset..][0..entry.frame_len];
@@ -1717,7 +1751,7 @@ fn validateFrameIndexEntriesInternalAlloc(allocator: std.mem.Allocator, dict: ?[
         if (entry.frame_len != try frameLenFromInfo(info)) return error.CorruptFrame;
         if (entry.uncompressed_len != info.uncompressed_size) return error.CorruptFrame;
         if (entry.checksum != info.checksum) return error.ChecksumMismatch;
-        if (mode == .metadata) continue;
+        if (options.mode == .metadata) continue;
         // A sidecar can outlive and travel separately from its stream, so
         // structural agreement with frame headers is not enough: a payload byte
         // could be modified while both the frame header and sidecar checksum
@@ -1732,39 +1766,39 @@ fn validateFrameIndexEntriesInternalAlloc(allocator: std.mem.Allocator, dict: ?[
     }
 }
 
-fn validateSidecarIndexReportInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, sidecar_index: []const u8, mode: SidecarValidationMode) ValidationReport {
+fn validateSidecarIndexReportInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, sidecar_index: []const u8, options: SidecarValidationOptions) ValidationReport {
     const index = decodeFrameIndexAlloc(allocator, sidecar_index) catch |err| {
-        return validationFailure(mode, .index_decode, err, null, null, null);
+        return validationFailure(options.mode, .index_decode, err, null, null, null);
     };
     defer allocator.free(index);
-    return validateFrameIndexEntriesReportInternalAlloc(allocator, dict, input, index, mode);
+    return validateFrameIndexEntriesReportInternalAlloc(allocator, dict, input, index, options);
 }
 
-fn validateFrameIndexEntriesReportInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, mode: SidecarValidationMode) ValidationReport {
-    validateFrameIndex(index) catch |err| return validationFailure(mode, .index_structure, err, null, null, null);
-    const combined_checksum = frameIndexCombinedChecksum(index) catch |err| return validationFailure(mode, .index_structure, err, null, null, null);
-    const total_uncompressed = if (index.len == 0) 0 else index[index.len - 1].uncompressed_offset + index[index.len - 1].uncompressed_len;
+fn validateFrameIndexEntriesReportInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, options: SidecarValidationOptions) ValidationReport {
+    validateFrameIndex(index) catch |err| return validationFailure(options.mode, .index_structure, err, null, null, null);
+    const summary = frameIndexSummary(index) catch |err| return validationFailure(options.mode, .index_structure, err, null, null, null);
+    validateFrameIndexSummaryExpectations(summary, options) catch |err| return validationFailure(options.mode, .frame_metadata, err, null, null, null);
     for (index, 0..) |entry, i| {
-        if (input.len - entry.frame_offset < entry.frame_len) return validationFailure(mode, .frame_bounds, error.TruncatedFrame, i, entry, null);
+        if (input.len - entry.frame_offset < entry.frame_len) return validationFailure(options.mode, .frame_bounds, error.TruncatedFrame, i, entry, null);
         const frame = input[entry.frame_offset..][0..entry.frame_len];
-        const info = parseHeader(frame) catch |err| return validationFailure(mode, .frame_header, err, i, entry, null);
-        if (entry.frame_len != (frameLenFromInfo(info) catch |err| return validationFailure(mode, .frame_metadata, err, i, entry, info.flags))) return validationFailure(mode, .frame_metadata, error.CorruptFrame, i, entry, info.flags);
-        if (entry.uncompressed_len != info.uncompressed_size) return validationFailure(mode, .frame_metadata, error.CorruptFrame, i, entry, info.flags);
-        if (entry.checksum != info.checksum) return validationFailure(mode, .frame_metadata, error.ChecksumMismatch, i, entry, info.flags);
-        if (mode == .metadata) continue;
+        const info = parseHeader(frame) catch |err| return validationFailure(options.mode, .frame_header, err, i, entry, null);
+        if (entry.frame_len != (frameLenFromInfo(info) catch |err| return validationFailure(options.mode, .frame_metadata, err, i, entry, info.flags))) return validationFailure(options.mode, .frame_metadata, error.CorruptFrame, i, entry, info.flags);
+        if (entry.uncompressed_len != info.uncompressed_size) return validationFailure(options.mode, .frame_metadata, error.CorruptFrame, i, entry, info.flags);
+        if (entry.checksum != info.checksum) return validationFailure(options.mode, .frame_metadata, error.ChecksumMismatch, i, entry, info.flags);
+        if (options.mode == .metadata) continue;
         const decoded = if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) blk: {
-            const dictionary_bytes = dict orelse return validationFailure(mode, .payload_decode, error.InvalidDictionaryTraining, i, entry, info.flags);
-            break :blk decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame) catch |err| return validationFailure(mode, .payload_decode, err, i, entry, info.flags);
-        } else decodeAnyAlloc(allocator, frame) catch |err| return validationFailure(mode, .payload_decode, err, i, entry, info.flags);
+            const dictionary_bytes = dict orelse return validationFailure(options.mode, .payload_decode, error.InvalidDictionaryTraining, i, entry, info.flags);
+            break :blk decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame) catch |err| return validationFailure(options.mode, .payload_decode, err, i, entry, info.flags);
+        } else decodeAnyAlloc(allocator, frame) catch |err| return validationFailure(options.mode, .payload_decode, err, i, entry, info.flags);
         allocator.free(decoded);
     }
     return .{
         .ok = true,
-        .mode = mode,
-        .stage = if (mode == .metadata) .frame_metadata else .payload_decode,
-        .frame_count = index.len,
-        .total_uncompressed = total_uncompressed,
-        .combined_checksum = combined_checksum,
+        .mode = options.mode,
+        .stage = if (options.mode == .metadata) .frame_metadata else .payload_decode,
+        .frame_count = summary.frame_count,
+        .total_uncompressed = summary.total_uncompressed,
+        .combined_checksum = summary.combined_checksum,
     };
 }
 
@@ -2401,6 +2435,40 @@ test "sidecar index report captures frame failure context" {
     try std.testing.expectEqualStrings("store", report.frame_mode);
 }
 
+test "sidecar validation options enforce expected logical checksum and length" {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const sidecar = try encodeSidecarIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer sidecar.deinit(std.testing.allocator);
+
+    const expected_payload = "alphabetagamma";
+    const expected_checksum = checksum.crc32(expected_payload);
+    try validateSidecarIndexWithOptionsAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, .{
+        .mode = .metadata,
+        .expected_total_uncompressed = expected_payload.len,
+        .expected_checksum = expected_checksum,
+    });
+
+    try std.testing.expectError(error.SizeMismatch, validateSidecarIndexWithOptionsAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, .{
+        .mode = .metadata,
+        .expected_total_uncompressed = expected_payload.len + 1,
+        .expected_checksum = expected_checksum,
+    }));
+    try std.testing.expectError(error.ChecksumMismatch, validateSidecarIndexWithOptionsAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, .{
+        .mode = .metadata,
+        .expected_total_uncompressed = expected_payload.len,
+        .expected_checksum = expected_checksum ^ 1,
+    }));
+
+    const report = validateSidecarIndexReportAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, .{
+        .mode = .metadata,
+        .expected_checksum = expected_checksum ^ 1,
+    });
+    try std.testing.expect(!report.ok);
+    try std.testing.expectEqual(ValidationStage.frame_metadata, report.stage);
+    try std.testing.expectEqualStrings("ChecksumMismatch", report.error_name);
+    try std.testing.expectEqual(ValidationHint.index_mismatch, report.recoverability_hint);
+}
+
 test "embedded index report includes combined checksum summary" {
     const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
     const stream = try encodeIndexedStreamAlloc(std.testing.allocator, &payloads);
@@ -2411,6 +2479,31 @@ test "embedded index report includes combined checksum summary" {
     try std.testing.expectEqual(@as(usize, 3), report.frame_count);
     try std.testing.expectEqual(@as(u64, "alphabetagamma".len), report.total_uncompressed);
     try std.testing.expectEqual(checksum.crc32("alphabetagamma"), report.combined_checksum.?);
+}
+
+test "embedded validation options enforce expected logical checksum and length" {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const stream = try encodeIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer std.testing.allocator.free(stream);
+
+    const expected_payload = "alphabetagamma";
+    const expected_checksum = checksum.crc32(expected_payload);
+    try validateEmbeddedIndexWithOptionsAlloc(std.testing.allocator, stream, .{
+        .mode = .metadata,
+        .expected_total_uncompressed = expected_payload.len,
+        .expected_checksum = expected_checksum,
+    });
+    try std.testing.expectError(error.SizeMismatch, validateEmbeddedIndexWithOptionsAlloc(std.testing.allocator, stream, .{
+        .mode = .metadata,
+        .expected_total_uncompressed = expected_payload.len + 1,
+    }));
+    const report = validateEmbeddedIndexReportAlloc(std.testing.allocator, stream, .{
+        .mode = .metadata,
+        .expected_checksum = expected_checksum ^ 1,
+    });
+    try std.testing.expect(!report.ok);
+    try std.testing.expectEqual(ValidationStage.frame_metadata, report.stage);
+    try std.testing.expectEqualStrings("ChecksumMismatch", report.error_name);
 }
 
 test "embedded index validation supports metadata and full modes" {

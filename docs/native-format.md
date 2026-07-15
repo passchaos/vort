@@ -21,6 +21,9 @@ dictionaries in full mode, while `validateSidecarIndexWithDictionaryAlloc` and
 structured failure context (validation mode, stage, frame index/offset,
 uncompressed offset, numeric frame flags, readable frame mode, recoverability
 hint, and error name) for diagnostics without replacing the throwing APIs.
+`SidecarValidationOptions.expected_total_uncompressed` and
+`expected_checksum` let callers enforce a known logical payload length and
+whole-stream CRC-32 from index metadata before optional full payload decoding.
 `run-sidecar-verify-report` includes the same context columns/fields in CSV,
 Markdown, and JSON output when validation fails. JSON validation artifacts carry
 stable `schema` and `schema_version` fields so scripts can gate compatibility.
@@ -108,4 +111,5 @@ checksum metadata without decoding or rereading every frame payload. Normal
 sidecar/embedded validation remains responsible for proving that frame bytes and
 index entries match. Successful `ValidationReport` values expose the combined
 checksum, frame count, and total indexed uncompressed byte count for callers that
-need a whole-stream summary.
+need a whole-stream summary; callers can also feed those expected values back
+through `SidecarValidationOptions` to reject mismatched sidecar/index metadata.
