@@ -33,9 +33,9 @@ Remaining encoder work for future milestones:
 - implement package-merge length-limited Huffman for optimal code lengths
   under the 15-bit constraint (current tree + zlib-style overflow
   redistribution is correct and deterministic but not globally optimal);
-  `run-huffman-length-report-dashboard` records small brute-force oracle cases
-  that future implementations must satisfy before replacing the production
-  length builder;
+  `run-huffman-length-report-dashboard` records fixed and generated small
+  brute-force oracle cases that future implementations must satisfy before
+  replacing the production length builder;
 - dynamic-Huffman-aware optimal parser refinement (iterative LZ77
   re-optimization using dynamic bit costs beyond the production fixed-cost
   optimal parser);

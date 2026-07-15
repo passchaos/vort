@@ -24,7 +24,7 @@ const Row = struct {
     optimal_lengths: [max_symbols]u4,
 };
 
-const cases = [_]Case{
+const fixed_cases = [_]Case{
     .{ .name = "classic4", .max_bits = 3, .freqs = freqs(&.{ 5, 7, 10, 15 }), .symbol_count = 4 },
     .{ .name = "skew4", .max_bits = 3, .freqs = freqs(&.{ 100, 50, 25, 1 }), .symbol_count = 4 },
     .{ .name = "equal3", .max_bits = 2, .freqs = freqs(&.{ 1, 1, 1 }), .symbol_count = 3 },
@@ -50,12 +50,14 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
-    var rows: [cases.len]Row = undefined;
-    for (cases, 0..) |case, i| rows[i] = buildRow(case);
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(init.gpa);
+    for (fixed_cases) |case| try rows.append(init.gpa, buildRow(case));
+    try appendGeneratedRows(init.gpa, &rows);
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try writeCsv(&csv.writer, &rows);
+    try writeCsv(&csv.writer, rows.items);
     const csv_bytes = csv.written();
 
     var stdout_buffer: [1024]u8 = undefined;
@@ -68,9 +70,27 @@ pub fn main(init: std.process.Init) !void {
     if (markdown_path) |path| {
         var markdown = std.Io.Writer.Allocating.init(init.gpa);
         defer markdown.deinit();
-        try writeMarkdown(&markdown.writer, &rows);
+        try writeMarkdown(&markdown.writer, rows.items);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = markdown.written() });
     }
+}
+
+fn appendGeneratedRows(allocator: std.mem.Allocator, rows: *std.ArrayList(Row)) !void {
+    inline for (.{ 3, 4, 5, 6 }) |symbol_count| {
+        inline for (.{ 3, 4 }) |max_bits| {
+            if (symbol_count > (@as(usize, 1) << max_bits)) continue;
+            try rows.append(allocator, buildGeneratedRow("equal", symbol_count, max_bits, equalFreqs(symbol_count)));
+            try rows.append(allocator, buildGeneratedRow("ramp", symbol_count, max_bits, rampFreqs(symbol_count)));
+            try rows.append(allocator, buildGeneratedRow("reverse-ramp", symbol_count, max_bits, reverseRampFreqs(symbol_count)));
+            try rows.append(allocator, buildGeneratedRow("fibonacci", symbol_count, max_bits, fibonacciFreqs(symbol_count)));
+            try rows.append(allocator, buildGeneratedRow("head-heavy", symbol_count, max_bits, headHeavyFreqs(symbol_count)));
+        }
+    }
+}
+
+fn buildGeneratedRow(comptime family: []const u8, comptime symbol_count: usize, comptime max_bits: u4, freq_values: [max_symbols]u32) Row {
+    const name = std.fmt.comptimePrint("{s}-{d}-b{d}", .{ family, symbol_count, max_bits });
+    return buildRow(.{ .name = name, .max_bits = max_bits, .freqs = freq_values, .symbol_count = symbol_count });
 }
 
 fn buildRow(case: Case) Row {
@@ -117,6 +137,13 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
 fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
     try writer.writeAll("# Huffman length-limit report\n\n");
     try writer.writeAll("Small fixed cases are brute-forced at runtime to guard future package-merge work.\n\n");
+    const summary = summarizeRows(rows);
+    try writer.print("- rows: {d}\n- optimal rows: {d}\n- non-optimal rows: {d}\n- worst gap bits: {d}\n\n", .{
+        rows.len,
+        summary.optimal_rows,
+        rows.len - summary.optimal_rows,
+        summary.worst_gap_bits,
+    });
     try writer.writeAll("| case | symbols | max bits | optimal cost | actual cost | gap bits | Kraft | optimal? | lengths | oracle lengths |\n");
     try writer.writeAll("|---|---:|---:|---:|---:|---:|---:|---|---|---|\n");
     for (rows) |row| {
@@ -136,6 +163,20 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
         try writeLengthSlice(writer, row.optimal_lengths[0..row.symbol_count]);
         try writer.writeAll(" |\n");
     }
+}
+
+const Summary = struct {
+    optimal_rows: usize = 0,
+    worst_gap_bits: isize = 0,
+};
+
+fn summarizeRows(rows: []const Row) Summary {
+    var summary = Summary{};
+    for (rows) |row| {
+        if (row.optimal) summary.optimal_rows += 1;
+        if (row.gap_bits > summary.worst_gap_bits) summary.worst_gap_bits = row.gap_bits;
+    }
+    return summary;
 }
 
 fn writeLengths(writer: *std.Io.Writer, row: Row) !void {
@@ -207,5 +248,46 @@ fn kraftCost(lengths: *const [max_symbols]u4, symbol_count: usize, max_bits: u4)
 fn freqs(values: []const u32) [max_symbols]u32 {
     var out: [max_symbols]u32 = @splat(0);
     for (values, 0..) |value, i| out[i] = value;
+    return out;
+}
+
+fn equalFreqs(comptime symbol_count: usize) [max_symbols]u32 {
+    var out: [max_symbols]u32 = @splat(0);
+    for (0..symbol_count) |i| out[i] = 1;
+    return out;
+}
+
+fn rampFreqs(comptime symbol_count: usize) [max_symbols]u32 {
+    var out: [max_symbols]u32 = @splat(0);
+    for (0..symbol_count) |i| out[i] = @intCast(i + 1);
+    return out;
+}
+
+fn reverseRampFreqs(comptime symbol_count: usize) [max_symbols]u32 {
+    var out: [max_symbols]u32 = @splat(0);
+    for (0..symbol_count) |i| out[i] = @intCast(symbol_count - i);
+    return out;
+}
+
+fn fibonacciFreqs(comptime symbol_count: usize) [max_symbols]u32 {
+    var out: [max_symbols]u32 = @splat(0);
+    var a: u32 = 1;
+    var b: u32 = 1;
+    for (0..symbol_count) |i| {
+        out[i] = a;
+        const next = a + b;
+        a = b;
+        b = next;
+    }
+    return out;
+}
+
+fn headHeavyFreqs(comptime symbol_count: usize) [max_symbols]u32 {
+    var out: [max_symbols]u32 = @splat(0);
+    if (symbol_count == 0) return out;
+    out[0] = @intCast(symbol_count * symbol_count * 10);
+    if (symbol_count > 1) out[1] = @intCast(symbol_count * 3);
+    var i: usize = 2;
+    while (i < symbol_count) : (i += 1) out[i] = 1;
     return out;
 }
