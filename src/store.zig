@@ -127,19 +127,29 @@ fn encodeRlePayloadAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 
     return out.toOwnedSlice(allocator);
 }
 
-fn decodeRlePayloadAlloc(allocator: std.mem.Allocator, payload: []const u8) ![]u8 {
+fn decodeRlePayloadAlloc(allocator: std.mem.Allocator, payload: []const u8, expected_len: usize) ![]u8 {
+    const out = try allocator.alloc(u8, expected_len);
+    errdefer allocator.free(out);
+    const written = try decodeRlePayloadInto(payload, out);
+    std.debug.assert(written == expected_len);
+    return out;
+}
+
+fn decodeRlePayloadInto(payload: []const u8, output: []u8) Error!usize {
     if ((payload.len & 1) != 0) return error.CorruptFrame;
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
+    var written: usize = 0;
     var i: usize = 0;
     while (i < payload.len) : (i += 2) {
-        const run = payload[i];
+        const run: usize = payload[i];
         const byte = payload[i + 1];
         if (run == 0) return error.CorruptFrame;
-        try out.ensureUnusedCapacity(allocator, run);
-        for (0..run) |_| out.appendAssumeCapacity(byte);
+        if (written > output.len) return error.SizeMismatch;
+        if (run > output.len - written) return error.SizeMismatch;
+        @memset(output[written..][0..run], byte);
+        written += run;
     }
-    return out.toOwnedSlice(allocator);
+    if (written != output.len) return error.SizeMismatch;
+    return written;
 }
 
 pub fn encodeRleAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -332,7 +342,7 @@ pub fn decodeAnyAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
             break :blk out;
         },
         flags_deflate => try deflate.decodeRawAutoAlloc(allocator, payload),
-        flags_rle => try decodeRlePayloadAlloc(allocator, payload),
+        flags_rle => try decodeRlePayloadAlloc(allocator, payload, std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow),
         flags_dictionary_patch => return error.InvalidDictionaryTraining,
         flags_dictionary_deflate => return error.InvalidDictionaryTraining,
         flags_ldm => try decodeLongDistancePayloadAlloc(allocator, payload, std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow),
@@ -342,6 +352,21 @@ pub fn decodeAnyAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     if (decoded.len != info.uncompressed_size) return error.SizeMismatch;
     if (checksum.crc32(decoded) != info.checksum) return error.ChecksumMismatch;
     return decoded;
+}
+
+pub fn decodeRleInto(input: []const u8, output: []u8) Error!usize {
+    const info = try parseHeader(input);
+    if (info.flags != flags_rle) return error.CorruptFrame;
+    const output_len = std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow;
+    if (output.len < output_len) return error.OutputTooSmall;
+    const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
+    const total_len = try encodedSize(payload_len);
+    if (input.len < total_len) return error.TruncatedFrame;
+    const payload = input[header_len..total_len];
+    const written = try decodeRlePayloadInto(payload, output[0..output_len]);
+    if (written != output_len) return error.SizeMismatch;
+    if (checksum.crc32(output[0..output_len]) != info.checksum) return error.ChecksumMismatch;
+    return output_len;
 }
 
 pub fn decodeLongDistanceInto(input: []const u8, output: []u8) Error!usize {
@@ -1058,6 +1083,7 @@ fn decodeRangeWithDictionaryIntoValidated(
         const entry = index[i];
         if (entry.uncompressed_offset >= end) break;
         if (try copyStoredRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
+        if (try copyRleRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
         if (try copyFullDeflateRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
         if (try copyFullDictionaryRangeIntoIfPossible(allocator, dict, input, entry, offset, end, output, &written, &crc)) continue;
         if (try copyFullLongDistanceRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
@@ -1115,6 +1141,64 @@ fn copyStoredRangeIntoIfPossible(
         crc.update(slice);
         written.* += slice.len;
     }
+    return true;
+}
+
+fn copyRleRangeIntoIfPossible(
+    input: []const u8,
+    entry: FrameIndexEntry,
+    range_offset: u64,
+    range_end: u64,
+    output: []u8,
+    written: *usize,
+    range_crc: *checksum.Crc32,
+) !bool {
+    if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
+    const frame = input[entry.frame_offset..][0..entry.frame_len];
+    const frame_info = try parseHeader(frame);
+    if (frame_info.flags != flags_rle) return false;
+    if (entry.frame_len != try frameLenFromInfo(frame_info)) return error.CorruptFrame;
+    if (entry.checksum != frame_info.checksum) return error.ChecksumMismatch;
+    if (entry.uncompressed_len != frame_info.uncompressed_size) return error.CorruptFrame;
+
+    const expected_len = std.math.cast(usize, entry.uncompressed_len) orelse return error.IntegerOverflow;
+    const payload_len = std.math.cast(usize, frame_info.stored_size) orelse return error.IntegerOverflow;
+    const payload = frame[header_len..][0..payload_len];
+    if ((payload.len & 1) != 0) return error.CorruptFrame;
+
+    const frame_start = entry.uncompressed_offset;
+    const frame_end = entry.uncompressed_offset + entry.uncompressed_len;
+    const copy_start = std.math.cast(usize, if (range_offset > frame_start) range_offset - frame_start else 0) orelse return error.IntegerOverflow;
+    const copy_end_global = @min(range_end, frame_end);
+    const copy_end = std.math.cast(usize, copy_end_global - frame_start) orelse return error.IntegerOverflow;
+
+    var frame_crc = checksum.Crc32.init();
+    var decoded_pos: usize = 0;
+    var offset: usize = 0;
+    var run_buf: [255]u8 = undefined;
+    while (offset < payload.len) : (offset += 2) {
+        const run: usize = payload[offset];
+        const byte = payload[offset + 1];
+        if (run == 0) return error.CorruptFrame;
+        if (decoded_pos > expected_len) return error.SizeMismatch;
+        if (run > expected_len - decoded_pos) return error.SizeMismatch;
+        @memset(run_buf[0..run], byte);
+        frame_crc.update(run_buf[0..run]);
+
+        const run_start = decoded_pos;
+        const run_end = decoded_pos + run;
+        const overlap_start = @max(copy_start, run_start);
+        const overlap_end = @min(copy_end, run_end);
+        if (overlap_end > overlap_start) {
+            const copy_len = overlap_end - overlap_start;
+            @memset(output[written.*..][0..copy_len], byte);
+            range_crc.update(output[written.*..][0..copy_len]);
+            written.* += copy_len;
+        }
+        decoded_pos = run_end;
+    }
+    if (decoded_pos != expected_len) return error.SizeMismatch;
+    if (frame_crc.digest() != frame_info.checksum) return error.ChecksumMismatch;
     return true;
 }
 
@@ -3579,6 +3663,44 @@ test "native RLE frame round trips repeated payloads" {
     const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "native RLE frame decodes into caller buffer without allocation" {
+    const input = "aaaaabbbbbbbbbbbbbcccccccccccccccc";
+    const frame = try encodeRleAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_rle, info.flags);
+
+    var out: [input.len]u8 = undefined;
+    const written = try decodeRleInto(frame, &out);
+    try std.testing.expectEqual(out.len, written);
+    try std.testing.expectEqualSlices(u8, input, &out);
+
+    var short: [input.len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodeRleInto(frame, &short));
+}
+
+test "RLE frame range decodes into caller buffer without allocation" {
+    const input = "aaaaabbbbbbbbbbbbbcccccccccccccccc";
+    const frame = try encodeRleAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_rle, info.flags);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+
+    var full: [input.len]u8 = undefined;
+    const full_result = try decodeRangeInto(std.testing.failing_allocator, frame, index, 0, full.len, full[0..]);
+    try std.testing.expectEqual(full.len, full_result.output_written);
+    try std.testing.expectEqualSlices(u8, input, &full);
+    try std.testing.expectEqual(checksum.crc32(input), full_result.crc32);
+
+    var partial: [20]u8 = undefined;
+    const partial_result = try decodeRangeInto(std.testing.failing_allocator, frame, index, 3, partial.len, partial[0..]);
+    try std.testing.expectEqual(partial.len, partial_result.output_written);
+    try std.testing.expectEqualSlices(u8, input[3..23], &partial);
+    try std.testing.expectEqual(checksum.crc32(input[3..23]), partial_result.crc32);
 }
 
 test "native long-distance frame round trips beyond-window repetitions" {

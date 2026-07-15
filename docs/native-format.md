@@ -162,6 +162,15 @@ allocating a temporary whole-frame decoded buffer for common block-aligned range
 reads. Partial deflate-frame ranges still use the decoded-frame cache path so
 subranges can be copied safely after the frame checksum has been verified.
 
+## RLE decode-into and range fast path
+
+Native RLE frames expose a caller-owned decode path that expands each run with
+`@memset` into the provided buffer and verifies the frame CRC-32. Range reads over
+RLE frames stream through the compact run payload, validate the full-frame CRC as
+they go, and copy only the overlapping logical run spans into the caller's range
+buffer. This avoids materializing a whole decoded RLE frame for both full-frame
+and partial range reads.
+
 ## Dictionary decode-into and full-frame range fast path
 
 The dictionary patch codec now exposes caller-owned decode helpers

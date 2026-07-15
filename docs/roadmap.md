@@ -65,6 +65,8 @@ architecture blindly.
 - [x] Batch range-decode APIs cover LDM and dictionary-deflate indexed frame modes.
 - [x] Batch range-decode error tests cover LDM out-of-bounds and dictionary-deflate missing-dictionary requests without buffer mutation.
 - [x] Range-decode into paths copy directly from checksum-validated store-frame payloads without whole-frame decode allocation.
+- [x] Native RLE frame decode-into expands runs directly into caller buffers.
+- [x] Native RLE range-decode into streams compact runs and avoids whole-frame decoded allocation for full and partial ranges.
 - [x] Full-frame native deflate range-decode into path writes directly to caller buffers without temporary decode allocation.
 - [x] Dictionary patch codec exposes caller-owned decode-into and decoded-size helpers.
 - [x] Full-frame native dictionary-patch range-decode into path writes directly to caller buffers without temporary decoded-frame allocation.
