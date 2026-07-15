@@ -40,6 +40,24 @@ const Row = struct {
     mix: u64,
 };
 
+const Wrapper = enum { raw, zlib, gzip };
+
+const ErrorCase = struct {
+    name: []const u8,
+    wrapper: Wrapper,
+    input: []const u8,
+    expected_error: anyerror,
+};
+
+const ErrorRow = struct {
+    name: []const u8,
+    wrapper: Wrapper,
+    input_bytes: usize,
+    expected_error: []const u8,
+    actual_error: []const u8,
+    matched: bool,
+};
+
 const binary_payload = blk: {
     @setEvalBranchQuota(200000);
     var data: [64 * 1024]u8 = undefined;
@@ -58,6 +76,53 @@ const builtins = [_]Case{
     .{ .name = "binary", .payload = &binary_payload },
     .{ .name = "stored-binary", .payload = &binary_payload, .mode = .stored },
     .{ .name = "structured", .payload = "{\"service\":\"vort\",\"level\":\"default\",\"message\":\"decode stage\"}\n" ** 512 },
+};
+
+// Use a final stored block for empty-wrapper boundary fixtures.  Stored blocks
+// keep the bytes easy to audit by hand: BFINAL/BTYPE, LEN=0, and NLEN=~LEN.
+const raw_empty_block = [_]u8{ 0x01, 0x00, 0x00, 0xff, 0xff };
+const raw_empty_block_trailing = raw_empty_block ++ [_]u8{0x58};
+const zlib_empty_frame = [_]u8{ 0x78, 0x01 } ++ raw_empty_block ++ [_]u8{ 0x00, 0x00, 0x00, 0x01 };
+const zlib_missing_footer = [_]u8{ 0x78, 0x01 } ++ raw_empty_block;
+const zlib_bad_adler = [_]u8{ 0x78, 0x01 } ++ raw_empty_block ++ [_]u8{ 0x00, 0x00, 0x00, 0x02 };
+const zlib_empty_trailing = zlib_empty_frame ++ [_]u8{0x58};
+const gzip_header = [_]u8{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03 };
+const gzip_empty_member = gzip_header ++ raw_empty_block ++ [_]u8{
+    0x00, 0x00, 0x00, 0x00, // CRC32 of the empty payload.
+    0x00, 0x00, 0x00, 0x00, // ISIZE of the empty payload.
+};
+const gzip_missing_trailer = gzip_header ++ raw_empty_block;
+const gzip_bad_crc_member = gzip_header ++ raw_empty_block ++ [_]u8{
+    0x01, 0x00, 0x00, 0x00, // Deliberately wrong CRC32.
+    0x00, 0x00, 0x00, 0x00,
+};
+const gzip_bad_isize_member = gzip_header ++ raw_empty_block ++ [_]u8{
+    0x00, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x00, 0x00, // Deliberately wrong ISIZE.
+};
+const gzip_empty_trailing = gzip_empty_member ++ [_]u8{0x58};
+const gzip_second_member_bad_crc = gzip_empty_member ++ gzip_bad_crc_member;
+const gzip_second_member_truncated = gzip_empty_member ++ gzip_header;
+const gzip_third_member_bad_crc = gzip_empty_member ++ gzip_empty_member ++ gzip_bad_crc_member;
+
+const error_cases = [_]ErrorCase{
+    .{ .name = "raw-empty", .wrapper = .raw, .input = "", .expected_error = error.TruncatedFrame },
+    .{ .name = "raw-header-only", .wrapper = .raw, .input = &.{0x01}, .expected_error = error.TruncatedFrame },
+    .{ .name = "raw-trailing-garbage", .wrapper = .raw, .input = &raw_empty_block_trailing, .expected_error = error.TrailingData },
+    .{ .name = "zlib-empty", .wrapper = .zlib, .input = "", .expected_error = error.TruncatedFrame },
+    .{ .name = "zlib-header-only", .wrapper = .zlib, .input = &.{ 0x78, 0x01 }, .expected_error = error.TruncatedFrame },
+    .{ .name = "zlib-missing-footer", .wrapper = .zlib, .input = &zlib_missing_footer, .expected_error = error.TruncatedFrame },
+    .{ .name = "zlib-bad-adler", .wrapper = .zlib, .input = &zlib_bad_adler, .expected_error = error.ChecksumMismatch },
+    .{ .name = "zlib-trailing-garbage", .wrapper = .zlib, .input = &zlib_empty_trailing, .expected_error = error.TrailingData },
+    .{ .name = "gzip-empty", .wrapper = .gzip, .input = "", .expected_error = error.TruncatedFrame },
+    .{ .name = "gzip-header-only", .wrapper = .gzip, .input = &gzip_header, .expected_error = error.TruncatedFrame },
+    .{ .name = "gzip-missing-trailer", .wrapper = .gzip, .input = &gzip_missing_trailer, .expected_error = error.TruncatedFrame },
+    .{ .name = "gzip-bad-crc", .wrapper = .gzip, .input = &gzip_bad_crc_member, .expected_error = error.ChecksumMismatch },
+    .{ .name = "gzip-bad-isize", .wrapper = .gzip, .input = &gzip_bad_isize_member, .expected_error = error.SizeMismatch },
+    .{ .name = "gzip-trailing-garbage", .wrapper = .gzip, .input = &gzip_empty_trailing, .expected_error = error.TruncatedFrame },
+    .{ .name = "gzip-second-member-bad-crc", .wrapper = .gzip, .input = &gzip_second_member_bad_crc, .expected_error = error.ChecksumMismatch },
+    .{ .name = "gzip-second-member-truncated", .wrapper = .gzip, .input = &gzip_second_member_truncated, .expected_error = error.TruncatedFrame },
+    .{ .name = "gzip-third-member-bad-crc", .wrapper = .gzip, .input = &gzip_third_member_bad_crc, .expected_error = error.ChecksumMismatch },
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -96,6 +161,9 @@ pub fn main(init: std.process.Init) !void {
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(init.gpa);
     for (cases) |case| try rows.append(init.gpa, try measureCase(init, case, iterations_override));
+    var error_rows: std.ArrayList(ErrorRow) = .empty;
+    defer error_rows.deinit(init.gpa);
+    for (&error_cases) |case| try error_rows.append(init.gpa, measureErrorCase(init.gpa, case));
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
@@ -111,8 +179,38 @@ pub fn main(init: std.process.Init) !void {
     if (markdown_path) |path| {
         var markdown = std.Io.Writer.Allocating.init(init.gpa);
         defer markdown.deinit();
-        try writeMarkdown(&markdown.writer, rows.items);
+        try writeMarkdown(&markdown.writer, rows.items, error_rows.items);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = markdown.written() });
+    }
+    try assertErrorRowsMatched(error_rows.items);
+}
+
+fn measureErrorCase(allocator: std.mem.Allocator, case: ErrorCase) ErrorRow {
+    const expected_error = @errorName(case.expected_error);
+    const actual_error = decodeErrorName(allocator, case.wrapper, case.input);
+    return .{
+        .name = case.name,
+        .wrapper = case.wrapper,
+        .input_bytes = case.input.len,
+        .expected_error = expected_error,
+        .actual_error = actual_error,
+        .matched = std.mem.eql(u8, actual_error, expected_error),
+    };
+}
+
+fn decodeErrorName(allocator: std.mem.Allocator, wrapper: Wrapper, input: []const u8) []const u8 {
+    const decoded = switch (wrapper) {
+        .raw => vort.decodeRawDeflateAlloc(allocator, input) catch |err| return @errorName(err),
+        .zlib => vort.decodeZlibAlloc(allocator, input) catch |err| return @errorName(err),
+        .gzip => vort.decodeGzipConcatenatedAlloc(allocator, input) catch |err| return @errorName(err),
+    };
+    allocator.free(decoded);
+    return "accepted";
+}
+
+fn assertErrorRowsMatched(error_rows: []const ErrorRow) !void {
+    for (error_rows) |row| {
+        if (!row.matched) return error.DecodeErrorSmokeMismatch;
     }
 }
 
@@ -328,7 +426,7 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
     }
 }
 
-fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
+fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row, error_rows: []const ErrorRow) !void {
     try writer.writeAll(
         \\# Deflate decode stage report
         \\
@@ -365,6 +463,26 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
             row.zlib_alloc_into_time_ratio,
             row.gzip_alloc_exact_time_ratio,
             row.gzip_alloc_into_time_ratio,
+        });
+    }
+    try writer.writeAll(
+        \\
+        \\## Error path smoke
+        \\
+        \\These rows keep representative malformed/truncated/checksum wrapper inputs visible in the decode-stage dashboard without mixing them into throughput timings.
+        \\
+        \\| case | wrapper | input bytes | expected error | actual error | matched |
+        \\| --- | --- | ---: | --- | --- | --- |
+        \\
+    );
+    for (error_rows) |row| {
+        try writer.print("| {s} | {s} | {d} | `{s}` | `{s}` | `{}` |\n", .{
+            row.name,
+            @tagName(row.wrapper),
+            row.input_bytes,
+            row.expected_error,
+            row.actual_error,
+            row.matched,
         });
     }
 }
