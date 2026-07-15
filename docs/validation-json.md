@@ -617,6 +617,7 @@ Example:
     "vort.dashboard_producers_negative_smoke",
     "vort.dashboard_producers_required_artifacts",
     "vort.dashboard_producers_required_smoke",
+    "vort.dashboard_category_expected_artifacts",
     "vort.dashboard_index",
     "vort.header_inspect_smoke",
     "vort.header_inspect_required_workflows",
@@ -631,6 +632,39 @@ Example:
   "cli_failure_hint": "payload_corrupt",
   "report_rows": 1,
   "corrupt_rows": 8
+}
+```
+
+## `vort.dashboard_category_expected_artifacts`
+
+Consumed by:
+
+```sh
+zig build run-dashboard-category-smoke
+python3 tools/dashboard_category_smoke.py zig-out/vort-dashboard-index.json
+```
+
+This schema defines representative dashboard artifacts whose categories should
+not regress. Required validation artifacts must be present and carry producer and
+smoke-gate metadata; optional benchmark/corpus/native/other examples still
+exercise the classifier even when the corresponding expensive dashboard was not
+generated in a narrow smoke run.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_category_expected_artifacts",
+  "schema_version": 1,
+  "expected_artifacts": [
+    {
+      "name": "vort-rust-deflate-benchmark-summary.md",
+      "category": "benchmark",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    }
+  ]
 }
 ```
 

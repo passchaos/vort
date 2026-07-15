@@ -132,6 +132,7 @@
       "item_enums": {
         "category": [
           "validation",
+          "benchmark",
           "corpus and ratio",
           "native parallel",
           "other"
@@ -459,6 +460,30 @@
             }
           }
         }
+      }
+    },
+    "vort.dashboard_category_expected_artifacts": {
+      "fields": {
+        "expected_artifacts": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "expected_artifacts",
+      "item_fields": {
+        "category": "str",
+        "name": "str",
+        "require_present": "bool",
+        "require_producer_step": "bool",
+        "require_smoke_gate": "bool"
+      },
+      "item_enums": {
+        "category": [
+          "validation",
+          "benchmark",
+          "corpus and ratio",
+          "native parallel",
+          "other"
+        ]
       }
     },
     "vort.dashboard_producers": {
@@ -1413,6 +1438,7 @@
           "vort.dashboard_producers_negative_smoke",
           "vort.dashboard_producers_required_artifacts",
           "vort.dashboard_producers_required_smoke",
+          "vort.dashboard_category_expected_artifacts",
           "vort.dashboard_index",
           "vort.header_inspect_smoke",
           "vort.header_inspect_required_workflows",

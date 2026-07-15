@@ -12,6 +12,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "validation-json.md"
 MANIFEST = ROOT / "tools" / "validation_json_schema_manifest.json"
+DASHBOARD_CATEGORY_EXPECTED_ARTIFACTS = ROOT / "tools" / "dashboard_category_expected_artifacts.json"
 DASHBOARD_PRODUCERS = ROOT / "tools" / "dashboard_producers.json"
 DASHBOARD_PRODUCER_REQUIRED_ARTIFACTS = ROOT / "tools" / "dashboard_producers_required_artifacts.json"
 HEADER_INSPECT_WORKFLOWS = ROOT / "tools" / "header_inspect_required_workflows.json"
@@ -634,6 +635,7 @@ def main() -> int:
         raise AssertionError(f"expected {len(expected_schemas)} examples, found {len(parsed)}")
     for value in parsed:
         validate_value_against_manifest(value, schemas_def)
+    validate_value_against_manifest(json.loads(DASHBOARD_CATEGORY_EXPECTED_ARTIFACTS.read_text()), schemas_def)
     validate_value_against_manifest(json.loads(DASHBOARD_PRODUCERS.read_text()), schemas_def)
     validate_value_against_manifest(json.loads(DASHBOARD_PRODUCER_REQUIRED_ARTIFACTS.read_text()), schemas_def)
     validate_value_against_manifest(json.loads(HEADER_INSPECT_WORKFLOWS.read_text()), schemas_def)

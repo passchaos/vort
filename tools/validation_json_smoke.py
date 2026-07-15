@@ -105,6 +105,10 @@ def main() -> int:
         assert corrupt["rows"] >= 1
         validate_value_against_manifest(corrupt, schemas_def)
 
+        dashboard_category_expected = json.loads((ROOT / "tools" / "dashboard_category_expected_artifacts.json").read_text())
+        assert dashboard_category_expected["schema"] == "vort.dashboard_category_expected_artifacts"
+        assert dashboard_category_expected["expected_artifacts"]
+        validate_value_against_manifest(dashboard_category_expected, schemas_def)
         dashboard_strict_modes = json.loads((ROOT / "tools" / "dashboard_strict_expected_modes.json").read_text())
         assert dashboard_strict_modes["schema"] == "vort.dashboard_strict_expected_modes"
         assert dashboard_strict_modes["expected_modes"]
@@ -422,6 +426,7 @@ def main() -> int:
                 dashboard_producers_negative["schema"],
                 dashboard_producers_required["schema"],
                 dashboard_producers_required_smoke["schema"],
+                dashboard_category_expected["schema"],
                 dashboard["schema"],
                 header_summary["schema"],
                 required_workflows["schema"],
