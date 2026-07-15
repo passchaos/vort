@@ -115,6 +115,7 @@ architecture blindly.
 - [x] Hex-sample fuzz corpus harness supports explicit output limits for raw/zlib/gzip samples.
 - [x] Deflate wrapper hex corpus includes malformed dynamic-Huffman samples.
 - [x] Deflate wrapper hex corpus includes raw/zlib/gzip repeat17 and repeat18 overrun samples.
+- [x] Deflate wrapper hex corpus includes header-only, missing-footer, and trailing-garbage boundary samples.
 - [x] libFuzzer-compatible exported entrypoint smoke.
 - [x] AFL-style file-input fuzz driver smoke.
 - [x] Local CI smoke runner wiring for fuzz entrypoints.

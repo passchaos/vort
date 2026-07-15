@@ -2,7 +2,12 @@
 --deflate
 4b0400 # expect: accept
 090000ffff # expect: accept
+ # Stored-block header only and valid fixed stream with trailing garbage. These
+ # mirror CLI differential boundary checks so reducers keep low-level decoder
+ # behavior covered even when CLI-only smoke is not running.
 4a0400 # expect: reject
+01 # expect: reject
+4b040058 # expect: reject
 4b043e00 # expect: reject
 1b03 # expect: reject
 cb402701 # expect: reject
@@ -11,6 +16,9 @@ cb402701 # expect: reject
 --zlib
 7801cb48cdc9c90700062c0215 # expect: accept
 7801090000ffff00000001 # expect: accept
+7801 # expect: reject
+7801090000ffff # expect: reject
+7801090000ffff0000000158 # expect: reject
 0000 # expect: reject
 782000000000 # expect: reject
 78f908610235cb4027013a2e067d # expect: reject
@@ -22,6 +30,9 @@ cb402701 # expect: reject
 --gzip
 1f8b0800000000000403cb48cdc9c9070086a6103605000000 # expect: accept
 1f8b0800000000000403090000ffff0000000000000000 # expect: accept
+1f8b0800000000000403 # expect: reject
+1f8b0800000000000403090000ffff # expect: reject
+1f8b0800000000000403090000ffff000000000000000058 # expect: reject
 0000 # expect: reject
 1f8b08000000000004034b043e000000000000000000 # expect: reject
 1f8b08000000000004031b030000000000000000 # expect: reject
