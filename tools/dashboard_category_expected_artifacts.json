@@ -2,24 +2,145 @@
   "schema": "vort.dashboard_category_expected_artifacts",
   "schema_version": 1,
   "expected_artifacts": [
-    {"name": "vort-sidecar-corrupt-smoke.json", "category": "validation", "require_present": true, "require_producer_step": true, "require_smoke_gate": true},
-    {"name": "vort-sidecar-corrupt-smoke.md", "category": "validation", "require_present": true, "require_producer_step": true, "require_smoke_gate": true},
-    {"name": "vort-validation-json-smoke.json", "category": "validation", "require_present": true, "require_producer_step": true, "require_smoke_gate": true},
-    {"name": "vort-validation-json-docs-negative-smoke.json", "category": "validation", "require_present": true, "require_producer_step": true, "require_smoke_gate": true},
-    {"name": "vort-header-inspect-smoke.json", "category": "validation", "require_present": true, "require_producer_step": true, "require_smoke_gate": true},
-    {"name": "vort-header-inspect-smoke.md", "category": "validation", "require_present": true, "require_producer_step": true, "require_smoke_gate": true},
-    {"name": "vort-dashboard-producers-negative-smoke.json", "category": "validation", "require_present": true, "require_producer_step": true, "require_smoke_gate": true},
-    {"name": "vort-dashboard-producers-required-smoke.json", "category": "validation", "require_present": true, "require_producer_step": true, "require_smoke_gate": true},
-    {"name": "vort-dashboard-strict-smoke.json", "category": "validation", "require_present": true, "require_producer_step": true, "require_smoke_gate": true},
-    {"name": "vort-dashboard-strict-smoke.md", "category": "validation", "require_present": true, "require_producer_step": true, "require_smoke_gate": true},
-    {"name": "vort-rust-deflate-benchmark-summary.md", "category": "benchmark", "require_present": false, "require_producer_step": false, "require_smoke_gate": false},
-    {"name": "vort-rust-deflate-decode-bench.csv", "category": "benchmark", "require_present": false, "require_producer_step": false, "require_smoke_gate": false},
-    {"name": "vort-rust-deflate-encode-bench.csv", "category": "benchmark", "require_present": false, "require_producer_step": false, "require_smoke_gate": false},
-    {"name": "vort-dictionary-corpus-dashboard.md", "category": "corpus and ratio", "require_present": false, "require_producer_step": false, "require_smoke_gate": false},
-    {"name": "vort-file-corpus-standard-dashboard.md", "category": "corpus and ratio", "require_present": false, "require_producer_step": false, "require_smoke_gate": false},
-    {"name": "vort-standard-corpus-dashboard.md", "category": "corpus and ratio", "require_present": false, "require_producer_step": false, "require_smoke_gate": false},
-    {"name": "vort-native-parallel-dashboard.md", "category": "native parallel", "require_present": false, "require_producer_step": false, "require_smoke_gate": false},
-    {"name": "vort-native-thread-pool-full-dashboard.md", "category": "native parallel", "require_present": false, "require_producer_step": false, "require_smoke_gate": false},
-    {"name": "vort-deflate-decode-stage-report.md", "category": "other", "require_present": false, "require_producer_step": false, "require_smoke_gate": false}
+    {
+      "name": "vort-sidecar-corrupt-smoke.json",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-sidecar-corrupt-smoke.md",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-validation-json-smoke.json",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-validation-json-docs-negative-smoke.json",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-header-inspect-smoke.json",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-header-inspect-smoke.md",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-dashboard-producers-negative-smoke.json",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-dashboard-producers-required-smoke.json",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-dashboard-category-negative-smoke.json",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-dashboard-strict-smoke.json",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-dashboard-strict-smoke.md",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-rust-deflate-benchmark-summary.md",
+      "category": "benchmark",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "name": "vort-rust-deflate-decode-bench.csv",
+      "category": "benchmark",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "name": "vort-rust-deflate-encode-bench.csv",
+      "category": "benchmark",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "name": "vort-dictionary-corpus-dashboard.md",
+      "category": "corpus and ratio",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "name": "vort-file-corpus-standard-dashboard.md",
+      "category": "corpus and ratio",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "name": "vort-standard-corpus-dashboard.md",
+      "category": "corpus and ratio",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "name": "vort-native-parallel-dashboard.md",
+      "category": "native parallel",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "name": "vort-native-thread-pool-full-dashboard.md",
+      "category": "native parallel",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "name": "vort-deflate-decode-stage-report.md",
+      "category": "other",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    }
   ]
 }

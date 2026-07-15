@@ -269,6 +269,7 @@ architecture blindly.
 - [x] Dashboard producer-map negative smoke catches format, producer-step, and smoke-gate drift cases.
 - [x] Dashboard producer-map required artifact matrix is stored in a schema-checked external JSON config.
 - [x] Dashboard category smoke uses a schema-checked matrix covering validation, benchmark, corpus, native, and other artifacts.
+- [x] Dashboard category negative smoke catches classifier, required-artifact, producer, and smoke-gate drift cases.
 - [x] Dashboard category smoke protects raw/zlib/gzip header inspection validation classification.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.

@@ -63,6 +63,7 @@ def main() -> int:
         dashboard_path = root / "vort-dashboard-index.md"
         dashboard_manifest_path = root / "vort-dashboard-index.json"
         docs_negative_path = root / "vort-validation-json-docs-negative-smoke.json"
+        dashboard_category_negative_path = root / "vort-dashboard-category-negative-smoke.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -195,6 +196,19 @@ def main() -> int:
         assert dashboard_producers_required_smoke["artifact_count"] == len(dashboard_producers_required["required_artifacts"])
         assert all(row["matched"] is True for row in dashboard_producers_required_smoke["cases"])
         validate_value_against_manifest(dashboard_producers_required_smoke, schemas_def)
+
+        run([
+            "python3",
+            str(ROOT / "tools" / "dashboard_category_negative_smoke.py"),
+            "--summary",
+            str(dashboard_category_negative_path),
+        ])
+        dashboard_category_negative = json.loads(dashboard_category_negative_path.read_text())
+        assert dashboard_category_negative["schema"] == "vort.dashboard_category_negative_smoke"
+        assert dashboard_category_negative["ok"] is True
+        assert dashboard_category_negative["case_count"] >= 1
+        assert all(row["matched"] is True for row in dashboard_category_negative["cases"])
+        validate_value_against_manifest(dashboard_category_negative, schemas_def)
 
         run([
             "python3",
@@ -427,6 +441,7 @@ def main() -> int:
                 dashboard_producers_required["schema"],
                 dashboard_producers_required_smoke["schema"],
                 dashboard_category_expected["schema"],
+                dashboard_category_negative["schema"],
                 dashboard["schema"],
                 header_summary["schema"],
                 required_workflows["schema"],

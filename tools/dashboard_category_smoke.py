@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -14,14 +15,15 @@ EXPECTED = ROOT / "tools" / "dashboard_category_expected_artifacts.json"
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print(f"usage: {argv[0]} <dashboard-manifest.json>", file=sys.stderr)
-        return 2
+    parser = argparse.ArgumentParser()
+    parser.add_argument("manifest", help="dashboard manifest JSON path")
+    parser.add_argument("--expected", default=str(EXPECTED), help="category expectation matrix path")
+    args = parser.parse_args(argv[1:])
 
-    manifest = json.loads(Path(argv[1]).read_text())
+    manifest = json.loads(Path(args.manifest).read_text())
     if manifest.get("schema") != "vort.dashboard_index":
         raise AssertionError(f"unexpected dashboard schema: {manifest.get('schema')!r}")
-    expected_payload = json.loads(EXPECTED.read_text())
+    expected_payload = json.loads(Path(args.expected).read_text())
     if expected_payload.get("schema") != "vort.dashboard_category_expected_artifacts":
         raise AssertionError(f"unexpected dashboard category expected schema: {expected_payload.get('schema')!r}")
     if expected_payload.get("schema_version") != 1:

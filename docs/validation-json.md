@@ -618,6 +618,7 @@ Example:
     "vort.dashboard_producers_required_artifacts",
     "vort.dashboard_producers_required_smoke",
     "vort.dashboard_category_expected_artifacts",
+    "vort.dashboard_category_negative_smoke",
     "vort.dashboard_index",
     "vort.header_inspect_smoke",
     "vort.header_inspect_required_workflows",
@@ -663,6 +664,45 @@ Example:
       "require_present": false,
       "require_producer_step": false,
       "require_smoke_gate": false
+    }
+  ]
+}
+```
+
+## `vort.dashboard_category_negative_smoke`
+
+Produced by:
+
+```sh
+zig build run-dashboard-category-negative-smoke
+python3 tools/dashboard_category_negative_smoke.py --summary zig-out/vort-dashboard-category-negative-smoke.json
+```
+
+This schema summarizes negative checks for the dashboard category expectation
+matrix. The smoke feeds intentionally drifted category configs or manifest rows
+to `tools/dashboard_category_smoke.py` and verifies that classifier mismatches,
+missing required artifacts, bad manifest categories, and missing producer/smoke
+metadata all fail with the expected diagnostic.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_category_negative_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "cases": [
+    {
+      "name": "classifier_category_mismatch",
+      "expected_failure": true,
+      "expected_output": "classifier category='benchmark', expected 'validation'",
+      "actual_output": "vort-rust-deflate-benchmark-summary.md classifier category='benchmark', expected 'validation'",
+      "actual_output_bytes": 92,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
     }
   ]
 }
