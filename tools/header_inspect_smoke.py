@@ -151,7 +151,7 @@ def main(argv: list[str]) -> int:
             "raw_header compressed_bytes": str(len(raw_dynamic_frame)),
             "block_type": "dynamic",
             "dynamic_hlit": "257",
-            "header_bits_consumed": "17",
+            "dynamic_code_length_count": "",
         },
     )
     cases.append(
@@ -171,7 +171,9 @@ def main(argv: list[str]) -> int:
     assert raw_dynamic_json["dynamic_hlit"] >= 257
     assert raw_dynamic_json["dynamic_hdist"] >= 1
     assert raw_dynamic_json["dynamic_hclen"] >= 4
-    assert raw_dynamic_json["header_bits_consumed"] == 17
+    assert raw_dynamic_json["dynamic_code_length_count"] == raw_dynamic_json["dynamic_hclen"]
+    assert len(raw_dynamic_json["dynamic_code_length_lengths"]) == 19
+    assert raw_dynamic_json["header_bits_consumed"] == 17 + raw_dynamic_json["dynamic_hclen"] * 3
     validate_value_against_manifest(raw_dynamic_json, schemas_def)
 
     zlib_hex = run(cli, "inspect-zlib-header-hex", zlib_frame.hex())

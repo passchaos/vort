@@ -158,6 +158,7 @@ architecture blindly.
 - [x] Public raw deflate first-block header parser exposes BFINAL/BTYPE and payload offsets.
 - [x] Raw deflate header parser exposes stored-block LEN/NLEN and payload offsets.
 - [x] Raw deflate header parser exposes dynamic-block HLIT/HDIST/HCLEN fields.
+- [x] Raw deflate header parser exposes dynamic code-length-code lengths.
 - [x] Raw deflate header parser reports how many bits/bytes the lightweight inspection consumed.
 - [x] CLI raw deflate header inspection supports text and schema-checked JSON output.
 - [x] Allocator-returning raw/zlib/gzip decoders use larger capped output capacity hints for highly compressed frames.

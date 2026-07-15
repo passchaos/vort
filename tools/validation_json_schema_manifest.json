@@ -98,6 +98,8 @@
         "compressed_bytes": "int",
         "data_bit_offset": "int",
         "data_byte_offset": "int",
+        "dynamic_code_length_count": "int?",
+        "dynamic_code_length_lengths": "list",
         "dynamic_hclen": "int?",
         "dynamic_hdist": "int?",
         "dynamic_hlit": "int?",

@@ -1085,6 +1085,10 @@ fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     try printOptionalJson(u16, stdout, info.dynamic_hdist);
     try stdout.print(" dynamic_hclen=", .{});
     try printOptionalJson(u8, stdout, info.dynamic_hclen);
+    try stdout.print(" dynamic_code_length_count=", .{});
+    try printOptionalJson(u8, stdout, info.dynamic_code_length_count);
+    try stdout.print(" dynamic_code_length_lengths=", .{});
+    try printCodeLengthArray(stdout, &info.dynamic_code_length_lengths);
     try stdout.print("\n", .{});
 }
 
@@ -1170,7 +1174,20 @@ fn printRawHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     try printOptionalJson(u16, stdout, info.dynamic_hdist);
     try stdout.print(",\"dynamic_hclen\":", .{});
     try printOptionalJson(u8, stdout, info.dynamic_hclen);
+    try stdout.print(",\"dynamic_code_length_count\":", .{});
+    try printOptionalJson(u8, stdout, info.dynamic_code_length_count);
+    try stdout.print(",\"dynamic_code_length_lengths\":", .{});
+    try printCodeLengthArray(stdout, &info.dynamic_code_length_lengths);
     try stdout.print("}}\n", .{});
+}
+
+fn printCodeLengthArray(stdout: *std.Io.Writer, lengths: *const [19]u4) !void {
+    try stdout.print("[", .{});
+    for (lengths, 0..) |length, i| {
+        if (i != 0) try stdout.print(",", .{});
+        try stdout.print("{d}", .{length});
+    }
+    try stdout.print("]", .{});
 }
 
 fn printZlibHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.ZlibHeaderInfo) !void {
