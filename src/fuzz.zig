@@ -53,6 +53,7 @@ pub fn runStoreSmokeCorpus(allocator: std.mem.Allocator) !CorpusStats {
     }
 
     try runEmbeddedDictionarySmokeCorpus(allocator, &stats);
+    try runConcatenatedDictionarySmokeCorpus(allocator, &stats);
 
     return stats;
 }
@@ -128,6 +129,51 @@ fn expectMalformedEmbeddedDictionary(stats: *CorpusStats, input: []const u8, exp
     } else |err| {
         if (err != expected_error) return err;
         stats.expected_errors += 1;
+    }
+}
+
+fn runConcatenatedDictionarySmokeCorpus(allocator: std.mem.Allocator, stats: *CorpusStats) !void {
+    const dict = "alpha beta gamma";
+    const first = "zz alpha beta yy gamma";
+    const second = "alpha beta";
+    const expected = first ++ second;
+
+    const dict_frame = try embeddedDictionarySkippableAlloc(allocator, dict);
+    defer allocator.free(dict_frame);
+    const first_frame = try store.encodeDictionaryPatchAlloc(allocator, dict, first, 5);
+    defer allocator.free(first_frame);
+    const second_frame = try store.encodeDictionaryDeflateAlloc(allocator, dict, second, 5);
+    defer allocator.free(second_frame);
+
+    var stream = std.ArrayList(u8).empty;
+    defer stream.deinit(allocator);
+    try stream.appendSlice(allocator, dict_frame);
+    try stream.appendSlice(allocator, first_frame);
+    try stream.appendSlice(allocator, second_frame);
+
+    stats.cases += 1;
+    var out: [expected.len]u8 = undefined;
+    const result = try store.decodeConcatenatedAutoInto(allocator, stream.items, &out);
+    try std.testing.expectEqual(expected.len, result.output_written);
+    try std.testing.expectEqual(@as(usize, 2), result.frame_count);
+    try std.testing.expectEqualSlices(u8, expected, &out);
+    stats.valid_frames += 1;
+
+    stats.cases += 1;
+    if (store.decodeConcatenatedInto(allocator, stream.items, &out)) |_| {
+        return error.UnexpectedValidFrame;
+    } else |err| switch (err) {
+        error.InvalidDictionaryTraining => stats.expected_errors += 1,
+        else => return err,
+    }
+
+    stats.cases += 1;
+    var short: [expected.len - 1]u8 = undefined;
+    if (store.decodeConcatenatedAutoInto(allocator, stream.items, &short)) |_| {
+        return error.UnexpectedValidFrame;
+    } else |err| switch (err) {
+        error.OutputTooSmall => stats.expected_errors += 1,
+        else => return err,
     }
 }
 
@@ -351,9 +397,9 @@ fn writeMinimalDynamicHeader(allocator: std.mem.Allocator, writer: *bitstream.Bi
 
 test "store smoke corpus covers malformed and valid frames" {
     const stats = try runStoreSmokeCorpus(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 16), stats.cases);
-    try std.testing.expectEqual(@as(usize, 5), stats.valid_frames);
-    try std.testing.expectEqual(@as(usize, 11), stats.expected_errors);
+    try std.testing.expectEqual(@as(usize, 19), stats.cases);
+    try std.testing.expectEqual(@as(usize, 6), stats.valid_frames);
+    try std.testing.expectEqual(@as(usize, 13), stats.expected_errors);
 }
 
 test "deflate smoke corpus covers valid and malformed raw streams" {
