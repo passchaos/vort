@@ -75,6 +75,44 @@
         "schema_version": "int",
         "zlib_cases": "int"
       },
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        },
+        "raw_cases": {
+          "collection": "cases",
+          "field": "format",
+          "equals": "raw"
+        },
+        "zlib_cases": {
+          "collection": "cases",
+          "field": "format",
+          "equals": "zlib"
+        },
+        "gzip_cases": {
+          "collection": "cases",
+          "field": "format",
+          "equals": "gzip"
+        },
+        "dictionary_cases": {
+          "collection": "cases",
+          "field": "has_dictionary",
+          "equals": true
+        },
+        "optional_header_cases": {
+          "collection": "cases",
+          "field": "has_optional_fields",
+          "equals": true
+        },
+        "fhcrc_cases": {
+          "collection": "cases",
+          "field": "header_crc",
+          "equals": true
+        },
+        "negative_cases": {
+          "collection": "negative_items"
+        }
+      },
       "item_collection": "cases",
       "item_enums": {
         "command": [

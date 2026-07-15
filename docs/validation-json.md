@@ -192,7 +192,7 @@ Important fields:
 - `schema_version`: `1`
 - `ok`: whether the smoke passed
 - `case_count`, `raw_cases`, `zlib_cases`, `gzip_cases`
-  (checked against the `cases` array by validation smoke)
+  (checked against the `cases` array by the schema manifest)
 - `negative_cases`: malformed header cases expected to fail inspection
 - `negative_items`: case-level command/sample/argv/error matches for malformed headers
   (`command` and `expected_error` are enum-checked by the schema manifest)
@@ -210,11 +210,11 @@ Example:
   "schema": "vort.header_inspect_smoke",
   "schema_version": 1,
   "ok": true,
-  "case_count": 7,
-  "raw_cases": 3,
-  "zlib_cases": 2,
-  "gzip_cases": 2,
-  "negative_cases": 5,
+  "case_count": 1,
+  "raw_cases": 0,
+  "zlib_cases": 1,
+  "gzip_cases": 0,
+  "negative_cases": 1,
   "negative_items": [
     {
       "name": "raw_reserved_btype",
@@ -226,8 +226,8 @@ Example:
     }
   ],
   "dictionary_cases": 1,
-  "optional_header_cases": 1,
-  "fhcrc_cases": 1,
+  "optional_header_cases": 0,
+  "fhcrc_cases": 0,
   "cases": [
     {
       "name": "zlib_dictionary",
@@ -568,6 +568,7 @@ Each schema entry can contain:
 | --- | --- | --- |
 | `fields` | object | Required top-level fields mapped to type names. |
 | `enums` | object | Optional top-level string enum constraints. |
+| `count_rules` | object | Optional top-level count fields that must match list lengths or filtered item counts. |
 | `item_collection` | string | Optional nested list field to inspect. |
 | `item_fields` | object | Required fields for the first nested item. |
 | `item_enums` | object | Optional nested item enum constraints. |

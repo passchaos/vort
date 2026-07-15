@@ -88,6 +88,28 @@ def require_list_field_pairs(value: dict[str, Any], list_field_pairs: dict[str, 
             raise AssertionError(f"{label}.{list_field}={actual!r} does not match fields {source_fields!r}; expected {expected!r}")
 
 
+def require_count_rules(value: dict[str, Any], count_rules: dict[str, Any], label: str) -> None:
+    for count_field, rule in count_rules.items():
+        if not isinstance(rule, dict):
+            raise AssertionError(f"{label}.{count_field} count rule must be an object")
+        collection_name = rule.get("collection")
+        if not isinstance(collection_name, str):
+            raise AssertionError(f"{label}.{count_field} count rule must define collection")
+        items = value.get(collection_name)
+        if not isinstance(items, list):
+            raise AssertionError(f"{label}.{collection_name} must be a list for count rule {count_field}")
+        expected = len(items)
+        if "field" in rule:
+            field = rule.get("field")
+            if not isinstance(field, str):
+                raise AssertionError(f"{label}.{count_field} count rule field must be a string")
+            match_value = rule.get("equals")
+            expected = sum(1 for item in items if isinstance(item, dict) and item.get(field) == match_value)
+        actual = value.get(count_field)
+        if actual != expected:
+            raise AssertionError(f"{label}.{count_field}={actual!r} does not match count rule; expected {expected!r}")
+
+
 def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str, Any]) -> None:
     schema = value.get("schema")
     schema_def = schemas_def.get(schema)
@@ -99,6 +121,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     require_fields(value, set(fields), schema)
     require_types(value, fields, schema)
     require_enums(value, schema_def.get("enums", {}), schema)
+    require_count_rules(value, schema_def.get("count_rules", {}), schema)
 
     item_collection = schema_def.get("item_collection")
     if item_collection:
