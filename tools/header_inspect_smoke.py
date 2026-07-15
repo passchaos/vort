@@ -30,18 +30,68 @@ def require_fields(output: str, fields: dict[str, str]) -> None:
             raise AssertionError(f"missing {needle!r} in {output!r}")
 
 
+def md(text: object) -> str:
+    return str(text).replace("|", "\\|")
+
+
+def write_markdown(path: Path, summary: dict[str, object]) -> None:
+    lines = [
+        "# Vort header inspect smoke",
+        "",
+        f"- ok: `{summary['ok']}`",
+        f"- cases: {summary['case_count']} (raw={summary['raw_cases']}, zlib={summary['zlib_cases']}, gzip={summary['gzip_cases']})",
+        f"- dictionary cases: {summary['dictionary_cases']}",
+        f"- optional gzip header cases: {summary['optional_header_cases']}",
+        f"- FHCRC cases: {summary['fhcrc_cases']}",
+        f"- malformed negative cases: {summary['negative_cases']}",
+        "",
+        "## Successful inspections",
+        "",
+        "| name | format | schema | bytes | command | sample |",
+        "| --- | --- | --- | ---: | --- | --- |",
+    ]
+    for case in summary["cases"]:
+        lines.append(
+            f"| {md(case['name'])} | {md(case['format'])} | `{md(case['schema_name'])}` | {case['bytes']} | `{md(case['command'])}` | `{md(case['sample'])}` |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Expected failures",
+            "",
+            "| name | command | sample | expected error |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
+    for item in summary["negative_items"]:
+        lines.append(f"| {md(item['name'])} | `{md(item['command'])}` | `{md(item['sample'])}` | `{md(item['expected_error'])}` |")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) not in (2, 4):
-        print(f"usage: {argv[0]} <vort-cli> [--summary <path>]", file=sys.stderr)
+    if len(argv) < 2:
+        print(f"usage: {argv[0]} <vort-cli> [--summary <path>] [--markdown <path>]", file=sys.stderr)
         return 2
 
     cli = argv[1]
     summary_path: Path | None = None
-    if len(argv) == 4:
-        if argv[2] != "--summary":
-            print(f"usage: {argv[0]} <vort-cli> [--summary <path>]", file=sys.stderr)
+    markdown_path: Path | None = None
+    index = 2
+    while index < len(argv):
+        if index + 1 >= len(argv):
+            print(f"usage: {argv[0]} <vort-cli> [--summary <path>] [--markdown <path>]", file=sys.stderr)
             return 2
-        summary_path = Path(argv[3])
+        flag = argv[index]
+        value = Path(argv[index + 1])
+        if flag == "--summary":
+            summary_path = value
+        elif flag == "--markdown":
+            markdown_path = value
+        else:
+            print(f"usage: {argv[0]} <vort-cli> [--summary <path>] [--markdown <path>]", file=sys.stderr)
+            return 2
+        index += 2
 
     summary: dict[str, object] = {
         "schema": "vort.header_inspect_smoke",
@@ -411,6 +461,8 @@ def main(argv: list[str]) -> int:
     if summary_path is not None:
         summary_path.parent.mkdir(parents=True, exist_ok=True)
         summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+    if markdown_path is not None:
+        write_markdown(markdown_path, summary)
     print("header inspect smoke: raw=ok zlib=ok zlib_dict=ok gzip=ok gzip_optional=ok negatives=ok")
     return 0
 

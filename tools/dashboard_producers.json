@@ -9,7 +9,8 @@
     "vort-sidecar-corrupt-smoke.json",
     "vort-sidecar-corrupt-smoke.md",
     "vort-validation-json-smoke.json",
-    "vort-header-inspect-smoke.json"
+    "vort-header-inspect-smoke.json",
+    "vort-header-inspect-smoke.md"
   ],
   "artifact_metadata": {
     "vort-dashboard-index.json": {
@@ -67,6 +68,10 @@
     "vort-deflate-decode-stage-report.md": {
       "expected_format": "md",
       "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard"
+    },
+    "vort-header-inspect-smoke.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-header-inspect-dashboard"
     }
   },
   "exact": {
@@ -90,7 +95,8 @@
     "vort-standard-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-corpus-dashboard",
     "vort-standard-corpus-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-corpus-full-dashboard",
     "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
-    "vort-header-inspect-smoke.json": "zig build run-header-inspect-dashboard"
+    "vort-header-inspect-smoke.json": "zig build run-header-inspect-dashboard",
+    "vort-header-inspect-smoke.md": "zig build run-header-inspect-dashboard"
   },
   "contains": [
     {

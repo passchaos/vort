@@ -185,6 +185,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection smoke moves summary counter checks into the shared schema manifest.
 - [x] raw/zlib/gzip header inspection smoke reports structured malformed-header failure items.
 - [x] raw/zlib/gzip header inspection smoke writes a schema-checked dashboard JSON artifact.
+- [x] raw/zlib/gzip header inspection smoke writes a Markdown dashboard artifact.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
 - [x] zlib preset-dictionary encoders emit FDICT/DICTID frames for stored/fixed/dynamic/best modes.

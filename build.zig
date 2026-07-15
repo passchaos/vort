@@ -368,8 +368,13 @@ pub fn build(b: *std.Build) void {
 
     const header_inspect_dashboard = b.addSystemCommand(&.{ "python3", "tools/header_inspect_smoke.py" });
     header_inspect_dashboard.addArtifactArg(cli_exe);
-    header_inspect_dashboard.addArgs(&.{ "--summary", "zig-out/vort-header-inspect-smoke.json" });
-    const header_inspect_dashboard_step = b.step("run-header-inspect-dashboard", "Write raw/zlib/gzip header inspection smoke summary to zig-out");
+    header_inspect_dashboard.addArgs(&.{
+        "--summary",
+        "zig-out/vort-header-inspect-smoke.json",
+        "--markdown",
+        "zig-out/vort-header-inspect-smoke.md",
+    });
+    const header_inspect_dashboard_step = b.step("run-header-inspect-dashboard", "Write raw/zlib/gzip header inspection smoke summary artifacts to zig-out");
     header_inspect_dashboard_step.dependOn(&header_inspect_dashboard.step);
 
     const zlib_family_diff = b.addSystemCommand(&.{ "python3", "tools/zlib_family_diff.py" });
