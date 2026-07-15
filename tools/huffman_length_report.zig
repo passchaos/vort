@@ -8,7 +8,6 @@ const Case = struct {
     max_bits: u4,
     freqs: [max_symbols]u32,
     symbol_count: usize,
-    optimal_cost: usize,
 };
 
 const Row = struct {
@@ -22,15 +21,16 @@ const Row = struct {
     kraft_limit: usize,
     optimal: bool,
     lengths: [max_symbols]u4,
+    optimal_lengths: [max_symbols]u4,
 };
 
 const cases = [_]Case{
-    .{ .name = "classic4", .max_bits = 3, .freqs = freqs(&.{ 5, 7, 10, 15 }), .symbol_count = 4, .optimal_cost = 71 },
-    .{ .name = "skew4", .max_bits = 3, .freqs = freqs(&.{ 100, 50, 25, 1 }), .symbol_count = 4, .optimal_cost = 278 },
-    .{ .name = "equal3", .max_bits = 2, .freqs = freqs(&.{ 1, 1, 1 }), .symbol_count = 3, .optimal_cost = 5 },
-    .{ .name = "equal5", .max_bits = 3, .freqs = freqs(&.{ 1, 1, 1, 1, 1 }), .symbol_count = 5, .optimal_cost = 12 },
-    .{ .name = "ramp5", .max_bits = 3, .freqs = freqs(&.{ 1, 2, 3, 4, 5 }), .symbol_count = 5, .optimal_cost = 33 },
-    .{ .name = "strong-skew7", .max_bits = 4, .freqs = freqs(&.{ 10_000, 1_000, 1, 1, 1, 1, 1 }), .symbol_count = 7, .optimal_cost = 13_019 },
+    .{ .name = "classic4", .max_bits = 3, .freqs = freqs(&.{ 5, 7, 10, 15 }), .symbol_count = 4 },
+    .{ .name = "skew4", .max_bits = 3, .freqs = freqs(&.{ 100, 50, 25, 1 }), .symbol_count = 4 },
+    .{ .name = "equal3", .max_bits = 2, .freqs = freqs(&.{ 1, 1, 1 }), .symbol_count = 3 },
+    .{ .name = "equal5", .max_bits = 3, .freqs = freqs(&.{ 1, 1, 1, 1, 1 }), .symbol_count = 5 },
+    .{ .name = "ramp5", .max_bits = 3, .freqs = freqs(&.{ 1, 2, 3, 4, 5 }), .symbol_count = 5 },
+    .{ .name = "strong-skew7", .max_bits = 4, .freqs = freqs(&.{ 10_000, 1_000, 1, 1, 1, 1, 1 }), .symbol_count = 7 },
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -76,23 +76,25 @@ pub fn main(init: std.process.Init) !void {
 fn buildRow(case: Case) Row {
     const lengths = vort.huffman.treeCodeLengths(max_symbols, &case.freqs, case.max_bits);
     const actual = codeLengthCost(&case.freqs, &lengths, case.symbol_count);
+    const oracle = bruteForceOptimal(case);
     const kraft = kraftCost(&lengths, case.symbol_count, case.max_bits);
     return .{
         .case_name = case.name,
         .symbol_count = case.symbol_count,
         .max_bits = case.max_bits,
-        .optimal_cost = case.optimal_cost,
+        .optimal_cost = oracle.cost,
         .actual_cost = actual,
-        .gap_bits = @as(isize, @intCast(actual)) - @as(isize, @intCast(case.optimal_cost)),
+        .gap_bits = @as(isize, @intCast(actual)) - @as(isize, @intCast(oracle.cost)),
         .kraft_cost = kraft,
         .kraft_limit = @as(usize, 1) << case.max_bits,
-        .optimal = actual == case.optimal_cost and kraft <= (@as(usize, 1) << case.max_bits),
+        .optimal = actual == oracle.cost and kraft <= (@as(usize, 1) << case.max_bits),
         .lengths = lengths,
+        .optimal_lengths = oracle.lengths,
     };
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,symbol_count,max_bits,optimal_cost,actual_cost,gap_bits,kraft_cost,kraft_limit,optimal,lengths\n");
+    try writer.writeAll("case,symbol_count,max_bits,optimal_cost,actual_cost,gap_bits,kraft_cost,kraft_limit,optimal,lengths,optimal_lengths\n");
     for (rows) |row| {
         try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{},", .{
             row.case_name,
@@ -106,15 +108,17 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
             row.optimal,
         });
         try writeLengths(writer, row);
+        try writer.writeByte(',');
+        try writeLengthSlice(writer, row.optimal_lengths[0..row.symbol_count]);
         try writer.writeByte('\n');
     }
 }
 
 fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
     try writer.writeAll("# Huffman length-limit report\n\n");
-    try writer.writeAll("Small fixed cases are brute-force oracle values used to guard future package-merge work.\n\n");
-    try writer.writeAll("| case | symbols | max bits | optimal cost | actual cost | gap bits | Kraft | optimal? | lengths |\n");
-    try writer.writeAll("|---|---:|---:|---:|---:|---:|---:|---|---|\n");
+    try writer.writeAll("Small fixed cases are brute-forced at runtime to guard future package-merge work.\n\n");
+    try writer.writeAll("| case | symbols | max bits | optimal cost | actual cost | gap bits | Kraft | optimal? | lengths | oracle lengths |\n");
+    try writer.writeAll("|---|---:|---:|---:|---:|---:|---:|---|---|---|\n");
     for (rows) |row| {
         try writer.print("| {s} | {d} | {d} | {d} | {d} | {d} | {d}/{d} | {} | ", .{
             row.case_name,
@@ -128,15 +132,61 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
             row.optimal,
         });
         try writeLengths(writer, row);
+        try writer.writeAll(" | ");
+        try writeLengthSlice(writer, row.optimal_lengths[0..row.symbol_count]);
         try writer.writeAll(" |\n");
     }
 }
 
 fn writeLengths(writer: *std.Io.Writer, row: Row) !void {
-    for (row.lengths[0..row.symbol_count], 0..) |bits, i| {
+    try writeLengthSlice(writer, row.lengths[0..row.symbol_count]);
+}
+
+fn writeLengthSlice(writer: *std.Io.Writer, lengths: []const u4) !void {
+    for (lengths, 0..) |bits, i| {
         if (i != 0) try writer.writeByte(';');
         try writer.print("{d}", .{bits});
     }
+}
+
+const Oracle = struct {
+    cost: usize,
+    lengths: [max_symbols]u4,
+};
+
+fn bruteForceOptimal(case: Case) Oracle {
+    var current: [max_symbols]u4 = @splat(0);
+    var best = Oracle{ .cost = std.math.maxInt(usize), .lengths = @splat(0) };
+    bruteForceLengths(case, 0, &current, &best);
+    std.debug.assert(best.cost != std.math.maxInt(usize));
+    return best;
+}
+
+fn bruteForceLengths(case: Case, index: usize, current: *[max_symbols]u4, best: *Oracle) void {
+    if (index == case.symbol_count) {
+        const kraft = kraftCost(current, case.symbol_count, case.max_bits);
+        if (kraft > (@as(usize, 1) << case.max_bits)) return;
+        const cost = codeLengthCost(&case.freqs, current, case.symbol_count);
+        if (cost < best.cost or (cost == best.cost and lengthsLess(current, &best.lengths, case.symbol_count))) {
+            best.cost = cost;
+            best.lengths = current.*;
+        }
+        return;
+    }
+
+    var bits: u4 = 1;
+    while (bits <= case.max_bits) : (bits += 1) {
+        current[index] = bits;
+        bruteForceLengths(case, index + 1, current, best);
+    }
+    current[index] = 0;
+}
+
+fn lengthsLess(lhs: *const [max_symbols]u4, rhs: *const [max_symbols]u4, symbol_count: usize) bool {
+    for (lhs[0..symbol_count], rhs[0..symbol_count]) |left, right| {
+        if (left != right) return left < right;
+    }
+    return false;
 }
 
 fn codeLengthCost(freq_values: *const [max_symbols]u32, lengths: *const [max_symbols]u4, symbol_count: usize) usize {
