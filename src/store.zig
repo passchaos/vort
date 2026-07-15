@@ -1899,15 +1899,19 @@ pub fn inspectEmbeddedDictionary(input: []const u8) Error!EmbeddedDictionaryInsp
     return (try viewEmbeddedDictionary(input)).inspection;
 }
 
-pub fn inspectEmbeddedDictionaryWithOptions(input: []const u8, options: EmbeddedDictionaryInspectionOptions) Error!EmbeddedDictionaryInspection {
-    const inspection = try inspectEmbeddedDictionary(input);
+pub fn viewEmbeddedDictionaryWithOptions(input: []const u8, options: EmbeddedDictionaryInspectionOptions) Error!EmbeddedDictionaryView {
+    const view = try viewEmbeddedDictionary(input);
     if (options.expected_id) |expected| {
-        if (inspection.id.asInt() != expected.asInt()) return error.ChecksumMismatch;
+        if (view.inspection.id.asInt() != expected.asInt()) return error.ChecksumMismatch;
     }
     if (options.expected_content_len) |expected| {
-        if (inspection.content_len != expected) return error.SizeMismatch;
+        if (view.inspection.content_len != expected) return error.SizeMismatch;
     }
-    return inspection;
+    return view;
+}
+
+pub fn inspectEmbeddedDictionaryWithOptions(input: []const u8, options: EmbeddedDictionaryInspectionOptions) Error!EmbeddedDictionaryInspection {
+    return (try viewEmbeddedDictionaryWithOptions(input, options)).inspection;
 }
 
 pub fn parseEmbeddedDictionary(input: []const u8) Error![]const u8 {
@@ -4670,6 +4674,11 @@ test "self-contained dictionary stream embeds dictionary and supports range deco
         .expected_content_len = dict.len,
     });
     try std.testing.expectEqual(inspection.id.asInt(), checked.id.asInt());
+    const checked_view = try viewEmbeddedDictionaryWithOptions(stream, .{
+        .expected_id = dictionary.DictionaryId.fromBytes(dict),
+        .expected_content_len = dict.len,
+    });
+    try std.testing.expectEqualSlices(u8, dict, checked_view.bytes);
     try std.testing.expectError(error.SizeMismatch, inspectEmbeddedDictionaryWithOptions(stream, .{ .expected_content_len = dict.len + 1 }));
     try std.testing.expectError(error.ChecksumMismatch, inspectEmbeddedDictionaryWithOptions(stream, .{ .expected_id = dictionary.DictionaryId.fromBytes("wrong") }));
     const summary = try summarizeModes(stream);
@@ -4686,6 +4695,37 @@ test "self-contained dictionary stream embeds dictionary and supports range deco
     try std.testing.expectEqual(buffer.len, into.output_written);
     try std.testing.expectEqualSlices(u8, input[7..71], &buffer);
     try std.testing.expectEqual(checksum.crc32(input[7..71]), into.crc32);
+}
+
+test "embedded dictionary view rejects corrupt metadata" {
+    const dict = "alpha beta gamma";
+    const payload = try encodeEmbeddedDictionaryBytesAlloc(std.testing.allocator, dict);
+    defer std.testing.allocator.free(payload);
+
+    const no_dict = try encodeAlloc(std.testing.allocator, "plain");
+    defer std.testing.allocator.free(no_dict);
+    try std.testing.expectError(error.InvalidMagic, viewEmbeddedDictionary(no_dict));
+
+    const reserved = try std.testing.allocator.dupe(u8, payload);
+    defer std.testing.allocator.free(reserved);
+    reserved[16] = 1;
+    const reserved_frame = try encodeSkippableAlloc(std.testing.allocator, reserved);
+    defer std.testing.allocator.free(reserved_frame);
+    try std.testing.expectError(error.CorruptFrame, viewEmbeddedDictionary(reserved_frame));
+
+    const bad_id = try std.testing.allocator.dupe(u8, payload);
+    defer std.testing.allocator.free(bad_id);
+    bad_id[4] ^= 1;
+    const bad_id_frame = try encodeSkippableAlloc(std.testing.allocator, bad_id);
+    defer std.testing.allocator.free(bad_id_frame);
+    try std.testing.expectError(error.ChecksumMismatch, viewEmbeddedDictionary(bad_id_frame));
+
+    const bad_len = try std.testing.allocator.dupe(u8, payload);
+    defer std.testing.allocator.free(bad_len);
+    std.mem.writeInt(u32, bad_len[12..16], @intCast(dict.len + 1), .little);
+    const bad_len_frame = try encodeSkippableAlloc(std.testing.allocator, bad_len);
+    defer std.testing.allocator.free(bad_len_frame);
+    try std.testing.expectError(error.TruncatedFrame, viewEmbeddedDictionary(bad_len_frame));
 }
 
 test "sidecar self-contained dictionary stream keeps index external" {

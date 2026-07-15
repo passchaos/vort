@@ -169,6 +169,7 @@ pub const StoreEmbeddedDictionaryInspection = store.EmbeddedDictionaryInspection
 pub const StoreEmbeddedDictionaryView = store.EmbeddedDictionaryView;
 pub const StoreEmbeddedDictionaryInspectionOptions = store.EmbeddedDictionaryInspectionOptions;
 pub const storeViewEmbeddedDictionary = store.viewEmbeddedDictionary;
+pub const storeViewEmbeddedDictionaryWithOptions = store.viewEmbeddedDictionaryWithOptions;
 pub const storeInspectEmbeddedDictionary = store.inspectEmbeddedDictionary;
 pub const storeInspectEmbeddedDictionaryWithOptions = store.inspectEmbeddedDictionaryWithOptions;
 pub const storeParseEmbeddedDictionary = store.parseEmbeddedDictionary;
