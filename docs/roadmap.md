@@ -457,6 +457,7 @@ architecture blindly.
 - [x] Compression-level report validating parser/cost-model settings and round trips.
 - [x] Compression-level report exposes incompressible stored fast-path decisions.
 - [x] Compression-level report accepts ad-hoc file corpora.
+- [x] Compression-level report exposes token mix, match coverage, fixed bit density, and size-ratio diagnostics.
 - [x] Level-specific optimal parser match-candidate limits.
 - [x] Level-specific lazy parser gain thresholds.
 - [x] Default lazy parser accepts one-byte lazy gains to improve binary/source default-size competitiveness against Rust fdeflate/miniz_oxide baselines.

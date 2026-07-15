@@ -56,7 +56,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("case,level,strategy,parser,block_selection,window_len,max_chain,nice_len,max_candidates,lazy_min_gain,min_match,max_match,min_savings_bits,split_min,split_max,split_step,stored_fast_path,tokens,fixed_bits,raw_best_bytes,adaptive_bytes,roundtrip_crc32\n", .{});
+    try stdout.print("case,input_bytes,level,strategy,parser,block_selection,window_len,max_chain,nice_len,max_candidates,lazy_min_gain,min_match,max_match,min_savings_bits,split_min,split_max,split_step,stored_fast_path,tokens,literal_tokens,match_tokens,matched_bytes,match_coverage_x10000,avg_match_len_x100,fixed_bits,fixed_bits_per_byte_x100,raw_best_bytes,raw_best_ratio_x10000,adaptive_bytes,adaptive_ratio_x10000,roundtrip_crc32\n", .{});
 
     for (cases) |case| {
         for (levels) |level_case| {
@@ -89,8 +89,16 @@ pub fn main(init: std.process.Init) !void {
                 defer init.gpa.free(adaptive_decoded);
                 if (!std.mem.eql(u8, case.input, adaptive_decoded)) return error.RoundTripMismatch;
 
-                try stdout.print("{s},{s},{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{},{d},{d},{d},{d},{d}\n", .{
+                const fixed_bits = vort.fixedLz77BitCost(plan.tokens);
+                const avg_match_len_x100 = if (plan.stats.matches == 0) 0 else (plan.stats.matched_bytes * 100) / plan.stats.matches;
+                const match_coverage_x10000 = scaledRatio(plan.stats.matched_bytes, case.input.len, 10_000);
+                const fixed_bits_per_byte_x100 = scaledRatio(fixed_bits, case.input.len, 100);
+                const raw_best_ratio_x10000 = scaledRatio(encoded.len, case.input.len, 10_000);
+                const adaptive_ratio_x10000 = scaledRatio(adaptive.len, case.input.len, 10_000);
+
+                try stdout.print("{s},{d},{s},{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
                     case.name,
+                    case.input.len,
                     level_case.name,
                     strategy_case.name,
                     @tagName(options.parser),
@@ -108,13 +116,26 @@ pub fn main(init: std.process.Init) !void {
                     options.split_options.search_step,
                     vort.usesStoredFastPath(case.input, options),
                     plan.stats.tokenCount(),
-                    vort.fixedLz77BitCost(plan.tokens),
+                    plan.stats.literals,
+                    plan.stats.matches,
+                    plan.stats.matched_bytes,
+                    match_coverage_x10000,
+                    avg_match_len_x100,
+                    fixed_bits,
+                    fixed_bits_per_byte_x100,
                     encoded.len,
+                    raw_best_ratio_x10000,
                     adaptive.len,
+                    adaptive_ratio_x10000,
                     vort.crc32(decoded),
                 });
             }
         }
     }
     try stdout.flush();
+}
+
+fn scaledRatio(numerator: usize, denominator: usize, scale: usize) usize {
+    if (denominator == 0) return 0;
+    return (numerator * scale) / denominator;
 }
