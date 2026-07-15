@@ -49,6 +49,7 @@ architecture blindly.
 - [x] Bounded-output streaming encoder/decoder smoke coverage.
 - [x] Fully incremental input/output store-frame decoder.
 - [x] Concatenated store-frame iterator and decode helper.
+- [x] Concatenated native decode supports non-dictionary compressed frame modes with exact-size and output-limited allocator variants.
 - [x] Deterministic malformed-header/frame smoke corpus.
 - [x] Skippable native frames.
 - [x] In-memory frame indexes for concatenated native store streams.

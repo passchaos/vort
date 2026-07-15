@@ -2746,15 +2746,39 @@ pub fn countConcatenatedFrames(input: []const u8) Error!usize {
     return count;
 }
 
-/// Decode all concatenated store frames into one owned buffer.
+/// Decode all concatenated non-dictionary native frames into one owned buffer.
 pub fn decodeConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    return decodeConcatenatedAllocInternal(allocator, input, null, null);
+}
+
+pub fn decodeConcatenatedAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeConcatenatedAllocInternal(allocator, input, null, expected_output_len);
+}
+
+pub fn decodeConcatenatedAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    return decodeConcatenatedAllocInternal(allocator, input, max_output_len, null);
+}
+
+fn decodeConcatenatedAllocInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize, expected_output_len: ?usize) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
     var iterator = ConcatIterator.init(input);
     while (try iterator.next()) |span| {
-        if (checksum.crc32(span.payload) != span.info.checksum) return error.ChecksumMismatch;
-        try out.appendSlice(allocator, span.payload);
+        const decoded_len = std.math.cast(usize, span.info.uncompressed_size) orelse return error.IntegerOverflow;
+        if (expected_output_len) |expected| {
+            if (decoded_len > expected or out.items.len > expected - decoded_len) return error.SizeMismatch;
+        }
+        if (max_output_len) |limit| {
+            if (decoded_len > limit or out.items.len > limit - decoded_len) return error.OutputLimitExceeded;
+        }
+        const old_len = out.items.len;
+        try out.resize(allocator, old_len + decoded_len);
+        const written = try decodeAnyInto(span.frame, out.items[old_len..]);
+        if (written != decoded_len) return error.SizeMismatch;
+    }
+    if (expected_output_len) |expected| {
+        if (out.items.len != expected) return error.SizeMismatch;
     }
 
     return out.toOwnedSlice(allocator);
@@ -2984,6 +3008,37 @@ test "concatenated frame iterator and decode helper" {
     const decoded = try decodeConcatenatedAlloc(std.testing.allocator, concatenated);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+}
+
+test "concatenated decode supports compressed frames and output bounds" {
+    const first = "hello hello hello hello";
+    const second = "aaaaabbbbbbbbbbbbbcccccccc";
+    const first_frame = try encodeDeflateAlloc(std.testing.allocator, first);
+    defer std.testing.allocator.free(first_frame);
+    const second_frame = try encodeRleAlloc(std.testing.allocator, second);
+    defer std.testing.allocator.free(second_frame);
+
+    var combined = std.ArrayList(u8).empty;
+    defer combined.deinit(std.testing.allocator);
+    try combined.appendSlice(std.testing.allocator, first_frame);
+    try combined.appendSlice(std.testing.allocator, second_frame);
+
+    const expected = first ++ second;
+    const decoded = try decodeConcatenatedAlloc(std.testing.allocator, combined.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+
+    const exact = try decodeConcatenatedAllocExactSize(std.testing.allocator, combined.items, expected.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, expected, exact);
+
+    const limited = try decodeConcatenatedAllocLimited(std.testing.allocator, combined.items, expected.len);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, expected, limited);
+
+    try std.testing.expectError(error.SizeMismatch, decodeConcatenatedAllocExactSize(std.testing.allocator, combined.items, expected.len - 1));
+    try std.testing.expectError(error.SizeMismatch, decodeConcatenatedAllocExactSize(std.testing.allocator, combined.items, expected.len + 1));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeConcatenatedAllocLimited(std.testing.allocator, combined.items, expected.len - 1));
 }
 
 test "concat iterator rejects trailing partial frame" {

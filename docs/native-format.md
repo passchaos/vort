@@ -150,6 +150,10 @@ frame's target buffer. Allocator-returning callers can use
 `decodeAnyAllocLimited` when they need to cap allocation before trusting frame
 metadata. Dictionary frames still require the dictionary-specific decode APIs
 because their correctness depends on caller-supplied dictionary bytes.
+Concatenated native decode now uses the same per-frame decode path for
+non-dictionary store/deflate/RLE/LDM frames, and exposes exact-size and
+output-limited allocator variants for callers that need bounded memory use across
+multi-frame inputs.
 
 ## Batch range summary APIs
 
