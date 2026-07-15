@@ -186,6 +186,7 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
         try writeLengthSlice(writer, row.package_merge_lengths[0..row.symbol_count]);
         try writer.writeAll(" |\n");
     }
+    try writeLargeAlphabetMarkdown(writer);
 }
 
 const Summary = struct {
@@ -332,6 +333,88 @@ fn mergePackageLists(comptime n: usize, out: *[n]Package, leaves: []const Packag
         }
     }
     return out_len;
+}
+
+fn writeLargeAlphabetMarkdown(writer: *std.Io.Writer) !void {
+    try writer.writeAll("\n## Large DEFLATE alphabet regression cases\n\n");
+    try writer.writeAll("These rows are not brute-forced; they guard Kraft validity, maximum length, and deterministic output for production-sized alphabets.\n\n");
+    try writer.writeAll("| case | symbols | max bits | nonzero | max length | Kraft | deterministic? | cost |\n");
+    try writer.writeAll("|---|---:|---:|---:|---:|---:|---|---:|\n");
+    try writeLargeAlphabetRow(writer, "literal-length-286", 286, maxLiteralFreqs(), 15);
+    try writeLargeAlphabetRow(writer, "distance-30", 30, maxDistanceFreqs(), 15);
+    try writeLargeAlphabetRow(writer, "code-length-19", 19, maxCodeLengthFreqs(), 7);
+    try writeLargeAlphabetRow(writer, "sparse-literal-286", 286, sparseLiteralFreqs(), 15);
+}
+
+fn writeLargeAlphabetRow(
+    writer: *std.Io.Writer,
+    comptime name: []const u8,
+    comptime n: usize,
+    freqs_value: [n]u32,
+    comptime max_bits: u4,
+) !void {
+    const first = vort.huffman.treeCodeLengths(n, &freqs_value, max_bits);
+    const second = vort.huffman.treeCodeLengths(n, &freqs_value, max_bits);
+    const deterministic = std.meta.eql(first, second);
+    var nonzero: usize = 0;
+    var max_length: u4 = 0;
+    for (freqs_value, first) |freq, bits| {
+        if (freq == 0) continue;
+        nonzero += 1;
+        max_length = @max(max_length, bits);
+    }
+    try writer.print("| {s} | {d} | {d} | {d} | {d} | {d}/{d} | {} | {d} |\n", .{
+        name,
+        n,
+        max_bits,
+        nonzero,
+        max_length,
+        kraftCostGeneric(n, &first, max_bits),
+        @as(usize, 1) << max_bits,
+        deterministic,
+        codeLengthCostGeneric(n, &freqs_value, &first),
+    });
+}
+
+fn maxLiteralFreqs() [286]u32 {
+    var out: [286]u32 = @splat(0);
+    for (&out, 0..) |*freq, i| freq.* = @intCast(1 + ((i * 17 + (i / 7) * 31) % 251));
+    return out;
+}
+
+fn sparseLiteralFreqs() [286]u32 {
+    var out: [286]u32 = @splat(0);
+    for (0..286) |i| {
+        if (i == 256 or i % 17 == 0) out[i] = @intCast(1 + ((i * 13 + 5) % 97));
+    }
+    return out;
+}
+
+fn maxDistanceFreqs() [30]u32 {
+    var out: [30]u32 = @splat(0);
+    for (&out, 0..) |*freq, i| freq.* = @intCast(1 + ((i * 11 + 3) % 29));
+    return out;
+}
+
+fn maxCodeLengthFreqs() [19]u32 {
+    var out: [19]u32 = @splat(0);
+    for (&out, 0..) |*freq, i| freq.* = @intCast(1 + ((i * 5 + 7) % 23));
+    return out;
+}
+
+fn codeLengthCostGeneric(comptime n: usize, freq_values: *const [n]u32, lengths: *const [n]u4) usize {
+    var cost: usize = 0;
+    for (freq_values.*, lengths.*) |freq, bits| cost += @as(usize, freq) * bits;
+    return cost;
+}
+
+fn kraftCostGeneric(comptime n: usize, lengths: *const [n]u4, max_bits: u4) usize {
+    var cost: usize = 0;
+    for (lengths.*) |bits| {
+        if (bits == 0) continue;
+        cost += @as(usize, 1) << @intCast(max_bits - bits);
+    }
+    return cost;
 }
 
 fn codeLengthCost(freq_values: *const [max_symbols]u32, lengths: *const [max_symbols]u4, symbol_count: usize) usize {
