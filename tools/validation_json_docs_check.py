@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "validation-json.md"
 MANIFEST = ROOT / "tools" / "validation_json_schema_manifest.json"
 DASHBOARD_PRODUCERS = ROOT / "tools" / "dashboard_producers.json"
+DASHBOARD_PRODUCER_REQUIRED_ARTIFACTS = ROOT / "tools" / "dashboard_producers_required_artifacts.json"
 HEADER_INSPECT_WORKFLOWS = ROOT / "tools" / "header_inspect_required_workflows.json"
 DASHBOARD_STRICT_MODES = ROOT / "tools" / "dashboard_strict_expected_modes.json"
 DASHBOARD_STRICT_REASONS = ROOT / "tools" / "dashboard_strict_validation_reasons.json"
@@ -493,6 +494,45 @@ def require_dashboard_validation_reason_manifest_consistency(schemas_def: dict[s
         )
 
 
+def require_dashboard_producer_required_manifest_consistency() -> None:
+    producers = json.loads(DASHBOARD_PRODUCERS.read_text())
+    required = json.loads(DASHBOARD_PRODUCER_REQUIRED_ARTIFACTS.read_text())
+    rows = required.get("required_artifacts")
+    exact = producers.get("exact")
+    metadata = producers.get("artifact_metadata")
+    required_smoke_gates = producers.get("required_smoke_gates")
+    if not isinstance(rows, list) or not rows:
+        raise AssertionError("dashboard producer required artifacts config must be non-empty")
+    if not isinstance(exact, dict) or not isinstance(metadata, dict) or not isinstance(required_smoke_gates, list):
+        raise AssertionError("dashboard producer map has invalid exact/metadata/required_smoke_gates collections")
+    configured_names = {row.get("name") for row in rows if isinstance(row, dict)}
+    exact_names = set(exact)
+    if configured_names != exact_names:
+        raise AssertionError(
+            f"dashboard producer required artifacts differ from exact producer map: configured={sorted(configured_names)!r} exact={sorted(exact_names)!r}"
+        )
+    required_smoke_gate_names = {name for name in required_smoke_gates if isinstance(name, str)}
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise AssertionError(f"dashboard producer required_artifacts[{index}] must be an object")
+        name = row.get("name")
+        if not isinstance(name, str):
+            raise AssertionError(f"dashboard producer required_artifacts[{index}].name must be a string")
+        item_metadata = metadata.get(name)
+        if not isinstance(item_metadata, dict):
+            raise AssertionError(f"dashboard producer artifact {name!r} missing artifact_metadata")
+        checks = {
+            "producer_step": exact.get(name),
+            "expected_format": item_metadata.get("expected_format"),
+            "smoke_gate": item_metadata.get("smoke_gate"),
+            "required_smoke_gate": name in required_smoke_gate_names,
+        }
+        for field, actual in checks.items():
+            expected = row.get(field)
+            if actual != expected:
+                raise AssertionError(f"dashboard producer artifact {name!r} {field}={actual!r}, expected {expected!r}")
+
+
 def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str, Any]) -> None:
     schema = value.get("schema")
     schema_def = schemas_def.get(schema)
@@ -595,12 +635,14 @@ def main() -> int:
     for value in parsed:
         validate_value_against_manifest(value, schemas_def)
     validate_value_against_manifest(json.loads(DASHBOARD_PRODUCERS.read_text()), schemas_def)
+    validate_value_against_manifest(json.loads(DASHBOARD_PRODUCER_REQUIRED_ARTIFACTS.read_text()), schemas_def)
     validate_value_against_manifest(json.loads(HEADER_INSPECT_WORKFLOWS.read_text()), schemas_def)
     validate_value_against_manifest(json.loads(DASHBOARD_STRICT_MODES.read_text()), schemas_def)
     validate_value_against_manifest(json.loads(DASHBOARD_STRICT_REASONS.read_text()), schemas_def)
     require_header_workflow_manifest_consistency(schemas_def)
     require_dashboard_strict_mode_manifest_consistency(schemas_def)
     require_dashboard_validation_reason_manifest_consistency(schemas_def)
+    require_dashboard_producer_required_manifest_consistency()
     print(f"validation_json_docs=ok examples={len(parsed)}")
     return 0
 

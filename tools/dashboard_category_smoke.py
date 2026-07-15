@@ -24,6 +24,7 @@ def main(argv: list[str]) -> int:
         "vort-dashboard-strict-smoke.json": "validation",
         "vort-dashboard-strict-smoke.md": "validation",
         "vort-dashboard-producers-negative-smoke.json": "validation",
+        "vort-dashboard-producers-required-smoke.json": "validation",
     }
     for name, category in expected.items():
         item = artifacts.get(name)

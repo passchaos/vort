@@ -1,0 +1,195 @@
+{
+  "required_artifacts": [
+    {
+      "expected_format": "json",
+      "name": "vort-dashboard-index.json",
+      "producer_step": "zig build run-dashboard-index",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-dashboard-index"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-dashboard-index.md",
+      "producer_step": "zig build run-dashboard-index",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-dashboard-index"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-dashboard-producers-negative-smoke.json",
+      "producer_step": "zig build run-dashboard-producers-negative-smoke",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-dashboard-producers-negative-smoke"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-dashboard-producers-required-smoke.json",
+      "producer_step": "zig build run-dashboard-producers-required-smoke",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-dashboard-producers-required-smoke"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-dashboard-strict-smoke.json",
+      "producer_step": "zig build run-dashboard-strict-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-dashboard-strict-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-dashboard-strict-smoke.md",
+      "producer_step": "zig build run-dashboard-strict-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-dashboard-strict-dashboard"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-deflate-decode-stage-report.csv",
+      "producer_step": "zig build run-deflate-decode-stage-report-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-deflate-decode-stage-report-csv"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-deflate-decode-stage-report.md",
+      "producer_step": "zig build run-deflate-decode-stage-report-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-dictionary-corpus-dashboard.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-dictionary-deflate-report.csv",
+      "producer_step": "zig build run-dictionary-deflate-report-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-dictionary-deflate-report-csv"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-dictionary-deflate-report.md",
+      "producer_step": "zig build run-dictionary-deflate-report-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-dictionary-deflate-report-dashboard"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-dynamic-plan-report.csv",
+      "producer_step": "zig build run-dynamic-plan-report-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-dynamic-plan-report-csv"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-file-corpus-standard-dashboard.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-file-corpus-standard-full-dashboard.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-header-inspect-smoke.json",
+      "producer_step": "zig build run-header-inspect-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-header-inspect-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-header-inspect-smoke.md",
+      "producer_step": "zig build run-header-inspect-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-header-inspect-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-native-parallel-dashboard.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-native-thread-pool-full-dashboard.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-rust-deflate-benchmark-summary.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-rust-deflate-decode-bench.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-rust-deflate-encode-bench.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-sidecar-corrupt-smoke.json",
+      "producer_step": "zig build run-sidecar-corrupt-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-sidecar-corrupt-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-sidecar-corrupt-smoke.md",
+      "producer_step": "zig build run-sidecar-corrupt-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-sidecar-corrupt-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-standard-corpus-dashboard.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-standard-corpus-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-standard-corpus-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-standard-corpus-full-dashboard.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-standard-corpus-full-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-standard-corpus-full-dashboard"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-validation-json-docs-negative-smoke.json",
+      "producer_step": "zig build run-validation-json-docs-negative-smoke",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-validation-json-docs-negative-smoke"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-validation-json-smoke.json",
+      "producer_step": "zig build run-validation-json-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-validation-json-dashboard"
+    }
+  ],
+  "schema": "vort.dashboard_producers_required_artifacts",
+  "schema_version": 1
+}

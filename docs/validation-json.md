@@ -615,6 +615,8 @@ Example:
     "vort.dashboard_strict_validation_reasons",
     "vort.dashboard_strict_smoke",
     "vort.dashboard_producers_negative_smoke",
+    "vort.dashboard_producers_required_artifacts",
+    "vort.dashboard_producers_required_smoke",
     "vort.dashboard_index",
     "vort.header_inspect_smoke",
     "vort.header_inspect_required_workflows",
@@ -701,6 +703,81 @@ Example:
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,
+      "matched": true
+    }
+  ]
+}
+```
+
+## `vort.dashboard_producers_required_artifacts`
+
+Consumed by:
+
+```sh
+zig build run-dashboard-producers-required-smoke
+python3 tools/dashboard_producers_required_smoke.py
+```
+
+This schema defines the expected exact artifact coverage for
+`tools/dashboard_producers.json`. Each row records the artifact filename,
+producer command, expected file format, smoke gate, and whether the artifact must
+appear in `required_smoke_gates`. The docs checker compares this config with the
+actual producer map so adding or removing a known dashboard artifact cannot
+silently skip producer/smoke metadata.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_producers_required_artifacts",
+  "schema_version": 1,
+  "required_artifacts": [
+    {
+      "name": "vort-validation-json-smoke.json",
+      "producer_step": "zig build run-validation-json-dashboard",
+      "expected_format": "json",
+      "smoke_gate": "zig build run-validation-json-dashboard",
+      "required_smoke_gate": true
+    }
+  ]
+}
+```
+
+## `vort.dashboard_producers_required_smoke`
+
+Produced by:
+
+```sh
+zig build run-dashboard-producers-required-smoke
+python3 tools/dashboard_producers_required_smoke.py --summary zig-out/vort-dashboard-producers-required-smoke.json
+```
+
+This schema summarizes the required-artifact comparison between
+`tools/dashboard_producers_required_artifacts.json` and
+`tools/dashboard_producers.json`. It records actual versus configured producer
+step, expected format, smoke gate, and required-smoke-gate membership for every
+required artifact.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_producers_required_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "artifact_count": 1,
+  "required_smoke_gate_count": 1,
+  "cases": [
+    {
+      "name": "vort-validation-json-smoke.json",
+      "producer_step": "zig build run-validation-json-dashboard",
+      "configured_producer_step": "zig build run-validation-json-dashboard",
+      "expected_format": "json",
+      "configured_expected_format": "json",
+      "smoke_gate": "zig build run-validation-json-dashboard",
+      "configured_smoke_gate": "zig build run-validation-json-dashboard",
+      "required_smoke_gate": true,
+      "configured_required_smoke_gate": true,
       "matched": true
     }
   ]
@@ -1039,6 +1116,10 @@ checks it against the artifact filename suffix. `smoke_gate` is copied into the
 dashboard manifest to show the validation command associated with that artifact.
 `required_smoke_gates` drives `--strict-smoke-gates`, causing dashboard index
 generation to fail when a required artifact is absent or lacks a smoke gate.
+`tools/dashboard_producers_required_artifacts.json` is a schema-checked coverage
+matrix for exact producer mappings; `zig build run-dashboard-producers-required-smoke`
+verifies that every configured artifact still has matching producer, format, and
+smoke-gate metadata.
 
 Example:
 

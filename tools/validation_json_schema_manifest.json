@@ -513,6 +513,54 @@
         ]
       }
     },
+    "vort.dashboard_producers_required_artifacts": {
+      "fields": {
+        "required_artifacts": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "required_artifacts",
+      "item_fields": {
+        "expected_format": "str",
+        "name": "str",
+        "producer_step": "str",
+        "required_smoke_gate": "bool",
+        "smoke_gate": "str"
+      }
+    },
+    "vort.dashboard_producers_required_smoke": {
+      "fields": {
+        "artifact_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "required_smoke_gate_count": "int",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "artifact_count": {
+          "collection": "cases"
+        },
+        "required_smoke_gate_count": {
+          "collection": "cases",
+          "field": "required_smoke_gate",
+          "equals": true
+        }
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "configured_expected_format": "str",
+        "configured_producer_step": "str",
+        "configured_required_smoke_gate": "bool",
+        "configured_smoke_gate": "str",
+        "expected_format": "str",
+        "matched": "bool",
+        "name": "str",
+        "producer_step": "str",
+        "required_smoke_gate": "bool",
+        "smoke_gate": "str"
+      }
+    },
     "vort.header_inspect_required_workflows": {
       "fields": {
         "required_workflows": "list",
@@ -1363,6 +1411,8 @@
           "vort.dashboard_strict_validation_reasons",
           "vort.dashboard_strict_smoke",
           "vort.dashboard_producers_negative_smoke",
+          "vort.dashboard_producers_required_artifacts",
+          "vort.dashboard_producers_required_smoke",
           "vort.dashboard_index",
           "vort.header_inspect_smoke",
           "vort.header_inspect_required_workflows",

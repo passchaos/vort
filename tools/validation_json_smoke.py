@@ -116,6 +116,7 @@ def main() -> int:
         dashboard_strict_path = root / "vort-dashboard-strict-smoke.json"
         dashboard_strict_markdown_path = root / "vort-dashboard-strict-smoke.md"
         dashboard_producers_negative_path = root / "vort-dashboard-producers-negative-smoke.json"
+        dashboard_producers_required_path = root / "vort-dashboard-producers-required-smoke.json"
         run([
             "python3",
             str(ROOT / "tools" / "dashboard_strict_smoke.py"),
@@ -173,6 +174,23 @@ def main() -> int:
         assert dashboard_producers_negative["case_count"] >= 1
         assert all(row["matched"] is True for row in dashboard_producers_negative["cases"])
         validate_value_against_manifest(dashboard_producers_negative, schemas_def)
+
+        dashboard_producers_required = json.loads((ROOT / "tools" / "dashboard_producers_required_artifacts.json").read_text())
+        assert dashboard_producers_required["schema"] == "vort.dashboard_producers_required_artifacts"
+        assert dashboard_producers_required["required_artifacts"]
+        validate_value_against_manifest(dashboard_producers_required, schemas_def)
+        run([
+            "python3",
+            str(ROOT / "tools" / "dashboard_producers_required_smoke.py"),
+            "--summary",
+            str(dashboard_producers_required_path),
+        ])
+        dashboard_producers_required_smoke = json.loads(dashboard_producers_required_path.read_text())
+        assert dashboard_producers_required_smoke["schema"] == "vort.dashboard_producers_required_smoke"
+        assert dashboard_producers_required_smoke["ok"] is True
+        assert dashboard_producers_required_smoke["artifact_count"] == len(dashboard_producers_required["required_artifacts"])
+        assert all(row["matched"] is True for row in dashboard_producers_required_smoke["cases"])
+        validate_value_against_manifest(dashboard_producers_required_smoke, schemas_def)
 
         run([
             "python3",
@@ -402,6 +420,8 @@ def main() -> int:
                 dashboard_strict_reasons["schema"],
                 dashboard_strict["schema"],
                 dashboard_producers_negative["schema"],
+                dashboard_producers_required["schema"],
+                dashboard_producers_required_smoke["schema"],
                 dashboard["schema"],
                 header_summary["schema"],
                 required_workflows["schema"],
