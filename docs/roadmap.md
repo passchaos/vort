@@ -187,6 +187,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection smoke writes a schema-checked dashboard JSON artifact.
 - [x] raw/zlib/gzip header inspection smoke writes a Markdown dashboard artifact.
 - [x] raw/zlib/gzip header inspection Markdown dashboard includes per-format summary totals.
+- [x] Dashboard index classifies raw/zlib/gzip header inspection artifacts under validation.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
 - [x] zlib preset-dictionary encoders emit FDICT/DICTID frames for stored/fixed/dynamic/best modes.
