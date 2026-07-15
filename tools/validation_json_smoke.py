@@ -121,6 +121,17 @@ def main() -> int:
         assert dashboard["schema_version"] == 1
         assert dashboard["artifact_count"] >= 2
         validate_value_against_manifest(dashboard, schemas_def)
+
+        header_summary_path = root / "vort-header-inspect-smoke.json"
+        run([cli, "inspect-zlib-header-hex", "7801cb48cdc9c90700062c0215"])
+        run(["python3", str(ROOT / "tools" / "header_inspect_smoke.py"), cli, "--summary", str(header_summary_path)])
+        header_summary = json.loads(header_summary_path.read_text())
+        assert header_summary["schema"] == "vort.header_inspect_smoke"
+        assert header_summary["schema_version"] == 1
+        assert header_summary["ok"] is True
+        assert header_summary["dictionary_cases"] >= 1
+        assert header_summary["optional_header_cases"] >= 1
+        validate_value_against_manifest(header_summary, schemas_def)
         summary = {
             "schema": "vort.validation_json_smoke",
             "schema_version": 1,
@@ -130,6 +141,7 @@ def main() -> int:
                 report["schema"],
                 corrupt["schema"],
                 dashboard["schema"],
+                header_summary["schema"],
             ],
             "cli_success_ok": ok["ok"],
             "cli_failure_ok": failure["ok"],

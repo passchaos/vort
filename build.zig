@@ -366,6 +366,12 @@ pub fn build(b: *std.Build) void {
     const header_inspect_smoke_step = b.step("run-header-inspect-smoke", "Run zlib/gzip header inspection CLI smoke");
     header_inspect_smoke_step.dependOn(&header_inspect_smoke.step);
 
+    const header_inspect_dashboard = b.addSystemCommand(&.{ "python3", "tools/header_inspect_smoke.py" });
+    header_inspect_dashboard.addArtifactArg(cli_exe);
+    header_inspect_dashboard.addArgs(&.{ "--summary", "zig-out/vort-header-inspect-smoke.json" });
+    const header_inspect_dashboard_step = b.step("run-header-inspect-dashboard", "Write zlib/gzip header inspection smoke summary to zig-out");
+    header_inspect_dashboard_step.dependOn(&header_inspect_dashboard.step);
+
     const zlib_family_diff = b.addSystemCommand(&.{ "python3", "tools/zlib_family_diff.py" });
     zlib_family_diff.addArtifactArg(cli_exe);
     const zlib_family_diff_step = b.step("run-zlib-family-diff", "Run optional zlib-ng/zlib-rs differential harness when binaries are available");
@@ -644,6 +650,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index_step.dependOn(&dashboard_index.step);
     dashboard_index_step.dependOn(sidecar_corrupt_dashboard_step);
     dashboard_index_step.dependOn(validation_json_dashboard_step);
+    dashboard_index_step.dependOn(header_inspect_dashboard_step);
 
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
@@ -787,6 +794,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(python_zlib_diff_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(header_inspect_smoke_step);
+    ci_smoke_step.dependOn(header_inspect_dashboard_step);
     ci_smoke_step.dependOn(zlib_family_diff_step);
     ci_smoke_step.dependOn(rust_deflate_diff_step);
     ci_smoke_step.dependOn(external_probe_step);

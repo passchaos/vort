@@ -174,6 +174,56 @@ Example:
 }
 ```
 
+## `vort.header_inspect_smoke`
+
+Produced by:
+
+```sh
+zig build run-header-inspect-dashboard
+```
+
+This schema summarizes the CLI smoke that inspects zlib and gzip wrapper
+headers through both hex and file workflows. It is intended to keep wrapper
+metadata diagnostics covered by CI and dashboard artifacts.
+
+Important fields:
+
+- `schema`: `vort.header_inspect_smoke`
+- `schema_version`: `1`
+- `ok`: whether the smoke passed
+- `case_count`, `zlib_cases`, `gzip_cases`
+- `dictionary_cases`: zlib FDICT/DICTID cases covered
+- `optional_header_cases`, `fhcrc_cases`: gzip optional-header/FHCRC cases covered
+- `cases`: case-level metadata including format, byte size, data offset, and
+  feature booleans
+
+Example:
+
+```json
+{
+  "schema": "vort.header_inspect_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 4,
+  "zlib_cases": 2,
+  "gzip_cases": 2,
+  "dictionary_cases": 1,
+  "optional_header_cases": 1,
+  "fhcrc_cases": 1,
+  "cases": [
+    {
+      "name": "zlib_dictionary",
+      "format": "zlib",
+      "bytes": 14,
+      "data_offset": 6,
+      "has_dictionary": true,
+      "has_optional_fields": false,
+      "header_crc": false
+    }
+  ]
+}
+```
+
 ## `vort.validation_json_smoke`
 
 Produced by:
@@ -204,7 +254,8 @@ Example:
   "checked_schemas": [
     "vort.validation_report",
     "vort.sidecar_verify_report",
-    "vort.sidecar_corrupt_smoke_report"
+    "vort.sidecar_corrupt_smoke_report",
+    "vort.header_inspect_smoke"
   ],
   "cli_failure_hint": "payload_corrupt",
   "report_rows": 1,

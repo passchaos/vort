@@ -2,6 +2,7 @@
 """Smoke-test Vort zlib/gzip header inspection CLI commands."""
 
 import gzip
+import json
 import subprocess
 import sys
 import tempfile
@@ -21,11 +22,24 @@ def require_fields(output: str, fields: dict[str, str]) -> None:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print(f"usage: {argv[0]} <vort-cli>", file=sys.stderr)
+    if len(argv) not in (2, 4):
+        print(f"usage: {argv[0]} <vort-cli> [--summary <path>]", file=sys.stderr)
         return 2
 
     cli = argv[1]
+    summary_path: Path | None = None
+    if len(argv) == 4:
+        if argv[2] != "--summary":
+            print(f"usage: {argv[0]} <vort-cli> [--summary <path>]", file=sys.stderr)
+            return 2
+        summary_path = Path(argv[3])
+
+    summary: dict[str, object] = {
+        "schema": "vort.header_inspect_smoke",
+        "schema_version": 1,
+        "ok": False,
+        "cases": [],
+    }
     payload = b"hello"
     zlib_frame = zlib.compress(payload, level=6)
     gzip_frame = gzip.compress(payload, compresslevel=6, mtime=0)
@@ -55,6 +69,17 @@ def main(argv: list[str]) -> int:
             "dictid": "null",
         },
     )
+    cases: list[dict[str, object]] = [
+        {
+            "name": "zlib_default",
+            "format": "zlib",
+            "bytes": len(zlib_frame),
+            "data_offset": 2,
+            "has_dictionary": False,
+            "has_optional_fields": False,
+            "header_crc": False,
+        }
+    ]
     zlib_dict_hex = run(cli, "inspect-zlib-header-hex", zlib_dict_frame.hex())
     require_fields(
         zlib_dict_hex,
@@ -66,6 +91,17 @@ def main(argv: list[str]) -> int:
             "fdict": "true",
             "dictid": str(zlib.adler32(dictionary) & 0xFFFFFFFF),
         },
+    )
+    cases.append(
+        {
+            "name": "zlib_dictionary",
+            "format": "zlib",
+            "bytes": len(zlib_dict_frame),
+            "data_offset": 6,
+            "has_dictionary": True,
+            "has_optional_fields": False,
+            "header_crc": False,
+        }
     )
 
     gzip_hex = run(cli, "inspect-gzip-header-hex", gzip_frame.hex())
@@ -83,6 +119,17 @@ def main(argv: list[str]) -> int:
             "header_crc": "null",
         },
     )
+    cases.append(
+        {
+            "name": "gzip_default",
+            "format": "gzip",
+            "bytes": len(gzip_frame),
+            "data_offset": 10,
+            "has_dictionary": False,
+            "has_optional_fields": False,
+            "header_crc": False,
+        }
+    )
     gzip_optional_hex = run(cli, "inspect-gzip-header-hex", gzip_optional_frame.hex())
     require_fields(
         gzip_optional_hex,
@@ -97,6 +144,17 @@ def main(argv: list[str]) -> int:
             "comment": '"comment"',
             "header_crc": "18658",
         },
+    )
+    cases.append(
+        {
+            "name": "gzip_optional",
+            "format": "gzip",
+            "bytes": len(gzip_optional_frame),
+            "data_offset": 31,
+            "has_dictionary": False,
+            "has_optional_fields": True,
+            "header_crc": True,
+        }
     )
 
     with tempfile.TemporaryDirectory(prefix="vort-header-inspect-") as tmp:
@@ -123,6 +181,21 @@ def main(argv: list[str]) -> int:
         if gzip_optional_file != gzip_optional_hex:
             raise AssertionError(f"gzip optional file/hex inspection mismatch: {gzip_optional_file!r} != {gzip_optional_hex!r}")
 
+    summary = {
+        "schema": "vort.header_inspect_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "cases": cases,
+        "case_count": len(cases),
+        "zlib_cases": sum(1 for case in cases if case["format"] == "zlib"),
+        "gzip_cases": sum(1 for case in cases if case["format"] == "gzip"),
+        "dictionary_cases": sum(1 for case in cases if case["has_dictionary"]),
+        "optional_header_cases": sum(1 for case in cases if case["has_optional_fields"]),
+        "fhcrc_cases": sum(1 for case in cases if case["header_crc"]),
+    }
+    if summary_path is not None:
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     print("header inspect smoke: zlib=ok zlib_dict=ok gzip=ok gzip_optional=ok")
     return 0
 

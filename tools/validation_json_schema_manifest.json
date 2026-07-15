@@ -59,6 +59,36 @@
         "producer_step": "str"
       }
     },
+    "vort.header_inspect_smoke": {
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "dictionary_cases": "int",
+        "fhcrc_cases": "int",
+        "gzip_cases": "int",
+        "ok": "bool",
+        "optional_header_cases": "int",
+        "schema": "str",
+        "schema_version": "int",
+        "zlib_cases": "int"
+      },
+      "item_collection": "cases",
+      "item_enums": {
+        "format": [
+          "zlib",
+          "gzip"
+        ]
+      },
+      "item_fields": {
+        "bytes": "int",
+        "data_offset": "int",
+        "format": "str",
+        "has_dictionary": "bool",
+        "has_optional_fields": "bool",
+        "header_crc": "bool",
+        "name": "str"
+      }
+    },
     "vort.sidecar_corrupt_smoke_report": {
       "fields": {
         "full_rejected_rows": "int",

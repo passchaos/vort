@@ -167,6 +167,7 @@ architecture blindly.
 - [x] Public zlib header metadata parser exposes CMF/FLG, window, FDICT/DICTID, and FLEVEL fields.
 - [x] CLI zlib header inspection prints parsed metadata for hex/file workflows.
 - [x] zlib/gzip header inspection CLI smoke runs in local CI aggregate.
+- [x] zlib/gzip header inspection smoke writes a schema-checked dashboard JSON artifact.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
 - [x] zlib preset-dictionary encoders emit FDICT/DICTID frames for stored/fixed/dynamic/best modes.
