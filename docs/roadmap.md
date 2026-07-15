@@ -312,6 +312,7 @@ architecture blindly.
 - [x] raw/zlib/gzip CLI differential smoke rejects header-only truncated inputs.
 - [x] zlib/gzip CLI differential smoke rejects missing footer/trailer inputs.
 - [x] raw/zlib/gzip CLI differential smoke rejects trailing garbage inputs.
+- [x] gzip CLI differential smoke rejects corrupt or truncated second concatenated members.
 - [x] File CLI and gzip differential smoke cover gzip file decode with output limits.
 - [x] File CLI and gzip differential smoke cover concatenated gzip file decode.
 - [x] gzip differential smoke rejects too-small file output limits.
