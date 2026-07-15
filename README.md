@@ -279,6 +279,9 @@ const gzip_with_metadata = try vort.encodeGzipBestWithHeaderAlloc(
 defer allocator.free(gzip_with_metadata);
 const gzip_header = try vort.parseGzipHeaderInfo(gzip_with_metadata);
 _ = gzip_header.filename; // "payload.txt"; slices alias gzip_with_metadata
+const gzip_member = try vort.inspectGzipMemberAlloc(allocator, gzip_bytes, 0);
+_ = gzip_member.deflate_bytes; // exact raw DEFLATE byte count for member 0
+_ = gzip_member.crc32_matches; // diagnostic trailer check; false does not hide member offsets
 const gzip_exact = try vort.decodeGzipAllocExactSize(allocator, gzip_bytes, "payload".len);
 defer allocator.free(gzip_exact);
 const gzip_cat_exact = try vort.decodeGzipConcatenatedAllocExactSize(allocator, gzip_bytes, "payload".len);

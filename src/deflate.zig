@@ -154,6 +154,46 @@ pub const GzipHeaderInfo = struct {
     header_crc: ?u16 = null,
 };
 
+pub const GzipMemberInfo = struct {
+    /// Zero-based concatenated-member index requested by the caller.
+    member_index: usize,
+    /// Absolute byte offset of the gzip member header within the supplied
+    /// buffer. This is zero for ordinary single-member gzip frames.
+    member_offset: usize,
+    /// Parsed gzip header for this member. The embedded data_offset remains
+    /// member-relative, while deflate_offset below provides the absolute stream
+    /// offset. Any optional slices alias the caller-provided input.
+    header: GzipHeaderInfo,
+    /// Absolute byte offset where this member's raw DEFLATE payload starts.
+    deflate_offset: usize,
+    /// Exact byte length of this member's raw DEFLATE payload, excluding the
+    /// gzip header and 8-byte trailer.
+    deflate_bytes: usize,
+    /// Exact decoded byte count for this member. The inspector materializes the
+    /// member payload in caller-provided scratch allocation so it can report
+    /// CRC/ISIZE diagnostics without accepting corrupt trailers as valid data.
+    output_bytes: usize,
+    /// Absolute byte offset of the 8-byte gzip trailer.
+    footer_offset: usize,
+    /// Exclusive byte offset after the selected member's trailer.
+    end_offset: usize,
+    /// CRC-32 value stored in the gzip trailer.
+    footer_crc32: u32,
+    /// CRC-32 computed from the decoded member payload.
+    crc32: u32,
+    /// Whether footer_crc32 matches crc32. A false value is diagnostic rather
+    /// than fatal: unlike decode APIs, inspection keeps returning member
+    /// metadata when the raw DEFLATE payload is decodable but the trailer is
+    /// corrupt.
+    crc32_matches: bool,
+    /// ISIZE stored in the gzip trailer.
+    footer_isize: u32,
+    /// Decoded output byte count truncated to gzip's modulo-2^32 ISIZE field.
+    isize: u32,
+    /// Whether footer_isize matches isize.
+    isize_matches: bool,
+};
+
 pub const ZlibHeaderInfo = struct {
     /// Offset where the raw deflate payload starts. This is 2 for ordinary
     /// zlib streams and 6 when FDICT/DICTID is present.
@@ -2821,6 +2861,54 @@ fn validateGzipFooter(input: []const u8, footer_offset: usize, actual_crc: u32, 
     if (footer_offset + 8 != input.len) return error.TrailingData;
 }
 
+pub fn inspectGzipMemberAlloc(allocator: std.mem.Allocator, input: []const u8, member_index: usize) !GzipMemberInfo {
+    return inspectGzipMemberAllocLimited(allocator, input, member_index, 128 * 1024 * 1024);
+}
+
+pub fn inspectGzipMemberAllocLimited(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    member_index: usize,
+    max_output_len: usize,
+) !GzipMemberInfo {
+    var offset: usize = 0;
+    var index: usize = 0;
+    while (offset < input.len) : (index += 1) {
+        const header = try parseGzipHeaderInfo(input[offset..]);
+        const deflate_offset = offset + header.data_offset;
+        const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[deflate_offset..], "", max_output_len);
+        defer raw.deinit(allocator);
+        const footer_offset = deflate_offset + raw.input_read;
+        if (input.len - footer_offset < 8) return error.TruncatedFrame;
+        const end_offset = footer_offset + 8;
+        if (index == member_index) {
+            const footer_crc32 = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
+            const footer_isize = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
+            const actual_crc32 = checksum.crc32Best(raw.bytes);
+            const actual_isize: u32 = @truncate(raw.bytes.len);
+            const info: GzipMemberInfo = .{
+                .member_index = index,
+                .member_offset = offset,
+                .header = header,
+                .deflate_offset = deflate_offset,
+                .deflate_bytes = raw.input_read,
+                .output_bytes = raw.bytes.len,
+                .footer_offset = footer_offset,
+                .end_offset = end_offset,
+                .footer_crc32 = footer_crc32,
+                .crc32 = actual_crc32,
+                .crc32_matches = footer_crc32 == actual_crc32,
+                .footer_isize = footer_isize,
+                .isize = actual_isize,
+                .isize_matches = footer_isize == actual_isize,
+            };
+            return info;
+        }
+        offset = end_offset;
+    }
+    return error.RangeOutOfBounds;
+}
+
 pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
     const data_offset = try parseGzipHeader(input);
     const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice16, input[data_offset..], output)) orelse return error.InvalidDeflateBlockType;
@@ -4596,6 +4684,72 @@ test "gzip concatenated members decode in sequence" {
     try std.testing.expectEqualSlices(u8, "helloworld", exact);
     try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, 9));
     try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, 11));
+}
+
+test "gzip member inspector reports concatenated offsets and trailer diagnostics" {
+    const a = try encodeGzipFixedAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(a);
+    const b = try encodeGzipFixedAlloc(std.testing.allocator, "world");
+    defer std.testing.allocator.free(b);
+    var cat: std.ArrayList(u8) = .empty;
+    defer cat.deinit(std.testing.allocator);
+    try cat.appendSlice(std.testing.allocator, a);
+    try cat.appendSlice(std.testing.allocator, b);
+
+    const first = try inspectGzipMemberAlloc(std.testing.allocator, cat.items, 0);
+    try std.testing.expectEqual(@as(usize, 0), first.member_index);
+    try std.testing.expectEqual(@as(usize, 0), first.member_offset);
+    try std.testing.expectEqual(@as(usize, gzip_header.len), first.deflate_offset);
+    try std.testing.expectEqual(a.len - gzip_header.len - 8, first.deflate_bytes);
+    try std.testing.expectEqual(@as(usize, 5), first.output_bytes);
+    try std.testing.expectEqual(first.deflate_offset + first.deflate_bytes, first.footer_offset);
+    try std.testing.expectEqual(first.footer_offset + 8, first.end_offset);
+    try std.testing.expectEqual(a.len, first.end_offset);
+    try std.testing.expectEqual(checksum.crc32Best("hello"), first.footer_crc32);
+    try std.testing.expectEqual(first.footer_crc32, first.crc32);
+    try std.testing.expect(first.crc32_matches);
+    try std.testing.expectEqual(@as(u32, 5), first.footer_isize);
+    try std.testing.expectEqual(first.footer_isize, first.isize);
+    try std.testing.expect(first.isize_matches);
+
+    const second = try inspectGzipMemberAlloc(std.testing.allocator, cat.items, 1);
+    try std.testing.expectEqual(@as(usize, 1), second.member_index);
+    try std.testing.expectEqual(a.len, second.member_offset);
+    try std.testing.expectEqual(a.len + gzip_header.len, second.deflate_offset);
+    try std.testing.expectEqual(b.len - gzip_header.len - 8, second.deflate_bytes);
+    try std.testing.expectEqual(@as(usize, 5), second.output_bytes);
+    try std.testing.expectEqual(cat.items.len, second.end_offset);
+    try std.testing.expectEqual(checksum.crc32Best("world"), second.footer_crc32);
+    try std.testing.expectEqual(second.footer_crc32, second.crc32);
+    try std.testing.expect(second.crc32_matches);
+    try std.testing.expectEqual(@as(u32, 5), second.footer_isize);
+    try std.testing.expectEqual(second.footer_isize, second.isize);
+    try std.testing.expect(second.isize_matches);
+    try std.testing.expectError(error.RangeOutOfBounds, inspectGzipMemberAlloc(std.testing.allocator, cat.items, 2));
+}
+
+test "gzip member inspector reports trailer mismatches without rejecting payload" {
+    const gzip_frame = try encodeGzipFixedAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(gzip_frame);
+
+    var bad_crc = try std.testing.allocator.dupe(u8, gzip_frame);
+    defer std.testing.allocator.free(bad_crc);
+    bad_crc[bad_crc.len - 8] ^= 1;
+    const crc_info = try inspectGzipMemberAlloc(std.testing.allocator, bad_crc, 0);
+    try std.testing.expectEqual(checksum.crc32Best("hello"), crc_info.crc32);
+    try std.testing.expect(crc_info.footer_crc32 != crc_info.crc32);
+    try std.testing.expect(!crc_info.crc32_matches);
+    try std.testing.expect(crc_info.isize_matches);
+
+    var bad_isize = try std.testing.allocator.dupe(u8, gzip_frame);
+    defer std.testing.allocator.free(bad_isize);
+    bad_isize[bad_isize.len - 4] ^= 1;
+    const isize_info = try inspectGzipMemberAlloc(std.testing.allocator, bad_isize, 0);
+    try std.testing.expect(isize_info.crc32_matches);
+    try std.testing.expect(isize_info.footer_isize != isize_info.isize);
+    try std.testing.expect(!isize_info.isize_matches);
+
+    try std.testing.expectError(error.OutputLimitExceeded, inspectGzipMemberAllocLimited(std.testing.allocator, gzip_frame, 0, 4));
 }
 
 test "gzip concatenated members keep match history isolated" {

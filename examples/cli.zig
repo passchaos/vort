@@ -884,10 +884,10 @@ pub fn main(init: std.process.Init) !void {
         const member_index = try parseOptionalMemberIndex(args.next());
         const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(compressed);
-        const member = try locateGzipMember(init.gpa, compressed, member_index);
+        const member = try vort.inspectGzipMemberAlloc(init.gpa, compressed, member_index);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[member.deflate_offset..]);
         if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, gzipWrappedDeflateContext(compressed.len, member_index, member), info)
+            try printWrappedDeflateHeaderJson(stdout, gzipWrappedDeflateContext(compressed.len, member), info)
         else
             try printRawHeaderInfo(stdout, compressed.len - member.deflate_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-hex")) {
@@ -962,10 +962,10 @@ pub fn main(init: std.process.Init) !void {
         const member_index = try parseOptionalMemberIndex(args.next());
         const compressed = try hexToOwnedBytes(init.gpa, hex);
         defer init.gpa.free(compressed);
-        const member = try locateGzipMember(init.gpa, compressed, member_index);
+        const member = try vort.inspectGzipMemberAlloc(init.gpa, compressed, member_index);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[member.deflate_offset..]);
         if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, gzipWrappedDeflateContext(compressed.len, member_index, member), info)
+            try printWrappedDeflateHeaderJson(stdout, gzipWrappedDeflateContext(compressed.len, member), info)
         else
             try printRawHeaderInfo(stdout, compressed.len - member.deflate_offset, info, output_format);
     } else {
@@ -1130,88 +1130,6 @@ const WrappedDeflateContext = struct {
     member_isize: ?u32 = null,
     member_isize_matches: ?bool = null,
 };
-
-const GzipMemberLocation = struct {
-    member_offset: usize,
-    deflate_offset: usize,
-    member_deflate_bytes: usize,
-    member_output_bytes: usize,
-    member_footer_offset: usize,
-    member_end_offset: usize,
-    member_footer_crc32: u32,
-    member_crc32: u32,
-    member_footer_isize: u32,
-    member_isize: u32,
-};
-
-fn locateGzipMember(allocator: std.mem.Allocator, compressed: []const u8, member_index: usize) !GzipMemberLocation {
-    var offset: usize = 0;
-    var index: usize = 0;
-    while (offset < compressed.len) {
-        const header = try vort.parseGzipHeaderInfo(compressed[offset..]);
-        const deflate_offset = offset + header.data_offset;
-        const raw_extent = try decodeRawExtent(allocator, compressed[deflate_offset..]);
-        const footer_offset = deflate_offset + raw_extent.input_read;
-        if (compressed.len - footer_offset < 8) return error.TruncatedFrame;
-        const end_offset = footer_offset + 8;
-        const footer_crc32 = std.mem.readInt(u32, compressed[footer_offset..][0..4], .little);
-        const footer_isize = std.mem.readInt(u32, compressed[footer_offset + 4 ..][0..4], .little);
-        // Gzip stores ISIZE modulo 2^32. The full decoded byte count is still
-        // reported separately as member_output_bytes for callers that need the
-        // exact in-memory payload length of inspected members below the CLI's
-        // current bounded decode cap.
-        const member_isize: u32 = @truncate(raw_extent.output_written);
-        if (index == member_index) {
-            return .{
-                .member_offset = offset,
-                .deflate_offset = deflate_offset,
-                .member_deflate_bytes = raw_extent.input_read,
-                .member_output_bytes = raw_extent.output_written,
-                .member_footer_offset = footer_offset,
-                .member_end_offset = end_offset,
-                .member_footer_crc32 = footer_crc32,
-                .member_crc32 = raw_extent.crc32,
-                .member_footer_isize = footer_isize,
-                .member_isize = member_isize,
-            };
-        }
-        // To advance across concatenated gzip members, decode just enough of
-        // the raw DEFLATE payload to learn its byte length, then skip the
-        // 8-byte gzip trailer. This avoids guessing from magic-byte scans,
-        // which can collide with compressed payload bytes.
-        offset = end_offset;
-        index += 1;
-    }
-    return error.RangeOutOfBounds;
-}
-
-const RawDeflateExtent = struct {
-    input_read: usize,
-    output_written: usize,
-    crc32: u32,
-};
-
-fn decodeRawExtent(allocator: std.mem.Allocator, input: []const u8) !RawDeflateExtent {
-    var capacity: usize = 64 * 1024;
-    while (capacity <= 128 * 1024 * 1024) : (capacity *= 2) {
-        const out = try allocator.alloc(u8, capacity);
-        const decoded = vort.decodeRawDeflate(input, out) catch |err| {
-            allocator.free(out);
-            switch (err) {
-                error.OutputTooSmall => continue,
-                else => return err,
-            }
-        };
-        const crc32 = vort.crc32Best(out[0..decoded.output_written]);
-        allocator.free(out);
-        return .{
-            .input_read = decoded.input_read,
-            .output_written = decoded.output_written,
-            .crc32 = crc32,
-        };
-    }
-    return error.OutputLimitExceeded;
-}
 
 fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.RawDeflateHeaderInfo, output_format: HeaderInspectOutputFormat) !void {
     if (output_format == .json) return printRawHeaderJson(stdout, compressed_len, info);
@@ -1406,23 +1324,23 @@ fn zlibWrappedDeflateContext(wrapper_bytes: usize, deflate_offset: usize) Wrappe
     };
 }
 
-fn gzipWrappedDeflateContext(wrapper_bytes: usize, member_index: usize, member: GzipMemberLocation) WrappedDeflateContext {
+fn gzipWrappedDeflateContext(wrapper_bytes: usize, member: vort.GzipMemberInfo) WrappedDeflateContext {
     return .{
         .wrapper = "gzip",
         .wrapper_bytes = wrapper_bytes,
         .member_offset = member.member_offset,
         .deflate_offset = member.deflate_offset,
-        .member_index = member_index,
-        .member_deflate_bytes = member.member_deflate_bytes,
-        .member_output_bytes = member.member_output_bytes,
-        .member_footer_offset = member.member_footer_offset,
-        .member_end_offset = member.member_end_offset,
-        .member_footer_crc32 = member.member_footer_crc32,
-        .member_crc32 = member.member_crc32,
-        .member_crc32_matches = member.member_footer_crc32 == member.member_crc32,
-        .member_footer_isize = member.member_footer_isize,
-        .member_isize = member.member_isize,
-        .member_isize_matches = member.member_footer_isize == member.member_isize,
+        .member_index = member.member_index,
+        .member_deflate_bytes = member.deflate_bytes,
+        .member_output_bytes = member.output_bytes,
+        .member_footer_offset = member.footer_offset,
+        .member_end_offset = member.end_offset,
+        .member_footer_crc32 = member.footer_crc32,
+        .member_crc32 = member.crc32,
+        .member_crc32_matches = member.crc32_matches,
+        .member_footer_isize = member.footer_isize,
+        .member_isize = member.isize,
+        .member_isize_matches = member.isize_matches,
     };
 }
 
