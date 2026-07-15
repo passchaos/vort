@@ -154,7 +154,7 @@ def main() -> int:
     if summary_path is not None:
         summary_path.parent.mkdir(parents=True, exist_ok=True)
         summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
-    print("validation_json_smoke=ok schemas=vort.validation_report,vort.sidecar_verify_report,vort.sidecar_corrupt_smoke_report")
+    print(f"validation_json_smoke=ok schemas={','.join(summary['checked_schemas'])}")
     return 0
 
 
