@@ -28,15 +28,20 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
 
+    var csv_path: ?[]const u8 = null;
     var file_cases: std.ArrayList(Case) = .empty;
     defer {
         for (file_cases.items) |case| if (case.owned) init.gpa.free(case.input);
         file_cases.deinit(init.gpa);
     }
-    while (args.next()) |path| {
-        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(64 * 1024 * 1024));
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--csv")) {
+            csv_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
+        const input = try std.Io.Dir.cwd().readFileAlloc(init.io, arg, init.gpa, .limited(64 * 1024 * 1024));
         errdefer init.gpa.free(input);
-        try file_cases.append(init.gpa, .{ .name = path, .input = input, .owned = true });
+        try file_cases.append(init.gpa, .{ .name = arg, .input = input, .owned = true });
     }
 
     const cases = if (file_cases.items.len == 0) builtins[0..] else file_cases.items;
@@ -53,10 +58,10 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "rle", .strategy = .rle },
     };
 
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
-    const stdout = &stdout_writer.interface;
-    try stdout.print("case,input_bytes,level,strategy,parser,block_selection,window_len,max_chain,nice_len,max_candidates,lazy_min_gain,min_match,max_match,min_savings_bits,split_min,split_max,split_step,stored_fast_path,tokens,literal_tokens,match_tokens,matched_bytes,match_coverage_x10000,avg_match_len_x100,fixed_bits,fixed_bits_per_byte_x100,raw_best_bytes,raw_best_ratio_x10000,adaptive_bytes,adaptive_ratio_x10000,roundtrip_crc32\n", .{});
+    var output = std.Io.Writer.Allocating.init(init.gpa);
+    defer output.deinit();
+    const writer = &output.writer;
+    try writer.print("case,input_bytes,level,strategy,parser,block_selection,window_len,max_chain,nice_len,max_candidates,lazy_min_gain,min_match,max_match,min_savings_bits,split_min,split_max,split_step,stored_fast_path,tokens,literal_tokens,match_tokens,matched_bytes,match_coverage_x10000,avg_match_len_x100,fixed_bits,fixed_bits_per_byte_x100,raw_best_bytes,raw_best_ratio_x10000,adaptive_bytes,adaptive_ratio_x10000,roundtrip_crc32\n", .{});
 
     for (cases) |case| {
         for (levels) |level_case| {
@@ -96,7 +101,7 @@ pub fn main(init: std.process.Init) !void {
                 const raw_best_ratio_x10000 = scaledRatio(encoded.len, case.input.len, 10_000);
                 const adaptive_ratio_x10000 = scaledRatio(adaptive.len, case.input.len, 10_000);
 
-                try stdout.print("{s},{d},{s},{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
+                try writer.print("{s},{d},{s},{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
                     case.name,
                     case.input.len,
                     level_case.name,
@@ -132,7 +137,17 @@ pub fn main(init: std.process.Init) !void {
             }
         }
     }
+    const bytes = output.written();
+
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
+    const stdout = &stdout_writer.interface;
+    try stdout.writeAll(bytes);
     try stdout.flush();
+
+    if (csv_path) |path| {
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = bytes });
+    }
 }
 
 fn scaledRatio(numerator: usize, denominator: usize, scale: usize) usize {

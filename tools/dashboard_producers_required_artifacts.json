@@ -155,6 +155,13 @@
       "smoke_gate": "zig build run-header-inspect-dashboard"
     },
     {
+      "expected_format": "csv",
+      "name": "vort-level-report.csv",
+      "producer_step": "zig build run-level-report-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-level-report-csv"
+    },
+    {
       "expected_format": "md",
       "name": "vort-native-parallel-dashboard.md",
       "producer_step": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard",

@@ -182,6 +182,7 @@ zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-suite
 zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-dashboard
 zig build run-compression-report
 zig build run-level-report
+zig build run-level-report-csv
 zig build run-level-report -- README.md docs/roadmap.md
 zig build run-dictionary-report
 zig build run-dictionary-report -- README.md docs/roadmap.md
@@ -197,6 +198,7 @@ zig build -Doptimize=ReleaseFast run-dictionary-corpus-report -- --per-file
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard
 zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard -- --targets 128,256,512
 zig build run-level-report
+zig build run-level-report-csv
 zig build run-dynamic-plan-report
 zig build run-dynamic-plan-report-csv
 zig build run-split-policy-report
