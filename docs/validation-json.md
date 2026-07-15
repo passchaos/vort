@@ -621,6 +621,7 @@ Example:
     "vort.dashboard_category_expected_artifacts",
     "vort.dashboard_category_negative_smoke",
     "vort.dashboard_config_index",
+    "vort.dashboard_config_index_negative_smoke",
     "vort.dashboard_config_index_smoke",
     "vort.dashboard_index",
     "vort.header_inspect_smoke",
@@ -668,6 +669,45 @@ Example:
       "docs_section": "## `vort.dashboard_category_expected_artifacts`",
       "validation_step": "zig build run-dashboard-category-smoke",
       "consumer": "tools/dashboard_category_smoke.py"
+    }
+  ]
+}
+```
+
+## `vort.dashboard_config_index_negative_smoke`
+
+Produced by:
+
+```sh
+zig build run-dashboard-config-index-negative-smoke
+python3 tools/dashboard_config_index_negative_smoke.py --summary zig-out/vort-dashboard-config-index-negative-smoke.json
+```
+
+This schema summarizes negative checks for the dashboard config index. The smoke
+feeds intentionally drifted index files to `tools/dashboard_config_index_smoke.py`
+and verifies that missing config paths, schema mismatches, missing docs sections,
+missing build steps, missing consumers, and schemas not covered by
+`vort.validation_json_smoke.checked_schemas` fail with the expected diagnostic.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_config_index_negative_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "cases": [
+    {
+      "name": "missing_config_path",
+      "expected_failure": true,
+      "expected_output": "\"path_exists\": false",
+      "actual_output": "... \"path_exists\": false ...",
+      "actual_output_bytes": 120,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
     }
   ]
 }

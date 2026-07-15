@@ -30,13 +30,14 @@ def load_json(path: Path) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--summary", help="optional JSON summary output path")
+    parser.add_argument("--config-index", default=str(CONFIG_INDEX), help="dashboard config index path")
     args = parser.parse_args()
 
     schemas_def = load_manifest()
     docs_text = DOC.read_text()
     build_text = BUILD.read_text()
     checked_schema_values = set(schemas_def["vort.validation_json_smoke"]["list_item_enums"]["checked_schemas"])
-    index = load_json(CONFIG_INDEX)
+    index = load_json(Path(args.config_index))
     if index.get("schema") != "vort.dashboard_config_index":
         raise AssertionError("unexpected dashboard config index schema")
     if index.get("schema_version") != 1:
@@ -88,7 +89,7 @@ def main() -> int:
                 validation_json_smoke_checked,
             )
         )
-        if path_exists and manifest_schema_present:
+        if path_exists and schema_matches and manifest_schema_present:
             validate_value_against_manifest(config_payload, schemas_def)
         configs.append(
             {

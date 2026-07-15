@@ -658,6 +658,10 @@ pub fn build(b: *std.Build) void {
     const dashboard_config_index_smoke_step = b.step("run-dashboard-config-index-smoke", "Validate dashboard external configuration index");
     dashboard_config_index_smoke_step.dependOn(&dashboard_config_index_smoke.step);
 
+    const dashboard_config_index_negative_smoke = b.addSystemCommand(&.{ "python3", "tools/dashboard_config_index_negative_smoke.py", "--summary", "zig-out/vort-dashboard-config-index-negative-smoke.json" });
+    const dashboard_config_index_negative_smoke_step = b.step("run-dashboard-config-index-negative-smoke", "Validate dashboard config-index negative drift cases");
+    dashboard_config_index_negative_smoke_step.dependOn(&dashboard_config_index_negative_smoke.step);
+
     const dashboard_producers_negative_smoke = b.addSystemCommand(&.{ "python3", "tools/dashboard_producers_negative_smoke.py", "--summary", "zig-out/vort-dashboard-producers-negative-smoke.json" });
     const dashboard_producers_negative_smoke_step = b.step("run-dashboard-producers-negative-smoke", "Validate dashboard producer-map negative drift cases");
     dashboard_producers_negative_smoke_step.dependOn(&dashboard_producers_negative_smoke.step);
@@ -683,6 +687,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(validation_json_dashboard_step);
     dashboard_index.step.dependOn(validation_json_docs_negative_smoke_step);
     dashboard_index.step.dependOn(dashboard_config_index_smoke_step);
+    dashboard_index.step.dependOn(dashboard_config_index_negative_smoke_step);
     dashboard_index.step.dependOn(dashboard_producers_negative_smoke_step);
     dashboard_index.step.dependOn(dashboard_producers_required_smoke_step);
     dashboard_index.step.dependOn(dashboard_category_negative_smoke_step);
@@ -861,6 +866,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(validation_json_docs_check_step);
     ci_smoke_step.dependOn(validation_json_docs_negative_smoke_step);
     ci_smoke_step.dependOn(dashboard_config_index_smoke_step);
+    ci_smoke_step.dependOn(dashboard_config_index_negative_smoke_step);
     ci_smoke_step.dependOn(dashboard_producers_negative_smoke_step);
     ci_smoke_step.dependOn(dashboard_producers_required_smoke_step);
     ci_smoke_step.dependOn(dashboard_category_negative_smoke_step);

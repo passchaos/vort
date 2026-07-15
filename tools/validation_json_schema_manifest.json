@@ -542,6 +542,43 @@
         "validation_step": "str"
       }
     },
+
+    "vort.dashboard_config_index_negative_smoke": {
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "actual_output": "str",
+        "actual_output_bytes": "int",
+        "actual_output_limit": "int",
+        "actual_output_truncated": "bool",
+        "expected_failure": "bool",
+        "expected_output": "str",
+        "matched": "bool",
+        "name": "str",
+        "returncode": "int"
+      },
+      "item_enums": {
+        "name": [
+          "missing_config_path",
+          "schema_mismatch",
+          "missing_docs_section",
+          "missing_build_step",
+          "missing_consumer",
+          "unchecked_validation_json_schema"
+        ]
+      }
+    },
     "vort.dashboard_config_index_smoke": {
       "fields": {
         "config_count": "int",
@@ -1528,6 +1565,7 @@
           "vort.dashboard_category_expected_artifacts",
           "vort.dashboard_category_negative_smoke",
           "vort.dashboard_config_index",
+          "vort.dashboard_config_index_negative_smoke",
           "vort.dashboard_config_index_smoke",
           "vort.dashboard_index",
           "vort.header_inspect_smoke",

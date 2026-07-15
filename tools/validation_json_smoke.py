@@ -65,6 +65,7 @@ def main() -> int:
         docs_negative_path = root / "vort-validation-json-docs-negative-smoke.json"
         dashboard_category_negative_path = root / "vort-dashboard-category-negative-smoke.json"
         dashboard_config_index_path = root / "vort-dashboard-config-index-smoke.json"
+        dashboard_config_index_negative_path = root / "vort-dashboard-config-index-negative-smoke.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -126,6 +127,19 @@ def main() -> int:
         assert dashboard_config_index_smoke["config_count"] == dashboard_config_index["config_count"]
         assert all(row["matched"] is True for row in dashboard_config_index_smoke["configs"])
         validate_value_against_manifest(dashboard_config_index_smoke, schemas_def)
+
+        run([
+            "python3",
+            str(ROOT / "tools" / "dashboard_config_index_negative_smoke.py"),
+            "--summary",
+            str(dashboard_config_index_negative_path),
+        ])
+        dashboard_config_index_negative = json.loads(dashboard_config_index_negative_path.read_text())
+        assert dashboard_config_index_negative["schema"] == "vort.dashboard_config_index_negative_smoke"
+        assert dashboard_config_index_negative["ok"] is True
+        assert dashboard_config_index_negative["case_count"] >= 1
+        assert all(row["matched"] is True for row in dashboard_config_index_negative["cases"])
+        validate_value_against_manifest(dashboard_config_index_negative, schemas_def)
 
         dashboard_category_expected = json.loads((ROOT / "tools" / "dashboard_category_expected_artifacts.json").read_text())
         assert dashboard_category_expected["schema"] == "vort.dashboard_category_expected_artifacts"
@@ -465,6 +479,7 @@ def main() -> int:
                 dashboard_category_expected["schema"],
                 dashboard_category_negative["schema"],
                 dashboard_config_index["schema"],
+                dashboard_config_index_negative["schema"],
                 dashboard_config_index_smoke["schema"],
                 dashboard["schema"],
                 header_summary["schema"],

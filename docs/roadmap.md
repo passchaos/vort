@@ -271,6 +271,7 @@ architecture blindly.
 - [x] Dashboard category smoke uses a schema-checked matrix covering validation, benchmark, corpus, native, and other artifacts.
 - [x] Dashboard category negative smoke catches classifier, required-artifact, producer, and smoke-gate drift cases.
 - [x] Dashboard external configuration index tracks config schemas, docs sections, consumers, and validation steps.
+- [x] Dashboard config-index negative smoke catches missing paths, docs, build steps, consumers, and unchecked schemas.
 - [x] Dashboard category smoke protects raw/zlib/gzip header inspection validation classification.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
