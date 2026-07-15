@@ -333,6 +333,13 @@
         "deflate_bytes": "int",
         "deflate_offset": "int",
         "deflate_span_kind": "str",
+        "stream_adler32": "int?",
+        "stream_adler32_matches": "bool?",
+        "stream_deflate_bytes": "int?",
+        "stream_end_offset": "int?",
+        "stream_footer_adler32": "int?",
+        "stream_footer_offset": "int?",
+        "stream_output_bytes": "int?",
         "member_crc32": "int?",
         "member_crc32_matches": "bool?",
         "member_deflate_bytes": "int?",
@@ -398,6 +405,21 @@
             "field": "wrapper",
             "equals": "gzip"
           },
+          "null": [
+            "stream_deflate_bytes",
+            "stream_output_bytes",
+            "stream_footer_offset",
+            "stream_end_offset",
+            "stream_footer_adler32",
+            "stream_adler32",
+            "stream_adler32_matches"
+          ]
+        },
+        {
+          "when": {
+            "field": "wrapper",
+            "equals": "gzip"
+          },
           "non_null": [
             "member_deflate_bytes",
             "member_output_bytes",
@@ -413,6 +435,34 @@
         }
       ],
       "numeric_relations": [
+        {
+          "when": {
+            "field": "stream_footer_offset",
+            "not_equals": null
+          },
+          "left": "stream_footer_offset",
+          "op": "gt",
+          "right": "deflate_offset"
+        },
+        {
+          "when": {
+            "field": "stream_end_offset",
+            "not_equals": null
+          },
+          "left": "stream_end_offset",
+          "op": "eq",
+          "right": "stream_footer_offset",
+          "offset": 4
+        },
+        {
+          "when": {
+            "field": "stream_end_offset",
+            "not_equals": null
+          },
+          "left": "stream_end_offset",
+          "op": "le",
+          "right": "wrapper_bytes"
+        },
         {
           "when": {
             "field": "wrapper",
@@ -454,6 +504,15 @@
       "difference_relations": [
         {
           "when": {
+            "field": "stream_deflate_bytes",
+            "not_equals": null
+          },
+          "left": "stream_deflate_bytes",
+          "minuend": "stream_footer_offset",
+          "subtrahend": "deflate_offset"
+        },
+        {
+          "when": {
             "field": "wrapper",
             "equals": "gzip"
           },
@@ -463,6 +522,15 @@
         }
       ],
       "equality_flag_relations": [
+        {
+          "when": {
+            "field": "stream_adler32_matches",
+            "not_equals": null
+          },
+          "left": "stream_footer_adler32",
+          "right": "stream_adler32",
+          "flag": "stream_adler32_matches"
+        },
         {
           "when": {
             "field": "wrapper",

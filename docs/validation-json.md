@@ -334,21 +334,26 @@ context needed to locate the inner DEFLATE payload. It records the wrapper type,
 scope, member index, total wrapper bytes, byte offset where the DEFLATE payload
 starts, remaining bytes after that offset, and the nested raw header object.
 `deflate_span_kind` is currently `header_tail`: `deflate_bytes` is the byte count
-after the wrapper header; for concatenated gzip inputs that includes the
-selected member footer and later members. For gzip, `member_deflate_bytes` is the
-selected member's exact raw DEFLATE payload length, `member_footer_offset` points
-at its 8-byte trailer, and `member_end_offset` is the exclusive end offset
-(`member_footer_offset + 8`). `member_output_bytes` is the exact decoded
-payload byte count used for the inspected member's ISIZE comparison. Gzip member
-trailer diagnostics also include the stored CRC-32/ISIZE values, Vort's decoded
+after the wrapper header; for zlib inputs that includes the Adler-32 footer, and
+for concatenated gzip inputs that includes the selected member footer and later
+members. For zlib streams without a preset dictionary requirement,
+`stream_deflate_bytes` reports the exact raw DEFLATE payload length before the
+4-byte Adler-32 footer, and `stream_*adler32*` fields report stored-vs-computed
+checksum diagnostics. These zlib stream diagnostics are `null` when the stream
+requires a preset dictionary because the header-only CLI has no dictionary bytes
+to decode the payload. For gzip, `member_deflate_bytes` is the selected member's
+exact raw DEFLATE payload length, `member_footer_offset` points at its 8-byte
+trailer, and `member_end_offset` is the exclusive end offset
+(`member_footer_offset + 8`). `member_output_bytes` is the exact decoded payload
+byte count used for the inspected member's ISIZE comparison. Gzip member trailer
+diagnostics also include the stored CRC-32/ISIZE values, Vort's decoded
 CRC-32/ISIZE values, and boolean match flags. A false match flag is diagnostic:
-header inspection still reports the selected member even when the gzip trailer
-CRC-32 or ISIZE disagrees with the decoded payload. These member-specific fields
-are `null` for zlib because the current wrapped-deflate schema reports gzip
-member boundaries and trailers only. The
-optional `member_index` argument selects the gzip member to inspect and defaults
-to `0`; member traversal uses the previous member's decoded raw DEFLATE byte
-length plus the gzip trailer.
+header inspection still reports the selected member even when the zlib or gzip
+footer checksum/size disagrees with the decoded payload. Gzip member-specific
+fields are `null` for zlib, and zlib stream-specific fields are `null` for gzip.
+The optional `member_index` argument selects the gzip member to inspect and
+defaults to `0`; member traversal uses the previous member's decoded raw DEFLATE
+byte length plus the gzip trailer.
 
 Example:
 
@@ -364,6 +369,13 @@ Example:
   "deflate_offset": 2,
   "deflate_bytes": 11,
   "deflate_span_kind": "header_tail",
+  "stream_deflate_bytes": 7,
+  "stream_output_bytes": 5,
+  "stream_footer_offset": 9,
+  "stream_end_offset": 13,
+  "stream_footer_adler32": 103547413,
+  "stream_adler32": 103547413,
+  "stream_adler32_matches": true,
   "member_deflate_bytes": null,
   "member_output_bytes": null,
   "member_footer_offset": null,

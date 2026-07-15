@@ -140,6 +140,14 @@ def main() -> int:
         assert wrapped_zlib_header["scope"] == "zlib_stream"
         assert wrapped_zlib_header["member_index"] == 0
         assert wrapped_zlib_header["deflate_span_kind"] == "header_tail"
+        assert wrapped_zlib_header["stream_footer_offset"] > wrapped_zlib_header["deflate_offset"]
+        assert wrapped_zlib_header["stream_deflate_bytes"] == wrapped_zlib_header["stream_footer_offset"] - wrapped_zlib_header["deflate_offset"]
+        assert wrapped_zlib_header["stream_output_bytes"] == 5
+        assert wrapped_zlib_header["stream_end_offset"] == wrapped_zlib_header["stream_footer_offset"] + 4
+        assert wrapped_zlib_header["stream_end_offset"] == wrapped_zlib_header["wrapper_bytes"]
+        assert wrapped_zlib_header["stream_footer_adler32"] == 0x062C0215
+        assert wrapped_zlib_header["stream_adler32"] == wrapped_zlib_header["stream_footer_adler32"]
+        assert wrapped_zlib_header["stream_adler32_matches"] is True
         for key in (
             "member_deflate_bytes",
             "member_output_bytes",
@@ -164,6 +172,16 @@ def main() -> int:
         assert wrapped_gzip_header["scope"] == "gzip_member"
         assert wrapped_gzip_header["member_index"] == 0
         assert wrapped_gzip_header["deflate_span_kind"] == "header_tail"
+        for key in (
+            "stream_deflate_bytes",
+            "stream_output_bytes",
+            "stream_footer_offset",
+            "stream_end_offset",
+            "stream_footer_adler32",
+            "stream_adler32",
+            "stream_adler32_matches",
+        ):
+            assert wrapped_gzip_header[key] is None
         assert wrapped_gzip_header["member_footer_offset"] > wrapped_gzip_header["deflate_offset"]
         assert wrapped_gzip_header["member_deflate_bytes"] == wrapped_gzip_header["member_footer_offset"] - wrapped_gzip_header["deflate_offset"]
         assert wrapped_gzip_header["member_output_bytes"] == 5

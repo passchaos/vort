@@ -212,6 +212,31 @@ pub const ZlibHeaderInfo = struct {
     dictionary_id: ?u32 = null,
 };
 
+pub const ZlibStreamInfo = struct {
+    /// Parsed zlib wrapper header.
+    header: ZlibHeaderInfo,
+    /// Absolute byte offset where the raw DEFLATE payload starts.
+    deflate_offset: usize,
+    /// Exact byte length of the raw DEFLATE payload before the Adler-32 footer.
+    deflate_bytes: usize,
+    /// Exact decoded byte count for the inspected stream.
+    output_bytes: usize,
+    /// Absolute byte offset of the 4-byte Adler-32 footer.
+    footer_offset: usize,
+    /// Exclusive byte offset after the zlib stream footer. This may be smaller
+    /// than the input length when callers intentionally inspect a stream prefix
+    /// inside a larger buffer.
+    end_offset: usize,
+    /// Adler-32 value stored in the zlib footer.
+    footer_adler32: u32,
+    /// Adler-32 computed from the decoded stream payload.
+    adler32: u32,
+    /// Whether footer_adler32 matches adler32. A false value is diagnostic:
+    /// unlike decode APIs, inspection keeps returning stream metadata when the
+    /// raw DEFLATE payload is decodable but the footer is corrupt.
+    adler32_matches: bool,
+};
+
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
         .fastest => .{ .parser = .hash, .lz77_options = .{ .window_len = 8 * 1024, .max_chain = 4, .nice_len = 8, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4, .max_match = 64, .min_savings_bits = 8 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
@@ -2502,6 +2527,56 @@ fn validateZlibFooter(input: []const u8, footer_offset: usize, actual: u32) Erro
     if (footer_offset + 4 != input.len) return error.TrailingData;
 }
 
+pub fn inspectZlibStreamAlloc(allocator: std.mem.Allocator, input: []const u8) !ZlibStreamInfo {
+    return inspectZlibStreamAllocLimited(allocator, input, 128 * 1024 * 1024);
+}
+
+pub fn inspectZlibStreamAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) !ZlibStreamInfo {
+    return inspectZlibStreamAllocWithOptionalDictionaryLimited(allocator, input, null, max_output_len);
+}
+
+pub fn inspectZlibStreamAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) !ZlibStreamInfo {
+    return inspectZlibStreamAllocWithDictionaryLimited(allocator, input, dictionary, 128 * 1024 * 1024);
+}
+
+pub fn inspectZlibStreamAllocWithDictionaryLimited(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary: []const u8,
+    max_output_len: usize,
+) !ZlibStreamInfo {
+    return inspectZlibStreamAllocWithOptionalDictionaryLimited(allocator, input, dictionary, max_output_len);
+}
+
+fn inspectZlibStreamAllocWithOptionalDictionaryLimited(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary: ?[]const u8,
+    max_output_len: usize,
+) !ZlibStreamInfo {
+    const header = try parseZlibHeader(input, dictionary);
+    const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+    const header_info = try parseZlibHeaderInfo(input);
+    const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[header.data_offset..], raw_dictionary, max_output_len);
+    defer raw.deinit(allocator);
+    const footer_offset = header.data_offset + raw.input_read;
+    if (footer_offset > input.len or input.len - footer_offset < 4) return error.TruncatedFrame;
+    const end_offset = footer_offset + 4;
+    const footer_adler32 = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
+    const actual_adler32 = checksum.adler32(raw.bytes);
+    return .{
+        .header = header_info,
+        .deflate_offset = header.data_offset,
+        .deflate_bytes = raw.input_read,
+        .output_bytes = raw.bytes.len,
+        .footer_offset = footer_offset,
+        .end_offset = end_offset,
+        .footer_adler32 = footer_adler32,
+        .adler32 = actual_adler32,
+        .adler32_matches = footer_adler32 == actual_adler32,
+    };
+}
+
 pub fn decodeZlibStored(input: []const u8, output: []u8) Error!usize {
     const header = try parseZlibHeader(input, null);
     const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) orelse return error.InvalidDeflateBlockType;
@@ -3460,6 +3535,51 @@ test "zlib stored wrapper validates checksum header and trailing data" {
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeZlibStored(with_trailing[0 .. encoded.len + 1], &out));
     try std.testing.expectError(error.TrailingData, decodeZlibStoredAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]));
+}
+
+test "zlib stream inspector reports deflate length and adler diagnostics" {
+    const encoded = try encodeZlibFixedAlloc(std.testing.allocator, "payload");
+    defer std.testing.allocator.free(encoded);
+    const info = try inspectZlibStreamAlloc(std.testing.allocator, encoded);
+    try std.testing.expectEqual(@as(usize, 2), info.deflate_offset);
+    try std.testing.expectEqual(encoded.len - 2 - 4, info.deflate_bytes);
+    try std.testing.expectEqual(@as(usize, 7), info.output_bytes);
+    try std.testing.expectEqual(info.deflate_offset + info.deflate_bytes, info.footer_offset);
+    try std.testing.expectEqual(info.footer_offset + 4, info.end_offset);
+    try std.testing.expectEqual(encoded.len, info.end_offset);
+    try std.testing.expectEqual(checksum.adler32("payload"), info.footer_adler32);
+    try std.testing.expectEqual(info.footer_adler32, info.adler32);
+    try std.testing.expect(info.adler32_matches);
+
+    var bad_adler = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_adler);
+    bad_adler[bad_adler.len - 1] ^= 1;
+    const bad_info = try inspectZlibStreamAlloc(std.testing.allocator, bad_adler);
+    try std.testing.expectEqual(checksum.adler32("payload"), bad_info.adler32);
+    try std.testing.expect(bad_info.footer_adler32 != bad_info.adler32);
+    try std.testing.expect(!bad_info.adler32_matches);
+
+    var with_trailing: [128]u8 = undefined;
+    @memcpy(with_trailing[0..encoded.len], encoded);
+    with_trailing[encoded.len] = 0;
+    const prefix_info = try inspectZlibStreamAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]);
+    try std.testing.expectEqual(encoded.len, prefix_info.end_offset);
+    try std.testing.expectEqual(@as(usize, encoded.len + 1), with_trailing[0 .. encoded.len + 1].len);
+    try std.testing.expectError(error.OutputLimitExceeded, inspectZlibStreamAllocLimited(std.testing.allocator, encoded, 6));
+}
+
+test "zlib stream inspector validates preset dictionary IDs" {
+    const dictionary = "hello ";
+    const payload = "hello hello hello";
+    const encoded = try encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, payload, dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    const info = try inspectZlibStreamAllocWithDictionary(std.testing.allocator, encoded, dictionary);
+    try std.testing.expect(info.header.uses_dictionary);
+    try std.testing.expectEqual(checksum.adler32(dictionary), info.header.dictionary_id.?);
+    try std.testing.expectEqual(checksum.adler32(payload), info.adler32);
+    try std.testing.expect(info.adler32_matches);
+    try std.testing.expectError(error.NeedDictionary, inspectZlibStreamAlloc(std.testing.allocator, encoded));
+    try std.testing.expectError(error.ChecksumMismatch, inspectZlibStreamAllocWithDictionary(std.testing.allocator, encoded, "wrong"));
 }
 
 test "gzip stored wrapper matches level-0 vectors" {

@@ -838,10 +838,12 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(compressed);
         const wrapper = try vort.parseZlibHeaderInfo(compressed);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
-        if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, zlibWrappedDeflateContext(compressed.len, wrapper.data_offset), info)
-        else
+        if (output_format == .json) {
+            const stream = try inspectZlibStreamForWrappedJson(init.gpa, compressed);
+            try printWrappedDeflateHeaderJson(stdout, zlibWrappedDeflateContext(compressed.len, wrapper.data_offset, stream), info);
+        } else {
             try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
+        }
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -922,10 +924,12 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(compressed);
         const wrapper = try vort.parseZlibHeaderInfo(compressed);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
-        if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, zlibWrappedDeflateContext(compressed.len, wrapper.data_offset), info)
-        else
+        if (output_format == .json) {
+            const stream = try inspectZlibStreamForWrappedJson(init.gpa, compressed);
+            try printWrappedDeflateHeaderJson(stdout, zlibWrappedDeflateContext(compressed.len, wrapper.data_offset, stream), info);
+        } else {
             try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
+        }
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const dictionary = args.next() orelse "";
@@ -1119,6 +1123,13 @@ const WrappedDeflateContext = struct {
     member_offset: usize,
     deflate_offset: usize,
     member_index: usize,
+    stream_deflate_bytes: ?usize = null,
+    stream_output_bytes: ?usize = null,
+    stream_footer_offset: ?usize = null,
+    stream_end_offset: ?usize = null,
+    stream_footer_adler32: ?u32 = null,
+    stream_adler32: ?u32 = null,
+    stream_adler32_matches: ?bool = null,
     member_deflate_bytes: ?usize = null,
     member_output_bytes: ?usize = null,
     member_footer_offset: ?usize = null,
@@ -1314,14 +1325,34 @@ fn printRawHeaderJsonObject(stdout: *std.Io.Writer, compressed_len: usize, info:
     try stdout.print("}}", .{});
 }
 
-fn zlibWrappedDeflateContext(wrapper_bytes: usize, deflate_offset: usize) WrappedDeflateContext {
-    return .{
+fn inspectZlibStreamForWrappedJson(allocator: std.mem.Allocator, compressed: []const u8) !?vort.ZlibStreamInfo {
+    return vort.inspectZlibStreamAlloc(allocator, compressed) catch |err| switch (err) {
+        // The header-level command has no dictionary argument. Preserve useful
+        // raw-header inspection for FDICT streams while leaving checksum and
+        // exact-length diagnostics null when the preset dictionary is required.
+        error.NeedDictionary => null,
+        else => return err,
+    };
+}
+
+fn zlibWrappedDeflateContext(wrapper_bytes: usize, deflate_offset: usize, stream: ?vort.ZlibStreamInfo) WrappedDeflateContext {
+    var context = WrappedDeflateContext{
         .wrapper = "zlib",
         .wrapper_bytes = wrapper_bytes,
         .member_offset = 0,
         .deflate_offset = deflate_offset,
         .member_index = 0,
     };
+    if (stream) |info| {
+        context.stream_deflate_bytes = info.deflate_bytes;
+        context.stream_output_bytes = info.output_bytes;
+        context.stream_footer_offset = info.footer_offset;
+        context.stream_end_offset = info.end_offset;
+        context.stream_footer_adler32 = info.footer_adler32;
+        context.stream_adler32 = info.adler32;
+        context.stream_adler32_matches = info.adler32_matches;
+    }
+    return context;
 }
 
 fn gzipWrappedDeflateContext(wrapper_bytes: usize, member: vort.GzipMemberInfo) WrappedDeflateContext {
@@ -1347,7 +1378,7 @@ fn gzipWrappedDeflateContext(wrapper_bytes: usize, member: vort.GzipMemberInfo) 
 fn printWrappedDeflateHeaderJson(stdout: *std.Io.Writer, context: WrappedDeflateContext, info: vort.RawDeflateHeaderInfo) !void {
     const scope = if (std.mem.eql(u8, context.wrapper, "gzip")) "gzip_member" else "zlib_stream";
     try stdout.print(
-        "{{\"schema\":\"vort.wrapped_deflate_header_info\",\"schema_version\":1,\"wrapper\":\"{s}\",\"scope\":\"{s}\",\"member_index\":{d},\"member_offset\":{d},\"wrapper_bytes\":{d},\"deflate_offset\":{d},\"deflate_bytes\":{d},\"deflate_span_kind\":\"header_tail\",\"member_deflate_bytes\":",
+        "{{\"schema\":\"vort.wrapped_deflate_header_info\",\"schema_version\":1,\"wrapper\":\"{s}\",\"scope\":\"{s}\",\"member_index\":{d},\"member_offset\":{d},\"wrapper_bytes\":{d},\"deflate_offset\":{d},\"deflate_bytes\":{d},\"deflate_span_kind\":\"header_tail\",\"stream_deflate_bytes\":",
         .{
             context.wrapper,
             scope,
@@ -1358,6 +1389,20 @@ fn printWrappedDeflateHeaderJson(stdout: *std.Io.Writer, context: WrappedDeflate
             context.wrapper_bytes - context.deflate_offset,
         },
     );
+    try printOptionalJson(usize, stdout, context.stream_deflate_bytes);
+    try stdout.print(",\"stream_output_bytes\":", .{});
+    try printOptionalJson(usize, stdout, context.stream_output_bytes);
+    try stdout.print(",\"stream_footer_offset\":", .{});
+    try printOptionalJson(usize, stdout, context.stream_footer_offset);
+    try stdout.print(",\"stream_end_offset\":", .{});
+    try printOptionalJson(usize, stdout, context.stream_end_offset);
+    try stdout.print(",\"stream_footer_adler32\":", .{});
+    try printOptionalJson(u32, stdout, context.stream_footer_adler32);
+    try stdout.print(",\"stream_adler32\":", .{});
+    try printOptionalJson(u32, stdout, context.stream_adler32);
+    try stdout.print(",\"stream_adler32_matches\":", .{});
+    try printOptionalBoolJson(stdout, context.stream_adler32_matches);
+    try stdout.print(",\"member_deflate_bytes\":", .{});
     try printOptionalJson(usize, stdout, context.member_deflate_bytes);
     try stdout.print(",\"member_output_bytes\":", .{});
     try printOptionalJson(usize, stdout, context.member_output_bytes);

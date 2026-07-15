@@ -424,6 +424,14 @@ def main(argv: list[str]) -> int:
     assert zlib_inner_json["scope"] == "zlib_stream"
     assert zlib_inner_json["member_index"] == 0
     assert zlib_inner_json["deflate_span_kind"] == "header_tail"
+    assert zlib_inner_json["stream_footer_offset"] > zlib_inner_json["deflate_offset"]
+    assert zlib_inner_json["stream_deflate_bytes"] == zlib_inner_json["stream_footer_offset"] - zlib_inner_json["deflate_offset"]
+    assert zlib_inner_json["stream_output_bytes"] == len(payload)
+    assert zlib_inner_json["stream_end_offset"] == zlib_inner_json["stream_footer_offset"] + 4
+    assert zlib_inner_json["stream_end_offset"] == len(zlib_frame)
+    assert zlib_inner_json["stream_footer_adler32"] == (zlib.adler32(payload) & 0xFFFFFFFF)
+    assert zlib_inner_json["stream_adler32"] == zlib_inner_json["stream_footer_adler32"]
+    assert zlib_inner_json["stream_adler32_matches"] is True
     for key in (
         "member_deflate_bytes",
         "member_output_bytes",
@@ -438,6 +446,14 @@ def main(argv: list[str]) -> int:
     ):
         assert zlib_inner_json[key] is None
     assert zlib_inner_json["raw_header"]["block_type"] == "fixed"
+
+    zlib_bad_adler_frame = bytearray(zlib_frame)
+    zlib_bad_adler_frame[-1] ^= 1
+    zlib_bad_adler_json = json.loads(run(cli, "inspect-zlib-deflate-header-hex", bytes(zlib_bad_adler_frame).hex(), "json"))
+    assert zlib_bad_adler_json["stream_adler32"] == zlib_inner_json["stream_adler32"]
+    assert zlib_bad_adler_json["stream_footer_adler32"] != zlib_bad_adler_json["stream_adler32"]
+    assert zlib_bad_adler_json["stream_adler32_matches"] is False
+    validate_value_against_manifest(zlib_bad_adler_json, schemas_def)
     cases.append(
         {
             "name": "zlib_inner_deflate",
@@ -488,6 +504,14 @@ def main(argv: list[str]) -> int:
     assert zlib_dict_json["dictionary_id"] == (zlib.adler32(dictionary) & 0xFFFFFFFF)
     validate_value_against_manifest(zlib_dict_json, schemas_def)
 
+    zlib_dict_inner_json = json.loads(run(cli, "inspect-zlib-deflate-header-hex", zlib_dict_frame.hex(), "json"))
+    assert zlib_dict_inner_json["schema"] == "vort.wrapped_deflate_header_info"
+    assert zlib_dict_inner_json["wrapper"] == "zlib"
+    assert zlib_dict_inner_json["stream_deflate_bytes"] is None
+    assert zlib_dict_inner_json["stream_adler32_matches"] is None
+    assert zlib_dict_inner_json["raw_header"]["schema"] == "vort.raw_deflate_header_info"
+    validate_value_against_manifest(zlib_dict_inner_json, schemas_def)
+
     gzip_hex = run(cli, "inspect-gzip-header-hex", gzip_frame.hex())
     require_fields(
         gzip_hex,
@@ -530,6 +554,16 @@ def main(argv: list[str]) -> int:
     assert gzip_inner_json["scope"] == "gzip_member"
     assert gzip_inner_json["member_index"] == 0
     assert gzip_inner_json["deflate_span_kind"] == "header_tail"
+    for key in (
+        "stream_deflate_bytes",
+        "stream_output_bytes",
+        "stream_footer_offset",
+        "stream_end_offset",
+        "stream_footer_adler32",
+        "stream_adler32",
+        "stream_adler32_matches",
+    ):
+        assert gzip_inner_json[key] is None
     assert gzip_inner_json["member_footer_offset"] > gzip_inner_json["deflate_offset"]
     assert gzip_inner_json["member_deflate_bytes"] == gzip_inner_json["member_footer_offset"] - gzip_inner_json["deflate_offset"]
     assert gzip_inner_json["member_output_bytes"] == len(payload)

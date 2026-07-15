@@ -203,6 +203,8 @@ architecture blindly.
 - [x] gzip inner-deflate header inspection JSON reports exact member deflate length plus CRC32/ISIZE trailer diagnostics.
 - [x] gzip inner-deflate header inspection smoke covers CRC32 and ISIZE trailer mismatch diagnostics without rejecting inspection.
 - [x] Public gzip member inspector API exposes member offsets, exact deflate length, decoded byte count, and trailer diagnostics.
+- [x] zlib inner-deflate header inspection JSON reports exact stream deflate length and Adler-32 footer diagnostics.
+- [x] Public zlib stream inspector API exposes stream offsets, exact deflate length, decoded byte count, and Adler-32 diagnostics.
 - [x] zlib/gzip inner-deflate header inspection schema cross-checks wrapper type and scope.
 - [x] zlib/gzip inner-deflate header inspection schema-validates nested raw headers.
 - [x] raw/zlib/gzip header inspection smoke records and schema-checks malformed case formats and per-format negative counts.
