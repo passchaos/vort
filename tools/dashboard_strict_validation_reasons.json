@@ -28,6 +28,11 @@
       "fixture": "missing_header_workflows"
     },
     {
+      "reason": "header_inspect_undercovered",
+      "check": "validation_header_inspect_undercovered",
+      "fixture": "header_inspect_undercovered"
+    },
+    {
       "reason": "missing_dashboard_strict_artifact",
       "check": "validation_missing_dashboard_strict_artifact",
       "fixture": "missing_dashboard_strict_artifact"

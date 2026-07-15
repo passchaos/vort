@@ -376,16 +376,51 @@ def header_inspect_health(artifacts: list[Path]) -> dict:
             missing_workflows = data.get("missing_workflows")
             if not isinstance(missing_workflows, list):
                 missing_workflows = []
+            def as_int(field: str) -> int:
+                value = data.get(field)
+                return value if isinstance(value, int) and not isinstance(value, bool) else 0
             return {
                 "present": True,
                 "ok": bool(data.get("ok")),
-                "required_workflow_count": int(data.get("required_workflow_count") or 0),
-                "missing_workflow_count": int(data.get("missing_workflow_count") or 0),
+                "case_count": as_int("case_count"),
+                "raw_cases": as_int("raw_cases"),
+                "zlib_cases": as_int("zlib_cases"),
+                "gzip_cases": as_int("gzip_cases"),
+                "negative_cases": as_int("negative_cases"),
+                "raw_negative_cases": as_int("raw_negative_cases"),
+                "zlib_negative_cases": as_int("zlib_negative_cases"),
+                "gzip_negative_cases": as_int("gzip_negative_cases"),
+                "command_count": as_int("command_count"),
+                "command_successes": as_int("command_successes"),
+                "command_failures": as_int("command_failures"),
+                "workflow_count": as_int("workflow_count"),
+                "workflow_successes": as_int("workflow_successes"),
+                "dictionary_cases": as_int("dictionary_cases"),
+                "optional_header_cases": as_int("optional_header_cases"),
+                "fhcrc_cases": as_int("fhcrc_cases"),
+                "required_workflow_count": as_int("required_workflow_count"),
+                "missing_workflow_count": as_int("missing_workflow_count"),
                 "missing_workflows": missing_workflows,
             }
     return {
         "present": False,
         "ok": False,
+        "case_count": 0,
+        "raw_cases": 0,
+        "zlib_cases": 0,
+        "gzip_cases": 0,
+        "negative_cases": 0,
+        "raw_negative_cases": 0,
+        "zlib_negative_cases": 0,
+        "gzip_negative_cases": 0,
+        "command_count": 0,
+        "command_successes": 0,
+        "command_failures": 0,
+        "workflow_count": 0,
+        "workflow_successes": 0,
+        "dictionary_cases": 0,
+        "optional_header_cases": 0,
+        "fhcrc_cases": 0,
         "required_workflow_count": 0,
         "missing_workflow_count": 0,
         "missing_workflows": [],
@@ -469,7 +504,27 @@ def main() -> int:
     decode_stage_health_summary = decode_stage_health(artifacts)
     producer_healthy = len(producer_step_missing) == 0
     smoke_gate_healthy = len(smoke_gate_required_missing) == 0
-    header_healthy = header_health["present"] and header_health["ok"] and header_health["missing_workflow_count"] == 0
+    header_healthy = (
+        header_health["present"]
+        and header_health["ok"]
+        and header_health["missing_workflow_count"] == 0
+        and header_health["case_count"] > 0
+        and header_health["raw_cases"] > 0
+        and header_health["zlib_cases"] > 0
+        and header_health["gzip_cases"] > 0
+        and header_health["negative_cases"] > 0
+        and header_health["raw_negative_cases"] > 0
+        and header_health["zlib_negative_cases"] > 0
+        and header_health["gzip_negative_cases"] > 0
+        and header_health["command_count"] > 0
+        and header_health["command_successes"] > 0
+        and header_health["command_failures"] > 0
+        and header_health["workflow_count"] > 0
+        and header_health["workflow_successes"] > 0
+        and header_health["dictionary_cases"] > 0
+        and header_health["optional_header_cases"] > 0
+        and header_health["fhcrc_cases"] > 0
+    )
     strict_healthy = strict_health["present"] and strict_health["ok"] and strict_health["missing_mode_count"] == 0
     sidecar_corrupt_healthy = sidecar_corrupt_health_summary["healthy"]
     huffman_healthy = huffman_health["healthy"]
@@ -487,6 +542,8 @@ def main() -> int:
         validation_unhealthy_reasons.append("header_inspect_failed")
     elif header_health["missing_workflow_count"]:
         validation_unhealthy_reasons.append("missing_header_workflows")
+    elif not header_healthy:
+        validation_unhealthy_reasons.append("header_inspect_undercovered")
     if not strict_health["present"]:
         validation_unhealthy_reasons.append("missing_dashboard_strict_artifact")
     elif not strict_health["ok"]:
@@ -527,6 +584,7 @@ def main() -> int:
         f"- validation healthy: `{validation_healthy}`",
         f"- validation unhealthy reasons: {len(validation_unhealthy_reasons)}",
         f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing, healthy `{header_healthy}`",
+        f"- header inspect coverage: cases raw/zlib/gzip {header_health['raw_cases']}/{header_health['zlib_cases']}/{header_health['gzip_cases']}, negatives raw/zlib/gzip {header_health['raw_negative_cases']}/{header_health['zlib_negative_cases']}/{header_health['gzip_negative_cases']}, commands {header_health['command_successes']}/{header_health['command_failures']}, workflows {header_health['workflow_successes']}, dictionary/optional/FHCRC {header_health['dictionary_cases']}/{header_health['optional_header_cases']}/{header_health['fhcrc_cases']}",
         f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing modes, checks/expected/matched deltas {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']}), healthy `{strict_healthy}`",
         f"- sidecar corrupt smoke: {sidecar_corrupt_health_summary['metadata_ok_rows']}/{sidecar_corrupt_health_summary['rows']} metadata-ok rows, {sidecar_corrupt_health_summary['full_rejected_rows']}/{sidecar_corrupt_health_summary['rows']} full-rejected rows, healthy `{sidecar_corrupt_healthy}`",
         f"- huffman length oracle: {huffman_health['optimal_rows']}/{huffman_health['row_count']} production optimal rows, {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} package-merge optimal rows, gaps {huffman_health['worst_gap_bits']}/{huffman_health['package_merge_worst_gap_bits']}, malformed rows {huffman_health['malformed_rows']}, healthy `{huffman_healthy}`",
@@ -590,6 +648,22 @@ def main() -> int:
                 "header_inspect_present": header_health["present"],
                 "header_inspect_ok": header_health["ok"],
                 "header_inspect_healthy": header_healthy,
+                "header_inspect_case_count": header_health["case_count"],
+                "header_inspect_raw_cases": header_health["raw_cases"],
+                "header_inspect_zlib_cases": header_health["zlib_cases"],
+                "header_inspect_gzip_cases": header_health["gzip_cases"],
+                "header_inspect_negative_cases": header_health["negative_cases"],
+                "header_inspect_raw_negative_cases": header_health["raw_negative_cases"],
+                "header_inspect_zlib_negative_cases": header_health["zlib_negative_cases"],
+                "header_inspect_gzip_negative_cases": header_health["gzip_negative_cases"],
+                "header_inspect_command_count": header_health["command_count"],
+                "header_inspect_command_successes": header_health["command_successes"],
+                "header_inspect_command_failures": header_health["command_failures"],
+                "header_inspect_workflow_count": header_health["workflow_count"],
+                "header_inspect_workflow_successes": header_health["workflow_successes"],
+                "header_inspect_dictionary_cases": header_health["dictionary_cases"],
+                "header_inspect_optional_header_cases": header_health["optional_header_cases"],
+                "header_inspect_fhcrc_cases": header_health["fhcrc_cases"],
                 "header_inspect_required_workflow_count": header_health["required_workflow_count"],
                 "header_inspect_missing_workflow_count": header_health["missing_workflow_count"],
                 "header_inspect_missing_workflows": header_health["missing_workflows"],

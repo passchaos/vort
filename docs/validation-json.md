@@ -1252,6 +1252,7 @@ Current unhealthy reason values are:
 - `missing_header_inspect_artifact`
 - `header_inspect_failed`
 - `missing_header_workflows`
+- `header_inspect_undercovered`
 - `missing_dashboard_strict_artifact`
 - `dashboard_strict_failed`
 - `missing_dashboard_strict_modes`
@@ -1282,6 +1283,14 @@ Top-level fields:
 - `validation_healthy`
 - `validation_unhealthy_reasons`
 - `header_inspect_present`, `header_inspect_ok`, `header_inspect_healthy`,
+  `header_inspect_case_count`, `header_inspect_raw_cases`,
+  `header_inspect_zlib_cases`, `header_inspect_gzip_cases`,
+  `header_inspect_negative_cases`, `header_inspect_raw_negative_cases`,
+  `header_inspect_zlib_negative_cases`, `header_inspect_gzip_negative_cases`,
+  `header_inspect_command_count`, `header_inspect_command_successes`,
+  `header_inspect_command_failures`, `header_inspect_workflow_count`,
+  `header_inspect_workflow_successes`, `header_inspect_dictionary_cases`,
+  `header_inspect_optional_header_cases`, `header_inspect_fhcrc_cases`,
   `header_inspect_required_workflow_count`,
   `header_inspect_missing_workflow_count`,
   `header_inspect_missing_workflows`
@@ -1356,6 +1365,22 @@ Example:
   "header_inspect_present": false,
   "header_inspect_ok": false,
   "header_inspect_healthy": false,
+  "header_inspect_case_count": 0,
+  "header_inspect_raw_cases": 0,
+  "header_inspect_zlib_cases": 0,
+  "header_inspect_gzip_cases": 0,
+  "header_inspect_negative_cases": 0,
+  "header_inspect_raw_negative_cases": 0,
+  "header_inspect_zlib_negative_cases": 0,
+  "header_inspect_gzip_negative_cases": 0,
+  "header_inspect_command_count": 0,
+  "header_inspect_command_successes": 0,
+  "header_inspect_command_failures": 0,
+  "header_inspect_workflow_count": 0,
+  "header_inspect_workflow_successes": 0,
+  "header_inspect_dictionary_cases": 0,
+  "header_inspect_optional_header_cases": 0,
+  "header_inspect_fhcrc_cases": 0,
   "header_inspect_required_workflow_count": 0,
   "header_inspect_missing_workflow_count": 0,
   "header_inspect_missing_workflows": [],

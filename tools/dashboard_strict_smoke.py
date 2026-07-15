@@ -109,12 +109,43 @@ def write_producer_map(
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
-def write_header_summary(path: Path, *, ok: bool = True, missing: list[dict[str, object]] | None = None) -> None:
+def write_header_summary(
+    path: Path,
+    *,
+    ok: bool = True,
+    missing: list[dict[str, object]] | None = None,
+    undercovered: bool = False,
+) -> None:
     missing = missing or []
+    raw_cases = 0 if undercovered else 1
+    zlib_cases = 1
+    gzip_cases = 1
+    raw_negative_cases = 1
+    zlib_negative_cases = 1
+    gzip_negative_cases = 1
+    command_successes = raw_cases + zlib_cases + gzip_cases
+    command_failures = raw_negative_cases + zlib_negative_cases + gzip_negative_cases
+    workflow_successes = command_successes
     payload = {
         "schema": "vort.header_inspect_smoke",
         "schema_version": 1,
         "ok": ok,
+        "case_count": raw_cases + zlib_cases + gzip_cases,
+        "raw_cases": raw_cases,
+        "zlib_cases": zlib_cases,
+        "gzip_cases": gzip_cases,
+        "negative_cases": command_failures,
+        "raw_negative_cases": raw_negative_cases,
+        "zlib_negative_cases": zlib_negative_cases,
+        "gzip_negative_cases": gzip_negative_cases,
+        "command_count": 3,
+        "command_successes": command_successes,
+        "command_failures": command_failures,
+        "workflow_count": 3,
+        "workflow_successes": workflow_successes,
+        "dictionary_cases": 1,
+        "optional_header_cases": 1,
+        "fhcrc_cases": 1,
         "required_workflow_count": 1,
         "missing_workflow_count": len(missing),
         "missing_workflows": missing,
@@ -824,6 +855,9 @@ def main() -> int:
                     fixture_root / HEADER_INSPECT_ARTIFACT,
                     missing=[{"command": "inspect-raw-header-file", "workflow": "file", "format": "raw"}],
                 )
+                write_producer_map(producer_map)
+            elif fixture == "header_inspect_undercovered":
+                write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT, undercovered=True)
                 write_producer_map(producer_map)
             elif fixture == "missing_dashboard_strict_artifact":
                 (fixture_root / DASHBOARD_STRICT_ARTIFACT).unlink()

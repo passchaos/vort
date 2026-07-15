@@ -482,6 +482,22 @@ def main() -> int:
         assert dashboard["header_inspect_required_workflow_count"] == header_summary["required_workflow_count"]
         assert dashboard["header_inspect_missing_workflow_count"] == header_summary["missing_workflow_count"]
         assert dashboard["header_inspect_missing_workflows"] == header_summary["missing_workflows"]
+        assert dashboard["header_inspect_case_count"] == header_summary["case_count"]
+        assert dashboard["header_inspect_raw_cases"] == header_summary["raw_cases"]
+        assert dashboard["header_inspect_zlib_cases"] == header_summary["zlib_cases"]
+        assert dashboard["header_inspect_gzip_cases"] == header_summary["gzip_cases"]
+        assert dashboard["header_inspect_negative_cases"] == header_summary["negative_cases"]
+        assert dashboard["header_inspect_raw_negative_cases"] == header_summary["raw_negative_cases"]
+        assert dashboard["header_inspect_zlib_negative_cases"] == header_summary["zlib_negative_cases"]
+        assert dashboard["header_inspect_gzip_negative_cases"] == header_summary["gzip_negative_cases"]
+        assert dashboard["header_inspect_command_count"] == header_summary["command_count"]
+        assert dashboard["header_inspect_command_successes"] == header_summary["command_successes"]
+        assert dashboard["header_inspect_command_failures"] == header_summary["command_failures"]
+        assert dashboard["header_inspect_workflow_count"] == header_summary["workflow_count"]
+        assert dashboard["header_inspect_workflow_successes"] == header_summary["workflow_successes"]
+        assert dashboard["header_inspect_dictionary_cases"] == header_summary["dictionary_cases"]
+        assert dashboard["header_inspect_optional_header_cases"] == header_summary["optional_header_cases"]
+        assert dashboard["header_inspect_fhcrc_cases"] == header_summary["fhcrc_cases"]
         assert dashboard["dashboard_strict_present"] is True
         assert dashboard["dashboard_strict_ok"] is True
         assert dashboard["dashboard_strict_healthy"] is True
