@@ -127,6 +127,9 @@ returned logical range. Caller-owned output variants such as
 offset/CRC-32 summary, avoiding the final range allocation when callers already
 own suitably sized storage. These variants preserve the same index, dictionary,
 and bounds validation behavior as the byte-slice range APIs.
+Allocator-returning single-range helpers are built on the caller-owned path, so
+their behavior and fast paths stay aligned with `decodeRangeInto` while adding
+only the final returned range buffer allocation.
 
 ## One-shot decode-into APIs
 

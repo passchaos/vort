@@ -989,12 +989,20 @@ pub fn decodeRangeWithSummaryAlloc(allocator: std.mem.Allocator, input: []const 
 }
 
 pub fn decodeRangeWithDictionarySummaryAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize) !RangeDecodeResult {
-    const bytes = try decodeRangeWithDictionaryAlloc(allocator, dict, input, index, offset, length);
+    if (length == 0) {
+        return .{
+            .bytes = try allocator.alloc(u8, 0),
+            .offset = offset,
+            .crc32 = checksum.crc32(""),
+        };
+    }
+    const bytes = try allocator.alloc(u8, length);
     errdefer allocator.free(bytes);
+    const result = try decodeRangeWithDictionaryInto(allocator, dict, input, index, offset, length, bytes);
     return .{
         .bytes = bytes,
-        .offset = offset,
-        .crc32 = checksum.crc32(bytes),
+        .offset = result.offset,
+        .crc32 = result.crc32,
     };
 }
 
@@ -1363,36 +1371,12 @@ fn decodeIndexedFramePayloadAlloc(allocator: std.mem.Allocator, dict: ?[]const u
 }
 
 pub fn decodeRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize) ![]u8 {
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
-    if (length == 0) return out.toOwnedSlice(allocator);
-    try validateFrameIndex(index);
-    const end = std.math.add(u64, offset, length) catch return error.IntegerOverflow;
-    const start_i = findFrameForOffset(index, offset) orelse return error.RangeOutOfBounds;
-    var i = start_i;
-    while (i < index.len and out.items.len < length) : (i += 1) {
-        const entry = index[i];
-        if (entry.uncompressed_offset >= end) break;
-        if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
-        const frame = input[entry.frame_offset..][0..entry.frame_len];
-        const frame_info = try parseHeader(frame);
-        if (entry.frame_len != try frameLenFromInfo(frame_info)) return error.CorruptFrame;
-        if (entry.checksum != frame_info.checksum) return error.ChecksumMismatch;
-        if (entry.uncompressed_len != frame_info.uncompressed_size) return error.CorruptFrame;
-        const decoded = if (frame_info.flags == flags_dictionary_patch or frame_info.flags == flags_dictionary_deflate) blk: {
-            const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
-            break :blk try decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame);
-        } else try decodeAnyAlloc(allocator, frame);
-        defer allocator.free(decoded);
-        const frame_start = entry.uncompressed_offset;
-        const frame_end = entry.uncompressed_offset + entry.uncompressed_len;
-        const copy_start = if (offset > frame_start) offset - frame_start else 0;
-        const copy_end_global = @min(end, frame_end);
-        const copy_end = copy_end_global - frame_start;
-        if (copy_end > copy_start) try out.appendSlice(allocator, decoded[@intCast(copy_start)..@intCast(copy_end)]);
-    }
-    if (out.items.len != length) return error.RangeOutOfBounds;
-    return out.toOwnedSlice(allocator);
+    if (length == 0) return allocator.alloc(u8, 0);
+    const out = try allocator.alloc(u8, length);
+    errdefer allocator.free(out);
+    const result = try decodeRangeWithDictionaryInto(allocator, dict, input, index, offset, length, out);
+    std.debug.assert(result.output_written == out.len);
+    return out;
 }
 
 pub const SidecarIndexedStream = struct {
@@ -3531,6 +3515,22 @@ test "full deflate frame range decodes into caller buffer without allocation" {
     try std.testing.expectEqual(@as(u64, 0), result.offset);
     try std.testing.expectEqualSlices(u8, input, &out);
     try std.testing.expectEqual(checksum.crc32(input), result.crc32);
+}
+
+test "range alloc reuses range-into fast path for full deflate frames" {
+    const input = "hello hello hello hello";
+    const frame = try encodeDeflateAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_deflate, info.flags);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
+    const decoded = try decodeRangeAlloc(failing.allocator(), frame, index, 0, input.len);
+    defer failing.allocator().free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+    try std.testing.expectEqual(@as(usize, 1), failing.allocations);
 }
 
 test "decodeAnyAlloc preserves old store frames" {
