@@ -258,6 +258,8 @@ const gzip_with_metadata = try vort.encodeGzipBestWithHeaderAlloc(
     },
 );
 defer allocator.free(gzip_with_metadata);
+const gzip_header = try vort.parseGzipHeaderInfo(gzip_with_metadata);
+_ = gzip_header.filename; // "payload.txt"; slices alias gzip_with_metadata
 const gzip_exact = try vort.decodeGzipAllocExactSize(allocator, gzip_bytes, "payload".len);
 defer allocator.free(gzip_exact);
 const gzip_cat_exact = try vort.decodeGzipConcatenatedAllocExactSize(allocator, gzip_bytes, "payload".len);

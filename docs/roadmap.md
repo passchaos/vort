@@ -186,6 +186,7 @@ architecture blindly.
 - [x] gzip wrapper and CRC/ISIZE verification for stored blocks.
 - [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC validation.
 - [x] gzip encoders can emit configurable MTIME/XFL/OS plus FEXTRA/FNAME/FCOMMENT/FHCRC metadata while preserving deterministic defaults.
+- [x] Public gzip header metadata parser exposes MTIME/XFL/OS/FEXTRA/FNAME/FCOMMENT/FHCRC slices for library callers.
 - [x] gzip wrapper integration for fixed-Huffman blocks.
 - [x] gzip wrapper integration for single final dynamic-Huffman blocks.
 - [x] gzip wrapper integration for multi-block dynamic streams.

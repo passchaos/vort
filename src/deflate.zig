@@ -57,6 +57,30 @@ pub const GzipHeaderOptions = struct {
     header_crc: bool = false,
 };
 
+pub const GzipHeaderInfo = struct {
+    /// Offset where the raw deflate member payload begins. All optional header
+    /// fields and FHCRC bytes are before this offset.
+    data_offset: usize,
+    /// Raw FLG byte after reserved-bit validation.
+    flags: u8,
+    text: bool,
+    mtime: u32,
+    xfl: u8,
+    os: u8,
+    /// Optional FEXTRA bytes. The slice aliases the caller's input and excludes
+    /// the two-byte XLEN field.
+    extra: ?[]const u8 = null,
+    /// Optional FNAME bytes, excluding the terminating NUL. The slice aliases
+    /// the caller's input.
+    filename: ?[]const u8 = null,
+    /// Optional FCOMMENT bytes, excluding the terminating NUL. The slice
+    /// aliases the caller's input.
+    comment: ?[]const u8 = null,
+    /// Optional FHCRC value after validation against the bytes before the CRC
+    /// field. The gzip spec stores only the low 16 bits of CRC-32.
+    header_crc: ?u16 = null,
+};
+
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
         .fastest => .{ .parser = .hash, .lz77_options = .{ .window_len = 8 * 1024, .max_chain = 4, .nice_len = 8, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4, .max_match = 64, .min_savings_bits = 8 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
@@ -2821,37 +2845,61 @@ fn writeGzipHeader(output: []u8, header_options: GzipHeaderOptions) Error!usize 
     return offset;
 }
 
-fn parseGzipHeader(input: []const u8) Error!usize {
+pub fn parseGzipHeaderInfo(input: []const u8) Error!GzipHeaderInfo {
     if (input.len < 10) return error.TruncatedFrame;
     if (!std.mem.eql(u8, input[0..2], &.{ 0x1f, 0x8b })) return error.BadGzipHeader;
     if (input[2] != 8) return error.BadGzipHeader;
     const flags = input[3];
     if ((flags & 0xe0) != 0) return error.BadGzipHeader;
 
-    var offset: usize = 10;
+    var info = GzipHeaderInfo{
+        .data_offset = 10,
+        .flags = flags,
+        .text = (flags & 0x01) != 0,
+        .mtime = std.mem.readInt(u32, input[4..8], .little),
+        .xfl = input[8],
+        .os = input[9],
+    };
+
+    var offset: usize = info.data_offset;
     if ((flags & 0x04) != 0) {
         if (input.len - offset < 2) return error.TruncatedFrame;
         const xlen: usize = std.mem.readInt(u16, input[offset..][0..2], .little);
         offset += 2;
         if (input.len - offset < xlen) return error.TruncatedFrame;
+        info.extra = input[offset..][0..xlen];
         offset += xlen;
     }
-    if ((flags & 0x08) != 0) offset = try skipGzipZeroTerminated(input, offset);
-    if ((flags & 0x10) != 0) offset = try skipGzipZeroTerminated(input, offset);
+    if ((flags & 0x08) != 0) {
+        const end = try gzipZeroTerminatedEnd(input, offset);
+        info.filename = input[offset..end];
+        offset = end + 1;
+    }
+    if ((flags & 0x10) != 0) {
+        const end = try gzipZeroTerminatedEnd(input, offset);
+        info.comment = input[offset..end];
+        offset = end + 1;
+    }
     if ((flags & 0x02) != 0) {
         if (input.len - offset < 2) return error.TruncatedFrame;
         const expected = std.mem.readInt(u16, input[offset..][0..2], .little);
         const actual: u16 = @truncate(checksum.crc32Best(input[0..offset]));
         if (actual != expected) return error.BadGzipHeader;
+        info.header_crc = expected;
         offset += 2;
     }
-    return offset;
+    info.data_offset = offset;
+    return info;
 }
 
-fn skipGzipZeroTerminated(input: []const u8, offset: usize) Error!usize {
+fn parseGzipHeader(input: []const u8) Error!usize {
+    return (try parseGzipHeaderInfo(input)).data_offset;
+}
+
+fn gzipZeroTerminatedEnd(input: []const u8, offset: usize) Error!usize {
     var index = offset;
     while (index < input.len) : (index += 1) {
-        if (input[index] == 0) return index + 1;
+        if (input[index] == 0) return index;
     }
     return error.TruncatedFrame;
 }
@@ -3041,6 +3089,18 @@ test "gzip encoders can emit metadata-rich headers with FHCRC" {
     const stored = try encodeGzipStoredWithHeaderAlloc(std.testing.allocator, payload, header_options);
     defer std.testing.allocator.free(stored);
     try expectGzipRoundTripWithPrefix(stored, expected_prefix, payload);
+
+    const parsed = try parseGzipHeaderInfo(stored);
+    try std.testing.expectEqual(expected_prefix.len, parsed.data_offset);
+    try std.testing.expectEqual(@as(u8, 0x1f), parsed.flags);
+    try std.testing.expect(parsed.text);
+    try std.testing.expectEqual(@as(u32, 0x12345678), parsed.mtime);
+    try std.testing.expectEqual(@as(u8, 0x02), parsed.xfl);
+    try std.testing.expectEqual(@as(u8, 0xff), parsed.os);
+    try std.testing.expectEqualSlices(u8, &extra, parsed.extra.?);
+    try std.testing.expectEqualSlices(u8, "sample.txt", parsed.filename.?);
+    try std.testing.expectEqualSlices(u8, "generated by vort", parsed.comment.?);
+    try std.testing.expectEqual(@as(u16, 0x5d05), parsed.header_crc.?);
 
     const fixed = try encodeGzipFixedWithHeaderAlloc(std.testing.allocator, payload, .{}, header_options);
     defer std.testing.allocator.free(fixed);
