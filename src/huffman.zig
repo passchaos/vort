@@ -341,27 +341,89 @@ pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n
         node_count += 1;
         active -= 1;
     }
-    assignLengths(n, &nodes, node_count - 1, 0, max_bits, &lengths);
-    repairLengthLimit(n, freqs, &lengths, max_bits);
-    return lengths;
+    var unbounded: [n]u16 = @splat(0);
+    assignUnboundedLengths(n, &nodes, node_count - 1, 0, &unbounded);
+    return limitTreeLengths(n, freqs, &unbounded, max_bits);
 }
 
-fn repairLengthLimit(comptime n: usize, freqs: *const [n]u32, lengths: *[n]u4, max_bits: u4) void {
-    while (kraftCost(n, lengths, max_bits) > (@as(usize, 1) << max_bits)) {
-        var best_i: ?usize = null;
-        for (lengths.*, 0..) |bits, i| {
-            if (bits == 0 or bits >= max_bits) continue;
-            if (best_i == null or repairLess(n, freqs, lengths.*, i, best_i.?)) best_i = i;
+fn limitTreeLengths(comptime n: usize, freqs: *const [n]u32, unbounded: *const [n]u16, max_bits: u4) [n]u4 {
+    std.debug.assert(max_bits > 0);
+    var counts: [max_code_bits + 1]usize = @splat(0);
+    var active: usize = 0;
+    for (unbounded.*) |bits| {
+        if (bits == 0) continue;
+        active += 1;
+        if (bits > max_bits) {
+            counts[max_bits] += 1;
+        } else {
+            counts[bits] += 1;
         }
-        const i = best_i orelse break;
-        lengths[i] += 1;
     }
+    if (active == 0) return @splat(0);
+
+    // zlib-style overflow redistribution: first cap too-deep leaves at the
+    // DEFLATE limit, then repeatedly split the longest available shallower
+    // code. Tracking the scaled Kraft excess directly makes the repair robust
+    // for arbitrary small test alphabets, not only the even-overflow cases that
+    // fall out of the classic heap implementation.
+    const target_cost = @as(usize, 1) << max_bits;
+    std.debug.assert(active <= target_cost);
+    const initial_cost = codeLengthCountKraftCost(&counts, max_bits);
+    var excess = if (initial_cost > target_cost) initial_cost - target_cost else 0;
+    while (excess > 0) {
+        var bits: usize = max_bits - 1;
+        while (bits > 0 and counts[bits] == 0) bits -= 1;
+        std.debug.assert(bits > 0);
+        std.debug.assert(counts[max_bits] > 0);
+        counts[bits] -= 1;
+        counts[bits + 1] += 2;
+        counts[max_bits] -= 1;
+        excess -= 1;
+    }
+
+    var order: [n]usize = undefined;
+    var order_len: usize = 0;
+    for (freqs.*, 0..) |freq, symbol| {
+        if (freq == 0) continue;
+        order[order_len] = symbol;
+        order_len += 1;
+    }
+    std.debug.assert(order_len == active);
+    const Context = struct {
+        freqs: *const [n]u32,
+
+        fn less(ctx: @This(), lhs: usize, rhs: usize) bool {
+            if (ctx.freqs[lhs] != ctx.freqs[rhs]) return ctx.freqs[lhs] < ctx.freqs[rhs];
+            // Longer lengths are assigned first below. Put larger symbol values
+            // first for equal frequencies so canonical tie-breaking leaves the
+            // smaller symbols with shorter/equal codes and stable output bytes.
+            return lhs > rhs;
+        }
+    };
+    std.mem.sort(usize, order[0..order_len], Context{ .freqs = freqs }, Context.less);
+
+    var limited: [n]u4 = @splat(0);
+    var cursor: usize = 0;
+    var bits = max_bits;
+    while (bits > 0) : (bits -= 1) {
+        var remaining = counts[bits];
+        while (remaining > 0) : (remaining -= 1) {
+            const symbol = order[cursor];
+            limited[symbol] = @intCast(bits);
+            cursor += 1;
+        }
+    }
+    std.debug.assert(cursor == active);
+    return limited;
 }
 
-fn repairLess(comptime n: usize, freqs: *const [n]u32, lengths: [n]u4, lhs: usize, rhs: usize) bool {
-    if (lengths[lhs] != lengths[rhs]) return lengths[lhs] < lengths[rhs];
-    if (freqs[lhs] != freqs[rhs]) return freqs[lhs] < freqs[rhs];
-    return lhs > rhs;
+fn codeLengthCountKraftCost(counts: *const [max_code_bits + 1]usize, max_bits: u4) usize {
+    var cost: usize = 0;
+    var bits: usize = 1;
+    while (bits <= max_bits) : (bits += 1) {
+        cost += counts[bits] * (@as(usize, 1) << @intCast(max_bits - bits));
+    }
+    return cost;
 }
 
 fn kraftCost(comptime n: usize, lengths: *const [n]u4, max_bits: u4) usize {
@@ -405,15 +467,15 @@ fn nodeLess(lhs: TreeNode, rhs: TreeNode) bool {
     return (lhs.symbol orelse std.math.maxInt(usize)) < (rhs.symbol orelse std.math.maxInt(usize));
 }
 
-fn assignLengths(comptime n: usize, nodes: []const TreeNode, node_index: usize, depth: u4, max_bits: u4, lengths: *[n]u4) void {
+fn assignUnboundedLengths(comptime n: usize, nodes: []const TreeNode, node_index: usize, depth: u16, lengths: *[n]u16) void {
     const node = nodes[node_index];
     if (node.symbol) |symbol| {
-        lengths[symbol] = @max(@as(u4, 1), @min(depth, max_bits));
+        lengths[symbol] = @max(@as(u16, 1), depth);
         return;
     }
-    const next_depth = @min(depth + 1, max_bits);
-    if (node.left) |left| assignLengths(n, nodes, left, next_depth, max_bits, lengths);
-    if (node.right) |right| assignLengths(n, nodes, right, next_depth, max_bits, lengths);
+    const next_depth = depth + 1;
+    if (node.left) |left| assignUnboundedLengths(n, nodes, left, next_depth, lengths);
+    if (node.right) |right| assignUnboundedLengths(n, nodes, right, next_depth, lengths);
 }
 
 pub const FixedLookupEntry = struct { symbol: u16, bits: u4 };
@@ -706,6 +768,23 @@ test "tree Huffman length repair preserves canonical code space" {
     const Table = HuffmanTable(freqs.len);
     const table = try Table.init(&lengths);
     try std.testing.expectEqual(@as(usize, 32), table.len);
+}
+
+test "tree Huffman length limiter preserves skewed short codes" {
+    var freqs: [20]u32 = @splat(1);
+    freqs[0] = 10_000;
+    freqs[1] = 1_000;
+    const lengths = treeCodeLengths(freqs.len, &freqs, 5);
+    try std.testing.expect(kraftCost(freqs.len, &lengths, 5) <= (@as(usize, 1) << 5));
+    try std.testing.expect(lengths[0] < lengths[19]);
+    try std.testing.expect(lengths[1] <= lengths[19]);
+    for (lengths) |bits| {
+        try std.testing.expect(bits > 0);
+        try std.testing.expect(bits <= 5);
+    }
+    const Table = HuffmanTable(freqs.len);
+    const table = try Table.init(&lengths);
+    try std.testing.expectEqual(@as(usize, freqs.len), table.len);
 }
 
 test "fixed literal fast lookup matches table decoder" {

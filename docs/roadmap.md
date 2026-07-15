@@ -416,6 +416,7 @@ architecture blindly.
 - [x] Rust deflate benchmark summary displays length/distance extra-bit bucket histograms.
 - [x] Rust deflate benchmark summary highlights largest length/distance symbol histogram deltas.
 - [x] Huffman tree length builder uses sorted-leaf/internal-node queues instead of repeated full scans.
+- [x] Huffman tree length builder preserves unbounded depths before deterministic length-limit redistribution.
 - [x] Dynamic HCLEN trimming helper with boundary tests.
 - [x] Dynamic HLIT/HDIST trimming helpers with boundary tests.
 - [x] Adaptive split search using stored/fixed/dynamic bit-cost candidates.
