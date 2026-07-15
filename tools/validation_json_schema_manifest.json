@@ -71,6 +71,43 @@
         "smoke_gate": "str"
       }
     },
+    "vort.dashboard_strict_smoke": {
+      "fields": {
+        "check_count": "int",
+        "checks": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "check_count": {
+          "collection": "checks"
+        }
+      },
+      "item_collection": "checks",
+      "item_fields": {
+        "expected_failure": "bool",
+        "matched": "bool",
+        "mode": "str",
+        "name": "str"
+      },
+      "item_enums": {
+        "mode": [
+          "all",
+          "strict-producers",
+          "strict-smoke-gates",
+          "strict-header-inspect"
+        ],
+        "name": [
+          "all_strict_ok",
+          "missing_producer",
+          "missing_smoke_gate",
+          "missing_header_inspect",
+          "failed_header_inspect",
+          "missing_header_workflow"
+        ]
+      }
+    },
     "vort.dashboard_producers": {
       "fields": {
         "allow_missing": "dict",

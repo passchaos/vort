@@ -104,6 +104,14 @@ def main() -> int:
         assert corrupt["rows"] >= 1
         validate_value_against_manifest(corrupt, schemas_def)
 
+        dashboard_strict_path = root / "vort-dashboard-strict-smoke.json"
+        run(["python3", str(ROOT / "tools" / "dashboard_strict_smoke.py"), "--summary", str(dashboard_strict_path)])
+        dashboard_strict = json.loads(dashboard_strict_path.read_text())
+        assert dashboard_strict["schema"] == "vort.dashboard_strict_smoke"
+        assert dashboard_strict["ok"] is True
+        assert dashboard_strict["check_count"] >= 1
+        validate_value_against_manifest(dashboard_strict, schemas_def)
+
         header_summary_path = root / "vort-header-inspect-smoke.json"
         required_workflows = json.loads((ROOT / "tools" / "header_inspect_required_workflows.json").read_text())
         assert required_workflows["schema"] == "vort.header_inspect_required_workflows"
@@ -292,6 +300,7 @@ def main() -> int:
                 ok["schema"],
                 report["schema"],
                 corrupt["schema"],
+                dashboard_strict["schema"],
                 dashboard["schema"],
                 header_summary["schema"],
                 required_workflows["schema"],

@@ -706,6 +706,37 @@ Example:
 }
 ```
 
+## `vort.dashboard_strict_smoke`
+
+Produced by:
+
+```sh
+zig build run-dashboard-strict-dashboard
+python3 tools/dashboard_strict_smoke.py --summary zig-out/vort-dashboard-strict-smoke.json
+```
+
+This schema summarizes positive and negative smoke checks for dashboard strict
+modes: producer coverage, smoke-gate coverage, and header-inspection health.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_strict_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "check_count": 1,
+  "checks": [
+    {
+      "name": "all_strict_ok",
+      "mode": "all",
+      "expected_failure": false,
+      "matched": true
+    }
+  ]
+}
+```
+
 ## `vort.dashboard_producers`
 
 Consumed by:
