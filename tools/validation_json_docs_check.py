@@ -132,6 +132,21 @@ def require_dict_sum_rules(value: dict[str, Any], dict_sum_rules: dict[str, str]
             raise AssertionError(f"{label}.{count_field}={actual!r} does not match sum({dict_field}); expected {expected!r}")
 
 
+def require_nested_schema_fields(
+    value: dict[str, Any],
+    nested_schema_fields: dict[str, str],
+    schemas_def: dict[str, Any],
+    label: str,
+) -> None:
+    for field, expected_schema in nested_schema_fields.items():
+        nested = value.get(field)
+        if not isinstance(nested, dict):
+            raise AssertionError(f"{label}.{field} must be an object for nested schema validation")
+        if nested.get("schema") != expected_schema:
+            raise AssertionError(f"{label}.{field}.schema={nested.get('schema')!r}, expected {expected_schema!r}")
+        validate_value_against_manifest(nested, schemas_def)
+
+
 def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str, Any]) -> None:
     schema = value.get("schema")
     schema_def = schemas_def.get(schema)
@@ -145,6 +160,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     require_enums(value, schema_def.get("enums", {}), schema)
     require_count_rules(value, schema_def.get("count_rules", {}), schema)
     require_dict_sum_rules(value, schema_def.get("dict_sum_rules", {}), schema)
+    require_nested_schema_fields(value, schema_def.get("nested_schema_fields", {}), schemas_def, schema)
 
     item_collection = schema_def.get("item_collection")
     if item_collection:

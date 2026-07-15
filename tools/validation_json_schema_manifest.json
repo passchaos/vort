@@ -331,6 +331,9 @@
           "zlib",
           "gzip"
         ]
+      },
+      "nested_schema_fields": {
+        "raw_header": "vort.raw_deflate_header_info"
       }
     },
     "vort.zlib_header_info": {

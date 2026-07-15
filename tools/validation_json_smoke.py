@@ -139,6 +139,14 @@ def main() -> int:
         assert wrapped_zlib_header["wrapper"] == "zlib"
         assert wrapped_zlib_header["raw_header"]["schema"] == "vort.raw_deflate_header_info"
         validate_value_against_manifest(wrapped_zlib_header, schemas_def)
+        wrapped_gzip_header = json.loads(
+            run([cli, "inspect-gzip-deflate-header-hex", "1f8b0800000000000403cb48cdc9c9070086a6103605000000", "json"]).stdout
+        )
+        assert wrapped_gzip_header["schema"] == "vort.wrapped_deflate_header_info"
+        assert wrapped_gzip_header["schema_version"] == 1
+        assert wrapped_gzip_header["wrapper"] == "gzip"
+        assert wrapped_gzip_header["raw_header"]["schema"] == "vort.raw_deflate_header_info"
+        validate_value_against_manifest(wrapped_gzip_header, schemas_def)
         gzip_header = json.loads(
             run([cli, "inspect-gzip-header-hex", "1f8b0800000000000403cb48cdc9c9070086a6103605000000", "json"]).stdout
         )
