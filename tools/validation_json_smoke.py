@@ -140,8 +140,19 @@ def main() -> int:
         assert wrapped_zlib_header["scope"] == "zlib_stream"
         assert wrapped_zlib_header["member_index"] == 0
         assert wrapped_zlib_header["deflate_span_kind"] == "header_tail"
-        assert wrapped_zlib_header["member_footer_offset"] is None
-        assert wrapped_zlib_header["member_end_offset"] is None
+        for key in (
+            "member_deflate_bytes",
+            "member_output_bytes",
+            "member_footer_offset",
+            "member_end_offset",
+            "member_footer_crc32",
+            "member_crc32",
+            "member_crc32_matches",
+            "member_footer_isize",
+            "member_isize",
+            "member_isize_matches",
+        ):
+            assert wrapped_zlib_header[key] is None
         assert wrapped_zlib_header["raw_header"]["schema"] == "vort.raw_deflate_header_info"
         validate_value_against_manifest(wrapped_zlib_header, schemas_def)
         wrapped_gzip_header = json.loads(
@@ -154,8 +165,16 @@ def main() -> int:
         assert wrapped_gzip_header["member_index"] == 0
         assert wrapped_gzip_header["deflate_span_kind"] == "header_tail"
         assert wrapped_gzip_header["member_footer_offset"] > wrapped_gzip_header["deflate_offset"]
+        assert wrapped_gzip_header["member_deflate_bytes"] == wrapped_gzip_header["member_footer_offset"] - wrapped_gzip_header["deflate_offset"]
+        assert wrapped_gzip_header["member_output_bytes"] == 5
         assert wrapped_gzip_header["member_end_offset"] == wrapped_gzip_header["member_footer_offset"] + 8
         assert wrapped_gzip_header["member_end_offset"] == wrapped_gzip_header["wrapper_bytes"]
+        assert wrapped_gzip_header["member_footer_crc32"] == 0x3610A686
+        assert wrapped_gzip_header["member_crc32"] == wrapped_gzip_header["member_footer_crc32"]
+        assert wrapped_gzip_header["member_crc32_matches"] is True
+        assert wrapped_gzip_header["member_footer_isize"] == 5
+        assert wrapped_gzip_header["member_isize"] == 5
+        assert wrapped_gzip_header["member_isize_matches"] is True
         assert wrapped_gzip_header["raw_header"]["schema"] == "vort.raw_deflate_header_info"
         validate_value_against_manifest(wrapped_gzip_header, schemas_def)
         gzip_header = json.loads(

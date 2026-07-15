@@ -335,10 +335,17 @@ scope, member index, total wrapper bytes, byte offset where the DEFLATE payload
 starts, remaining bytes after that offset, and the nested raw header object.
 `deflate_span_kind` is currently `header_tail`: `deflate_bytes` is the byte count
 after the wrapper header; for concatenated gzip inputs that includes the
-selected member footer and later members. For gzip, `member_footer_offset` points
-at the selected member's 8-byte trailer and `member_end_offset` is the exclusive
-end offset (`member_footer_offset + 8`); both fields are `null` for zlib because
-the current wrapped-deflate schema reports gzip member boundaries only. The
+selected member footer and later members. For gzip, `member_deflate_bytes` is the
+selected member's exact raw DEFLATE payload length, `member_footer_offset` points
+at its 8-byte trailer, and `member_end_offset` is the exclusive end offset
+(`member_footer_offset + 8`). `member_output_bytes` is the exact decoded
+payload byte count used for the inspected member's ISIZE comparison. Gzip member
+trailer diagnostics also include the stored CRC-32/ISIZE values, Vort's decoded
+CRC-32/ISIZE values, and boolean match flags. A false match flag is diagnostic:
+header inspection still reports the selected member even when the gzip trailer
+CRC-32 or ISIZE disagrees with the decoded payload. These member-specific fields
+are `null` for zlib because the current wrapped-deflate schema reports gzip
+member boundaries and trailers only. The
 optional `member_index` argument selects the gzip member to inspect and defaults
 to `0`; member traversal uses the previous member's decoded raw DEFLATE byte
 length plus the gzip trailer.
@@ -357,8 +364,16 @@ Example:
   "deflate_offset": 2,
   "deflate_bytes": 11,
   "deflate_span_kind": "header_tail",
+  "member_deflate_bytes": null,
+  "member_output_bytes": null,
   "member_footer_offset": null,
   "member_end_offset": null,
+  "member_footer_crc32": null,
+  "member_crc32": null,
+  "member_crc32_matches": null,
+  "member_footer_isize": null,
+  "member_isize": null,
+  "member_isize_matches": null,
   "raw_header": {
     "schema": "vort.raw_deflate_header_info",
     "schema_version": 1,
@@ -682,6 +697,8 @@ Each schema entry can contain:
 | `field_pairs` | object | Optional top-level cross-field equality constraints driven by an allowed map. |
 | `conditional_fields` | list | Optional conditional null/non-null constraints, currently driven by simple field equality predicates. |
 | `numeric_relations` | list | Optional conditional integer comparisons between two fields, with an optional right-hand offset. |
+| `difference_relations` | list | Optional conditional checks that one integer field equals the difference of two other integer fields. |
+| `equality_flag_relations` | list | Optional conditional checks that a boolean field equals the equality result of two integer fields. |
 | `count_rules` | object | Optional top-level count fields that must match list lengths or filtered item counts. |
 | `dict_sum_rules` | object | Optional top-level count fields that must equal the sum of values in a dict field. |
 | `dict_key_enums` | object | Optional dict fields whose keys must be in an allowed string set. |
@@ -696,4 +713,6 @@ Each schema entry can contain:
 Supported type names are `str`, `int`, `bool`, `list`, `dict`, `str?`,
 `int?`, and `bool?`. Conditional predicates support `equals`/`not_equals` on a
 named field. Numeric relation operators are `eq`, `ne`, `lt`, `le`, `gt`, and
-`ge`; `offset` is added to the right-hand field before comparison.
+`ge`; `offset` is added to the right-hand field before comparison. Difference
+relations compare `left == minuend - subtrahend`, and equality-flag relations
+compare `flag == (left == right)`.

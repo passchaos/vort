@@ -221,6 +221,68 @@ def require_numeric_relations(value: dict[str, Any], numeric_relations: Any, lab
             raise AssertionError(f"{label}.{left_field}={left!r} violates {op_name} {suffix} ({expected_right!r})")
 
 
+def require_difference_relations(value: dict[str, Any], difference_relations: Any, label: str) -> None:
+    if not difference_relations:
+        return
+    if not isinstance(difference_relations, list):
+        raise AssertionError(f"{label}.difference_relations must be a list")
+    for index, rule in enumerate(difference_relations):
+        rule_label = f"{label}.difference_relations[{index}]"
+        if not isinstance(rule, dict):
+            raise AssertionError(f"{rule_label} must be an object")
+        if not condition_matches(value, rule.get("when"), rule_label):
+            continue
+        left_field = rule.get("left")
+        minuend_field = rule.get("minuend")
+        subtrahend_field = rule.get("subtrahend")
+        if not all(isinstance(field, str) for field in (left_field, minuend_field, subtrahend_field)):
+            raise AssertionError(f"{rule_label} must define string left, minuend, and subtrahend fields")
+        left = value.get(left_field)
+        minuend = value.get(minuend_field)
+        subtrahend = value.get(subtrahend_field)
+        for field_name, field_value in (
+            (left_field, left),
+            (minuend_field, minuend),
+            (subtrahend_field, subtrahend),
+        ):
+            if not isinstance(field_value, int) or isinstance(field_value, bool):
+                raise AssertionError(f"{label}.{field_name} must be an integer for {rule_label}")
+        expected = minuend - subtrahend
+        if left != expected:
+            raise AssertionError(
+                f"{label}.{left_field}={left!r} does not equal {minuend_field}-{subtrahend_field} ({expected!r})"
+            )
+
+
+def require_equality_flag_relations(value: dict[str, Any], equality_flag_relations: Any, label: str) -> None:
+    if not equality_flag_relations:
+        return
+    if not isinstance(equality_flag_relations, list):
+        raise AssertionError(f"{label}.equality_flag_relations must be a list")
+    for index, rule in enumerate(equality_flag_relations):
+        rule_label = f"{label}.equality_flag_relations[{index}]"
+        if not isinstance(rule, dict):
+            raise AssertionError(f"{rule_label} must be an object")
+        if not condition_matches(value, rule.get("when"), rule_label):
+            continue
+        left_field = rule.get("left")
+        right_field = rule.get("right")
+        flag_field = rule.get("flag")
+        if not isinstance(left_field, str) or not isinstance(right_field, str) or not isinstance(flag_field, str):
+            raise AssertionError(f"{rule_label} must define string left, right, and flag fields")
+        left = value.get(left_field)
+        right = value.get(right_field)
+        flag = value.get(flag_field)
+        for field_name, field_value in ((left_field, left), (right_field, right)):
+            if not isinstance(field_value, int) or isinstance(field_value, bool):
+                raise AssertionError(f"{label}.{field_name} must be an integer for {rule_label}")
+        if not isinstance(flag, bool):
+            raise AssertionError(f"{label}.{flag_field} must be a boolean for {rule_label}")
+        expected = left == right
+        if flag != expected:
+            raise AssertionError(f"{label}.{flag_field}={flag!r} does not match ({left_field} == {right_field})={expected!r}")
+
+
 def require_nested_schema_fields(
     value: dict[str, Any],
     nested_schema_fields: dict[str, str],
@@ -253,6 +315,8 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     require_dict_key_enums(value, schema_def.get("dict_key_enums", {}), schema)
     require_conditional_fields(value, schema_def.get("conditional_fields", []), schema)
     require_numeric_relations(value, schema_def.get("numeric_relations", []), schema)
+    require_difference_relations(value, schema_def.get("difference_relations", []), schema)
+    require_equality_flag_relations(value, schema_def.get("equality_flag_relations", []), schema)
     require_nested_schema_fields(value, schema_def.get("nested_schema_fields", {}), schemas_def, schema)
 
     item_collection = schema_def.get("item_collection")

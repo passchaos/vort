@@ -200,6 +200,8 @@ architecture blindly.
 - [x] zlib/gzip inner-deflate header inspection JSON reports wrapper scope and member index.
 - [x] zlib/gzip inner-deflate header inspection JSON labels deflate byte span semantics.
 - [x] gzip inner-deflate header inspection JSON reports exact selected-member footer and end offsets.
+- [x] gzip inner-deflate header inspection JSON reports exact member deflate length plus CRC32/ISIZE trailer diagnostics.
+- [x] gzip inner-deflate header inspection smoke covers CRC32 and ISIZE trailer mismatch diagnostics without rejecting inspection.
 - [x] zlib/gzip inner-deflate header inspection schema cross-checks wrapper type and scope.
 - [x] zlib/gzip inner-deflate header inspection schema-validates nested raw headers.
 - [x] raw/zlib/gzip header inspection smoke records and schema-checks malformed case formats and per-format negative counts.

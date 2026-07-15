@@ -333,9 +333,17 @@
         "deflate_bytes": "int",
         "deflate_offset": "int",
         "deflate_span_kind": "str",
+        "member_crc32": "int?",
+        "member_crc32_matches": "bool?",
+        "member_deflate_bytes": "int?",
         "member_end_offset": "int?",
+        "member_footer_crc32": "int?",
+        "member_footer_isize": "int?",
         "member_footer_offset": "int?",
         "member_index": "int",
+        "member_isize": "int?",
+        "member_isize_matches": "bool?",
+        "member_output_bytes": "int?",
         "member_offset": "int",
         "raw_header": "dict",
         "schema": "str",
@@ -373,8 +381,16 @@
             "equals": "zlib"
           },
           "null": [
+            "member_deflate_bytes",
+            "member_output_bytes",
             "member_footer_offset",
-            "member_end_offset"
+            "member_end_offset",
+            "member_footer_crc32",
+            "member_crc32",
+            "member_crc32_matches",
+            "member_footer_isize",
+            "member_isize",
+            "member_isize_matches"
           ]
         },
         {
@@ -383,8 +399,16 @@
             "equals": "gzip"
           },
           "non_null": [
+            "member_deflate_bytes",
+            "member_output_bytes",
             "member_footer_offset",
-            "member_end_offset"
+            "member_end_offset",
+            "member_footer_crc32",
+            "member_crc32",
+            "member_crc32_matches",
+            "member_footer_isize",
+            "member_isize",
+            "member_isize_matches"
           ]
         }
       ],
@@ -416,6 +440,46 @@
           "left": "member_end_offset",
           "op": "le",
           "right": "wrapper_bytes"
+        },
+        {
+          "when": {
+            "field": "wrapper",
+            "equals": "gzip"
+          },
+          "left": "member_isize",
+          "op": "eq",
+          "right": "member_output_bytes"
+        }
+      ],
+      "difference_relations": [
+        {
+          "when": {
+            "field": "wrapper",
+            "equals": "gzip"
+          },
+          "left": "member_deflate_bytes",
+          "minuend": "member_footer_offset",
+          "subtrahend": "deflate_offset"
+        }
+      ],
+      "equality_flag_relations": [
+        {
+          "when": {
+            "field": "wrapper",
+            "equals": "gzip"
+          },
+          "left": "member_footer_crc32",
+          "right": "member_crc32",
+          "flag": "member_crc32_matches"
+        },
+        {
+          "when": {
+            "field": "wrapper",
+            "equals": "gzip"
+          },
+          "left": "member_footer_isize",
+          "right": "member_isize",
+          "flag": "member_isize_matches"
         }
       ],
       "nested_schema_fields": {
