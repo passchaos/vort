@@ -546,6 +546,11 @@ pub fn build(b: *std.Build) void {
     const level_report_csv_step = b.step("run-level-report-csv", "Write compression level parser and token diagnostics CSV to zig-out");
     level_report_csv_step.dependOn(&run_level_report_csv.step);
 
+    const run_level_report_dashboard = b.addRunArtifact(level_report_exe);
+    run_level_report_dashboard.addArgs(&.{ "--csv", "zig-out/vort-level-report.csv", "--markdown", "zig-out/vort-level-report.md" });
+    const level_report_dashboard_step = b.step("run-level-report-dashboard", "Write compression level parser diagnostics dashboard to zig-out");
+    level_report_dashboard_step.dependOn(&run_level_report_dashboard.step);
+
     const dynamic_plan_report_exe = b.addExecutable(.{
         .name = "vort-dynamic-plan-report",
         .root_module = b.createModule(.{
@@ -724,7 +729,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(dashboard_category_negative_smoke_step);
     dashboard_index.step.dependOn(header_inspect_dashboard_step);
     dashboard_index.step.dependOn(dashboard_strict_dashboard_step);
-    dashboard_index.step.dependOn(level_report_csv_step);
+    dashboard_index.step.dependOn(level_report_dashboard_step);
     dashboard_index.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     dashboard_index.step.dependOn(fuzz_corpus_coverage_smoke_step);
     const dashboard_index_step = b.step("run-dashboard-index", "Write a Markdown index for zig-out dashboard artifacts");
@@ -894,6 +899,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(dictionary_deflate_report_dashboard_step);
     ci_smoke_step.dependOn(level_report_step);
     ci_smoke_step.dependOn(level_report_csv_step);
+    ci_smoke_step.dependOn(level_report_dashboard_step);
     ci_smoke_step.dependOn(dynamic_plan_report_step);
     ci_smoke_step.dependOn(split_policy_report_step);
     ci_smoke_step.dependOn(native_range_report_step);

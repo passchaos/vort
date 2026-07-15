@@ -129,6 +129,13 @@
       "require_smoke_gate": true
     },
     {
+      "name": "vort-level-report.md",
+      "category": "corpus and ratio",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
       "name": "vort-file-corpus-standard-dashboard.md",
       "category": "corpus and ratio",
       "require_present": false,

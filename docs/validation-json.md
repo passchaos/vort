@@ -774,8 +774,8 @@ not regress. Required validation artifacts must be present and carry producer an
 smoke-gate metadata; optional benchmark/corpus/native/other examples still
 exercise the classifier even when the corresponding expensive dashboard was not
 generated in a narrow smoke run. Lightweight corpus/ratio artifacts such as the
-level-report CSV can also require presence so dashboard indexing keeps covering
-their producer and smoke-gate metadata.
+level-report CSV/Markdown dashboard can also require presence so dashboard
+indexing keeps covering their producer and smoke-gate metadata.
 
 Example:
 

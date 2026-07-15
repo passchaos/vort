@@ -163,6 +163,13 @@
     },
     {
       "expected_format": "md",
+      "name": "vort-level-report.md",
+      "producer_step": "zig build run-level-report-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-level-report-dashboard"
+    },
+    {
+      "expected_format": "md",
       "name": "vort-native-parallel-dashboard.md",
       "producer_step": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard",
       "required_smoke_gate": false,
