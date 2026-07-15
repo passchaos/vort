@@ -124,3 +124,13 @@ returned logical range. Caller-owned output variants such as
 offset/CRC-32 summary, avoiding the final range allocation when callers already
 own suitably sized storage. These variants preserve the same index, dictionary,
 and bounds validation behavior as the byte-slice range APIs.
+
+## Batch range summary APIs
+
+`decodeRangesWithSummaryAlloc`, `decodeIndexedRangesWithSummaryAlloc`, and the
+dictionary/sidecar batch variants decode multiple logical ranges after a single
+index parse/validation step. Each returned `RangeDecodeResult` carries its own
+bytes, offset, and CRC-32 summary. The batch APIs are intended for workloads
+such as data-lake readers or archive manifests that need several small slices
+from the same indexed stream without reparsing the embedded or sidecar index for
+each request.

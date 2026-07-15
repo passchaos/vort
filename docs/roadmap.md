@@ -57,6 +57,7 @@ architecture blindly.
 - [x] Indexed and sidecar range-decode summary APIs return range bytes with CRC-32 summaries.
 - [x] Indexed and sidecar range-decode into APIs fill caller-owned buffers while returning range CRC-32 summaries.
 - [x] Dictionary-backed embedded and sidecar auto range-decode summary APIs support CRC-32 summaries and caller-owned buffers.
+- [x] Indexed and sidecar batch range-decode summary APIs reuse one parsed index for multiple logical ranges.
 - [x] Sidecar-indexed stream encoder keeps index external.
 - [x] Sidecar frame-index bytes can drive range decode without embedded index.
 - [x] Sidecar frame-index bytes can drive dictionary range decode.
