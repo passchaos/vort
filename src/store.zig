@@ -894,12 +894,12 @@ pub fn decodeRangesInto(allocator: std.mem.Allocator, input: []const u8, index: 
 }
 
 pub fn decodeRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
-    if (results.len < requests.len) return error.OutputTooSmall;
     // Decode many ranges with one structural index validation and one decoded
     // copy per referenced frame. This matters for small random reads over
     // indexed streams where several logical ranges often land in the same
     // compressed frame.
     try validateFrameIndex(index);
+    try validateBatchRangeIntoRequests(index, requests, results);
     const decoded_cache = try allocator.alloc(?[]u8, index.len);
     defer {
         for (decoded_cache) |maybe_decoded| {
@@ -910,6 +910,18 @@ pub fn decodeRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]con
     @memset(decoded_cache, null);
     for (requests, 0..) |request, i| {
         results[i] = try decodeRangeWithDictionaryIntoValidated(allocator, dict, input, index, request.offset, request.length, request.output, decoded_cache);
+    }
+}
+
+fn validateBatchRangeIntoRequests(index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) Error!void {
+    if (results.len < requests.len) return error.OutputTooSmall;
+    const total_uncompressed = if (index.len == 0) 0 else index[index.len - 1].uncompressed_offset + index[index.len - 1].uncompressed_len;
+    for (requests) |request| {
+        if (request.output.len < request.length) return error.OutputTooSmall;
+        if (request.length == 0) continue;
+        const end = std.math.add(u64, request.offset, request.length) catch return error.IntegerOverflow;
+        if (end > total_uncompressed) return error.RangeOutOfBounds;
+        _ = findFrameForOffset(index, request.offset) orelse return error.RangeOutOfBounds;
     }
 }
 
@@ -2678,6 +2690,26 @@ test "frame index supports seek and range decode" {
     try std.testing.expectEqual(checksum.crc32(&batch_a), batch_results[0].crc32);
     try std.testing.expectEqualSlices(u8, "habetaga", &batch_b);
     try std.testing.expectEqual(checksum.crc32(&batch_b), batch_results[1].crc32);
+    @memset(batch_a[0..], '!');
+    @memset(batch_b[0..], '!');
+    try std.testing.expectError(error.OutputTooSmall, decodeRangesInto(std.testing.allocator, combined.items, index, &.{
+        .{ .offset = 0, .length = batch_a.len, .output = batch_a[0..] },
+        .{ .offset = 3, .length = batch_b.len, .output = batch_b[0..] },
+    }, batch_results[0..1]));
+    try std.testing.expectEqualSlices(u8, "!!!!!", &batch_a);
+    try std.testing.expectEqualSlices(u8, "!!!!!!!!", &batch_b);
+    try std.testing.expectError(error.OutputTooSmall, decodeRangesInto(std.testing.allocator, combined.items, index, &.{
+        .{ .offset = 0, .length = batch_a.len, .output = batch_a[0..] },
+        .{ .offset = 3, .length = batch_b.len, .output = batch_b[0..7] },
+    }, batch_results[0..]));
+    try std.testing.expectEqualSlices(u8, "!!!!!", &batch_a);
+    try std.testing.expectEqualSlices(u8, "!!!!!!!!", &batch_b);
+    try std.testing.expectError(error.RangeOutOfBounds, decodeRangesInto(std.testing.allocator, combined.items, index, &.{
+        .{ .offset = 0, .length = batch_a.len, .output = batch_a[0..] },
+        .{ .offset = 12, .length = batch_b.len, .output = batch_b[0..] },
+    }, batch_results[0..]));
+    try std.testing.expectEqualSlices(u8, "!!!!!", &batch_a);
+    try std.testing.expectEqualSlices(u8, "!!!!!!!!", &batch_b);
     try std.testing.expectError(error.OutputTooSmall, decodeRangeInto(std.testing.allocator, combined.items, index, 3, buffer.len, buffer[0..7]));
 }
 
