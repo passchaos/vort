@@ -4833,6 +4833,33 @@ test "gzip concatenated decoders preserve later members after an empty member" {
     try std.testing.expectEqualSlices(u8, "hello world", &into);
 }
 
+test "gzip concatenated decoders reject corrupt third member after empty middle member" {
+    const first = try encodeGzipFixedAlloc(std.testing.allocator, "hello ");
+    defer std.testing.allocator.free(first);
+    const empty = try encodeGzipFixedAlloc(std.testing.allocator, "");
+    defer std.testing.allocator.free(empty);
+    const third = try encodeGzipFixedAlloc(std.testing.allocator, "world");
+    defer std.testing.allocator.free(third);
+
+    var cat: std.ArrayList(u8) = .empty;
+    defer cat.deinit(std.testing.allocator);
+    try cat.appendSlice(std.testing.allocator, first);
+    try cat.appendSlice(std.testing.allocator, empty);
+    try cat.appendSlice(std.testing.allocator, third);
+
+    try std.testing.expectError(error.TruncatedFrame, decodeGzipConcatenatedAlloc(std.testing.allocator, cat.items[0 .. cat.items.len - 8]));
+
+    var bad_crc = try std.testing.allocator.dupe(u8, cat.items);
+    defer std.testing.allocator.free(bad_crc);
+    bad_crc[bad_crc.len - 8] ^= 1;
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzipConcatenatedAlloc(std.testing.allocator, bad_crc));
+
+    var bad_isize = try std.testing.allocator.dupe(u8, cat.items);
+    defer std.testing.allocator.free(bad_isize);
+    bad_isize[bad_isize.len - 4] ^= 1;
+    try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAlloc(std.testing.allocator, bad_isize));
+}
+
 test "gzip concatenated decoders reject empty input" {
     var out: [1]u8 = undefined;
     try std.testing.expectError(error.TruncatedFrame, decodeGzipConcatenated("", &out));

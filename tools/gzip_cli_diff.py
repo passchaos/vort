@@ -99,6 +99,14 @@ def main() -> int:
     expect_cli_failure("decode-gzip-hex", bytes(second_bad_isize).hex(), error_name="SizeMismatch")
     out = run_cli("decode-gzip-hex", concatenated_with_empty.hex())
     assert int(parse_field(out, "decoded_bytes")) == len(concatenated_plain), out
+    third_missing_trailer = concatenated_with_empty[:-8]
+    expect_cli_failure("decode-gzip-hex", third_missing_trailer.hex(), error_name="TruncatedFrame")
+    third_bad_crc = bytearray(concatenated_with_empty)
+    third_bad_crc[-8] ^= 1
+    expect_cli_failure("decode-gzip-hex", bytes(third_bad_crc).hex(), error_name="ChecksumMismatch")
+    third_bad_isize = bytearray(concatenated_with_empty)
+    third_bad_isize[-4] ^= 1
+    expect_cli_failure("decode-gzip-hex", bytes(third_bad_isize).hex(), error_name="SizeMismatch")
     with tempfile.TemporaryDirectory(prefix="vort-gzip-cat-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         compressed_path = tmp / "cat.gz"
@@ -139,6 +147,15 @@ def main() -> int:
         out = run_cli("decode-gzip-file", str(cat_empty_path), str(cat_empty_out))
         assert int(parse_field(out, "decoded_bytes")) == len(concatenated_plain), out
         assert cat_empty_out.read_bytes() == concatenated_plain
+        third_missing_trailer_path = tmp / "cat-third-missing-trailer.gz"
+        third_missing_trailer_path.write_bytes(third_missing_trailer)
+        expect_cli_failure("decode-gzip-file", str(third_missing_trailer_path), str(tmp / "cat-third-missing-trailer.out"), error_name="TruncatedFrame")
+        third_bad_crc_path = tmp / "cat-third-bad-crc.gz"
+        third_bad_crc_path.write_bytes(third_bad_crc)
+        expect_cli_failure("decode-gzip-file", str(third_bad_crc_path), str(tmp / "cat-third-bad-crc.out"), error_name="ChecksumMismatch")
+        third_bad_isize_path = tmp / "cat-third-bad-isize.gz"
+        third_bad_isize_path.write_bytes(third_bad_isize)
+        expect_cli_failure("decode-gzip-file", str(third_bad_isize_path), str(tmp / "cat-third-bad-isize.out"), error_name="SizeMismatch")
 
     # Vort fixed gzip known vector -> system gzip.
     vort_hello = bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a6103605000000")

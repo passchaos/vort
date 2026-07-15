@@ -890,6 +890,25 @@ def main(argv: list[str]) -> int:
     assert gzip_third_after_empty_json["member_isize_matches"] is True
     validate_value_against_manifest(gzip_third_after_empty_json, schemas_def)
 
+    gzip_third_bad_crc_frame = bytearray(gzip_concat_with_empty_frame)
+    gzip_third_bad_crc_frame[-8] ^= 1
+    gzip_third_bad_crc_json = json.loads(run(cli, "inspect-gzip-deflate-header-hex", bytes(gzip_third_bad_crc_frame).hex(), "json", "2"))
+    assert gzip_third_bad_crc_json["member_index"] == 2
+    assert gzip_third_bad_crc_json["member_crc32"] == gzip_third_after_empty_json["member_crc32"]
+    assert gzip_third_bad_crc_json["member_footer_crc32"] != gzip_third_bad_crc_json["member_crc32"]
+    assert gzip_third_bad_crc_json["member_crc32_matches"] is False
+    assert gzip_third_bad_crc_json["member_isize_matches"] is True
+    validate_value_against_manifest(gzip_third_bad_crc_json, schemas_def)
+
+    gzip_third_bad_isize_frame = bytearray(gzip_concat_with_empty_frame)
+    gzip_third_bad_isize_frame[-4] ^= 1
+    gzip_third_bad_isize_json = json.loads(run(cli, "inspect-gzip-deflate-header-hex", bytes(gzip_third_bad_isize_frame).hex(), "json", "2"))
+    assert gzip_third_bad_isize_json["member_index"] == 2
+    assert gzip_third_bad_isize_json["member_crc32_matches"] is True
+    assert gzip_third_bad_isize_json["member_footer_isize"] != gzip_third_bad_isize_json["member_isize"]
+    assert gzip_third_bad_isize_json["member_isize_matches"] is False
+    validate_value_against_manifest(gzip_third_bad_isize_json, schemas_def)
+
     gzip_optional_hex = run(cli, "inspect-gzip-header-hex", gzip_optional_frame.hex())
     require_fields(
         gzip_optional_hex,
