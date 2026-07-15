@@ -145,6 +145,7 @@
         "bytes": "int",
         "command": "str",
         "data_offset": "int",
+        "detail": "str",
         "format": "str",
         "has_dictionary": "bool",
         "has_optional_fields": "bool",

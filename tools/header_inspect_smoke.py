@@ -87,13 +87,13 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
             [
                 f"### {format_name}",
                 "",
-                "| name | schema | bytes | command | sample |",
-                "| --- | --- | ---: | --- | --- |",
+                "| name | schema | bytes | details | command | sample |",
+                "| --- | --- | ---: | --- | --- | --- |",
             ]
         )
         for case in cases:
             lines.append(
-                f"| {md(case['name'])} | `{md(case['schema_name'])}` | {case['bytes']} | `{md(case['command'])}` | `{md(case['sample'])}` |"
+                f"| {md(case['name'])} | `{md(case['schema_name'])}` | {case['bytes']} | {md(case['detail'])} | `{md(case['command'])}` | `{md(case['sample'])}` |"
             )
         lines.append("")
     lines.extend(
@@ -218,6 +218,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-raw-header-hex",
             "sample": raw_frame.hex(),
             "argv": ["inspect-raw-header-hex", raw_frame.hex()],
+            "detail": "fixed",
             "format": "raw",
             "bytes": len(raw_frame),
             "data_offset": 1,
@@ -253,6 +254,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-raw-header-hex",
             "sample": raw_stored_frame.hex(),
             "argv": ["inspect-raw-header-hex", raw_stored_frame.hex()],
+            "detail": "LEN=5",
             "format": "raw",
             "bytes": len(raw_stored_frame),
             "data_offset": 5,
@@ -289,6 +291,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-raw-header-hex",
             "sample": raw_dynamic_frame_hex,
             "argv": ["inspect-raw-header-hex", raw_dynamic_frame_hex],
+            "detail": "dynamic",
             "format": "raw",
             "bytes": len(raw_dynamic_frame),
             "data_offset": 1,
@@ -319,6 +322,12 @@ def main(argv: list[str]) -> int:
     assert len(raw_dynamic_json["dynamic_distance_length_histogram"]) == 16
     assert sum(raw_dynamic_json["dynamic_literal_length_histogram"]) == raw_dynamic_json["dynamic_hlit"]
     assert sum(raw_dynamic_json["dynamic_distance_length_histogram"]) == raw_dynamic_json["dynamic_hdist"]
+    cases[-1]["detail"] = (
+        f"HLIT={raw_dynamic_json['dynamic_hlit']} HDIST={raw_dynamic_json['dynamic_hdist']} "
+        f"HCLEN={raw_dynamic_json['dynamic_hclen']} lit_nonzero={raw_dynamic_json['dynamic_literal_nonzero']} "
+        f"dist_nonzero={raw_dynamic_json['dynamic_distance_nonzero']} max={raw_dynamic_json['dynamic_literal_max_bits']}/"
+        f"{raw_dynamic_json['dynamic_distance_max_bits']}"
+    )
     validate_value_against_manifest(raw_dynamic_json, schemas_def)
 
     zlib_hex = run(cli, "inspect-zlib-header-hex", zlib_frame.hex())
@@ -341,6 +350,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-zlib-header-hex",
             "sample": zlib_frame.hex(),
             "argv": ["inspect-zlib-header-hex", zlib_frame.hex()],
+            "detail": "-",
             "format": "zlib",
             "bytes": len(zlib_frame),
             "data_offset": 2,
@@ -373,6 +383,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-zlib-header-hex",
             "sample": zlib_dict_frame.hex(),
             "argv": ["inspect-zlib-header-hex", zlib_dict_frame.hex()],
+            "detail": "FDICT",
             "format": "zlib",
             "bytes": len(zlib_dict_frame),
             "data_offset": 6,
@@ -409,6 +420,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-gzip-header-hex",
             "sample": gzip_frame.hex(),
             "argv": ["inspect-gzip-header-hex", gzip_frame.hex()],
+            "detail": "-",
             "format": "gzip",
             "bytes": len(gzip_frame),
             "data_offset": 10,
@@ -444,6 +456,7 @@ def main(argv: list[str]) -> int:
             "command": "inspect-gzip-header-hex",
             "sample": gzip_optional_frame.hex(),
             "argv": ["inspect-gzip-header-hex", gzip_optional_frame.hex()],
+            "detail": "FEXTRA/FNAME/FCOMMENT/FHCRC",
             "format": "gzip",
             "bytes": len(gzip_optional_frame),
             "data_offset": 31,

@@ -153,6 +153,7 @@ def main() -> int:
         )
         assert header_summary["cases"][0]["command"].startswith("inspect-")
         assert header_summary["cases"][0]["sample"]
+        assert header_summary["cases"][0]["detail"]
         assert header_summary["cases"][0]["argv"] == [
             header_summary["cases"][0]["command"],
             header_summary["cases"][0]["sample"],

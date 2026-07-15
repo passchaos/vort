@@ -201,9 +201,9 @@ Important fields:
   (`command` and `expected_error` are enum-checked by the schema manifest)
 - `dictionary_cases`: zlib FDICT/DICTID cases covered
 - `optional_header_cases`, `fhcrc_cases`: gzip optional-header/FHCRC cases covered
-- `cases`: case-level metadata including enum-checked `name`, replayable
-  `command`/`sample`/`argv`, format, JSON `schema_name`, byte size, data
-  offset, and feature booleans. The manifest cross-checks `format` against `schema_name`
+- `cases`: case-level metadata including enum-checked `name`, human-readable
+  `detail`, replayable `command`/`sample`/`argv`, format, JSON `schema_name`,
+  byte size, data offset, and feature booleans. The manifest cross-checks `format` against `schema_name`
   and `schema_name` against the replay command.
 
 Example:
@@ -238,6 +238,7 @@ Example:
       "command": "inspect-zlib-header-hex",
       "sample": "78bb08610235cb4027013a2e067d",
       "argv": ["inspect-zlib-header-hex", "78bb08610235cb4027013a2e067d"],
+      "detail": "FDICT",
       "format": "zlib",
       "bytes": 14,
       "data_offset": 6,
