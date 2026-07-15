@@ -77,12 +77,16 @@ pub const RawDeflateHeaderInfo = struct {
     dynamic_literal_zero: ?u16 = null,
     /// Maximum literal/length code length in bits.
     dynamic_literal_max_bits: ?u8 = null,
+    /// Literal/length code-length histogram indexed by bit length 0..15.
+    dynamic_literal_length_histogram: [16]u16 = @splat(0),
     /// Number of non-zero distance code lengths in the dynamic header.
     dynamic_distance_nonzero: ?u16 = null,
     /// Number of zero distance code lengths in the dynamic header.
     dynamic_distance_zero: ?u16 = null,
     /// Maximum distance code length in bits.
     dynamic_distance_max_bits: ?u8 = null,
+    /// Distance code-length histogram indexed by bit length 0..15.
+    dynamic_distance_length_histogram: [16]u16 = @splat(0),
     /// Whether literal/length symbol 256 (end-of-block) is present.
     dynamic_has_eob: ?bool = null,
     /// Bit position after reading the full dynamic code-length sequences.
@@ -1284,9 +1288,11 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
     var dynamic_literal_nonzero: ?u16 = null;
     var dynamic_literal_zero: ?u16 = null;
     var dynamic_literal_max_bits: ?u8 = null;
+    var dynamic_literal_length_histogram: [16]u16 = @splat(0);
     var dynamic_distance_nonzero: ?u16 = null;
     var dynamic_distance_zero: ?u16 = null;
     var dynamic_distance_max_bits: ?u8 = null;
+    var dynamic_distance_length_histogram: [16]u16 = @splat(0);
     var dynamic_has_eob: ?bool = null;
     var dynamic_lengths_bit_offset: ?usize = null;
     var dynamic_lengths_byte_offset: ?usize = null;
@@ -1323,6 +1329,7 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         var lit_nonzero: u16 = 0;
         var lit_max_bits: u8 = 0;
         for (parsed.literal_lengths[0..hlit]) |length| {
+            dynamic_literal_length_histogram[length] += 1;
             if (length != 0) {
                 lit_nonzero += 1;
                 lit_max_bits = @max(lit_max_bits, @as(u8, length));
@@ -1331,6 +1338,7 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         var dist_nonzero: u16 = 0;
         var dist_max_bits: u8 = 0;
         for (parsed.distance_lengths[0..hdist]) |length| {
+            dynamic_distance_length_histogram[length] += 1;
             if (length != 0) {
                 dist_nonzero += 1;
                 dist_max_bits = @max(dist_max_bits, @as(u8, length));
@@ -1366,9 +1374,11 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         .dynamic_literal_nonzero = dynamic_literal_nonzero,
         .dynamic_literal_zero = dynamic_literal_zero,
         .dynamic_literal_max_bits = dynamic_literal_max_bits,
+        .dynamic_literal_length_histogram = dynamic_literal_length_histogram,
         .dynamic_distance_nonzero = dynamic_distance_nonzero,
         .dynamic_distance_zero = dynamic_distance_zero,
         .dynamic_distance_max_bits = dynamic_distance_max_bits,
+        .dynamic_distance_length_histogram = dynamic_distance_length_histogram,
         .dynamic_has_eob = dynamic_has_eob,
         .dynamic_lengths_bit_offset = dynamic_lengths_bit_offset,
         .dynamic_lengths_byte_offset = dynamic_lengths_byte_offset,
@@ -3182,9 +3192,15 @@ test "raw deflate header parser exposes first block metadata" {
     try std.testing.expect(dynamic_info.dynamic_literal_nonzero.? >= 1);
     try std.testing.expectEqual(dynamic_info.dynamic_hlit.? - dynamic_info.dynamic_literal_nonzero.?, dynamic_info.dynamic_literal_zero.?);
     try std.testing.expect(dynamic_info.dynamic_literal_max_bits.? >= 1);
+    var literal_hist_total: u16 = 0;
+    for (dynamic_info.dynamic_literal_length_histogram) |count| literal_hist_total += count;
+    try std.testing.expectEqual(dynamic_info.dynamic_hlit.?, literal_hist_total);
     try std.testing.expect(dynamic_info.dynamic_distance_nonzero.? >= 1);
     try std.testing.expectEqual(dynamic_info.dynamic_hdist.? - dynamic_info.dynamic_distance_nonzero.?, dynamic_info.dynamic_distance_zero.?);
     try std.testing.expect(dynamic_info.dynamic_distance_max_bits.? >= 1);
+    var distance_hist_total: u16 = 0;
+    for (dynamic_info.dynamic_distance_length_histogram) |count| distance_hist_total += count;
+    try std.testing.expectEqual(dynamic_info.dynamic_hdist.?, distance_hist_total);
     try std.testing.expect(dynamic_info.dynamic_has_eob.?);
     try std.testing.expectEqual(dynamic_info.header_bits_consumed, dynamic_info.dynamic_lengths_bit_offset.?);
     try std.testing.expectEqual(dynamic_info.header_bytes_consumed, dynamic_info.dynamic_lengths_byte_offset.?);

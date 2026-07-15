@@ -1095,12 +1095,16 @@ fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     try printOptionalJson(u16, stdout, info.dynamic_literal_zero);
     try stdout.print(" dynamic_literal_max_bits=", .{});
     try printOptionalJson(u8, stdout, info.dynamic_literal_max_bits);
+    try stdout.print(" dynamic_literal_length_histogram=", .{});
+    try printU16Array16(stdout, &info.dynamic_literal_length_histogram);
     try stdout.print(" dynamic_distance_nonzero=", .{});
     try printOptionalJson(u16, stdout, info.dynamic_distance_nonzero);
     try stdout.print(" dynamic_distance_zero=", .{});
     try printOptionalJson(u16, stdout, info.dynamic_distance_zero);
     try stdout.print(" dynamic_distance_max_bits=", .{});
     try printOptionalJson(u8, stdout, info.dynamic_distance_max_bits);
+    try stdout.print(" dynamic_distance_length_histogram=", .{});
+    try printU16Array16(stdout, &info.dynamic_distance_length_histogram);
     try stdout.print(" dynamic_has_eob=", .{});
     try printOptionalBoolJson(stdout, info.dynamic_has_eob);
     try stdout.print(" dynamic_lengths_bit_offset=", .{});
@@ -1202,12 +1206,16 @@ fn printRawHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     try printOptionalJson(u16, stdout, info.dynamic_literal_zero);
     try stdout.print(",\"dynamic_literal_max_bits\":", .{});
     try printOptionalJson(u8, stdout, info.dynamic_literal_max_bits);
+    try stdout.print(",\"dynamic_literal_length_histogram\":", .{});
+    try printU16Array16(stdout, &info.dynamic_literal_length_histogram);
     try stdout.print(",\"dynamic_distance_nonzero\":", .{});
     try printOptionalJson(u16, stdout, info.dynamic_distance_nonzero);
     try stdout.print(",\"dynamic_distance_zero\":", .{});
     try printOptionalJson(u16, stdout, info.dynamic_distance_zero);
     try stdout.print(",\"dynamic_distance_max_bits\":", .{});
     try printOptionalJson(u8, stdout, info.dynamic_distance_max_bits);
+    try stdout.print(",\"dynamic_distance_length_histogram\":", .{});
+    try printU16Array16(stdout, &info.dynamic_distance_length_histogram);
     try stdout.print(",\"dynamic_has_eob\":", .{});
     try printOptionalBoolJson(stdout, info.dynamic_has_eob);
     try stdout.print(",\"dynamic_lengths_bit_offset\":", .{});
@@ -1222,6 +1230,15 @@ fn printCodeLengthArray(stdout: *std.Io.Writer, lengths: *const [19]u4) !void {
     for (lengths, 0..) |length, i| {
         if (i != 0) try stdout.print(",", .{});
         try stdout.print("{d}", .{length});
+    }
+    try stdout.print("]", .{});
+}
+
+fn printU16Array16(stdout: *std.Io.Writer, values: *const [16]u16) !void {
+    try stdout.print("[", .{});
+    for (values, 0..) |value, i| {
+        if (i != 0) try stdout.print(",", .{});
+        try stdout.print("{d}", .{value});
     }
     try stdout.print("]", .{});
 }
