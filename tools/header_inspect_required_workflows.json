@@ -1,0 +1,18 @@
+{
+  "schema": "vort.header_inspect_required_workflows",
+  "schema_version": 1,
+  "required_workflows": [
+    {"command": "inspect-raw-header-hex", "workflow": "hex", "format": "raw"},
+    {"command": "inspect-raw-header-file", "workflow": "file", "format": "raw"},
+    {"command": "inspect-zlib-header-hex", "workflow": "hex", "format": "zlib"},
+    {"command": "inspect-zlib-header-file", "workflow": "file", "format": "zlib"},
+    {"command": "inspect-zlib-deflate-header-hex", "workflow": "hex", "format": "zlib"},
+    {"command": "inspect-zlib-deflate-header-file", "workflow": "file", "format": "zlib"},
+    {"command": "inspect-zlib-dict-deflate-header-hex", "workflow": "hex", "format": "zlib"},
+    {"command": "inspect-zlib-dict-deflate-header-file", "workflow": "file", "format": "zlib"},
+    {"command": "inspect-gzip-header-hex", "workflow": "hex", "format": "gzip"},
+    {"command": "inspect-gzip-header-file", "workflow": "file", "format": "gzip"},
+    {"command": "inspect-gzip-deflate-header-hex", "workflow": "hex", "format": "gzip"},
+    {"command": "inspect-gzip-deflate-header-file", "workflow": "file", "format": "gzip"}
+  ]
+}

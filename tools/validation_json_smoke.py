@@ -123,6 +123,10 @@ def main() -> int:
         validate_value_against_manifest(dashboard, schemas_def)
 
         header_summary_path = root / "vort-header-inspect-smoke.json"
+        required_workflows = json.loads((ROOT / "tools" / "header_inspect_required_workflows.json").read_text())
+        assert required_workflows["schema"] == "vort.header_inspect_required_workflows"
+        assert required_workflows["required_workflows"]
+        validate_value_against_manifest(required_workflows, schemas_def)
         raw_header = json.loads(run([cli, "inspect-raw-header-hex", "cb48cdc9c90700", "json"]).stdout)
         assert raw_header["schema"] == "vort.raw_deflate_header_info"
         assert raw_header["schema_version"] == 1
@@ -260,6 +264,7 @@ def main() -> int:
                 corrupt["schema"],
                 dashboard["schema"],
                 header_summary["schema"],
+                required_workflows["schema"],
                 raw_header["schema"],
                 wrapped_zlib_header["schema"],
                 zlib_header["schema"],

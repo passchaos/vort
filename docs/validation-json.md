@@ -307,6 +307,35 @@ Example:
 }
 ```
 
+## `vort.header_inspect_required_workflows`
+
+Consumed by:
+
+```sh
+python3 tools/header_inspect_smoke.py zig-out/bin/vort
+zig build run-header-inspect-smoke
+```
+
+This schema defines the required hex/file workflow coverage matrix for public
+header-inspection CLI commands. Keeping the matrix in a small JSON file makes new
+inspect commands reviewable without editing the smoke script logic.
+
+Example:
+
+```json
+{
+  "schema": "vort.header_inspect_required_workflows",
+  "schema_version": 1,
+  "required_workflows": [
+    {
+      "command": "inspect-zlib-header-hex",
+      "workflow": "hex",
+      "format": "zlib"
+    }
+  ]
+}
+```
+
 ## `vort.raw_deflate_header_info`
 
 Produced by:

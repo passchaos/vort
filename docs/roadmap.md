@@ -213,6 +213,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection smoke reports schema-checked per-command success/failure coverage.
 - [x] raw/zlib/gzip header inspection smoke reports hex/file workflow coverage per inspect command.
 - [x] raw/zlib/gzip header inspection smoke enforces a required hex/file workflow coverage matrix.
+- [x] Header inspection required workflow coverage matrix is stored in a schema-checked external JSON config.
 - [x] raw/zlib/gzip header inspection smoke records the schema name for each successful case.
 - [x] raw/zlib/gzip header inspection smoke enum-checks successful case names.
 - [x] raw/zlib/gzip header inspection smoke records replayable command/sample fields for each successful case.

@@ -12,6 +12,7 @@ from pathlib import Path
 from validation_json_docs_check import load_manifest, validate_value_against_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
+REQUIRED_WORKFLOWS = ROOT / "tools" / "header_inspect_required_workflows.json"
 
 
 def run(cli: str, *args: str) -> str:
@@ -88,36 +89,40 @@ def build_workflow_coverage(success_items: list[dict[str, object]]) -> list[dict
     ]
 
 
-REQUIRED_WORKFLOW_COVERAGE = [
-    ("inspect-raw-header-hex", "hex"),
-    ("inspect-raw-header-file", "file"),
-    ("inspect-zlib-header-hex", "hex"),
-    ("inspect-zlib-header-file", "file"),
-    ("inspect-zlib-deflate-header-hex", "hex"),
-    ("inspect-zlib-deflate-header-file", "file"),
-    ("inspect-zlib-dict-deflate-header-hex", "hex"),
-    ("inspect-zlib-dict-deflate-header-file", "file"),
-    ("inspect-gzip-header-hex", "hex"),
-    ("inspect-gzip-header-file", "file"),
-    ("inspect-gzip-deflate-header-hex", "hex"),
-    ("inspect-gzip-deflate-header-file", "file"),
-]
-
-
-def build_required_workflow_rows() -> list[dict[str, object]]:
-    return [
-        {
-            "command": command,
-            "workflow": workflow,
-            "format": format_for_command(command),
-        }
-        for command, workflow in REQUIRED_WORKFLOW_COVERAGE
-    ]
+def load_required_workflow_rows() -> list[dict[str, object]]:
+    payload = json.loads(REQUIRED_WORKFLOWS.read_text())
+    if payload.get("schema") != "vort.header_inspect_required_workflows":
+        raise AssertionError("unexpected header inspect workflow schema")
+    if payload.get("schema_version") != 1:
+        raise AssertionError("unsupported header inspect workflow schema version")
+    rows = payload.get("required_workflows")
+    if not isinstance(rows, list) or not rows:
+        raise AssertionError("required_workflows must be a non-empty list")
+    normalized: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise AssertionError(f"required_workflows[{index}] must be an object")
+        command = row.get("command")
+        workflow = row.get("workflow")
+        format_name = row.get("format")
+        if not isinstance(command, str) or not isinstance(workflow, str) or not isinstance(format_name, str):
+            raise AssertionError(f"required_workflows[{index}] must include string command/workflow/format")
+        if workflow not in ("hex", "file"):
+            raise AssertionError(f"required_workflows[{index}] has invalid workflow {workflow!r}")
+        if format_name != format_for_command(command):
+            raise AssertionError(f"required_workflows[{index}] format {format_name!r} does not match command {command!r}")
+        key = (command, workflow)
+        if key in seen:
+            raise AssertionError(f"duplicate required workflow {key!r}")
+        seen.add(key)
+        normalized.append({"command": command, "workflow": workflow, "format": format_name})
+    return normalized
 
 
 def missing_required_workflows(workflow_coverage: list[dict[str, object]]) -> list[dict[str, object]]:
     covered = {(str(row["command"]), str(row["workflow"])) for row in workflow_coverage if int(row["successes"]) > 0}
-    return [row for row in build_required_workflow_rows() if (str(row["command"]), str(row["workflow"])) not in covered]
+    return [row for row in load_required_workflow_rows() if (str(row["command"]), str(row["workflow"])) not in covered]
 
 
 def write_markdown(path: Path, summary: dict[str, object]) -> None:
@@ -959,7 +964,7 @@ def main(argv: list[str]) -> int:
     success_items = [{"command": case["command"], "workflow": case["workflow"], "format": case["format"]} for case in cases] + file_success_items
     command_coverage = build_command_coverage(success_items, negative_items)
     workflow_coverage = build_workflow_coverage(success_items)
-    required_workflows = build_required_workflow_rows()
+    required_workflows = load_required_workflow_rows()
     missing_workflows = missing_required_workflows(workflow_coverage)
     if missing_workflows:
         raise AssertionError(f"missing required header inspect workflow coverage: {missing_workflows!r}")

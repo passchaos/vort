@@ -59,6 +59,30 @@
         "producer_step": "str"
       }
     },
+    "vort.header_inspect_required_workflows": {
+      "fields": {
+        "required_workflows": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "required_workflows",
+      "item_fields": {
+        "command": "str",
+        "format": "str",
+        "workflow": "str"
+      },
+      "item_enums": {
+        "format": [
+          "raw",
+          "zlib",
+          "gzip"
+        ],
+        "workflow": [
+          "hex",
+          "file"
+        ]
+      }
+    },
     "vort.header_inspect_smoke": {
       "fields": {
         "case_count": "int",
