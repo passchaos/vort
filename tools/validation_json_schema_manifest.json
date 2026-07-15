@@ -25,6 +25,16 @@
         "dashboard_strict_ok": "bool",
         "dashboard_strict_present": "bool",
         "dashboard_strict_healthy": "bool",
+        "huffman_length_healthy": "bool",
+        "huffman_length_malformed_rows": "int",
+        "huffman_length_non_optimal_rows": "int",
+        "huffman_length_optimal_rows": "int",
+        "huffman_length_package_merge_non_optimal_rows": "int",
+        "huffman_length_package_merge_optimal_rows": "int",
+        "huffman_length_package_merge_worst_gap_bits": "int",
+        "huffman_length_present": "bool",
+        "huffman_length_row_count": "int",
+        "huffman_length_worst_gap_bits": "int",
         "producer_healthy": "bool",
         "producer_step_allowed_missing": "list",
         "producer_step_covered": "int",
@@ -54,7 +64,8 @@
             "producer_healthy",
             "smoke_gate_healthy",
             "header_inspect_healthy",
-            "dashboard_strict_healthy"
+            "dashboard_strict_healthy",
+            "huffman_length_healthy"
           ]
         },
         "header_inspect_healthy": {
@@ -73,6 +84,21 @@
           ],
           "zero": [
             "dashboard_strict_missing_mode_count"
+          ]
+        },
+        "huffman_length_healthy": {
+          "all": [
+            "huffman_length_present"
+          ],
+          "zero": [
+            "huffman_length_non_optimal_rows",
+            "huffman_length_malformed_rows",
+            "huffman_length_worst_gap_bits",
+            "huffman_length_package_merge_non_optimal_rows",
+            "huffman_length_package_merge_worst_gap_bits"
+          ],
+          "positive": [
+            "huffman_length_row_count"
           ]
         }
       },
@@ -125,7 +151,9 @@
           "missing_header_workflows",
           "missing_dashboard_strict_artifact",
           "dashboard_strict_failed",
-          "missing_dashboard_strict_modes"
+          "missing_dashboard_strict_modes",
+          "missing_huffman_length_artifact",
+          "huffman_length_failed"
         ]
       },
       "item_collection": "artifacts",
@@ -138,6 +166,7 @@
           "other"
         ],
         "format": [
+          "csv",
           "json",
           "md"
         ]
@@ -204,7 +233,9 @@
           "validation_missing_header_workflows",
           "validation_missing_dashboard_strict_artifact",
           "validation_dashboard_strict_failed",
-          "validation_missing_dashboard_strict_modes"
+          "validation_missing_dashboard_strict_modes",
+          "validation_missing_huffman_length_artifact",
+          "validation_huffman_length_failed"
         ],
         "fixture": [
           "missing_producer_steps",
@@ -214,7 +245,9 @@
           "missing_header_workflows",
           "missing_dashboard_strict_artifact",
           "dashboard_strict_failed",
-          "missing_dashboard_strict_modes"
+          "missing_dashboard_strict_modes",
+          "missing_huffman_length_artifact",
+          "huffman_length_failed"
         ],
         "reason": [
           "missing_producer_steps",
@@ -224,7 +257,9 @@
           "missing_header_workflows",
           "missing_dashboard_strict_artifact",
           "dashboard_strict_failed",
-          "missing_dashboard_strict_modes"
+          "missing_dashboard_strict_modes",
+          "missing_huffman_length_artifact",
+          "huffman_length_failed"
         ]
       },
       "item_field_pairs": {
@@ -238,7 +273,9 @@
             "validation_missing_header_workflows": "missing_header_workflows",
             "validation_missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
             "validation_dashboard_strict_failed": "dashboard_strict_failed",
-            "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes"
+            "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
+            "validation_missing_huffman_length_artifact": "missing_huffman_length_artifact",
+            "validation_huffman_length_failed": "huffman_length_failed"
           }
         },
         "fixture": {
@@ -251,7 +288,9 @@
             "missing_header_workflows": "missing_header_workflows",
             "missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
             "dashboard_strict_failed": "dashboard_strict_failed",
-            "missing_dashboard_strict_modes": "missing_dashboard_strict_modes"
+            "missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
+            "missing_huffman_length_artifact": "missing_huffman_length_artifact",
+            "huffman_length_failed": "huffman_length_failed"
           }
         }
       }
@@ -333,6 +372,8 @@
           "validation_missing_dashboard_strict_artifact",
           "validation_dashboard_strict_failed",
           "validation_missing_dashboard_strict_modes",
+          "validation_missing_huffman_length_artifact",
+          "validation_huffman_length_failed",
           "truncated_output"
         ]
       },
@@ -431,7 +472,9 @@
               "validation_missing_header_workflows",
               "validation_missing_dashboard_strict_artifact",
               "validation_dashboard_strict_failed",
-              "validation_missing_dashboard_strict_modes"
+              "validation_missing_dashboard_strict_modes",
+              "validation_missing_huffman_length_artifact",
+              "validation_huffman_length_failed"
             ],
             "reason": [
               "missing_producer_steps",
@@ -441,7 +484,9 @@
               "missing_header_workflows",
               "missing_dashboard_strict_artifact",
               "dashboard_strict_failed",
-              "missing_dashboard_strict_modes"
+              "missing_dashboard_strict_modes",
+              "missing_huffman_length_artifact",
+              "huffman_length_failed"
             ]
           },
           "field_pairs": {
@@ -455,7 +500,9 @@
                 "validation_missing_header_workflows": "missing_header_workflows",
                 "validation_missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
                 "validation_dashboard_strict_failed": "dashboard_strict_failed",
-                "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes"
+                "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
+                "validation_missing_huffman_length_artifact": "missing_huffman_length_artifact",
+                "validation_huffman_length_failed": "huffman_length_failed"
               }
             }
           }
@@ -1854,7 +1901,8 @@
           "strict_validation_mode_missing",
           "reason_check_pair_mismatch",
           "reason_fixture_pair_mismatch",
-          "validation_smoke_checked_schema_enum"
+          "validation_smoke_checked_schema_enum",
+          "boolean_formula_positive_field"
         ]
       }
     },

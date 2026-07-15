@@ -1185,6 +1185,8 @@ Current unhealthy reason values are:
 - `missing_dashboard_strict_artifact`
 - `dashboard_strict_failed`
 - `missing_dashboard_strict_modes`
+- `missing_huffman_length_artifact`
+- `huffman_length_failed`
 
 Top-level fields:
 
@@ -1211,6 +1213,13 @@ Top-level fields:
   `dashboard_strict_expected_mode_count`, `dashboard_strict_missing_mode_count`,
   `dashboard_strict_missing_checks`, `dashboard_strict_missing_expected_failures`,
   `dashboard_strict_missing_matched`, `dashboard_strict_missing_modes`
+- `huffman_length_present`, `huffman_length_healthy`,
+  `huffman_length_row_count`, `huffman_length_optimal_rows`,
+  `huffman_length_non_optimal_rows`, `huffman_length_malformed_rows`,
+  `huffman_length_worst_gap_bits`,
+  `huffman_length_package_merge_optimal_rows`,
+  `huffman_length_package_merge_non_optimal_rows`,
+  `huffman_length_package_merge_worst_gap_bits`
 - `artifacts`
 
 Each artifact includes:
@@ -1243,7 +1252,8 @@ Example:
   "validation_healthy": false,
   "validation_unhealthy_reasons": [
     "missing_header_inspect_artifact",
-    "missing_dashboard_strict_artifact"
+    "missing_dashboard_strict_artifact",
+    "missing_huffman_length_artifact"
   ],
   "header_inspect_present": false,
   "header_inspect_ok": false,
@@ -1264,6 +1274,16 @@ Example:
   "dashboard_strict_missing_expected_failures": 0,
   "dashboard_strict_missing_matched": 0,
   "dashboard_strict_missing_modes": [],
+  "huffman_length_present": false,
+  "huffman_length_healthy": false,
+  "huffman_length_row_count": 0,
+  "huffman_length_optimal_rows": 0,
+  "huffman_length_non_optimal_rows": 0,
+  "huffman_length_malformed_rows": 0,
+  "huffman_length_worst_gap_bits": 0,
+  "huffman_length_package_merge_optimal_rows": 0,
+  "huffman_length_package_merge_non_optimal_rows": 0,
+  "huffman_length_package_merge_worst_gap_bits": 0,
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",

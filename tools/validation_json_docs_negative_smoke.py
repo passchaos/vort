@@ -154,6 +154,81 @@ def main() -> int:
             )
         )
 
+        def boolean_formula_positive_field() -> None:
+            payload = {
+                "schema": "vort.dashboard_index",
+                "schema_version": 1,
+                "artifact_count": 1,
+                "producer_step_covered": 1,
+                "producer_step_missing": [],
+                "producer_step_allowed_missing": [],
+                "producer_healthy": True,
+                "smoke_gate_covered": 1,
+                "smoke_gate_missing": [],
+                "smoke_gate_healthy": True,
+                "smoke_gate_required_missing": [],
+                "validation_healthy": True,
+                "validation_unhealthy_reasons": [],
+                "header_inspect_present": True,
+                "header_inspect_ok": True,
+                "header_inspect_healthy": True,
+                "header_inspect_required_workflow_count": 1,
+                "header_inspect_missing_workflow_count": 0,
+                "header_inspect_missing_workflows": [],
+                "dashboard_strict_present": True,
+                "dashboard_strict_ok": True,
+                "dashboard_strict_healthy": True,
+                "dashboard_strict_check_count": 1,
+                "dashboard_strict_mode_count": 1,
+                "dashboard_strict_expected_failure_count": 0,
+                "dashboard_strict_matched_count": 1,
+                "dashboard_strict_expected_mode_count": 1,
+                "dashboard_strict_missing_mode_count": 0,
+                "dashboard_strict_missing_checks": 0,
+                "dashboard_strict_missing_expected_failures": 0,
+                "dashboard_strict_missing_matched": 0,
+                "dashboard_strict_missing_modes": [],
+                "huffman_length_present": True,
+                "huffman_length_healthy": True,
+                "huffman_length_row_count": 0,
+                "huffman_length_optimal_rows": 0,
+                "huffman_length_non_optimal_rows": 0,
+                "huffman_length_malformed_rows": 0,
+                "huffman_length_worst_gap_bits": 0,
+                "huffman_length_package_merge_optimal_rows": 0,
+                "huffman_length_package_merge_non_optimal_rows": 0,
+                "huffman_length_package_merge_worst_gap_bits": 0,
+                "artifacts": [
+                    {
+                        "name": "vort-huffman-length-report.csv",
+                        "path": "vort-huffman-length-report.csv",
+                        "category": "validation",
+                        "format": "csv",
+                        "expected_format": "csv",
+                        "producer_step": "zig build run-huffman-length-report-dashboard",
+                        "producer_missing_allowed": False,
+                        "smoke_gate": "zig build run-huffman-length-report-dashboard",
+                        "size_bytes": 1,
+                        "mtime_utc": "2026-07-15T00:00:00Z",
+                        "schema": None,
+                        "schema_version": None,
+                        "rows": 0,
+                        "ok": None,
+                        "required_workflow_count": None,
+                        "missing_workflow_count": None,
+                    }
+                ],
+            }
+            docs_check.validate_value_against_manifest(payload, schemas_def)
+
+        cases.append(
+            negative_case(
+                "boolean_formula_positive_field",
+                "huffman_length_healthy=True does not match boolean formula",
+                boolean_formula_positive_field,
+            )
+        )
+
     summary = {
         "schema": "vort.validation_json_docs_negative_smoke",
         "schema_version": 1,

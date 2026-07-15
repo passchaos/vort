@@ -158,14 +158,14 @@
       "expected_format": "csv",
       "name": "vort-huffman-length-report.csv",
       "producer_step": "zig build run-huffman-length-report-dashboard",
-      "required_smoke_gate": false,
+      "required_smoke_gate": true,
       "smoke_gate": "zig build run-huffman-length-report-dashboard"
     },
     {
       "expected_format": "md",
       "name": "vort-huffman-length-report.md",
       "producer_step": "zig build run-huffman-length-report-dashboard",
-      "required_smoke_gate": false,
+      "required_smoke_gate": true,
       "smoke_gate": "zig build run-huffman-length-report-dashboard"
     },
     {

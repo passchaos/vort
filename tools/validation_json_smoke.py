@@ -31,6 +31,28 @@ def first_json_line(text: str) -> dict:
     raise AssertionError(f"no JSON object found in output:\n{text}")
 
 
+def write_huffman_length_csv(path: Path) -> None:
+    row = {
+        "case": "validation-json-smoke",
+        "symbol_count": "3",
+        "max_bits": "2",
+        "optimal_cost": "5",
+        "actual_cost": "5",
+        "gap_bits": "0",
+        "kraft_cost": "4",
+        "kraft_limit": "4",
+        "optimal": "true",
+        "lengths": "1;2;2",
+        "optimal_lengths": "1;2;2",
+        "package_merge_cost": "5",
+        "package_merge_gap_bits": "0",
+        "package_merge_optimal": "true",
+        "package_merge_lengths": "1;2;2",
+    }
+    columns = list(row)
+    path.write_text(",".join(columns) + "\n" + ",".join(row[column] for column in columns) + "\n")
+
+
 def main() -> int:
     if len(sys.argv) not in (3, 5):
         print("usage: validation_json_smoke.py <vort-cli> <sidecar-report> [--summary <path>]", file=sys.stderr)
@@ -66,6 +88,8 @@ def main() -> int:
         dashboard_category_negative_path = root / "vort-dashboard-category-negative-smoke.json"
         dashboard_config_index_path = root / "vort-dashboard-config-index-smoke.json"
         dashboard_config_index_negative_path = root / "vort-dashboard-config-index-negative-smoke.json"
+        huffman_length_csv_path = root / "vort-huffman-length-report.csv"
+        huffman_length_markdown_path = root / "vort-huffman-length-report.md"
         fuzz_report_path = ROOT / "zig-out" / "vort-deflate-wrapper-fuzz-corpus.json"
         fuzz_coverage_path = ROOT / "tools" / "fuzz_corpus_expected_coverage.json"
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
@@ -416,6 +440,8 @@ def main() -> int:
             (row["command"], row["workflow"]) for row in header_summary["required_workflows"]
         }
         validate_value_against_manifest(header_summary, schemas_def)
+        write_huffman_length_csv(huffman_length_csv_path)
+        huffman_length_markdown_path.write_text("# Huffman length smoke\n\nAll rows are optimal.\n")
 
         run(
             [
@@ -455,11 +481,22 @@ def main() -> int:
         assert dashboard["dashboard_strict_missing_expected_failures"] == sum(row["missing_expected_failures"] for row in dashboard_strict["mode_requirements"])
         assert dashboard["dashboard_strict_missing_matched"] == sum(row["missing_matched"] for row in dashboard_strict["mode_requirements"])
         assert dashboard["dashboard_strict_missing_modes"] == dashboard_strict["missing_modes"]
+        assert dashboard["huffman_length_present"] is True
+        assert dashboard["huffman_length_healthy"] is True
+        assert dashboard["huffman_length_row_count"] == 1
+        assert dashboard["huffman_length_optimal_rows"] == 1
+        assert dashboard["huffman_length_non_optimal_rows"] == 0
+        assert dashboard["huffman_length_malformed_rows"] == 0
+        assert dashboard["huffman_length_worst_gap_bits"] == 0
+        assert dashboard["huffman_length_package_merge_optimal_rows"] == 1
+        assert dashboard["huffman_length_package_merge_non_optimal_rows"] == 0
+        assert dashboard["huffman_length_package_merge_worst_gap_bits"] == 0
         assert dashboard["validation_healthy"] == (
             dashboard["producer_healthy"]
             and dashboard["smoke_gate_healthy"]
             and dashboard["header_inspect_healthy"]
             and dashboard["dashboard_strict_healthy"]
+            and dashboard["huffman_length_healthy"]
         )
         assert dashboard["validation_unhealthy_reasons"] == ([] if dashboard["validation_healthy"] else dashboard["validation_unhealthy_reasons"])
         validate_value_against_manifest(dashboard, schemas_def)

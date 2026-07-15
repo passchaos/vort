@@ -16,6 +16,7 @@ EXPECTED_MODES = ROOT / "tools" / "dashboard_strict_expected_modes.json"
 VALIDATION_REASONS = ROOT / "tools" / "dashboard_strict_validation_reasons.json"
 HEADER_INSPECT_ARTIFACT = "vort-header-inspect-smoke.json"
 DASHBOARD_STRICT_ARTIFACT = "vort-dashboard-strict-smoke.json"
+HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
 
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -29,6 +30,8 @@ def write_producer_map(
     include_header_smoke: bool = True,
     include_strict_exact: bool = True,
     include_strict_smoke: bool = True,
+    include_huffman_exact: bool = True,
+    include_huffman_smoke: bool = True,
     required_names: list[str] | None = None,
 ) -> None:
     artifact_metadata = {}
@@ -42,11 +45,18 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-dashboard-strict-smoke",
         }
+    if include_huffman_smoke:
+        artifact_metadata[HUFFMAN_LENGTH_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-huffman-length-report-dashboard",
+        }
     exact = {}
     if include_header_exact:
         exact[HEADER_INSPECT_ARTIFACT] = "zig build run-header-inspect-dashboard"
     if include_strict_exact:
         exact[DASHBOARD_STRICT_ARTIFACT] = "zig build run-dashboard-strict-smoke"
+    if include_huffman_exact:
+        exact[HUFFMAN_LENGTH_ARTIFACT] = "zig build run-huffman-length-report-dashboard"
     payload = {
         "schema": "vort.dashboard_producers",
         "schema_version": 1,
@@ -168,9 +178,32 @@ def write_dashboard_strict_summary(path: Path, *, ok: bool = True, missing_modes
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_huffman_length_csv(path: Path, *, optimal: bool = True) -> None:
+    row = {
+        "case": "strict-smoke",
+        "symbol_count": "3",
+        "max_bits": "2",
+        "optimal_cost": "5",
+        "actual_cost": "5" if optimal else "6",
+        "gap_bits": "0" if optimal else "1",
+        "kraft_cost": "4",
+        "kraft_limit": "4",
+        "optimal": "true" if optimal else "false",
+        "lengths": "1;2;2" if optimal else "2;2;2",
+        "optimal_lengths": "1;2;2",
+        "package_merge_cost": "5" if optimal else "6",
+        "package_merge_gap_bits": "0" if optimal else "1",
+        "package_merge_optimal": "true" if optimal else "false",
+        "package_merge_lengths": "1;2;2" if optimal else "2;2;2",
+    }
+    columns = list(row)
+    path.write_text(",".join(columns) + "\n" + ",".join(row[column] for column in columns) + "\n")
+
+
 def write_healthy_artifacts(root: Path) -> None:
     write_header_summary(root / HEADER_INSPECT_ARTIFACT)
     write_dashboard_strict_summary(root / DASHBOARD_STRICT_ARTIFACT)
+    write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
 
 
 def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
@@ -519,10 +552,12 @@ def main() -> int:
                 write_producer_map(producer_map, include_header_smoke=False, required_names=[HEADER_INSPECT_ARTIFACT])
             elif fixture == "missing_header_inspect_artifact":
                 write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT)
+                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
                 write_producer_map(producer_map)
             elif fixture == "header_inspect_failed":
                 write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT, ok=False)
                 write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT)
+                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
                 write_producer_map(producer_map)
             elif fixture == "missing_header_workflows":
                 write_header_summary(
@@ -530,13 +565,16 @@ def main() -> int:
                     missing=[{"command": "inspect-raw-header-file", "workflow": "file", "format": "raw"}],
                 )
                 write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT)
+                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
                 write_producer_map(producer_map)
             elif fixture == "missing_dashboard_strict_artifact":
                 write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT)
+                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
                 write_producer_map(producer_map)
             elif fixture == "dashboard_strict_failed":
                 write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT)
                 write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT, ok=False)
+                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
                 write_producer_map(producer_map)
             elif fixture == "missing_dashboard_strict_modes":
                 minimum = len(expected_validation_reasons)
@@ -552,6 +590,16 @@ def main() -> int:
                         }
                     ],
                 )
+                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
+                write_producer_map(producer_map)
+            elif fixture == "missing_huffman_length_artifact":
+                write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT)
+                write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT)
+                write_producer_map(producer_map)
+            elif fixture == "huffman_length_failed":
+                write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT)
+                write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT)
+                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT, optimal=False)
                 write_producer_map(producer_map)
             else:
                 raise AssertionError(f"unsupported validation reason fixture {fixture!r}")

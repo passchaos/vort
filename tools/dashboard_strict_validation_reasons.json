@@ -41,6 +41,16 @@
       "reason": "missing_dashboard_strict_modes",
       "check": "validation_missing_dashboard_strict_modes",
       "fixture": "missing_dashboard_strict_modes"
+    },
+    {
+      "reason": "missing_huffman_length_artifact",
+      "check": "validation_missing_huffman_length_artifact",
+      "fixture": "missing_huffman_length_artifact"
+    },
+    {
+      "reason": "huffman_length_failed",
+      "check": "validation_huffman_length_failed",
+      "fixture": "huffman_length_failed"
     }
   ]
 }

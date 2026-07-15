@@ -20,6 +20,7 @@ def category_for(path: Path) -> str:
         or "dashboard-producers" in name
         or "dashboard-category" in name
         or "dashboard-config" in name
+        or "huffman-length" in name
         or "fuzz" in name
     ):
         return "validation"
@@ -140,6 +141,62 @@ def csv_row_count(path: Path) -> int | None:
             return sum(1 for _ in csv.DictReader(f))
     except Exception:
         return None
+
+
+def huffman_length_health(artifacts: list[Path]) -> dict:
+    def parse_int(value: str | None) -> int | None:
+        try:
+            return int(value or "0")
+        except ValueError:
+            return None
+
+    for artifact in artifacts:
+        if artifact.name != "vort-huffman-length-report.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+        row_count = len(rows)
+        optimal_rows = sum(1 for row in rows if row.get("optimal") == "true")
+        package_merge_optimal_rows = sum(1 for row in rows if row.get("package_merge_optimal") == "true")
+        gap_values = [parse_int(row.get("gap_bits")) for row in rows]
+        package_merge_gap_values = [parse_int(row.get("package_merge_gap_bits")) for row in rows]
+        malformed_rows = sum(1 for left, right in zip(gap_values, package_merge_gap_values) if left is None or right is None)
+        worst_gap_bits = max((value for value in gap_values if value is not None), default=0)
+        package_merge_worst_gap_bits = max((value for value in package_merge_gap_values if value is not None), default=0)
+        non_optimal_rows = row_count - optimal_rows
+        package_merge_non_optimal_rows = row_count - package_merge_optimal_rows
+        return {
+            "present": True,
+            "row_count": row_count,
+            "optimal_rows": optimal_rows,
+            "non_optimal_rows": non_optimal_rows,
+            "malformed_rows": malformed_rows,
+            "worst_gap_bits": worst_gap_bits,
+            "package_merge_optimal_rows": package_merge_optimal_rows,
+            "package_merge_non_optimal_rows": package_merge_non_optimal_rows,
+            "package_merge_worst_gap_bits": package_merge_worst_gap_bits,
+            "healthy": row_count > 0
+            and malformed_rows == 0
+            and non_optimal_rows == 0
+            and worst_gap_bits == 0
+            and package_merge_non_optimal_rows == 0
+            and package_merge_worst_gap_bits == 0,
+        }
+    return {
+        "present": False,
+        "row_count": 0,
+        "optimal_rows": 0,
+        "non_optimal_rows": 0,
+        "malformed_rows": 0,
+        "worst_gap_bits": 0,
+        "package_merge_optimal_rows": 0,
+        "package_merge_non_optimal_rows": 0,
+        "package_merge_worst_gap_bits": 0,
+        "healthy": False,
+    }
 
 
 def artifact_metadata(path: Path) -> str:
@@ -285,11 +342,13 @@ def main() -> int:
     ]
     header_health = header_inspect_health(artifacts)
     strict_health = dashboard_strict_health(artifacts)
+    huffman_health = huffman_length_health(artifacts)
     producer_healthy = len(producer_step_missing) == 0
     smoke_gate_healthy = len(smoke_gate_required_missing) == 0
     header_healthy = header_health["present"] and header_health["ok"] and header_health["missing_workflow_count"] == 0
     strict_healthy = strict_health["present"] and strict_health["ok"] and strict_health["missing_mode_count"] == 0
-    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy
+    huffman_healthy = huffman_health["healthy"]
+    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and huffman_healthy
     validation_unhealthy_reasons = []
     if not producer_healthy:
         validation_unhealthy_reasons.append("missing_producer_steps")
@@ -307,6 +366,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("dashboard_strict_failed")
     elif strict_health["missing_mode_count"]:
         validation_unhealthy_reasons.append("missing_dashboard_strict_modes")
+    if not huffman_health["present"]:
+        validation_unhealthy_reasons.append("missing_huffman_length_artifact")
+    elif not huffman_healthy:
+        validation_unhealthy_reasons.append("huffman_length_failed")
 
     lines = [
         "# Vort dashboard index",
@@ -322,6 +385,7 @@ def main() -> int:
         f"- validation unhealthy reasons: {len(validation_unhealthy_reasons)}",
         f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing, healthy `{header_healthy}`",
         f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing modes, checks/expected/matched deltas {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']}), healthy `{strict_healthy}`",
+        f"- huffman length oracle: {huffman_health['optimal_rows']}/{huffman_health['row_count']} production optimal rows, {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} package-merge optimal rows, gaps {huffman_health['worst_gap_bits']}/{huffman_health['package_merge_worst_gap_bits']}, malformed rows {huffman_health['malformed_rows']}, healthy `{huffman_healthy}`",
         "",
     ]
     if strict_health["missing_modes"]:
@@ -396,6 +460,16 @@ def main() -> int:
                 "dashboard_strict_missing_expected_failures": strict_health["missing_expected_failures"],
                 "dashboard_strict_missing_matched": strict_health["missing_matched"],
                 "dashboard_strict_missing_modes": strict_health["missing_modes"],
+                "huffman_length_present": huffman_health["present"],
+                "huffman_length_healthy": huffman_healthy,
+                "huffman_length_row_count": huffman_health["row_count"],
+                "huffman_length_optimal_rows": huffman_health["optimal_rows"],
+                "huffman_length_non_optimal_rows": huffman_health["non_optimal_rows"],
+                "huffman_length_malformed_rows": huffman_health["malformed_rows"],
+                "huffman_length_worst_gap_bits": huffman_health["worst_gap_bits"],
+                "huffman_length_package_merge_optimal_rows": huffman_health["package_merge_optimal_rows"],
+                "huffman_length_package_merge_non_optimal_rows": huffman_health["package_merge_non_optimal_rows"],
+                "huffman_length_package_merge_worst_gap_bits": huffman_health["package_merge_worst_gap_bits"],
                 "artifacts": records,
             },
             indent=2,

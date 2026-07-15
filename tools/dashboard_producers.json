@@ -229,7 +229,9 @@
     "vort-dashboard-config-index-smoke.json",
     "vort-dashboard-config-index-negative-smoke.json",
     "vort-dashboard-strict-smoke.json",
-    "vort-dashboard-strict-smoke.md"
+    "vort-dashboard-strict-smoke.md",
+    "vort-huffman-length-report.csv",
+    "vort-huffman-length-report.md"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1
