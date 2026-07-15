@@ -75,19 +75,29 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
     lines.extend(
         [
             "",
-        "## Successful inspections",
-        "",
-        "| name | format | schema | bytes | command | sample |",
-        "| --- | --- | --- | ---: | --- | --- |",
+            "## Successful inspections",
+            "",
         ]
     )
-    for case in summary["cases"]:
-        lines.append(
-            f"| {md(case['name'])} | {md(case['format'])} | `{md(case['schema_name'])}` | {case['bytes']} | `{md(case['command'])}` | `{md(case['sample'])}` |"
+    for format_name in ("raw", "zlib", "gzip"):
+        cases = [case for case in summary["cases"] if case["format"] == format_name]
+        if not cases:
+            continue
+        lines.extend(
+            [
+                f"### {format_name}",
+                "",
+                "| name | schema | bytes | command | sample |",
+                "| --- | --- | ---: | --- | --- |",
+            ]
         )
+        for case in cases:
+            lines.append(
+                f"| {md(case['name'])} | `{md(case['schema_name'])}` | {case['bytes']} | `{md(case['command'])}` | `{md(case['sample'])}` |"
+            )
+        lines.append("")
     lines.extend(
         [
-            "",
             "## Expected failures",
             "",
             "| format | failures |",
