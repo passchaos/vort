@@ -44,6 +44,7 @@ architecture blindly.
 - [x] Native frame inspection exposes mode, encoded length, payload length, and dictionary requirement before decode allocation.
 - [x] Header-only native frame inspection supports allocation preflight before payload bytes are available.
 - [x] Exact native frame inspection rejects trailing bytes for single-frame preflight.
+- [x] Concatenated native inspection summarizes data-frame count, total uncompressed bytes, combined CRC-32, modes, and dictionary requirement without decoding.
 - [x] One-shot encode/decode APIs.
 - [x] Allocator-returning convenience APIs.
 - [x] Bounded-output streaming encoder/decoder smoke coverage.

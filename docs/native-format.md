@@ -15,6 +15,10 @@ length, payload length, raw header metadata, and whether the frame requires a
 caller-supplied dictionary before callers allocate decode buffers; the
 header-only variant works before the full payload is available, while the exact
 variant rejects trailing bytes for single-frame inputs.
+`inspectConcatenated` extends the same preflight idea across concatenated native
+streams by reporting data-frame count, total uncompressed bytes, combined CRC-32,
+mode counts, and whether any member requires a dictionary without decoding
+payloads.
 `SidecarValidationMode.metadata` checks sidecar/index structure and frame-header
 agreement without decoding payloads, while the default
 `SidecarValidationMode.full` decodes each referenced frame so it detects payload

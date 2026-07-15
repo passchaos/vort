@@ -119,6 +119,7 @@ pub const StoreRangeDecodeResult = store.RangeDecodeResult;
 pub const StoreRangeBatchDecodeResult = store.RangeBatchDecodeResult;
 pub const StoreRangeDecodeIntoResult = store.RangeDecodeIntoResult;
 pub const StoreConcatenatedDecodeIntoResult = store.ConcatenatedDecodeIntoResult;
+pub const StoreConcatenatedInspectionSummary = store.ConcatenatedInspectionSummary;
 pub const SidecarValidationMode = store.SidecarValidationMode;
 pub const SidecarValidationOptions = store.SidecarValidationOptions;
 pub const ValidationStage = store.ValidationStage;
@@ -165,6 +166,7 @@ pub const storeDecodeIndexedRangeAutoInto = store.decodeIndexedRangeAutoInto;
 pub const storeDecodeIndexedRangesAutoInto = store.decodeIndexedRangesAutoInto;
 pub const storeParseEmbeddedDictionaryAlloc = store.parseEmbeddedDictionaryAlloc;
 pub const storeSummarizeModes = store.summarizeModes;
+pub const storeInspectConcatenated = store.inspectConcatenated;
 pub const storeParseEmbeddedLdmSummary = store.parseEmbeddedLdmSummary;
 
 pub const encodeRawStoredDeflate = deflate.encodeRawStored;

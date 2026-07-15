@@ -2743,6 +2743,40 @@ pub fn summarizeModes(input: []const u8) Error!ModeSummary {
     return summary;
 }
 
+pub const ConcatenatedInspectionSummary = struct {
+    frame_count: usize = 0,
+    total_uncompressed: u64 = 0,
+    combined_checksum: u32 = checksum.crc32(""),
+    modes: ModeSummary = .{},
+    requires_dictionary: bool = false,
+};
+
+pub fn inspectConcatenated(input: []const u8) Error!ConcatenatedInspectionSummary {
+    var summary = ConcatenatedInspectionSummary{};
+    var iterator = ConcatIterator.init(input);
+    while (try iterator.next()) |span| {
+        summary.frame_count = std.math.add(usize, summary.frame_count, 1) catch return error.IntegerOverflow;
+        summary.total_uncompressed = std.math.add(u64, summary.total_uncompressed, span.info.uncompressed_size) catch return error.IntegerOverflow;
+        summary.combined_checksum = checksum.crc32Combine(summary.combined_checksum, span.info.checksum, span.info.uncompressed_size);
+        switch (span.info.flags) {
+            flags_none => summary.modes.store += 1,
+            flags_deflate => summary.modes.deflate += 1,
+            flags_rle => summary.modes.rle += 1,
+            flags_dictionary_patch => {
+                summary.modes.dictionary_patch += 1;
+                summary.requires_dictionary = true;
+            },
+            flags_dictionary_deflate => {
+                summary.modes.dictionary_deflate += 1;
+                summary.requires_dictionary = true;
+            },
+            flags_ldm => summary.modes.ldm += 1,
+            else => return error.CorruptFrame,
+        }
+    }
+    return summary;
+}
+
 pub fn countConcatenatedFrames(input: []const u8) Error!usize {
     var iterator = ConcatIterator.init(input);
     var count: usize = 0;
@@ -3112,6 +3146,14 @@ test "concatenated decode supports compressed frames and output bounds" {
     try combined.appendSlice(std.testing.allocator, second_frame);
 
     const expected = first ++ second;
+    const inspection = try inspectConcatenated(combined.items);
+    try std.testing.expectEqual(@as(usize, 2), inspection.frame_count);
+    try std.testing.expectEqual(@as(u64, expected.len), inspection.total_uncompressed);
+    try std.testing.expectEqual(checksum.crc32(expected), inspection.combined_checksum);
+    try std.testing.expectEqual(@as(usize, 1), inspection.modes.deflate);
+    try std.testing.expectEqual(@as(usize, 1), inspection.modes.rle);
+    try std.testing.expect(!inspection.requires_dictionary);
+
     const decoded = try decodeConcatenatedAlloc(std.testing.allocator, combined.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, expected, decoded);
@@ -3154,6 +3196,13 @@ test "concatenated decode supports caller dictionaries with output bounds" {
 
     const expected = first ++ second;
     try std.testing.expectError(error.InvalidDictionaryTraining, decodeConcatenatedAlloc(std.testing.allocator, combined.items));
+    const inspection = try inspectConcatenated(combined.items);
+    try std.testing.expectEqual(@as(usize, 2), inspection.frame_count);
+    try std.testing.expectEqual(@as(u64, expected.len), inspection.total_uncompressed);
+    try std.testing.expectEqual(checksum.crc32(expected), inspection.combined_checksum);
+    try std.testing.expectEqual(@as(usize, 1), inspection.modes.dictionary_patch);
+    try std.testing.expectEqual(@as(usize, 1), inspection.modes.dictionary_deflate);
+    try std.testing.expect(inspection.requires_dictionary);
 
     const decoded = try decodeConcatenatedWithDictionaryAlloc(std.testing.allocator, dict, combined.items);
     defer std.testing.allocator.free(decoded);
