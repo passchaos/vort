@@ -266,6 +266,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke covers every validation unhealthy reason with isolated negative fixtures.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
 - [x] Validation JSON docs negative smoke catches dashboard strict config drift cases.
+- [x] Dashboard producer-map negative smoke catches format, producer-step, and smoke-gate drift cases.
 - [x] Dashboard category smoke protects raw/zlib/gzip header inspection validation classification.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.

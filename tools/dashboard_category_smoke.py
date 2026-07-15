@@ -23,6 +23,7 @@ def main(argv: list[str]) -> int:
         "vort-header-inspect-smoke.md": "validation",
         "vort-dashboard-strict-smoke.json": "validation",
         "vort-dashboard-strict-smoke.md": "validation",
+        "vort-dashboard-producers-negative-smoke.json": "validation",
     }
     for name, category in expected.items():
         item = artifacts.get(name)
@@ -35,7 +36,7 @@ def main(argv: list[str]) -> int:
         if not item.get("smoke_gate"):
             raise AssertionError(f"{name} missing smoke_gate")
 
-    print("dashboard_category_smoke=ok header_inspect=validation dashboard_strict=validation")
+    print("dashboard_category_smoke=ok header_inspect=validation dashboard_strict=validation dashboard_producers=validation")
     return 0
 
 

@@ -115,6 +115,7 @@ def main() -> int:
         validate_value_against_manifest(dashboard_strict_reasons, schemas_def)
         dashboard_strict_path = root / "vort-dashboard-strict-smoke.json"
         dashboard_strict_markdown_path = root / "vort-dashboard-strict-smoke.md"
+        dashboard_producers_negative_path = root / "vort-dashboard-producers-negative-smoke.json"
         run([
             "python3",
             str(ROOT / "tools" / "dashboard_strict_smoke.py"),
@@ -159,6 +160,19 @@ def main() -> int:
         assert "missing_header_workflow" in dashboard_strict_markdown
         assert "validation_missing_dashboard_strict_modes" in dashboard_strict_markdown
         validate_value_against_manifest(dashboard_strict, schemas_def)
+
+        run([
+            "python3",
+            str(ROOT / "tools" / "dashboard_producers_negative_smoke.py"),
+            "--summary",
+            str(dashboard_producers_negative_path),
+        ])
+        dashboard_producers_negative = json.loads(dashboard_producers_negative_path.read_text())
+        assert dashboard_producers_negative["schema"] == "vort.dashboard_producers_negative_smoke"
+        assert dashboard_producers_negative["ok"] is True
+        assert dashboard_producers_negative["case_count"] >= 1
+        assert all(row["matched"] is True for row in dashboard_producers_negative["cases"])
+        validate_value_against_manifest(dashboard_producers_negative, schemas_def)
 
         run([
             "python3",
@@ -387,6 +401,7 @@ def main() -> int:
                 dashboard_strict_modes["schema"],
                 dashboard_strict_reasons["schema"],
                 dashboard_strict["schema"],
+                dashboard_producers_negative["schema"],
                 dashboard["schema"],
                 header_summary["schema"],
                 required_workflows["schema"],

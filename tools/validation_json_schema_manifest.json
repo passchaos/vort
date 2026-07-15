@@ -477,6 +477,42 @@
         "producer_step": "str"
       }
     },
+    "vort.dashboard_producers_negative_smoke": {
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "actual_output": "str",
+        "actual_output_bytes": "int",
+        "actual_output_limit": "int",
+        "actual_output_truncated": "bool",
+        "expected_failure": "bool",
+        "expected_output": "str",
+        "matched": "bool",
+        "name": "str",
+        "returncode": "int"
+      },
+      "item_enums": {
+        "name": [
+          "expected_format_mismatch",
+          "missing_producer_step",
+          "missing_present_smoke_gate",
+          "missing_absent_smoke_gate",
+          "allow_missing_exact",
+          "contains_producer_step"
+        ]
+      }
+    },
     "vort.header_inspect_required_workflows": {
       "fields": {
         "required_workflows": "list",
@@ -1326,6 +1362,7 @@
           "vort.dashboard_strict_expected_modes",
           "vort.dashboard_strict_validation_reasons",
           "vort.dashboard_strict_smoke",
+          "vort.dashboard_producers_negative_smoke",
           "vort.dashboard_index",
           "vort.header_inspect_smoke",
           "vort.header_inspect_required_workflows",

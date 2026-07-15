@@ -614,6 +614,7 @@ Example:
     "vort.dashboard_strict_expected_modes",
     "vort.dashboard_strict_validation_reasons",
     "vort.dashboard_strict_smoke",
+    "vort.dashboard_producers_negative_smoke",
     "vort.dashboard_index",
     "vort.header_inspect_smoke",
     "vort.header_inspect_required_workflows",
@@ -661,6 +662,45 @@ Example:
       "expected_failure": true,
       "expected_error": "differs from dashboard index enum",
       "actual_error": "dashboard strict validation reason config differs from dashboard index enum",
+      "matched": true
+    }
+  ]
+}
+```
+
+## `vort.dashboard_producers_negative_smoke`
+
+Produced by:
+
+```sh
+zig build run-dashboard-producers-negative-smoke
+python3 tools/dashboard_producers_negative_smoke.py --summary zig-out/vort-dashboard-producers-negative-smoke.json
+```
+
+This schema summarizes negative and control checks for dashboard producer-map
+configuration. The smoke creates small throwaway dashboard artifact directories
+and verifies that `tools/dashboard_index.py` rejects expected-format mismatches,
+missing producer mappings, and missing required smoke gates, while still
+accepting explicit `allow_missing.exact` and substring `contains` producer rules.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_producers_negative_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "cases": [
+    {
+      "name": "missing_producer_step",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_missing_producers=vort-validation-producer-unmapped.json",
+      "actual_output": "dashboard_index_missing_producers=vort-validation-producer-unmapped.json",
+      "actual_output_bytes": 76,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
       "matched": true
     }
   ]
