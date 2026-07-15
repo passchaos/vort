@@ -66,6 +66,7 @@
         "dictionary_cases": "int",
         "fhcrc_cases": "int",
         "gzip_cases": "int",
+        "negative_cases": "int",
         "ok": "bool",
         "optional_header_cases": "int",
         "raw_cases": "int",

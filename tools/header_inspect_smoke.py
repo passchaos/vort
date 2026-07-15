@@ -16,6 +16,13 @@ def run(cli: str, *args: str) -> str:
     return subprocess.check_output([cli, *args], text=True).strip()
 
 
+def expect_failure(cli: str, *args: str) -> str:
+    result = subprocess.run([cli, *args], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if result.returncode == 0:
+        raise AssertionError(f"expected failure for {[cli, *args]!r}, got success: {result.stdout!r}")
+    return result.stdout
+
+
 def require_fields(output: str, fields: dict[str, str]) -> None:
     for key, value in fields.items():
         needle = f"{key}={value}"
@@ -60,6 +67,16 @@ def main(argv: list[str]) -> int:
         "1f8b081e0000000000030400616263646e616d6500636f6d6d656e7400"
         "e248cb48cdc9c9070086a6103605000000"
     )
+    negative_cases = [
+        ("raw_reserved_btype", "inspect-raw-header-hex", "07", "InvalidDeflateBlockType"),
+        ("raw_bad_stored_nlen", "inspect-raw-header-hex", "010100ffff78", "StoredLengthMismatch"),
+        ("zlib_bad_fcheck", "inspect-zlib-header-hex", "7802", "BadZlibHeader"),
+        ("gzip_bad_fhcrc", "inspect-gzip-header-hex", "1f8b0802000000000403a2b2", "BadGzipHeader"),
+    ]
+    for _, command, sample, expected_error in negative_cases:
+        failed = expect_failure(cli, command, sample)
+        if expected_error not in failed:
+            raise AssertionError(f"expected {expected_error!r} in failure output for {command} {sample}, got {failed!r}")
 
     raw_hex = run(cli, "inspect-raw-header-hex", raw_frame.hex())
     require_fields(
@@ -346,11 +363,12 @@ def main(argv: list[str]) -> int:
         "dictionary_cases": sum(1 for case in cases if case["has_dictionary"]),
         "optional_header_cases": sum(1 for case in cases if case["has_optional_fields"]),
         "fhcrc_cases": sum(1 for case in cases if case["header_crc"]),
+        "negative_cases": len(negative_cases),
     }
     if summary_path is not None:
         summary_path.parent.mkdir(parents=True, exist_ok=True)
         summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
-    print("header inspect smoke: raw=ok zlib=ok zlib_dict=ok gzip=ok gzip_optional=ok")
+    print("header inspect smoke: raw=ok zlib=ok zlib_dict=ok gzip=ok gzip_optional=ok negatives=ok")
     return 0
 
 

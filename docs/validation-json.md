@@ -192,6 +192,7 @@ Important fields:
 - `schema_version`: `1`
 - `ok`: whether the smoke passed
 - `case_count`, `raw_cases`, `zlib_cases`, `gzip_cases`
+- `negative_cases`: malformed header cases expected to fail inspection
 - `dictionary_cases`: zlib FDICT/DICTID cases covered
 - `optional_header_cases`, `fhcrc_cases`: gzip optional-header/FHCRC cases covered
 - `cases`: case-level metadata including format, byte size, data offset, and
@@ -208,6 +209,7 @@ Example:
   "raw_cases": 3,
   "zlib_cases": 2,
   "gzip_cases": 2,
+  "negative_cases": 4,
   "dictionary_cases": 1,
   "optional_header_cases": 1,
   "fhcrc_cases": 1,
