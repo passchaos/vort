@@ -2771,6 +2771,28 @@ pub fn decodeConcatenatedWithDictionaryAllocLimited(allocator: std.mem.Allocator
     return decodeConcatenatedWithDictionaryAllocInternal(allocator, dict, input, max_output_len, null);
 }
 
+pub fn decodeConcatenatedAutoAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    return decodeConcatenatedAutoAllocInternal(allocator, input, null, null);
+}
+
+pub fn decodeConcatenatedAutoAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeConcatenatedAutoAllocInternal(allocator, input, null, expected_output_len);
+}
+
+pub fn decodeConcatenatedAutoAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    return decodeConcatenatedAutoAllocInternal(allocator, input, max_output_len, null);
+}
+
+fn decodeConcatenatedAutoAllocInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize, expected_output_len: ?usize) ![]u8 {
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return decodeConcatenatedWithDictionaryAllocInternal(allocator, dict, input, max_output_len, expected_output_len);
+    } else |err| switch (err) {
+        error.InvalidMagic => return decodeConcatenatedWithDictionaryAllocInternal(allocator, null, input, max_output_len, expected_output_len),
+        else => return err,
+    }
+}
+
 fn decodeConcatenatedWithDictionaryAllocInternal(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, max_output_len: ?usize, expected_output_len: ?usize) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -3092,6 +3114,30 @@ test "concatenated decode supports caller dictionaries with output bounds" {
 
     try std.testing.expectError(error.SizeMismatch, decodeConcatenatedWithDictionaryAllocExactSize(std.testing.allocator, dict, combined.items, expected.len - 1));
     try std.testing.expectError(error.OutputLimitExceeded, decodeConcatenatedWithDictionaryAllocLimited(std.testing.allocator, dict, combined.items, expected.len - 1));
+}
+
+test "concatenated auto decode uses embedded dictionaries" {
+    const phrase = "self-contained dictionary phrase for native streams";
+    const input = (phrase ++ "!") ** 3;
+    const stream = try encodeSelfContainedDictionaryStreamAlloc(std.testing.allocator, input, phrase.len + 1, 256, 8);
+    defer std.testing.allocator.free(stream);
+
+    try std.testing.expectError(error.InvalidDictionaryTraining, decodeConcatenatedAlloc(std.testing.allocator, stream));
+
+    const decoded = try decodeConcatenatedAutoAlloc(std.testing.allocator, stream);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+
+    const exact = try decodeConcatenatedAutoAllocExactSize(std.testing.allocator, stream, input.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, input, exact);
+
+    const limited = try decodeConcatenatedAutoAllocLimited(std.testing.allocator, stream, input.len);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, input, limited);
+
+    try std.testing.expectError(error.SizeMismatch, decodeConcatenatedAutoAllocExactSize(std.testing.allocator, stream, input.len - 1));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeConcatenatedAutoAllocLimited(std.testing.allocator, stream, input.len - 1));
 }
 
 test "concat iterator rejects trailing partial frame" {

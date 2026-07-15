@@ -154,7 +154,9 @@ Concatenated native decode now uses the same per-frame decode path for
 store/deflate/RLE/LDM frames, and dictionary-aware concatenated variants accept
 caller-supplied dictionary bytes for dictionary-patch/deflate members. Both
 surfaces expose exact-size and output-limited allocator variants for callers that
-need bounded memory use across multi-frame inputs.
+need bounded memory use across multi-frame inputs. Auto concatenated variants
+reuse embedded dictionary metadata when present, matching the indexed range auto
+decode behavior for self-contained dictionary streams.
 
 ## Batch range summary APIs
 
