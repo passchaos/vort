@@ -39,6 +39,7 @@ pub const frameModeName = store.frameModeName;
 pub const StoreFrameInspection = store.FrameInspection;
 pub const storeInspectHeader = store.inspectHeader;
 pub const storeInspectFrame = store.inspectFrame;
+pub const storeInspectFrameExact = store.inspectFrameExact;
 pub const storeEncode = store.encode;
 pub const storeDecode = store.decode;
 pub const storeEncodeAlloc = store.encodeAlloc;

@@ -67,6 +67,12 @@ pub fn inspectFrame(input: []const u8) Error!FrameInspection {
     return inspection;
 }
 
+pub fn inspectFrameExact(input: []const u8) Error!FrameInspection {
+    const inspection = try inspectFrame(input);
+    if (input.len != inspection.frame_len) return error.TrailingData;
+    return inspection;
+}
+
 pub fn skippableEncodedSize(payload_len: usize) Error!usize {
     if (payload_len > std.math.maxInt(u32)) return error.IntegerOverflow;
     return std.math.add(usize, skippable_header_len, payload_len) catch error.IntegerOverflow;
@@ -2834,6 +2840,7 @@ test "native frame inspection exposes mode sizes and dictionary requirement" {
     try std.testing.expectEqual(store_inspection.frame_len, header_inspection.frame_len);
     try std.testing.expectEqual(store_inspection.payload_len, header_inspection.payload_len);
     try std.testing.expectEqualStrings(store_inspection.mode, header_inspection.mode);
+    _ = try inspectFrameExact(store_frame);
 
     const dict = "alpha beta gamma";
     const input = "zz alpha beta yy gamma";
@@ -2844,6 +2851,12 @@ test "native frame inspection exposes mode sizes and dictionary requirement" {
     try std.testing.expect(dict_inspection.requires_dictionary);
     try std.testing.expectEqual(dict_frame.len, dict_inspection.frame_len);
 
+    var trailing = std.ArrayList(u8).empty;
+    defer trailing.deinit(std.testing.allocator);
+    try trailing.appendSlice(std.testing.allocator, store_frame);
+    try trailing.append(std.testing.allocator, 'x');
+    try std.testing.expectEqual(store_frame.len, (try inspectFrame(trailing.items)).frame_len);
+    try std.testing.expectError(error.TrailingData, inspectFrameExact(trailing.items));
     try std.testing.expectError(error.TruncatedFrame, inspectFrame(store_frame[0 .. store_frame.len - 1]));
 }
 
