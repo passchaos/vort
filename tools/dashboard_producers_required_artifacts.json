@@ -135,6 +135,13 @@
     },
     {
       "expected_format": "json",
+      "name": "vort-fuzz-corpus-coverage-smoke.json",
+      "producer_step": "zig build run-fuzz-corpus-coverage-smoke",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-fuzz-corpus-coverage-smoke"
+    },
+    {
+      "expected_format": "json",
       "name": "vort-header-inspect-smoke.json",
       "producer_step": "zig build run-header-inspect-dashboard",
       "required_smoke_gate": true,

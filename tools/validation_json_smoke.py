@@ -67,6 +67,8 @@ def main() -> int:
         dashboard_config_index_path = root / "vort-dashboard-config-index-smoke.json"
         dashboard_config_index_negative_path = root / "vort-dashboard-config-index-negative-smoke.json"
         fuzz_report_path = ROOT / "zig-out" / "vort-deflate-wrapper-fuzz-corpus.json"
+        fuzz_coverage_path = ROOT / "tools" / "fuzz_corpus_expected_coverage.json"
+        fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -124,6 +126,17 @@ def main() -> int:
         assert fuzz_report["exact_error_expectations"] >= 1
         assert fuzz_report["matched_rows"] == fuzz_report["cases"]
         validate_value_against_manifest(fuzz_report, schemas_def)
+        fuzz_coverage = json.loads(fuzz_coverage_path.read_text())
+        assert fuzz_coverage["schema"] == "vort.fuzz_corpus_expected_coverage"
+        assert fuzz_coverage["mode_requirements"]
+        assert fuzz_coverage["error_requirements"]
+        validate_value_against_manifest(fuzz_coverage, schemas_def)
+        fuzz_coverage_smoke = json.loads(fuzz_coverage_smoke_path.read_text())
+        assert fuzz_coverage_smoke["schema"] == "vort.fuzz_corpus_coverage_smoke"
+        assert fuzz_coverage_smoke["ok"] is True
+        assert fuzz_coverage_smoke["mode_requirement_count"] == len(fuzz_coverage["mode_requirements"])
+        assert fuzz_coverage_smoke["error_requirement_count"] == len(fuzz_coverage["error_requirements"])
+        validate_value_against_manifest(fuzz_coverage_smoke, schemas_def)
         run([
             "python3",
             str(ROOT / "tools" / "dashboard_config_index_smoke.py"),
@@ -486,6 +499,8 @@ def main() -> int:
                 dashboard_producers_required["schema"],
                 dashboard_producers_required_smoke["schema"],
                 fuzz_report["schema"],
+                fuzz_coverage["schema"],
+                fuzz_coverage_smoke["schema"],
                 dashboard_category_expected["schema"],
                 dashboard_category_negative["schema"],
                 dashboard_config_index["schema"],

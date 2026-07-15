@@ -123,6 +123,7 @@ architecture blindly.
 - [x] Deflate wrapper hex corpus pins representative raw/zlib/gzip boundary samples to exact expected errors.
 - [x] Deflate wrapper hex corpus dashboard records per-sample expected/actual error matches.
 - [x] Deflate wrapper hex corpus dashboard summarizes coverage by wrapper mode and actual error name.
+- [x] Deflate wrapper hex corpus dashboard has a schema-checked minimum coverage matrix for wrapper/error combinations.
 - [x] Deflate wrapper hex corpus pins malformed dynamic-Huffman and output-limit samples to exact expected errors.
 - [x] Deflate wrapper hex corpus covers concatenated gzip second-member corruption.
 - [x] libFuzzer-compatible exported entrypoint smoke.

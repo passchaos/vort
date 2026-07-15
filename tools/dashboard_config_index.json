@@ -1,7 +1,7 @@
 {
   "schema": "vort.dashboard_config_index",
   "schema_version": 1,
-  "config_count": 7,
+  "config_count": 8,
   "configs": [
     {
       "path": "tools/dashboard_config_index.json",
@@ -51,6 +51,13 @@
       "docs_section": "## `vort.header_inspect_required_workflows`",
       "validation_step": "zig build run-header-inspect-dashboard",
       "consumer": "tools/header_inspect_smoke.py"
+    },
+    {
+      "path": "tools/fuzz_corpus_expected_coverage.json",
+      "schema_name": "vort.fuzz_corpus_expected_coverage",
+      "docs_section": "## `vort.fuzz_corpus_expected_coverage`",
+      "validation_step": "zig build run-fuzz-corpus-coverage-smoke",
+      "consumer": "tools/fuzz_corpus_coverage_smoke.py"
     }
   ]
 }

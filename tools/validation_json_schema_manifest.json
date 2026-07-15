@@ -851,6 +851,109 @@
         }
       }
     },
+    "vort.fuzz_corpus_expected_coverage": {
+      "fields": {
+        "error_requirements": "list",
+        "mode_requirements": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "collections": {
+        "mode_requirements": {
+          "fields": {
+            "min_accepted": "int",
+            "min_cases": "int",
+            "min_exact_error_expectations": "int",
+            "min_matched_rows": "int",
+            "min_rejected": "int",
+            "mode": "str"
+          },
+          "enums": {
+            "mode": [
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          }
+        },
+        "error_requirements": {
+          "fields": {
+            "error": "str",
+            "min_count": "int",
+            "mode": "str"
+          },
+          "enums": {
+            "mode": [
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          }
+        }
+      }
+    },
+    "vort.fuzz_corpus_coverage_smoke": {
+      "fields": {
+        "coverage": "str",
+        "error_requirement_count": "int",
+        "error_requirements": "list",
+        "mode_requirement_count": "int",
+        "mode_requirements": "list",
+        "ok": "bool",
+        "report": "str",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "mode_requirement_count": {
+          "collection": "mode_requirements"
+        },
+        "error_requirement_count": {
+          "collection": "error_requirements"
+        }
+      },
+      "collections": {
+        "mode_requirements": {
+          "fields": {
+            "actual_accepted": "int",
+            "actual_cases": "int",
+            "actual_exact_error_expectations": "int",
+            "actual_matched_rows": "int",
+            "actual_rejected": "int",
+            "matched": "bool",
+            "min_accepted": "int",
+            "min_cases": "int",
+            "min_exact_error_expectations": "int",
+            "min_matched_rows": "int",
+            "min_rejected": "int",
+            "mode": "str"
+          },
+          "enums": {
+            "mode": [
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          }
+        },
+        "error_requirements": {
+          "fields": {
+            "actual_count": "int",
+            "error": "str",
+            "matched": "bool",
+            "min_count": "int",
+            "mode": "str"
+          },
+          "enums": {
+            "mode": [
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          }
+        }
+      }
+    },
     "vort.header_inspect_required_workflows": {
       "fields": {
         "required_workflows": "list",
@@ -1705,6 +1808,8 @@
           "vort.dashboard_producers_required_artifacts",
           "vort.dashboard_producers_required_smoke",
           "vort.fuzz_corpus_report",
+          "vort.fuzz_corpus_coverage_smoke",
+          "vort.fuzz_corpus_expected_coverage",
           "vort.dashboard_category_expected_artifacts",
           "vort.dashboard_category_negative_smoke",
           "vort.dashboard_config_index",

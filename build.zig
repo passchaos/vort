@@ -269,6 +269,11 @@ pub fn build(b: *std.Build) void {
     const deflate_wrapper_fuzz_corpus_dashboard_step = b.step("run-deflate-wrapper-fuzz-corpus-dashboard", "Write raw/zlib/gzip wrapper fuzz corpus dashboard artifacts");
     deflate_wrapper_fuzz_corpus_dashboard_step.dependOn(&run_deflate_wrapper_fuzz_corpus_dashboard.step);
 
+    const fuzz_corpus_coverage_smoke = b.addSystemCommand(&.{ "python3", "tools/fuzz_corpus_coverage_smoke.py", "--summary", "zig-out/vort-fuzz-corpus-coverage-smoke.json" });
+    fuzz_corpus_coverage_smoke.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
+    const fuzz_corpus_coverage_smoke_step = b.step("run-fuzz-corpus-coverage-smoke", "Validate wrapper fuzz corpus coverage minimums");
+    fuzz_corpus_coverage_smoke_step.dependOn(&fuzz_corpus_coverage_smoke.step);
+
     const fuzz_target_exe = b.addExecutable(.{
         .name = "vort-fuzz-target",
         .root_module = b.createModule(.{
@@ -654,6 +659,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.addArtifactArg(cli_exe);
     validation_json_smoke.addArtifactArg(sidecar_verify_report_exe);
     validation_json_smoke.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
+    validation_json_smoke.step.dependOn(fuzz_corpus_coverage_smoke_step);
     const validation_json_smoke_step = b.step("run-validation-json-smoke", "Validate CLI and report JSON schema outputs");
     validation_json_smoke_step.dependOn(&validation_json_smoke.step);
 
@@ -662,6 +668,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.addArtifactArg(sidecar_verify_report_exe);
     validation_json_dashboard.addArgs(&.{ "--summary", "zig-out/vort-validation-json-smoke.json" });
     validation_json_dashboard.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
+    validation_json_dashboard.step.dependOn(fuzz_corpus_coverage_smoke_step);
     const validation_json_dashboard_step = b.step("run-validation-json-dashboard", "Write validation JSON schema smoke summary to zig-out");
     validation_json_dashboard_step.dependOn(&validation_json_dashboard.step);
 
@@ -713,6 +720,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(header_inspect_dashboard_step);
     dashboard_index.step.dependOn(dashboard_strict_dashboard_step);
     dashboard_index.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
+    dashboard_index.step.dependOn(fuzz_corpus_coverage_smoke_step);
     const dashboard_index_step = b.step("run-dashboard-index", "Write a Markdown index for zig-out dashboard artifacts");
     dashboard_index_step.dependOn(&dashboard_index.step);
 
@@ -855,6 +863,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(fuzz_corpus_step);
     ci_smoke_step.dependOn(deflate_wrapper_fuzz_corpus_step);
     ci_smoke_step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
+    ci_smoke_step.dependOn(fuzz_corpus_coverage_smoke_step);
     ci_smoke_step.dependOn(fuzz_target_step);
     ci_smoke_step.dependOn(libfuzzer_smoke_step);
     ci_smoke_step.dependOn(afl_smoke_step);

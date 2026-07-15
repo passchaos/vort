@@ -619,6 +619,8 @@ Example:
     "vort.dashboard_producers_required_artifacts",
     "vort.dashboard_producers_required_smoke",
     "vort.fuzz_corpus_report",
+    "vort.fuzz_corpus_expected_coverage",
+    "vort.fuzz_corpus_coverage_smoke",
     "vort.dashboard_category_expected_artifacts",
     "vort.dashboard_category_negative_smoke",
     "vort.dashboard_config_index",
@@ -934,6 +936,98 @@ Example:
       "expected_format": "json",
       "smoke_gate": "zig build run-validation-json-dashboard",
       "required_smoke_gate": true
+    }
+  ]
+}
+```
+
+## `vort.fuzz_corpus_expected_coverage`
+
+Consumed by:
+
+```sh
+zig build run-fuzz-corpus-coverage-smoke
+python3 tools/fuzz_corpus_coverage_smoke.py --coverage tools/fuzz_corpus_expected_coverage.json
+```
+
+This schema stores minimum coverage requirements for the retained wrapper fuzz
+corpus dashboard. It makes important wrapper/error combinations contractual so a
+future corpus edit cannot silently drop malformed-input coverage.
+
+Example:
+
+```json
+{
+  "schema": "vort.fuzz_corpus_expected_coverage",
+  "schema_version": 1,
+  "mode_requirements": [
+    {
+      "mode": "deflate",
+      "min_cases": 2,
+      "min_accepted": 1,
+      "min_rejected": 1,
+      "min_exact_error_expectations": 1,
+      "min_matched_rows": 2
+    }
+  ],
+  "error_requirements": [
+    {
+      "mode": "deflate",
+      "error": "TrailingData",
+      "min_count": 1
+    }
+  ]
+}
+```
+
+## `vort.fuzz_corpus_coverage_smoke`
+
+Produced by:
+
+```sh
+zig build run-fuzz-corpus-coverage-smoke
+python3 tools/fuzz_corpus_coverage_smoke.py --summary zig-out/vort-fuzz-corpus-coverage-smoke.json
+```
+
+This schema records the actual mode/error coverage observed in a
+`vort.fuzz_corpus_report` compared with `vort.fuzz_corpus_expected_coverage`.
+Rows are marked `matched=false` when actual coverage falls below the configured
+minimum.
+
+Example:
+
+```json
+{
+  "schema": "vort.fuzz_corpus_coverage_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "report": "zig-out/vort-deflate-wrapper-fuzz-corpus.json",
+  "coverage": "tools/fuzz_corpus_expected_coverage.json",
+  "mode_requirement_count": 1,
+  "error_requirement_count": 1,
+  "mode_requirements": [
+    {
+      "mode": "deflate",
+      "min_cases": 2,
+      "actual_cases": 2,
+      "min_accepted": 1,
+      "actual_accepted": 1,
+      "min_rejected": 1,
+      "actual_rejected": 1,
+      "min_exact_error_expectations": 1,
+      "actual_exact_error_expectations": 1,
+      "min_matched_rows": 2,
+      "actual_matched_rows": 2,
+      "matched": true
+    }
+  ],
+  "error_requirements": [
+    {
+      "mode": "deflate",
+      "error": "TrailingData",
+      "min_count": 1,
+      "actual_count": 1,
+      "matched": true
     }
   ]
 }

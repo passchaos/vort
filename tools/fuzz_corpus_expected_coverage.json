@@ -1,0 +1,54 @@
+{
+  "schema": "vort.fuzz_corpus_expected_coverage",
+  "schema_version": 1,
+  "mode_requirements": [
+    {
+      "mode": "deflate",
+      "min_cases": 20,
+      "min_accepted": 5,
+      "min_rejected": 15,
+      "min_exact_error_expectations": 15,
+      "min_matched_rows": 20
+    },
+    {
+      "mode": "zlib",
+      "min_cases": 22,
+      "min_accepted": 5,
+      "min_rejected": 17,
+      "min_exact_error_expectations": 17,
+      "min_matched_rows": 22
+    },
+    {
+      "mode": "gzip",
+      "min_cases": 27,
+      "min_accepted": 5,
+      "min_rejected": 22,
+      "min_exact_error_expectations": 22,
+      "min_matched_rows": 27
+    }
+  ],
+  "error_requirements": [
+    { "mode": "deflate", "error": "InvalidDynamicBlockHeader", "min_count": 4 },
+    { "mode": "deflate", "error": "InvalidHuffmanCode", "min_count": 4 },
+    { "mode": "deflate", "error": "InvalidMatch", "min_count": 2 },
+    { "mode": "deflate", "error": "OutputLimitExceeded", "min_count": 1 },
+    { "mode": "deflate", "error": "TrailingData", "min_count": 1 },
+    { "mode": "deflate", "error": "TruncatedFrame", "min_count": 3 },
+    { "mode": "zlib", "error": "BadZlibHeader", "min_count": 1 },
+    { "mode": "zlib", "error": "ChecksumMismatch", "min_count": 1 },
+    { "mode": "zlib", "error": "InvalidDynamicBlockHeader", "min_count": 4 },
+    { "mode": "zlib", "error": "InvalidHuffmanCode", "min_count": 3 },
+    { "mode": "zlib", "error": "InvalidMatch", "min_count": 1 },
+    { "mode": "zlib", "error": "NeedDictionary", "min_count": 2 },
+    { "mode": "zlib", "error": "OutputLimitExceeded", "min_count": 1 },
+    { "mode": "zlib", "error": "TrailingData", "min_count": 1 },
+    { "mode": "zlib", "error": "TruncatedFrame", "min_count": 3 },
+    { "mode": "gzip", "error": "ChecksumMismatch", "min_count": 3 },
+    { "mode": "gzip", "error": "InvalidDynamicBlockHeader", "min_count": 4 },
+    { "mode": "gzip", "error": "InvalidHuffmanCode", "min_count": 3 },
+    { "mode": "gzip", "error": "InvalidMatch", "min_count": 1 },
+    { "mode": "gzip", "error": "OutputLimitExceeded", "min_count": 1 },
+    { "mode": "gzip", "error": "SizeMismatch", "min_count": 3 },
+    { "mode": "gzip", "error": "TruncatedFrame", "min_count": 7 }
+  ]
+}

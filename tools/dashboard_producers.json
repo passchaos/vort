@@ -139,6 +139,10 @@
     "vort-deflate-wrapper-fuzz-corpus.md": {
       "expected_format": "md",
       "smoke_gate": "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
+    },
+    "vort-fuzz-corpus-coverage-smoke.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-fuzz-corpus-coverage-smoke"
     }
   },
   "contains": [
@@ -189,7 +193,8 @@
     "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
     "vort-validation-json-docs-negative-smoke.json": "zig build run-validation-json-docs-negative-smoke",
     "vort-deflate-wrapper-fuzz-corpus.json": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
-    "vort-deflate-wrapper-fuzz-corpus.md": "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
+    "vort-deflate-wrapper-fuzz-corpus.md": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
+    "vort-fuzz-corpus-coverage-smoke.json": "zig build run-fuzz-corpus-coverage-smoke"
   },
   "required_smoke_gates": [
     "vort-sidecar-corrupt-smoke.json",
