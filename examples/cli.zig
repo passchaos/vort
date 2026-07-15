@@ -1089,6 +1089,12 @@ fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     try printOptionalJson(u8, stdout, info.dynamic_code_length_count);
     try stdout.print(" dynamic_code_length_lengths=", .{});
     try printCodeLengthArray(stdout, &info.dynamic_code_length_lengths);
+    try stdout.print(" dynamic_code_length_repeat_prev=", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_code_length_repeat_prev);
+    try stdout.print(" dynamic_code_length_repeat_zero_short=", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_code_length_repeat_zero_short);
+    try stdout.print(" dynamic_code_length_repeat_zero_long=", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_code_length_repeat_zero_long);
     try stdout.print(" dynamic_literal_nonzero=", .{});
     try printOptionalJson(u16, stdout, info.dynamic_literal_nonzero);
     try stdout.print(" dynamic_literal_zero=", .{});
@@ -1200,6 +1206,12 @@ fn printRawHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     try printOptionalJson(u8, stdout, info.dynamic_code_length_count);
     try stdout.print(",\"dynamic_code_length_lengths\":", .{});
     try printCodeLengthArray(stdout, &info.dynamic_code_length_lengths);
+    try stdout.print(",\"dynamic_code_length_repeat_prev\":", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_code_length_repeat_prev);
+    try stdout.print(",\"dynamic_code_length_repeat_zero_short\":", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_code_length_repeat_zero_short);
+    try stdout.print(",\"dynamic_code_length_repeat_zero_long\":", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_code_length_repeat_zero_long);
     try stdout.print(",\"dynamic_literal_nonzero\":", .{});
     try printOptionalJson(u16, stdout, info.dynamic_literal_nonzero);
     try stdout.print(",\"dynamic_literal_zero\":", .{});

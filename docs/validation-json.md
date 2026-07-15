@@ -263,9 +263,9 @@ This schema is the machine-readable form of raw DEFLATE first-block header
 inspection. It reports BFINAL, BTYPE, the bit/byte offsets where the
 block-specific payload begins, how many header bits were consumed by the
 lightweight inspection, dynamic-block HLIT/HDIST/HCLEN, code-length-code
-lengths, literal/distance code-length zero/non-zero counts, max-bit summaries,
-and bit-length histograms when BTYPE is `dynamic`, and stored-block LEN/NLEN
-diagnostics when BTYPE is `stored`.
+lengths and RLE operation counts, literal/distance code-length zero/non-zero
+counts, max-bit summaries, and bit-length histograms when BTYPE is `dynamic`,
+and stored-block LEN/NLEN diagnostics when BTYPE is `stored`.
 
 Example:
 
@@ -285,6 +285,9 @@ Example:
   "dynamic_hclen": null,
   "dynamic_code_length_count": null,
   "dynamic_code_length_lengths": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  "dynamic_code_length_repeat_prev": null,
+  "dynamic_code_length_repeat_zero_short": null,
+  "dynamic_code_length_repeat_zero_long": null,
   "dynamic_literal_nonzero": null,
   "dynamic_literal_zero": null,
   "dynamic_literal_max_bits": null,

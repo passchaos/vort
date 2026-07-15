@@ -316,6 +316,7 @@ def main(argv: list[str]) -> int:
     assert raw_dynamic_json["dynamic_hdist"] >= 1
     assert raw_dynamic_json["dynamic_hclen"] >= 4
     assert raw_dynamic_json["dynamic_code_length_count"] == raw_dynamic_json["dynamic_hclen"]
+    assert raw_dynamic_json["dynamic_code_length_repeat_zero_long"] >= 1
     assert len(raw_dynamic_json["dynamic_code_length_lengths"]) == 19
     assert raw_dynamic_json["dynamic_literal_nonzero"] >= 1
     assert raw_dynamic_json["dynamic_distance_nonzero"] >= 1
@@ -335,7 +336,7 @@ def main(argv: list[str]) -> int:
         f"HLIT={raw_dynamic_json['dynamic_hlit']} HDIST={raw_dynamic_json['dynamic_hdist']} "
         f"HCLEN={raw_dynamic_json['dynamic_hclen']} lit_nonzero={raw_dynamic_json['dynamic_literal_nonzero']} "
         f"dist_nonzero={raw_dynamic_json['dynamic_distance_nonzero']} max={raw_dynamic_json['dynamic_literal_max_bits']}/"
-        f"{raw_dynamic_json['dynamic_distance_max_bits']}"
+        f"{raw_dynamic_json['dynamic_distance_max_bits']} rle18={raw_dynamic_json['dynamic_code_length_repeat_zero_long']}"
     )
     validate_value_against_manifest(raw_dynamic_json, schemas_def)
 

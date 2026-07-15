@@ -71,6 +71,12 @@ pub const RawDeflateHeaderInfo = struct {
     /// Code-length-code lengths indexed by symbol 0..18. Entries outside the
     /// HCLEN prefix order remain zero, matching RFC 1951 semantics.
     dynamic_code_length_lengths: [19]u4 = @splat(0),
+    /// Number of code-length RLE symbol 16 operations (repeat previous).
+    dynamic_code_length_repeat_prev: ?u16 = null,
+    /// Number of code-length RLE symbol 17 operations (repeat zero 3..10).
+    dynamic_code_length_repeat_zero_short: ?u16 = null,
+    /// Number of code-length RLE symbol 18 operations (repeat zero 11..138).
+    dynamic_code_length_repeat_zero_long: ?u16 = null,
     /// Number of non-zero literal/length code lengths in the dynamic header.
     dynamic_literal_nonzero: ?u16 = null,
     /// Number of zero literal/length code lengths in the dynamic header.
@@ -1285,6 +1291,9 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
     var dynamic_hclen: ?u8 = null;
     var dynamic_code_length_count: ?u8 = null;
     var dynamic_code_length_lengths: [19]u4 = @splat(0);
+    var dynamic_code_length_repeat_prev: ?u16 = null;
+    var dynamic_code_length_repeat_zero_short: ?u16 = null;
+    var dynamic_code_length_repeat_zero_long: ?u16 = null;
     var dynamic_literal_nonzero: ?u16 = null;
     var dynamic_literal_zero: ?u16 = null;
     var dynamic_literal_max_bits: ?u8 = null;
@@ -1326,6 +1335,9 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
             .hclen = hclen,
             .code_length_lengths = dynamic_code_length_lengths,
         }, &reader);
+        dynamic_code_length_repeat_prev = parsed.code_length_symbol_histogram[16];
+        dynamic_code_length_repeat_zero_short = parsed.code_length_symbol_histogram[17];
+        dynamic_code_length_repeat_zero_long = parsed.code_length_symbol_histogram[18];
         var lit_nonzero: u16 = 0;
         var lit_max_bits: u8 = 0;
         for (parsed.literal_lengths[0..hlit]) |length| {
@@ -1371,6 +1383,9 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         .dynamic_hclen = dynamic_hclen,
         .dynamic_code_length_count = dynamic_code_length_count,
         .dynamic_code_length_lengths = dynamic_code_length_lengths,
+        .dynamic_code_length_repeat_prev = dynamic_code_length_repeat_prev,
+        .dynamic_code_length_repeat_zero_short = dynamic_code_length_repeat_zero_short,
+        .dynamic_code_length_repeat_zero_long = dynamic_code_length_repeat_zero_long,
         .dynamic_literal_nonzero = dynamic_literal_nonzero,
         .dynamic_literal_zero = dynamic_literal_zero,
         .dynamic_literal_max_bits = dynamic_literal_max_bits,
@@ -3189,6 +3204,7 @@ test "raw deflate header parser exposes first block metadata" {
     try std.testing.expect(dynamic_info.dynamic_hdist.? >= 1);
     try std.testing.expect(dynamic_info.dynamic_hclen.? >= 4);
     try std.testing.expectEqual(dynamic_info.dynamic_hclen.?, dynamic_info.dynamic_code_length_count.?);
+    try std.testing.expect(dynamic_info.dynamic_code_length_repeat_zero_long.? >= 1);
     try std.testing.expect(dynamic_info.dynamic_literal_nonzero.? >= 1);
     try std.testing.expectEqual(dynamic_info.dynamic_hlit.? - dynamic_info.dynamic_literal_nonzero.?, dynamic_info.dynamic_literal_zero.?);
     try std.testing.expect(dynamic_info.dynamic_literal_max_bits.? >= 1);

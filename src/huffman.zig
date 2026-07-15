@@ -152,6 +152,7 @@ pub const DynamicLengths = struct {
     header: DynamicHeader,
     literal_lengths: [286]u4 = @splat(0),
     distance_lengths: [30]u4 = @splat(0),
+    code_length_symbol_histogram: [19]u16 = @splat(0),
 };
 
 pub fn parseDynamicHeader(reader: *bitstream.BitReader) Error!DynamicHeader {
@@ -207,9 +208,11 @@ pub fn parseDynamicLengthsBody(header: DynamicHeader, reader: *bitstream.BitRead
     const code_decoder = FastDecoder(19, 7).init(code_lengths);
     var combined: [286 + 30]u4 = @splat(0);
     const total = header.hlit + header.hdist;
+    var symbol_histogram: [19]u16 = @splat(0);
     var pos: usize = 0;
     while (pos < total) {
         const symbol = (try code_decoder.decode(reader)).value;
+        symbol_histogram[symbol] += 1;
         switch (symbol) {
             0...15 => {
                 combined[pos] = @intCast(symbol);
@@ -241,6 +244,7 @@ pub fn parseDynamicLengthsBody(header: DynamicHeader, reader: *bitstream.BitRead
     var parsed = DynamicLengths{ .header = header };
     @memcpy(parsed.literal_lengths[0..header.hlit], combined[0..header.hlit]);
     @memcpy(parsed.distance_lengths[0..header.hdist], combined[header.hlit..][0..header.hdist]);
+    parsed.code_length_symbol_histogram = symbol_histogram;
     // A dynamic literal/length alphabet without the end-of-block symbol cannot
     // terminate a compressed block. Reject it at header parse time so wrappers
     // consistently report a malformed dynamic header instead of decoding until
