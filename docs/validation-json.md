@@ -646,7 +646,8 @@ Top-level fields:
 - `smoke_gate_required_missing`
 - `header_inspect_present`, `header_inspect_ok`,
   `header_inspect_required_workflow_count`,
-  `header_inspect_missing_workflow_count`
+  `header_inspect_missing_workflow_count`,
+  `header_inspect_missing_workflows`
 - `artifacts`
 
 Each artifact includes:
@@ -678,6 +679,7 @@ Example:
   "header_inspect_ok": false,
   "header_inspect_required_workflow_count": 0,
   "header_inspect_missing_workflow_count": 0,
+  "header_inspect_missing_workflows": [],
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",

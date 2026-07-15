@@ -142,17 +142,22 @@ def artifact_metadata(path: Path) -> str:
 def header_inspect_health(records: list[dict]) -> dict:
     for record in records:
         if record.get("schema") == "vort.header_inspect_smoke":
+            missing_workflows = record.get("missing_workflows")
+            if not isinstance(missing_workflows, list):
+                missing_workflows = []
             return {
                 "present": True,
                 "ok": bool(record.get("ok")),
                 "required_workflow_count": int(record.get("required_workflow_count") or 0),
                 "missing_workflow_count": int(record.get("missing_workflow_count") or 0),
+                "missing_workflows": missing_workflows,
             }
     return {
         "present": False,
         "ok": False,
         "required_workflow_count": 0,
         "missing_workflow_count": 0,
+        "missing_workflows": [],
     }
 
 
@@ -239,6 +244,11 @@ def main() -> int:
         f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing",
         "",
     ]
+    if header_health["missing_workflows"]:
+        lines.extend(["## Missing header inspect workflows", "", "| command | workflow | format |", "| --- | --- | --- |"])
+        for row in header_health["missing_workflows"]:
+            lines.append(f"| `{row.get('command', '')}` | {row.get('workflow', '')} | {row.get('format', '')} |")
+        lines.append("")
     for category in sorted(grouped):
         lines.extend([f"## {category}", ""])
         for artifact in grouped[category]:
@@ -282,6 +292,7 @@ def main() -> int:
                 "header_inspect_ok": header_health["ok"],
                 "header_inspect_required_workflow_count": header_health["required_workflow_count"],
                 "header_inspect_missing_workflow_count": header_health["missing_workflow_count"],
+                "header_inspect_missing_workflows": header_health["missing_workflows"],
                 "artifacts": records,
             },
             indent=2,
@@ -301,7 +312,8 @@ def main() -> int:
         if not header_health["ok"]:
             raise SystemExit("dashboard_index_header_inspect_failed=1")
         if header_health["missing_workflow_count"]:
-            raise SystemExit(f"dashboard_index_header_inspect_missing_workflows={header_health['missing_workflow_count']}")
+            missing = ",".join(f"{row.get('command')}:{row.get('workflow')}" for row in header_health["missing_workflows"])
+            raise SystemExit(f"dashboard_index_header_inspect_missing_workflows={header_health['missing_workflow_count']}:{missing}")
     print(f"dashboard_index={output} manifest={manifest} artifacts={len(artifacts)}")
     return 0
 

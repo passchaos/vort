@@ -262,6 +262,7 @@ def main() -> int:
         assert dashboard["header_inspect_ok"] is True
         assert dashboard["header_inspect_required_workflow_count"] == header_summary["required_workflow_count"]
         assert dashboard["header_inspect_missing_workflow_count"] == header_summary["missing_workflow_count"]
+        assert dashboard["header_inspect_missing_workflows"] == header_summary["missing_workflows"]
         validate_value_against_manifest(dashboard, schemas_def)
         strict_missing_root = root / "strict-missing"
         strict_missing_root.mkdir()

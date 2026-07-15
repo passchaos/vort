@@ -7,6 +7,7 @@
         "artifact_count": "int",
         "artifacts": "list",
         "header_inspect_missing_workflow_count": "int",
+        "header_inspect_missing_workflows": "list",
         "header_inspect_ok": "bool",
         "header_inspect_present": "bool",
         "header_inspect_required_workflow_count": "int",
@@ -18,6 +19,27 @@
         "smoke_gate_covered": "int",
         "smoke_gate_missing": "list",
         "smoke_gate_required_missing": "list"
+      },
+      "collections": {
+        "header_inspect_missing_workflows": {
+          "fields": {
+            "command": "str",
+            "format": "str",
+            "workflow": "str"
+          },
+          "enums": {
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ],
+            "workflow": [
+              "hex",
+              "file"
+            ]
+          },
+          "allow_empty": true
+        }
       },
       "item_collection": "artifacts",
       "item_enums": {
