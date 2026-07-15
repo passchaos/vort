@@ -100,6 +100,8 @@
         "dictionary_cases": "int",
         "fhcrc_cases": "int",
         "gzip_cases": "int",
+        "help_workflow_count": "int",
+        "help_workflows": "list",
         "negative_cases": "int",
         "negative_error_counts": "dict",
         "negative_items": "list",
@@ -138,6 +140,9 @@
         },
         "missing_workflow_count": {
           "collection": "missing_workflows"
+        },
+        "help_workflow_count": {
+          "collection": "help_workflows"
         },
         "raw_cases": {
           "collection": "cases",
@@ -377,6 +382,24 @@
             ]
           },
           "allow_empty": true
+        },
+        "help_workflows": {
+          "fields": {
+            "command": "str",
+            "format": "str",
+            "workflow": "str"
+          },
+          "enums": {
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ],
+            "workflow": [
+              "hex",
+              "file"
+            ]
+          }
         },
         "negative_items": {
           "fields": {

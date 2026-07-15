@@ -89,40 +89,69 @@ def build_workflow_coverage(success_items: list[dict[str, object]]) -> list[dict
     ]
 
 
+def normalize_workflow_rows(rows: object, *, label: str) -> list[dict[str, object]]:
+    if not isinstance(rows, list) or not rows:
+        raise AssertionError(f"{label} must be a non-empty list")
+    normalized: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise AssertionError(f"{label}[{index}] must be an object")
+        command = row.get("command")
+        workflow = row.get("workflow")
+        format_name = row.get("format")
+        if not isinstance(command, str) or not isinstance(workflow, str) or not isinstance(format_name, str):
+            raise AssertionError(f"{label}[{index}] must include string command/workflow/format")
+        if workflow not in ("hex", "file"):
+            raise AssertionError(f"{label}[{index}] has invalid workflow {workflow!r}")
+        if format_name != format_for_command(command):
+            raise AssertionError(f"{label}[{index}] format {format_name!r} does not match command {command!r}")
+        key = (command, workflow)
+        if key in seen:
+            raise AssertionError(f"duplicate workflow {key!r} in {label}")
+        seen.add(key)
+        normalized.append({"command": command, "workflow": workflow, "format": format_name})
+    return normalized
+
+
 def load_required_workflow_rows() -> list[dict[str, object]]:
     payload = json.loads(REQUIRED_WORKFLOWS.read_text())
     if payload.get("schema") != "vort.header_inspect_required_workflows":
         raise AssertionError("unexpected header inspect workflow schema")
     if payload.get("schema_version") != 1:
         raise AssertionError("unsupported header inspect workflow schema version")
-    rows = payload.get("required_workflows")
-    if not isinstance(rows, list) or not rows:
-        raise AssertionError("required_workflows must be a non-empty list")
-    normalized: list[dict[str, object]] = []
-    seen: set[tuple[str, str]] = set()
-    for index, row in enumerate(rows):
-        if not isinstance(row, dict):
-            raise AssertionError(f"required_workflows[{index}] must be an object")
-        command = row.get("command")
-        workflow = row.get("workflow")
-        format_name = row.get("format")
-        if not isinstance(command, str) or not isinstance(workflow, str) or not isinstance(format_name, str):
-            raise AssertionError(f"required_workflows[{index}] must include string command/workflow/format")
-        if workflow not in ("hex", "file"):
-            raise AssertionError(f"required_workflows[{index}] has invalid workflow {workflow!r}")
-        if format_name != format_for_command(command):
-            raise AssertionError(f"required_workflows[{index}] format {format_name!r} does not match command {command!r}")
-        key = (command, workflow)
-        if key in seen:
-            raise AssertionError(f"duplicate required workflow {key!r}")
-        seen.add(key)
-        normalized.append({"command": command, "workflow": workflow, "format": format_name})
-    return normalized
+    return normalize_workflow_rows(payload.get("required_workflows"), label="required_workflows")
 
 
-def missing_required_workflows(workflow_coverage: list[dict[str, object]]) -> list[dict[str, object]]:
+def help_workflow_rows(cli: str) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for line in run(cli, "--help").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("inspect-"):
+            continue
+        command = stripped.split()[0]
+        if command.endswith("-hex"):
+            workflow = "hex"
+        elif command.endswith("-file"):
+            workflow = "file"
+        else:
+            continue
+        rows.append({"command": command, "workflow": workflow, "format": format_for_command(command)})
+    return normalize_workflow_rows(rows, label="help_workflows")
+
+
+def require_help_matches_required(required_rows: list[dict[str, object]], help_rows: list[dict[str, object]]) -> None:
+    required = {(str(row["command"]), str(row["workflow"])) for row in required_rows}
+    advertised = {(str(row["command"]), str(row["workflow"])) for row in help_rows}
+    missing = sorted(required - advertised)
+    extra = sorted(advertised - required)
+    if missing or extra:
+        raise AssertionError(f"header inspect help/required workflow mismatch: missing={missing!r} extra={extra!r}")
+
+
+def missing_required_workflows(workflow_coverage: list[dict[str, object]], required_rows: list[dict[str, object]]) -> list[dict[str, object]]:
     covered = {(str(row["command"]), str(row["workflow"])) for row in workflow_coverage if int(row["successes"]) > 0}
-    return [row for row in load_required_workflow_rows() if (str(row["command"]), str(row["workflow"])) not in covered]
+    return [row for row in required_rows if (str(row["command"]), str(row["workflow"])) not in covered]
 
 
 def write_markdown(path: Path, summary: dict[str, object]) -> None:
@@ -260,6 +289,9 @@ def main(argv: list[str]) -> int:
         return 2
 
     cli = argv[1]
+    required_workflows = load_required_workflow_rows()
+    help_workflows = help_workflow_rows(cli)
+    require_help_matches_required(required_workflows, help_workflows)
     summary_path: Path | None = None
     markdown_path: Path | None = None
     index = 2
@@ -964,8 +996,7 @@ def main(argv: list[str]) -> int:
     success_items = [{"command": case["command"], "workflow": case["workflow"], "format": case["format"]} for case in cases] + file_success_items
     command_coverage = build_command_coverage(success_items, negative_items)
     workflow_coverage = build_workflow_coverage(success_items)
-    required_workflows = load_required_workflow_rows()
-    missing_workflows = missing_required_workflows(workflow_coverage)
+    missing_workflows = missing_required_workflows(workflow_coverage, required_workflows)
     if missing_workflows:
         raise AssertionError(f"missing required header inspect workflow coverage: {missing_workflows!r}")
 
@@ -996,6 +1027,8 @@ def main(argv: list[str]) -> int:
         "workflow_successes": sum(row["successes"] for row in workflow_coverage),
         "required_workflows": required_workflows,
         "required_workflow_count": len(required_workflows),
+        "help_workflows": help_workflows,
+        "help_workflow_count": len(help_workflows),
         "missing_workflows": missing_workflows,
         "missing_workflow_count": len(missing_workflows),
     }

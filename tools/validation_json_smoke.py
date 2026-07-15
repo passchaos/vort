@@ -235,6 +235,10 @@ def main() -> int:
         ]
         assert header_summary["dictionary_cases"] >= 1
         assert header_summary["optional_header_cases"] >= 1
+        assert header_summary["help_workflow_count"] == header_summary["required_workflow_count"]
+        assert {(row["command"], row["workflow"]) for row in header_summary["help_workflows"]} == {
+            (row["command"], row["workflow"]) for row in header_summary["required_workflows"]
+        }
         validate_value_against_manifest(header_summary, schemas_def)
 
         run(
