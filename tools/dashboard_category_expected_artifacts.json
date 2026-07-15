@@ -171,6 +171,20 @@
       "require_smoke_gate": false
     },
     {
+      "name": "vort-huffman-length-report.csv",
+      "category": "other",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "name": "vort-huffman-length-report.md",
+      "category": "other",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
       "name": "vort-deflate-wrapper-fuzz-corpus.json",
       "category": "validation",
       "require_present": true,

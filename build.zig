@@ -551,6 +551,27 @@ pub fn build(b: *std.Build) void {
     const level_report_dashboard_step = b.step("run-level-report-dashboard", "Write compression level parser diagnostics dashboard to zig-out");
     level_report_dashboard_step.dependOn(&run_level_report_dashboard.step);
 
+    const huffman_length_report_exe = b.addExecutable(.{
+        .name = "vort-huffman-length-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/huffman_length_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_huffman_length_report = b.addRunArtifact(huffman_length_report_exe);
+    if (b.args) |args| run_huffman_length_report.addArgs(args);
+    const huffman_length_report_step = b.step("run-huffman-length-report", "Report length-limited Huffman costs against small optimal oracles");
+    huffman_length_report_step.dependOn(&run_huffman_length_report.step);
+
+    const run_huffman_length_report_dashboard = b.addRunArtifact(huffman_length_report_exe);
+    run_huffman_length_report_dashboard.addArgs(&.{ "--csv", "zig-out/vort-huffman-length-report.csv", "--markdown", "zig-out/vort-huffman-length-report.md" });
+    const huffman_length_report_dashboard_step = b.step("run-huffman-length-report-dashboard", "Write length-limited Huffman oracle dashboard to zig-out");
+    huffman_length_report_dashboard_step.dependOn(&run_huffman_length_report_dashboard.step);
+
     const dynamic_plan_report_exe = b.addExecutable(.{
         .name = "vort-dynamic-plan-report",
         .root_module = b.createModule(.{
@@ -730,6 +751,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(header_inspect_dashboard_step);
     dashboard_index.step.dependOn(dashboard_strict_dashboard_step);
     dashboard_index.step.dependOn(level_report_dashboard_step);
+    dashboard_index.step.dependOn(huffman_length_report_dashboard_step);
     dashboard_index.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     dashboard_index.step.dependOn(fuzz_corpus_coverage_smoke_step);
     const dashboard_index_step = b.step("run-dashboard-index", "Write a Markdown index for zig-out dashboard artifacts");
@@ -860,6 +882,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&dictionary_report_exe.step);
     check_step.dependOn(&dictionary_deflate_report_exe.step);
     check_step.dependOn(&level_report_exe.step);
+    check_step.dependOn(&huffman_length_report_exe.step);
     check_step.dependOn(&dynamic_plan_report_exe.step);
     check_step.dependOn(&split_policy_report_exe.step);
     check_step.dependOn(&native_range_report_exe.step);
@@ -900,6 +923,8 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(level_report_step);
     ci_smoke_step.dependOn(level_report_csv_step);
     ci_smoke_step.dependOn(level_report_dashboard_step);
+    ci_smoke_step.dependOn(huffman_length_report_step);
+    ci_smoke_step.dependOn(huffman_length_report_dashboard_step);
     ci_smoke_step.dependOn(dynamic_plan_report_step);
     ci_smoke_step.dependOn(split_policy_report_step);
     ci_smoke_step.dependOn(native_range_report_step);

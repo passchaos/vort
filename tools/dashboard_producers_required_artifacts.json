@@ -156,6 +156,20 @@
     },
     {
       "expected_format": "csv",
+      "name": "vort-huffman-length-report.csv",
+      "producer_step": "zig build run-huffman-length-report-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-huffman-length-report-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-huffman-length-report.md",
+      "producer_step": "zig build run-huffman-length-report-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-huffman-length-report-dashboard"
+    },
+    {
+      "expected_format": "csv",
       "name": "vort-level-report.csv",
       "producer_step": "zig build run-level-report-csv",
       "required_smoke_gate": false,
