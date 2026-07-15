@@ -1063,7 +1063,7 @@ fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     if (output_format == .json) return printRawHeaderJson(stdout, compressed_len, info);
 
     try stdout.print(
-        "raw_header compressed_bytes={d} final={} block_type={s} data_bit_offset={d} data_byte_offset={d}\n",
+        "raw_header compressed_bytes={d} final={} block_type={s} data_bit_offset={d} data_byte_offset={d} stored_len=",
         .{
             compressed_len,
             info.final,
@@ -1072,6 +1072,12 @@ fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
             info.data_byte_offset,
         },
     );
+    try printOptionalJson(u16, stdout, info.stored_len);
+    try stdout.print(" stored_nlen=", .{});
+    try printOptionalJson(u16, stdout, info.stored_nlen);
+    try stdout.print(" stored_payload_offset=", .{});
+    try printOptionalJson(usize, stdout, info.stored_payload_offset);
+    try stdout.print("\n", .{});
 }
 
 fn printZlibHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.ZlibHeaderInfo, output_format: HeaderInspectOutputFormat) !void {
@@ -1134,7 +1140,7 @@ fn printGzipHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort
 
 fn printRawHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.RawDeflateHeaderInfo) !void {
     try stdout.print(
-        "{{\"schema\":\"vort.raw_deflate_header_info\",\"schema_version\":1,\"compressed_bytes\":{d},\"final\":{},\"block_type\":\"{s}\",\"data_bit_offset\":{d},\"data_byte_offset\":{d}}}\n",
+        "{{\"schema\":\"vort.raw_deflate_header_info\",\"schema_version\":1,\"compressed_bytes\":{d},\"final\":{},\"block_type\":\"{s}\",\"data_bit_offset\":{d},\"data_byte_offset\":{d},\"stored_len\":",
         .{
             compressed_len,
             info.final,
@@ -1143,6 +1149,12 @@ fn printRawHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
             info.data_byte_offset,
         },
     );
+    try printOptionalJson(u16, stdout, info.stored_len);
+    try stdout.print(",\"stored_nlen\":", .{});
+    try printOptionalJson(u16, stdout, info.stored_nlen);
+    try stdout.print(",\"stored_payload_offset\":", .{});
+    try printOptionalJson(usize, stdout, info.stored_payload_offset);
+    try stdout.print("}}\n", .{});
 }
 
 fn printZlibHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.ZlibHeaderInfo) !void {

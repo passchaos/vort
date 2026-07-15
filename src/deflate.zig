@@ -44,6 +44,14 @@ pub const RawDeflateHeaderInfo = struct {
     /// Byte containing the block-specific payload start. For fixed/dynamic
     /// blocks this may still contain unread bits because DEFLATE is bit-packed.
     data_byte_offset: usize,
+    /// Stored-block LEN when BTYPE=stored, otherwise null.
+    stored_len: ?u16 = null,
+    /// Stored-block NLEN when BTYPE=stored, otherwise null.
+    stored_nlen: ?u16 = null,
+    /// Byte offset where stored payload bytes start after byte alignment and
+    /// LEN/NLEN. For compressed block types this remains null because payload
+    /// starts at data_bit_offset rather than a byte-aligned LEN/NLEN section.
+    stored_payload_offset: ?usize = null,
 };
 
 pub const GzipHeaderOptions = struct {
@@ -1226,11 +1234,30 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         2 => .dynamic,
         else => return error.InvalidDeflateBlockType,
     };
+    const data_bit_offset = reader.bitPosition();
+    const data_byte_offset = reader.byteOffset();
+    var stored_len: ?u16 = null;
+    var stored_nlen: ?u16 = null;
+    var stored_payload_offset: ?usize = null;
+    if (block_type == .stored) {
+        reader.alignToByte();
+        const offset = reader.byteOffset();
+        if (input.len - offset < 4) return error.TruncatedFrame;
+        const len = std.mem.readInt(u16, input[offset..][0..2], .little);
+        const nlen = std.mem.readInt(u16, input[offset + 2 ..][0..2], .little);
+        if (len != ~nlen) return error.StoredLengthMismatch;
+        stored_len = len;
+        stored_nlen = nlen;
+        stored_payload_offset = offset + 4;
+    }
     return .{
         .final = final,
         .block_type = block_type,
-        .data_bit_offset = reader.bitPosition(),
-        .data_byte_offset = reader.byteOffset(),
+        .data_bit_offset = data_bit_offset,
+        .data_byte_offset = data_byte_offset,
+        .stored_len = stored_len,
+        .stored_nlen = stored_nlen,
+        .stored_payload_offset = stored_payload_offset,
     };
 }
 
@@ -3016,10 +3043,14 @@ test "raw deflate header parser exposes first block metadata" {
     try std.testing.expectEqual(RawDeflateBlockType.stored, stored.block_type);
     try std.testing.expectEqual(@as(usize, 3), stored.data_bit_offset);
     try std.testing.expectEqual(@as(usize, 1), stored.data_byte_offset);
+    try std.testing.expectEqual(@as(?u16, 0), stored.stored_len);
+    try std.testing.expectEqual(@as(?u16, 0xffff), stored.stored_nlen);
+    try std.testing.expectEqual(@as(?usize, 5), stored.stored_payload_offset);
 
     const fixed = try parseRawDeflateHeaderInfo(&.{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 });
     try std.testing.expect(fixed.final);
     try std.testing.expectEqual(RawDeflateBlockType.fixed, fixed.block_type);
+    try std.testing.expectEqual(@as(?u16, null), fixed.stored_len);
 
     const dynamic = try encodeRawDynamicLiteralAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(dynamic);
@@ -3029,6 +3060,8 @@ test "raw deflate header parser exposes first block metadata" {
 
     try std.testing.expectError(error.TruncatedFrame, parseRawDeflateHeaderInfo(""));
     try std.testing.expectError(error.InvalidDeflateBlockType, parseRawDeflateHeaderInfo(&.{0x07}));
+    try std.testing.expectError(error.TruncatedFrame, parseRawDeflateHeaderInfo(&.{0x01}));
+    try std.testing.expectError(error.StoredLengthMismatch, parseRawDeflateHeaderInfo(&.{ 0x01, 0x01, 0x00, 0xff, 0xff, 'x' }));
 }
 
 test "raw stored deflate round trips across block boundary" {

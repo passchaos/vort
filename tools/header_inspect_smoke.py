@@ -44,6 +44,7 @@ def main(argv: list[str]) -> int:
     }
     payload = b"hello"
     raw_frame = bytes.fromhex("cb48cdc9c90700")
+    raw_stored_frame = bytes.fromhex("010500faff68656c6c6f")
     zlib_frame = zlib.compress(payload, level=6)
     gzip_frame = gzip.compress(payload, compresslevel=6, mtime=0)
     schemas_def = load_manifest()
@@ -86,7 +87,38 @@ def main(argv: list[str]) -> int:
     assert raw_json["schema"] == "vort.raw_deflate_header_info"
     assert raw_json["block_type"] == "fixed"
     assert raw_json["final"] is True
+    assert raw_json["stored_len"] is None
     validate_value_against_manifest(raw_json, schemas_def)
+
+    raw_stored_hex = run(cli, "inspect-raw-header-hex", raw_stored_frame.hex())
+    require_fields(
+        raw_stored_hex,
+        {
+            "raw_header compressed_bytes": str(len(raw_stored_frame)),
+            "block_type": "stored",
+            "stored_len": "5",
+            "stored_nlen": "65530",
+            "stored_payload_offset": "5",
+        },
+    )
+    cases.append(
+        {
+            "name": "raw_stored",
+            "format": "raw",
+            "bytes": len(raw_stored_frame),
+            "data_offset": 5,
+            "has_dictionary": False,
+            "has_optional_fields": False,
+            "header_crc": False,
+        }
+    )
+    raw_stored_json = json.loads(run(cli, "inspect-raw-header-hex", raw_stored_frame.hex(), "json"))
+    assert raw_stored_json["schema"] == "vort.raw_deflate_header_info"
+    assert raw_stored_json["block_type"] == "stored"
+    assert raw_stored_json["stored_len"] == 5
+    assert raw_stored_json["stored_nlen"] == 65530
+    assert raw_stored_json["stored_payload_offset"] == 5
+    validate_value_against_manifest(raw_stored_json, schemas_def)
 
     zlib_hex = run(cli, "inspect-zlib-header-hex", zlib_frame.hex())
     require_fields(
@@ -214,26 +246,32 @@ def main(argv: list[str]) -> int:
     with tempfile.TemporaryDirectory(prefix="vort-header-inspect-") as tmp:
         tmp_path = Path(tmp)
         raw_path = tmp_path / "sample.raw"
+        raw_stored_path = tmp_path / "sample-stored.raw"
         zlib_path = tmp_path / "sample.zlib"
         zlib_dict_path = tmp_path / "sample-dict.zlib"
         gzip_path = tmp_path / "sample.gz"
         gzip_optional_path = tmp_path / "sample-options.gz"
         raw_path.write_bytes(raw_frame)
+        raw_stored_path.write_bytes(raw_stored_frame)
         zlib_path.write_bytes(zlib_frame)
         zlib_dict_path.write_bytes(zlib_dict_frame)
         gzip_path.write_bytes(gzip_frame)
         gzip_optional_path.write_bytes(gzip_optional_frame)
 
         raw_file = run(cli, "inspect-raw-header-file", str(raw_path))
+        raw_stored_file = run(cli, "inspect-raw-header-file", str(raw_stored_path))
         zlib_file = run(cli, "inspect-zlib-header-file", str(zlib_path))
         zlib_dict_file = run(cli, "inspect-zlib-header-file", str(zlib_dict_path))
         gzip_file = run(cli, "inspect-gzip-header-file", str(gzip_path))
         gzip_optional_file = run(cli, "inspect-gzip-header-file", str(gzip_optional_path))
         raw_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_path), "json"))
+        raw_stored_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_stored_path), "json"))
         zlib_file_json = json.loads(run(cli, "inspect-zlib-header-file", str(zlib_path), "json"))
         gzip_optional_file_json = json.loads(run(cli, "inspect-gzip-header-file", str(gzip_optional_path), "json"))
         if raw_file != raw_hex:
             raise AssertionError(f"raw file/hex inspection mismatch: {raw_file!r} != {raw_hex!r}")
+        if raw_stored_file != raw_stored_hex:
+            raise AssertionError(f"raw stored file/hex inspection mismatch: {raw_stored_file!r} != {raw_stored_hex!r}")
         if zlib_file != zlib_hex:
             raise AssertionError(f"zlib file/hex inspection mismatch: {zlib_file!r} != {zlib_hex!r}")
         if zlib_dict_file != zlib_dict_hex:
@@ -244,6 +282,8 @@ def main(argv: list[str]) -> int:
             raise AssertionError(f"gzip optional file/hex inspection mismatch: {gzip_optional_file!r} != {gzip_optional_hex!r}")
         if raw_file_json != raw_json:
             raise AssertionError(f"raw JSON file/hex inspection mismatch: {raw_file_json!r} != {raw_json!r}")
+        if raw_stored_file_json != raw_stored_json:
+            raise AssertionError(f"raw stored JSON file/hex inspection mismatch: {raw_stored_file_json!r} != {raw_stored_json!r}")
         if zlib_file_json != zlib_json:
             raise AssertionError(f"zlib JSON file/hex inspection mismatch: {zlib_file_json!r} != {zlib_json!r}")
         if gzip_optional_file_json != gzip_optional_json:

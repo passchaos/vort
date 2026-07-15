@@ -99,7 +99,10 @@
         "data_byte_offset": "int",
         "final": "bool",
         "schema": "str",
-        "schema_version": "int"
+        "schema_version": "int",
+        "stored_len": "int?",
+        "stored_nlen": "int?",
+        "stored_payload_offset": "int?"
       },
       "enums": {
         "block_type": [
