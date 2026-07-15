@@ -191,6 +191,7 @@ zig build run-level-report
 zig build run-level-report-csv
 zig build run-level-report-dashboard
 zig build run-huffman-length-report-dashboard
+zig build run-huffman-length-report-dashboard -- --iterations 1000
 zig build run-level-report -- README.md docs/roadmap.md
 zig build run-dictionary-report
 zig build run-dictionary-report -- README.md docs/roadmap.md
@@ -209,6 +210,7 @@ zig build run-level-report
 zig build run-level-report-csv
 zig build run-level-report-dashboard
 zig build run-huffman-length-report-dashboard
+zig build run-huffman-length-report-dashboard -- --iterations 1000
 zig build run-dynamic-plan-report
 zig build run-dynamic-plan-report-csv
 zig build run-split-policy-report

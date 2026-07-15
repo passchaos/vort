@@ -428,6 +428,7 @@ architecture blindly.
 - [x] Production Huffman length builder uses package-merge length-limited code generation.
 - [x] Production package-merge Huffman builder has large DEFLATE-alphabet regression coverage.
 - [x] Huffman length-limit dashboard summarizes production-sized alphabet Kraft and determinism checks.
+- [x] Huffman length-limit dashboard records production-sized alphabet generation timing.
 - [x] Dynamic HCLEN trimming helper with boundary tests.
 - [x] Dynamic HLIT/HDIST trimming helpers with boundary tests.
 - [x] Adaptive split search using stored/fixed/dynamic bit-cost candidates.

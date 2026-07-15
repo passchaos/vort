@@ -569,6 +569,7 @@ pub fn build(b: *std.Build) void {
 
     const run_huffman_length_report_dashboard = b.addRunArtifact(huffman_length_report_exe);
     run_huffman_length_report_dashboard.addArgs(&.{ "--csv", "zig-out/vort-huffman-length-report.csv", "--markdown", "zig-out/vort-huffman-length-report.md" });
+    if (b.args) |args| run_huffman_length_report_dashboard.addArgs(args);
     const huffman_length_report_dashboard_step = b.step("run-huffman-length-report-dashboard", "Write length-limited Huffman oracle dashboard to zig-out");
     huffman_length_report_dashboard_step.dependOn(&run_huffman_length_report_dashboard.step);
 

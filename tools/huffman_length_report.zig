@@ -44,11 +44,15 @@ pub fn main(init: std.process.Init) !void {
 
     var csv_path: ?[]const u8 = null;
     var markdown_path: ?[]const u8 = null;
+    var iterations: usize = 200;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--csv")) {
             csv_path = args.next() orelse return error.MissingCorpusPath;
         } else if (std.mem.eql(u8, arg, "--markdown")) {
             markdown_path = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--iterations")) {
+            iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+            if (iterations == 0) return error.InvalidBlockPlan;
         } else {
             return error.InvalidBlockPlan;
         }
@@ -74,7 +78,7 @@ pub fn main(init: std.process.Init) !void {
     if (markdown_path) |path| {
         var markdown = std.Io.Writer.Allocating.init(init.gpa);
         defer markdown.deinit();
-        try writeMarkdown(&markdown.writer, rows.items);
+        try writeMarkdown(init, &markdown.writer, rows.items, iterations);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = markdown.written() });
     }
 }
@@ -147,7 +151,7 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
     }
 }
 
-fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
+fn writeMarkdown(init: std.process.Init, writer: *std.Io.Writer, rows: []const Row, iterations: usize) !void {
     try writer.writeAll("# Huffman length-limit report\n\n");
     try writer.writeAll("Small fixed cases are brute-forced at runtime to guard future package-merge work.\n\n");
     const summary = summarizeRows(rows);
@@ -186,7 +190,7 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
         try writeLengthSlice(writer, row.package_merge_lengths[0..row.symbol_count]);
         try writer.writeAll(" |\n");
     }
-    try writeLargeAlphabetMarkdown(writer);
+    try writeLargeAlphabetMarkdown(init, writer, iterations);
 }
 
 const Summary = struct {
@@ -335,27 +339,31 @@ fn mergePackageLists(comptime n: usize, out: *[n]Package, leaves: []const Packag
     return out_len;
 }
 
-fn writeLargeAlphabetMarkdown(writer: *std.Io.Writer) !void {
+fn writeLargeAlphabetMarkdown(init: std.process.Init, writer: *std.Io.Writer, iterations: usize) !void {
     try writer.writeAll("\n## Large DEFLATE alphabet regression cases\n\n");
     try writer.writeAll("These rows are not brute-forced; they guard Kraft validity, maximum length, and deterministic output for production-sized alphabets.\n\n");
-    try writer.writeAll("| case | symbols | max bits | nonzero | max length | Kraft | deterministic? | cost |\n");
-    try writer.writeAll("|---|---:|---:|---:|---:|---:|---|---:|\n");
-    try writeLargeAlphabetRow(writer, "literal-length-286", 286, maxLiteralFreqs(), 15);
-    try writeLargeAlphabetRow(writer, "distance-30", 30, maxDistanceFreqs(), 15);
-    try writeLargeAlphabetRow(writer, "code-length-19", 19, maxCodeLengthFreqs(), 7);
-    try writeLargeAlphabetRow(writer, "sparse-literal-286", 286, sparseLiteralFreqs(), 15);
+    try writer.print("Timing iterations per row: {d}\n\n", .{iterations});
+    try writer.writeAll("| case | symbols | max bits | nonzero | max length | Kraft | deterministic? | cost | ns/op |\n");
+    try writer.writeAll("|---|---:|---:|---:|---:|---:|---|---:|---:|\n");
+    try writeLargeAlphabetRow(init, writer, "literal-length-286", 286, maxLiteralFreqs(), 15, iterations);
+    try writeLargeAlphabetRow(init, writer, "distance-30", 30, maxDistanceFreqs(), 15, iterations);
+    try writeLargeAlphabetRow(init, writer, "code-length-19", 19, maxCodeLengthFreqs(), 7, iterations);
+    try writeLargeAlphabetRow(init, writer, "sparse-literal-286", 286, sparseLiteralFreqs(), 15, iterations);
 }
 
 fn writeLargeAlphabetRow(
+    init: std.process.Init,
     writer: *std.Io.Writer,
     comptime name: []const u8,
     comptime n: usize,
     freqs_value: [n]u32,
     comptime max_bits: u4,
+    iterations: usize,
 ) !void {
     const first = vort.huffman.treeCodeLengths(n, &freqs_value, max_bits);
     const second = vort.huffman.treeCodeLengths(n, &freqs_value, max_bits);
     const deterministic = std.meta.eql(first, second);
+    const ns_per_op = try timeCodeLengths(init, n, &freqs_value, max_bits, iterations);
     var nonzero: usize = 0;
     var max_length: u4 = 0;
     for (freqs_value, first) |freq, bits| {
@@ -363,7 +371,7 @@ fn writeLargeAlphabetRow(
         nonzero += 1;
         max_length = @max(max_length, bits);
     }
-    try writer.print("| {s} | {d} | {d} | {d} | {d} | {d}/{d} | {} | {d} |\n", .{
+    try writer.print("| {s} | {d} | {d} | {d} | {d} | {d}/{d} | {} | {d} | {d} |\n", .{
         name,
         n,
         max_bits,
@@ -373,7 +381,27 @@ fn writeLargeAlphabetRow(
         @as(usize, 1) << max_bits,
         deterministic,
         codeLengthCostGeneric(n, &freqs_value, &first),
+        ns_per_op,
     });
+}
+
+fn timeCodeLengths(
+    init: std.process.Init,
+    comptime n: usize,
+    freqs_value: *const [n]u32,
+    comptime max_bits: u4,
+    iterations: usize,
+) !u128 {
+    const start = std.Io.Clock.awake.now(init.io);
+    var checksum: usize = 0;
+    for (0..iterations) |_| {
+        const lengths = vort.huffman.treeCodeLengths(n, freqs_value, max_bits);
+        checksum +%= lengths[0];
+        checksum +%= lengths[n - 1];
+    }
+    std.mem.doNotOptimizeAway(checksum);
+    const elapsed = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+    return @intCast(@divTrunc(elapsed, @as(i128, @intCast(iterations))));
 }
 
 fn maxLiteralFreqs() [286]u32 {
