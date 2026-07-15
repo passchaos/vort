@@ -35,3 +35,13 @@ Required gates before enabling an architecture-specific IEEE path:
 3. `run-checksum-diff` and `run-checksum-zlib-diff` must both pass.
 4. `run-cpu-features` must report the selected IEEE path explicitly; portable
    builds currently report `portable-ieee-slice16`.
+
+## Block checksum composition
+
+`crc32Combine(left, right, right_len)` and `crc32cCombine(left, right, right_len)`
+compose already-finalized per-block digests into a whole-stream digest. They use
+GF(2) operators for the reflected CRC polynomials and are intended for indexed,
+blocked, or parallel paths that can validate chunks independently without
+rereading all payload bytes for a final checksum. Unit tests cover empty, tiny,
+large, and associative multi-block combinations against one-shot CRC-32 and
+CRC-32C hashes.

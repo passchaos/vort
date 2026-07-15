@@ -412,6 +412,16 @@ pub fn crc32Best(input: []const u8) u32 {
     };
 }
 
+/// Combine two already-finalized IEEE CRC-32 digests.
+///
+/// `right_len` is the byte length of the payload that produced `right_crc`.
+/// The returned digest is exactly `crc32(left_payload ++ right_payload)`.
+/// This is useful for parallel/block encoders that already validated each block
+/// independently but need a whole-stream checksum without rereading bytes.
+pub fn crc32Combine(left_crc: u32, right_crc: u32, right_len: u64) u32 {
+    return crcCombineReflected(Crc32.polynomial_reflected, left_crc, right_crc, right_len);
+}
+
 pub fn crc32Slice4(input: []const u8) u32 {
     return Crc32Slice4.hash(input);
 }
@@ -608,6 +618,14 @@ pub fn crc32c(input: []const u8) u32 {
     return Crc32C.hash(input);
 }
 
+/// Combine two already-finalized CRC-32C/Castagnoli digests.
+///
+/// `right_len` is the byte length of the payload that produced `right_crc`.
+/// The returned digest is exactly `crc32c(left_payload ++ right_payload)`.
+pub fn crc32cCombine(left_crc: u32, right_crc: u32, right_len: u64) u32 {
+    return crcCombineReflected(Crc32C.polynomial_reflected, left_crc, right_crc, right_len);
+}
+
 pub fn crc32cSlice8(input: []const u8) u32 {
     return Crc32CSlice8.hash(input);
 }
@@ -644,6 +662,63 @@ fn makeCrc32SliceTables(comptime slices: usize, comptime polynomial: u32) [slice
         }
     }
     return tables;
+}
+
+const gf2_matrix_dim = 32;
+
+fn crcCombineReflected(comptime polynomial: u32, left_crc: u32, right_crc: u32, right_len: u64) u32 {
+    if (right_len == 0) return left_crc;
+
+    var odd: [gf2_matrix_dim]u32 = undefined;
+    var even: [gf2_matrix_dim]u32 = undefined;
+
+    // `odd` starts as the operator for appending one zero bit to a reflected
+    // CRC state. Squaring advances it to two/four/eight zero-bit operators.
+    // The first operator applied in the loop is therefore one zero byte, and
+    // subsequent squarings cover powers of two bytes in `right_len`.
+    odd[0] = polynomial;
+    var row: u32 = 1;
+    for (1..gf2_matrix_dim) |index| {
+        odd[index] = row;
+        row <<= 1;
+    }
+
+    gf2MatrixSquare(&even, &odd); // two zero bits
+    gf2MatrixSquare(&odd, &even); // four zero bits
+
+    var len = right_len;
+    var combined = left_crc;
+    while (len != 0) {
+        gf2MatrixSquare(&even, &odd); // one zero byte, then powers of two bytes
+        if ((len & 1) != 0) combined = gf2MatrixTimes(&even, combined);
+        len >>= 1;
+        if (len == 0) break;
+
+        gf2MatrixSquare(&odd, &even);
+        if ((len & 1) != 0) combined = gf2MatrixTimes(&odd, combined);
+        len >>= 1;
+    }
+
+    return combined ^ right_crc;
+}
+
+fn gf2MatrixTimes(matrix: *const [gf2_matrix_dim]u32, vector_in: u32) u32 {
+    var vector = vector_in;
+    var index: usize = 0;
+    var sum: u32 = 0;
+    while (vector != 0) : ({
+        vector >>= 1;
+        index += 1;
+    }) {
+        if ((vector & 1) != 0) sum ^= matrix[index];
+    }
+    return sum;
+}
+
+fn gf2MatrixSquare(square: *[gf2_matrix_dim]u32, matrix: *const [gf2_matrix_dim]u32) void {
+    for (0..gf2_matrix_dim) |index| {
+        square[index] = gf2MatrixTimes(matrix, matrix[index]);
+    }
 }
 
 test "Adler-32 known zlib vectors" {
@@ -745,6 +820,60 @@ test "CRC-32 slice-by-4 slice-by-8 and slice-by-16 match scalar" {
         try std.testing.expectEqual(crc32(case), crc32Slice8(case));
         try std.testing.expectEqual(crc32(case), crc32Slice16(case));
     }
+}
+
+test "CRC combine matches one-shot for IEEE and Castagnoli" {
+    const left_cases = [_][]const u8{
+        "",
+        "left",
+        "prefix data " ** 17,
+        "0123456789abcdef" ** 129,
+    };
+    const right_cases = [_][]const u8{
+        "",
+        "right",
+        "suffix data " ** 19,
+        "fedcba9876543210" ** 127,
+    };
+
+    for (left_cases) |left| {
+        for (right_cases) |right| {
+            var joined = std.ArrayList(u8).empty;
+            defer joined.deinit(std.testing.allocator);
+            try joined.appendSlice(std.testing.allocator, left);
+            try joined.appendSlice(std.testing.allocator, right);
+
+            try std.testing.expectEqual(
+                crc32(joined.items),
+                crc32Combine(crc32(left), crc32(right), right.len),
+            );
+            try std.testing.expectEqual(
+                crc32c(joined.items),
+                crc32cCombine(crc32c(left), crc32c(right), right.len),
+            );
+        }
+    }
+}
+
+test "CRC combine is associative across block boundaries" {
+    const input = ("parallel checksum combine " ** 257) ++ ("0123456789abcdef" ** 73);
+    const a = input[0..13];
+    const b = input[13..2048];
+    const c = input[2048..];
+
+    const ab_crc32 = crc32Combine(crc32(a), crc32(b), b.len);
+    const abc_crc32 = crc32Combine(ab_crc32, crc32(c), c.len);
+    const bc_crc32 = crc32Combine(crc32(b), crc32(c), c.len);
+    const a_bc_crc32 = crc32Combine(crc32(a), bc_crc32, b.len + c.len);
+    try std.testing.expectEqual(crc32(input), abc_crc32);
+    try std.testing.expectEqual(crc32(input), a_bc_crc32);
+
+    const ab_crc32c = crc32cCombine(crc32c(a), crc32c(b), b.len);
+    const abc_crc32c = crc32cCombine(ab_crc32c, crc32c(c), c.len);
+    const bc_crc32c = crc32cCombine(crc32c(b), crc32c(c), c.len);
+    const a_bc_crc32c = crc32cCombine(crc32c(a), bc_crc32c, b.len + c.len);
+    try std.testing.expectEqual(crc32c(input), abc_crc32c);
+    try std.testing.expectEqual(crc32c(input), a_bc_crc32c);
 }
 
 test "CRC-32 best dispatch matches scalar" {
