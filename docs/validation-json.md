@@ -208,7 +208,9 @@ Important fields:
 - `cases`: case-level metadata including enum-checked `name`, human-readable
   `detail`, replayable `command`/`sample`/`argv`, format, JSON `schema_name`,
   byte size, data offset, and feature booleans. The manifest cross-checks `format` against `schema_name`
-  and `schema_name` against the replay command.
+  and `schema_name` against the replay command; zlib/gzip cases may point at
+  `vort.raw_deflate_header_info` when the replay command inspects the wrapped
+  deflate payload.
 
 Example:
 

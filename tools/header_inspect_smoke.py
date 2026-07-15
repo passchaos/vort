@@ -396,6 +396,26 @@ def main(argv: list[str]) -> int:
     assert zlib_json["uses_dictionary"] is False
     assert zlib_json["data_offset"] == 2
     validate_value_against_manifest(zlib_json, schemas_def)
+
+    zlib_inner_json = json.loads(run(cli, "inspect-zlib-deflate-header-hex", zlib_frame.hex(), "json"))
+    assert zlib_inner_json["schema"] == "vort.raw_deflate_header_info"
+    assert zlib_inner_json["block_type"] == "fixed"
+    cases.append(
+        {
+            "name": "zlib_inner_deflate",
+            "schema_name": "vort.raw_deflate_header_info",
+            "command": "inspect-zlib-deflate-header-hex",
+            "sample": zlib_frame.hex(),
+            "argv": ["inspect-zlib-deflate-header-hex", zlib_frame.hex()],
+            "detail": "inner fixed",
+            "format": "zlib",
+            "bytes": len(zlib_frame),
+            "data_offset": zlib_json["data_offset"],
+            "has_dictionary": False,
+            "has_optional_fields": False,
+            "header_crc": False,
+        }
+    )
     zlib_dict_hex = run(cli, "inspect-zlib-header-hex", zlib_dict_frame.hex())
     require_fields(
         zlib_dict_hex,
@@ -466,6 +486,25 @@ def main(argv: list[str]) -> int:
     assert gzip_json["extra_present"] is False
     assert gzip_json["header_crc"] is None
     validate_value_against_manifest(gzip_json, schemas_def)
+    gzip_inner_json = json.loads(run(cli, "inspect-gzip-deflate-header-hex", gzip_frame.hex(), "json"))
+    assert gzip_inner_json["schema"] == "vort.raw_deflate_header_info"
+    assert gzip_inner_json["block_type"] == "fixed"
+    cases.append(
+        {
+            "name": "gzip_inner_deflate",
+            "schema_name": "vort.raw_deflate_header_info",
+            "command": "inspect-gzip-deflate-header-hex",
+            "sample": gzip_frame.hex(),
+            "argv": ["inspect-gzip-deflate-header-hex", gzip_frame.hex()],
+            "detail": "inner fixed",
+            "format": "gzip",
+            "bytes": len(gzip_frame),
+            "data_offset": gzip_json["data_offset"],
+            "has_dictionary": False,
+            "has_optional_fields": False,
+            "header_crc": False,
+        }
+    )
     gzip_optional_hex = run(cli, "inspect-gzip-header-hex", gzip_optional_frame.hex())
     require_fields(
         gzip_optional_hex,

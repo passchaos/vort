@@ -140,7 +140,9 @@
         "command": [
           "inspect-raw-header-hex",
           "inspect-zlib-header-hex",
-          "inspect-gzip-header-hex"
+          "inspect-gzip-header-hex",
+          "inspect-zlib-deflate-header-hex",
+          "inspect-gzip-deflate-header-hex"
         ],
         "format": [
           "raw",
@@ -154,7 +156,9 @@
           "zlib_default",
           "zlib_dictionary",
           "gzip_default",
-          "gzip_optional"
+          "gzip_optional",
+          "zlib_inner_deflate",
+          "gzip_inner_deflate"
         ],
         "schema_name": [
           "vort.raw_deflate_header_info",
@@ -181,14 +185,24 @@
           "target": "schema_name",
           "allowed": {
             "raw": "vort.raw_deflate_header_info",
-            "zlib": "vort.zlib_header_info",
-            "gzip": "vort.gzip_header_info"
+            "zlib": [
+              "vort.zlib_header_info",
+              "vort.raw_deflate_header_info"
+            ],
+            "gzip": [
+              "vort.gzip_header_info",
+              "vort.raw_deflate_header_info"
+            ]
           }
         },
         "schema_name": {
           "target": "command",
           "allowed": {
-            "vort.raw_deflate_header_info": "inspect-raw-header-hex",
+            "vort.raw_deflate_header_info": [
+              "inspect-raw-header-hex",
+              "inspect-zlib-deflate-header-hex",
+              "inspect-gzip-deflate-header-hex"
+            ],
             "vort.zlib_header_info": "inspect-zlib-header-hex",
             "vort.gzip_header_info": "inspect-gzip-header-hex"
           }
