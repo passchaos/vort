@@ -58,6 +58,8 @@ def main() -> int:
     if not CLI.exists():
         raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
 
+    expect_cli_failure("decode-gzip-hex", "", error_name="TruncatedFrame")
+
     payloads = [b"", b"hello", b"hello vort", b"abcabcabcabc", b"the quick brown fox\n" * 8]
     for data in payloads:
         frame = gzip_compress(data)
@@ -94,6 +96,9 @@ def main() -> int:
         assert int(parse_field(out, "decoded_bytes")) == len(concatenated_plain), out
         assert limited_path.read_bytes() == concatenated_plain, out
         expect_cli_failure("decode-gzip-file", str(compressed_path), str(tmp / "cat-too-small.out"), str(len(concatenated_plain) - 1), error_name="OutputLimitExceeded")
+        empty_path = tmp / "empty.gz"
+        empty_path.write_bytes(b"")
+        expect_cli_failure("decode-gzip-file", str(empty_path), str(tmp / "empty.out"), error_name="TruncatedFrame")
 
     # Vort fixed gzip known vector -> system gzip.
     vort_hello = bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a6103605000000")
