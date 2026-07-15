@@ -417,6 +417,34 @@ def require_dashboard_strict_mode_manifest_consistency(schemas_def: dict[str, An
         raise AssertionError(
             f"dashboard strict expected modes differ from mode_counts enum: configured={sorted(configured_modes)!r} manifest={sorted(mode_count_modes)!r}"
         )
+    for collection in ("expected_modes", "mode_requirements", "missing_modes"):
+        collection_modes = set(
+            strict_schema.get("collections", {}).get(collection, {}).get("enums", {}).get("mode", [])
+        )
+        if configured_modes != collection_modes:
+            raise AssertionError(
+                f"dashboard strict expected modes differ from {collection} enum: configured={sorted(configured_modes)!r} manifest={sorted(collection_modes)!r}"
+            )
+
+
+def require_dashboard_validation_reason_manifest_consistency(schemas_def: dict[str, Any]) -> None:
+    dashboard_schema = schemas_def.get("vort.dashboard_index", {})
+    configured_reasons = set(
+        dashboard_schema.get("list_item_enums", {}).get("validation_unhealthy_reasons", [])
+    )
+    if not configured_reasons:
+        raise AssertionError("dashboard validation unhealthy reason enum must be non-empty")
+    strict_schema = schemas_def.get("vort.dashboard_strict_smoke", {})
+    covered_reasons = set(
+        strict_schema.get("collections", {})
+        .get("validation_unhealthy_reason_checks", {})
+        .get("enums", {})
+        .get("reason", [])
+    )
+    if configured_reasons != covered_reasons:
+        raise AssertionError(
+            f"dashboard strict validation reason coverage differs from dashboard index enum: configured={sorted(configured_reasons)!r} covered={sorted(covered_reasons)!r}"
+        )
 
 
 def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str, Any]) -> None:
@@ -525,6 +553,7 @@ def main() -> int:
     validate_value_against_manifest(json.loads(DASHBOARD_STRICT_MODES.read_text()), schemas_def)
     require_header_workflow_manifest_consistency(schemas_def)
     require_dashboard_strict_mode_manifest_consistency(schemas_def)
+    require_dashboard_validation_reason_manifest_consistency(schemas_def)
     print(f"validation_json_docs=ok examples={len(parsed)}")
     return 0
 

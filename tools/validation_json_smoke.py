@@ -130,6 +130,14 @@ def main() -> int:
         assert all(row["missing_checks"] == 0 and row["missing_expected_failures"] == 0 and row["missing_matched"] == 0 for row in dashboard_strict["mode_requirements"])
         assert sum(row["checks"] for row in dashboard_strict["mode_counts"]) == dashboard_strict["check_count"]
         assert any(row["mode"] == "strict-header-inspect" and row["checks"] >= 1 for row in dashboard_strict["mode_counts"])
+        expected_validation_reasons = set(
+            schemas_def["vort.dashboard_index"]["list_item_enums"]["validation_unhealthy_reasons"]
+        )
+        covered_validation_reasons = {row["reason"] for row in dashboard_strict["validation_unhealthy_reason_checks"]}
+        assert dashboard_strict["validation_unhealthy_reason_count"] == len(expected_validation_reasons)
+        assert covered_validation_reasons == expected_validation_reasons
+        assert all(row["matched"] is True for row in dashboard_strict["validation_unhealthy_reason_checks"])
+        assert any(row["mode"] == "strict-validation-health" and row["checks"] >= len(expected_validation_reasons) for row in dashboard_strict["mode_counts"])
         assert all(
             "expected_output" in row
             and "actual_output" in row
@@ -140,7 +148,9 @@ def main() -> int:
             for row in dashboard_strict["checks"]
         )
         assert any(row["actual_output_truncated"] is True for row in dashboard_strict["checks"])
-        assert "missing_header_workflow" in dashboard_strict_markdown_path.read_text()
+        dashboard_strict_markdown = dashboard_strict_markdown_path.read_text()
+        assert "missing_header_workflow" in dashboard_strict_markdown
+        assert "validation_missing_dashboard_strict_modes" in dashboard_strict_markdown
         validate_value_against_manifest(dashboard_strict, schemas_def)
 
         header_summary_path = root / "vort-header-inspect-smoke.json"

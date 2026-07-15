@@ -638,6 +638,16 @@ generation fails when the header inspect artifact is absent, reports `ok=false`,
 or has missing required workflows. With `--strict-validation-health`, generation
 fails whenever the aggregate `validation_healthy` field is false and reports the
 `validation_unhealthy_reasons` list with specific missing/failed artifact or coverage reasons.
+Current unhealthy reason values are:
+
+- `missing_producer_steps`
+- `missing_required_smoke_gates`
+- `missing_header_inspect_artifact`
+- `header_inspect_failed`
+- `missing_header_workflows`
+- `missing_dashboard_strict_artifact`
+- `dashboard_strict_failed`
+- `missing_dashboard_strict_modes`
 
 Top-level fields:
 
@@ -782,14 +792,18 @@ python3 tools/dashboard_strict_smoke.py --summary zig-out/vort-dashboard-strict-
 ```
 
 This schema summarizes positive and negative smoke checks for dashboard strict
-modes: producer coverage, smoke-gate coverage, and header-inspection health. Each
-check records the expected output marker, actual truncated output, original output
-length, truncation limit/flag, and process return code for CI diagnostics. `mode_counts` groups checks by strict mode for a
-compact dashboard overview, while `expected_modes` defines the minimum required
-coverage per strict mode, `mode_requirements` reports actual/minimum/delta values,
-and `missing_modes` reports unmet requirements. A
-synthetic long-output check keeps the truncation path covered so
-`actual_output_truncated=true` is exercised in CI.
+modes: producer coverage, smoke-gate coverage, header-inspection health, and
+aggregate validation-health failures. Each check records the expected output
+marker, actual truncated output, original output length, truncation limit/flag,
+and process return code for CI diagnostics. `mode_counts` groups checks by
+strict mode for a compact dashboard overview, while `expected_modes` defines the
+minimum required coverage per strict mode, `mode_requirements` reports
+actual/minimum/delta values, and `missing_modes` reports unmet requirements.
+`validation_unhealthy_reason_checks` records one isolated negative fixture for
+each `vort.dashboard_index.validation_unhealthy_reasons` enum value so new
+aggregate health reasons must be backed by real failing dashboard inputs before
+the smoke artifact can pass. A synthetic long-output check keeps the truncation
+path covered so `actual_output_truncated=true` is exercised in CI.
 
 Example:
 
@@ -802,6 +816,7 @@ Example:
   "mode_count": 1,
   "expected_mode_count": 1,
   "missing_mode_count": 0,
+  "validation_unhealthy_reason_count": 1,
   "expected_modes": [
     {
       "mode": "all",
@@ -844,6 +859,13 @@ Example:
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 0,
+      "matched": true
+    }
+  ],
+  "validation_unhealthy_reason_checks": [
+    {
+      "reason": "missing_dashboard_strict_modes",
+      "check": "validation_missing_dashboard_strict_modes",
       "matched": true
     }
   ]

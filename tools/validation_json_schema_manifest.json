@@ -195,7 +195,9 @@
         "missing_modes": "list",
         "ok": "bool",
         "schema": "str",
-        "schema_version": "int"
+        "schema_version": "int",
+        "validation_unhealthy_reason_count": "int",
+        "validation_unhealthy_reason_checks": "list"
       },
       "count_rules": {
         "check_count": {
@@ -209,6 +211,9 @@
         },
         "missing_mode_count": {
           "collection": "missing_modes"
+        },
+        "validation_unhealthy_reason_count": {
+          "collection": "validation_unhealthy_reason_checks"
         }
       },
       "collection_sum_rules": {
@@ -242,11 +247,18 @@
         "name": [
           "all_strict_ok",
           "missing_producer",
-          "validation_unhealthy",
           "missing_smoke_gate",
           "missing_header_inspect",
           "failed_header_inspect",
           "missing_header_workflow",
+          "validation_missing_producer_steps",
+          "validation_missing_required_smoke_gates",
+          "validation_missing_header_inspect_artifact",
+          "validation_header_inspect_failed",
+          "validation_missing_header_workflows",
+          "validation_missing_dashboard_strict_artifact",
+          "validation_dashboard_strict_failed",
+          "validation_missing_dashboard_strict_modes",
           "truncated_output"
         ]
       },
@@ -329,6 +341,50 @@
             ]
           },
           "allow_empty": true
+        },
+        "validation_unhealthy_reason_checks": {
+          "fields": {
+            "check": "str",
+            "matched": "bool",
+            "reason": "str"
+          },
+          "enums": {
+            "check": [
+              "validation_missing_producer_steps",
+              "validation_missing_required_smoke_gates",
+              "validation_missing_header_inspect_artifact",
+              "validation_header_inspect_failed",
+              "validation_missing_header_workflows",
+              "validation_missing_dashboard_strict_artifact",
+              "validation_dashboard_strict_failed",
+              "validation_missing_dashboard_strict_modes"
+            ],
+            "reason": [
+              "missing_producer_steps",
+              "missing_required_smoke_gates",
+              "missing_header_inspect_artifact",
+              "header_inspect_failed",
+              "missing_header_workflows",
+              "missing_dashboard_strict_artifact",
+              "dashboard_strict_failed",
+              "missing_dashboard_strict_modes"
+            ]
+          },
+          "field_pairs": {
+            "check": {
+              "target": "reason",
+              "allowed": {
+                "validation_missing_producer_steps": "missing_producer_steps",
+                "validation_missing_required_smoke_gates": "missing_required_smoke_gates",
+                "validation_missing_header_inspect_artifact": "missing_header_inspect_artifact",
+                "validation_header_inspect_failed": "header_inspect_failed",
+                "validation_missing_header_workflows": "missing_header_workflows",
+                "validation_missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
+                "validation_dashboard_strict_failed": "dashboard_strict_failed",
+                "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes"
+              }
+            }
+          }
         }
       }
     },

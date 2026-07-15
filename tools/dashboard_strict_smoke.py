@@ -13,30 +13,49 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_INDEX = ROOT / "tools" / "dashboard_index.py"
 EXPECTED_MODES = ROOT / "tools" / "dashboard_strict_expected_modes.json"
+SCHEMA_MANIFEST = ROOT / "tools" / "validation_json_schema_manifest.json"
+HEADER_INSPECT_ARTIFACT = "vort-header-inspect-smoke.json"
+DASHBOARD_STRICT_ARTIFACT = "vort-dashboard-strict-smoke.json"
 
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, check=check, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 
-def write_producer_map(path: Path, *, include_exact: bool = True, include_smoke: bool = True, required_name: str | None = None) -> None:
+def write_producer_map(
+    path: Path,
+    *,
+    include_header_exact: bool = True,
+    include_header_smoke: bool = True,
+    include_strict_exact: bool = True,
+    include_strict_smoke: bool = True,
+    required_names: list[str] | None = None,
+) -> None:
     artifact_metadata = {}
-    if include_smoke:
-        artifact_metadata["vort-header-inspect-smoke.json"] = {
+    if include_header_smoke:
+        artifact_metadata[HEADER_INSPECT_ARTIFACT] = {
             "expected_format": "json",
             "smoke_gate": "zig build run-header-inspect-dashboard",
         }
+    if include_strict_smoke:
+        artifact_metadata[DASHBOARD_STRICT_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-dashboard-strict-smoke",
+        }
+    exact = {}
+    if include_header_exact:
+        exact[HEADER_INSPECT_ARTIFACT] = "zig build run-header-inspect-dashboard"
+    if include_strict_exact:
+        exact[DASHBOARD_STRICT_ARTIFACT] = "zig build run-dashboard-strict-smoke"
     payload = {
         "schema": "vort.dashboard_producers",
         "schema_version": 1,
         "allow_missing": {"exact": [], "contains": []},
-        "required_smoke_gates": [required_name] if required_name else [],
+        "required_smoke_gates": list(required_names or []),
         "artifact_metadata": artifact_metadata,
-        "exact": {},
+        "exact": exact,
         "contains": [],
     }
-    if include_exact:
-        payload["exact"]["vort-header-inspect-smoke.json"] = "zig build run-header-inspect-dashboard"
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
@@ -51,6 +70,102 @@ def write_header_summary(path: Path, *, ok: bool = True, missing: list[dict[str,
         "missing_workflows": missing,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_dashboard_strict_summary(path: Path, *, ok: bool = True, missing_modes: list[dict[str, object]] | None = None) -> None:
+    missing_modes = missing_modes or []
+    mode_counts = [
+        {
+            "mode": "all",
+            "checks": 1,
+            "expected_failures": 0,
+            "matched": 1,
+        }
+    ]
+    expected_modes = [
+        {
+            "mode": "all",
+            "min_checks": 1,
+            "min_expected_failures": 0,
+            "min_matched": 1,
+        }
+    ]
+    mode_requirements = [
+        {
+            "mode": "all",
+            "checks": 1,
+            "min_checks": 1,
+            "missing_checks": 0,
+            "expected_failures": 0,
+            "min_expected_failures": 0,
+            "missing_expected_failures": 0,
+            "matched": 1,
+            "min_matched": 1,
+            "missing_matched": 0,
+        }
+    ]
+    for row in missing_modes:
+        mode = str(row.get("mode", "strict-validation-health"))
+        min_checks = int(row.get("min_checks", 1))
+        min_expected_failures = int(row.get("min_expected_failures", 1))
+        min_matched = int(row.get("min_matched", 1))
+        expected_modes.append(
+            {
+                "mode": mode,
+                "min_checks": min_checks,
+                "min_expected_failures": min_expected_failures,
+                "min_matched": min_matched,
+            }
+        )
+        mode_requirements.append(
+            {
+                "mode": mode,
+                "checks": 0,
+                "min_checks": min_checks,
+                "missing_checks": min_checks,
+                "expected_failures": 0,
+                "min_expected_failures": min_expected_failures,
+                "missing_expected_failures": min_expected_failures,
+                "matched": 0,
+                "min_matched": min_matched,
+                "missing_matched": min_matched,
+            }
+        )
+    payload = {
+        "schema": "vort.dashboard_strict_smoke",
+        "schema_version": 1,
+        "ok": ok,
+        "check_count": sum(row["checks"] for row in mode_counts),
+        "checks": [
+            {
+                "name": "all_strict_ok",
+                "mode": "all",
+                "expected_failure": False,
+                "matched": True,
+                "returncode": 0,
+                "expected_output": "dashboard_index=",
+                "actual_output": "dashboard_index=ok",
+                "actual_output_bytes": len("dashboard_index=ok"),
+                "actual_output_limit": 240,
+                "actual_output_truncated": False,
+            }
+        ],
+        "mode_count": len(mode_counts),
+        "mode_counts": mode_counts,
+        "expected_mode_count": len(expected_modes),
+        "expected_modes": expected_modes,
+        "mode_requirements": mode_requirements,
+        "missing_mode_count": len(missing_modes),
+        "missing_modes": missing_modes,
+        "validation_unhealthy_reason_count": 0,
+        "validation_unhealthy_reason_checks": [],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_healthy_artifacts(root: Path) -> None:
+    write_header_summary(root / HEADER_INSPECT_ARTIFACT)
+    write_dashboard_strict_summary(root / DASHBOARD_STRICT_ARTIFACT)
 
 
 def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
@@ -158,6 +273,21 @@ def load_expected_modes() -> list[dict[str, object]]:
     return normalized
 
 
+def load_validation_unhealthy_reasons() -> list[str]:
+    payload = json.loads(SCHEMA_MANIFEST.read_text())
+    reasons = (
+        payload.get("schemas", {})
+        .get("vort.dashboard_index", {})
+        .get("list_item_enums", {})
+        .get("validation_unhealthy_reasons")
+    )
+    if not isinstance(reasons, list) or not reasons or not all(isinstance(reason, str) for reason in reasons):
+        raise AssertionError("dashboard index validation_unhealthy_reasons enum must be a non-empty string list")
+    if len(set(reasons)) != len(reasons):
+        raise AssertionError("dashboard index validation_unhealthy_reasons enum contains duplicates")
+    return reasons
+
+
 def mode_requirements(mode_counts: list[dict[str, object]], expected_modes: list[dict[str, object]]) -> list[dict[str, object]]:
     counts = {str(row["mode"]): row for row in mode_counts}
     rows: list[dict[str, object]] = []
@@ -233,6 +363,17 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
             lines.append(f"| `{row['mode']}` | {row['min_checks']} | {row['min_expected_failures']} | {row['min_matched']} |")
     lines.extend([
         "",
+        "### Validation unhealthy reason coverage",
+        "",
+        f"- covered reasons: {summary['validation_unhealthy_reason_count']}",
+        "",
+        "| reason | check | matched |",
+        "| --- | --- | --- |",
+    ])
+    for row in summary["validation_unhealthy_reason_checks"]:
+        lines.append(f"| `{row['reason']}` | `{row['check']}` | `{row['matched']}` |")
+    lines.extend([
+        "",
         "## Checks",
         "",
         "| name | mode | expected failure | returncode | expected output | actual bytes | actual output | truncated | matched |",
@@ -254,12 +395,20 @@ def main() -> int:
     checks: list[dict[str, object]] = []
     with tempfile.TemporaryDirectory(prefix="vort-dashboard-strict-") as tmp:
         root = Path(tmp)
-        artifact = root / "vort-header-inspect-smoke.json"
         producer_map = root / "producers.json"
-        write_header_summary(artifact)
-        write_producer_map(producer_map)
+        write_healthy_artifacts(root)
+        write_producer_map(producer_map, required_names=[HEADER_INSPECT_ARTIFACT, DASHBOARD_STRICT_ARTIFACT])
 
-        ok = run(dashboard_args(root, producer_map, "--strict-producers", "--strict-smoke-gates", "--strict-header-inspect"))
+        ok = run(
+            dashboard_args(
+                root,
+                producer_map,
+                "--strict-producers",
+                "--strict-smoke-gates",
+                "--strict-header-inspect",
+                "--strict-validation-health",
+            )
+        )
         if "dashboard_index=" not in ok.stdout:
             raise AssertionError(f"dashboard index success output missing marker: {ok.stdout!r}")
         manifest = json.loads((root / "vort-dashboard-index.json").read_text())
@@ -269,19 +418,14 @@ def main() -> int:
         checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
 
         no_producer = root / "no-producer.json"
-        write_producer_map(no_producer, include_exact=False)
-        no_producer_result = expect_failure(dashboard_args(root, no_producer, "--strict-producers"), "dashboard_index_missing_producers=vort-header-inspect-smoke.json")
-        checks.append(check_row("missing_producer", "strict-producers", True, True, no_producer_result.returncode, "dashboard_index_missing_producers=vort-header-inspect-smoke.json", no_producer_result.stdout))
-        validation_unhealthy_result = expect_failure(
-            dashboard_args(root, no_producer, "--strict-validation-health"),
-            "dashboard_index_validation_unhealthy=missing_producer_steps",
-        )
-        checks.append(check_row("validation_unhealthy", "strict-validation-health", True, True, validation_unhealthy_result.returncode, "dashboard_index_validation_unhealthy=missing_producer_steps", validation_unhealthy_result.stdout))
+        write_producer_map(no_producer, include_header_exact=False, required_names=[HEADER_INSPECT_ARTIFACT, DASHBOARD_STRICT_ARTIFACT])
+        no_producer_result = expect_failure(dashboard_args(root, no_producer, "--strict-producers"), f"dashboard_index_missing_producers={HEADER_INSPECT_ARTIFACT}")
+        checks.append(check_row("missing_producer", "strict-producers", True, True, no_producer_result.returncode, f"dashboard_index_missing_producers={HEADER_INSPECT_ARTIFACT}", no_producer_result.stdout))
 
         no_smoke = root / "no-smoke.json"
-        write_producer_map(no_smoke, include_smoke=False, required_name="vort-header-inspect-smoke.json")
-        no_smoke_result = expect_failure(dashboard_args(root, no_smoke, "--strict-smoke-gates"), "dashboard_index_missing_smoke_gates=vort-header-inspect-smoke.json")
-        checks.append(check_row("missing_smoke_gate", "strict-smoke-gates", True, True, no_smoke_result.returncode, "dashboard_index_missing_smoke_gates=vort-header-inspect-smoke.json", no_smoke_result.stdout))
+        write_producer_map(no_smoke, include_header_smoke=False, required_names=[HEADER_INSPECT_ARTIFACT])
+        no_smoke_result = expect_failure(dashboard_args(root, no_smoke, "--strict-smoke-gates"), f"dashboard_index_missing_smoke_gates={HEADER_INSPECT_ARTIFACT}")
+        checks.append(check_row("missing_smoke_gate", "strict-smoke-gates", True, True, no_smoke_result.returncode, f"dashboard_index_missing_smoke_gates={HEADER_INSPECT_ARTIFACT}", no_smoke_result.stdout))
 
         missing_root = root / "missing-header"
         missing_root.mkdir()
@@ -316,6 +460,145 @@ def main() -> int:
         )
         checks.append(check_row("missing_header_workflow", "strict-header-inspect", True, True, missing_workflow_result.returncode, "dashboard_index_header_inspect_missing_workflows=1:inspect-raw-header-file:file", missing_workflow_result.stdout))
 
+        validation_reason_checks: list[dict[str, object]] = []
+
+        def add_validation_reason_check(root: Path, producer_map: Path, name: str, reason: str) -> None:
+            expected = f"dashboard_index_validation_unhealthy={reason}"
+            result = expect_failure(dashboard_args(root, producer_map, "--strict-validation-health"), expected)
+            marker = "dashboard_index_validation_unhealthy="
+            reason_line = next((line for line in result.stdout.splitlines() if line.startswith(marker)), "")
+            actual_reasons = [item for item in reason_line.removeprefix(marker).split(",") if item]
+            # Each fixture intentionally isolates one health failure. This keeps
+            # a broad aggregate gate from masking a missing fine-grained reason
+            # behind another, easier-to-trigger dashboard problem.
+            if actual_reasons != [reason]:
+                raise AssertionError(f"{name} expected isolated reason {reason!r}, got {actual_reasons!r}")
+            row = check_row(name, "strict-validation-health", True, True, result.returncode, expected, result.stdout)
+            checks.append(row)
+            validation_reason_checks.append({"reason": reason, "check": name, "matched": row["matched"]})
+
+        validation_missing_producer_root = root / "validation-missing-producer"
+        validation_missing_producer_root.mkdir()
+        write_healthy_artifacts(validation_missing_producer_root)
+        validation_missing_producer_map = validation_missing_producer_root / "producers.json"
+        write_producer_map(validation_missing_producer_map, include_header_exact=False)
+        add_validation_reason_check(
+            validation_missing_producer_root,
+            validation_missing_producer_map,
+            "validation_missing_producer_steps",
+            "missing_producer_steps",
+        )
+
+        validation_missing_smoke_root = root / "validation-missing-smoke"
+        validation_missing_smoke_root.mkdir()
+        write_healthy_artifacts(validation_missing_smoke_root)
+        validation_missing_smoke_map = validation_missing_smoke_root / "producers.json"
+        write_producer_map(validation_missing_smoke_map, include_header_smoke=False, required_names=[HEADER_INSPECT_ARTIFACT])
+        add_validation_reason_check(
+            validation_missing_smoke_root,
+            validation_missing_smoke_map,
+            "validation_missing_required_smoke_gates",
+            "missing_required_smoke_gates",
+        )
+
+        validation_missing_header_root = root / "validation-missing-header"
+        validation_missing_header_root.mkdir()
+        write_dashboard_strict_summary(validation_missing_header_root / DASHBOARD_STRICT_ARTIFACT)
+        validation_missing_header_map = validation_missing_header_root / "producers.json"
+        write_producer_map(validation_missing_header_map)
+        add_validation_reason_check(
+            validation_missing_header_root,
+            validation_missing_header_map,
+            "validation_missing_header_inspect_artifact",
+            "missing_header_inspect_artifact",
+        )
+
+        validation_failed_header_root = root / "validation-failed-header"
+        validation_failed_header_root.mkdir()
+        write_header_summary(validation_failed_header_root / HEADER_INSPECT_ARTIFACT, ok=False)
+        write_dashboard_strict_summary(validation_failed_header_root / DASHBOARD_STRICT_ARTIFACT)
+        validation_failed_header_map = validation_failed_header_root / "producers.json"
+        write_producer_map(validation_failed_header_map)
+        add_validation_reason_check(
+            validation_failed_header_root,
+            validation_failed_header_map,
+            "validation_header_inspect_failed",
+            "header_inspect_failed",
+        )
+
+        validation_missing_workflows_root = root / "validation-missing-workflows"
+        validation_missing_workflows_root.mkdir()
+        write_header_summary(
+            validation_missing_workflows_root / HEADER_INSPECT_ARTIFACT,
+            missing=[{"command": "inspect-raw-header-file", "workflow": "file", "format": "raw"}],
+        )
+        write_dashboard_strict_summary(validation_missing_workflows_root / DASHBOARD_STRICT_ARTIFACT)
+        validation_missing_workflows_map = validation_missing_workflows_root / "producers.json"
+        write_producer_map(validation_missing_workflows_map)
+        add_validation_reason_check(
+            validation_missing_workflows_root,
+            validation_missing_workflows_map,
+            "validation_missing_header_workflows",
+            "missing_header_workflows",
+        )
+
+        validation_missing_strict_root = root / "validation-missing-strict"
+        validation_missing_strict_root.mkdir()
+        write_header_summary(validation_missing_strict_root / HEADER_INSPECT_ARTIFACT)
+        validation_missing_strict_map = validation_missing_strict_root / "producers.json"
+        write_producer_map(validation_missing_strict_map)
+        add_validation_reason_check(
+            validation_missing_strict_root,
+            validation_missing_strict_map,
+            "validation_missing_dashboard_strict_artifact",
+            "missing_dashboard_strict_artifact",
+        )
+
+        validation_failed_strict_root = root / "validation-failed-strict"
+        validation_failed_strict_root.mkdir()
+        write_header_summary(validation_failed_strict_root / HEADER_INSPECT_ARTIFACT)
+        write_dashboard_strict_summary(validation_failed_strict_root / DASHBOARD_STRICT_ARTIFACT, ok=False)
+        validation_failed_strict_map = validation_failed_strict_root / "producers.json"
+        write_producer_map(validation_failed_strict_map)
+        add_validation_reason_check(
+            validation_failed_strict_root,
+            validation_failed_strict_map,
+            "validation_dashboard_strict_failed",
+            "dashboard_strict_failed",
+        )
+
+        validation_missing_strict_modes_root = root / "validation-missing-strict-modes"
+        validation_missing_strict_modes_root.mkdir()
+        write_header_summary(validation_missing_strict_modes_root / HEADER_INSPECT_ARTIFACT)
+        write_dashboard_strict_summary(
+            validation_missing_strict_modes_root / DASHBOARD_STRICT_ARTIFACT,
+            missing_modes=[
+                {
+                    "mode": "strict-validation-health",
+                    "min_checks": 8,
+                    "min_expected_failures": 8,
+                    "min_matched": 8,
+                }
+            ],
+        )
+        validation_missing_strict_modes_map = validation_missing_strict_modes_root / "producers.json"
+        write_producer_map(validation_missing_strict_modes_map)
+        add_validation_reason_check(
+            validation_missing_strict_modes_root,
+            validation_missing_strict_modes_map,
+            "validation_missing_dashboard_strict_modes",
+            "missing_dashboard_strict_modes",
+        )
+
+        expected_validation_reasons = load_validation_unhealthy_reasons()
+        covered_validation_reasons = {str(row["reason"]) for row in validation_reason_checks}
+        missing_validation_reasons = [reason for reason in expected_validation_reasons if reason not in covered_validation_reasons]
+        extra_validation_reasons = sorted(covered_validation_reasons - set(expected_validation_reasons))
+        if missing_validation_reasons or extra_validation_reasons:
+            raise AssertionError(
+                f"validation unhealthy reason coverage mismatch: missing={missing_validation_reasons!r} extra={extra_validation_reasons!r}"
+            )
+
         long_output = "dashboard_index_synthetic_long_output=" + ("x" * 512)
         checks.append(check_row("truncated_output", "synthetic", False, True, 0, "dashboard_index_synthetic_long_output=", long_output))
         if not checks[-1]["actual_output_truncated"]:
@@ -340,6 +623,8 @@ def main() -> int:
         "mode_requirements": mode_requirement_rows,
         "missing_mode_count": len(missing_modes),
         "missing_modes": missing_modes,
+        "validation_unhealthy_reason_count": len(validation_reason_checks),
+        "validation_unhealthy_reason_checks": validation_reason_checks,
     }
     if args.summary:
         path = Path(args.summary)
