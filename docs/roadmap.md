@@ -157,6 +157,7 @@ architecture blindly.
 - [x] Raw/zlib/gzip one-shot decode APIs support explicit output limits.
 - [x] Public raw deflate first-block header parser exposes BFINAL/BTYPE and payload offsets.
 - [x] Raw deflate header parser exposes stored-block LEN/NLEN and payload offsets.
+- [x] Raw deflate header parser exposes dynamic-block HLIT/HDIST/HCLEN fields.
 - [x] CLI raw deflate header inspection supports text and schema-checked JSON output.
 - [x] Allocator-returning raw/zlib/gzip decoders use larger capped output capacity hints for highly compressed frames.
 - [x] Raw/zlib/gzip alloc decoders expose exact-size variants for callers that know the output length.

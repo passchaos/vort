@@ -1077,6 +1077,12 @@ fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     try printOptionalJson(u16, stdout, info.stored_nlen);
     try stdout.print(" stored_payload_offset=", .{});
     try printOptionalJson(usize, stdout, info.stored_payload_offset);
+    try stdout.print(" dynamic_hlit=", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_hlit);
+    try stdout.print(" dynamic_hdist=", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_hdist);
+    try stdout.print(" dynamic_hclen=", .{});
+    try printOptionalJson(u8, stdout, info.dynamic_hclen);
     try stdout.print("\n", .{});
 }
 
@@ -1154,6 +1160,12 @@ fn printRawHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     try printOptionalJson(u16, stdout, info.stored_nlen);
     try stdout.print(",\"stored_payload_offset\":", .{});
     try printOptionalJson(usize, stdout, info.stored_payload_offset);
+    try stdout.print(",\"dynamic_hlit\":", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_hlit);
+    try stdout.print(",\"dynamic_hdist\":", .{});
+    try printOptionalJson(u16, stdout, info.dynamic_hdist);
+    try stdout.print(",\"dynamic_hclen\":", .{});
+    try printOptionalJson(u8, stdout, info.dynamic_hclen);
     try stdout.print("}}\n", .{});
 }
 

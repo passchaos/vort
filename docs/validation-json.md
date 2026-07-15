@@ -204,8 +204,8 @@ Example:
   "schema": "vort.header_inspect_smoke",
   "schema_version": 1,
   "ok": true,
-  "case_count": 6,
-  "raw_cases": 2,
+  "case_count": 7,
+  "raw_cases": 3,
   "zlib_cases": 2,
   "gzip_cases": 2,
   "dictionary_cases": 1,
@@ -235,8 +235,9 @@ zig build run -- inspect-raw-header-hex cb48cdc9c90700 json
 
 This schema is the machine-readable form of raw DEFLATE first-block header
 inspection. It reports BFINAL, BTYPE, the bit/byte offsets where the
-block-specific payload begins, and stored-block LEN/NLEN diagnostics when
-BTYPE is `stored`.
+block-specific payload begins, dynamic-block HLIT/HDIST/HCLEN values when
+BTYPE is `dynamic`, and stored-block LEN/NLEN diagnostics when BTYPE is
+`stored`.
 
 Example:
 
@@ -249,6 +250,9 @@ Example:
   "block_type": "fixed",
   "data_bit_offset": 3,
   "data_byte_offset": 1,
+  "dynamic_hlit": null,
+  "dynamic_hdist": null,
+  "dynamic_hclen": null,
   "stored_len": null,
   "stored_nlen": null,
   "stored_payload_offset": null

@@ -120,6 +120,36 @@ def main(argv: list[str]) -> int:
     assert raw_stored_json["stored_payload_offset"] == 5
     validate_value_against_manifest(raw_stored_json, schemas_def)
 
+    raw_dynamic_frame_hex = run(cli, "encode-raw-dynamic-hex", payload.decode("ascii"), "default")
+    raw_dynamic_frame = bytes.fromhex(raw_dynamic_frame_hex)
+    raw_dynamic_hex = run(cli, "inspect-raw-header-hex", raw_dynamic_frame_hex)
+    require_fields(
+        raw_dynamic_hex,
+        {
+            "raw_header compressed_bytes": str(len(raw_dynamic_frame)),
+            "block_type": "dynamic",
+            "dynamic_hlit": "257",
+        },
+    )
+    cases.append(
+        {
+            "name": "raw_dynamic",
+            "format": "raw",
+            "bytes": len(raw_dynamic_frame),
+            "data_offset": 1,
+            "has_dictionary": False,
+            "has_optional_fields": False,
+            "header_crc": False,
+        }
+    )
+    raw_dynamic_json = json.loads(run(cli, "inspect-raw-header-hex", raw_dynamic_frame_hex, "json"))
+    assert raw_dynamic_json["schema"] == "vort.raw_deflate_header_info"
+    assert raw_dynamic_json["block_type"] == "dynamic"
+    assert raw_dynamic_json["dynamic_hlit"] >= 257
+    assert raw_dynamic_json["dynamic_hdist"] >= 1
+    assert raw_dynamic_json["dynamic_hclen"] >= 4
+    validate_value_against_manifest(raw_dynamic_json, schemas_def)
+
     zlib_hex = run(cli, "inspect-zlib-header-hex", zlib_frame.hex())
     require_fields(
         zlib_hex,
@@ -247,12 +277,14 @@ def main(argv: list[str]) -> int:
         tmp_path = Path(tmp)
         raw_path = tmp_path / "sample.raw"
         raw_stored_path = tmp_path / "sample-stored.raw"
+        raw_dynamic_path = tmp_path / "sample-dynamic.raw"
         zlib_path = tmp_path / "sample.zlib"
         zlib_dict_path = tmp_path / "sample-dict.zlib"
         gzip_path = tmp_path / "sample.gz"
         gzip_optional_path = tmp_path / "sample-options.gz"
         raw_path.write_bytes(raw_frame)
         raw_stored_path.write_bytes(raw_stored_frame)
+        raw_dynamic_path.write_bytes(raw_dynamic_frame)
         zlib_path.write_bytes(zlib_frame)
         zlib_dict_path.write_bytes(zlib_dict_frame)
         gzip_path.write_bytes(gzip_frame)
@@ -260,18 +292,22 @@ def main(argv: list[str]) -> int:
 
         raw_file = run(cli, "inspect-raw-header-file", str(raw_path))
         raw_stored_file = run(cli, "inspect-raw-header-file", str(raw_stored_path))
+        raw_dynamic_file = run(cli, "inspect-raw-header-file", str(raw_dynamic_path))
         zlib_file = run(cli, "inspect-zlib-header-file", str(zlib_path))
         zlib_dict_file = run(cli, "inspect-zlib-header-file", str(zlib_dict_path))
         gzip_file = run(cli, "inspect-gzip-header-file", str(gzip_path))
         gzip_optional_file = run(cli, "inspect-gzip-header-file", str(gzip_optional_path))
         raw_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_path), "json"))
         raw_stored_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_stored_path), "json"))
+        raw_dynamic_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_dynamic_path), "json"))
         zlib_file_json = json.loads(run(cli, "inspect-zlib-header-file", str(zlib_path), "json"))
         gzip_optional_file_json = json.loads(run(cli, "inspect-gzip-header-file", str(gzip_optional_path), "json"))
         if raw_file != raw_hex:
             raise AssertionError(f"raw file/hex inspection mismatch: {raw_file!r} != {raw_hex!r}")
         if raw_stored_file != raw_stored_hex:
             raise AssertionError(f"raw stored file/hex inspection mismatch: {raw_stored_file!r} != {raw_stored_hex!r}")
+        if raw_dynamic_file != raw_dynamic_hex:
+            raise AssertionError(f"raw dynamic file/hex inspection mismatch: {raw_dynamic_file!r} != {raw_dynamic_hex!r}")
         if zlib_file != zlib_hex:
             raise AssertionError(f"zlib file/hex inspection mismatch: {zlib_file!r} != {zlib_hex!r}")
         if zlib_dict_file != zlib_dict_hex:
@@ -284,6 +320,8 @@ def main(argv: list[str]) -> int:
             raise AssertionError(f"raw JSON file/hex inspection mismatch: {raw_file_json!r} != {raw_json!r}")
         if raw_stored_file_json != raw_stored_json:
             raise AssertionError(f"raw stored JSON file/hex inspection mismatch: {raw_stored_file_json!r} != {raw_stored_json!r}")
+        if raw_dynamic_file_json != raw_dynamic_json:
+            raise AssertionError(f"raw dynamic JSON file/hex inspection mismatch: {raw_dynamic_file_json!r} != {raw_dynamic_json!r}")
         if zlib_file_json != zlib_json:
             raise AssertionError(f"zlib JSON file/hex inspection mismatch: {zlib_file_json!r} != {zlib_json!r}")
         if gzip_optional_file_json != gzip_optional_json:

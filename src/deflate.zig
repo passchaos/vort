@@ -52,6 +52,12 @@ pub const RawDeflateHeaderInfo = struct {
     /// LEN/NLEN. For compressed block types this remains null because payload
     /// starts at data_bit_offset rather than a byte-aligned LEN/NLEN section.
     stored_payload_offset: ?usize = null,
+    /// Dynamic-block HLIT value after adding the RFC 1951 base of 257.
+    dynamic_hlit: ?u16 = null,
+    /// Dynamic-block HDIST value after adding the RFC 1951 base of 1.
+    dynamic_hdist: ?u16 = null,
+    /// Dynamic-block HCLEN value after adding the RFC 1951 base of 4.
+    dynamic_hclen: ?u8 = null,
 };
 
 pub const GzipHeaderOptions = struct {
@@ -1239,6 +1245,9 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
     var stored_len: ?u16 = null;
     var stored_nlen: ?u16 = null;
     var stored_payload_offset: ?usize = null;
+    var dynamic_hlit: ?u16 = null;
+    var dynamic_hdist: ?u16 = null;
+    var dynamic_hclen: ?u8 = null;
     if (block_type == .stored) {
         reader.alignToByte();
         const offset = reader.byteOffset();
@@ -1249,6 +1258,14 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         stored_len = len;
         stored_nlen = nlen;
         stored_payload_offset = offset + 4;
+    } else if (block_type == .dynamic) {
+        const hlit: u16 = @as(u16, try reader.readBits(u5, 5)) + 257;
+        const hdist: u16 = @as(u16, try reader.readBits(u5, 5)) + 1;
+        const hclen: u8 = @as(u8, try reader.readBits(u4, 4)) + 4;
+        if (hlit > 286 or hdist > 30 or hclen > huffman.code_length_order.len) return error.InvalidDynamicBlockHeader;
+        dynamic_hlit = hlit;
+        dynamic_hdist = hdist;
+        dynamic_hclen = hclen;
     }
     return .{
         .final = final,
@@ -1258,6 +1275,9 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         .stored_len = stored_len,
         .stored_nlen = stored_nlen,
         .stored_payload_offset = stored_payload_offset,
+        .dynamic_hlit = dynamic_hlit,
+        .dynamic_hdist = dynamic_hdist,
+        .dynamic_hclen = dynamic_hclen,
     };
 }
 
@@ -3057,10 +3077,14 @@ test "raw deflate header parser exposes first block metadata" {
     const dynamic_info = try parseRawDeflateHeaderInfo(dynamic);
     try std.testing.expect(dynamic_info.final);
     try std.testing.expectEqual(RawDeflateBlockType.dynamic, dynamic_info.block_type);
+    try std.testing.expect(dynamic_info.dynamic_hlit.? >= 257);
+    try std.testing.expect(dynamic_info.dynamic_hdist.? >= 1);
+    try std.testing.expect(dynamic_info.dynamic_hclen.? >= 4);
 
     try std.testing.expectError(error.TruncatedFrame, parseRawDeflateHeaderInfo(""));
     try std.testing.expectError(error.InvalidDeflateBlockType, parseRawDeflateHeaderInfo(&.{0x07}));
     try std.testing.expectError(error.TruncatedFrame, parseRawDeflateHeaderInfo(&.{0x01}));
+    try std.testing.expectError(error.TruncatedFrame, parseRawDeflateHeaderInfo(&.{0x05}));
     try std.testing.expectError(error.StoredLengthMismatch, parseRawDeflateHeaderInfo(&.{ 0x01, 0x01, 0x00, 0xff, 0xff, 'x' }));
 }
 
