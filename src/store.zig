@@ -2649,10 +2649,20 @@ pub fn decodeSidecarIndexedRangeWithDictionaryInto(allocator: std.mem.Allocator,
     return decodeRangeWithDictionaryInto(allocator, dict, input, index, offset, length, output);
 }
 
+pub fn decodeSidecarIndexedRangeWithDictionaryIntoWithIndexBuffer(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize, output: []u8, index_buffer: []FrameIndexEntry) !RangeDecodeIntoResult {
+    const count = try decodeFrameIndex(sidecar_index, index_buffer);
+    return decodeRangeWithDictionaryInto(allocator, dict, input, index_buffer[0..count], offset, length, output);
+}
+
 pub fn decodeSidecarIndexedRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
     const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
     defer allocator.free(index);
     return decodeRangesWithDictionaryInto(allocator, dict, input, index, requests, results);
+}
+
+pub fn decodeSidecarIndexedRangesWithDictionaryIntoWithIndexBuffer(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, index_buffer: []FrameIndexEntry) !void {
+    const count = try decodeFrameIndex(sidecar_index, index_buffer);
+    return decodeRangesWithDictionaryInto(allocator, dict, input, index_buffer[0..count], requests, results);
 }
 
 pub fn decodeSidecarIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
@@ -2724,10 +2734,20 @@ pub fn decodeIndexedRangeWithDictionaryInto(allocator: std.mem.Allocator, dict: 
     return decodeRangeWithDictionaryInto(allocator, dict, input, embedded.entries, offset, length, output);
 }
 
+pub fn decodeIndexedRangeWithDictionaryIntoWithIndexBuffer(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, offset: u64, length: usize, output: []u8, index_buffer: []FrameIndexEntry) !RangeDecodeIntoResult {
+    const decoded_index = try decodeEmbeddedIndex(input, index_buffer);
+    return decodeRangeWithDictionaryInto(allocator, dict, input, index_buffer[0..decoded_index.entries_written], offset, length, output);
+}
+
 pub fn decodeIndexedRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
     const embedded = try parseEmbeddedIndexAlloc(allocator, input);
     defer embedded.deinit(allocator);
     return decodeRangesWithDictionaryInto(allocator, dict, input, embedded.entries, requests, results);
+}
+
+pub fn decodeIndexedRangesWithDictionaryIntoWithIndexBuffer(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, index_buffer: []FrameIndexEntry) !void {
+    const decoded_index = try decodeEmbeddedIndex(input, index_buffer);
+    return decodeRangesWithDictionaryInto(allocator, dict, input, index_buffer[0..decoded_index.entries_written], requests, results);
 }
 
 pub fn decodeSelfContainedDictionaryRangeAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
@@ -4581,6 +4601,38 @@ test "full dictionary patch frame range decodes into caller buffer without alloc
     try std.testing.expectEqual(@as(u64, 0), result.offset);
     try std.testing.expectEqualSlices(u8, input, &out);
     try std.testing.expectEqual(checksum.crc32(input), result.crc32);
+}
+
+test "dictionary range into can reuse caller index buffers without allocation" {
+    const dict = "alpha beta gamma";
+    const input = "zz alpha beta yy gamma";
+    const frame = try encodeDictionaryPatchAlloc(std.testing.allocator, dict, input, 5);
+    defer std.testing.allocator.free(frame);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+    const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, index);
+    defer std.testing.allocator.free(sidecar);
+    const index_frame = try encodeSkippableAlloc(std.testing.allocator, sidecar);
+    defer std.testing.allocator.free(index_frame);
+
+    var embedded_stream = std.ArrayList(u8).empty;
+    defer embedded_stream.deinit(std.testing.allocator);
+    try embedded_stream.appendSlice(std.testing.allocator, frame);
+    try embedded_stream.appendSlice(std.testing.allocator, index_frame);
+
+    var sidecar_index_buffer: [1]FrameIndexEntry = undefined;
+    var sidecar_out: [input.len]u8 = undefined;
+    const sidecar_result = try decodeSidecarIndexedRangeWithDictionaryIntoWithIndexBuffer(std.testing.failing_allocator, dict, frame, sidecar, 0, sidecar_out.len, sidecar_out[0..], &sidecar_index_buffer);
+    try std.testing.expectEqual(sidecar_out.len, sidecar_result.output_written);
+    try std.testing.expectEqualSlices(u8, input, &sidecar_out);
+    try std.testing.expectEqual(checksum.crc32(input), sidecar_result.crc32);
+
+    var embedded_index_buffer: [1]FrameIndexEntry = undefined;
+    var embedded_out: [input.len]u8 = undefined;
+    const embedded_result = try decodeIndexedRangeWithDictionaryIntoWithIndexBuffer(std.testing.failing_allocator, dict, embedded_stream.items, 0, embedded_out.len, embedded_out[0..], &embedded_index_buffer);
+    try std.testing.expectEqual(embedded_out.len, embedded_result.output_written);
+    try std.testing.expectEqualSlices(u8, input, &embedded_out);
+    try std.testing.expectEqual(checksum.crc32(input), embedded_result.crc32);
 }
 
 test "native dictionary deflate frame decodes with caller dictionary" {

@@ -36,6 +36,8 @@ pub fn main(init: std.process.Init) !void {
     defer allocator.free(indexed_deflate_stream);
     const dict_stream = try buildEmbeddedDictionaryPatchStream(allocator);
     defer allocator.free(dict_stream);
+    const dict_indexed_stream = try buildDictionaryPatchIndexedStream(allocator);
+    defer allocator.free(dict_indexed_stream);
     const self_contained_dict_stream = try vort.storeEncodeSelfContainedDictionaryStreamAlloc(
         allocator,
         ("self-contained dictionary phrase for native streams" ++ "!") ** 3,
@@ -56,6 +58,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureBatchRangeInto(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureBatchRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
+    try rows.append(allocator, try measureDictionaryRangeIntoWithIndexBuffer(allocator, dict_indexed_stream));
     try rows.append(allocator, try measureEmbeddedValidation(allocator, self_contained_dict_stream));
 
     var stdout_buffer: [1024]u8 = undefined;
@@ -174,6 +177,24 @@ fn buildIndexedDeflateStream(allocator: std.mem.Allocator) ![]u8 {
     return vort.storeEncodeIndexedDeflateStreamAlloc(allocator, &payloads);
 }
 
+fn buildDictionaryPatchIndexedStream(allocator: std.mem.Allocator) ![]u8 {
+    const dict = "alpha beta gamma";
+    const input = "zz alpha beta yy gamma";
+    const frame = try vort.storeEncodeDictionaryPatchAlloc(allocator, dict, input, 5);
+    defer allocator.free(frame);
+    const index = try vort.storeBuildFrameIndexAlloc(allocator, frame);
+    defer allocator.free(index);
+    const index_bytes = try vort.storeEncodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try vort.storeEncodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    var stream = std.ArrayList(u8).empty;
+    errdefer stream.deinit(allocator);
+    try stream.appendSlice(allocator, frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
 fn embeddedDictionaryPayloadAlloc(allocator: std.mem.Allocator, dict: []const u8) ![]u8 {
     const header_len = 20;
     const out = try allocator.alloc(u8, header_len + dict.len);
@@ -290,6 +311,19 @@ fn measureBatchRangeIntoWithIndexBuffer(backing: std.mem.Allocator, stream: []co
         .{ .offset = index[1].uncompressed_offset, .length = second_len, .output = second },
     }, results[0..], index_buffer);
     return stats("batch_range_into_index_buffer", stream.len, results[0].output_written + results[1].output_written, failing);
+}
+
+fn measureDictionaryRangeIntoWithIndexBuffer(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const dict = "alpha beta gamma";
+    const input = "zz alpha beta yy gamma";
+    const out = try backing.alloc(u8, input.len);
+    defer backing.free(out);
+    const view = try vort.storeViewEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, view.entry_count);
+    defer backing.free(index_buffer);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.storeDecodeIndexedRangeWithDictionaryIntoWithIndexBuffer(failing.allocator(), dict, stream, 0, out.len, out, index_buffer);
+    return stats("dictionary_range_into_index_buffer", stream.len, result.output_written, failing);
 }
 
 fn measureEmbeddedValidation(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
