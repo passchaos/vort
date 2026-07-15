@@ -132,6 +132,9 @@ entries and do not need a full validation report.
 Serialized frame indexes also expose `frameIndexEntryCount` and caller-owned
 `decodeFrameIndex`, so callers can preflight sidecar buffer sizes and decode
 index entries without forcing an allocation.
+Embedded-index helpers mirror that shape: `viewEmbeddedIndex` returns the
+borrowed serialized index payload, payload offset, and entry count, while
+`decodeEmbeddedIndex` fills caller-owned entry storage.
 
 ## Range decode summary APIs
 

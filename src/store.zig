@@ -2261,17 +2261,32 @@ pub const EmbeddedIndex = struct {
     }
 };
 
-pub fn parseEmbeddedIndexAlloc(allocator: std.mem.Allocator, input: []const u8) !EmbeddedIndex {
+pub const EmbeddedIndexView = struct {
+    payload: []const u8,
+    payload_offset: usize,
+    entry_count: usize,
+};
+
+pub const EmbeddedIndexDecodeResult = struct {
+    entries_written: usize,
+    payload_offset: usize,
+};
+
+pub fn viewEmbeddedIndex(input: []const u8) Error!EmbeddedIndexView {
     var offset: usize = 0;
-    var last_payload: ?[]const u8 = null;
+    var last_view: ?EmbeddedIndexView = null;
     var last_payload_offset: usize = 0;
     while (offset < input.len) {
         const tail = input[offset..];
         if (tail.len >= 4 and std.mem.eql(u8, tail[0..4], &skippable_magic)) {
             const payload = try parseSkippable(tail);
             if (payload.len >= 4 and std.mem.eql(u8, payload[0..4], &serialized_index_magic)) {
-                last_payload = payload;
                 last_payload_offset = offset + skippable_header_len;
+                last_view = .{
+                    .payload = payload,
+                    .payload_offset = last_payload_offset,
+                    .entry_count = try frameIndexEntryCount(payload),
+                };
             }
             const total = try skippableTotalLen(tail);
             if (tail.len < total) return error.TruncatedFrame;
@@ -2283,8 +2298,22 @@ pub fn parseEmbeddedIndexAlloc(allocator: std.mem.Allocator, input: []const u8) 
             offset += total;
         }
     }
-    const payload = last_payload orelse return error.InvalidMagic;
-    return .{ .entries = try decodeFrameIndexAlloc(allocator, payload), .payload_offset = last_payload_offset };
+    return last_view orelse error.InvalidMagic;
+}
+
+pub fn decodeEmbeddedIndex(input: []const u8, output: []FrameIndexEntry) Error!EmbeddedIndexDecodeResult {
+    const view = try viewEmbeddedIndex(input);
+    const written = try decodeFrameIndex(view.payload, output);
+    return .{ .entries_written = written, .payload_offset = view.payload_offset };
+}
+
+pub fn parseEmbeddedIndexAlloc(allocator: std.mem.Allocator, input: []const u8) !EmbeddedIndex {
+    const view = try viewEmbeddedIndex(input);
+    const entries = try allocator.alloc(FrameIndexEntry, view.entry_count);
+    errdefer allocator.free(entries);
+    const written = try decodeFrameIndex(view.payload, entries);
+    std.debug.assert(written == entries.len);
+    return .{ .entries = entries, .payload_offset = view.payload_offset };
 }
 
 pub fn decodeIndexedRangeAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
@@ -3653,6 +3682,21 @@ test "indexed stream embeds sidecar index as skippable frame" {
     defer embedded.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 3), embedded.entries.len);
     try std.testing.expect(embedded.payload_offset > 0);
+    const view = try viewEmbeddedIndex(stream);
+    try std.testing.expectEqual(embedded.payload_offset, view.payload_offset);
+    try std.testing.expectEqual(embedded.entries.len, view.entry_count);
+    const into_entries = try std.testing.allocator.alloc(FrameIndexEntry, view.entry_count);
+    defer std.testing.allocator.free(into_entries);
+    const into = try decodeEmbeddedIndex(stream, into_entries);
+    try std.testing.expectEqual(view.entry_count, into.entries_written);
+    try std.testing.expectEqual(view.payload_offset, into.payload_offset);
+    for (embedded.entries, into_entries) |expected, actual| {
+        try std.testing.expectEqual(expected.frame_offset, actual.frame_offset);
+        try std.testing.expectEqual(expected.frame_len, actual.frame_len);
+        try std.testing.expectEqual(expected.uncompressed_offset, actual.uncompressed_offset);
+        try std.testing.expectEqual(expected.uncompressed_len, actual.uncompressed_len);
+        try std.testing.expectEqual(expected.checksum, actual.checksum);
+    }
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 3, 8);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, "habetaga", range);
