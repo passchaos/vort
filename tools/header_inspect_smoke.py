@@ -34,6 +34,15 @@ def md(text: object) -> str:
     return str(text).replace("|", "\\|")
 
 
+def md_sample(text: object, limit: int = 32) -> str:
+    value = str(text)
+    if len(value) <= limit:
+        return md(value)
+    head = max(8, limit - 12)
+    tail = 8
+    return md(f"{value[:head]}…{value[-tail:]} ({len(value)} hex)")
+
+
 def format_for_command(command: str) -> str:
     if "raw" in command:
         return "raw"
@@ -93,7 +102,7 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
         )
         for case in cases:
             lines.append(
-                f"| {md(case['name'])} | `{md(case['schema_name'])}` | {case['bytes']} | {md(case['detail'])} | `{md(case['command'])}` | `{md(case['sample'])}` |"
+                f"| {md(case['name'])} | `{md(case['schema_name'])}` | {case['bytes']} | {md(case['detail'])} | `{md(case['command'])}` | `{md_sample(case['sample'])}` |"
             )
         lines.append("")
     lines.extend(
@@ -121,7 +130,7 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
             ]
         )
         for item in items:
-            lines.append(f"| {md(item['name'])} | `{md(item['command'])}` | `{md(item['sample'])}` | `{md(item['expected_error'])}` |")
+            lines.append(f"| {md(item['name'])} | `{md(item['command'])}` | `{md_sample(item['sample'])}` | `{md(item['expected_error'])}` |")
         lines.append("")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")

@@ -192,6 +192,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection Markdown dashboard includes per-format summary totals.
 - [x] raw/zlib/gzip header inspection Markdown dashboard groups successful inspections by format.
 - [x] raw/zlib/gzip header inspection Markdown dashboard surfaces human-readable success-case details.
+- [x] raw/zlib/gzip header inspection Markdown dashboard shortens long hex samples while JSON keeps full replay data.
 - [x] raw/zlib/gzip header inspection Markdown dashboard groups malformed-header failures by format.
 - [x] Dashboard index classifies raw/zlib/gzip header inspection artifacts under validation.
 - [x] Dashboard category smoke protects raw/zlib/gzip header inspection validation classification.
