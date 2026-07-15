@@ -158,7 +158,8 @@
           "gzip_default",
           "gzip_optional",
           "zlib_inner_deflate",
-          "gzip_inner_deflate"
+          "gzip_inner_deflate",
+          "gzip_concat_inner_deflate"
         ],
         "schema_name": [
           "vort.raw_deflate_header_info",

@@ -328,7 +328,8 @@ zig build run -- inspect-zlib-deflate-header-hex 7801cb48cdc9c90700062c0215 json
 This schema wraps `vort.raw_deflate_header_info` with the zlib/gzip header
 context needed to locate the inner DEFLATE payload. It records the wrapper type,
 total wrapper bytes, byte offset where the DEFLATE payload starts, remaining
-bytes after that offset, and the nested raw header object.
+bytes after that offset, and the nested raw header object. For concatenated gzip
+inputs the current CLI inspects the first member's DEFLATE header.
 
 Example:
 

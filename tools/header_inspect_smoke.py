@@ -182,6 +182,7 @@ def main(argv: list[str]) -> int:
     raw_stored_frame = bytes.fromhex("010500faff68656c6c6f")
     zlib_frame = zlib.compress(payload, level=6)
     gzip_frame = gzip.compress(payload, compresslevel=6, mtime=0)
+    gzip_concat_frame = gzip_frame + gzip.compress(b"world", compresslevel=6, mtime=0)
     schemas_def = load_manifest()
     dictionary = b"hello "
     dict_payload = b"hello hello hello"
@@ -507,6 +508,30 @@ def main(argv: list[str]) -> int:
             "header_crc": False,
         }
     )
+
+    gzip_concat_inner_json = json.loads(run(cli, "inspect-gzip-deflate-header-hex", gzip_concat_frame.hex(), "json"))
+    assert gzip_concat_inner_json["schema"] == "vort.wrapped_deflate_header_info"
+    assert gzip_concat_inner_json["wrapper"] == "gzip"
+    assert gzip_concat_inner_json["deflate_offset"] == gzip_inner_json["deflate_offset"]
+    for key in ("block_type", "final", "data_bit_offset", "header_bits_consumed"):
+        assert gzip_concat_inner_json["raw_header"][key] == gzip_inner_json["raw_header"][key]
+    cases.append(
+        {
+            "name": "gzip_concat_inner_deflate",
+            "schema_name": "vort.wrapped_deflate_header_info",
+            "command": "inspect-gzip-deflate-header-hex",
+            "sample": gzip_concat_frame.hex(),
+            "argv": ["inspect-gzip-deflate-header-hex", gzip_concat_frame.hex()],
+            "detail": "first member inner fixed",
+            "format": "gzip",
+            "bytes": len(gzip_concat_frame),
+            "data_offset": gzip_concat_inner_json["deflate_offset"],
+            "has_dictionary": False,
+            "has_optional_fields": False,
+            "header_crc": False,
+        }
+    )
+
     gzip_optional_hex = run(cli, "inspect-gzip-header-hex", gzip_optional_frame.hex())
     require_fields(
         gzip_optional_hex,
@@ -554,6 +579,7 @@ def main(argv: list[str]) -> int:
         zlib_path = tmp_path / "sample.zlib"
         zlib_dict_path = tmp_path / "sample-dict.zlib"
         gzip_path = tmp_path / "sample.gz"
+        gzip_concat_path = tmp_path / "sample-cat.gz"
         gzip_optional_path = tmp_path / "sample-options.gz"
         raw_path.write_bytes(raw_frame)
         raw_stored_path.write_bytes(raw_stored_frame)
@@ -561,6 +587,7 @@ def main(argv: list[str]) -> int:
         zlib_path.write_bytes(zlib_frame)
         zlib_dict_path.write_bytes(zlib_dict_frame)
         gzip_path.write_bytes(gzip_frame)
+        gzip_concat_path.write_bytes(gzip_concat_frame)
         gzip_optional_path.write_bytes(gzip_optional_frame)
 
         raw_file = run(cli, "inspect-raw-header-file", str(raw_path))
@@ -570,6 +597,7 @@ def main(argv: list[str]) -> int:
         zlib_dict_file = run(cli, "inspect-zlib-header-file", str(zlib_dict_path))
         gzip_file = run(cli, "inspect-gzip-header-file", str(gzip_path))
         gzip_optional_file = run(cli, "inspect-gzip-header-file", str(gzip_optional_path))
+        gzip_concat_inner_file_json = json.loads(run(cli, "inspect-gzip-deflate-header-file", str(gzip_concat_path), "json"))
         raw_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_path), "json"))
         raw_stored_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_stored_path), "json"))
         raw_dynamic_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_dynamic_path), "json"))
@@ -599,6 +627,8 @@ def main(argv: list[str]) -> int:
             raise AssertionError(f"zlib JSON file/hex inspection mismatch: {zlib_file_json!r} != {zlib_json!r}")
         if gzip_optional_file_json != gzip_optional_json:
             raise AssertionError(f"gzip optional JSON file/hex inspection mismatch: {gzip_optional_file_json!r} != {gzip_optional_json!r}")
+        if gzip_concat_inner_file_json != gzip_concat_inner_json:
+            raise AssertionError(f"gzip concatenated inner JSON file/hex inspection mismatch: {gzip_concat_inner_file_json!r} != {gzip_concat_inner_json!r}")
 
     negative_error_counts: dict[str, int] = {}
     for item in negative_items:
