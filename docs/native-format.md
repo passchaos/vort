@@ -203,7 +203,10 @@ inflating the compressed patch payload; partial dictionary ranges continue to us
 the decoded-frame cache path so subranges share one verified decoded copy within
 batch requests. Allocator-returning dictionary frame decoders also have
 exact-size and output-limited variants, matching the non-dictionary native safety
-surface while still requiring the caller-supplied dictionary bytes.
+surface while still requiring the caller-supplied dictionary bytes. Deflate-
+wrapped dictionary patches bound the intermediate inflated patch size from the
+declared decoded output length and reject non-progress literal operations, so a
+small final payload cannot force unbounded patch materialization.
 
 ## Long-distance decode-into and full-frame range fast path
 

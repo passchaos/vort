@@ -291,6 +291,7 @@ pub const findDictionaryMatchesAlloc = dictionary.findMatchesAlloc;
 pub const summarizeDictionaryMatchesAlloc = dictionary.summarizeMatchesAlloc;
 pub const encodeDictionaryPatchAlloc = dictionary.encodePatchAlloc;
 pub const decodedDictionaryPatchSize = dictionary.decodedPatchSize;
+pub const maxDictionaryPatchSizeForDecodedLen = dictionary.maxPatchSizeForDecodedLen;
 pub const decodeDictionaryPatch = dictionary.decodePatch;
 pub const decodeDictionaryPatchInto = dictionary.decodePatchInto;
 pub const decodeDictionaryPatchAlloc = dictionary.decodePatchAlloc;

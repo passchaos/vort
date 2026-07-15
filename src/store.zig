@@ -556,7 +556,8 @@ pub fn decodeDictionaryPatchInto(allocator: std.mem.Allocator, dict: []const u8,
             // stream. The final patch materialization nevertheless writes into
             // the caller-owned frame output buffer instead of allocating the
             // decoded user payload.
-            const patch = try deflate.decodeRawAutoAlloc(allocator, payload);
+            const patch_limit = try dictionary.maxPatchSizeForDecodedLen(output_len);
+            const patch = try deflate.decodeRawAutoAllocLimited(allocator, payload, patch_limit);
             defer allocator.free(patch);
             const written = try dictionary.decodePatchInto(dict, patch, output[0..output_len]);
             if (written != output_len) return error.SizeMismatch;
@@ -4077,6 +4078,32 @@ test "native dictionary deflate frame decodes into caller buffer" {
     try std.testing.expectEqualSlices(u8, input, exact);
 
     try std.testing.expectError(error.OutputLimitExceeded, decodeDictionaryPatchAllocLimited(std.testing.allocator, dict, frame, input.len - 1));
+}
+
+test "native dictionary deflate patch inflate is bounded by decoded size" {
+    const patch = try dictionary.encodePatchAlloc(std.testing.allocator, "", "", 1);
+    defer std.testing.allocator.free(patch);
+    var oversized_patch = std.ArrayList(u8).empty;
+    defer oversized_patch.deinit(std.testing.allocator);
+    try oversized_patch.appendSlice(std.testing.allocator, patch);
+    try oversized_patch.append(std.testing.allocator, 0);
+    try appendIntLE(u16, std.testing.allocator, &oversized_patch, 0);
+
+    const compressed = try deflate.encodeRawStoredAlloc(std.testing.allocator, oversized_patch.items);
+    defer std.testing.allocator.free(compressed);
+    const frame = try std.testing.allocator.alloc(u8, try encodedSize(compressed.len));
+    defer std.testing.allocator.free(frame);
+    writeHeader(frame[0..header_len], .{
+        .version = current_version,
+        .flags = flags_dictionary_deflate,
+        .uncompressed_size = 0,
+        .stored_size = @intCast(compressed.len),
+        .checksum = checksum.crc32(""),
+    });
+    @memcpy(frame[header_len..], compressed);
+
+    var out: [0]u8 = .{};
+    try std.testing.expectError(error.OutputLimitExceeded, decodeDictionaryPatchInto(std.testing.allocator, "", frame, &out));
 }
 
 test "full dictionary deflate frame range decodes into caller buffer" {

@@ -221,6 +221,16 @@ pub fn decodedPatchSize(patch: []const u8) !usize {
     return (try parsePatchHeader(patch)).expected_len;
 }
 
+pub fn maxPatchSizeForDecodedLen(decoded_len: usize) !usize {
+    // The decoder rejects zero-length literal ops below, so each accepted patch
+    // operation must make forward progress. A one-byte match with min_match_len=1
+    // is the densest valid opcode encoding: 1 tag byte + 2 offset bytes +
+    // 2 length bytes for one decoded byte. Literals are at most 4 bytes per
+    // decoded byte when split into single-byte literal ops.
+    const body = std.math.mul(usize, decoded_len, 5) catch return error.IntegerOverflow;
+    return std.math.add(usize, patch_header_len, body) catch return error.IntegerOverflow;
+}
+
 pub fn decodePatch(dict: []const u8, patch: []const u8, output: []u8) !usize {
     return decodePatchInto(dict, patch, output);
 }
@@ -238,6 +248,7 @@ pub fn decodePatchInto(dict: []const u8, patch: []const u8, output: []u8) !usize
                 if (patch.len - offset < 2) return error.TruncatedFrame;
                 const len: usize = std.mem.readInt(u16, patch[offset..][0..2], .little);
                 offset += 2;
+                if (len == 0) return error.CorruptFrame;
                 if (patch.len - offset < len) return error.TruncatedFrame;
                 try copyDecodedPatchBytes(output, &written, header.expected_len, patch[offset..][0..len]);
                 offset += len;
@@ -406,4 +417,20 @@ test "dictionary patch decode into rejects short output and overlong op streams"
     std.mem.writeInt(u16, corrupt[patch_header_len + 3 ..][0..2], @intCast(sample.len + 1), .little);
     var out: [sample.len + 1]u8 = undefined;
     try std.testing.expectError(error.SizeMismatch, decodePatchInto(dict, corrupt, &out));
+}
+
+test "dictionary patch rejects non-progress literal ops" {
+    const patch = try encodePatchAlloc(std.testing.allocator, "", "", 1);
+    defer std.testing.allocator.free(patch);
+    try std.testing.expectEqual(patch_header_len, patch.len);
+    try std.testing.expectEqual(patch_header_len, try maxPatchSizeForDecodedLen(0));
+    try std.testing.expectEqual(@as(usize, patch_header_len + 5), try maxPatchSizeForDecodedLen(1));
+
+    var corrupt = std.ArrayList(u8).empty;
+    defer corrupt.deinit(std.testing.allocator);
+    try corrupt.appendSlice(std.testing.allocator, patch);
+    try corrupt.append(std.testing.allocator, op_literal);
+    try appendInt(u16, std.testing.allocator, &corrupt, 0);
+    var out: [0]u8 = .{};
+    try std.testing.expectError(error.CorruptFrame, decodePatchInto("", corrupt.items, &out));
 }

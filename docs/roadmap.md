@@ -76,6 +76,8 @@ architecture blindly.
 - [x] Full-frame native dictionary-patch range-decode into path writes directly to caller buffers without temporary decoded-frame allocation.
 - [x] Native dictionary-deflate frame decode-into uses caller buffers after inflating the patch payload.
 - [x] Native dictionary-patch/deflate allocator decoders expose exact-size and output-limited variants.
+- [x] Native dictionary-deflate patch inflation is bounded by declared decoded output size.
+- [x] Dictionary patch decoder rejects non-progress literal operations.
 - [x] Native LDM frame decode-into replays literals and matches directly into caller buffers.
 - [x] Full-frame native LDM range-decode into path writes directly to caller buffers without temporary decoded-frame allocation.
 - [x] Sidecar-indexed stream encoder keeps index external.
