@@ -253,6 +253,7 @@ architecture blindly.
 - [x] Dashboard index surfaces dashboard strict expected-failure and matched check totals.
 - [x] Dashboard index exposes direct header-inspection and dashboard-strict health booleans.
 - [x] Dashboard index exposes producer, smoke-gate, and overall validation health booleans.
+- [x] Dashboard index exposes validation unhealthy reasons with schema-checked reason enums.
 - [x] Validation JSON schema checker validates dashboard health booleans against their component fields.
 - [x] Dashboard index surfaces dashboard strict expected/missing mode details.
 - [x] Dashboard strict-mode smoke records actual-output truncation limit and truncation flag per check.

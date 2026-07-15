@@ -319,6 +319,7 @@ def main() -> int:
             and dashboard["header_inspect_healthy"]
             and dashboard["dashboard_strict_healthy"]
         )
+        assert dashboard["validation_unhealthy_reasons"] == ([] if dashboard["validation_healthy"] else dashboard["validation_unhealthy_reasons"])
         validate_value_against_manifest(dashboard, schemas_def)
         strict_missing_root = root / "strict-missing"
         strict_missing_root.mkdir()

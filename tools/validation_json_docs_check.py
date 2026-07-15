@@ -165,6 +165,17 @@ def require_collection_sum_rules(value: dict[str, Any], collection_sum_rules: di
             raise AssertionError(f"{label}.{total_field}={value.get(total_field)!r} does not match sum({collection_name}.{field}); expected {total!r}")
 
 
+def require_list_item_enums(value: dict[str, Any], list_item_enums: dict[str, list[str]], label: str) -> None:
+    for list_field, allowed_values in list_item_enums.items():
+        payload = value.get(list_field)
+        if not isinstance(payload, list):
+            raise AssertionError(f"{label}.{list_field} must be a list for item enum validation")
+        allowed = set(allowed_values)
+        unexpected = sorted(item for item in payload if item not in allowed)
+        if unexpected:
+            raise AssertionError(f"{label}.{list_field} has unexpected items {unexpected!r}; allowed={sorted(allowed)}")
+
+
 def require_dict_key_enums(value: dict[str, Any], dict_key_enums: dict[str, list[str]], label: str) -> None:
     for dict_field, allowed_values in dict_key_enums.items():
         payload = value.get(dict_field)
@@ -424,6 +435,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     require_dict_sum_rules(value, schema_def.get("dict_sum_rules", {}), schema)
     require_collection_sum_rules(value, schema_def.get("collection_sum_rules", {}), schema)
     require_dict_key_enums(value, schema_def.get("dict_key_enums", {}), schema)
+    require_list_item_enums(value, schema_def.get("list_item_enums", {}), schema)
     require_conditional_fields(value, schema_def.get("conditional_fields", []), schema)
     require_numeric_relations(value, schema_def.get("numeric_relations", []), schema)
     require_difference_relations(value, schema_def.get("difference_relations", []), schema)

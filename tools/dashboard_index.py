@@ -271,6 +271,15 @@ def main() -> int:
     header_healthy = header_health["present"] and header_health["ok"] and header_health["missing_workflow_count"] == 0
     strict_healthy = strict_health["present"] and strict_health["ok"] and strict_health["missing_mode_count"] == 0
     validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy
+    validation_unhealthy_reasons = []
+    if not producer_healthy:
+        validation_unhealthy_reasons.append("missing_producers")
+    if not smoke_gate_healthy:
+        validation_unhealthy_reasons.append("missing_smoke_gates")
+    if not header_healthy:
+        validation_unhealthy_reasons.append("header_inspect_unhealthy")
+    if not strict_healthy:
+        validation_unhealthy_reasons.append("dashboard_strict_unhealthy")
 
     lines = [
         "# Vort dashboard index",
@@ -283,6 +292,7 @@ def main() -> int:
         f"- smoke gates: {smoke_gate_covered}/{len(records)}",
         f"- required smoke gates missing: {len(smoke_gate_required_missing)}",
         f"- validation healthy: `{validation_healthy}`",
+        f"- validation unhealthy reasons: {len(validation_unhealthy_reasons)}",
         f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing, healthy `{header_healthy}`",
         f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing), healthy `{strict_healthy}`",
         "",
@@ -339,6 +349,7 @@ def main() -> int:
                 "smoke_gate_required_missing": smoke_gate_required_missing,
                 "smoke_gate_healthy": smoke_gate_healthy,
                 "validation_healthy": validation_healthy,
+                "validation_unhealthy_reasons": validation_unhealthy_reasons,
                 "header_inspect_present": header_health["present"],
                 "header_inspect_ok": header_health["ok"],
                 "header_inspect_healthy": header_healthy,

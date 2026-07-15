@@ -32,7 +32,8 @@
         "smoke_gate_healthy": "bool",
         "smoke_gate_missing": "list",
         "smoke_gate_required_missing": "list",
-        "validation_healthy": "bool"
+        "validation_healthy": "bool",
+        "validation_unhealthy_reasons": "list"
       },
       "boolean_formula_rules": {
         "producer_healthy": {
@@ -110,6 +111,14 @@
           },
           "allow_empty": true
         }
+      },
+      "list_item_enums": {
+        "validation_unhealthy_reasons": [
+          "missing_producers",
+          "missing_smoke_gates",
+          "header_inspect_unhealthy",
+          "dashboard_strict_unhealthy"
+        ]
       },
       "item_collection": "artifacts",
       "item_enums": {

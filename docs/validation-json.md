@@ -651,6 +651,7 @@ Top-level fields:
 - `smoke_gate_healthy`
 - `smoke_gate_required_missing`
 - `validation_healthy`
+- `validation_unhealthy_reasons`
 - `header_inspect_present`, `header_inspect_ok`, `header_inspect_healthy`,
   `header_inspect_required_workflow_count`,
   `header_inspect_missing_workflow_count`,
@@ -690,6 +691,10 @@ Example:
   "smoke_gate_healthy": true,
   "smoke_gate_required_missing": [],
   "validation_healthy": false,
+  "validation_unhealthy_reasons": [
+    "header_inspect_unhealthy",
+    "dashboard_strict_unhealthy"
+  ],
   "header_inspect_present": false,
   "header_inspect_ok": false,
   "header_inspect_healthy": false,
@@ -942,6 +947,7 @@ Each schema entry can contain:
 | `count_rules` | object | Optional top-level count fields that must match list lengths or filtered item counts. |
 | `dict_sum_rules` | object | Optional top-level count fields that must equal the sum of values in a dict field. |
 | `dict_key_enums` | object | Optional dict fields whose keys must be in an allowed string set. |
+| `list_item_enums` | object | Optional list fields whose scalar items must be in an allowed string set. |
 | `nested_schema_fields` | object | Optional nested object fields that must validate against another schema. |
 | `item_collection` | string | Optional nested list field to inspect. |
 | `item_fields` | object | Required fields for the first nested item. |
