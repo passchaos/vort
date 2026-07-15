@@ -4810,6 +4810,29 @@ test "gzip concatenated members decode in sequence" {
     try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, 11));
 }
 
+test "gzip concatenated decoders preserve later members after an empty member" {
+    const first = try encodeGzipFixedAlloc(std.testing.allocator, "hello ");
+    defer std.testing.allocator.free(first);
+    const empty = try encodeGzipFixedAlloc(std.testing.allocator, "");
+    defer std.testing.allocator.free(empty);
+    const third = try encodeGzipFixedAlloc(std.testing.allocator, "world");
+    defer std.testing.allocator.free(third);
+
+    var cat: std.ArrayList(u8) = .empty;
+    defer cat.deinit(std.testing.allocator);
+    try cat.appendSlice(std.testing.allocator, first);
+    try cat.appendSlice(std.testing.allocator, empty);
+    try cat.appendSlice(std.testing.allocator, third);
+
+    const decoded = try decodeGzipConcatenatedAlloc(std.testing.allocator, cat.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "hello world", decoded);
+
+    var into: [11]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 11), try decodeGzipConcatenated(cat.items, &into));
+    try std.testing.expectEqualSlices(u8, "hello world", &into);
+}
+
 test "gzip concatenated decoders reject empty input" {
     var out: [1]u8 = undefined;
     try std.testing.expectError(error.TruncatedFrame, decodeGzipConcatenated("", &out));

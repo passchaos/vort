@@ -322,6 +322,7 @@ def main(argv: list[str]) -> int:
     zlib_frame = zlib.compress(payload, level=6)
     gzip_frame = gzip.compress(payload, compresslevel=6, mtime=0)
     gzip_concat_frame = gzip_frame + gzip.compress(b"world", compresslevel=6, mtime=0)
+    gzip_concat_with_empty_frame = gzip.compress(b"hello ", compresslevel=6, mtime=0) + gzip.compress(b"", compresslevel=6, mtime=0) + gzip.compress(b"world", compresslevel=6, mtime=0)
     schemas_def = load_manifest()
     dictionary = b"hello "
     dict_payload = b"hello hello hello"
@@ -877,6 +878,17 @@ def main(argv: list[str]) -> int:
     assert gzip_second_bad_isize_json["member_footer_isize"] != gzip_second_bad_isize_json["member_isize"]
     assert gzip_second_bad_isize_json["member_isize_matches"] is False
     validate_value_against_manifest(gzip_second_bad_isize_json, schemas_def)
+
+    gzip_third_after_empty_json = json.loads(run(cli, "inspect-gzip-deflate-header-hex", gzip_concat_with_empty_frame.hex(), "json", "2"))
+    assert gzip_third_after_empty_json["schema"] == "vort.wrapped_deflate_header_info"
+    assert gzip_third_after_empty_json["wrapper"] == "gzip"
+    assert gzip_third_after_empty_json["member_index"] == 2
+    assert gzip_third_after_empty_json["member_offset"] > gzip_second_inner_json["member_offset"]
+    assert gzip_third_after_empty_json["member_output_bytes"] == len(second_payload)
+    assert gzip_third_after_empty_json["member_crc32_matches"] is True
+    assert gzip_third_after_empty_json["member_footer_isize"] == len(second_payload)
+    assert gzip_third_after_empty_json["member_isize_matches"] is True
+    validate_value_against_manifest(gzip_third_after_empty_json, schemas_def)
 
     gzip_optional_hex = run(cli, "inspect-gzip-header-hex", gzip_optional_frame.hex())
     require_fields(

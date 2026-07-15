@@ -309,6 +309,7 @@ architecture blindly.
 - [x] gzip concatenated member decode support.
 - [x] gzip concatenated member decode supports explicit total output limits.
 - [x] gzip concatenated member decode supports caller-owned output buffers.
+- [x] gzip concatenated decoders preserve later members after an empty middle member.
 - [x] gzip concatenated decoders reject empty input as truncated data.
 - [x] gzip CLI differential smoke rejects empty gzip hex/file inputs.
 - [x] raw/zlib/gzip CLI differential smoke rejects header-only truncated inputs.

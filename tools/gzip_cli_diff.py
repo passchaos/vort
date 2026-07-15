@@ -84,6 +84,7 @@ def main() -> int:
 
     concatenated = gzip_compress(b"hello ") + gzip_compress(b"world")
     concatenated_plain = b"hello world"
+    concatenated_with_empty = gzip_compress(b"hello ") + gzip_compress(b"") + gzip_compress(b"world")
     missing_trailer = gzip_compress(b"footer truncation smoke")[:-8]
     expect_cli_failure("decode-gzip-hex", missing_trailer.hex(), error_name="TruncatedFrame")
     trailing_garbage = gzip_compress(b"trailing garbage smoke") + b"garbage"
@@ -96,6 +97,8 @@ def main() -> int:
     second_bad_isize = bytearray(concatenated)
     second_bad_isize[-4] ^= 1
     expect_cli_failure("decode-gzip-hex", bytes(second_bad_isize).hex(), error_name="SizeMismatch")
+    out = run_cli("decode-gzip-hex", concatenated_with_empty.hex())
+    assert int(parse_field(out, "decoded_bytes")) == len(concatenated_plain), out
     with tempfile.TemporaryDirectory(prefix="vort-gzip-cat-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         compressed_path = tmp / "cat.gz"
@@ -130,6 +133,12 @@ def main() -> int:
         second_bad_isize_path = tmp / "cat-second-bad-isize.gz"
         second_bad_isize_path.write_bytes(second_bad_isize)
         expect_cli_failure("decode-gzip-file", str(second_bad_isize_path), str(tmp / "cat-second-bad-isize.out"), error_name="SizeMismatch")
+        cat_empty_path = tmp / "cat-empty-member.gz"
+        cat_empty_path.write_bytes(concatenated_with_empty)
+        cat_empty_out = tmp / "cat-empty-member.out"
+        out = run_cli("decode-gzip-file", str(cat_empty_path), str(cat_empty_out))
+        assert int(parse_field(out, "decoded_bytes")) == len(concatenated_plain), out
+        assert cat_empty_out.read_bytes() == concatenated_plain
 
     # Vort fixed gzip known vector -> system gzip.
     vort_hello = bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a6103605000000")
