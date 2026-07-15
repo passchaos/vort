@@ -3045,6 +3045,8 @@ pub fn decodeGzipConcatenatedAllocExactSize(allocator: std.mem.Allocator, input:
 }
 
 pub fn decodeGzipConcatenated(input: []const u8, output: []u8) Error!usize {
+    if (input.len == 0) return error.TruncatedFrame;
+
     var offset: usize = 0;
     var out_offset: usize = 0;
     while (offset < input.len) {
@@ -3061,6 +3063,8 @@ pub fn decodeGzipConcatenated(input: []const u8, output: []u8) Error!usize {
 }
 
 fn decodeGzipConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
+    if (input.len == 0) return error.TruncatedFrame;
+
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var offset: usize = 0;
@@ -4804,6 +4808,14 @@ test "gzip concatenated members decode in sequence" {
     try std.testing.expectEqualSlices(u8, "helloworld", exact);
     try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, 9));
     try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, 11));
+}
+
+test "gzip concatenated decoders reject empty input" {
+    var out: [1]u8 = undefined;
+    try std.testing.expectError(error.TruncatedFrame, decodeGzipConcatenated("", &out));
+    try std.testing.expectError(error.TruncatedFrame, decodeGzipConcatenatedAlloc(std.testing.allocator, ""));
+    try std.testing.expectError(error.TruncatedFrame, decodeGzipConcatenatedAllocLimited(std.testing.allocator, "", 1));
+    try std.testing.expectError(error.TruncatedFrame, decodeGzipConcatenatedAllocExactSize(std.testing.allocator, "", 0));
 }
 
 test "gzip member inspector reports concatenated offsets and trailer diagnostics" {
