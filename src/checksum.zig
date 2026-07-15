@@ -355,6 +355,35 @@ pub fn adler32(input: []const u8) u32 {
     return Adler32.hash(input);
 }
 
+/// Combine two already-finalized Adler-32 digests.
+///
+/// `right_len` is the byte length of the payload that produced `right_adler`.
+/// The returned digest is exactly `adler32(left_payload ++ right_payload)`.
+/// This follows zlib's `adler32_combine` arithmetic and lets callers compose
+/// independently checksummed blocks without replaying their bytes.
+pub fn adler32Combine(left_adler: u32, right_adler: u32, right_len: u64) u32 {
+    if (right_len == 0) return left_adler;
+
+    const rem: u32 = @intCast(right_len % adler32_modulus);
+    const left_a = left_adler & 0xffff;
+    const left_b = left_adler >> 16;
+    const right_a = right_adler & 0xffff;
+    const right_b = right_adler >> 16;
+
+    const combined_a = addMod(left_a, right_a + adler32_modulus - 1);
+    // For Adler-32, b is the sum of every intermediate a value. Concatenating
+    // the right block adds right_b, then shifts every byte in the right block by
+    // the left block's final a value. `right_len * (left_a - 1)` accounts for
+    // that constant offset, while the final `-1` removes the duplicated initial
+    // Adler a=1 term from the right digest.
+    const combined_b = addMod(addMod(left_b, right_b), (rem * left_a) % adler32_modulus + adler32_modulus - rem);
+    return (combined_b << 16) | combined_a;
+}
+
+fn addMod(left: u32, right: u32) u32 {
+    return @intCast((@as(u64, left) + right) % adler32_modulus);
+}
+
 pub fn crc32(input: []const u8) u32 {
     return Crc32.hash(input);
 }
@@ -741,6 +770,45 @@ test "Adler-32 streaming matches one-shot across reduction boundary" {
     state.update(input[1..5553]);
     state.update(input[5553..]);
     try std.testing.expectEqual(adler32(&input), state.digest());
+}
+
+test "Adler-32 combine matches one-shot and is associative" {
+    const left_cases = [_][]const u8{
+        "",
+        "left",
+        "prefix data " ** 17,
+        "0123456789abcdef" ** 129,
+    };
+    const right_cases = [_][]const u8{
+        "",
+        "right",
+        "suffix data " ** 19,
+        "fedcba9876543210" ** 127,
+    };
+
+    for (left_cases) |left| {
+        for (right_cases) |right| {
+            var joined = std.ArrayList(u8).empty;
+            defer joined.deinit(std.testing.allocator);
+            try joined.appendSlice(std.testing.allocator, left);
+            try joined.appendSlice(std.testing.allocator, right);
+            try std.testing.expectEqual(
+                adler32(joined.items),
+                adler32Combine(adler32(left), adler32(right), right.len),
+            );
+        }
+    }
+
+    const input = ("parallel adler combine " ** 257) ++ ("0123456789abcdef" ** 73);
+    const a = input[0..13];
+    const b = input[13..2048];
+    const c = input[2048..];
+    const ab = adler32Combine(adler32(a), adler32(b), b.len);
+    const abc = adler32Combine(ab, adler32(c), c.len);
+    const bc = adler32Combine(adler32(b), adler32(c), c.len);
+    const a_bc = adler32Combine(adler32(a), bc, b.len + c.len);
+    try std.testing.expectEqual(adler32(input), abc);
+    try std.testing.expectEqual(adler32(input), a_bc);
 }
 
 test "CRC-32 known IEEE vectors" {

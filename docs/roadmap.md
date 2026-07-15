@@ -25,7 +25,7 @@ architecture blindly.
 - [x] Portable CRC32C slice-by-8 fallback.
 - [x] Portable CRC32C slice-by-16 fallback selected when hardware CRC32C is unavailable.
 - [x] Runtime checksum dispatch API selecting portable fast path.
-- [x] CRC-32 and CRC-32C combine helpers compose independently checksummed blocks without rereading payload bytes.
+- [x] Adler-32, CRC-32, and CRC-32C combine helpers compose independently checksummed blocks without rereading payload bytes.
 - [x] Adler-32 update uses 64-byte vector folding for zlib wrapper throughput.
 - [x] CPU feature/dispatch report tool.
 - [x] x86 checksum CPU feature reporting with IEEE-vs-CRC32C safety distinction.
