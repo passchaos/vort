@@ -246,6 +246,18 @@ const zlib_written = try vort.decodeZlib(zlib_bytes, &zlib_out);
 
 const gzip_bytes = try vort.encodeGzipFixedAlloc(allocator, "payload");
 defer allocator.free(gzip_bytes);
+const gzip_with_metadata = try vort.encodeGzipBestWithHeaderAlloc(
+    allocator,
+    "payload",
+    vort.optionsForCompressionLevel(.default),
+    .{
+        .mtime = 0,
+        .filename = "payload.txt",
+        .comment = "deterministic Vort gzip stream",
+        .header_crc = true,
+    },
+);
+defer allocator.free(gzip_with_metadata);
 const gzip_exact = try vort.decodeGzipAllocExactSize(allocator, gzip_bytes, "payload".len);
 defer allocator.free(gzip_exact);
 const gzip_cat_exact = try vort.decodeGzipConcatenatedAllocExactSize(allocator, gzip_bytes, "payload".len);

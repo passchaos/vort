@@ -28,6 +28,35 @@ pub const CompressionOptions = struct {
 
 pub const CompressionLevel = enum { fastest, fast, default, best };
 
+pub const GzipHeaderOptions = struct {
+    /// Set the advisory FTEXT flag. Decoders must not rely on this bit for
+    /// correctness, but exposing it keeps Vort able to reproduce metadata-rich
+    /// gzip streams emitted by legacy tools.
+    text: bool = false,
+    /// Modification time in Unix seconds, serialized little-endian per RFC
+    /// 1952. The default stays zero so existing encoders remain deterministic.
+    mtime: u32 = 0,
+    /// Extra flags byte. Existing Vort gzip encoders used 4, matching the
+    /// "fastest algorithm" hint often emitted for level-0/fast streams.
+    xfl: u8 = 0x04,
+    /// Operating-system identifier. The default 3 preserves the historical
+    /// Unix-compatible header used by this project.
+    os: u8 = 0x03,
+    /// Optional FEXTRA payload. A non-null empty slice intentionally emits an
+    /// XLEN=0 field; null omits FEXTRA entirely.
+    extra: ?[]const u8 = null,
+    /// Optional zero-terminated original file name. Embedded NUL bytes are
+    /// rejected because they would truncate the field for standard decoders.
+    filename: ?[]const u8 = null,
+    /// Optional zero-terminated comment. Embedded NUL bytes are rejected for
+    /// the same reason as filename.
+    comment: ?[]const u8 = null,
+    /// Emit FHCRC over the gzip header bytes before the CRC field. The value is
+    /// the low 16 bits of the standard gzip CRC-32, which lets the existing
+    /// parser validate generated metadata without a separate checksum path.
+    header_crc: bool = false,
+};
+
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
         .fastest => .{ .parser = .hash, .lz77_options = .{ .window_len = 8 * 1024, .max_chain = 4, .nice_len = 8, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4, .max_match = 64, .min_savings_bits = 8 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
@@ -2314,37 +2343,54 @@ fn decodeZlibAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, 
 }
 
 pub fn gzipStoredEncodedSize(input_len: usize) Error!usize {
+    return gzipStoredEncodedSizeWithHeader(input_len, .{});
+}
+
+pub fn gzipStoredEncodedSizeWithHeader(input_len: usize, header_options: GzipHeaderOptions) Error!usize {
     const raw_len = try rawStoredEncodedSize(input_len);
-    const with_header = std.math.add(usize, 10, raw_len) catch return error.IntegerOverflow;
+    const header_len = try gzipHeaderEncodedSize(header_options);
+    const with_header = std.math.add(usize, header_len, raw_len) catch return error.IntegerOverflow;
     return std.math.add(usize, with_header, 8) catch error.IntegerOverflow;
 }
 
 pub fn encodeGzipStored(input: []const u8, output: []u8) Error!usize {
-    const required = try gzipStoredEncodedSize(input.len);
+    return encodeGzipStoredWithHeader(input, output, .{});
+}
+
+pub fn encodeGzipStoredWithHeader(input: []const u8, output: []u8, header_options: GzipHeaderOptions) Error!usize {
+    const required = try gzipStoredEncodedSizeWithHeader(input.len, header_options);
     if (output.len < required) return error.OutputTooSmall;
 
-    @memcpy(output[0..10], &gzip_header);
-    const raw_written = try encodeRawStored(input, output[10 .. required - 8]);
-    const footer_offset = 10 + raw_written;
+    const header_len = try writeGzipHeader(output[0..required], header_options);
+    const raw_written = try encodeRawStored(input, output[header_len .. required - 8]);
+    const footer_offset = header_len + raw_written;
     std.mem.writeInt(u32, output[footer_offset..][0..4], checksum.crc32Best(input), .little);
     std.mem.writeInt(u32, output[footer_offset + 4 ..][0..4], @truncate(input.len), .little);
     return footer_offset + 8;
 }
 
 pub fn encodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    const required = try gzipStoredEncodedSize(input.len);
+    return encodeGzipStoredWithHeaderAlloc(allocator, input, .{});
+}
+
+pub fn encodeGzipStoredWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, header_options: GzipHeaderOptions) ![]u8 {
+    const required = try gzipStoredEncodedSizeWithHeader(input.len, header_options);
     const out = try allocator.alloc(u8, required);
     errdefer allocator.free(out);
-    const written = try encodeGzipStored(input, out);
+    const written = try encodeGzipStoredWithHeader(input, out, header_options);
     std.debug.assert(written == out.len);
     return out;
 }
 
 fn encodeGzipStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
+    return encodeGzipStoredSplitWithHeaderAlloc(allocator, input, block_len, .{});
+}
+
+fn encodeGzipStoredSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, header_options: GzipHeaderOptions) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
-    try writeGzipPrefix(allocator, &writer);
+    _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
     try writeStoredSplitBlocks(allocator, &writer, input, block_len);
     return finishGzipFrame(allocator, &writer, input);
 }
@@ -2354,88 +2400,140 @@ pub fn encodeGzipFixedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
 }
 
 pub fn encodeGzipFixedWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    return encodeGzipFixedWithHeaderAlloc(allocator, input, options, .{});
+}
+
+pub fn encodeGzipFixedWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    return encodeGzipFixedTokensAlloc(allocator, input, plan.tokens);
+    return encodeGzipFixedTokensWithHeaderAlloc(allocator, input, plan.tokens, header_options);
 }
 
 pub fn encodeGzipDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    return encodeGzipDynamicLiteralWithHeaderAlloc(allocator, input, .{});
+}
+
+pub fn encodeGzipDynamicLiteralWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, header_options: GzipHeaderOptions) ![]u8 {
     const plan = try lz77.literalPlanAlloc(allocator, input);
     defer plan.deinit(allocator);
-    return encodeGzipDynamicTokensAlloc(allocator, input, plan.tokens);
+    return encodeGzipDynamicTokensWithHeaderAlloc(allocator, input, plan.tokens, header_options);
 }
 
 pub fn encodeGzipDynamicWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
+    return encodeGzipDynamicWithHeaderAlloc(allocator, input, options, .{});
+}
+
+pub fn encodeGzipDynamicWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    return encodeGzipDynamicTokensAlloc(allocator, input, plan.tokens);
+    return encodeGzipDynamicTokensWithHeaderAlloc(allocator, input, plan.tokens, header_options);
 }
 
 pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
-    if (usesStoredFastPath(input, options)) return encodeGzipStoredAlloc(allocator, input);
+    return encodeGzipBestWithHeaderAlloc(allocator, input, options, .{});
+}
+
+pub fn encodeGzipBestWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
-    return encodeGzipBestTokensAlloc(allocator, input, plan.tokens, options);
+    return encodeGzipBestTokensWithHeaderAlloc(allocator, input, plan.tokens, options, header_options);
 }
 
 pub fn encodeGzipBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-    if (usesStoredFastPath(input, options)) return encodeGzipStoredSplitAlloc(allocator, input, block_len);
-    return encodeGzipBestSplitDirectAlloc(allocator, input, block_len, options);
+    return encodeGzipBestSplitWithHeaderAlloc(allocator, input, block_len, options, .{});
+}
+
+pub fn encodeGzipBestSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeGzipStoredSplitWithHeaderAlloc(allocator, input, block_len, header_options);
+    return encodeGzipBestSplitDirectWithHeaderAlloc(allocator, input, block_len, options, header_options);
 }
 
 pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
-    if (usesStoredFastPath(input, options)) return encodeGzipStoredAlloc(allocator, input);
-    const one_shot = try encodeGzipBestAlloc(allocator, input, options);
+    return encodeGzipBestAdaptiveSplitWithHeaderAlloc(allocator, input, options, split_options, .{});
+}
+
+pub fn encodeGzipBestAdaptiveSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) ![]u8 {
+    if (usesStoredFastPath(input, options)) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
+    const one_shot = try encodeGzipBestWithHeaderAlloc(allocator, input, options, header_options);
     errdefer allocator.free(one_shot);
     if (shouldSkipAdaptiveSplitSearch(input.len, split_options)) return one_shot;
-    return encodeGzipBestAdaptiveSplitDirectAlloc(allocator, input, options, split_options, one_shot);
+    return encodeGzipBestAdaptiveSplitDirectWithHeaderAlloc(allocator, input, options, split_options, one_shot, header_options);
 }
 
 fn encodeGzipFixedTokensAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token) ![]u8 {
+    return encodeGzipFixedTokensWithHeaderAlloc(allocator, input, tokens, .{});
+}
+
+fn encodeGzipFixedTokensWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token, header_options: GzipHeaderOptions) ![]u8 {
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
-    try writeGzipPrefix(allocator, &writer);
+    _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
     try writeFixedTokens(allocator, &writer, tokens, true);
     return finishGzipFrame(allocator, &writer, input);
 }
 
 fn encodeGzipDynamicTokensAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token) ![]u8 {
+    return encodeGzipDynamicTokensWithHeaderAlloc(allocator, input, tokens, .{});
+}
+
+fn encodeGzipDynamicTokensWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token, header_options: GzipHeaderOptions) ![]u8 {
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
-    try writeGzipPrefix(allocator, &writer);
+    const header_len = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
     const plan = try DynamicCodingPlan.init(tokens);
-    try writer.bytes.ensureTotalCapacity(allocator, gzip_header.len + (plan.bitCost(tokens) + 7) / 8 + 8);
+    try writer.bytes.ensureTotalCapacity(allocator, header_len + (plan.bitCost(tokens) + 7) / 8 + 8);
     try plan.write(allocator, &writer, tokens, true);
     return finishGzipFrame(allocator, &writer, input);
 }
 
 fn encodeGzipBestTokensAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token, options: CompressionOptions) ![]u8 {
+    return encodeGzipBestTokensWithHeaderAlloc(allocator, input, tokens, options, .{});
+}
+
+fn encodeGzipBestTokensWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
-    try writeGzipPrefix(allocator, &writer);
+    _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
     try writeBestTokensBlock(allocator, &writer, input, tokens, true, options);
     return finishGzipFrame(allocator, &writer, input);
 }
 
 fn encodeGzipBestSplitDirectAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    return encodeGzipBestSplitDirectWithHeaderAlloc(allocator, input, block_len, options, .{});
+}
+
+fn encodeGzipBestSplitDirectWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
-    try writeGzipPrefix(allocator, &writer);
+    _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
     try writeBestSplitBlocks(allocator, &writer, input, null, block_len, options);
     return finishGzipFrame(allocator, &writer, input);
 }
 
 fn encodeGzipBestAdaptiveSplitDirectAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, one_shot: []u8) ![]u8 {
+    return encodeGzipBestAdaptiveSplitDirectWithHeaderAlloc(allocator, input, options, split_options, one_shot, .{});
+}
+
+fn encodeGzipBestAdaptiveSplitDirectWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, one_shot: []u8, header_options: GzipHeaderOptions) ![]u8 {
     var writer = bitstream.BitWriter{};
     defer writer.deinit(allocator);
-    try writeGzipPrefix(allocator, &writer);
+    _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
     try writeBestAdaptiveSplitBlocks(allocator, &writer, input, null, options, split_options);
-    return smallerWrappedAdaptiveOrOneShot(allocator, &writer, input, gzip_header.len, one_shot, .gzip);
+    return smallerWrappedAdaptiveOrOneShot(allocator, &writer, input, try gzipHeaderEncodedSize(header_options), one_shot, .gzip);
 }
 
 fn writeGzipPrefix(allocator: std.mem.Allocator, writer: *bitstream.BitWriter) !void {
-    try writer.bytes.ensureTotalCapacity(allocator, gzip_header.len);
-    try writer.bytes.appendSlice(allocator, &gzip_header);
+    _ = try writeGzipPrefixWithOptions(allocator, writer, .{});
+}
+
+fn writeGzipPrefixWithOptions(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, header_options: GzipHeaderOptions) !usize {
+    const header_len = try gzipHeaderEncodedSize(header_options);
+    try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + header_len);
+    const header = try writer.bytes.addManyAsSlice(allocator, header_len);
+    const written = try writeGzipHeader(header, header_options);
+    std.debug.assert(written == header_len);
+    return header_len;
 }
 
 fn finishGzipFrame(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8) ![]u8 {
@@ -2646,6 +2744,83 @@ fn parseZlibHeader(input: []const u8, dictionary: ?[]const u8) Error!ZlibHeader 
 
 const gzip_header = [_]u8{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03 };
 
+fn gzipHeaderEncodedSize(header_options: GzipHeaderOptions) Error!usize {
+    try validateGzipZeroTerminatedField(header_options.filename);
+    try validateGzipZeroTerminatedField(header_options.comment);
+
+    var len: usize = gzip_header.len;
+    if (header_options.extra) |extra| {
+        if (extra.len > std.math.maxInt(u16)) return error.IntegerOverflow;
+        len = std.math.add(usize, len, 2) catch return error.IntegerOverflow;
+        len = std.math.add(usize, len, extra.len) catch return error.IntegerOverflow;
+    }
+    if (header_options.filename) |filename| {
+        len = std.math.add(usize, len, filename.len) catch return error.IntegerOverflow;
+        len = std.math.add(usize, len, 1) catch return error.IntegerOverflow;
+    }
+    if (header_options.comment) |comment| {
+        len = std.math.add(usize, len, comment.len) catch return error.IntegerOverflow;
+        len = std.math.add(usize, len, 1) catch return error.IntegerOverflow;
+    }
+    if (header_options.header_crc) {
+        len = std.math.add(usize, len, 2) catch return error.IntegerOverflow;
+    }
+    return len;
+}
+
+fn validateGzipZeroTerminatedField(field: ?[]const u8) Error!void {
+    if (field) |bytes| {
+        // FNAME and FCOMMENT are serialized as NUL-terminated byte strings.
+        // Reject embedded NULs rather than silently truncating metadata for
+        // downstream gzip tools or breaking our own FHCRC reproduction.
+        if (std.mem.indexOfScalar(u8, bytes, 0) != null) return error.BadGzipHeader;
+    }
+}
+
+fn writeGzipHeader(output: []u8, header_options: GzipHeaderOptions) Error!usize {
+    const required = try gzipHeaderEncodedSize(header_options);
+    if (output.len < required) return error.OutputTooSmall;
+
+    output[0] = 0x1f;
+    output[1] = 0x8b;
+    output[2] = 0x08;
+    output[3] = (@as(u8, @intFromBool(header_options.text)) << 0) |
+        (@as(u8, @intFromBool(header_options.header_crc)) << 1) |
+        (@as(u8, @intFromBool(header_options.extra != null)) << 2) |
+        (@as(u8, @intFromBool(header_options.filename != null)) << 3) |
+        (@as(u8, @intFromBool(header_options.comment != null)) << 4);
+    std.mem.writeInt(u32, output[4..8], header_options.mtime, .little);
+    output[8] = header_options.xfl;
+    output[9] = header_options.os;
+
+    var offset: usize = gzip_header.len;
+    if (header_options.extra) |extra| {
+        std.mem.writeInt(u16, output[offset..][0..2], @intCast(extra.len), .little);
+        offset += 2;
+        @memcpy(output[offset..][0..extra.len], extra);
+        offset += extra.len;
+    }
+    if (header_options.filename) |filename| {
+        @memcpy(output[offset..][0..filename.len], filename);
+        offset += filename.len;
+        output[offset] = 0;
+        offset += 1;
+    }
+    if (header_options.comment) |comment| {
+        @memcpy(output[offset..][0..comment.len], comment);
+        offset += comment.len;
+        output[offset] = 0;
+        offset += 1;
+    }
+    if (header_options.header_crc) {
+        const actual: u16 = @truncate(checksum.crc32Best(output[0..offset]));
+        std.mem.writeInt(u16, output[offset..][0..2], actual, .little);
+        offset += 2;
+    }
+    std.debug.assert(offset == required);
+    return offset;
+}
+
 fn parseGzipHeader(input: []const u8) Error!usize {
     if (input.len < 10) return error.TruncatedFrame;
     if (!std.mem.eql(u8, input[0..2], &.{ 0x1f, 0x8b })) return error.BadGzipHeader;
@@ -2686,6 +2861,14 @@ fn writeStoredHeader(final: bool, len: u16, output: []u8) void {
     output[0] = @intFromBool(final);
     std.mem.writeInt(u16, output[1..3], len, .little);
     std.mem.writeInt(u16, output[3..5], ~len, .little);
+}
+
+fn expectGzipRoundTripWithPrefix(encoded: []const u8, expected_prefix: []const u8, plain: []const u8) !void {
+    try std.testing.expect(encoded.len >= expected_prefix.len);
+    try std.testing.expectEqualSlices(u8, expected_prefix, encoded[0..expected_prefix.len]);
+    const decoded = try decodeGzipAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, plain, decoded);
 }
 
 test "raw stored deflate matches zlib level-0 vectors" {
@@ -2827,6 +3010,68 @@ test "gzip stored wrapper matches level-0 vectors" {
     const hello = try encodeGzipStoredAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(hello);
     try std.testing.expectEqualSlices(u8, &.{ 0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03, 0x01, 0x05, 0x00, 0xfa, 0xff, 'h', 'e', 'l', 'l', 'o', 0x86, 0xa6, 0x10, 0x36, 0x05, 0x00, 0x00, 0x00 }, hello);
+}
+
+test "gzip encoders can emit metadata-rich headers with FHCRC" {
+    const payload = "metadata payload metadata payload";
+    const extra = [_]u8{ 0x55, 0xaa, 0x00, 0xff };
+    const header_options = GzipHeaderOptions{
+        .text = true,
+        .mtime = 0x12345678,
+        .xfl = 0x02,
+        .os = 0xff,
+        .extra = &extra,
+        .filename = "sample.txt",
+        .comment = "generated by vort",
+        .header_crc = true,
+    };
+    const expected_prefix = &.{
+        0x1f, 0x8b, 0x08, 0x1f, 0x78, 0x56, 0x34, 0x12, 0x02, 0xff,
+        0x04, 0x00, 0x55, 0xaa, 0x00, 0xff, 's',  'a',  'm',  'p',
+        'l',  'e',  '.',  't',  'x',  't',  0x00, 'g',  'e',  'n',
+        'e',  'r',  'a',  't',  'e',  'd',  ' ',  'b',  'y',  ' ',
+        'v',  'o',  'r',  't',  0x00, 0x05, 0x5d,
+    };
+
+    try std.testing.expectEqual(
+        try gzipStoredEncodedSizeWithHeader(payload.len, header_options),
+        (try rawStoredEncodedSize(payload.len)) + expected_prefix.len + 8,
+    );
+
+    const stored = try encodeGzipStoredWithHeaderAlloc(std.testing.allocator, payload, header_options);
+    defer std.testing.allocator.free(stored);
+    try expectGzipRoundTripWithPrefix(stored, expected_prefix, payload);
+
+    const fixed = try encodeGzipFixedWithHeaderAlloc(std.testing.allocator, payload, .{}, header_options);
+    defer std.testing.allocator.free(fixed);
+    try expectGzipRoundTripWithPrefix(fixed, expected_prefix, payload);
+
+    const dynamic = try encodeGzipDynamicWithHeaderAlloc(std.testing.allocator, payload, optionsForLevel(.default), header_options);
+    defer std.testing.allocator.free(dynamic);
+    try expectGzipRoundTripWithPrefix(dynamic, expected_prefix, payload);
+
+    const best = try encodeGzipBestWithHeaderAlloc(std.testing.allocator, payload, optionsForLevel(.default), header_options);
+    defer std.testing.allocator.free(best);
+    try expectGzipRoundTripWithPrefix(best, expected_prefix, payload);
+
+    const split = try encodeGzipBestSplitWithHeaderAlloc(std.testing.allocator, payload, 7, optionsForLevel(.default), header_options);
+    defer std.testing.allocator.free(split);
+    try expectGzipRoundTripWithPrefix(split, expected_prefix, payload);
+
+    const level_options = optionsForLevel(.default);
+    const adaptive = try encodeGzipBestAdaptiveSplitWithHeaderAlloc(std.testing.allocator, payload, level_options, level_options.split_options, header_options);
+    defer std.testing.allocator.free(adaptive);
+    try expectGzipRoundTripWithPrefix(adaptive, expected_prefix, payload);
+}
+
+test "gzip header option validation rejects unterminated field ambiguity" {
+    const bad_filename = [_]u8{ 'b', 'a', 'd', 0, 'n', 'a', 'm', 'e' };
+    try std.testing.expectError(error.BadGzipHeader, gzipStoredEncodedSizeWithHeader(1, .{ .filename = &bad_filename }));
+    try std.testing.expectError(error.BadGzipHeader, encodeGzipStoredWithHeaderAlloc(std.testing.allocator, "x", .{ .comment = &bad_filename }));
+
+    const too_large_extra = try std.testing.allocator.alloc(u8, std.math.maxInt(u16) + 1);
+    defer std.testing.allocator.free(too_large_extra);
+    try std.testing.expectError(error.IntegerOverflow, gzipStoredEncodedSizeWithHeader(1, .{ .extra = too_large_extra }));
 }
 
 test "gzip stored wrapper validates crc size header and trailing data" {
