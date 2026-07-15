@@ -822,6 +822,12 @@ pub const RangeDecodeResult = struct {
     }
 };
 
+pub const RangeDecodeIntoResult = struct {
+    output_written: usize,
+    offset: u64,
+    crc32: u32,
+};
+
 pub fn decodeRangeWithSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize) !RangeDecodeResult {
     return decodeRangeWithDictionarySummaryAlloc(allocator, null, input, index, offset, length);
 }
@@ -833,6 +839,59 @@ pub fn decodeRangeWithDictionarySummaryAlloc(allocator: std.mem.Allocator, dict:
         .bytes = bytes,
         .offset = offset,
         .crc32 = checksum.crc32(bytes),
+    };
+}
+
+pub fn decodeRangeInto(allocator: std.mem.Allocator, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
+    return decodeRangeWithDictionaryInto(allocator, null, input, index, offset, length, output);
+}
+
+pub fn decodeRangeWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
+    if (output.len < length) return error.OutputTooSmall;
+    var crc = checksum.Crc32.init();
+    if (length == 0) {
+        return .{
+            .output_written = 0,
+            .offset = offset,
+            .crc32 = crc.digest(),
+        };
+    }
+    try validateFrameIndex(index);
+    const end = std.math.add(u64, offset, length) catch return error.IntegerOverflow;
+    const start_i = findFrameForOffset(index, offset) orelse return error.RangeOutOfBounds;
+    var written: usize = 0;
+    var i = start_i;
+    while (i < index.len and written < length) : (i += 1) {
+        const entry = index[i];
+        if (entry.uncompressed_offset >= end) break;
+        if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
+        const frame = input[entry.frame_offset..][0..entry.frame_len];
+        const frame_info = try parseHeader(frame);
+        if (entry.frame_len != try frameLenFromInfo(frame_info)) return error.CorruptFrame;
+        if (entry.checksum != frame_info.checksum) return error.ChecksumMismatch;
+        if (entry.uncompressed_len != frame_info.uncompressed_size) return error.CorruptFrame;
+        const decoded = if (frame_info.flags == flags_dictionary_patch or frame_info.flags == flags_dictionary_deflate) blk: {
+            const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
+            break :blk try decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame);
+        } else try decodeAnyAlloc(allocator, frame);
+        defer allocator.free(decoded);
+        const frame_start = entry.uncompressed_offset;
+        const frame_end = entry.uncompressed_offset + entry.uncompressed_len;
+        const copy_start = if (offset > frame_start) offset - frame_start else 0;
+        const copy_end_global = @min(end, frame_end);
+        const copy_end = copy_end_global - frame_start;
+        if (copy_end > copy_start) {
+            const slice = decoded[@intCast(copy_start)..@intCast(copy_end)];
+            @memcpy(output[written..][0..slice.len], slice);
+            crc.update(slice);
+            written += slice.len;
+        }
+    }
+    if (written != length) return error.RangeOutOfBounds;
+    return .{
+        .output_written = written,
+        .offset = offset,
+        .crc32 = crc.digest(),
     };
 }
 
@@ -1630,6 +1689,12 @@ pub fn decodeIndexedRangeWithSummaryAlloc(allocator: std.mem.Allocator, input: [
     return decodeRangeWithSummaryAlloc(allocator, input, embedded.entries, offset, length);
 }
 
+pub fn decodeIndexedRangeInto(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
+    const embedded = try parseEmbeddedIndexAlloc(allocator, input);
+    defer embedded.deinit(allocator);
+    return decodeRangeInto(allocator, input, embedded.entries, offset, length, output);
+}
+
 pub const SidecarValidationMode = enum {
     /// Check only sidecar/index structure, frame spans, frame headers, and the
     /// checksum values recorded in frame headers. This is intentionally cheap
@@ -1869,6 +1934,12 @@ pub fn decodeSidecarIndexedRangeWithSummaryAlloc(allocator: std.mem.Allocator, i
     return decodeRangeWithSummaryAlloc(allocator, input, index, offset, length);
 }
 
+pub fn decodeSidecarIndexedRangeInto(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
+    const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
+    defer allocator.free(index);
+    return decodeRangeInto(allocator, input, index, offset, length, output);
+}
+
 pub fn decodeSidecarIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
     const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
     defer allocator.free(index);
@@ -1879,6 +1950,12 @@ pub fn decodeSidecarIndexedRangeWithDictionarySummaryAlloc(allocator: std.mem.Al
     const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
     defer allocator.free(index);
     return decodeRangeWithDictionarySummaryAlloc(allocator, dict, input, index, offset, length);
+}
+
+pub fn decodeSidecarIndexedRangeWithDictionaryInto(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
+    const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
+    defer allocator.free(index);
+    return decodeRangeWithDictionaryInto(allocator, dict, input, index, offset, length, output);
 }
 
 pub fn decodeSidecarIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
@@ -1897,6 +1974,16 @@ pub fn decodeSidecarIndexedRangeAutoWithSummaryAlloc(allocator: std.mem.Allocato
         return decodeSidecarIndexedRangeWithDictionarySummaryAlloc(allocator, dict, input, sidecar_index, offset, length);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeSidecarIndexedRangeWithSummaryAlloc(allocator, input, sidecar_index, offset, length),
+        else => return err,
+    }
+}
+
+pub fn decodeSidecarIndexedRangeAutoInto(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return decodeSidecarIndexedRangeWithDictionaryInto(allocator, dict, input, sidecar_index, offset, length, output);
+    } else |err| switch (err) {
+        error.InvalidMagic => return decodeSidecarIndexedRangeInto(allocator, input, sidecar_index, offset, length, output),
         else => return err,
     }
 }
@@ -2316,6 +2403,13 @@ test "frame index supports seek and range decode" {
     try std.testing.expectEqual(@as(u64, 3), summary.offset);
     try std.testing.expectEqualSlices(u8, "habetaga", summary.bytes);
     try std.testing.expectEqual(checksum.crc32("habetaga"), summary.crc32);
+    var buffer: [8]u8 = undefined;
+    const into = try decodeRangeInto(std.testing.allocator, combined.items, index, 3, buffer.len, buffer[0..]);
+    try std.testing.expectEqual(buffer.len, into.output_written);
+    try std.testing.expectEqual(@as(u64, 3), into.offset);
+    try std.testing.expectEqualSlices(u8, "habetaga", &buffer);
+    try std.testing.expectEqual(checksum.crc32(&buffer), into.crc32);
+    try std.testing.expectError(error.OutputTooSmall, decodeRangeInto(std.testing.allocator, combined.items, index, 3, buffer.len, buffer[0..7]));
 }
 
 test "range decode rejects out of bounds" {
@@ -2426,6 +2520,12 @@ test "sidecar index bytes support range decode without embedded index" {
     try std.testing.expectEqual(@as(u64, 3), summary.offset);
     try std.testing.expectEqualSlices(u8, "habet", summary.bytes);
     try std.testing.expectEqual(checksum.crc32("habet"), summary.crc32);
+    var buffer: [5]u8 = undefined;
+    const into = try decodeSidecarIndexedRangeInto(std.testing.allocator, stream.items, sidecar, 3, buffer.len, buffer[0..]);
+    try std.testing.expectEqual(buffer.len, into.output_written);
+    try std.testing.expectEqual(@as(u64, 3), into.offset);
+    try std.testing.expectEqualSlices(u8, "habet", &buffer);
+    try std.testing.expectEqual(checksum.crc32(&buffer), into.crc32);
 }
 
 test "sidecar index range decode rejects tampered checksum" {

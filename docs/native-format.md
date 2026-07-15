@@ -118,7 +118,9 @@ through `SidecarValidationOptions` to reject mismatched sidecar/index metadata.
 
 `decodeRangeWithSummaryAlloc`, `decodeIndexedRangeWithSummaryAlloc`, and the
 sidecar range summary variants return both the decoded bytes and a CRC-32 of the
-returned logical range. This lets callers that need range-level integrity or
-cache keys avoid immediately rescanning the output bytes after a range decode.
-The summary variants preserve the same index, dictionary, and bounds validation
-behavior as the byte-slice range APIs.
+returned logical range. Caller-owned output variants such as
+`decodeRangeInto`, `decodeIndexedRangeInto`, and
+`decodeSidecarIndexedRangeInto` fill a provided buffer and return the same
+offset/CRC-32 summary, avoiding the final range allocation when callers already
+own suitably sized storage. These variants preserve the same index, dictionary,
+and bounds validation behavior as the byte-slice range APIs.
