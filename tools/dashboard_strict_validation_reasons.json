@@ -1,0 +1,46 @@
+{
+  "schema": "vort.dashboard_strict_validation_reasons",
+  "schema_version": 1,
+  "expected_reasons": [
+    {
+      "reason": "missing_producer_steps",
+      "check": "validation_missing_producer_steps",
+      "fixture": "missing_producer_steps"
+    },
+    {
+      "reason": "missing_required_smoke_gates",
+      "check": "validation_missing_required_smoke_gates",
+      "fixture": "missing_required_smoke_gates"
+    },
+    {
+      "reason": "missing_header_inspect_artifact",
+      "check": "validation_missing_header_inspect_artifact",
+      "fixture": "missing_header_inspect_artifact"
+    },
+    {
+      "reason": "header_inspect_failed",
+      "check": "validation_header_inspect_failed",
+      "fixture": "header_inspect_failed"
+    },
+    {
+      "reason": "missing_header_workflows",
+      "check": "validation_missing_header_workflows",
+      "fixture": "missing_header_workflows"
+    },
+    {
+      "reason": "missing_dashboard_strict_artifact",
+      "check": "validation_missing_dashboard_strict_artifact",
+      "fixture": "missing_dashboard_strict_artifact"
+    },
+    {
+      "reason": "dashboard_strict_failed",
+      "check": "validation_dashboard_strict_failed",
+      "fixture": "dashboard_strict_failed"
+    },
+    {
+      "reason": "missing_dashboard_strict_modes",
+      "check": "validation_missing_dashboard_strict_modes",
+      "fixture": "missing_dashboard_strict_modes"
+    }
+  ]
+}

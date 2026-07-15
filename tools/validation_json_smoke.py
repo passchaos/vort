@@ -108,6 +108,10 @@ def main() -> int:
         assert dashboard_strict_modes["schema"] == "vort.dashboard_strict_expected_modes"
         assert dashboard_strict_modes["expected_modes"]
         validate_value_against_manifest(dashboard_strict_modes, schemas_def)
+        dashboard_strict_reasons = json.loads((ROOT / "tools" / "dashboard_strict_validation_reasons.json").read_text())
+        assert dashboard_strict_reasons["schema"] == "vort.dashboard_strict_validation_reasons"
+        assert dashboard_strict_reasons["expected_reasons"]
+        validate_value_against_manifest(dashboard_strict_reasons, schemas_def)
         dashboard_strict_path = root / "vort-dashboard-strict-smoke.json"
         dashboard_strict_markdown_path = root / "vort-dashboard-strict-smoke.md"
         run([
@@ -133,7 +137,9 @@ def main() -> int:
         expected_validation_reasons = set(
             schemas_def["vort.dashboard_index"]["list_item_enums"]["validation_unhealthy_reasons"]
         )
+        configured_validation_reasons = {row["reason"] for row in dashboard_strict_reasons["expected_reasons"]}
         covered_validation_reasons = {row["reason"] for row in dashboard_strict["validation_unhealthy_reason_checks"]}
+        assert configured_validation_reasons == expected_validation_reasons
         assert dashboard_strict["validation_unhealthy_reason_count"] == len(expected_validation_reasons)
         assert covered_validation_reasons == expected_validation_reasons
         assert all(row["matched"] is True for row in dashboard_strict["validation_unhealthy_reason_checks"])
@@ -365,6 +371,7 @@ def main() -> int:
                 report["schema"],
                 corrupt["schema"],
                 dashboard_strict_modes["schema"],
+                dashboard_strict_reasons["schema"],
                 dashboard_strict["schema"],
                 dashboard["schema"],
                 header_summary["schema"],

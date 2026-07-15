@@ -611,12 +611,19 @@ Example:
     "vort.validation_report",
     "vort.sidecar_verify_report",
     "vort.sidecar_corrupt_smoke_report",
+    "vort.dashboard_strict_expected_modes",
+    "vort.dashboard_strict_validation_reasons",
+    "vort.dashboard_strict_smoke",
+    "vort.dashboard_index",
     "vort.header_inspect_smoke",
+    "vort.header_inspect_required_workflows",
     "vort.raw_deflate_header_info",
     "vort.wrapped_deflate_header_info",
     "vort.zlib_header_info",
     "vort.gzip_header_info"
   ],
+  "cli_success_ok": true,
+  "cli_failure_ok": false,
   "cli_failure_hint": "payload_corrupt",
   "report_rows": 1,
   "corrupt_rows": 8
@@ -782,6 +789,39 @@ Example:
 }
 ```
 
+## `vort.dashboard_strict_validation_reasons`
+
+Consumed by:
+
+```sh
+python3 tools/dashboard_strict_smoke.py
+zig build run-dashboard-strict-smoke
+```
+
+This schema defines the required fine-grained `--strict-validation-health`
+negative fixture matrix for dashboard strict smoke tests. Keeping it external
+makes reason coverage reviewable without editing the smoke script. The docs
+checker validates this config against both
+`vort.dashboard_index.validation_unhealthy_reasons` and the
+`vort.dashboard_strict_smoke.validation_unhealthy_reason_checks` enums so every
+published unhealthy reason has a configured check name and fixture strategy.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_strict_validation_reasons",
+  "schema_version": 1,
+  "expected_reasons": [
+    {
+      "reason": "missing_dashboard_strict_modes",
+      "check": "validation_missing_dashboard_strict_modes",
+      "fixture": "missing_dashboard_strict_modes"
+    }
+  ]
+}
+```
+
 ## `vort.dashboard_strict_smoke`
 
 Produced by:
@@ -802,8 +842,10 @@ actual/minimum/delta values, and `missing_modes` reports unmet requirements.
 `validation_unhealthy_reason_checks` records one isolated negative fixture for
 each `vort.dashboard_index.validation_unhealthy_reasons` enum value so new
 aggregate health reasons must be backed by real failing dashboard inputs before
-the smoke artifact can pass. A synthetic long-output check keeps the truncation
-path covered so `actual_output_truncated=true` is exercised in CI.
+the smoke artifact can pass. The expected reason/check/fixture matrix lives in
+`tools/dashboard_strict_validation_reasons.json`. A synthetic long-output check
+keeps the truncation path covered so `actual_output_truncated=true` is exercised
+in CI.
 
 Example:
 

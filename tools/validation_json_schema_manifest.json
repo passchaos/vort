@@ -182,6 +182,79 @@
         ]
       }
     },
+    "vort.dashboard_strict_validation_reasons": {
+      "fields": {
+        "expected_reasons": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "expected_reasons",
+      "item_fields": {
+        "check": "str",
+        "fixture": "str",
+        "reason": "str"
+      },
+      "item_enums": {
+        "check": [
+          "validation_missing_producer_steps",
+          "validation_missing_required_smoke_gates",
+          "validation_missing_header_inspect_artifact",
+          "validation_header_inspect_failed",
+          "validation_missing_header_workflows",
+          "validation_missing_dashboard_strict_artifact",
+          "validation_dashboard_strict_failed",
+          "validation_missing_dashboard_strict_modes"
+        ],
+        "fixture": [
+          "missing_producer_steps",
+          "missing_required_smoke_gates",
+          "missing_header_inspect_artifact",
+          "header_inspect_failed",
+          "missing_header_workflows",
+          "missing_dashboard_strict_artifact",
+          "dashboard_strict_failed",
+          "missing_dashboard_strict_modes"
+        ],
+        "reason": [
+          "missing_producer_steps",
+          "missing_required_smoke_gates",
+          "missing_header_inspect_artifact",
+          "header_inspect_failed",
+          "missing_header_workflows",
+          "missing_dashboard_strict_artifact",
+          "dashboard_strict_failed",
+          "missing_dashboard_strict_modes"
+        ]
+      },
+      "item_field_pairs": {
+        "check": {
+          "target": "reason",
+          "allowed": {
+            "validation_missing_producer_steps": "missing_producer_steps",
+            "validation_missing_required_smoke_gates": "missing_required_smoke_gates",
+            "validation_missing_header_inspect_artifact": "missing_header_inspect_artifact",
+            "validation_header_inspect_failed": "header_inspect_failed",
+            "validation_missing_header_workflows": "missing_header_workflows",
+            "validation_missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
+            "validation_dashboard_strict_failed": "dashboard_strict_failed",
+            "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes"
+          }
+        },
+        "fixture": {
+          "target": "reason",
+          "allowed": {
+            "missing_producer_steps": "missing_producer_steps",
+            "missing_required_smoke_gates": "missing_required_smoke_gates",
+            "missing_header_inspect_artifact": "missing_header_inspect_artifact",
+            "header_inspect_failed": "header_inspect_failed",
+            "missing_header_workflows": "missing_header_workflows",
+            "missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
+            "dashboard_strict_failed": "dashboard_strict_failed",
+            "missing_dashboard_strict_modes": "missing_dashboard_strict_modes"
+          }
+        }
+      }
+    },
     "vort.dashboard_strict_smoke": {
       "fields": {
         "check_count": "int",
@@ -1236,12 +1309,31 @@
       },
       "fields": {
         "checked_schemas": "list",
+        "cli_failure_ok": "bool",
         "cli_failure_hint": "str",
+        "cli_success_ok": "bool",
         "corrupt_rows": "int",
         "ok": "bool",
         "report_rows": "int",
         "schema": "str",
         "schema_version": "int"
+      },
+      "list_item_enums": {
+        "checked_schemas": [
+          "vort.validation_report",
+          "vort.sidecar_verify_report",
+          "vort.sidecar_corrupt_smoke_report",
+          "vort.dashboard_strict_expected_modes",
+          "vort.dashboard_strict_validation_reasons",
+          "vort.dashboard_strict_smoke",
+          "vort.dashboard_index",
+          "vort.header_inspect_smoke",
+          "vort.header_inspect_required_workflows",
+          "vort.raw_deflate_header_info",
+          "vort.wrapped_deflate_header_info",
+          "vort.zlib_header_info",
+          "vort.gzip_header_info"
+        ]
       }
     },
     "vort.validation_report": {

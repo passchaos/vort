@@ -15,6 +15,7 @@ MANIFEST = ROOT / "tools" / "validation_json_schema_manifest.json"
 DASHBOARD_PRODUCERS = ROOT / "tools" / "dashboard_producers.json"
 HEADER_INSPECT_WORKFLOWS = ROOT / "tools" / "header_inspect_required_workflows.json"
 DASHBOARD_STRICT_MODES = ROOT / "tools" / "dashboard_strict_expected_modes.json"
+DASHBOARD_STRICT_REASONS = ROOT / "tools" / "dashboard_strict_validation_reasons.json"
 
 TYPE_MAP: dict[str, type | tuple[type, ...]] = {
     "bool": bool,
@@ -434,6 +435,35 @@ def require_dashboard_validation_reason_manifest_consistency(schemas_def: dict[s
     )
     if not configured_reasons:
         raise AssertionError("dashboard validation unhealthy reason enum must be non-empty")
+    expected = json.loads(DASHBOARD_STRICT_REASONS.read_text())
+    rows = expected.get("expected_reasons")
+    if not isinstance(rows, list) or not rows:
+        raise AssertionError("dashboard strict validation reason config must be non-empty")
+    configured_checks = {row.get("check") for row in rows if isinstance(row, dict)}
+    configured_fixtures = {row.get("fixture") for row in rows if isinstance(row, dict)}
+    configured_reason_rows = {row.get("reason") for row in rows if isinstance(row, dict)}
+    if configured_reasons != configured_reason_rows:
+        raise AssertionError(
+            f"dashboard strict validation reason config differs from dashboard index enum: configured={sorted(configured_reason_rows)!r} dashboard={sorted(configured_reasons)!r}"
+        )
+    if configured_reasons != configured_fixtures:
+        raise AssertionError(
+            f"dashboard strict validation reason fixtures differ from dashboard index enum: fixtures={sorted(configured_fixtures)!r} dashboard={sorted(configured_reasons)!r}"
+        )
+    strict_modes = json.loads(DASHBOARD_STRICT_MODES.read_text()).get("expected_modes", [])
+    strict_validation_mode = next(
+        (row for row in strict_modes if isinstance(row, dict) and row.get("mode") == "strict-validation-health"),
+        None,
+    )
+    if not isinstance(strict_validation_mode, dict):
+        raise AssertionError("dashboard strict expected modes must include strict-validation-health")
+    reason_count = len(configured_reasons)
+    for field in ("min_checks", "min_expected_failures", "min_matched"):
+        value = strict_validation_mode.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < reason_count:
+            raise AssertionError(
+                f"strict-validation-health {field}={value!r} must cover {reason_count} validation unhealthy reasons"
+            )
     strict_schema = schemas_def.get("vort.dashboard_strict_smoke", {})
     covered_reasons = set(
         strict_schema.get("collections", {})
@@ -444,6 +474,22 @@ def require_dashboard_validation_reason_manifest_consistency(schemas_def: dict[s
     if configured_reasons != covered_reasons:
         raise AssertionError(
             f"dashboard strict validation reason coverage differs from dashboard index enum: configured={sorted(configured_reasons)!r} covered={sorted(covered_reasons)!r}"
+        )
+    covered_checks = set(
+        strict_schema.get("collections", {})
+        .get("validation_unhealthy_reason_checks", {})
+        .get("enums", {})
+        .get("check", [])
+    )
+    if configured_checks != covered_checks:
+        raise AssertionError(
+            f"dashboard strict validation reason checks differ from smoke enum: configured={sorted(configured_checks)!r} covered={sorted(covered_checks)!r}"
+        )
+    reason_config_schema = schemas_def.get("vort.dashboard_strict_validation_reasons", {})
+    reason_config_reasons = set(reason_config_schema.get("item_enums", {}).get("reason", []))
+    if configured_reasons != reason_config_reasons:
+        raise AssertionError(
+            f"dashboard strict validation reason config enum differs from dashboard index enum: config={sorted(reason_config_reasons)!r} dashboard={sorted(configured_reasons)!r}"
         )
 
 
@@ -551,6 +597,7 @@ def main() -> int:
     validate_value_against_manifest(json.loads(DASHBOARD_PRODUCERS.read_text()), schemas_def)
     validate_value_against_manifest(json.loads(HEADER_INSPECT_WORKFLOWS.read_text()), schemas_def)
     validate_value_against_manifest(json.loads(DASHBOARD_STRICT_MODES.read_text()), schemas_def)
+    validate_value_against_manifest(json.loads(DASHBOARD_STRICT_REASONS.read_text()), schemas_def)
     require_header_workflow_manifest_consistency(schemas_def)
     require_dashboard_strict_mode_manifest_consistency(schemas_def)
     require_dashboard_validation_reason_manifest_consistency(schemas_def)
