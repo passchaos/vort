@@ -630,12 +630,14 @@ Produced by:
 ```sh
 zig build run-dashboard-index
 zig build run-dashboard-strict-smoke
-python3 tools/dashboard_index.py --strict-header-inspect
+python3 tools/dashboard_index.py --strict-header-inspect --strict-validation-health
 ```
 
 This schema indexes files in `zig-out`. With `--strict-header-inspect`, index
 generation fails when the header inspect artifact is absent, reports `ok=false`,
-or has missing required workflows.
+or has missing required workflows. With `--strict-validation-health`, generation
+fails whenever the aggregate `validation_healthy` field is false and reports the
+`validation_unhealthy_reasons` list.
 
 Top-level fields:
 

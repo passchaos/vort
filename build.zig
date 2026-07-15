@@ -658,7 +658,7 @@ pub fn build(b: *std.Build) void {
     const dashboard_strict_dashboard_step = b.step("run-dashboard-strict-dashboard", "Write dashboard strict-mode smoke summary to zig-out");
     dashboard_strict_dashboard_step.dependOn(&dashboard_strict_dashboard.step);
 
-    const dashboard_index = b.addSystemCommand(&.{ "python3", "tools/dashboard_index.py", "--strict-producers", "--strict-smoke-gates", "--strict-header-inspect" });
+    const dashboard_index = b.addSystemCommand(&.{ "python3", "tools/dashboard_index.py", "--strict-producers", "--strict-smoke-gates", "--strict-header-inspect", "--strict-validation-health" });
     const dashboard_index_step = b.step("run-dashboard-index", "Write a Markdown index for zig-out dashboard artifacts");
     dashboard_index_step.dependOn(&dashboard_index.step);
     dashboard_index_step.dependOn(sidecar_corrupt_dashboard_step);

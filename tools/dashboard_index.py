@@ -237,6 +237,7 @@ def main() -> int:
     parser.add_argument("--strict-producers", action="store_true", help="fail if any artifact lacks a producer_step")
     parser.add_argument("--strict-smoke-gates", action="store_true", help="fail if required artifacts lack a smoke_gate")
     parser.add_argument("--strict-header-inspect", action="store_true", help="fail if header inspect artifact is missing, failed, or has missing workflows")
+    parser.add_argument("--strict-validation-health", action="store_true", help="fail if the aggregate validation_healthy flag is false")
     args = parser.parse_args()
 
     root = Path(args.dir)
@@ -387,6 +388,9 @@ def main() -> int:
         if header_health["missing_workflow_count"]:
             missing = ",".join(f"{row.get('command')}:{row.get('workflow')}" for row in header_health["missing_workflows"])
             raise SystemExit(f"dashboard_index_header_inspect_missing_workflows={header_health['missing_workflow_count']}:{missing}")
+    if args.strict_validation_health and not validation_healthy:
+        reasons = ",".join(validation_unhealthy_reasons)
+        raise SystemExit(f"dashboard_index_validation_unhealthy={reasons}")
     print(f"dashboard_index={output} manifest={manifest} artifacts={len(artifacts)}")
     return 0
 

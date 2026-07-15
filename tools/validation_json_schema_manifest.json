@@ -106,6 +106,7 @@
               "strict-producers",
               "strict-smoke-gates",
               "strict-header-inspect",
+              "strict-validation-health",
               "synthetic"
             ]
           },
@@ -169,6 +170,7 @@
           "strict-producers",
           "strict-smoke-gates",
           "strict-header-inspect",
+          "strict-validation-health",
           "synthetic"
         ]
       }
@@ -226,11 +228,13 @@
           "strict-producers",
           "strict-smoke-gates",
           "strict-header-inspect",
+          "strict-validation-health",
           "synthetic"
         ],
         "name": [
           "all_strict_ok",
           "missing_producer",
+          "validation_unhealthy",
           "missing_smoke_gate",
           "missing_header_inspect",
           "failed_header_inspect",
@@ -252,6 +256,7 @@
               "strict-producers",
               "strict-smoke-gates",
               "strict-header-inspect",
+              "strict-validation-health",
               "synthetic"
             ]
           }
@@ -269,6 +274,7 @@
               "strict-producers",
               "strict-smoke-gates",
               "strict-header-inspect",
+              "strict-validation-health",
               "synthetic"
             ]
           }
@@ -286,6 +292,7 @@
               "strict-producers",
               "strict-smoke-gates",
               "strict-header-inspect",
+              "strict-validation-health",
               "synthetic"
             ]
           },

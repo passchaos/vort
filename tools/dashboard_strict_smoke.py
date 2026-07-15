@@ -241,6 +241,11 @@ def main() -> int:
         write_producer_map(no_producer, include_exact=False)
         no_producer_result = expect_failure(dashboard_args(root, no_producer, "--strict-producers"), "dashboard_index_missing_producers=vort-header-inspect-smoke.json")
         checks.append(check_row("missing_producer", "strict-producers", True, True, no_producer_result.returncode, "dashboard_index_missing_producers=vort-header-inspect-smoke.json", no_producer_result.stdout))
+        validation_unhealthy_result = expect_failure(
+            dashboard_args(root, no_producer, "--strict-validation-health"),
+            "dashboard_index_validation_unhealthy=missing_producers",
+        )
+        checks.append(check_row("validation_unhealthy", "strict-validation-health", True, True, validation_unhealthy_result.returncode, "dashboard_index_validation_unhealthy=missing_producers", validation_unhealthy_result.stdout))
 
         no_smoke = root / "no-smoke.json"
         write_producer_map(no_smoke, include_smoke=False, required_name="vort-header-inspect-smoke.json")
