@@ -22,16 +22,37 @@
         "dashboard_strict_ok": "bool",
         "dashboard_strict_present": "bool",
         "dashboard_strict_healthy": "bool",
+        "producer_healthy": "bool",
         "producer_step_allowed_missing": "list",
         "producer_step_covered": "int",
         "producer_step_missing": "list",
         "schema": "str",
         "schema_version": "int",
         "smoke_gate_covered": "int",
+        "smoke_gate_healthy": "bool",
         "smoke_gate_missing": "list",
-        "smoke_gate_required_missing": "list"
+        "smoke_gate_required_missing": "list",
+        "validation_healthy": "bool"
       },
       "boolean_formula_rules": {
+        "producer_healthy": {
+          "zero": [
+            "producer_step_missing"
+          ]
+        },
+        "smoke_gate_healthy": {
+          "zero": [
+            "smoke_gate_required_missing"
+          ]
+        },
+        "validation_healthy": {
+          "all": [
+            "producer_healthy",
+            "smoke_gate_healthy",
+            "header_inspect_healthy",
+            "dashboard_strict_healthy"
+          ]
+        },
         "header_inspect_healthy": {
           "all": [
             "header_inspect_present",

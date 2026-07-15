@@ -334,9 +334,15 @@ def require_boolean_formula_rules(value: dict[str, Any], boolean_formula_rules: 
             expected = expected and field_value
         for field in zero_fields:
             field_value = value.get(field)
-            if not isinstance(field_value, int) or isinstance(field_value, bool):
-                raise AssertionError(f"{label}.{field} must be an integer for {target_field} formula")
-            expected = expected and field_value == 0
+            if isinstance(field_value, bool):
+                raise AssertionError(f"{label}.{field} must be an integer or list for {target_field} formula")
+            if isinstance(field_value, int):
+                expected = expected and field_value == 0
+                continue
+            if isinstance(field_value, list):
+                expected = expected and len(field_value) == 0
+                continue
+            raise AssertionError(f"{label}.{field} must be an integer or list for {target_field} formula")
         actual = value.get(target_field)
         if not isinstance(actual, bool):
             raise AssertionError(f"{label}.{target_field} must be a boolean for formula validation")

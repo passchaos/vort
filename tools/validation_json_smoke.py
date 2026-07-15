@@ -295,6 +295,8 @@ def main() -> int:
         assert dashboard["schema"] == "vort.dashboard_index"
         assert dashboard["schema_version"] == 1
         assert dashboard["artifact_count"] >= 3
+        assert dashboard["producer_healthy"] == (len(dashboard["producer_step_missing"]) == 0)
+        assert dashboard["smoke_gate_healthy"] == (len(dashboard["smoke_gate_required_missing"]) == 0)
         assert dashboard["header_inspect_present"] is True
         assert dashboard["header_inspect_ok"] is True
         assert dashboard["header_inspect_healthy"] is True
@@ -311,6 +313,12 @@ def main() -> int:
         assert dashboard["dashboard_strict_expected_mode_count"] == dashboard_strict["expected_mode_count"]
         assert dashboard["dashboard_strict_missing_mode_count"] == dashboard_strict["missing_mode_count"]
         assert dashboard["dashboard_strict_missing_modes"] == dashboard_strict["missing_modes"]
+        assert dashboard["validation_healthy"] == (
+            dashboard["producer_healthy"]
+            and dashboard["smoke_gate_healthy"]
+            and dashboard["header_inspect_healthy"]
+            and dashboard["dashboard_strict_healthy"]
+        )
         validate_value_against_manifest(dashboard, schemas_def)
         strict_missing_root = root / "strict-missing"
         strict_missing_root.mkdir()

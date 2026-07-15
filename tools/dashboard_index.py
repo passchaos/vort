@@ -266,8 +266,11 @@ def main() -> int:
     ]
     header_health = header_inspect_health(artifacts)
     strict_health = dashboard_strict_health(artifacts)
+    producer_healthy = len(producer_step_missing) == 0
+    smoke_gate_healthy = len(smoke_gate_required_missing) == 0
     header_healthy = header_health["present"] and header_health["ok"] and header_health["missing_workflow_count"] == 0
     strict_healthy = strict_health["present"] and strict_health["ok"] and strict_health["missing_mode_count"] == 0
+    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy
 
     lines = [
         "# Vort dashboard index",
@@ -279,6 +282,7 @@ def main() -> int:
         f"- allowed missing producer steps: {len(producer_step_allowed_missing)}",
         f"- smoke gates: {smoke_gate_covered}/{len(records)}",
         f"- required smoke gates missing: {len(smoke_gate_required_missing)}",
+        f"- validation healthy: `{validation_healthy}`",
         f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing, healthy `{header_healthy}`",
         f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing), healthy `{strict_healthy}`",
         "",
@@ -329,9 +333,12 @@ def main() -> int:
                 "producer_step_covered": producer_step_covered,
                 "producer_step_allowed_missing": producer_step_allowed_missing,
                 "producer_step_missing": producer_step_missing,
+                "producer_healthy": producer_healthy,
                 "smoke_gate_covered": smoke_gate_covered,
                 "smoke_gate_missing": smoke_gate_missing,
                 "smoke_gate_required_missing": smoke_gate_required_missing,
+                "smoke_gate_healthy": smoke_gate_healthy,
+                "validation_healthy": validation_healthy,
                 "header_inspect_present": header_health["present"],
                 "header_inspect_ok": header_health["ok"],
                 "header_inspect_healthy": header_healthy,

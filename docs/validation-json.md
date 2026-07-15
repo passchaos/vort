@@ -644,10 +644,13 @@ Top-level fields:
 - `artifact_count`
 - `producer_step_covered`
 - `producer_step_missing`
+- `producer_healthy`
 - `producer_step_allowed_missing`
 - `smoke_gate_covered`
 - `smoke_gate_missing`
+- `smoke_gate_healthy`
 - `smoke_gate_required_missing`
+- `validation_healthy`
 - `header_inspect_present`, `header_inspect_ok`, `header_inspect_healthy`,
   `header_inspect_required_workflow_count`,
   `header_inspect_missing_workflow_count`,
@@ -681,9 +684,12 @@ Example:
   "producer_step_covered": 1,
   "producer_step_missing": [],
   "producer_step_allowed_missing": [],
+  "producer_healthy": true,
   "smoke_gate_covered": 1,
   "smoke_gate_missing": [],
+  "smoke_gate_healthy": true,
   "smoke_gate_required_missing": [],
+  "validation_healthy": false,
   "header_inspect_present": false,
   "header_inspect_ok": false,
   "header_inspect_healthy": false,
@@ -950,5 +956,5 @@ named field. Numeric relation operators are `eq`, `ne`, `lt`, `le`, `gt`, and
 `ge`; `offset` is added to the right-hand field before comparison. Difference
 relations compare `left == minuend - subtrahend`, equality-flag relations
 compare `flag == (left == right)`, and boolean formula rules compare a target
-boolean to the conjunction of named boolean fields plus zero-valued integer
-fields.
+boolean to the conjunction of named boolean fields plus zero-valued integer or
+empty-list fields.
