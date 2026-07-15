@@ -1,0 +1,56 @@
+{
+  "schema": "vort.dashboard_config_index",
+  "schema_version": 1,
+  "config_count": 7,
+  "configs": [
+    {
+      "path": "tools/dashboard_config_index.json",
+      "schema_name": "vort.dashboard_config_index",
+      "docs_section": "## `vort.dashboard_config_index`",
+      "validation_step": "zig build run-dashboard-config-index-smoke",
+      "consumer": "tools/dashboard_config_index_smoke.py"
+    },
+    {
+      "path": "tools/dashboard_category_expected_artifacts.json",
+      "schema_name": "vort.dashboard_category_expected_artifacts",
+      "docs_section": "## `vort.dashboard_category_expected_artifacts`",
+      "validation_step": "zig build run-dashboard-category-smoke",
+      "consumer": "tools/dashboard_category_smoke.py"
+    },
+    {
+      "path": "tools/dashboard_producers.json",
+      "schema_name": "vort.dashboard_producers",
+      "docs_section": "## `vort.dashboard_producers`",
+      "validation_step": "zig build run-dashboard-producers-required-smoke",
+      "consumer": "tools/dashboard_index.py"
+    },
+    {
+      "path": "tools/dashboard_producers_required_artifacts.json",
+      "schema_name": "vort.dashboard_producers_required_artifacts",
+      "docs_section": "## `vort.dashboard_producers_required_artifacts`",
+      "validation_step": "zig build run-dashboard-producers-required-smoke",
+      "consumer": "tools/dashboard_producers_required_smoke.py"
+    },
+    {
+      "path": "tools/dashboard_strict_expected_modes.json",
+      "schema_name": "vort.dashboard_strict_expected_modes",
+      "docs_section": "## `vort.dashboard_strict_expected_modes`",
+      "validation_step": "zig build run-dashboard-strict-smoke",
+      "consumer": "tools/dashboard_strict_smoke.py"
+    },
+    {
+      "path": "tools/dashboard_strict_validation_reasons.json",
+      "schema_name": "vort.dashboard_strict_validation_reasons",
+      "docs_section": "## `vort.dashboard_strict_validation_reasons`",
+      "validation_step": "zig build run-dashboard-strict-smoke",
+      "consumer": "tools/dashboard_strict_smoke.py"
+    },
+    {
+      "path": "tools/header_inspect_required_workflows.json",
+      "schema_name": "vort.header_inspect_required_workflows",
+      "docs_section": "## `vort.header_inspect_required_workflows`",
+      "validation_step": "zig build run-header-inspect-dashboard",
+      "consumer": "tools/header_inspect_smoke.py"
+    }
+  ]
+}

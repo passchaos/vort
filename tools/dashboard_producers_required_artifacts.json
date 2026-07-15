@@ -9,6 +9,13 @@
     },
     {
       "expected_format": "json",
+      "name": "vort-dashboard-config-index-smoke.json",
+      "producer_step": "zig build run-dashboard-config-index-smoke",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-dashboard-config-index-smoke"
+    },
+    {
+      "expected_format": "json",
       "name": "vort-dashboard-index.json",
       "producer_step": "zig build run-dashboard-index",
       "required_smoke_gate": false,

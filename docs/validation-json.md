@@ -614,11 +614,14 @@ Example:
     "vort.dashboard_strict_expected_modes",
     "vort.dashboard_strict_validation_reasons",
     "vort.dashboard_strict_smoke",
+    "vort.dashboard_producers",
     "vort.dashboard_producers_negative_smoke",
     "vort.dashboard_producers_required_artifacts",
     "vort.dashboard_producers_required_smoke",
     "vort.dashboard_category_expected_artifacts",
     "vort.dashboard_category_negative_smoke",
+    "vort.dashboard_config_index",
+    "vort.dashboard_config_index_smoke",
     "vort.dashboard_index",
     "vort.header_inspect_smoke",
     "vort.header_inspect_required_workflows",
@@ -633,6 +636,84 @@ Example:
   "cli_failure_hint": "payload_corrupt",
   "report_rows": 1,
   "corrupt_rows": 8
+}
+```
+
+## `vort.dashboard_config_index`
+
+Consumed by:
+
+```sh
+zig build run-dashboard-config-index-smoke
+python3 tools/dashboard_config_index_smoke.py
+```
+
+This schema indexes dashboard-related external configuration files. Each row
+records the config path, schema name, documentation section, validation build
+step, and consumer script. The config-index smoke verifies that every indexed
+file exists, has the expected schema, is represented in this document, has a
+manifest schema entry, and points at an existing consumer.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_config_index",
+  "schema_version": 1,
+  "config_count": 1,
+  "configs": [
+    {
+      "path": "tools/dashboard_category_expected_artifacts.json",
+      "schema_name": "vort.dashboard_category_expected_artifacts",
+      "docs_section": "## `vort.dashboard_category_expected_artifacts`",
+      "validation_step": "zig build run-dashboard-category-smoke",
+      "consumer": "tools/dashboard_category_smoke.py"
+    }
+  ]
+}
+```
+
+## `vort.dashboard_config_index_smoke`
+
+Produced by:
+
+```sh
+zig build run-dashboard-config-index-smoke
+python3 tools/dashboard_config_index_smoke.py --summary zig-out/vort-dashboard-config-index-smoke.json
+```
+
+This schema summarizes the config-index validation. Each row records whether the
+file path exists, whether the file schema matches the indexed schema name,
+whether the schema exists in the shared manifest, whether the docs section is
+present, whether the validation step is present in `build.zig`, whether the
+consumer script exists, and whether `vort.validation_json_smoke.checked_schemas`
+allows the config schema.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_config_index_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "config_count": 1,
+  "configs": [
+    {
+      "path": "tools/dashboard_category_expected_artifacts.json",
+      "schema_name": "vort.dashboard_category_expected_artifacts",
+      "docs_section": "## `vort.dashboard_category_expected_artifacts`",
+      "validation_step": "zig build run-dashboard-category-smoke",
+      "consumer": "tools/dashboard_category_smoke.py",
+      "path_exists": true,
+      "schema_matches": true,
+      "manifest_schema_present": true,
+      "docs_section_present": true,
+      "validation_step_present": true,
+      "consumer_exists": true,
+      "validation_json_smoke_checked": true,
+      "matched": true
+    }
+  ]
 }
 ```
 

@@ -64,6 +64,7 @@ def main() -> int:
         dashboard_manifest_path = root / "vort-dashboard-index.json"
         docs_negative_path = root / "vort-validation-json-docs-negative-smoke.json"
         dashboard_category_negative_path = root / "vort-dashboard-category-negative-smoke.json"
+        dashboard_config_index_path = root / "vort-dashboard-config-index-smoke.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -105,6 +106,26 @@ def main() -> int:
         assert corrupt["schema_version"] == 1
         assert corrupt["rows"] >= 1
         validate_value_against_manifest(corrupt, schemas_def)
+
+        dashboard_config_index = json.loads((ROOT / "tools" / "dashboard_config_index.json").read_text())
+        assert dashboard_config_index["schema"] == "vort.dashboard_config_index"
+        assert dashboard_config_index["configs"]
+        validate_value_against_manifest(dashboard_config_index, schemas_def)
+        dashboard_producers = json.loads((ROOT / "tools" / "dashboard_producers.json").read_text())
+        assert dashboard_producers["schema"] == "vort.dashboard_producers"
+        validate_value_against_manifest(dashboard_producers, schemas_def)
+        run([
+            "python3",
+            str(ROOT / "tools" / "dashboard_config_index_smoke.py"),
+            "--summary",
+            str(dashboard_config_index_path),
+        ])
+        dashboard_config_index_smoke = json.loads(dashboard_config_index_path.read_text())
+        assert dashboard_config_index_smoke["schema"] == "vort.dashboard_config_index_smoke"
+        assert dashboard_config_index_smoke["ok"] is True
+        assert dashboard_config_index_smoke["config_count"] == dashboard_config_index["config_count"]
+        assert all(row["matched"] is True for row in dashboard_config_index_smoke["configs"])
+        validate_value_against_manifest(dashboard_config_index_smoke, schemas_def)
 
         dashboard_category_expected = json.loads((ROOT / "tools" / "dashboard_category_expected_artifacts.json").read_text())
         assert dashboard_category_expected["schema"] == "vort.dashboard_category_expected_artifacts"
@@ -437,11 +458,14 @@ def main() -> int:
                 dashboard_strict_modes["schema"],
                 dashboard_strict_reasons["schema"],
                 dashboard_strict["schema"],
+                dashboard_producers["schema"],
                 dashboard_producers_negative["schema"],
                 dashboard_producers_required["schema"],
                 dashboard_producers_required_smoke["schema"],
                 dashboard_category_expected["schema"],
                 dashboard_category_negative["schema"],
+                dashboard_config_index["schema"],
+                dashboard_config_index_smoke["schema"],
                 dashboard["schema"],
                 header_summary["schema"],
                 required_workflows["schema"],

@@ -66,6 +66,13 @@
       "require_smoke_gate": true
     },
     {
+      "name": "vort-dashboard-config-index-smoke.json",
+      "category": "validation",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
       "name": "vort-dashboard-strict-smoke.json",
       "category": "validation",
       "require_present": true,

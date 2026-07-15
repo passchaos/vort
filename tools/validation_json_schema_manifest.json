@@ -521,6 +521,57 @@
         ]
       }
     },
+    "vort.dashboard_config_index": {
+      "fields": {
+        "config_count": "int",
+        "configs": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "config_count": {
+          "collection": "configs"
+        }
+      },
+      "item_collection": "configs",
+      "item_fields": {
+        "consumer": "str",
+        "docs_section": "str",
+        "path": "str",
+        "schema_name": "str",
+        "validation_step": "str"
+      }
+    },
+    "vort.dashboard_config_index_smoke": {
+      "fields": {
+        "config_count": "int",
+        "configs": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "config_count": {
+          "collection": "configs"
+        }
+      },
+      "item_collection": "configs",
+      "item_fields": {
+        "consumer": "str",
+        "consumer_exists": "bool",
+        "docs_section": "str",
+        "docs_section_present": "bool",
+        "manifest_schema_present": "bool",
+        "matched": "bool",
+        "path": "str",
+        "path_exists": "bool",
+        "schema_matches": "bool",
+        "schema_name": "str",
+        "validation_json_smoke_checked": "bool",
+        "validation_step": "str",
+        "validation_step_present": "bool"
+      }
+    },
     "vort.dashboard_producers": {
       "fields": {
         "allow_missing": "dict",
@@ -1470,11 +1521,14 @@
           "vort.dashboard_strict_expected_modes",
           "vort.dashboard_strict_validation_reasons",
           "vort.dashboard_strict_smoke",
+          "vort.dashboard_producers",
           "vort.dashboard_producers_negative_smoke",
           "vort.dashboard_producers_required_artifacts",
           "vort.dashboard_producers_required_smoke",
           "vort.dashboard_category_expected_artifacts",
           "vort.dashboard_category_negative_smoke",
+          "vort.dashboard_config_index",
+          "vort.dashboard_config_index_smoke",
           "vort.dashboard_index",
           "vort.header_inspect_smoke",
           "vort.header_inspect_required_workflows",
