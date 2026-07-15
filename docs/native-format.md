@@ -137,9 +137,11 @@ only the final returned range buffer allocation.
 native frame modes: store, deflate, RLE, and LDM. It verifies the same size,
 trailing-data, and CRC-32 contracts as `decodeAnyAlloc`, while avoiding the
 allocator-returning helper's output allocation when the caller already knows the
-frame's target buffer. Dictionary frames still require the dictionary-specific
-decode APIs because their correctness depends on caller-supplied dictionary
-bytes.
+frame's target buffer. Allocator-returning callers can use
+`decodeAnyAllocExactSize` when they know the expected output length or
+`decodeAnyAllocLimited` when they need to cap allocation before trusting frame
+metadata. Dictionary frames still require the dictionary-specific decode APIs
+because their correctness depends on caller-supplied dictionary bytes.
 
 ## Batch range summary APIs
 

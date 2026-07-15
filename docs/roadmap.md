@@ -59,6 +59,7 @@ architecture blindly.
 - [x] Dictionary-backed embedded and sidecar auto range-decode summary APIs support CRC-32 summaries and caller-owned buffers.
 - [x] Allocator-returning single-range APIs reuse the caller-owned range-into path and mode-specific fast paths.
 - [x] One-shot native `decodeAnyInto` covers store/deflate/RLE/LDM caller-owned output paths.
+- [x] One-shot native `decodeAnyAllocExactSize` and `decodeAnyAllocLimited` bound allocator-returning output.
 - [x] Indexed and sidecar batch range-decode summary APIs reuse one parsed index for multiple logical ranges.
 - [x] Indexed and sidecar batch range-decode into APIs fill caller-owned buffers after one parsed index.
 - [x] Batch range-decode into APIs cache decoded frames within a batch to avoid repeated same-frame decode work.

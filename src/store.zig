@@ -334,6 +334,28 @@ pub fn decodeAnyAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) return error.InvalidDictionaryTraining;
     const payload = try payloadSliceFromInfo(input, info);
     const output_len = try decodeAnyOutputLen(info);
+    return decodeAnyPayloadAllocKnownLen(allocator, info, payload, output_len);
+}
+
+pub fn decodeAnyAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    const info = try parseHeader(input);
+    if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) return error.InvalidDictionaryTraining;
+    const payload = try payloadSliceFromInfo(input, info);
+    const output_len = try decodeAnyOutputLen(info);
+    if (output_len != expected_output_len) return error.SizeMismatch;
+    return decodeAnyPayloadAllocKnownLen(allocator, info, payload, output_len);
+}
+
+pub fn decodeAnyAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    const info = try parseHeader(input);
+    if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) return error.InvalidDictionaryTraining;
+    const payload = try payloadSliceFromInfo(input, info);
+    const output_len = try decodeAnyOutputLen(info);
+    if (output_len > max_output_len) return error.OutputLimitExceeded;
+    return decodeAnyPayloadAllocKnownLen(allocator, info, payload, output_len);
+}
+
+fn decodeAnyPayloadAllocKnownLen(allocator: std.mem.Allocator, info: FrameInfo, payload: []const u8, output_len: usize) ![]u8 {
     const decoded = try allocator.alloc(u8, output_len);
     errdefer allocator.free(decoded);
     const written = try decodeAnyPayloadInto(info, payload, decoded);
@@ -3591,6 +3613,24 @@ test "decodeAnyAlloc preserves old store frames" {
     const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "store", decoded);
+}
+
+test "decodeAnyAlloc exact-size and limited variants bound native output" {
+    const input = "hello hello hello hello";
+    const frame = try encodeDeflateAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(frame);
+
+    const exact = try decodeAnyAllocExactSize(std.testing.allocator, frame, input.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, input, exact);
+
+    const limited = try decodeAnyAllocLimited(std.testing.allocator, frame, input.len);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, input, limited);
+
+    try std.testing.expectError(error.SizeMismatch, decodeAnyAllocExactSize(std.testing.allocator, frame, input.len - 1));
+    try std.testing.expectError(error.SizeMismatch, decodeAnyAllocExactSize(std.testing.allocator, frame, input.len + 1));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeAnyAllocLimited(std.testing.allocator, frame, input.len - 1));
 }
 
 test "decodeAnyInto covers non-dictionary native frame modes" {
