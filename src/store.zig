@@ -961,16 +961,16 @@ pub fn validateFrameIndex(index: []const FrameIndexEntry) Error!void {
 /// index/frame validation paths when they need to prove the stream bytes match
 /// the index; this helper is purely the checksum-composition primitive.
 pub fn frameIndexCombinedChecksum(index: []const FrameIndexEntry) Error!u32 {
-    return (try frameIndexSummary(index)).combined_checksum;
+    return (try summarizeFrameIndex(index)).combined_checksum;
 }
 
-const FrameIndexSummary = struct {
+pub const FrameIndexSummary = struct {
     frame_count: usize,
     total_uncompressed: u64,
     combined_checksum: u32,
 };
 
-fn frameIndexSummary(index: []const FrameIndexEntry) Error!FrameIndexSummary {
+pub fn summarizeFrameIndex(index: []const FrameIndexEntry) Error!FrameIndexSummary {
     try validateFrameIndex(index);
     var combined = checksum.crc32("");
     for (index) |entry| {
@@ -2378,7 +2378,7 @@ fn validateSidecarIndexInternalAlloc(allocator: std.mem.Allocator, dict: ?[]cons
 
 fn validateFrameIndexEntriesInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, options: SidecarValidationOptions) !void {
     try validateFrameIndex(index);
-    const summary = try frameIndexSummary(index);
+    const summary = try summarizeFrameIndex(index);
     try validateFrameIndexSummaryExpectations(summary, options);
     var scratch: std.ArrayList(u8) = .empty;
     defer scratch.deinit(allocator);
@@ -2415,7 +2415,7 @@ fn validateSidecarIndexReportInternalAlloc(allocator: std.mem.Allocator, dict: ?
 
 fn validateFrameIndexEntriesReportInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, options: SidecarValidationOptions) ValidationReport {
     validateFrameIndex(index) catch |err| return validationFailure(options.mode, .index_structure, err, null, null, null);
-    const summary = frameIndexSummary(index) catch |err| return validationFailure(options.mode, .index_structure, err, null, null, null);
+    const summary = summarizeFrameIndex(index) catch |err| return validationFailure(options.mode, .index_structure, err, null, null, null);
     validateFrameIndexSummaryExpectations(summary, options) catch |err| return validationFailure(options.mode, .frame_metadata, err, null, null, null);
     var scratch: std.ArrayList(u8) = .empty;
     defer scratch.deinit(allocator);
@@ -3072,6 +3072,10 @@ test "frame index combines frame checksums into whole payload checksum" {
     const index = try buildFrameIndexAlloc(std.testing.allocator, combined_stream.items);
     defer std.testing.allocator.free(index);
     try std.testing.expectEqual(checksum.crc32(expected_payload.items), try frameIndexCombinedChecksum(index));
+    const summary = try summarizeFrameIndex(index);
+    try std.testing.expectEqual(index.len, summary.frame_count);
+    try std.testing.expectEqual(@as(u64, expected_payload.items.len), summary.total_uncompressed);
+    try std.testing.expectEqual(checksum.crc32(expected_payload.items), summary.combined_checksum);
 
     const encoded = try encodeFrameIndexAlloc(std.testing.allocator, index);
     defer std.testing.allocator.free(encoded);

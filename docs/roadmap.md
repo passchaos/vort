@@ -53,6 +53,7 @@ architecture blindly.
 - [x] Serialized/sidecar frame indexes.
 - [x] Serialized frame indexes carry per-frame checksums validated by range decode.
 - [x] Frame indexes can compose per-frame CRC-32 values into a whole-stream checksum without rereading payload bytes.
+- [x] Public frame-index summary API exposes frame count, total uncompressed length, and combined checksum.
 - [x] Validation reports expose frame-count, total-uncompressed, and combined-checksum summaries for successful indexed streams.
 - [x] Sidecar validation options can enforce expected whole-stream length and combined checksum from frame-index metadata.
 - [x] Indexed and sidecar range-decode summary APIs return range bytes with CRC-32 summaries.

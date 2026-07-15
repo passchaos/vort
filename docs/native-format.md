@@ -119,6 +119,9 @@ index entries match. Successful `ValidationReport` values expose the combined
 checksum, frame count, and total indexed uncompressed byte count for callers that
 need a whole-stream summary; callers can also feed those expected values back
 through `SidecarValidationOptions` to reject mismatched sidecar/index metadata.
+`summarizeFrameIndex` exposes the same frame count, total uncompressed length,
+and combined checksum directly for callers that already have trusted index
+entries and do not need a full validation report.
 
 ## Range decode summary APIs
 
