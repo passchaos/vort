@@ -1848,14 +1848,19 @@ pub const EmbeddedDictionaryInspection = struct {
     skippable_offset: usize,
 };
 
+pub const EmbeddedDictionaryView = struct {
+    bytes: []const u8,
+    inspection: EmbeddedDictionaryInspection,
+};
+
 pub const EmbeddedDictionaryInspectionOptions = struct {
     expected_id: ?dictionary.DictionaryId = null,
     expected_content_len: ?usize = null,
 };
 
-pub fn inspectEmbeddedDictionary(input: []const u8) Error!EmbeddedDictionaryInspection {
+pub fn viewEmbeddedDictionary(input: []const u8) Error!EmbeddedDictionaryView {
     var offset: usize = 0;
-    var found: ?EmbeddedDictionaryInspection = null;
+    var found: ?EmbeddedDictionaryView = null;
     while (offset < input.len) {
         const tail = input[offset..];
         if (tail.len >= 4 and std.mem.eql(u8, tail[0..4], &skippable_magic)) {
@@ -1869,9 +1874,12 @@ pub fn inspectEmbeddedDictionary(input: []const u8) Error!EmbeddedDictionaryInsp
                 const actual_id = dictionary.DictionaryId.fromBytes(dict);
                 if (actual_id.asInt() != expected_id) return error.ChecksumMismatch;
                 found = .{
-                    .id = actual_id,
-                    .content_len = dict.len,
-                    .skippable_offset = offset,
+                    .bytes = dict,
+                    .inspection = .{
+                        .id = actual_id,
+                        .content_len = dict.len,
+                        .skippable_offset = offset,
+                    },
                 };
             }
             const total = try skippableTotalLen(tail);
@@ -1887,6 +1895,10 @@ pub fn inspectEmbeddedDictionary(input: []const u8) Error!EmbeddedDictionaryInsp
     return found orelse error.InvalidMagic;
 }
 
+pub fn inspectEmbeddedDictionary(input: []const u8) Error!EmbeddedDictionaryInspection {
+    return (try viewEmbeddedDictionary(input)).inspection;
+}
+
 pub fn inspectEmbeddedDictionaryWithOptions(input: []const u8, options: EmbeddedDictionaryInspectionOptions) Error!EmbeddedDictionaryInspection {
     const inspection = try inspectEmbeddedDictionary(input);
     if (options.expected_id) |expected| {
@@ -1899,33 +1911,7 @@ pub fn inspectEmbeddedDictionaryWithOptions(input: []const u8, options: Embedded
 }
 
 pub fn parseEmbeddedDictionary(input: []const u8) Error![]const u8 {
-    var offset: usize = 0;
-    var found: ?[]const u8 = null;
-    while (offset < input.len) {
-        const tail = input[offset..];
-        if (tail.len >= 4 and std.mem.eql(u8, tail[0..4], &skippable_magic)) {
-            const payload = try parseSkippable(tail);
-            if (payload.len >= embedded_dictionary_header_len and std.mem.eql(u8, payload[0..4], &embedded_dictionary_magic)) {
-                if (std.mem.readInt(u32, payload[16..20], .little) != 0) return error.CorruptFrame;
-                const len: usize = std.mem.readInt(u32, payload[12..16], .little);
-                if (payload.len - embedded_dictionary_header_len < len) return error.TruncatedFrame;
-                const dict = payload[embedded_dictionary_header_len..][0..len];
-                const expected_id = std.mem.readInt(u64, payload[4..12], .little);
-                if (dictionary.DictionaryId.fromBytes(dict).asInt() != expected_id) return error.ChecksumMismatch;
-                found = dict;
-            }
-            const total = try skippableTotalLen(tail);
-            if (tail.len < total) return error.TruncatedFrame;
-            offset += total;
-        } else {
-            const info = try parseHeader(tail);
-            const total = try frameLenFromInfo(info);
-            if (tail.len < total) return error.TruncatedFrame;
-            offset += total;
-        }
-    }
-    const dict = found orelse return error.InvalidMagic;
-    return dict;
+    return (try viewEmbeddedDictionary(input)).bytes;
 }
 
 pub fn parseEmbeddedDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -4672,6 +4658,9 @@ test "self-contained dictionary stream embeds dictionary and supports range deco
     const dict = try parseEmbeddedDictionaryAlloc(std.testing.allocator, stream);
     defer std.testing.allocator.free(dict);
     try std.testing.expect(dict.len > 0);
+    const view = try viewEmbeddedDictionary(stream);
+    try std.testing.expectEqualSlices(u8, dict, view.bytes);
+    try std.testing.expectEqual(dict.len, view.inspection.content_len);
     const inspection = try inspectEmbeddedDictionary(stream);
     try std.testing.expectEqual(dict.len, inspection.content_len);
     try std.testing.expectEqual(dictionary.DictionaryId.fromBytes(dict).asInt(), inspection.id.asInt());

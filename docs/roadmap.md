@@ -58,6 +58,7 @@ architecture blindly.
 - [x] Embedded dictionary inspection validates dictionary metadata without allocating dictionary bytes.
 - [x] Embedded dictionary inspection options enforce expected dictionary ID and content length.
 - [x] Auto dictionary range/validation/concatenated decode paths borrow embedded dictionary bytes instead of copying them.
+- [x] Embedded dictionary view API returns borrowed bytes and validated metadata in one scan.
 - [x] Deterministic malformed-header/frame smoke corpus.
 - [x] Skippable native frames.
 - [x] In-memory frame indexes for concatenated native store streams.

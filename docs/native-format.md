@@ -172,7 +172,9 @@ enforce an expected dictionary ID and content length before any decode path
 allocates or copies dictionary bytes. `parseEmbeddedDictionary` returns a
 borrowed slice into the input stream, and auto dictionary range/validation/
 concatenated paths use that borrowed slice so self-contained dictionary streams
-do not copy dictionary bytes just to decode immediately.
+do not copy dictionary bytes just to decode immediately. `viewEmbeddedDictionary`
+combines the borrowed slice and validated metadata in one scan for callers that
+need both.
 
 ## Batch range summary APIs
 
