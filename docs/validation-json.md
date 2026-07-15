@@ -717,8 +717,8 @@ python3 tools/dashboard_strict_smoke.py --summary zig-out/vort-dashboard-strict-
 
 This schema summarizes positive and negative smoke checks for dashboard strict
 modes: producer coverage, smoke-gate coverage, and header-inspection health. Each
-check records the expected output marker, actual truncated output, and process
-return code for CI diagnostics. `mode_counts` groups checks by strict mode for a
+check records the expected output marker, actual truncated output, truncation
+limit/flag, and process return code for CI diagnostics. `mode_counts` groups checks by strict mode for a
 compact dashboard overview.
 
 Example:
@@ -745,6 +745,8 @@ Example:
       "expected_failure": false,
       "expected_output": "dashboard_index=",
       "actual_output": "dashboard_index=zig-out/vort-dashboard-index.md ...",
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
       "returncode": 0,
       "matched": true
     }

@@ -77,12 +77,15 @@ def expect_failure(args: list[str], needle: str) -> subprocess.CompletedProcess[
     return result
 
 
-def truncate_output(text: str, limit: int = 240) -> str:
-    normalized = text.replace("\n", "\
-")
-    if len(normalized) <= limit:
-        return normalized
-    return normalized[: limit - 1] + "…"
+def truncate_output(text: str, limit: int = 240) -> dict[str, object]:
+    normalized = text.replace("\n", "\\n")
+    truncated = len(normalized) > limit
+    output = normalized[: limit - 1] + "…" if truncated else normalized
+    return {
+        "output": output,
+        "limit": limit,
+        "truncated": truncated,
+    }
 
 
 def check_row(
@@ -94,6 +97,7 @@ def check_row(
     expected_output: str,
     actual_output: str,
 ) -> dict[str, object]:
+    actual = truncate_output(actual_output)
     return {
         "name": name,
         "mode": mode,
@@ -101,7 +105,9 @@ def check_row(
         "matched": matched,
         "returncode": returncode,
         "expected_output": expected_output,
-        "actual_output": truncate_output(actual_output),
+        "actual_output": actual["output"],
+        "actual_output_limit": actual["limit"],
+        "actual_output_truncated": actual["truncated"],
     }
 
 
@@ -136,12 +142,12 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
         "",
         "## Checks",
         "",
-        "| name | mode | expected failure | returncode | expected output | actual output | matched |",
-        "| --- | --- | --- | ---: | --- | --- | --- |",
+        "| name | mode | expected failure | returncode | expected output | actual output | truncated | matched |",
+        "| --- | --- | --- | ---: | --- | --- | --- | --- |",
     ])
     for row in summary["checks"]:
         lines.append(
-            f"| `{row['name']}` | `{row['mode']}` | `{row['expected_failure']}` | {row['returncode']} | `{row['expected_output']}` | `{row['actual_output']}` | `{row['matched']}` |"
+            f"| `{row['name']}` | `{row['mode']}` | `{row['expected_failure']}` | {row['returncode']} | `{row['expected_output']}` | `{row['actual_output']}` | `{row['actual_output_truncated']}` | `{row['matched']}` |"
         )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
