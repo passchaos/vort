@@ -215,6 +215,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection smoke verifies Markdown sample shortening without losing JSON replay data.
 - [x] raw/zlib/gzip header inspection Markdown dashboard groups malformed-header failures by format.
 - [x] raw/zlib/gzip header inspection Markdown dashboard summarizes malformed-header failures by expected error.
+- [x] raw/zlib/gzip header inspection schema enum-checks malformed error distribution keys.
 - [x] Dashboard index classifies raw/zlib/gzip header inspection artifacts under validation.
 - [x] Dashboard category smoke protects raw/zlib/gzip header inspection validation classification.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.

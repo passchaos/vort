@@ -273,6 +273,17 @@
             }
           }
         }
+      },
+      "dict_key_enums": {
+        "negative_error_counts": [
+          "BadGzipHeader",
+          "BadZlibHeader",
+          "InvalidDeflateBlockType",
+          "InvalidDynamicBlockHeader",
+          "InvalidHuffmanCode",
+          "StoredLengthMismatch",
+          "TruncatedFrame"
+        ]
       }
     },
     "vort.raw_deflate_header_info": {
