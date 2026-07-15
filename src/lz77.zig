@@ -555,8 +555,24 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     @memset(head, -1);
     const prev = try allocator.alloc(isize, input.len);
     defer allocator.free(prev);
-    // As in the lazy parser, only positions already inserted into `head` are
-    // traversed, so every reachable `prev` slot has been initialized.
+    return hashGreedyPlanWithTables(allocator, input, options, head, prev);
+}
+
+pub fn hashGreedyPlanTinyAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    if (input.len > 32 * 1024) return hashGreedyPlanAlloc(allocator, input, options);
+
+    var head: [4096]isize = @splat(-1);
+    var prev_stack: [32 * 1024]isize = undefined;
+    return hashGreedyPlanWithTables(allocator, input, options, &head, prev_stack[0..input.len]);
+}
+
+fn hashGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: []isize, prev: []isize) !GreedyPlan {
+    // The heap-backed and stack-backed hash parsers share exactly the same
+    // state machine. Keeping the loop in one place protects token/stat
+    // accounting and hash seeding from drifting as fast-level heuristics evolve.
+    // `prev` starts uninitialized by design: only positions previously inserted
+    // into `head` are reachable through a hash chain, and `insertHash` writes the
+    // corresponding `prev` slot before that position can be followed.
 
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
@@ -584,41 +600,6 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
             try tokens.append(allocator, .{ .literal = input[pos] });
             stats.literals += 1;
             insertHash(input, pos, head, prev);
-            pos += 1;
-        }
-    }
-    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
-}
-
-pub fn hashGreedyPlanTinyAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
-    if (input.len > 32 * 1024) return hashGreedyPlanAlloc(allocator, input, options);
-
-    var head: [4096]isize = @splat(-1);
-    var prev_stack: [32 * 1024]isize = undefined;
-    const prev = prev_stack[0..input.len];
-
-    var tokens = try initTokenList(allocator, input.len);
-    errdefer tokens.deinit(allocator);
-    var stats = PlanStats{};
-
-    var pos: usize = 0;
-    while (pos < input.len) {
-        const best = findBestHashMatch(input, pos, options, &head, prev);
-
-        if (acceptMatch(input, pos, best.length, best.distance, options)) {
-            try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
-            stats.matches += 1;
-            stats.matched_bytes += best.length;
-            const end = @min(input.len, pos + best.length);
-            insertHash(input, pos, &head, prev);
-            const tail_start = if (end > pos + 4) end - 4 else pos + 1;
-            pos += 1;
-            if (pos < tail_start) pos = tail_start;
-            while (pos < end) : (pos += 1) insertHash(input, pos, &head, prev);
-        } else {
-            try tokens.append(allocator, .{ .literal = input[pos] });
-            stats.literals += 1;
-            insertHash(input, pos, &head, prev);
             pos += 1;
         }
     }
@@ -1029,6 +1010,71 @@ test "tiny hash greedy planner round trips small repeated data" {
     const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
     defer std.testing.allocator.free(replayed);
     try std.testing.expectEqualSlices(u8, input, replayed);
+}
+
+test "hash greedy table variants share token and stats accounting" {
+    const input = "abcabcabcabc xyz xyz xyz aaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ** 4;
+    const options: GreedyOptions = .{ .window_len = 8 * 1024, .max_chain = 32, .nice_len = 16, .max_candidates = 2, .min_match = 4, .max_match = 128, .min_savings_bits = 4 };
+
+    const heap = try hashGreedyPlanAlloc(std.testing.allocator, input, options);
+    defer heap.deinit(std.testing.allocator);
+    try expectPlanStatsConsistent(heap, input.len);
+
+    var heap_head: [1 << 15]isize = @splat(-1);
+    var heap_prev: [input.len]isize = undefined;
+    const heap_direct = try hashGreedyPlanWithTables(std.testing.allocator, input, options, &heap_head, &heap_prev);
+    defer heap_direct.deinit(std.testing.allocator);
+    try expectEqualTokenSlices(heap.tokens, heap_direct.tokens);
+    try std.testing.expectEqual(heap.stats, heap_direct.stats);
+    try expectPlanStatsConsistent(heap_direct, input.len);
+
+    const tiny = try hashGreedyPlanTinyAlloc(std.testing.allocator, input, options);
+    defer tiny.deinit(std.testing.allocator);
+    try expectPlanStatsConsistent(tiny, input.len);
+
+    var tiny_head: [4096]isize = @splat(-1);
+    var tiny_prev: [input.len]isize = undefined;
+    const tiny_direct = try hashGreedyPlanWithTables(std.testing.allocator, input, options, &tiny_head, &tiny_prev);
+    defer tiny_direct.deinit(std.testing.allocator);
+    try expectEqualTokenSlices(tiny.tokens, tiny_direct.tokens);
+    try std.testing.expectEqual(tiny.stats, tiny_direct.stats);
+    try expectPlanStatsConsistent(tiny_direct, input.len);
+}
+
+fn expectPlanStatsConsistent(plan: GreedyPlan, input_len: usize) !void {
+    var literals: usize = 0;
+    var matches: usize = 0;
+    var matched_bytes: usize = 0;
+    for (plan.tokens) |token| switch (token) {
+        .literal => literals += 1,
+        .match => |m| {
+            matches += 1;
+            matched_bytes += m.length;
+        },
+    };
+    try std.testing.expectEqual(literals, plan.stats.literals);
+    try std.testing.expectEqual(matches, plan.stats.matches);
+    try std.testing.expectEqual(matched_bytes, plan.stats.matched_bytes);
+    try std.testing.expectEqual(plan.tokens.len, plan.stats.tokenCount());
+    try std.testing.expectEqual(input_len, literals + matched_bytes);
+}
+
+fn expectEqualTokenSlices(expected: []const Token, actual: []const Token) !void {
+    try std.testing.expectEqual(expected.len, actual.len);
+    for (expected, actual) |lhs, rhs| switch (lhs) {
+        .literal => |byte| try std.testing.expectEqual(byte, switch (rhs) {
+            .literal => |rhs_byte| rhs_byte,
+            .match => return error.TestExpectedEqual,
+        }),
+        .match => |m| {
+            const rhs_match = switch (rhs) {
+                .literal => return error.TestExpectedEqual,
+                .match => |rhs_m| rhs_m,
+            };
+            try std.testing.expectEqual(m.length, rhs_match.length);
+            try std.testing.expectEqual(m.distance, rhs_match.distance);
+        },
+    };
 }
 
 test "dictionary-backed hash and lazy planners can emit preset-history matches" {
