@@ -58,7 +58,7 @@ pub fn main(init: std.process.Init) !void {
     try stdout.flush();
 }
 
-const Mode = enum { store, deflate, zlib, gzip };
+const Mode = enum { store, native, deflate, zlib, gzip };
 
 const Outcome = enum { accepted, rejected };
 
@@ -110,6 +110,7 @@ const State = struct {
     dictionary: ?[]u8 = null,
     max_output_len: ?usize = null,
     saw_store: bool = false,
+    saw_native: bool = false,
     saw_deflate: bool = false,
     saw_zlib: bool = false,
     saw_gzip: bool = false,
@@ -120,10 +121,11 @@ const State = struct {
 
     fn modeLabel(self: State) []const u8 {
         const mode_count = @as(usize, @intFromBool(self.saw_store)) +
+            @as(usize, @intFromBool(self.saw_native)) +
             @as(usize, @intFromBool(self.saw_deflate)) +
             @as(usize, @intFromBool(self.saw_zlib)) +
             @as(usize, @intFromBool(self.saw_gzip));
-        return if (mode_count > 1) "mixed" else if (self.saw_gzip) "gzip" else if (self.saw_zlib) "zlib" else if (self.saw_deflate) "deflate" else "store";
+        return if (mode_count > 1) "mixed" else if (self.saw_gzip) "gzip" else if (self.saw_zlib) "zlib" else if (self.saw_deflate) "deflate" else if (self.saw_native) "native" else "store";
     }
 
     fn exactErrorExpectationCount(self: State) usize {
@@ -264,6 +266,10 @@ fn processToken(allocator: std.mem.Allocator, state: *State, arg: []const u8) !v
         state.mode = .store;
         return;
     }
+    if (std.mem.eql(u8, arg, "--native")) {
+        state.mode = .native;
+        return;
+    }
     if (std.mem.eql(u8, arg, "--deflate")) {
         state.mode = .deflate;
         return;
@@ -350,6 +356,29 @@ fn processSample(allocator: std.mem.Allocator, state: *State, bytes: []const u8)
                 }
             }
         },
+        .native => {
+            state.saw_native = true;
+            if (decodeNativeSample(allocator, state.dictionary, state.max_output_len, bytes)) |decoded| {
+                defer allocator.free(decoded);
+                try state.recordOutcome(allocator, bytes.len, .accepted, null);
+            } else |err| {
+                switch (err) {
+                    error.TruncatedFrame,
+                    error.InvalidMagic,
+                    error.UnsupportedVersion,
+                    error.CorruptFrame,
+                    error.ChecksumMismatch,
+                    error.SizeMismatch,
+                    error.InvalidDictionaryTraining,
+                    error.OutputLimitExceeded,
+                    error.TrailingData,
+                    error.InvalidHuffmanCode,
+                    error.InvalidMatch,
+                    => try state.recordOutcome(allocator, bytes.len, .rejected, @errorName(err)),
+                    else => return err,
+                }
+            }
+        },
         .deflate => {
             state.saw_deflate = true;
             if (decodeRawDeflateSample(allocator, state.dictionary, state.max_output_len, bytes)) |decoded| {
@@ -421,6 +450,15 @@ fn processSample(allocator: std.mem.Allocator, state: *State, bytes: []const u8)
             }
         },
     }
+}
+
+fn decodeNativeSample(allocator: std.mem.Allocator, dictionary: ?[]const u8, max_output_len: ?usize, bytes: []const u8) ![]u8 {
+    if (dictionary) |dict| {
+        if (max_output_len) |limit| return vort.storeDecodeConcatenatedWithDictionaryAllocLimited(allocator, dict, bytes, limit);
+        return vort.storeDecodeConcatenatedWithDictionaryAlloc(allocator, dict, bytes);
+    }
+    if (max_output_len) |limit| return vort.storeDecodeConcatenatedAutoAllocLimited(allocator, bytes, limit);
+    return vort.storeDecodeConcatenatedAutoAlloc(allocator, bytes);
 }
 
 fn decodeRawDeflateSample(allocator: std.mem.Allocator, dictionary: ?[]const u8, max_output_len: ?usize, bytes: []const u8) ![]u8 {
@@ -633,15 +671,17 @@ fn expectedLabel(expected: ?Expected) []const u8 {
 fn modeIndex(mode: Mode) usize {
     return switch (mode) {
         .store => 0,
-        .deflate => 1,
-        .zlib => 2,
-        .gzip => 3,
+        .native => 1,
+        .deflate => 2,
+        .zlib => 3,
+        .gzip => 4,
     };
 }
 
 fn collectModeCounts(allocator: std.mem.Allocator, rows: []const ReportRow) !std.ArrayList(ModeCount) {
     var counts = [_]ModeCount{
         .{ .mode = .store },
+        .{ .mode = .native },
         .{ .mode = .deflate },
         .{ .mode = .zlib },
         .{ .mode = .gzip },

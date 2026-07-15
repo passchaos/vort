@@ -257,6 +257,11 @@ pub fn build(b: *std.Build) void {
     const deflate_wrapper_fuzz_corpus_step = b.step("run-deflate-wrapper-fuzz-corpus", "Run raw/zlib/gzip wrapper hex-sample fuzz corpus");
     deflate_wrapper_fuzz_corpus_step.dependOn(&run_deflate_wrapper_fuzz_corpus.step);
 
+    const run_native_fuzz_corpus = b.addRunArtifact(fuzz_corpus_exe);
+    run_native_fuzz_corpus.addArgs(&.{ "--file", "corpus/native-smoke.hex" });
+    const native_fuzz_corpus_step = b.step("run-native-fuzz-corpus", "Run native VORT hex-sample fuzz corpus");
+    native_fuzz_corpus_step.dependOn(&run_native_fuzz_corpus.step);
+
     const run_deflate_wrapper_fuzz_corpus_dashboard = b.addRunArtifact(fuzz_corpus_exe);
     run_deflate_wrapper_fuzz_corpus_dashboard.addArgs(&.{
         "--file",
@@ -912,6 +917,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(fuzz_smoke_step);
     ci_smoke_step.dependOn(fuzz_corpus_step);
     ci_smoke_step.dependOn(deflate_wrapper_fuzz_corpus_step);
+    ci_smoke_step.dependOn(native_fuzz_corpus_step);
     ci_smoke_step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     ci_smoke_step.dependOn(fuzz_corpus_coverage_smoke_step);
     ci_smoke_step.dependOn(fuzz_target_step);
