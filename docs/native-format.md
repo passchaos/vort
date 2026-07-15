@@ -142,3 +142,12 @@ then reuse the same into/cache path before wrapping the buffers in
 data-lake readers or archive manifests that need several small slices from the
 same indexed stream without reparsing the embedded or sidecar index for each
 request.
+
+## Store-frame range fast path
+
+Caller-owned range decode paths copy directly from store-frame payload slices when
+the indexed frame is uncompressed. The fast path still validates the frame
+header, size metadata, and full payload CRC-32 before copying the requested
+subrange, but it avoids allocating and materializing a decoded copy of the whole
+store frame. Compressed, dictionary, and LDM frames continue through the normal
+decode/cache path.

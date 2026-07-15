@@ -984,6 +984,7 @@ fn decodeRangeWithDictionaryIntoValidated(
     while (i < index.len and written < length) : (i += 1) {
         const entry = index[i];
         if (entry.uncompressed_offset >= end) break;
+        if (try copyStoredRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
         const decoded = try decodedFrameForRange(allocator, dict, input, entry, i, decoded_cache);
         defer if (decoded_cache == null) allocator.free(decoded);
         const frame_start = entry.uncompressed_offset;
@@ -1004,6 +1005,41 @@ fn decodeRangeWithDictionaryIntoValidated(
         .offset = offset,
         .crc32 = crc.digest(),
     };
+}
+
+fn copyStoredRangeIntoIfPossible(
+    input: []const u8,
+    entry: FrameIndexEntry,
+    range_offset: u64,
+    range_end: u64,
+    output: []u8,
+    written: *usize,
+    crc: *checksum.Crc32,
+) !bool {
+    if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
+    const frame = input[entry.frame_offset..][0..entry.frame_len];
+    const frame_info = try parseHeader(frame);
+    if (frame_info.flags != flags_none) return false;
+    if (entry.frame_len != try frameLenFromInfo(frame_info)) return error.CorruptFrame;
+    if (entry.checksum != frame_info.checksum) return error.ChecksumMismatch;
+    if (entry.uncompressed_len != frame_info.uncompressed_size) return error.CorruptFrame;
+
+    const payload_len = try payloadLenFromInfo(frame_info);
+    const payload = frame[header_len..][0..payload_len];
+    if (checksum.crc32(payload) != frame_info.checksum) return error.ChecksumMismatch;
+
+    const frame_start = entry.uncompressed_offset;
+    const frame_end = entry.uncompressed_offset + entry.uncompressed_len;
+    const copy_start = if (range_offset > frame_start) range_offset - frame_start else 0;
+    const copy_end_global = @min(range_end, frame_end);
+    const copy_end = copy_end_global - frame_start;
+    if (copy_end > copy_start) {
+        const slice = payload[@intCast(copy_start)..@intCast(copy_end)];
+        @memcpy(output[written.*..][0..slice.len], slice);
+        crc.update(slice);
+        written.* += slice.len;
+    }
+    return true;
 }
 
 fn decodedFrameForRange(
@@ -2726,6 +2762,10 @@ test "frame index supports seek and range decode" {
     try std.testing.expectEqual(checksum.crc32(&batch_a), batch_results[0].crc32);
     try std.testing.expectEqualSlices(u8, "habetaga", &batch_b);
     try std.testing.expectEqual(checksum.crc32(&batch_b), batch_results[1].crc32);
+    const corrupt_store = try std.testing.allocator.dupe(u8, combined.items);
+    defer std.testing.allocator.free(corrupt_store);
+    corrupt_store[header_len] ^= 1;
+    try std.testing.expectError(error.ChecksumMismatch, decodeRangeInto(std.testing.allocator, corrupt_store, index, 0, batch_a.len, batch_a[0..]));
     @memset(batch_a[0..], '!');
     @memset(batch_b[0..], '!');
     try std.testing.expectError(error.OutputTooSmall, decodeRangesInto(std.testing.allocator, combined.items, index, &.{
