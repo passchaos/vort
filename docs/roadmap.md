@@ -60,6 +60,7 @@ architecture blindly.
 - [x] Auto dictionary range/validation/concatenated decode paths borrow embedded dictionary bytes instead of copying them.
 - [x] Embedded dictionary view API returns borrowed bytes and validated metadata in one scan.
 - [x] Embedded dictionary view API rejects reserved, truncated, and ID-mismatched metadata.
+- [x] Store/native fuzz smoke corpus covers embedded dictionary metadata accept/reject cases.
 - [x] Deterministic malformed-header/frame smoke corpus.
 - [x] Skippable native frames.
 - [x] In-memory frame indexes for concatenated native store streams.

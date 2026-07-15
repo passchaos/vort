@@ -1,6 +1,7 @@
 const std = @import("std");
 const store = @import("store.zig");
 const deflate = @import("deflate.zig");
+const dictionary = @import("dictionary.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
 const lz77 = @import("lz77.zig");
@@ -51,7 +52,83 @@ pub fn runStoreSmokeCorpus(allocator: std.mem.Allocator) !CorpusStats {
         stats.valid_frames += 1;
     }
 
+    try runEmbeddedDictionarySmokeCorpus(allocator, &stats);
+
     return stats;
+}
+
+fn runEmbeddedDictionarySmokeCorpus(allocator: std.mem.Allocator, stats: *CorpusStats) !void {
+    const dict = "alpha beta gamma";
+    const valid = try embeddedDictionarySkippableAlloc(allocator, dict);
+    defer allocator.free(valid);
+    try expectEmbeddedDictionaryView(allocator, stats, valid, dict);
+
+    const plain = try store.encodeAlloc(allocator, "plain");
+    defer allocator.free(plain);
+    try expectMalformedEmbeddedDictionary(stats, plain, error.InvalidMagic);
+
+    const payload = try embeddedDictionaryPayloadAlloc(allocator, dict);
+    defer allocator.free(payload);
+
+    const reserved_payload = try allocator.dupe(u8, payload);
+    defer allocator.free(reserved_payload);
+    reserved_payload[16] = 1;
+    const reserved = try store.encodeSkippableAlloc(allocator, reserved_payload);
+    defer allocator.free(reserved);
+    try expectMalformedEmbeddedDictionary(stats, reserved, error.CorruptFrame);
+
+    const bad_id_payload = try allocator.dupe(u8, payload);
+    defer allocator.free(bad_id_payload);
+    bad_id_payload[4] ^= 1;
+    const bad_id = try store.encodeSkippableAlloc(allocator, bad_id_payload);
+    defer allocator.free(bad_id);
+    try expectMalformedEmbeddedDictionary(stats, bad_id, error.ChecksumMismatch);
+
+    const bad_len_payload = try allocator.dupe(u8, payload);
+    defer allocator.free(bad_len_payload);
+    std.mem.writeInt(u32, bad_len_payload[12..16], @intCast(dict.len + 1), .little);
+    const bad_len = try store.encodeSkippableAlloc(allocator, bad_len_payload);
+    defer allocator.free(bad_len);
+    try expectMalformedEmbeddedDictionary(stats, bad_len, error.TruncatedFrame);
+}
+
+fn embeddedDictionarySkippableAlloc(allocator: std.mem.Allocator, dict: []const u8) ![]u8 {
+    const payload = try embeddedDictionaryPayloadAlloc(allocator, dict);
+    defer allocator.free(payload);
+    return store.encodeSkippableAlloc(allocator, payload);
+}
+
+fn embeddedDictionaryPayloadAlloc(allocator: std.mem.Allocator, dict: []const u8) ![]u8 {
+    const header_len = 20;
+    const out = try allocator.alloc(u8, header_len + dict.len);
+    errdefer allocator.free(out);
+    @memcpy(out[0..4], "VDIC");
+    const id = dictionary.DictionaryId.fromBytes(dict);
+    std.mem.writeInt(u64, out[4..12], id.asInt(), .little);
+    std.mem.writeInt(u32, out[12..16], @intCast(dict.len), .little);
+    std.mem.writeInt(u32, out[16..20], 0, .little);
+    @memcpy(out[header_len..], dict);
+    return out;
+}
+
+fn expectEmbeddedDictionaryView(allocator: std.mem.Allocator, stats: *CorpusStats, input: []const u8, expected_dict: []const u8) !void {
+    stats.cases += 1;
+    const view = try store.viewEmbeddedDictionary(input);
+    try std.testing.expectEqualSlices(u8, expected_dict, view.bytes);
+    const owned = try store.parseEmbeddedDictionaryAlloc(allocator, input);
+    defer allocator.free(owned);
+    try std.testing.expectEqualSlices(u8, expected_dict, owned);
+    stats.valid_frames += 1;
+}
+
+fn expectMalformedEmbeddedDictionary(stats: *CorpusStats, input: []const u8, expected_error: anyerror) !void {
+    stats.cases += 1;
+    if (store.viewEmbeddedDictionary(input)) |_| {
+        return error.UnexpectedValidFrame;
+    } else |err| {
+        if (err != expected_error) return err;
+        stats.expected_errors += 1;
+    }
 }
 
 pub fn runDeflateSmokeCorpus(allocator: std.mem.Allocator) !CorpusStats {
@@ -274,9 +351,9 @@ fn writeMinimalDynamicHeader(allocator: std.mem.Allocator, writer: *bitstream.Bi
 
 test "store smoke corpus covers malformed and valid frames" {
     const stats = try runStoreSmokeCorpus(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 11), stats.cases);
-    try std.testing.expectEqual(@as(usize, 4), stats.valid_frames);
-    try std.testing.expectEqual(@as(usize, 7), stats.expected_errors);
+    try std.testing.expectEqual(@as(usize, 16), stats.cases);
+    try std.testing.expectEqual(@as(usize, 5), stats.valid_frames);
+    try std.testing.expectEqual(@as(usize, 11), stats.expected_errors);
 }
 
 test "deflate smoke corpus covers valid and malformed raw streams" {
