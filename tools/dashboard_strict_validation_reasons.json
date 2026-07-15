@@ -43,6 +43,16 @@
       "fixture": "missing_dashboard_strict_modes"
     },
     {
+      "reason": "missing_sidecar_corrupt_artifact",
+      "check": "validation_missing_sidecar_corrupt_artifact",
+      "fixture": "missing_sidecar_corrupt_artifact"
+    },
+    {
+      "reason": "sidecar_corrupt_failed",
+      "check": "validation_sidecar_corrupt_failed",
+      "fixture": "sidecar_corrupt_failed"
+    },
+    {
       "reason": "missing_huffman_length_artifact",
       "check": "validation_missing_huffman_length_artifact",
       "fixture": "missing_huffman_length_artifact"

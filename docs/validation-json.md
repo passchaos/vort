@@ -1255,6 +1255,8 @@ Current unhealthy reason values are:
 - `missing_dashboard_strict_artifact`
 - `dashboard_strict_failed`
 - `missing_dashboard_strict_modes`
+- `missing_sidecar_corrupt_artifact`
+- `sidecar_corrupt_failed`
 - `missing_huffman_length_artifact`
 - `huffman_length_failed`
 - `missing_fuzz_corpus_artifact`
@@ -1289,6 +1291,11 @@ Top-level fields:
   `dashboard_strict_expected_mode_count`, `dashboard_strict_missing_mode_count`,
   `dashboard_strict_missing_checks`, `dashboard_strict_missing_expected_failures`,
   `dashboard_strict_missing_matched`, `dashboard_strict_missing_modes`
+- `sidecar_corrupt_present`, `sidecar_corrupt_healthy`,
+  `sidecar_corrupt_rows`, `sidecar_corrupt_metadata_ok_rows`,
+  `sidecar_corrupt_full_rejected_rows`,
+  `sidecar_corrupt_metadata_failed_rows`,
+  `sidecar_corrupt_full_not_rejected_rows`
 - `huffman_length_present`, `huffman_length_healthy`,
   `huffman_length_row_count`, `huffman_length_optimal_rows`,
   `huffman_length_non_optimal_rows`, `huffman_length_malformed_rows`,
@@ -1340,6 +1347,7 @@ Example:
   "validation_unhealthy_reasons": [
     "missing_header_inspect_artifact",
     "missing_dashboard_strict_artifact",
+    "missing_sidecar_corrupt_artifact",
     "missing_huffman_length_artifact",
     "missing_fuzz_corpus_artifact",
     "missing_fuzz_coverage_artifact",
@@ -1364,6 +1372,13 @@ Example:
   "dashboard_strict_missing_expected_failures": 0,
   "dashboard_strict_missing_matched": 0,
   "dashboard_strict_missing_modes": [],
+  "sidecar_corrupt_present": false,
+  "sidecar_corrupt_healthy": false,
+  "sidecar_corrupt_rows": 0,
+  "sidecar_corrupt_metadata_ok_rows": 0,
+  "sidecar_corrupt_full_rejected_rows": 0,
+  "sidecar_corrupt_metadata_failed_rows": 0,
+  "sidecar_corrupt_full_not_rejected_rows": 0,
   "huffman_length_present": false,
   "huffman_length_healthy": false,
   "huffman_length_row_count": 0,

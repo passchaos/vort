@@ -16,6 +16,7 @@ EXPECTED_MODES = ROOT / "tools" / "dashboard_strict_expected_modes.json"
 VALIDATION_REASONS = ROOT / "tools" / "dashboard_strict_validation_reasons.json"
 HEADER_INSPECT_ARTIFACT = "vort-header-inspect-smoke.json"
 DASHBOARD_STRICT_ARTIFACT = "vort-dashboard-strict-smoke.json"
+SIDECAR_CORRUPT_ARTIFACT = "vort-sidecar-corrupt-smoke.json"
 HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
@@ -33,6 +34,8 @@ def write_producer_map(
     include_header_smoke: bool = True,
     include_strict_exact: bool = True,
     include_strict_smoke: bool = True,
+    include_sidecar_corrupt_exact: bool = True,
+    include_sidecar_corrupt_smoke: bool = True,
     include_huffman_exact: bool = True,
     include_huffman_smoke: bool = True,
     include_fuzz_corpus_exact: bool = True,
@@ -53,6 +56,11 @@ def write_producer_map(
         artifact_metadata[DASHBOARD_STRICT_ARTIFACT] = {
             "expected_format": "json",
             "smoke_gate": "zig build run-dashboard-strict-smoke",
+        }
+    if include_sidecar_corrupt_smoke:
+        artifact_metadata[SIDECAR_CORRUPT_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-sidecar-corrupt-dashboard",
         }
     if include_huffman_smoke:
         artifact_metadata[HUFFMAN_LENGTH_ARTIFACT] = {
@@ -79,6 +87,8 @@ def write_producer_map(
         exact[HEADER_INSPECT_ARTIFACT] = "zig build run-header-inspect-dashboard"
     if include_strict_exact:
         exact[DASHBOARD_STRICT_ARTIFACT] = "zig build run-dashboard-strict-smoke"
+    if include_sidecar_corrupt_exact:
+        exact[SIDECAR_CORRUPT_ARTIFACT] = "zig build run-sidecar-corrupt-dashboard"
     if include_huffman_exact:
         exact[HUFFMAN_LENGTH_ARTIFACT] = "zig build run-huffman-length-report-dashboard"
     if include_fuzz_corpus_exact:
@@ -204,6 +214,35 @@ def write_dashboard_strict_summary(path: Path, *, ok: bool = True, missing_modes
         "missing_modes": missing_modes,
         "validation_unhealthy_reason_count": len(validation_reason_checks),
         "validation_unhealthy_reason_checks": validation_reason_checks,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_sidecar_corrupt_report(path: Path, *, ok: bool = True) -> None:
+    payload = {
+        "schema": "vort.sidecar_corrupt_smoke_report",
+        "schema_version": 1,
+        "rows": 2,
+        "metadata_ok_rows": 2 if ok else 1,
+        "full_rejected_rows": 2 if ok else 1,
+        "items": [
+            {
+                "case": "deflate",
+                "metadata_ok": True,
+                "full_rejected": True,
+                "full_error": "TruncatedFrame",
+                "stream_bytes": 44,
+                "sidecar_bytes": 48,
+            },
+            {
+                "case": "ldm",
+                "metadata_ok": ok,
+                "full_rejected": ok,
+                "full_error": "InvalidMatch" if ok else "",
+                "stream_bytes": 128,
+                "sidecar_bytes": 48,
+            },
+        ],
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
@@ -424,6 +463,7 @@ def write_decode_stage_report(path: Path, *, ok: bool = True) -> None:
 def write_healthy_artifacts(root: Path) -> None:
     write_header_summary(root / HEADER_INSPECT_ARTIFACT)
     write_dashboard_strict_summary(root / DASHBOARD_STRICT_ARTIFACT)
+    write_sidecar_corrupt_report(root / SIDECAR_CORRUPT_ARTIFACT)
     write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
@@ -804,6 +844,12 @@ def main() -> int:
                         }
                     ],
                 )
+                write_producer_map(producer_map)
+            elif fixture == "missing_sidecar_corrupt_artifact":
+                (fixture_root / SIDECAR_CORRUPT_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "sidecar_corrupt_failed":
+                write_sidecar_corrupt_report(fixture_root / SIDECAR_CORRUPT_ARTIFACT, ok=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_huffman_length_artifact":
                 (fixture_root / HUFFMAN_LENGTH_ARTIFACT).unlink()

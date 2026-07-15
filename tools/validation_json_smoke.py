@@ -495,6 +495,13 @@ def main() -> int:
         assert dashboard["dashboard_strict_missing_expected_failures"] == sum(row["missing_expected_failures"] for row in dashboard_strict["mode_requirements"])
         assert dashboard["dashboard_strict_missing_matched"] == sum(row["missing_matched"] for row in dashboard_strict["mode_requirements"])
         assert dashboard["dashboard_strict_missing_modes"] == dashboard_strict["missing_modes"]
+        assert dashboard["sidecar_corrupt_present"] is True
+        assert dashboard["sidecar_corrupt_healthy"] is True
+        assert dashboard["sidecar_corrupt_rows"] == corrupt["rows"]
+        assert dashboard["sidecar_corrupt_metadata_ok_rows"] == corrupt["metadata_ok_rows"]
+        assert dashboard["sidecar_corrupt_full_rejected_rows"] == corrupt["full_rejected_rows"]
+        assert dashboard["sidecar_corrupt_metadata_failed_rows"] == 0
+        assert dashboard["sidecar_corrupt_full_not_rejected_rows"] == 0
         assert dashboard["huffman_length_present"] is True
         assert dashboard["huffman_length_healthy"] is True
         assert dashboard["huffman_length_row_count"] == 1
@@ -530,6 +537,7 @@ def main() -> int:
             and dashboard["smoke_gate_healthy"]
             and dashboard["header_inspect_healthy"]
             and dashboard["dashboard_strict_healthy"]
+            and dashboard["sidecar_corrupt_healthy"]
             and dashboard["huffman_length_healthy"]
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]

@@ -25,6 +25,13 @@
         "dashboard_strict_ok": "bool",
         "dashboard_strict_present": "bool",
         "dashboard_strict_healthy": "bool",
+        "sidecar_corrupt_present": "bool",
+        "sidecar_corrupt_healthy": "bool",
+        "sidecar_corrupt_rows": "int",
+        "sidecar_corrupt_metadata_ok_rows": "int",
+        "sidecar_corrupt_full_rejected_rows": "int",
+        "sidecar_corrupt_metadata_failed_rows": "int",
+        "sidecar_corrupt_full_not_rejected_rows": "int",
         "huffman_length_healthy": "bool",
         "huffman_length_malformed_rows": "int",
         "huffman_length_non_optimal_rows": "int",
@@ -85,6 +92,7 @@
             "smoke_gate_healthy",
             "header_inspect_healthy",
             "dashboard_strict_healthy",
+            "sidecar_corrupt_healthy",
             "huffman_length_healthy",
             "fuzz_corpus_healthy",
             "decode_stage_healthy"
@@ -155,6 +163,18 @@
             "decode_stage_error_rows",
             "decode_stage_matched_error_rows"
           ]
+        },
+        "sidecar_corrupt_healthy": {
+          "all": [
+            "sidecar_corrupt_present"
+          ],
+          "zero": [
+            "sidecar_corrupt_metadata_failed_rows",
+            "sidecar_corrupt_full_not_rejected_rows"
+          ],
+          "positive": [
+            "sidecar_corrupt_rows"
+          ]
         }
       },
       "collections": {
@@ -207,6 +227,8 @@
           "missing_dashboard_strict_artifact",
           "dashboard_strict_failed",
           "missing_dashboard_strict_modes",
+          "missing_sidecar_corrupt_artifact",
+          "sidecar_corrupt_failed",
           "missing_huffman_length_artifact",
           "huffman_length_failed",
           "missing_fuzz_corpus_artifact",
@@ -295,6 +317,8 @@
           "validation_missing_dashboard_strict_artifact",
           "validation_dashboard_strict_failed",
           "validation_missing_dashboard_strict_modes",
+          "validation_missing_sidecar_corrupt_artifact",
+          "validation_sidecar_corrupt_failed",
           "validation_missing_huffman_length_artifact",
           "validation_huffman_length_failed",
           "validation_missing_fuzz_corpus_artifact",
@@ -313,6 +337,8 @@
           "missing_dashboard_strict_artifact",
           "dashboard_strict_failed",
           "missing_dashboard_strict_modes",
+          "missing_sidecar_corrupt_artifact",
+          "sidecar_corrupt_failed",
           "missing_huffman_length_artifact",
           "huffman_length_failed",
           "missing_fuzz_corpus_artifact",
@@ -331,6 +357,8 @@
           "missing_dashboard_strict_artifact",
           "dashboard_strict_failed",
           "missing_dashboard_strict_modes",
+          "missing_sidecar_corrupt_artifact",
+          "sidecar_corrupt_failed",
           "missing_huffman_length_artifact",
           "huffman_length_failed",
           "missing_fuzz_corpus_artifact",
@@ -360,7 +388,9 @@
             "validation_missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
             "validation_fuzz_coverage_failed": "fuzz_coverage_failed",
             "validation_missing_decode_stage_artifact": "missing_decode_stage_artifact",
-            "validation_decode_stage_failed": "decode_stage_failed"
+            "validation_decode_stage_failed": "decode_stage_failed",
+            "validation_missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
+            "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed"
           }
         },
         "fixture": {
@@ -381,7 +411,9 @@
             "missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
             "fuzz_coverage_failed": "fuzz_coverage_failed",
             "missing_decode_stage_artifact": "missing_decode_stage_artifact",
-            "decode_stage_failed": "decode_stage_failed"
+            "decode_stage_failed": "decode_stage_failed",
+            "missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
+            "sidecar_corrupt_failed": "sidecar_corrupt_failed"
           }
         }
       }
@@ -463,6 +495,8 @@
           "validation_missing_dashboard_strict_artifact",
           "validation_dashboard_strict_failed",
           "validation_missing_dashboard_strict_modes",
+          "validation_missing_sidecar_corrupt_artifact",
+          "validation_sidecar_corrupt_failed",
           "validation_missing_huffman_length_artifact",
           "validation_huffman_length_failed",
           "validation_missing_fuzz_corpus_artifact",
@@ -570,6 +604,8 @@
               "validation_missing_dashboard_strict_artifact",
               "validation_dashboard_strict_failed",
               "validation_missing_dashboard_strict_modes",
+              "validation_missing_sidecar_corrupt_artifact",
+              "validation_sidecar_corrupt_failed",
               "validation_missing_huffman_length_artifact",
               "validation_huffman_length_failed",
               "validation_missing_fuzz_corpus_artifact",
@@ -588,6 +624,8 @@
               "missing_dashboard_strict_artifact",
               "dashboard_strict_failed",
               "missing_dashboard_strict_modes",
+              "missing_sidecar_corrupt_artifact",
+              "sidecar_corrupt_failed",
               "missing_huffman_length_artifact",
               "huffman_length_failed",
               "missing_fuzz_corpus_artifact",
@@ -617,7 +655,9 @@
                 "validation_missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
                 "validation_fuzz_coverage_failed": "fuzz_coverage_failed",
                 "validation_missing_decode_stage_artifact": "missing_decode_stage_artifact",
-                "validation_decode_stage_failed": "decode_stage_failed"
+                "validation_decode_stage_failed": "decode_stage_failed",
+                "validation_missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
+                "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed"
               }
             }
           }
@@ -1967,6 +2007,21 @@
         "metadata_ok": "bool",
         "sidecar_bytes": "int",
         "stream_bytes": "int"
+      },
+      "count_rules": {
+        "rows": {
+          "collection": "items"
+        },
+        "metadata_ok_rows": {
+          "collection": "items",
+          "field": "metadata_ok",
+          "equals": true
+        },
+        "full_rejected_rows": {
+          "collection": "items",
+          "field": "full_rejected",
+          "equals": true
+        }
       }
     },
     "vort.sidecar_verify_report": {

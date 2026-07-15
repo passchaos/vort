@@ -144,6 +144,36 @@ def csv_row_count(path: Path) -> int | None:
         return None
 
 
+def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") != "vort.sidecar_corrupt_smoke_report":
+            continue
+        rows = int(data.get("rows") or 0)
+        metadata_ok_rows = int(data.get("metadata_ok_rows") or 0)
+        full_rejected_rows = int(data.get("full_rejected_rows") or 0)
+        metadata_failed_rows = rows - metadata_ok_rows
+        full_not_rejected_rows = rows - full_rejected_rows
+        return {
+            "present": True,
+            "rows": rows,
+            "metadata_ok_rows": metadata_ok_rows,
+            "full_rejected_rows": full_rejected_rows,
+            "metadata_failed_rows": metadata_failed_rows,
+            "full_not_rejected_rows": full_not_rejected_rows,
+            "healthy": rows > 0 and metadata_failed_rows == 0 and full_not_rejected_rows == 0,
+        }
+    return {
+        "present": False,
+        "rows": 0,
+        "metadata_ok_rows": 0,
+        "full_rejected_rows": 0,
+        "metadata_failed_rows": 0,
+        "full_not_rejected_rows": 0,
+        "healthy": False,
+    }
+
+
 def huffman_length_health(artifacts: list[Path]) -> dict:
     def parse_int(value: str | None) -> int | None:
         try:
@@ -433,6 +463,7 @@ def main() -> int:
     ]
     header_health = header_inspect_health(artifacts)
     strict_health = dashboard_strict_health(artifacts)
+    sidecar_corrupt_health_summary = sidecar_corrupt_health(artifacts)
     huffman_health = huffman_length_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
     decode_stage_health_summary = decode_stage_health(artifacts)
@@ -440,10 +471,11 @@ def main() -> int:
     smoke_gate_healthy = len(smoke_gate_required_missing) == 0
     header_healthy = header_health["present"] and header_health["ok"] and header_health["missing_workflow_count"] == 0
     strict_healthy = strict_health["present"] and strict_health["ok"] and strict_health["missing_mode_count"] == 0
+    sidecar_corrupt_healthy = sidecar_corrupt_health_summary["healthy"]
     huffman_healthy = huffman_health["healthy"]
     fuzz_healthy = fuzz_health["healthy"]
     decode_stage_healthy = decode_stage_health_summary["healthy"]
-    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy
+    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and sidecar_corrupt_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy
     validation_unhealthy_reasons = []
     if not producer_healthy:
         validation_unhealthy_reasons.append("missing_producer_steps")
@@ -461,6 +493,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("dashboard_strict_failed")
     elif strict_health["missing_mode_count"]:
         validation_unhealthy_reasons.append("missing_dashboard_strict_modes")
+    if not sidecar_corrupt_health_summary["present"]:
+        validation_unhealthy_reasons.append("missing_sidecar_corrupt_artifact")
+    elif not sidecar_corrupt_healthy:
+        validation_unhealthy_reasons.append("sidecar_corrupt_failed")
     if not huffman_health["present"]:
         validation_unhealthy_reasons.append("missing_huffman_length_artifact")
     elif not huffman_healthy:
@@ -492,6 +528,7 @@ def main() -> int:
         f"- validation unhealthy reasons: {len(validation_unhealthy_reasons)}",
         f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing, healthy `{header_healthy}`",
         f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing modes, checks/expected/matched deltas {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']}), healthy `{strict_healthy}`",
+        f"- sidecar corrupt smoke: {sidecar_corrupt_health_summary['metadata_ok_rows']}/{sidecar_corrupt_health_summary['rows']} metadata-ok rows, {sidecar_corrupt_health_summary['full_rejected_rows']}/{sidecar_corrupt_health_summary['rows']} full-rejected rows, healthy `{sidecar_corrupt_healthy}`",
         f"- huffman length oracle: {huffman_health['optimal_rows']}/{huffman_health['row_count']} production optimal rows, {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} package-merge optimal rows, gaps {huffman_health['worst_gap_bits']}/{huffman_health['package_merge_worst_gap_bits']}, malformed rows {huffman_health['malformed_rows']}, healthy `{huffman_healthy}`",
         f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
@@ -569,6 +606,13 @@ def main() -> int:
                 "dashboard_strict_missing_expected_failures": strict_health["missing_expected_failures"],
                 "dashboard_strict_missing_matched": strict_health["missing_matched"],
                 "dashboard_strict_missing_modes": strict_health["missing_modes"],
+                "sidecar_corrupt_present": sidecar_corrupt_health_summary["present"],
+                "sidecar_corrupt_healthy": sidecar_corrupt_healthy,
+                "sidecar_corrupt_rows": sidecar_corrupt_health_summary["rows"],
+                "sidecar_corrupt_metadata_ok_rows": sidecar_corrupt_health_summary["metadata_ok_rows"],
+                "sidecar_corrupt_full_rejected_rows": sidecar_corrupt_health_summary["full_rejected_rows"],
+                "sidecar_corrupt_metadata_failed_rows": sidecar_corrupt_health_summary["metadata_failed_rows"],
+                "sidecar_corrupt_full_not_rejected_rows": sidecar_corrupt_health_summary["full_not_rejected_rows"],
                 "huffman_length_present": huffman_health["present"],
                 "huffman_length_healthy": huffman_healthy,
                 "huffman_length_row_count": huffman_health["row_count"],
