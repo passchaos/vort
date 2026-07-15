@@ -238,6 +238,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection schema enum-checks malformed error distribution keys.
 - [x] Dashboard index classifies raw/zlib/gzip header inspection artifacts under validation.
 - [x] Dashboard index surfaces header inspection required/missing workflow coverage health.
+- [x] Dashboard index strict mode fails when header inspection coverage is missing or unhealthy.
 - [x] Dashboard category smoke protects raw/zlib/gzip header inspection validation classification.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.

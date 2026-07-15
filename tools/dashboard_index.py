@@ -196,6 +196,7 @@ def main() -> int:
     parser.add_argument("--producer-map", default="tools/dashboard_producers.json", help="JSON producer-step mapping path")
     parser.add_argument("--strict-producers", action="store_true", help="fail if any artifact lacks a producer_step")
     parser.add_argument("--strict-smoke-gates", action="store_true", help="fail if required artifacts lack a smoke_gate")
+    parser.add_argument("--strict-header-inspect", action="store_true", help="fail if header inspect artifact is missing, failed, or has missing workflows")
     args = parser.parse_args()
 
     root = Path(args.dir)
@@ -294,6 +295,13 @@ def main() -> int:
     if args.strict_smoke_gates and smoke_gate_required_missing:
         missing = ",".join(smoke_gate_required_missing)
         raise SystemExit(f"dashboard_index_missing_smoke_gates={missing}")
+    if args.strict_header_inspect:
+        if not header_health["present"]:
+            raise SystemExit("dashboard_index_missing_header_inspect=1")
+        if not header_health["ok"]:
+            raise SystemExit("dashboard_index_header_inspect_failed=1")
+        if header_health["missing_workflow_count"]:
+            raise SystemExit(f"dashboard_index_header_inspect_missing_workflows={header_health['missing_workflow_count']}")
     print(f"dashboard_index={output} manifest={manifest} artifacts={len(artifacts)}")
     return 0
 

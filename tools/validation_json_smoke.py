@@ -251,6 +251,7 @@ def main() -> int:
                 str(dashboard_path),
                 "--manifest",
                 str(dashboard_manifest_path),
+                "--strict-header-inspect",
             ]
         )
         dashboard = json.loads(dashboard_manifest_path.read_text())
@@ -262,6 +263,26 @@ def main() -> int:
         assert dashboard["header_inspect_required_workflow_count"] == header_summary["required_workflow_count"]
         assert dashboard["header_inspect_missing_workflow_count"] == header_summary["missing_workflow_count"]
         validate_value_against_manifest(dashboard, schemas_def)
+        strict_missing_root = root / "strict-missing"
+        strict_missing_root.mkdir()
+        strict_missing_dashboard = strict_missing_root / "vort-dashboard-index.md"
+        strict_missing_manifest = strict_missing_root / "vort-dashboard-index.json"
+        strict_missing = run(
+            [
+                "python3",
+                str(DASHBOARD_INDEX),
+                "--dir",
+                str(strict_missing_root),
+                "--output",
+                str(strict_missing_dashboard),
+                "--manifest",
+                str(strict_missing_manifest),
+                "--strict-header-inspect",
+            ],
+            check=False,
+        )
+        assert strict_missing.returncode != 0
+        assert "dashboard_index_missing_header_inspect=1" in strict_missing.stdout
         summary = {
             "schema": "vort.validation_json_smoke",
             "schema_version": 1,
