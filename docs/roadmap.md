@@ -190,6 +190,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection smoke covers zlib/gzip inner-deflate file workflows.
 - [x] gzip inner-deflate header inspection smoke covers concatenated gzip first-member behavior.
 - [x] gzip inner-deflate header inspection supports selecting a concatenated member index.
+- [x] gzip inner-deflate header inspection smoke rejects out-of-range member indexes.
 - [x] gzip inner-deflate header inspection docs clarify deflate_bytes for concatenated streams.
 - [x] README documents concatenated gzip inner-deflate inspection as first-member behavior.
 - [x] Validation JSON docs include zlib/gzip inner-deflate file workflow examples.

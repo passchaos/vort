@@ -245,6 +245,9 @@ def main(argv: list[str]) -> int:
                 "matched": True,
             }
         )
+    member_oob = expect_failure(cli, "inspect-gzip-deflate-header-hex", gzip_concat_frame.hex(), "json", "2")
+    if "RangeOutOfBounds" not in member_oob:
+        raise AssertionError(f"expected RangeOutOfBounds for gzip member_index overflow, got {member_oob!r}")
 
     raw_hex = run(cli, "inspect-raw-header-hex", raw_frame.hex())
     require_fields(
