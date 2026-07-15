@@ -82,6 +82,15 @@
           "zlib",
           "gzip"
         ],
+        "name": [
+          "raw_fixed",
+          "raw_stored",
+          "raw_dynamic",
+          "zlib_default",
+          "zlib_dictionary",
+          "gzip_default",
+          "gzip_optional"
+        ],
         "schema_name": [
           "vort.raw_deflate_header_info",
           "vort.zlib_header_info",
