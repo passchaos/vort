@@ -139,6 +139,23 @@ def artifact_metadata(path: Path) -> str:
     return f"{stat.st_size} bytes, updated `{mtime}`"
 
 
+def header_inspect_health(records: list[dict]) -> dict:
+    for record in records:
+        if record.get("schema") == "vort.header_inspect_smoke":
+            return {
+                "present": True,
+                "ok": bool(record.get("ok")),
+                "required_workflow_count": int(record.get("required_workflow_count") or 0),
+                "missing_workflow_count": int(record.get("missing_workflow_count") or 0),
+            }
+    return {
+        "present": False,
+        "ok": False,
+        "required_workflow_count": 0,
+        "missing_workflow_count": 0,
+    }
+
+
 def artifact_record(path: Path, output_dir: Path, producer_map: dict) -> dict:
     stat = path.stat()
     mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -166,6 +183,8 @@ def artifact_record(path: Path, output_dir: Path, producer_map: dict) -> dict:
         "schema_version": data.get("schema_version"),
         "rows": rows,
         "ok": data.get("ok"),
+        "required_workflow_count": data.get("required_workflow_count") if data.get("schema") == "vort.header_inspect_smoke" else None,
+        "missing_workflow_count": data.get("missing_workflow_count") if data.get("schema") == "vort.header_inspect_smoke" else None,
     }
 
 
@@ -204,6 +223,7 @@ def main() -> int:
         for name in required_smoke_gates(producer_map)
         if name not in records_by_name or not records_by_name[name]["smoke_gate"]
     ]
+    header_health = header_inspect_health(records)
 
     lines = [
         "# Vort dashboard index",
@@ -215,6 +235,7 @@ def main() -> int:
         f"- allowed missing producer steps: {len(producer_step_allowed_missing)}",
         f"- smoke gates: {smoke_gate_covered}/{len(records)}",
         f"- required smoke gates missing: {len(smoke_gate_required_missing)}",
+        f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing",
         "",
     ]
     for category in sorted(grouped):
@@ -256,6 +277,10 @@ def main() -> int:
                 "smoke_gate_covered": smoke_gate_covered,
                 "smoke_gate_missing": smoke_gate_missing,
                 "smoke_gate_required_missing": smoke_gate_required_missing,
+                "header_inspect_present": header_health["present"],
+                "header_inspect_ok": header_health["ok"],
+                "header_inspect_required_workflow_count": header_health["required_workflow_count"],
+                "header_inspect_missing_workflow_count": header_health["missing_workflow_count"],
                 "artifacts": records,
             },
             indent=2,

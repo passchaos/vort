@@ -632,6 +632,9 @@ Top-level fields:
 - `smoke_gate_covered`
 - `smoke_gate_missing`
 - `smoke_gate_required_missing`
+- `header_inspect_present`, `header_inspect_ok`,
+  `header_inspect_required_workflow_count`,
+  `header_inspect_missing_workflow_count`
 - `artifacts`
 
 Each artifact includes:
@@ -643,6 +646,8 @@ Each artifact includes:
 - `smoke_gate`
 - `size_bytes`, `mtime_utc`
 - JSON summary fields when applicable: `schema`, `schema_version`, `rows`, `ok`
+- Header-inspect artifact coverage fields when applicable:
+  `required_workflow_count`, `missing_workflow_count`
 
 Example:
 
@@ -657,6 +662,10 @@ Example:
   "smoke_gate_covered": 1,
   "smoke_gate_missing": [],
   "smoke_gate_required_missing": [],
+  "header_inspect_present": false,
+  "header_inspect_ok": false,
+  "header_inspect_required_workflow_count": 0,
+  "header_inspect_missing_workflow_count": 0,
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",
@@ -667,6 +676,8 @@ Example:
       "producer_step": "zig build run-validation-json-dashboard",
       "producer_missing_allowed": false,
       "smoke_gate": "zig build run-validation-json-dashboard",
+      "required_workflow_count": null,
+      "missing_workflow_count": null,
       "size_bytes": 349,
       "mtime_utc": "2026-07-13T11:00:55Z",
       "schema": "vort.validation_json_smoke",

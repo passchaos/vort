@@ -104,24 +104,6 @@ def main() -> int:
         assert corrupt["rows"] >= 1
         validate_value_against_manifest(corrupt, schemas_def)
 
-        run(
-            [
-                "python3",
-                str(DASHBOARD_INDEX),
-                "--dir",
-                str(root),
-                "--output",
-                str(dashboard_path),
-                "--manifest",
-                str(dashboard_manifest_path),
-            ]
-        )
-        dashboard = json.loads(dashboard_manifest_path.read_text())
-        assert dashboard["schema"] == "vort.dashboard_index"
-        assert dashboard["schema_version"] == 1
-        assert dashboard["artifact_count"] >= 2
-        validate_value_against_manifest(dashboard, schemas_def)
-
         header_summary_path = root / "vort-header-inspect-smoke.json"
         required_workflows = json.loads((ROOT / "tools" / "header_inspect_required_workflows.json").read_text())
         assert required_workflows["schema"] == "vort.header_inspect_required_workflows"
@@ -254,6 +236,28 @@ def main() -> int:
         assert header_summary["dictionary_cases"] >= 1
         assert header_summary["optional_header_cases"] >= 1
         validate_value_against_manifest(header_summary, schemas_def)
+
+        run(
+            [
+                "python3",
+                str(DASHBOARD_INDEX),
+                "--dir",
+                str(root),
+                "--output",
+                str(dashboard_path),
+                "--manifest",
+                str(dashboard_manifest_path),
+            ]
+        )
+        dashboard = json.loads(dashboard_manifest_path.read_text())
+        assert dashboard["schema"] == "vort.dashboard_index"
+        assert dashboard["schema_version"] == 1
+        assert dashboard["artifact_count"] >= 3
+        assert dashboard["header_inspect_present"] is True
+        assert dashboard["header_inspect_ok"] is True
+        assert dashboard["header_inspect_required_workflow_count"] == header_summary["required_workflow_count"]
+        assert dashboard["header_inspect_missing_workflow_count"] == header_summary["missing_workflow_count"]
+        validate_value_against_manifest(dashboard, schemas_def)
         summary = {
             "schema": "vort.validation_json_smoke",
             "schema_version": 1,
