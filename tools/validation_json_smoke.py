@@ -62,6 +62,7 @@ def main() -> int:
         corrupt_path = root / "vort-sidecar-corrupt-smoke.json"
         dashboard_path = root / "vort-dashboard-index.md"
         dashboard_manifest_path = root / "vort-dashboard-index.json"
+        docs_negative_path = root / "vort-validation-json-docs-negative-smoke.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -158,6 +159,19 @@ def main() -> int:
         assert "missing_header_workflow" in dashboard_strict_markdown
         assert "validation_missing_dashboard_strict_modes" in dashboard_strict_markdown
         validate_value_against_manifest(dashboard_strict, schemas_def)
+
+        run([
+            "python3",
+            str(ROOT / "tools" / "validation_json_docs_negative_smoke.py"),
+            "--summary",
+            str(docs_negative_path),
+        ])
+        docs_negative = json.loads(docs_negative_path.read_text())
+        assert docs_negative["schema"] == "vort.validation_json_docs_negative_smoke"
+        assert docs_negative["ok"] is True
+        assert docs_negative["case_count"] >= 1
+        assert all(row["matched"] is True for row in docs_negative["cases"])
+        validate_value_against_manifest(docs_negative, schemas_def)
 
         header_summary_path = root / "vort-header-inspect-smoke.json"
         required_workflows = json.loads((ROOT / "tools" / "header_inspect_required_workflows.json").read_text())
@@ -376,6 +390,7 @@ def main() -> int:
                 dashboard["schema"],
                 header_summary["schema"],
                 required_workflows["schema"],
+                docs_negative["schema"],
                 raw_header["schema"],
                 wrapped_zlib_header["schema"],
                 zlib_header["schema"],

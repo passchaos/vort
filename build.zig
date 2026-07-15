@@ -650,6 +650,10 @@ pub fn build(b: *std.Build) void {
     const validation_json_docs_check_step = b.step("run-validation-json-docs-check", "Validate JSON examples in docs/validation-json.md");
     validation_json_docs_check_step.dependOn(&validation_json_docs_check.step);
 
+    const validation_json_docs_negative_smoke = b.addSystemCommand(&.{ "python3", "tools/validation_json_docs_negative_smoke.py", "--summary", "zig-out/vort-validation-json-docs-negative-smoke.json" });
+    const validation_json_docs_negative_smoke_step = b.step("run-validation-json-docs-negative-smoke", "Validate validation JSON docs checker negative drift cases");
+    validation_json_docs_negative_smoke_step.dependOn(&validation_json_docs_negative_smoke.step);
+
     const dashboard_strict_smoke = b.addSystemCommand(&.{ "python3", "tools/dashboard_strict_smoke.py" });
     const dashboard_strict_smoke_step = b.step("run-dashboard-strict-smoke", "Validate dashboard strict-mode positive and negative paths");
     dashboard_strict_smoke_step.dependOn(&dashboard_strict_smoke.step);
@@ -663,6 +667,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index_step.dependOn(&dashboard_index.step);
     dashboard_index_step.dependOn(sidecar_corrupt_dashboard_step);
     dashboard_index_step.dependOn(validation_json_dashboard_step);
+    dashboard_index_step.dependOn(validation_json_docs_negative_smoke_step);
     dashboard_index_step.dependOn(header_inspect_dashboard_step);
     dashboard_index_step.dependOn(dashboard_strict_dashboard_step);
 
@@ -834,6 +839,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(validation_json_smoke_step);
     ci_smoke_step.dependOn(validation_json_dashboard_step);
     ci_smoke_step.dependOn(validation_json_docs_check_step);
+    ci_smoke_step.dependOn(validation_json_docs_negative_smoke_step);
     ci_smoke_step.dependOn(dashboard_index_step);
     ci_smoke_step.dependOn(dashboard_category_smoke_step);
     ci_smoke_step.dependOn(dashboard_strict_smoke_step);

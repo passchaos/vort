@@ -617,6 +617,7 @@ Example:
     "vort.dashboard_index",
     "vort.header_inspect_smoke",
     "vort.header_inspect_required_workflows",
+    "vort.validation_json_docs_negative_smoke",
     "vort.raw_deflate_header_info",
     "vort.wrapped_deflate_header_info",
     "vort.zlib_header_info",
@@ -627,6 +628,42 @@ Example:
   "cli_failure_hint": "payload_corrupt",
   "report_rows": 1,
   "corrupt_rows": 8
+}
+```
+
+## `vort.validation_json_docs_negative_smoke`
+
+Produced by:
+
+```sh
+zig build run-validation-json-docs-negative-smoke
+python3 tools/validation_json_docs_negative_smoke.py --summary zig-out/vort-validation-json-docs-negative-smoke.json
+```
+
+This schema summarizes negative checks for the validation JSON docs checker. The
+smoke creates intentionally drifted copies of dashboard strict mode/reason
+configs and malformed summary examples, then verifies that the generic manifest
+checker or the cross-config consistency checks reject them with the expected
+diagnostic. This protects the external dashboard strict config files from
+becoming inert documentation instead of enforced gates.
+
+Example:
+
+```json
+{
+  "schema": "vort.validation_json_docs_negative_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "cases": [
+    {
+      "name": "missing_reason_config",
+      "expected_failure": true,
+      "expected_error": "differs from dashboard index enum",
+      "actual_error": "dashboard strict validation reason config differs from dashboard index enum",
+      "matched": true
+    }
+  ]
 }
 ```
 

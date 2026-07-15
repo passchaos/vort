@@ -1329,10 +1329,43 @@
           "vort.dashboard_index",
           "vort.header_inspect_smoke",
           "vort.header_inspect_required_workflows",
+          "vort.validation_json_docs_negative_smoke",
           "vort.raw_deflate_header_info",
           "vort.wrapped_deflate_header_info",
           "vort.zlib_header_info",
           "vort.gzip_header_info"
+        ]
+      }
+    },
+    "vort.validation_json_docs_negative_smoke": {
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "actual_error": "str",
+        "expected_error": "str",
+        "expected_failure": "bool",
+        "matched": "bool",
+        "name": "str"
+      },
+      "item_enums": {
+        "name": [
+          "missing_reason_config",
+          "strict_validation_min_checks_shortfall",
+          "strict_validation_mode_missing",
+          "reason_check_pair_mismatch",
+          "reason_fixture_pair_mismatch",
+          "validation_smoke_checked_schema_enum"
         ]
       }
     },
