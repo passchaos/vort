@@ -185,7 +185,8 @@ zig build run-header-inspect-dashboard
 This schema summarizes the CLI smoke that inspects raw DEFLATE, zlib, and gzip
 headers through both hex and file workflows. It is intended to keep format
 metadata diagnostics covered by CI and dashboard artifacts. The same build step
-also writes `zig-out/vort-header-inspect-smoke.md` for human-readable review.
+also writes `zig-out/vort-header-inspect-smoke.md` for human-readable review,
+including per-format summary totals.
 
 Important fields:
 

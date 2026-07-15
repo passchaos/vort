@@ -45,11 +45,32 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
         f"- FHCRC cases: {summary['fhcrc_cases']}",
         f"- malformed negative cases: {summary['negative_cases']}",
         "",
+        "## Format summary",
+        "",
+        "| format | cases | bytes | dictionary | optional headers | FHCRC |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for format_name in ("raw", "zlib", "gzip"):
+        cases = [case for case in summary["cases"] if case["format"] == format_name]
+        lines.append(
+            "| {format} | {cases} | {bytes} | {dictionary} | {optional} | {fhcrc} |".format(
+                format=md(format_name),
+                cases=len(cases),
+                bytes=sum(case["bytes"] for case in cases),
+                dictionary=sum(1 for case in cases if case["has_dictionary"]),
+                optional=sum(1 for case in cases if case["has_optional_fields"]),
+                fhcrc=sum(1 for case in cases if case["header_crc"]),
+            )
+        )
+    lines.extend(
+        [
+            "",
         "## Successful inspections",
         "",
         "| name | format | schema | bytes | command | sample |",
         "| --- | --- | --- | ---: | --- | --- |",
-    ]
+        ]
+    )
     for case in summary["cases"]:
         lines.append(
             f"| {md(case['name'])} | {md(case['format'])} | `{md(case['schema_name'])}` | {case['bytes']} | `{md(case['command'])}` | `{md(case['sample'])}` |"
