@@ -1303,7 +1303,7 @@ fn printWrappedDeflateHeaderJson(
 ) !void {
     const scope = if (std.mem.eql(u8, wrapper, "gzip")) "gzip_member" else "zlib_stream";
     try stdout.print(
-        "{{\"schema\":\"vort.wrapped_deflate_header_info\",\"schema_version\":1,\"wrapper\":\"{s}\",\"scope\":\"{s}\",\"member_index\":0,\"wrapper_bytes\":{d},\"deflate_offset\":{d},\"deflate_bytes\":{d},\"raw_header\":",
+        "{{\"schema\":\"vort.wrapped_deflate_header_info\",\"schema_version\":1,\"wrapper\":\"{s}\",\"scope\":\"{s}\",\"member_index\":0,\"wrapper_bytes\":{d},\"deflate_offset\":{d},\"deflate_bytes\":{d},\"deflate_span_kind\":\"header_tail\",\"raw_header\":",
         .{ wrapper, scope, wrapper_bytes, deflate_offset, wrapper_bytes - deflate_offset },
     );
     try printRawHeaderJsonObject(stdout, wrapper_bytes - deflate_offset, info);

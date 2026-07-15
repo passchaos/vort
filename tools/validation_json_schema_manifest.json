@@ -332,6 +332,7 @@
       "fields": {
         "deflate_bytes": "int",
         "deflate_offset": "int",
+        "deflate_span_kind": "str",
         "member_index": "int",
         "raw_header": "dict",
         "schema": "str",
@@ -341,6 +342,9 @@
         "wrapper_bytes": "int"
       },
       "enums": {
+        "deflate_span_kind": [
+          "header_tail"
+        ],
         "scope": [
           "zlib_stream",
           "gzip_member"

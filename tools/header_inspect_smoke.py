@@ -410,6 +410,7 @@ def main(argv: list[str]) -> int:
     assert zlib_inner_json["wrapper"] == "zlib"
     assert zlib_inner_json["scope"] == "zlib_stream"
     assert zlib_inner_json["member_index"] == 0
+    assert zlib_inner_json["deflate_span_kind"] == "header_tail"
     assert zlib_inner_json["raw_header"]["block_type"] == "fixed"
     cases.append(
         {
@@ -502,6 +503,7 @@ def main(argv: list[str]) -> int:
     assert gzip_inner_json["wrapper"] == "gzip"
     assert gzip_inner_json["scope"] == "gzip_member"
     assert gzip_inner_json["member_index"] == 0
+    assert gzip_inner_json["deflate_span_kind"] == "header_tail"
     assert gzip_inner_json["raw_header"]["block_type"] == "fixed"
     cases.append(
         {

@@ -193,6 +193,7 @@ architecture blindly.
 - [x] Validation JSON docs include zlib/gzip inner-deflate file workflow examples.
 - [x] zlib/gzip inner-deflate header inspection JSON includes wrapper offset context.
 - [x] zlib/gzip inner-deflate header inspection JSON reports wrapper scope and member index.
+- [x] zlib/gzip inner-deflate header inspection JSON labels deflate byte span semantics.
 - [x] zlib/gzip inner-deflate header inspection schema cross-checks wrapper type and scope.
 - [x] zlib/gzip inner-deflate header inspection schema-validates nested raw headers.
 - [x] raw/zlib/gzip header inspection smoke records and schema-checks malformed case formats and per-format negative counts.

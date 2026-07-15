@@ -139,6 +139,7 @@ def main() -> int:
         assert wrapped_zlib_header["wrapper"] == "zlib"
         assert wrapped_zlib_header["scope"] == "zlib_stream"
         assert wrapped_zlib_header["member_index"] == 0
+        assert wrapped_zlib_header["deflate_span_kind"] == "header_tail"
         assert wrapped_zlib_header["raw_header"]["schema"] == "vort.raw_deflate_header_info"
         validate_value_against_manifest(wrapped_zlib_header, schemas_def)
         wrapped_gzip_header = json.loads(
@@ -149,6 +150,7 @@ def main() -> int:
         assert wrapped_gzip_header["wrapper"] == "gzip"
         assert wrapped_gzip_header["scope"] == "gzip_member"
         assert wrapped_gzip_header["member_index"] == 0
+        assert wrapped_gzip_header["deflate_span_kind"] == "header_tail"
         assert wrapped_gzip_header["raw_header"]["schema"] == "vort.raw_deflate_header_info"
         validate_value_against_manifest(wrapped_gzip_header, schemas_def)
         gzip_header = json.loads(
