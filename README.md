@@ -284,6 +284,10 @@ try zlib_cat.appendSlice(allocator, zlib_bytes);
 try zlib_cat.appendSlice(allocator, zlib_bytes);
 const zlib_concatenated = try vort.decodeZlibConcatenatedAlloc(allocator, zlib_cat.items);
 defer allocator.free(zlib_concatenated);
+// FDICT concatenated streams can use the dictionary-aware variants:
+// const zlib_dict_cat = try vort.decodeZlibConcatenatedAllocWithDictionary(
+//     allocator, zlib_dict_bytes, "preset dictionary",
+// );
 
 const gzip_bytes = try vort.encodeGzipFixedAlloc(allocator, "payload");
 defer allocator.free(gzip_bytes);

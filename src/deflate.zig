@@ -2674,14 +2674,23 @@ pub fn decodeZlibAllocWithDictionaryLimited(allocator: std.mem.Allocator, input:
 }
 
 pub fn decodeZlibConcatenated(input: []const u8, output: []u8) Error!usize {
+    return decodeZlibConcatenatedWithOptionalDictionary(input, output, null);
+}
+
+pub fn decodeZlibConcatenatedWithDictionary(input: []const u8, output: []u8, dictionary: []const u8) Error!usize {
+    return decodeZlibConcatenatedWithOptionalDictionary(input, output, dictionary);
+}
+
+fn decodeZlibConcatenatedWithOptionalDictionary(input: []const u8, output: []u8, dictionary: ?[]const u8) Error!usize {
     if (input.len == 0) return error.TruncatedFrame;
 
     var offset: usize = 0;
     var out_offset: usize = 0;
     while (offset < input.len) {
-        const header = try parseZlibHeader(input[offset..], null);
+        const header = try parseZlibHeader(input[offset..], dictionary);
+        const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
         const before_member = out_offset;
-        const raw = try decodeRawAuto(input[offset + header.data_offset ..], output[out_offset..]);
+        const raw = try decodeRawAutoWithDictionary(input[offset + header.data_offset ..], raw_dictionary, output[out_offset..]);
         out_offset += raw.output_written;
         const footer_offset = offset + header.data_offset + raw.input_read;
         try validateZlibFooterPartial(input, footer_offset, checksum.adler32(output[before_member..out_offset]));
@@ -2691,17 +2700,33 @@ pub fn decodeZlibConcatenated(input: []const u8, output: []u8) Error!usize {
 }
 
 pub fn decodeZlibConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    return decodeZlibConcatenatedAllocLimitedInternal(allocator, input, null);
+    return decodeZlibConcatenatedAllocLimitedInternal(allocator, input, null, null);
+}
+
+pub fn decodeZlibConcatenatedAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) ![]u8 {
+    return decodeZlibConcatenatedAllocLimitedInternal(allocator, input, dictionary, null);
 }
 
 pub fn decodeZlibConcatenatedAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
-    return decodeZlibConcatenatedAllocLimitedInternal(allocator, input, max_output_len);
+    return decodeZlibConcatenatedAllocLimitedInternal(allocator, input, null, max_output_len);
+}
+
+pub fn decodeZlibConcatenatedAllocWithDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
+    return decodeZlibConcatenatedAllocLimitedInternal(allocator, input, dictionary, max_output_len);
 }
 
 pub fn decodeZlibConcatenatedAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeZlibConcatenatedAllocWithOptionalDictionaryExactSize(allocator, input, null, expected_output_len);
+}
+
+pub fn decodeZlibConcatenatedAllocWithDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeZlibConcatenatedAllocWithOptionalDictionaryExactSize(allocator, input, dictionary, expected_output_len);
+}
+
+fn decodeZlibConcatenatedAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, expected_output_len: usize) ![]u8 {
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
-    const written = decodeZlibConcatenated(input, out) catch |err| switch (err) {
+    const written = decodeZlibConcatenatedWithOptionalDictionary(input, out, dictionary) catch |err| switch (err) {
         error.OutputTooSmall => return error.SizeMismatch,
         else => return err,
     };
@@ -2713,16 +2738,17 @@ fn decodeZlibAllocWithOptionalDictionary(allocator: std.mem.Allocator, input: []
     return decodeZlibAllocWithOptionalDictionaryLimited(allocator, input, dictionary, null);
 }
 
-fn decodeZlibConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
+fn decodeZlibConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
     if (input.len == 0) return error.TruncatedFrame;
 
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var offset: usize = 0;
     while (offset < input.len) {
-        const header = try parseZlibHeader(input[offset..], null);
+        const header = try parseZlibHeader(input[offset..], dictionary);
+        const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
         const before_member = out.items.len;
-        const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, input[offset + header.data_offset ..], "", &out, max_output_len);
+        const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, input[offset + header.data_offset ..], raw_dictionary, &out, max_output_len);
         const footer_offset = offset + header.data_offset + raw.input_read;
         try validateZlibFooterPartial(input, footer_offset, checksum.adler32(out.items[before_member..]));
         offset = footer_offset + 4;
@@ -3654,6 +3680,42 @@ test "zlib concatenated streams reject empty and corrupt later members" {
     defer std.testing.allocator.free(bad_adler);
     bad_adler[bad_adler.len - 1] ^= 1;
     try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenatedAlloc(std.testing.allocator, bad_adler));
+}
+
+test "zlib concatenated streams decode preset dictionary members" {
+    const dictionary = "hello ";
+    const first_payload = "hello hello ";
+    const second_payload = "hello world";
+    const first = try encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, first_payload, dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(first);
+    const second = try encodeZlibDynamicWithDictionaryAlloc(std.testing.allocator, second_payload, dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(second);
+
+    var cat: std.ArrayList(u8) = .empty;
+    defer cat.deinit(std.testing.allocator);
+    try cat.appendSlice(std.testing.allocator, first);
+    try cat.appendSlice(std.testing.allocator, second);
+
+    try std.testing.expectError(error.NeedDictionary, decodeZlibConcatenatedAlloc(std.testing.allocator, cat.items));
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenatedAllocWithDictionary(std.testing.allocator, cat.items, "wrong dictionary"));
+
+    const decoded = try decodeZlibConcatenatedAllocWithDictionary(std.testing.allocator, cat.items, dictionary);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first_payload ++ second_payload, decoded);
+
+    var into: [first_payload.len + second_payload.len]u8 = undefined;
+    try std.testing.expectEqual(into.len, try decodeZlibConcatenatedWithDictionary(cat.items, &into, dictionary));
+    try std.testing.expectEqualSlices(u8, first_payload ++ second_payload, &into);
+
+    const limited = try decodeZlibConcatenatedAllocWithDictionaryLimited(std.testing.allocator, cat.items, dictionary, into.len);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, &into, limited);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeZlibConcatenatedAllocWithDictionaryLimited(std.testing.allocator, cat.items, dictionary, into.len - 1));
+
+    const exact = try decodeZlibConcatenatedAllocWithDictionaryExactSize(std.testing.allocator, cat.items, dictionary, into.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, &into, exact);
+    try std.testing.expectError(error.SizeMismatch, decodeZlibConcatenatedAllocWithDictionaryExactSize(std.testing.allocator, cat.items, dictionary, into.len - 1));
 }
 
 test "zlib stream inspector reports deflate length and adler diagnostics" {
