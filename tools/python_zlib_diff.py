@@ -41,6 +41,8 @@ def main() -> int:
 
     expect_cli_failure("decode-raw-hex", "", error_name="TruncatedFrame")
     expect_cli_failure("decode-zlib-hex", "", error_name="TruncatedFrame")
+    expect_cli_failure("decode-raw-hex", "01", error_name="TruncatedFrame")
+    expect_cli_failure("decode-zlib-hex", "7801", error_name="TruncatedFrame")
 
     payloads = [
         "",
@@ -184,6 +186,9 @@ def main() -> int:
         empty_path = tmp / "empty.zlib"
         empty_path.write_bytes(b"")
         expect_cli_failure("decode-zlib-file", str(empty_path), str(tmp / "empty.out"), error_name="TruncatedFrame")
+        header_only_path = tmp / "header-only.zlib"
+        header_only_path.write_bytes(bytes.fromhex("7801"))
+        expect_cli_failure("decode-zlib-file", str(header_only_path), str(tmp / "header-only.out"), error_name="TruncatedFrame")
 
     raw_file_payload = b"raw deflate file output limit smoke"
     co = zlib.compressobj(level=6, wbits=-15)
@@ -204,6 +209,9 @@ def main() -> int:
         empty_path = tmp / "empty.raw"
         empty_path.write_bytes(b"")
         expect_cli_failure("decode-raw-file", str(empty_path), str(tmp / "empty.out"), error_name="TruncatedFrame")
+        header_only_path = tmp / "header-only.raw"
+        header_only_path.write_bytes(bytes.fromhex("01"))
+        expect_cli_failure("decode-raw-file", str(header_only_path), str(tmp / "header-only.out"), error_name="TruncatedFrame")
 
     co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, zdict=dictionary)
     zlib_dict_file = co.compress(dict_payload) + co.flush()

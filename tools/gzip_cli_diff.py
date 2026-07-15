@@ -59,6 +59,7 @@ def main() -> int:
         raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
 
     expect_cli_failure("decode-gzip-hex", "", error_name="TruncatedFrame")
+    expect_cli_failure("decode-gzip-hex", "1f8b0800000000000403", error_name="TruncatedFrame")
 
     payloads = [b"", b"hello", b"hello vort", b"abcabcabcabc", b"the quick brown fox\n" * 8]
     for data in payloads:
@@ -99,6 +100,9 @@ def main() -> int:
         empty_path = tmp / "empty.gz"
         empty_path.write_bytes(b"")
         expect_cli_failure("decode-gzip-file", str(empty_path), str(tmp / "empty.out"), error_name="TruncatedFrame")
+        header_only_path = tmp / "header-only.gz"
+        header_only_path.write_bytes(bytes.fromhex("1f8b0800000000000403"))
+        expect_cli_failure("decode-gzip-file", str(header_only_path), str(tmp / "header-only.out"), error_name="TruncatedFrame")
 
     # Vort fixed gzip known vector -> system gzip.
     vort_hello = bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a6103605000000")
