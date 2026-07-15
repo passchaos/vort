@@ -335,7 +335,7 @@ pub fn decodeAnyAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
         flags_rle => try decodeRlePayloadAlloc(allocator, payload),
         flags_dictionary_patch => return error.InvalidDictionaryTraining,
         flags_dictionary_deflate => return error.InvalidDictionaryTraining,
-        flags_ldm => try decodeLongDistancePayloadAlloc(allocator, payload, @intCast(info.uncompressed_size)),
+        flags_ldm => try decodeLongDistancePayloadAlloc(allocator, payload, std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow),
         else => return error.CorruptFrame,
     };
     errdefer allocator.free(decoded);
@@ -344,10 +344,32 @@ pub fn decodeAnyAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return decoded;
 }
 
+pub fn decodeLongDistanceInto(input: []const u8, output: []u8) Error!usize {
+    const info = try parseHeader(input);
+    if (info.flags != flags_ldm) return error.CorruptFrame;
+    const output_len = std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow;
+    if (output.len < output_len) return error.OutputTooSmall;
+    const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
+    const total_len = try encodedSize(payload_len);
+    if (input.len < total_len) return error.TruncatedFrame;
+    const payload = input[header_len..total_len];
+    const written = try decodeLongDistancePayloadInto(payload, output[0..output_len]);
+    if (written != output_len) return error.SizeMismatch;
+    if (checksum.crc32(output[0..output_len]) != info.checksum) return error.ChecksumMismatch;
+    return output_len;
+}
+
 fn decodeLongDistancePayloadAlloc(allocator: std.mem.Allocator, payload: []const u8, expected_len: usize) ![]u8 {
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
-    try out.ensureTotalCapacity(allocator, expected_len);
+    const out = try allocator.alloc(u8, expected_len);
+    errdefer allocator.free(out);
+    const written = try decodeLongDistancePayloadInto(payload, out);
+    std.debug.assert(written == expected_len);
+    return out;
+}
+
+fn decodeLongDistancePayloadInto(payload: []const u8, output: []u8) Error!usize {
+    const expected_len = output.len;
+    var written: usize = 0;
     var offset: usize = 0;
     while (offset < payload.len) {
         const tag = payload[offset];
@@ -358,7 +380,7 @@ fn decodeLongDistancePayloadAlloc(allocator: std.mem.Allocator, payload: []const
                 const len: usize = std.mem.readInt(u32, payload[offset..][0..4], .little);
                 offset += 4;
                 if (payload.len - offset < len) return error.TruncatedFrame;
-                try out.appendSlice(allocator, payload[offset..][0..len]);
+                try copyLongDistanceLiteral(output, &written, payload[offset..][0..len]);
                 offset += len;
             },
             1 => {
@@ -366,19 +388,35 @@ fn decodeLongDistancePayloadAlloc(allocator: std.mem.Allocator, payload: []const
                 const distance: usize = std.mem.readInt(u32, payload[offset..][0..4], .little);
                 const len: usize = std.mem.readInt(u32, payload[offset + 4 ..][0..4], .little);
                 offset += 8;
-                if (distance == 0 or distance > out.items.len) return error.InvalidMatch;
-                try out.ensureUnusedCapacity(allocator, len);
-                for (0..len) |_| {
-                    const index = out.items.len - distance;
-                    out.appendAssumeCapacity(out.items[index]);
-                }
+                try copyLongDistanceMatch(output, &written, distance, len);
             },
             else => return error.CorruptFrame,
         }
-        if (out.items.len > expected_len) return error.SizeMismatch;
     }
-    if (out.items.len != expected_len) return error.SizeMismatch;
-    return out.toOwnedSlice(allocator);
+    if (written != expected_len) return error.SizeMismatch;
+    return written;
+}
+
+fn copyLongDistanceLiteral(output: []u8, written: *usize, source: []const u8) Error!void {
+    if (written.* > output.len) return error.SizeMismatch;
+    if (source.len > output.len - written.*) return error.SizeMismatch;
+    @memcpy(output[written.*..][0..source.len], source);
+    written.* += source.len;
+}
+
+fn copyLongDistanceMatch(output: []u8, written: *usize, distance: usize, len: usize) Error!void {
+    if (distance == 0 or distance > written.*) return error.InvalidMatch;
+    if (written.* > output.len) return error.SizeMismatch;
+    if (len > output.len - written.*) return error.SizeMismatch;
+
+    // Matches intentionally copy one byte at a time instead of using @memcpy:
+    // when len > distance the source range overlaps bytes produced earlier in
+    // the same match, mirroring LZ-style repeated back-reference semantics.
+    for (0..len) |i| {
+        const dest_index = written.* + i;
+        output[dest_index] = output[dest_index - distance];
+    }
+    written.* += len;
 }
 
 pub fn decodeDictionaryPatchAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8) ![]u8 {
@@ -1022,6 +1060,7 @@ fn decodeRangeWithDictionaryIntoValidated(
         if (try copyStoredRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
         if (try copyFullDeflateRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
         if (try copyFullDictionaryRangeIntoIfPossible(allocator, dict, input, entry, offset, end, output, &written, &crc)) continue;
+        if (try copyFullLongDistanceRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
         const decoded = try decodedFrameForRange(allocator, dict, input, entry, i, decoded_cache);
         defer if (decoded_cache == null) allocator.free(decoded);
         const frame_start = entry.uncompressed_offset;
@@ -1137,6 +1176,34 @@ fn copyFullDictionaryRangeIntoIfPossible(
     const output_len = std.math.cast(usize, entry.uncompressed_len) orelse return error.IntegerOverflow;
     const target = output[written.*..][0..output_len];
     const decoded = try decodeDictionaryPatchInto(allocator, dictionary_bytes, frame, target);
+    if (decoded != output_len) return error.SizeMismatch;
+    crc.update(target);
+    written.* += target.len;
+    return true;
+}
+
+fn copyFullLongDistanceRangeIntoIfPossible(
+    input: []const u8,
+    entry: FrameIndexEntry,
+    range_offset: u64,
+    range_end: u64,
+    output: []u8,
+    written: *usize,
+    crc: *checksum.Crc32,
+) !bool {
+    if (range_offset > entry.uncompressed_offset) return false;
+    if (range_end < entry.uncompressed_offset + entry.uncompressed_len) return false;
+    if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
+    const frame = input[entry.frame_offset..][0..entry.frame_len];
+    const frame_info = try parseHeader(frame);
+    if (frame_info.flags != flags_ldm) return false;
+    if (entry.frame_len != try frameLenFromInfo(frame_info)) return error.CorruptFrame;
+    if (entry.checksum != frame_info.checksum) return error.ChecksumMismatch;
+    if (entry.uncompressed_len != frame_info.uncompressed_size) return error.CorruptFrame;
+
+    const output_len = std.math.cast(usize, entry.uncompressed_len) orelse return error.IntegerOverflow;
+    const target = output[written.*..][0..output_len];
+    const decoded = try decodeLongDistanceInto(frame, target);
     if (decoded != output_len) return error.SizeMismatch;
     crc.update(target);
     written.* += target.len;
@@ -3525,6 +3592,41 @@ test "native long-distance frame round trips beyond-window repetitions" {
     const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "native long-distance frame decodes into caller buffer without allocation" {
+    const prefix = deterministicLdmPrefix();
+    const input = prefix ++ "----" ++ prefix[0..64].*;
+    const frame = try encodeLongDistanceAlloc(std.testing.allocator, input, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_ldm, info.flags);
+
+    var out: [input.len]u8 = undefined;
+    const written = try decodeLongDistanceInto(frame, &out);
+    try std.testing.expectEqual(out.len, written);
+    try std.testing.expectEqualSlices(u8, input, &out);
+
+    var short: [input.len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodeLongDistanceInto(frame, &short));
+}
+
+test "full long-distance frame range decodes into caller buffer without allocation" {
+    const prefix = deterministicLdmPrefix();
+    const input = prefix ++ "----" ++ prefix[0..64].*;
+    const frame = try encodeLongDistanceAlloc(std.testing.allocator, input, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_ldm, info.flags);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+
+    var out: [input.len]u8 = undefined;
+    const result = try decodeRangeInto(std.testing.failing_allocator, frame, index, 0, out.len, out[0..]);
+    try std.testing.expectEqual(out.len, result.output_written);
+    try std.testing.expectEqual(@as(u64, 0), result.offset);
+    try std.testing.expectEqualSlices(u8, input, &out);
+    try std.testing.expectEqual(checksum.crc32(input), result.crc32);
 }
 
 test "native best frame selects RLE for repeated data" {

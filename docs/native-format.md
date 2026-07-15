@@ -173,3 +173,13 @@ dictionary-deflate frames use the same final patch decode-into step after
 inflating the compressed patch payload; partial dictionary ranges continue to use
 the decoded-frame cache path so subranges share one verified decoded copy within
 batch requests.
+
+## Long-distance decode-into and full-frame range fast path
+
+Native LDM frames also expose a caller-owned decode path. Literal operations copy
+directly into the provided buffer, while match operations replay from already
+produced bytes one byte at a time so overlapping back-references keep the same
+semantics as the allocator-returning decoder. Full-frame LDM range reads now use
+that decoder to fill the caller range buffer and validate the frame CRC-32
+without allocating a temporary whole-frame decoded copy; partial LDM ranges still
+use the decoded-frame cache path.
