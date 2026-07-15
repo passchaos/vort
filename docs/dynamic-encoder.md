@@ -6,11 +6,10 @@ generation, and handles arbitrary distance code sets without conservative
 fallback guards.
 
 The encoder:
-- uses tree-based Huffman length generation with Kraft-cost repair for
-  all three alphabets (literals, distances, code-lengths);
-- preserves the unbounded Huffman tree depths before applying zlib-style
-  length-limit redistribution, avoiding the older shortcut that clipped deep
-  leaves during tree traversal and then repaired the flattened code space;
+- uses package-merge length-limited Huffman generation for all three alphabets
+  (literals, distances, code-lengths), keeping generated code lengths within
+  DEFLATE's 15-bit limit while matching brute-force oracle costs on the
+  small cases tracked by `run-huffman-length-report-dashboard`;
 - handles arbitrary distance code sets without limiting active symbols or
   max symbol index;
 - uses minimal frequency completion (2 symbols) instead of power-of-two
@@ -30,13 +29,6 @@ The encoder:
 
 Remaining encoder work for future milestones:
 
-- implement package-merge length-limited Huffman for optimal code lengths
-  under the 15-bit constraint (current tree + zlib-style overflow
-  redistribution is correct and deterministic but not globally optimal);
-  `run-huffman-length-report-dashboard` records fixed and generated small
-  brute-force oracle cases that future implementations must satisfy before
-  replacing the production length builder, and now includes a package-merge
-  candidate side-by-side with the current production builder;
 - dynamic-Huffman-aware optimal parser refinement (iterative LZ77
   re-optimization using dynamic bit costs beyond the production fixed-cost
   optimal parser);

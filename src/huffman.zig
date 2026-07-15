@@ -310,120 +310,120 @@ pub fn weightedCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4
 
 pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n]u4 {
     var lengths: [n]u4 = @splat(0);
-    var nodes: [2 * n]TreeNode = undefined;
-    var node_count: usize = 0;
-    for (freqs, 0..) |freq, symbol| {
+    var active: usize = 0;
+    for (freqs.*) |freq| {
         if (freq == 0) continue;
-        nodes[node_count] = .{ .freq = freq, .symbol = @intCast(symbol) };
-        node_count += 1;
+        active += 1;
     }
-    if (node_count == 0) return lengths;
-    if (node_count == 1) {
-        lengths[nodes[0].symbol.?] = 1;
+    if (active == 0) return lengths;
+    if (active == 1) {
+        for (freqs.*, 0..) |freq, symbol| {
+            if (freq != 0) {
+                lengths[symbol] = 1;
+                break;
+            }
+        }
         return lengths;
     }
-
-    const leaf_count = node_count;
-    std.mem.sort(TreeNode, nodes[0..leaf_count], {}, treeNodeLess);
-    var leaf_index: usize = 0;
-    var internal_index: usize = leaf_count;
-    var active = node_count;
-    while (active > 1) {
-        const pair = .{
-            .a = popSmallestNode(&nodes, leaf_count, &leaf_index, &internal_index, node_count),
-            .b = popSmallestNode(&nodes, leaf_count, &leaf_index, &internal_index, node_count),
-        };
-        nodes[node_count] = .{
-            .freq = nodes[pair.a].freq + nodes[pair.b].freq,
-            .left = pair.a,
-            .right = pair.b,
-        };
-        node_count += 1;
-        active -= 1;
-    }
-    var unbounded: [n]u16 = @splat(0);
-    assignUnboundedLengths(n, &nodes, node_count - 1, 0, &unbounded);
-    return limitTreeLengths(n, freqs, &unbounded, max_bits);
+    return packageMergeCodeLengths(n, freqs, max_bits, active);
 }
 
-fn limitTreeLengths(comptime n: usize, freqs: *const [n]u32, unbounded: *const [n]u16, max_bits: u4) [n]u4 {
+fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
     std.debug.assert(max_bits > 0);
-    var counts: [max_code_bits + 1]usize = @splat(0);
-    var active: usize = 0;
-    for (unbounded.*) |bits| {
-        if (bits == 0) continue;
-        active += 1;
-        if (bits > max_bits) {
-            counts[max_bits] += 1;
-        } else {
-            counts[bits] += 1;
-        }
-    }
-    if (active == 0) return @splat(0);
-
-    // zlib-style overflow redistribution: first cap too-deep leaves at the
-    // DEFLATE limit, then repeatedly split the longest available shallower
-    // code. Tracking the scaled Kraft excess directly makes the repair robust
-    // for arbitrary small test alphabets, not only the even-overflow cases that
-    // fall out of the classic heap implementation.
-    const target_cost = @as(usize, 1) << max_bits;
-    std.debug.assert(active <= target_cost);
-    const initial_cost = codeLengthCountKraftCost(&counts, max_bits);
-    var excess = if (initial_cost > target_cost) initial_cost - target_cost else 0;
-    while (excess > 0) {
-        var bits: usize = max_bits - 1;
-        while (bits > 0 and counts[bits] == 0) bits -= 1;
-        std.debug.assert(bits > 0);
-        std.debug.assert(counts[max_bits] > 0);
-        counts[bits] -= 1;
-        counts[bits + 1] += 2;
-        counts[max_bits] -= 1;
-        excess -= 1;
-    }
-
-    var order: [n]usize = undefined;
-    var order_len: usize = 0;
+    std.debug.assert(active <= (@as(usize, 1) << max_bits));
+    const Pkg = LengthPackage(n);
+    var leaves: [n]Pkg = undefined;
+    var leaf_count: usize = 0;
     for (freqs.*, 0..) |freq, symbol| {
         if (freq == 0) continue;
-        order[order_len] = symbol;
-        order_len += 1;
+        var counts: [n]u4 = @splat(0);
+        counts[symbol] = 1;
+        leaves[leaf_count] = .{ .weight = freq, .counts = counts };
+        leaf_count += 1;
     }
-    std.debug.assert(order_len == active);
-    const Context = struct {
-        freqs: *const [n]u32,
+    std.debug.assert(leaf_count == active);
+    std.mem.sort(Pkg, leaves[0..active], {}, packageLess(n));
 
-        fn less(ctx: @This(), lhs: usize, rhs: usize) bool {
-            if (ctx.freqs[lhs] != ctx.freqs[rhs]) return ctx.freqs[lhs] < ctx.freqs[rhs];
-            // Longer lengths are assigned first below. Put larger symbol values
-            // first for equal frequencies so canonical tie-breaking leaves the
-            // smaller symbols with shorter/equal codes and stable output bytes.
-            return lhs > rhs;
-        }
-    };
-    std.mem.sort(usize, order[0..order_len], Context{ .freqs = freqs }, Context.less);
+    // The package list length converges below 2*active because every level
+    // merges adjacent packages pairwise and then merges those packages with the
+    // original leaf list. Storing multiplicity counts (rather than a bitset)
+    // is essential: package-merge can select the same symbol through multiple
+    // packages, and those selections are exactly the code length.
+    var current: [2 * n]Pkg = undefined;
+    var next: [2 * n]Pkg = undefined;
+    var current_len = active;
+    @memcpy(current[0..current_len], leaves[0..active]);
 
-    var limited: [n]u4 = @splat(0);
-    var cursor: usize = 0;
-    var bits = max_bits;
-    while (bits > 0) : (bits -= 1) {
-        var remaining = counts[bits];
-        while (remaining > 0) : (remaining -= 1) {
-            const symbol = order[cursor];
-            limited[symbol] = @intCast(bits);
-            cursor += 1;
+    var depth: u4 = 1;
+    while (depth < max_bits) : (depth += 1) {
+        var pair_len: usize = 0;
+        var i: usize = 0;
+        while (i + 1 < current_len) : (i += 2) {
+            next[pair_len] = combinePackages(n, current[i], current[i + 1]);
+            pair_len += 1;
         }
+        std.mem.sort(Pkg, next[0..pair_len], {}, packageLess(n));
+        current_len = mergePackageLists(n, &current, leaves[0..active], next[0..pair_len]);
+        std.debug.assert(current_len <= current.len);
     }
-    std.debug.assert(cursor == active);
-    return limited;
+
+    const selected_count = 2 * active - 2;
+    std.debug.assert(selected_count <= current_len);
+    var lengths: [n]u4 = @splat(0);
+    for (current[0..selected_count]) |package| {
+        for (package.counts, 0..) |count, symbol| lengths[symbol] += count;
+    }
+    return lengths;
 }
 
-fn codeLengthCountKraftCost(counts: *const [max_code_bits + 1]usize, max_bits: u4) usize {
-    var cost: usize = 0;
-    var bits: usize = 1;
-    while (bits <= max_bits) : (bits += 1) {
-        cost += counts[bits] * (@as(usize, 1) << @intCast(max_bits - bits));
+fn LengthPackage(comptime n: usize) type {
+    return struct {
+        weight: u64,
+        counts: [n]u4,
+    };
+}
+
+fn packageLess(comptime n: usize) fn (void, LengthPackage(n), LengthPackage(n)) bool {
+    return struct {
+        fn less(_: void, lhs: LengthPackage(n), rhs: LengthPackage(n)) bool {
+            if (lhs.weight != rhs.weight) return lhs.weight < rhs.weight;
+            var i: usize = n;
+            while (i > 0) {
+                i -= 1;
+                if (lhs.counts[i] != rhs.counts[i]) return lhs.counts[i] < rhs.counts[i];
+            }
+            return false;
+        }
+    }.less;
+}
+
+fn combinePackages(comptime n: usize, lhs: LengthPackage(n), rhs: LengthPackage(n)) LengthPackage(n) {
+    var out = LengthPackage(n){ .weight = lhs.weight + rhs.weight, .counts = @splat(0) };
+    for (&out.counts, lhs.counts, rhs.counts) |*value, left, right| value.* = left + right;
+    return out;
+}
+
+fn mergePackageLists(comptime n: usize, out: *[2 * n]LengthPackage(n), leaves: []const LengthPackage(n), packages: []const LengthPackage(n)) usize {
+    var out_len: usize = 0;
+    var leaf_i: usize = 0;
+    var package_i: usize = 0;
+    const less = packageLess(n);
+    while (leaf_i < leaves.len or package_i < packages.len) {
+        const take_leaf = if (package_i >= packages.len)
+            true
+        else if (leaf_i >= leaves.len)
+            false
+        else
+            less({}, leaves[leaf_i], packages[package_i]);
+        out[out_len] = if (take_leaf) leaves[leaf_i] else packages[package_i];
+        out_len += 1;
+        if (take_leaf) {
+            leaf_i += 1;
+        } else {
+            package_i += 1;
+        }
     }
-    return cost;
+    return out_len;
 }
 
 fn kraftCost(comptime n: usize, lengths: *const [n]u4, max_bits: u4) usize {
@@ -433,49 +433,6 @@ fn kraftCost(comptime n: usize, lengths: *const [n]u4, max_bits: u4) usize {
         cost += @as(usize, 1) << @intCast(max_bits - bits);
     }
     return cost;
-}
-
-const TreeNode = struct {
-    freq: u32,
-    symbol: ?usize = null,
-    left: ?usize = null,
-    right: ?usize = null,
-};
-
-fn treeNodeLess(_: void, lhs: TreeNode, rhs: TreeNode) bool {
-    return nodeLess(lhs, rhs);
-}
-
-fn popSmallestNode(nodes: []const TreeNode, leaf_count: usize, leaf_index: *usize, internal_index: *usize, node_count: usize) usize {
-    if (leaf_index.* >= leaf_count) {
-        const index = internal_index.*;
-        internal_index.* += 1;
-        return index;
-    }
-    if (internal_index.* >= node_count or nodeLess(nodes[leaf_index.*], nodes[internal_index.*])) {
-        const index = leaf_index.*;
-        leaf_index.* += 1;
-        return index;
-    }
-    const index = internal_index.*;
-    internal_index.* += 1;
-    return index;
-}
-
-fn nodeLess(lhs: TreeNode, rhs: TreeNode) bool {
-    if (lhs.freq != rhs.freq) return lhs.freq < rhs.freq;
-    return (lhs.symbol orelse std.math.maxInt(usize)) < (rhs.symbol orelse std.math.maxInt(usize));
-}
-
-fn assignUnboundedLengths(comptime n: usize, nodes: []const TreeNode, node_index: usize, depth: u16, lengths: *[n]u16) void {
-    const node = nodes[node_index];
-    if (node.symbol) |symbol| {
-        lengths[symbol] = @max(@as(u16, 1), depth);
-        return;
-    }
-    const next_depth = depth + 1;
-    if (node.left) |left| assignUnboundedLengths(n, nodes, left, next_depth, lengths);
-    if (node.right) |right| assignUnboundedLengths(n, nodes, right, next_depth, lengths);
 }
 
 pub const FixedLookupEntry = struct { symbol: u16, bits: u4 };

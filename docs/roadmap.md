@@ -425,6 +425,7 @@ architecture blindly.
 - [x] Huffman length-limit report records small brute-force oracle cases for package-merge replacement work.
 - [x] Huffman length-limit report generates multiple deterministic oracle families and summarizes optimality gaps.
 - [x] Huffman length-limit report compares a package-merge candidate against brute-force oracles.
+- [x] Production Huffman length builder uses package-merge length-limited code generation.
 - [x] Dynamic HCLEN trimming helper with boundary tests.
 - [x] Dynamic HLIT/HDIST trimming helpers with boundary tests.
 - [x] Adaptive split search using stored/fixed/dynamic bit-cost candidates.
