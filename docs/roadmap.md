@@ -430,6 +430,7 @@ architecture blindly.
 - [x] Production package-merge Huffman builder uses widened internal counters with final length assertions.
 - [x] Huffman length-limit dashboard summarizes production-sized alphabet Kraft and determinism checks.
 - [x] Huffman length-limit dashboard records production-sized alphabet generation timing.
+- [x] Rust benchmark summary includes Huffman length-limit oracle totals when available.
 - [x] Dynamic HCLEN trimming helper with boundary tests.
 - [x] Dynamic HLIT/HDIST trimming helpers with boundary tests.
 - [x] Adaptive split search using stored/fixed/dynamic bit-cost candidates.

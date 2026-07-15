@@ -425,6 +425,35 @@ def dynamic_plan_lines(rows: list[dict[str, str]]) -> list[str]:
     return lines
 
 
+def huffman_length_lines(rows: list[dict[str, str]]) -> list[str]:
+    total = len(rows)
+    optimal = sum(1 for row in rows if row.get("optimal") == "true")
+    package_optimal = sum(1 for row in rows if row.get("package_merge_optimal") == "true")
+    worst_gap = max((int(row.get("gap_bits") or 0) for row in rows), default=0)
+    package_worst_gap = max((int(row.get("package_merge_gap_bits") or 0) for row in rows), default=0)
+    lines = [
+        "## Huffman length-limit diagnostics",
+        "",
+        f"- oracle rows: {total}",
+        f"- production optimal rows: {optimal}",
+        f"- production worst gap bits: {worst_gap}",
+        f"- package-merge optimal rows: {package_optimal}",
+        f"- package-merge worst gap bits: {package_worst_gap}",
+        "",
+        "| case | symbols | max bits | optimal cost | production cost | production gap | package-merge cost | package-merge gap | Kraft | production optimal? | package-merge optimal? |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['case']} | {row['symbol_count']} | {row['max_bits']} | {row['optimal_cost']} | "
+            f"{row['actual_cost']} | {row['gap_bits']} | {row.get('package_merge_cost', '')} | "
+            f"{row.get('package_merge_gap_bits', '')} | {row['kraft_cost']}/{row['kraft_limit']} | "
+            f"{row['optimal']} | {row.get('package_merge_optimal', '')} |"
+        )
+    lines.append("")
+    return lines
+
+
 def dictionary_deflate_lines(rows: list[dict[str, str]]) -> list[str]:
     lines = [
         "## Dictionary deflate savings",
@@ -471,6 +500,7 @@ def main() -> int:
     parser.add_argument("--decode-csv", default="zig-out/vort-rust-deflate-decode-bench.csv")
     parser.add_argument("--encode-csv", default="zig-out/vort-rust-deflate-encode-bench.csv")
     parser.add_argument("--dynamic-plan-csv", default="zig-out/vort-dynamic-plan-report.csv")
+    parser.add_argument("--huffman-length-csv", default="zig-out/vort-huffman-length-report.csv")
     parser.add_argument("--dictionary-deflate-csv", default="zig-out/vort-dictionary-deflate-report.csv")
     parser.add_argument("--decode-stage-csv", default="zig-out/vort-deflate-decode-stage-report.csv")
     parser.add_argument("--output", default="zig-out/vort-rust-deflate-benchmark-summary.md")
@@ -480,6 +510,8 @@ def main() -> int:
     encode_rows = read_rows(Path(args.encode_csv))
     dynamic_plan_path = Path(args.dynamic_plan_csv)
     dynamic_plan_rows = read_rows(dynamic_plan_path) if dynamic_plan_path.exists() else []
+    huffman_length_path = Path(args.huffman_length_csv)
+    huffman_length_rows = read_rows(huffman_length_path) if huffman_length_path.exists() else []
     dictionary_deflate_path = Path(args.dictionary_deflate_csv)
     dictionary_deflate_rows = read_rows(dictionary_deflate_path) if dictionary_deflate_path.exists() else []
     decode_stage_path = Path(args.decode_stage_csv)
@@ -499,6 +531,8 @@ def main() -> int:
     lines.extend(raw_encode_lines(encode_rows))
     if dynamic_plan_rows:
         lines.extend(dynamic_plan_lines(dynamic_plan_rows))
+    if huffman_length_rows:
+        lines.extend(huffman_length_lines(huffman_length_rows))
     if decode_stage_rows:
         lines.extend(decode_stage_lines(decode_stage_rows))
     if dictionary_deflate_rows:
@@ -509,7 +543,8 @@ def main() -> int:
     print(
         f"rust_deflate_benchmark_summary={output} "
         f"decode_rows={len(decode_rows)} encode_rows={len(encode_rows)} "
-        f"dynamic_plan_rows={len(dynamic_plan_rows)} decode_stage_rows={len(decode_stage_rows)} "
+        f"dynamic_plan_rows={len(dynamic_plan_rows)} huffman_length_rows={len(huffman_length_rows)} "
+        f"decode_stage_rows={len(decode_stage_rows)} "
         f"dictionary_deflate_rows={len(dictionary_deflate_rows)}"
     )
     return 0
