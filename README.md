@@ -148,6 +148,7 @@ zig build run-python-zlib-diff
 zig build run-gzip-cli-diff
 zig build run-header-inspect-smoke
 zig build run-header-inspect-dashboard
+zig build run-dashboard-category-smoke
 zig build run-zlib-family-diff
 zig build run-rust-deflate-diff
 zig build run-external-probe
