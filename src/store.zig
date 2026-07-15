@@ -2751,6 +2751,12 @@ pub const ConcatenatedInspectionSummary = struct {
     requires_dictionary: bool = false,
 };
 
+pub const ConcatenatedInspectionOptions = struct {
+    expected_frame_count: ?usize = null,
+    expected_total_uncompressed: ?u64 = null,
+    expected_checksum: ?u32 = null,
+};
+
 pub fn inspectConcatenated(input: []const u8) Error!ConcatenatedInspectionSummary {
     var summary = ConcatenatedInspectionSummary{};
     var iterator = ConcatIterator.init(input);
@@ -2773,6 +2779,20 @@ pub fn inspectConcatenated(input: []const u8) Error!ConcatenatedInspectionSummar
             flags_ldm => summary.modes.ldm += 1,
             else => return error.CorruptFrame,
         }
+    }
+    return summary;
+}
+
+pub fn inspectConcatenatedWithOptions(input: []const u8, options: ConcatenatedInspectionOptions) Error!ConcatenatedInspectionSummary {
+    const summary = try inspectConcatenated(input);
+    if (options.expected_frame_count) |expected| {
+        if (summary.frame_count != expected) return error.SizeMismatch;
+    }
+    if (options.expected_total_uncompressed) |expected| {
+        if (summary.total_uncompressed != expected) return error.SizeMismatch;
+    }
+    if (options.expected_checksum) |expected| {
+        if (summary.combined_checksum != expected) return error.ChecksumMismatch;
     }
     return summary;
 }
@@ -3153,6 +3173,15 @@ test "concatenated decode supports compressed frames and output bounds" {
     try std.testing.expectEqual(@as(usize, 1), inspection.modes.deflate);
     try std.testing.expectEqual(@as(usize, 1), inspection.modes.rle);
     try std.testing.expect(!inspection.requires_dictionary);
+    const checked = try inspectConcatenatedWithOptions(combined.items, .{
+        .expected_frame_count = 2,
+        .expected_total_uncompressed = expected.len,
+        .expected_checksum = checksum.crc32(expected),
+    });
+    try std.testing.expectEqual(inspection.combined_checksum, checked.combined_checksum);
+    try std.testing.expectError(error.SizeMismatch, inspectConcatenatedWithOptions(combined.items, .{ .expected_frame_count = 3 }));
+    try std.testing.expectError(error.SizeMismatch, inspectConcatenatedWithOptions(combined.items, .{ .expected_total_uncompressed = expected.len + 1 }));
+    try std.testing.expectError(error.ChecksumMismatch, inspectConcatenatedWithOptions(combined.items, .{ .expected_checksum = checksum.crc32(expected) ^ 1 }));
 
     const decoded = try decodeConcatenatedAlloc(std.testing.allocator, combined.items);
     defer std.testing.allocator.free(decoded);

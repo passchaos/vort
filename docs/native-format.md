@@ -18,7 +18,8 @@ variant rejects trailing bytes for single-frame inputs.
 `inspectConcatenated` extends the same preflight idea across concatenated native
 streams by reporting data-frame count, total uncompressed bytes, combined CRC-32,
 mode counts, and whether any member requires a dictionary without decoding
-payloads.
+payloads. `inspectConcatenatedWithOptions` can enforce expected frame count,
+total uncompressed length, and combined checksum using only frame headers.
 `SidecarValidationMode.metadata` checks sidecar/index structure and frame-header
 agreement without decoding payloads, while the default
 `SidecarValidationMode.full` decodes each referenced frame so it detects payload
