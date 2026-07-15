@@ -524,6 +524,7 @@ def main(argv: list[str]) -> int:
     assert gzip_concat_inner_json["schema"] == "vort.wrapped_deflate_header_info"
     assert gzip_concat_inner_json["wrapper"] == "gzip"
     assert gzip_concat_inner_json["deflate_offset"] == gzip_inner_json["deflate_offset"]
+    assert gzip_concat_inner_json["deflate_bytes"] > gzip_inner_json["deflate_bytes"]
     for key in ("block_type", "final", "data_bit_offset", "header_bits_consumed"):
         assert gzip_concat_inner_json["raw_header"][key] == gzip_inner_json["raw_header"][key]
     cases.append(
