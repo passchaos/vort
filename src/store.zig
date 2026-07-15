@@ -1623,6 +1623,9 @@ pub const ValidationReport = struct {
     uncompressed_offset: ?u64 = null,
     frame_flags: ?u8 = null,
     frame_mode: []const u8 = "",
+    frame_count: usize = 0,
+    total_uncompressed: u64 = 0,
+    combined_checksum: ?u32 = null,
 };
 
 pub fn validateSidecarIndexAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8) !void {
@@ -1739,6 +1742,8 @@ fn validateSidecarIndexReportInternalAlloc(allocator: std.mem.Allocator, dict: ?
 
 fn validateFrameIndexEntriesReportInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, mode: SidecarValidationMode) ValidationReport {
     validateFrameIndex(index) catch |err| return validationFailure(mode, .index_structure, err, null, null, null);
+    const combined_checksum = frameIndexCombinedChecksum(index) catch |err| return validationFailure(mode, .index_structure, err, null, null, null);
+    const total_uncompressed = if (index.len == 0) 0 else index[index.len - 1].uncompressed_offset + index[index.len - 1].uncompressed_len;
     for (index, 0..) |entry, i| {
         if (input.len - entry.frame_offset < entry.frame_len) return validationFailure(mode, .frame_bounds, error.TruncatedFrame, i, entry, null);
         const frame = input[entry.frame_offset..][0..entry.frame_len];
@@ -1753,7 +1758,14 @@ fn validateFrameIndexEntriesReportInternalAlloc(allocator: std.mem.Allocator, di
         } else decodeAnyAlloc(allocator, frame) catch |err| return validationFailure(mode, .payload_decode, err, i, entry, info.flags);
         allocator.free(decoded);
     }
-    return .{ .ok = true, .mode = mode };
+    return .{
+        .ok = true,
+        .mode = mode,
+        .stage = if (mode == .metadata) .frame_metadata else .payload_decode,
+        .frame_count = index.len,
+        .total_uncompressed = total_uncompressed,
+        .combined_checksum = combined_checksum,
+    };
 }
 
 fn validationFailure(mode: SidecarValidationMode, stage: ValidationStage, err: anyerror, frame_index: ?usize, entry: ?FrameIndexEntry, frame_flags: ?u8) ValidationReport {
@@ -2368,6 +2380,9 @@ test "sidecar index report captures frame failure context" {
     const ok_report = validateSidecarIndexReportAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, .{ .mode = .metadata });
     try std.testing.expect(ok_report.ok);
     try std.testing.expectEqual(SidecarValidationMode.metadata, ok_report.mode);
+    try std.testing.expectEqual(@as(usize, 3), ok_report.frame_count);
+    try std.testing.expectEqual(@as(u64, "alphabetagamma".len), ok_report.total_uncompressed);
+    try std.testing.expectEqual(checksum.crc32("alphabetagamma"), ok_report.combined_checksum.?);
 
     const tampered = try std.testing.allocator.dupe(u8, sidecar.stream);
     defer std.testing.allocator.free(tampered);
@@ -2384,6 +2399,18 @@ test "sidecar index report captures frame failure context" {
     try std.testing.expectEqual(@as(?u64, 0), report.uncompressed_offset);
     try std.testing.expectEqual(@as(?u8, flags_none), report.frame_flags);
     try std.testing.expectEqualStrings("store", report.frame_mode);
+}
+
+test "embedded index report includes combined checksum summary" {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    const stream = try encodeIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer std.testing.allocator.free(stream);
+    const report = validateEmbeddedIndexReportAlloc(std.testing.allocator, stream, .{ .mode = .full });
+    try std.testing.expect(report.ok);
+    try std.testing.expectEqual(SidecarValidationMode.full, report.mode);
+    try std.testing.expectEqual(@as(usize, 3), report.frame_count);
+    try std.testing.expectEqual(@as(u64, "alphabetagamma".len), report.total_uncompressed);
+    try std.testing.expectEqual(checksum.crc32("alphabetagamma"), report.combined_checksum.?);
 }
 
 test "embedded index validation supports metadata and full modes" {

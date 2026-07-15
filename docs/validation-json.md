@@ -40,6 +40,9 @@ Fields:
 | `uncompressed_offset` | integer/null | Uncompressed byte offset represented by the failed frame. |
 | `frame_flags` | integer/null | Native frame mode flag. |
 | `frame_mode` | string | Human-readable frame mode such as `store`, `deflate`, `rle`, `dictionary_patch`, `dictionary_deflate`, or `ldm`. |
+| `frame_count` | integer | Number of indexed frames summarized on successful validation, otherwise `0`. |
+| `total_uncompressed` | integer | Total indexed uncompressed byte count on successful validation, otherwise `0`. |
+| `combined_checksum` | integer/null | CRC-32 composed from indexed per-frame CRCs on successful validation. |
 | `stream_bytes` | integer | Input stream byte length read by the CLI. |
 | `sidecar_bytes` | integer/null | Sidecar byte length, or `null` for embedded-index validation. |
 
@@ -60,6 +63,9 @@ Example failure:
   "uncompressed_offset": 0,
   "frame_flags": 1,
   "frame_mode": "deflate",
+  "frame_count": 0,
+  "total_uncompressed": 0,
+  "combined_checksum": null,
   "stream_bytes": 2868,
   "sidecar_bytes": 128
 }
@@ -89,14 +95,16 @@ Top-level fields:
 | `items` | array | Per-pair validation rows. |
 
 Each item includes the `vort.validation_report` context fields plus path and
-aggregate fields:
+aggregate fields. Successful rows expose both `total_uncompressed` and the
+combined checksum summary computed from indexed frame CRCs.
 
 - `stream`, `sidecar`
 - `status`, `error`
 - `mode`
 - `recoverability_hint`, `validation_stage`, `frame_index`, `frame_offset`,
   `uncompressed_offset`, `frame_flags`, `frame_mode`
-- `stream_bytes`, `sidecar_bytes`, `entries`, `total_uncompressed`, `crc32`
+- `stream_bytes`, `sidecar_bytes`, `entries`, `total_uncompressed`,
+  `combined_checksum`, `crc32`
 
 Example:
 
@@ -117,7 +125,16 @@ Example:
       "recoverability_hint": "payload_corrupt",
       "validation_stage": "payload_decode",
       "frame_index": 0,
-      "frame_mode": "deflate"
+      "frame_offset": 0,
+      "uncompressed_offset": 0,
+      "frame_flags": 1,
+      "frame_mode": "deflate",
+      "stream_bytes": 2868,
+      "sidecar_bytes": 128,
+      "entries": 1,
+      "total_uncompressed": 4096,
+      "combined_checksum": null,
+      "crc32": 1234567890
     }
   ]
 }

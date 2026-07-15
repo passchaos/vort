@@ -2173,7 +2173,13 @@
         "sidecar": "str",
         "status": "str",
         "stream": "str",
-        "validation_stage": "str"
+        "validation_stage": "str",
+        "combined_checksum": "int?",
+        "stream_bytes": "int",
+        "sidecar_bytes": "int",
+        "entries": "int",
+        "total_uncompressed": "int",
+        "crc32": "int"
       }
     },
     "vort.python_zlib_diff_smoke": {
@@ -2344,7 +2350,10 @@
         "stage": "str",
         "stream_bytes": "int",
         "target": "str",
-        "uncompressed_offset": "int?"
+        "uncompressed_offset": "int?",
+        "frame_count": "int",
+        "total_uncompressed": "int",
+        "combined_checksum": "int?"
       }
     }
   }

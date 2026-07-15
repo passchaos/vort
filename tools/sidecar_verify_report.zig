@@ -69,7 +69,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
-    try stdout.print("stream,sidecar,mode,status,error,recoverability_hint,validation_stage,frame_index,frame_offset,uncompressed_offset,frame_flags,frame_mode,stream_bytes,sidecar_bytes,entries,total_uncompressed,crc32\n", .{});
+    try stdout.print("stream,sidecar,mode,status,error,recoverability_hint,validation_stage,frame_index,frame_offset,uncompressed_offset,frame_flags,frame_mode,stream_bytes,sidecar_bytes,entries,total_uncompressed,combined_checksum,crc32\n", .{});
     for (pairs.items, 0..) |pair, i| {
         if (case_limit) |limit| if (i >= limit) break;
         const row = verifyPair(init, pair.stream, pair.sidecar, validation_mode, keep_going) catch |err| row: {
@@ -105,6 +105,7 @@ const ReportRow = struct {
     sidecar_bytes: usize = 0,
     entries: usize = 0,
     total_uncompressed: u64 = 0,
+    combined_checksum: ?u32 = null,
     crc32: u32 = 0,
     status: []const u8 = "ok",
     error_name: []const u8 = "",
@@ -387,6 +388,7 @@ fn verifyPair(init: std.process.Init, stream_path: []const u8, sidecar_path: []c
     var row = reportRowFromValidation(stream_path, sidecar_path, validation_mode, stream.len, sidecar.len, validation);
     row.entries = entries.len;
     row.total_uncompressed = total_uncompressed;
+    row.combined_checksum = validation.combined_checksum;
     row.crc32 = vort.crc32(sidecar);
     return row;
 }
@@ -407,6 +409,9 @@ fn reportRowFromValidation(stream_path: []const u8, sidecar_path: []const u8, va
         .uncompressed_offset = validation.uncompressed_offset,
         .frame_flags = validation.frame_flags,
         .frame_mode = validation.frame_mode,
+        .entries = validation.frame_count,
+        .total_uncompressed = validation.total_uncompressed,
+        .combined_checksum = validation.combined_checksum,
     };
 }
 
@@ -427,14 +432,15 @@ fn printCsvRow(stdout: *std.Io.Writer, row: ReportRow) !void {
     try printOptionalU64(stdout, row.uncompressed_offset);
     try stdout.print(",", .{});
     try printOptionalU8(stdout, row.frame_flags);
-    try stdout.print(",{s},{d},{d},{d},{d},{d}\n", .{
+    try stdout.print(",{s},{d},{d},{d},{d},", .{
         row.frame_mode,
         row.stream_bytes,
         row.sidecar_bytes,
         row.entries,
         row.total_uncompressed,
-        row.crc32,
     });
+    try printOptionalU32(stdout, row.combined_checksum);
+    try stdout.print(",{d}\n", .{row.crc32});
 }
 
 fn printOptionalUsize(writer: *std.Io.Writer, value: ?usize) !void {
@@ -446,6 +452,10 @@ fn printOptionalU64(writer: *std.Io.Writer, value: ?u64) !void {
 }
 
 fn printOptionalU8(writer: *std.Io.Writer, value: ?u8) !void {
+    if (value) |v| try writer.print("{d}", .{v});
+}
+
+fn printOptionalU32(writer: *std.Io.Writer, value: ?u32) !void {
     if (value) |v| try writer.print("{d}", .{v});
 }
 
@@ -468,8 +478,8 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
     }
     try w.print("# Sidecar verification report\n\n", .{});
     try w.print("- rows: {d}\n- ok rows: {d}\n- error rows: {d}\n- total stream bytes: {d}\n- total sidecar bytes: {d}\n- total entries: {d}\n- total uncompressed bytes: {d}\n\n", .{ rows.len, ok_rows, error_rows, total_stream, total_sidecar, total_entries, total_uncompressed });
-    try w.print("| stream | sidecar | mode | status | error | hint | stage | frame index | frame offset | uncompressed offset | frame flags | frame mode | stream bytes | sidecar bytes | entries | total uncompressed | sidecar crc32 |\n", .{});
-    try w.print("| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |\n", .{});
+    try w.print("| stream | sidecar | mode | status | error | hint | stage | frame index | frame offset | uncompressed offset | frame flags | frame mode | stream bytes | sidecar bytes | entries | total uncompressed | combined crc32 | sidecar crc32 |\n", .{});
+    try w.print("| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n", .{});
     for (rows) |row| {
         try w.print("| {s} | {s} | {s} | {s} | {s} | {s} | {s} | ", .{ row.stream, row.sidecar, row.validation_mode, row.status, row.error_name, row.recoverability_hint, row.validation_stage });
         try printOptionalUsize(w, row.frame_index);
@@ -479,7 +489,9 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
         try printOptionalU64(w, row.uncompressed_offset);
         try w.print(" | ", .{});
         try printOptionalU8(w, row.frame_flags);
-        try w.print(" | {s} | {d} | {d} | {d} | {d} | {d} |\n", .{ row.frame_mode, row.stream_bytes, row.sidecar_bytes, row.entries, row.total_uncompressed, row.crc32 });
+        try w.print(" | {s} | {d} | {d} | {d} | {d} | ", .{ row.frame_mode, row.stream_bytes, row.sidecar_bytes, row.entries, row.total_uncompressed });
+        try printOptionalU32(w, row.combined_checksum);
+        try w.print(" | {d} |\n", .{row.crc32});
     }
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
 }
@@ -527,11 +539,14 @@ fn writeJson(init: std.process.Init, path: []const u8, rows: []const ReportRow) 
         try writeOptionalJson(u8, w, row.frame_flags);
         try w.print(", \"frame_mode\": ", .{});
         try std.json.Stringify.value(row.frame_mode, .{}, w);
-        try w.print(", \"stream_bytes\": {d}, \"sidecar_bytes\": {d}, \"entries\": {d}, \"total_uncompressed\": {d}, \"crc32\": {d}}}{s}\n", .{
+        try w.print(", \"stream_bytes\": {d}, \"sidecar_bytes\": {d}, \"entries\": {d}, \"total_uncompressed\": {d}, \"combined_checksum\": ", .{
             row.stream_bytes,
             row.sidecar_bytes,
             row.entries,
             row.total_uncompressed,
+        });
+        try writeOptionalJson(u32, w, row.combined_checksum);
+        try w.print(", \"crc32\": {d}}}{s}\n", .{
             row.crc32,
             if (i + 1 == rows.len) "" else ",",
         });

@@ -106,4 +106,6 @@ uses the same `crc32Combine` primitive as other blocked/parallel checksum paths,
 so callers that already trust or have validated an index can compute whole-stream
 checksum metadata without decoding or rereading every frame payload. Normal
 sidecar/embedded validation remains responsible for proving that frame bytes and
-index entries match.
+index entries match. Successful `ValidationReport` values expose the combined
+checksum, frame count, and total indexed uncompressed byte count for callers that
+need a whole-stream summary.

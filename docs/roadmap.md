@@ -52,6 +52,7 @@ architecture blindly.
 - [x] Serialized/sidecar frame indexes.
 - [x] Serialized frame indexes carry per-frame checksums validated by range decode.
 - [x] Frame indexes can compose per-frame CRC-32 values into a whole-stream checksum without rereading payload bytes.
+- [x] Validation reports expose frame-count, total-uncompressed, and combined-checksum summaries for successful indexed streams.
 - [x] Sidecar-indexed stream encoder keeps index external.
 - [x] Sidecar frame-index bytes can drive range decode without embedded index.
 - [x] Sidecar frame-index bytes can drive dictionary range decode.

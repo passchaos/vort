@@ -1658,6 +1658,8 @@ fn printValidationJson(stdout: *std.Io.Writer, label: []const u8, report: vort.V
     try printOptionalJson(u8, stdout, report.frame_flags);
     try stdout.print(",\"frame_mode\":", .{});
     try std.json.Stringify.value(report.frame_mode, .{}, stdout);
+    try stdout.print(",\"frame_count\":{d},\"total_uncompressed\":{d},\"combined_checksum\":", .{ report.frame_count, report.total_uncompressed });
+    try printOptionalJson(u32, stdout, report.combined_checksum);
     try stdout.print(",\"stream_bytes\":{d},\"sidecar_bytes\":", .{stream_len});
     try printOptionalJson(usize, stdout, sidecar_len);
     try stdout.print("}}\n", .{});
