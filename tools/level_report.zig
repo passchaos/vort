@@ -241,6 +241,8 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
     const writer = &out.writer;
 
     try writer.print("# Vort compression level report\n\nRows: {d}\n\n", .{rows.len});
+    try writeMarkdownSummary(writer, rows);
+    try writer.writeByte('\n');
     try writer.print("| case | level | strategy | parser | raw bytes | raw ratio | adaptive bytes | adaptive ratio | match coverage | avg match len | fixed bits/byte | tokens | stored fast path |\n", .{});
     try writer.print("|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n", .{});
     for (rows) |row| {
@@ -260,6 +262,56 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const ReportR
     }
 
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = out.written() });
+}
+
+fn writeMarkdownSummary(writer: *std.Io.Writer, rows: []const ReportRow) !void {
+    try writer.print("## Best rows by case\n\n", .{});
+    try writer.print("| case | best raw | raw config | best adaptive | adaptive config | match coverage | tokens |\n", .{});
+    try writer.print("|---|---:|---|---:|---|---:|---:|\n", .{});
+
+    var index: usize = 0;
+    while (index < rows.len) {
+        const case_name = rows[index].case_name;
+        var best_raw = rows[index];
+        var best_adaptive = rows[index];
+        var next = index;
+        while (next < rows.len and std.mem.eql(u8, rows[next].case_name, case_name)) : (next += 1) {
+            if (rowLessRaw(rows[next], best_raw)) best_raw = rows[next];
+            if (rowLessAdaptive(rows[next], best_adaptive)) best_adaptive = rows[next];
+        }
+
+        try writer.writeByte('|');
+        try writeMarkdownCell(writer, case_name);
+        try writer.print(" | {d} | ", .{best_raw.raw_best_bytes});
+        try writeConfigCell(writer, best_raw);
+        try writer.print(" | {d} | ", .{best_adaptive.adaptive_bytes});
+        try writeConfigCell(writer, best_adaptive);
+        try writer.print(" | ", .{});
+        try writePercent(writer, best_adaptive.match_coverage_x10000);
+        try writer.print(" | {d} |\n", .{best_adaptive.tokens});
+
+        index = next;
+    }
+}
+
+fn rowLessRaw(lhs: ReportRow, rhs: ReportRow) bool {
+    if (lhs.raw_best_bytes != rhs.raw_best_bytes) return lhs.raw_best_bytes < rhs.raw_best_bytes;
+    if (lhs.adaptive_bytes != rhs.adaptive_bytes) return lhs.adaptive_bytes < rhs.adaptive_bytes;
+    return lhs.tokens < rhs.tokens;
+}
+
+fn rowLessAdaptive(lhs: ReportRow, rhs: ReportRow) bool {
+    if (lhs.adaptive_bytes != rhs.adaptive_bytes) return lhs.adaptive_bytes < rhs.adaptive_bytes;
+    if (lhs.raw_best_bytes != rhs.raw_best_bytes) return lhs.raw_best_bytes < rhs.raw_best_bytes;
+    return lhs.tokens < rhs.tokens;
+}
+
+fn writeConfigCell(writer: *std.Io.Writer, row: ReportRow) !void {
+    try writeMarkdownCell(writer, row.level_name);
+    try writer.writeByte('/');
+    try writeMarkdownCell(writer, row.strategy_name);
+    try writer.writeByte('/');
+    try writeMarkdownCell(writer, row.parser_name);
 }
 
 fn writeMarkdownCell(writer: *std.Io.Writer, value: []const u8) !void {

@@ -460,6 +460,7 @@ architecture blindly.
 - [x] Compression-level report exposes token mix, match coverage, fixed bit density, and size-ratio diagnostics.
 - [x] Compression-level report can write a dashboard-indexed CSV artifact.
 - [x] Compression-level report can write a Markdown dashboard for human review.
+- [x] Compression-level Markdown dashboard summarizes best raw/adaptive rows per case.
 - [x] Level-specific optimal parser match-candidate limits.
 - [x] Level-specific lazy parser gain thresholds.
 - [x] Default lazy parser accepts one-byte lazy gains to improve binary/source default-size competitiveness against Rust fdeflate/miniz_oxide baselines.
