@@ -317,6 +317,65 @@ Example:
 }
 ```
 
+## `vort.wrapped_deflate_header_info`
+
+Produced by:
+
+```sh
+zig build run -- inspect-zlib-deflate-header-hex 7801cb48cdc9c90700062c0215 json
+```
+
+This schema wraps `vort.raw_deflate_header_info` with the zlib/gzip header
+context needed to locate the inner DEFLATE payload. It records the wrapper type,
+total wrapper bytes, byte offset where the DEFLATE payload starts, remaining
+bytes after that offset, and the nested raw header object.
+
+Example:
+
+```json
+{
+  "schema": "vort.wrapped_deflate_header_info",
+  "schema_version": 1,
+  "wrapper": "zlib",
+  "wrapper_bytes": 13,
+  "deflate_offset": 2,
+  "deflate_bytes": 11,
+  "raw_header": {
+    "schema": "vort.raw_deflate_header_info",
+    "schema_version": 1,
+    "compressed_bytes": 11,
+    "final": true,
+    "block_type": "fixed",
+    "data_bit_offset": 3,
+    "data_byte_offset": 1,
+    "header_bits_consumed": 3,
+    "header_bytes_consumed": 1,
+    "stored_len": null,
+    "stored_nlen": null,
+    "stored_payload_offset": null,
+    "dynamic_hlit": null,
+    "dynamic_hdist": null,
+    "dynamic_hclen": null,
+    "dynamic_code_length_count": null,
+    "dynamic_code_length_lengths": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    "dynamic_code_length_repeat_prev": null,
+    "dynamic_code_length_repeat_zero_short": null,
+    "dynamic_code_length_repeat_zero_long": null,
+    "dynamic_literal_nonzero": null,
+    "dynamic_literal_zero": null,
+    "dynamic_literal_max_bits": null,
+    "dynamic_literal_length_histogram": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    "dynamic_distance_nonzero": null,
+    "dynamic_distance_zero": null,
+    "dynamic_distance_max_bits": null,
+    "dynamic_distance_length_histogram": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    "dynamic_has_eob": null,
+    "dynamic_lengths_bit_offset": null,
+    "dynamic_lengths_byte_offset": null
+  }
+}
+```
+
 ## `vort.zlib_header_info`
 
 Produced by:
@@ -416,6 +475,7 @@ Example:
     "vort.sidecar_corrupt_smoke_report",
     "vort.header_inspect_smoke",
     "vort.raw_deflate_header_info",
+    "vort.wrapped_deflate_header_info",
     "vort.zlib_header_info",
     "vort.gzip_header_info"
   ],

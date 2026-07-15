@@ -182,6 +182,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection smoke covers multiple malformed dynamic code-length failure paths.
 - [x] raw/zlib/gzip header inspection smoke covers malformed dynamic code-length failures through zlib/gzip inner-deflate inspection.
 - [x] raw/zlib/gzip header inspection smoke records successful zlib/gzip inner-deflate inspection cases.
+- [x] zlib/gzip inner-deflate header inspection JSON includes wrapper offset context.
 - [x] raw/zlib/gzip header inspection smoke records and schema-checks malformed case formats and per-format negative counts.
 - [x] raw/zlib/gzip header inspection smoke records the schema name for each successful case.
 - [x] raw/zlib/gzip header inspection smoke enum-checks successful case names.

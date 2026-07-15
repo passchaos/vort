@@ -163,7 +163,8 @@
         "schema_name": [
           "vort.raw_deflate_header_info",
           "vort.zlib_header_info",
-          "vort.gzip_header_info"
+          "vort.gzip_header_info",
+          "vort.wrapped_deflate_header_info"
         ]
       },
       "item_fields": {
@@ -187,19 +188,19 @@
             "raw": "vort.raw_deflate_header_info",
             "zlib": [
               "vort.zlib_header_info",
-              "vort.raw_deflate_header_info"
+              "vort.wrapped_deflate_header_info"
             ],
             "gzip": [
               "vort.gzip_header_info",
-              "vort.raw_deflate_header_info"
+              "vort.wrapped_deflate_header_info"
             ]
           }
         },
         "schema_name": {
           "target": "command",
           "allowed": {
-            "vort.raw_deflate_header_info": [
-              "inspect-raw-header-hex",
+            "vort.raw_deflate_header_info": "inspect-raw-header-hex",
+            "vort.wrapped_deflate_header_info": [
               "inspect-zlib-deflate-header-hex",
               "inspect-gzip-deflate-header-hex"
             ],
@@ -312,6 +313,23 @@
           "stored",
           "fixed",
           "dynamic"
+        ]
+      }
+    },
+    "vort.wrapped_deflate_header_info": {
+      "fields": {
+        "deflate_bytes": "int",
+        "deflate_offset": "int",
+        "raw_header": "dict",
+        "schema": "str",
+        "schema_version": "int",
+        "wrapper": "str",
+        "wrapper_bytes": "int"
+      },
+      "enums": {
+        "wrapper": [
+          "zlib",
+          "gzip"
         ]
       }
     },

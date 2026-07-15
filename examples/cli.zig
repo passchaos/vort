@@ -838,7 +838,10 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(compressed);
         const wrapper = try vort.parseZlibHeaderInfo(compressed);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
-        try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
+        if (output_format == .json)
+            try printWrappedDeflateHeaderJson(stdout, "zlib", compressed.len, wrapper.data_offset, info)
+        else
+            try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -882,7 +885,10 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(compressed);
         const wrapper = try vort.parseGzipHeaderInfo(compressed);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
-        try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
+        if (output_format == .json)
+            try printWrappedDeflateHeaderJson(stdout, "gzip", compressed.len, wrapper.data_offset, info)
+        else
+            try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -915,7 +921,10 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(compressed);
         const wrapper = try vort.parseZlibHeaderInfo(compressed);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
-        try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
+        if (output_format == .json)
+            try printWrappedDeflateHeaderJson(stdout, "zlib", compressed.len, wrapper.data_offset, info)
+        else
+            try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const dictionary = args.next() orelse "";
@@ -953,7 +962,10 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(compressed);
         const wrapper = try vort.parseGzipHeaderInfo(compressed);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
-        try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
+        if (output_format == .json)
+            try printWrappedDeflateHeaderJson(stdout, "gzip", compressed.len, wrapper.data_offset, info)
+        else
+            try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else {
         try stdout.print("unknown command: {s}\n\n", .{command});
         try printHelp(stdout);
@@ -1219,6 +1231,11 @@ fn printGzipHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort
 }
 
 fn printRawHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.RawDeflateHeaderInfo) !void {
+    try printRawHeaderJsonObject(stdout, compressed_len, info);
+    try stdout.print("\n", .{});
+}
+
+fn printRawHeaderJsonObject(stdout: *std.Io.Writer, compressed_len: usize, info: vort.RawDeflateHeaderInfo) !void {
     try stdout.print(
         "{{\"schema\":\"vort.raw_deflate_header_info\",\"schema_version\":1,\"compressed_bytes\":{d},\"final\":{},\"block_type\":\"{s}\",\"data_bit_offset\":{d},\"data_byte_offset\":{d},\"header_bits_consumed\":{d},\"header_bytes_consumed\":{d},\"stored_len\":",
         .{
@@ -1274,6 +1291,21 @@ fn printRawHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     try printOptionalJson(usize, stdout, info.dynamic_lengths_bit_offset);
     try stdout.print(",\"dynamic_lengths_byte_offset\":", .{});
     try printOptionalJson(usize, stdout, info.dynamic_lengths_byte_offset);
+    try stdout.print("}}", .{});
+}
+
+fn printWrappedDeflateHeaderJson(
+    stdout: *std.Io.Writer,
+    wrapper: []const u8,
+    wrapper_bytes: usize,
+    deflate_offset: usize,
+    info: vort.RawDeflateHeaderInfo,
+) !void {
+    try stdout.print(
+        "{{\"schema\":\"vort.wrapped_deflate_header_info\",\"schema_version\":1,\"wrapper\":\"{s}\",\"wrapper_bytes\":{d},\"deflate_offset\":{d},\"deflate_bytes\":{d},\"raw_header\":",
+        .{ wrapper, wrapper_bytes, deflate_offset, wrapper_bytes - deflate_offset },
+    );
+    try printRawHeaderJsonObject(stdout, wrapper_bytes - deflate_offset, info);
     try stdout.print("}}\n", .{});
 }
 

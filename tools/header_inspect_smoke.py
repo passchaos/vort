@@ -398,12 +398,13 @@ def main(argv: list[str]) -> int:
     validate_value_against_manifest(zlib_json, schemas_def)
 
     zlib_inner_json = json.loads(run(cli, "inspect-zlib-deflate-header-hex", zlib_frame.hex(), "json"))
-    assert zlib_inner_json["schema"] == "vort.raw_deflate_header_info"
-    assert zlib_inner_json["block_type"] == "fixed"
+    assert zlib_inner_json["schema"] == "vort.wrapped_deflate_header_info"
+    assert zlib_inner_json["wrapper"] == "zlib"
+    assert zlib_inner_json["raw_header"]["block_type"] == "fixed"
     cases.append(
         {
             "name": "zlib_inner_deflate",
-            "schema_name": "vort.raw_deflate_header_info",
+            "schema_name": "vort.wrapped_deflate_header_info",
             "command": "inspect-zlib-deflate-header-hex",
             "sample": zlib_frame.hex(),
             "argv": ["inspect-zlib-deflate-header-hex", zlib_frame.hex()],
@@ -487,12 +488,13 @@ def main(argv: list[str]) -> int:
     assert gzip_json["header_crc"] is None
     validate_value_against_manifest(gzip_json, schemas_def)
     gzip_inner_json = json.loads(run(cli, "inspect-gzip-deflate-header-hex", gzip_frame.hex(), "json"))
-    assert gzip_inner_json["schema"] == "vort.raw_deflate_header_info"
-    assert gzip_inner_json["block_type"] == "fixed"
+    assert gzip_inner_json["schema"] == "vort.wrapped_deflate_header_info"
+    assert gzip_inner_json["wrapper"] == "gzip"
+    assert gzip_inner_json["raw_header"]["block_type"] == "fixed"
     cases.append(
         {
             "name": "gzip_inner_deflate",
-            "schema_name": "vort.raw_deflate_header_info",
+            "schema_name": "vort.wrapped_deflate_header_info",
             "command": "inspect-gzip-deflate-header-hex",
             "sample": gzip_frame.hex(),
             "argv": ["inspect-gzip-deflate-header-hex", gzip_frame.hex()],
