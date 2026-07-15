@@ -105,6 +105,7 @@ def main(argv: list[str]) -> int:
     cases: list[dict[str, object]] = [
         {
             "name": "raw_fixed",
+            "schema_name": "vort.raw_deflate_header_info",
             "format": "raw",
             "bytes": len(raw_frame),
             "data_offset": 1,
@@ -136,6 +137,7 @@ def main(argv: list[str]) -> int:
     cases.append(
         {
             "name": "raw_stored",
+            "schema_name": "vort.raw_deflate_header_info",
             "format": "raw",
             "bytes": len(raw_stored_frame),
             "data_offset": 5,
@@ -168,6 +170,7 @@ def main(argv: list[str]) -> int:
     cases.append(
         {
             "name": "raw_dynamic",
+            "schema_name": "vort.raw_deflate_header_info",
             "format": "raw",
             "bytes": len(raw_dynamic_frame),
             "data_offset": 1,
@@ -203,6 +206,7 @@ def main(argv: list[str]) -> int:
     cases.append(
         {
             "name": "zlib_default",
+            "schema_name": "vort.zlib_header_info",
             "format": "zlib",
             "bytes": len(zlib_frame),
             "data_offset": 2,
@@ -231,6 +235,7 @@ def main(argv: list[str]) -> int:
     cases.append(
         {
             "name": "zlib_dictionary",
+            "schema_name": "vort.zlib_header_info",
             "format": "zlib",
             "bytes": len(zlib_dict_frame),
             "data_offset": 6,
@@ -263,6 +268,7 @@ def main(argv: list[str]) -> int:
     cases.append(
         {
             "name": "gzip_default",
+            "schema_name": "vort.gzip_header_info",
             "format": "gzip",
             "bytes": len(gzip_frame),
             "data_offset": 10,
@@ -294,6 +300,7 @@ def main(argv: list[str]) -> int:
     cases.append(
         {
             "name": "gzip_optional",
+            "schema_name": "vort.gzip_header_info",
             "format": "gzip",
             "bytes": len(gzip_optional_frame),
             "data_offset": 31,

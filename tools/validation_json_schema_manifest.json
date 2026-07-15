@@ -81,6 +81,11 @@
           "raw",
           "zlib",
           "gzip"
+        ],
+        "schema_name": [
+          "vort.raw_deflate_header_info",
+          "vort.zlib_header_info",
+          "vort.gzip_header_info"
         ]
       },
       "item_fields": {
@@ -90,7 +95,8 @@
         "has_dictionary": "bool",
         "has_optional_fields": "bool",
         "header_crc": "bool",
-        "name": "str"
+        "name": "str",
+        "schema_name": "str"
       },
       "collections": {
         "negative_items": {

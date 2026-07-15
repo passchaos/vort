@@ -175,6 +175,7 @@ architecture blindly.
 - [x] CLI zlib header inspection supports schema-checked JSON output.
 - [x] raw/zlib/gzip header inspection CLI smoke runs in local CI aggregate.
 - [x] raw/zlib/gzip header inspection smoke covers malformed-header failure paths.
+- [x] raw/zlib/gzip header inspection smoke records the schema name for each successful case.
 - [x] raw/zlib/gzip header inspection smoke reports structured malformed-header failure items.
 - [x] raw/zlib/gzip header inspection smoke writes a schema-checked dashboard JSON artifact.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.

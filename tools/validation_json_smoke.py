@@ -146,6 +146,11 @@ def main() -> int:
         assert header_summary["schema_version"] == 1
         assert header_summary["ok"] is True
         assert header_summary["raw_cases"] >= 1
+        assert header_summary["cases"][0]["schema_name"] in (
+            "vort.raw_deflate_header_info",
+            "vort.zlib_header_info",
+            "vort.gzip_header_info",
+        )
         assert header_summary["negative_cases"] >= 1
         assert len(header_summary["negative_items"]) == header_summary["negative_cases"]
         assert header_summary["negative_items"][0]["matched"] is True
