@@ -330,6 +330,28 @@ def require_nested_schema_fields(
         validate_value_against_manifest(nested, schemas_def)
 
 
+def require_header_workflow_manifest_consistency(schemas_def: dict[str, Any]) -> None:
+    required = json.loads(HEADER_INSPECT_WORKFLOWS.read_text())
+    rows = required.get("required_workflows")
+    if not isinstance(rows, list) or not rows:
+        raise AssertionError("header inspect required workflows must be non-empty")
+    required_commands = {row.get("command") for row in rows if isinstance(row, dict)}
+    required_hex_commands = {row.get("command") for row in rows if isinstance(row, dict) and row.get("workflow") == "hex"}
+    header_schema = schemas_def.get("vort.header_inspect_smoke", {})
+    command_coverage_commands = set(
+        header_schema.get("collections", {}).get("command_coverage", {}).get("enums", {}).get("command", [])
+    )
+    if required_commands != command_coverage_commands:
+        raise AssertionError(
+            f"header workflow commands differ from command_coverage enum: required={sorted(required_commands)!r} manifest={sorted(command_coverage_commands)!r}"
+        )
+    case_commands = set(header_schema.get("item_enums", {}).get("command", []))
+    if required_hex_commands != case_commands:
+        raise AssertionError(
+            f"header workflow hex commands differ from case command enum: required={sorted(required_hex_commands)!r} manifest={sorted(case_commands)!r}"
+        )
+
+
 def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str, Any]) -> None:
     schema = value.get("schema")
     schema_def = schemas_def.get(schema)
@@ -431,6 +453,7 @@ def main() -> int:
         validate_value_against_manifest(value, schemas_def)
     validate_value_against_manifest(json.loads(DASHBOARD_PRODUCERS.read_text()), schemas_def)
     validate_value_against_manifest(json.loads(HEADER_INSPECT_WORKFLOWS.read_text()), schemas_def)
+    require_header_workflow_manifest_consistency(schemas_def)
     print(f"validation_json_docs=ok examples={len(parsed)}")
     return 0
 

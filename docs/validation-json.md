@@ -327,7 +327,10 @@ zig build run-header-inspect-smoke
 
 This schema defines the required hex/file workflow coverage matrix for public
 header-inspection CLI commands. Keeping the matrix in a small JSON file makes new
-inspect commands reviewable without editing the smoke script logic.
+inspect commands reviewable without editing the smoke script logic. The docs
+checker also cross-checks this matrix against the header-inspect command enums in
+`tools/validation_json_schema_manifest.json` so the required coverage config and
+schema expectations cannot drift silently.
 
 Example:
 
