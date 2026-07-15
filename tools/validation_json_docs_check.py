@@ -87,10 +87,18 @@ def require_field_pairs(value: dict[str, Any], field_pairs: dict[str, Any], labe
 
 def require_list_field_pairs(value: dict[str, Any], list_field_pairs: dict[str, Any], label: str) -> None:
     for list_field, source_fields in list_field_pairs.items():
+        prefix_mode = False
+        if isinstance(source_fields, dict):
+            prefix_mode = bool(source_fields.get("prefix"))
+            source_fields = source_fields.get("fields")
         if not isinstance(source_fields, list) or not all(isinstance(field, str) for field in source_fields):
             raise AssertionError(f"{label}.{list_field} list pair rule must be a list of field names")
         expected = [value.get(field) for field in source_fields]
         actual = value.get(list_field)
+        if prefix_mode:
+            if not isinstance(actual, list) or actual[: len(expected)] != expected:
+                raise AssertionError(f"{label}.{list_field}={actual!r} does not start with fields {source_fields!r}; expected prefix {expected!r}")
+            continue
         if actual != expected:
             raise AssertionError(f"{label}.{list_field}={actual!r} does not match fields {source_fields!r}; expected {expected!r}")
 

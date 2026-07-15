@@ -529,9 +529,36 @@ def main(argv: list[str]) -> int:
     assert zlib_dict_inner_with_dict_json["stream_adler32"] == zlib_dict_inner_with_dict_json["stream_footer_adler32"]
     assert zlib_dict_inner_with_dict_json["stream_adler32_matches"] is True
     validate_value_against_manifest(zlib_dict_inner_with_dict_json, schemas_def)
+    cases.append(
+        {
+            "name": "zlib_dict_inner_deflate",
+            "schema_name": "vort.wrapped_deflate_header_info",
+            "command": "inspect-zlib-dict-deflate-header-hex",
+            "sample": zlib_dict_frame.hex(),
+            "argv": ["inspect-zlib-dict-deflate-header-hex", zlib_dict_frame.hex(), dictionary.decode("ascii")],
+            "detail": "inner fixed with preset dictionary",
+            "format": "zlib",
+            "bytes": len(zlib_dict_frame),
+            "data_offset": zlib_dict_inner_with_dict_json["deflate_offset"],
+            "has_dictionary": True,
+            "has_optional_fields": False,
+            "header_crc": False,
+        }
+    )
     wrong_dict = expect_failure(cli, "inspect-zlib-dict-deflate-header-hex", zlib_dict_frame.hex(), "wrong", "json")
     if "ChecksumMismatch" not in wrong_dict:
         raise AssertionError(f"expected ChecksumMismatch for wrong zlib inspect dictionary, got {wrong_dict!r}")
+    negative_items.append(
+        {
+            "name": "zlib_dict_wrong_inspect_dictionary",
+            "format": "zlib",
+            "command": "inspect-zlib-dict-deflate-header-hex",
+            "sample": zlib_dict_frame.hex(),
+            "argv": ["inspect-zlib-dict-deflate-header-hex", zlib_dict_frame.hex(), "wrong", "json"],
+            "expected_error": "ChecksumMismatch",
+            "matched": True,
+        }
+    )
 
     gzip_hex = run(cli, "inspect-gzip-header-hex", gzip_frame.hex())
     require_fields(
@@ -821,7 +848,7 @@ def main(argv: list[str]) -> int:
         "dictionary_cases": sum(1 for case in cases if case["has_dictionary"]),
         "optional_header_cases": sum(1 for case in cases if case["has_optional_fields"]),
         "fhcrc_cases": sum(1 for case in cases if case["header_crc"]),
-        "negative_cases": len(negative_cases),
+        "negative_cases": len(negative_items),
         "raw_negative_cases": sum(1 for item in negative_items if item["format"] == "raw"),
         "zlib_negative_cases": sum(1 for item in negative_items if item["format"] == "zlib"),
         "gzip_negative_cases": sum(1 for item in negative_items if item["format"] == "gzip"),
