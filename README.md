@@ -275,6 +275,12 @@ const zlib_bounded = try vort.decodeZlibAllocLimited(allocator, zlib_bytes, 1024
 defer allocator.free(zlib_bounded);
 var zlib_out: [1024]u8 = undefined;
 const zlib_written = try vort.decodeZlib(zlib_bytes, &zlib_out);
+var zlib_cat: std.ArrayList(u8) = .empty;
+defer zlib_cat.deinit(allocator);
+try zlib_cat.appendSlice(allocator, zlib_bytes);
+try zlib_cat.appendSlice(allocator, zlib_bytes);
+const zlib_concatenated = try vort.decodeZlibConcatenatedAlloc(allocator, zlib_cat.items);
+defer allocator.free(zlib_concatenated);
 
 const gzip_bytes = try vort.encodeGzipFixedAlloc(allocator, "payload");
 defer allocator.free(gzip_bytes);

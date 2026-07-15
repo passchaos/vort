@@ -305,6 +305,8 @@ architecture blindly.
 - [x] raw/zlib CLI differential smoke rejects empty hex/file inputs.
 - [x] File CLI and Python differential smoke cover zlib file decode with output limits.
 - [x] zlib dictionary-file differential smoke rejects too-small output limits.
+- [x] zlib concatenated stream decode support.
+- [x] zlib concatenated stream decode supports caller-owned buffers, exact-size alloc, and explicit total output limits.
 - [x] File CLI exposes non-dictionary raw/gzip best encoders for differential harnesses.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
