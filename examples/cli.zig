@@ -1157,6 +1157,7 @@ const WrappedDeflateContext = struct {
     member_offset: usize,
     deflate_offset: usize,
     member_index: usize,
+    exact_deflate_bytes: ?usize = null,
     stream_deflate_bytes: ?usize = null,
     stream_output_bytes: ?usize = null,
     stream_footer_offset: ?usize = null,
@@ -1378,6 +1379,7 @@ fn zlibWrappedDeflateContext(wrapper_bytes: usize, deflate_offset: usize, stream
         .member_index = 0,
     };
     if (stream) |info| {
+        context.exact_deflate_bytes = info.deflate_bytes;
         context.stream_deflate_bytes = info.deflate_bytes;
         context.stream_output_bytes = info.output_bytes;
         context.stream_footer_offset = info.footer_offset;
@@ -1396,6 +1398,7 @@ fn gzipWrappedDeflateContext(wrapper_bytes: usize, member: vort.GzipMemberInfo) 
         .member_offset = member.member_offset,
         .deflate_offset = member.deflate_offset,
         .member_index = member.member_index,
+        .exact_deflate_bytes = member.deflate_bytes,
         .member_deflate_bytes = member.deflate_bytes,
         .member_output_bytes = member.output_bytes,
         .member_footer_offset = member.footer_offset,
@@ -1412,7 +1415,7 @@ fn gzipWrappedDeflateContext(wrapper_bytes: usize, member: vort.GzipMemberInfo) 
 fn printWrappedDeflateHeaderJson(stdout: *std.Io.Writer, context: WrappedDeflateContext, info: vort.RawDeflateHeaderInfo) !void {
     const scope = if (std.mem.eql(u8, context.wrapper, "gzip")) "gzip_member" else "zlib_stream";
     try stdout.print(
-        "{{\"schema\":\"vort.wrapped_deflate_header_info\",\"schema_version\":1,\"wrapper\":\"{s}\",\"scope\":\"{s}\",\"member_index\":{d},\"member_offset\":{d},\"wrapper_bytes\":{d},\"deflate_offset\":{d},\"deflate_bytes\":{d},\"deflate_span_kind\":\"header_tail\",\"stream_deflate_bytes\":",
+        "{{\"schema\":\"vort.wrapped_deflate_header_info\",\"schema_version\":1,\"wrapper\":\"{s}\",\"scope\":\"{s}\",\"member_index\":{d},\"member_offset\":{d},\"wrapper_bytes\":{d},\"deflate_offset\":{d},\"deflate_bytes\":{d},\"deflate_span_kind\":\"header_tail\",\"exact_deflate_bytes\":",
         .{
             context.wrapper,
             scope,
@@ -1423,6 +1426,8 @@ fn printWrappedDeflateHeaderJson(stdout: *std.Io.Writer, context: WrappedDeflate
             context.wrapper_bytes - context.deflate_offset,
         },
     );
+    try printOptionalJson(usize, stdout, context.exact_deflate_bytes);
+    try stdout.print(",\"stream_deflate_bytes\":", .{});
     try printOptionalJson(usize, stdout, context.stream_deflate_bytes);
     try stdout.print(",\"stream_output_bytes\":", .{});
     try printOptionalJson(usize, stdout, context.stream_output_bytes);

@@ -333,6 +333,7 @@
         "deflate_bytes": "int",
         "deflate_offset": "int",
         "deflate_span_kind": "str",
+        "exact_deflate_bytes": "int?",
         "stream_adler32": "int?",
         "stream_adler32_matches": "bool?",
         "stream_deflate_bytes": "int?",
@@ -513,10 +514,28 @@
         },
         {
           "when": {
+            "field": "stream_deflate_bytes",
+            "not_equals": null
+          },
+          "left": "exact_deflate_bytes",
+          "minuend": "stream_footer_offset",
+          "subtrahend": "deflate_offset"
+        },
+        {
+          "when": {
             "field": "wrapper",
             "equals": "gzip"
           },
           "left": "member_deflate_bytes",
+          "minuend": "member_footer_offset",
+          "subtrahend": "deflate_offset"
+        },
+        {
+          "when": {
+            "field": "wrapper",
+            "equals": "gzip"
+          },
+          "left": "exact_deflate_bytes",
           "minuend": "member_footer_offset",
           "subtrahend": "deflate_offset"
         }

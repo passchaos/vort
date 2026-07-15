@@ -426,6 +426,7 @@ def main(argv: list[str]) -> int:
     assert zlib_inner_json["deflate_span_kind"] == "header_tail"
     assert zlib_inner_json["stream_footer_offset"] > zlib_inner_json["deflate_offset"]
     assert zlib_inner_json["stream_deflate_bytes"] == zlib_inner_json["stream_footer_offset"] - zlib_inner_json["deflate_offset"]
+    assert zlib_inner_json["exact_deflate_bytes"] == zlib_inner_json["stream_deflate_bytes"]
     assert zlib_inner_json["stream_output_bytes"] == len(payload)
     assert zlib_inner_json["stream_end_offset"] == zlib_inner_json["stream_footer_offset"] + 4
     assert zlib_inner_json["stream_end_offset"] == len(zlib_frame)
@@ -507,6 +508,7 @@ def main(argv: list[str]) -> int:
     zlib_dict_inner_json = json.loads(run(cli, "inspect-zlib-deflate-header-hex", zlib_dict_frame.hex(), "json"))
     assert zlib_dict_inner_json["schema"] == "vort.wrapped_deflate_header_info"
     assert zlib_dict_inner_json["wrapper"] == "zlib"
+    assert zlib_dict_inner_json["exact_deflate_bytes"] is None
     assert zlib_dict_inner_json["stream_deflate_bytes"] is None
     assert zlib_dict_inner_json["stream_adler32_matches"] is None
     assert zlib_dict_inner_json["raw_header"]["schema"] == "vort.raw_deflate_header_info"
@@ -519,6 +521,7 @@ def main(argv: list[str]) -> int:
     assert zlib_dict_inner_with_dict_json["wrapper"] == "zlib"
     assert zlib_dict_inner_with_dict_json["stream_footer_offset"] > zlib_dict_inner_with_dict_json["deflate_offset"]
     assert zlib_dict_inner_with_dict_json["stream_deflate_bytes"] == zlib_dict_inner_with_dict_json["stream_footer_offset"] - zlib_dict_inner_with_dict_json["deflate_offset"]
+    assert zlib_dict_inner_with_dict_json["exact_deflate_bytes"] == zlib_dict_inner_with_dict_json["stream_deflate_bytes"]
     assert zlib_dict_inner_with_dict_json["stream_output_bytes"] == len(dict_payload)
     assert zlib_dict_inner_with_dict_json["stream_end_offset"] == zlib_dict_inner_with_dict_json["stream_footer_offset"] + 4
     assert zlib_dict_inner_with_dict_json["stream_end_offset"] == len(zlib_dict_frame)
@@ -584,6 +587,7 @@ def main(argv: list[str]) -> int:
         assert gzip_inner_json[key] is None
     assert gzip_inner_json["member_footer_offset"] > gzip_inner_json["deflate_offset"]
     assert gzip_inner_json["member_deflate_bytes"] == gzip_inner_json["member_footer_offset"] - gzip_inner_json["deflate_offset"]
+    assert gzip_inner_json["exact_deflate_bytes"] == gzip_inner_json["member_deflate_bytes"]
     assert gzip_inner_json["member_output_bytes"] == len(payload)
     assert gzip_inner_json["member_end_offset"] == gzip_inner_json["member_footer_offset"] + 8
     assert gzip_inner_json["member_end_offset"] == len(gzip_frame)
@@ -672,6 +676,7 @@ def main(argv: list[str]) -> int:
     second_payload = b"world"
     assert gzip_second_inner_json["member_footer_offset"] > gzip_second_inner_json["deflate_offset"]
     assert gzip_second_inner_json["member_deflate_bytes"] == gzip_second_inner_json["member_footer_offset"] - gzip_second_inner_json["deflate_offset"]
+    assert gzip_second_inner_json["exact_deflate_bytes"] == gzip_second_inner_json["member_deflate_bytes"]
     assert gzip_second_inner_json["member_output_bytes"] == len(second_payload)
     assert gzip_second_inner_json["member_end_offset"] == gzip_second_inner_json["member_footer_offset"] + 8
     assert gzip_second_inner_json["member_end_offset"] == len(gzip_concat_frame)

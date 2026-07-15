@@ -142,6 +142,7 @@ def main() -> int:
         assert wrapped_zlib_header["deflate_span_kind"] == "header_tail"
         assert wrapped_zlib_header["stream_footer_offset"] > wrapped_zlib_header["deflate_offset"]
         assert wrapped_zlib_header["stream_deflate_bytes"] == wrapped_zlib_header["stream_footer_offset"] - wrapped_zlib_header["deflate_offset"]
+        assert wrapped_zlib_header["exact_deflate_bytes"] == wrapped_zlib_header["stream_deflate_bytes"]
         assert wrapped_zlib_header["stream_output_bytes"] == 5
         assert wrapped_zlib_header["stream_end_offset"] == wrapped_zlib_header["stream_footer_offset"] + 4
         assert wrapped_zlib_header["stream_end_offset"] == wrapped_zlib_header["wrapper_bytes"]
@@ -163,12 +164,20 @@ def main() -> int:
             assert wrapped_zlib_header[key] is None
         assert wrapped_zlib_header["raw_header"]["schema"] == "vort.raw_deflate_header_info"
         validate_value_against_manifest(wrapped_zlib_header, schemas_def)
+        wrapped_zlib_dict_header_without_dict = json.loads(
+            run([cli, "inspect-zlib-deflate-header-hex", "78f908610235cb4027013a2e067d", "json"]).stdout
+        )
+        assert wrapped_zlib_dict_header_without_dict["wrapper"] == "zlib"
+        assert wrapped_zlib_dict_header_without_dict["exact_deflate_bytes"] is None
+        assert wrapped_zlib_dict_header_without_dict["stream_deflate_bytes"] is None
+        validate_value_against_manifest(wrapped_zlib_dict_header_without_dict, schemas_def)
         wrapped_zlib_dict_header = json.loads(
             run([cli, "inspect-zlib-dict-deflate-header-hex", "78f908610235cb4027013a2e067d", "hello ", "json"]).stdout
         )
         assert wrapped_zlib_dict_header["schema"] == "vort.wrapped_deflate_header_info"
         assert wrapped_zlib_dict_header["wrapper"] == "zlib"
         assert wrapped_zlib_dict_header["stream_output_bytes"] == len("hello hello hello")
+        assert wrapped_zlib_dict_header["exact_deflate_bytes"] == wrapped_zlib_dict_header["stream_deflate_bytes"]
         assert wrapped_zlib_dict_header["stream_end_offset"] == wrapped_zlib_dict_header["wrapper_bytes"]
         assert wrapped_zlib_dict_header["stream_adler32_matches"] is True
         validate_value_against_manifest(wrapped_zlib_dict_header, schemas_def)
@@ -193,6 +202,7 @@ def main() -> int:
             assert wrapped_gzip_header[key] is None
         assert wrapped_gzip_header["member_footer_offset"] > wrapped_gzip_header["deflate_offset"]
         assert wrapped_gzip_header["member_deflate_bytes"] == wrapped_gzip_header["member_footer_offset"] - wrapped_gzip_header["deflate_offset"]
+        assert wrapped_gzip_header["exact_deflate_bytes"] == wrapped_gzip_header["member_deflate_bytes"]
         assert wrapped_gzip_header["member_output_bytes"] == 5
         assert wrapped_gzip_header["member_end_offset"] == wrapped_gzip_header["member_footer_offset"] + 8
         assert wrapped_gzip_header["member_end_offset"] == wrapped_gzip_header["wrapper_bytes"]

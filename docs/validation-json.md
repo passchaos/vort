@@ -338,9 +338,12 @@ starts, remaining bytes after that offset, and the nested raw header object.
 `deflate_span_kind` is currently `header_tail`: `deflate_bytes` is the byte count
 after the wrapper header; for zlib inputs that includes the Adler-32 footer, and
 for concatenated gzip inputs that includes the selected member footer and later
-members. For zlib streams without a preset dictionary requirement,
-`stream_deflate_bytes` reports the exact raw DEFLATE payload length before the
-4-byte Adler-32 footer, and `stream_*adler32*` fields report stored-vs-computed
+members. `exact_deflate_bytes` is the wrapper-neutral exact raw DEFLATE payload
+length when the inspection can decode enough context to find the payload end;
+for zlib FDICT streams inspected without a dictionary it is `null`. For zlib
+streams without a preset dictionary requirement, `stream_deflate_bytes` reports
+the same exact raw DEFLATE payload length before the 4-byte Adler-32 footer, and
+`stream_*adler32*` fields report stored-vs-computed
 checksum diagnostics. These zlib stream diagnostics are `null` when the stream
 requires a preset dictionary and the header-only command has no dictionary bytes;
 use `inspect-zlib-dict-deflate-header-*` to supply the dictionary and emit full
@@ -372,6 +375,7 @@ Example:
   "deflate_offset": 2,
   "deflate_bytes": 11,
   "deflate_span_kind": "header_tail",
+  "exact_deflate_bytes": 7,
   "stream_deflate_bytes": 7,
   "stream_output_bytes": 5,
   "stream_footer_offset": 9,
