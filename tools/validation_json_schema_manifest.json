@@ -77,6 +77,11 @@
       },
       "item_collection": "cases",
       "item_enums": {
+        "command": [
+          "inspect-raw-header-hex",
+          "inspect-zlib-header-hex",
+          "inspect-gzip-header-hex"
+        ],
         "format": [
           "raw",
           "zlib",
@@ -99,12 +104,14 @@
       },
       "item_fields": {
         "bytes": "int",
+        "command": "str",
         "data_offset": "int",
         "format": "str",
         "has_dictionary": "bool",
         "has_optional_fields": "bool",
         "header_crc": "bool",
         "name": "str",
+        "sample": "str",
         "schema_name": "str"
       },
       "collections": {

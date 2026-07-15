@@ -197,8 +197,9 @@ Important fields:
   (`command` and `expected_error` are enum-checked by the schema manifest)
 - `dictionary_cases`: zlib FDICT/DICTID cases covered
 - `optional_header_cases`, `fhcrc_cases`: gzip optional-header/FHCRC cases covered
-- `cases`: case-level metadata including enum-checked `name`, format, JSON
-  `schema_name`, byte size, data offset, and feature booleans
+- `cases`: case-level metadata including enum-checked `name`, replayable
+  `command`/`sample`, format, JSON `schema_name`, byte size, data offset, and
+  feature booleans
 
 Example:
 
@@ -228,6 +229,8 @@ Example:
     {
       "name": "zlib_dictionary",
       "schema_name": "vort.zlib_header_info",
+      "command": "inspect-zlib-header-hex",
+      "sample": "78bb08610235cb4027013a2e067d",
       "format": "zlib",
       "bytes": 14,
       "data_offset": 6,
