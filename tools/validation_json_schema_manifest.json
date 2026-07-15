@@ -75,6 +75,8 @@
       "fields": {
         "check_count": "int",
         "checks": "list",
+        "mode_count": "int",
+        "mode_counts": "list",
         "ok": "bool",
         "schema": "str",
         "schema_version": "int"
@@ -82,6 +84,15 @@
       "count_rules": {
         "check_count": {
           "collection": "checks"
+        },
+        "mode_count": {
+          "collection": "mode_counts"
+        }
+      },
+      "collection_sum_rules": {
+        "check_count": {
+          "collection": "mode_counts",
+          "field": "checks"
         }
       },
       "item_collection": "checks",
@@ -109,6 +120,24 @@
           "failed_header_inspect",
           "missing_header_workflow"
         ]
+      },
+      "collections": {
+        "mode_counts": {
+          "fields": {
+            "checks": "int",
+            "expected_failures": "int",
+            "matched": "int",
+            "mode": "str"
+          },
+          "enums": {
+            "mode": [
+              "all",
+              "strict-producers",
+              "strict-smoke-gates",
+              "strict-header-inspect"
+            ]
+          }
+        }
       }
     },
     "vort.dashboard_producers": {

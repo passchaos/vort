@@ -105,6 +105,19 @@ def check_row(
     }
 
 
+def build_mode_counts(checks: list[dict[str, object]]) -> list[dict[str, object]]:
+    modes = sorted({str(row["mode"]) for row in checks})
+    return [
+        {
+            "mode": mode,
+            "checks": sum(1 for row in checks if row["mode"] == mode),
+            "expected_failures": sum(1 for row in checks if row["mode"] == mode and row["expected_failure"]),
+            "matched": sum(1 for row in checks if row["mode"] == mode and row["matched"]),
+        }
+        for mode in modes
+    ]
+
+
 def write_markdown(path: Path, summary: dict[str, object]) -> None:
     lines = [
         "# Vort dashboard strict smoke",
@@ -112,9 +125,20 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
         f"- ok: `{summary['ok']}`",
         f"- checks: {summary['check_count']}",
         "",
+        "## Mode summary",
+        "",
+        "| mode | checks | expected failures | matched |",
+        "| --- | ---: | ---: | ---: |",
+    ]
+    for row in summary["mode_counts"]:
+        lines.append(f"| `{row['mode']}` | {row['checks']} | {row['expected_failures']} | {row['matched']} |")
+    lines.extend([
+        "",
+        "## Checks",
+        "",
         "| name | mode | expected failure | returncode | expected output | actual output | matched |",
         "| --- | --- | --- | ---: | --- | --- | --- |",
-    ]
+    ])
     for row in summary["checks"]:
         lines.append(
             f"| `{row['name']}` | `{row['mode']}` | `{row['expected_failure']}` | {row['returncode']} | `{row['expected_output']}` | `{row['actual_output']}` | `{row['matched']}` |"
@@ -188,12 +212,15 @@ def main() -> int:
         )
         checks.append(check_row("missing_header_workflow", "strict-header-inspect", True, True, missing_workflow_result.returncode, "dashboard_index_header_inspect_missing_workflows=1:inspect-raw-header-file:file", missing_workflow_result.stdout))
 
+    mode_counts = build_mode_counts(checks)
     summary = {
         "schema": "vort.dashboard_strict_smoke",
         "schema_version": 1,
         "ok": True,
         "check_count": len(checks),
         "checks": checks,
+        "mode_count": len(mode_counts),
+        "mode_counts": mode_counts,
     }
     if args.summary:
         path = Path(args.summary)

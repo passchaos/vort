@@ -118,6 +118,9 @@ def main() -> int:
         assert dashboard_strict["schema"] == "vort.dashboard_strict_smoke"
         assert dashboard_strict["ok"] is True
         assert dashboard_strict["check_count"] >= 1
+        assert dashboard_strict["mode_count"] >= 1
+        assert sum(row["checks"] for row in dashboard_strict["mode_counts"]) == dashboard_strict["check_count"]
+        assert any(row["mode"] == "strict-header-inspect" and row["checks"] >= 1 for row in dashboard_strict["mode_counts"])
         assert all("expected_output" in row and "actual_output" in row and "returncode" in row for row in dashboard_strict["checks"])
         assert "missing_header_workflow" in dashboard_strict_markdown_path.read_text()
         validate_value_against_manifest(dashboard_strict, schemas_def)
