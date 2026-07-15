@@ -1842,6 +1842,46 @@ fn encodeEmbeddedDictionaryBytesAlloc(allocator: std.mem.Allocator, dict: []cons
     return out;
 }
 
+pub const EmbeddedDictionaryInspection = struct {
+    id: dictionary.DictionaryId,
+    content_len: usize,
+    skippable_offset: usize,
+};
+
+pub fn inspectEmbeddedDictionary(input: []const u8) Error!EmbeddedDictionaryInspection {
+    var offset: usize = 0;
+    var found: ?EmbeddedDictionaryInspection = null;
+    while (offset < input.len) {
+        const tail = input[offset..];
+        if (tail.len >= 4 and std.mem.eql(u8, tail[0..4], &skippable_magic)) {
+            const payload = try parseSkippable(tail);
+            if (payload.len >= embedded_dictionary_header_len and std.mem.eql(u8, payload[0..4], &embedded_dictionary_magic)) {
+                if (std.mem.readInt(u32, payload[16..20], .little) != 0) return error.CorruptFrame;
+                const len: usize = std.mem.readInt(u32, payload[12..16], .little);
+                if (payload.len - embedded_dictionary_header_len < len) return error.TruncatedFrame;
+                const dict = payload[embedded_dictionary_header_len..][0..len];
+                const expected_id = std.mem.readInt(u64, payload[4..12], .little);
+                const actual_id = dictionary.DictionaryId.fromBytes(dict);
+                if (actual_id.asInt() != expected_id) return error.ChecksumMismatch;
+                found = .{
+                    .id = actual_id,
+                    .content_len = dict.len,
+                    .skippable_offset = offset,
+                };
+            }
+            const total = try skippableTotalLen(tail);
+            if (tail.len < total) return error.TruncatedFrame;
+            offset += total;
+        } else {
+            const info = try parseHeader(tail);
+            const total = try frameLenFromInfo(info);
+            if (tail.len < total) return error.TruncatedFrame;
+            offset += total;
+        }
+    }
+    return found orelse error.InvalidMagic;
+}
+
 pub fn parseEmbeddedDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     var offset: usize = 0;
     var found: ?[]const u8 = null;
@@ -4606,6 +4646,10 @@ test "self-contained dictionary stream embeds dictionary and supports range deco
     const dict = try parseEmbeddedDictionaryAlloc(std.testing.allocator, stream);
     defer std.testing.allocator.free(dict);
     try std.testing.expect(dict.len > 0);
+    const inspection = try inspectEmbeddedDictionary(stream);
+    try std.testing.expectEqual(dict.len, inspection.content_len);
+    try std.testing.expectEqual(dictionary.DictionaryId.fromBytes(dict).asInt(), inspection.id.asInt());
+    try std.testing.expectEqual(@as(usize, 0), inspection.skippable_offset);
     const summary = try summarizeModes(stream);
     try std.testing.expect(summary.dictionary_patch + summary.dictionary_deflate > 0);
     const range = try decodeSelfContainedDictionaryRangeAlloc(std.testing.allocator, stream, 7, 64);
