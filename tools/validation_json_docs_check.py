@@ -76,12 +76,47 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
         item_fields = schema_def.get("item_fields")
         if not isinstance(item_fields, dict):
             raise AssertionError(f"schema {schema!r} must define item_fields")
-        items = value.get(item_collection)
-        if not isinstance(items, list) or not items:
-            raise AssertionError(f"{schema} must include non-empty {item_collection}")
-        require_fields(items[0], set(item_fields), f"{schema}.{item_collection}[0]")
-        require_types(items[0], item_fields, f"{schema}.{item_collection}[0]")
-        require_enums(items[0], schema_def.get("item_enums", {}), f"{schema}.{item_collection}[0]")
+        validate_item_collection(
+            value,
+            item_collection,
+            item_fields,
+            schema_def.get("item_enums", {}),
+            schema,
+        )
+
+    collections = schema_def.get("collections", {})
+    if collections:
+        if not isinstance(collections, dict):
+            raise AssertionError(f"schema {schema!r} collections must be an object")
+        for collection_name, collection_def in collections.items():
+            if not isinstance(collection_def, dict):
+                raise AssertionError(f"schema {schema!r} collection {collection_name!r} must be an object")
+            item_fields = collection_def.get("fields")
+            if not isinstance(item_fields, dict):
+                raise AssertionError(f"schema {schema!r} collection {collection_name!r} must define fields")
+            validate_item_collection(
+                value,
+                collection_name,
+                item_fields,
+                collection_def.get("enums", {}),
+                schema,
+            )
+
+
+def validate_item_collection(
+    value: dict[str, Any],
+    collection_name: str,
+    item_fields: dict[str, str],
+    item_enums: dict[str, list[str]],
+    schema: str,
+) -> None:
+    items = value.get(collection_name)
+    if not isinstance(items, list) or not items:
+        raise AssertionError(f"{schema} must include non-empty {collection_name}")
+    label = f"{schema}.{collection_name}[0]"
+    require_fields(items[0], set(item_fields), label)
+    require_types(items[0], item_fields, label)
+    require_enums(items[0], item_enums, label)
 
 
 def main() -> int:

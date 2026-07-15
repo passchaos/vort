@@ -562,6 +562,7 @@ Each schema entry can contain:
 | `item_collection` | string | Optional nested list field to inspect. |
 | `item_fields` | object | Required fields for the first nested item. |
 | `item_enums` | object | Optional nested item enum constraints. |
+| `collections` | object | Optional map of additional nested list fields to per-item `fields`/`enums` checks. |
 
 Supported type names are `str`, `int`, `bool`, `list`, `dict`, `str?`, and
 `int?`.

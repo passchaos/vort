@@ -91,6 +91,17 @@
         "has_optional_fields": "bool",
         "header_crc": "bool",
         "name": "str"
+      },
+      "collections": {
+        "negative_items": {
+          "fields": {
+            "command": "str",
+            "expected_error": "str",
+            "matched": "bool",
+            "name": "str",
+            "sample": "str"
+          }
+        }
       }
     },
     "vort.raw_deflate_header_info": {
