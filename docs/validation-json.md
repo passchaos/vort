@@ -723,7 +723,10 @@ zig build run-dashboard-strict-smoke
 
 This schema defines the required per-mode coverage matrix for dashboard strict
 mode smoke tests. Keeping it external makes strict-gate coverage expectations
-reviewable without editing the smoke script logic.
+reviewable without editing the smoke script logic. The docs checker cross-checks
+this config against the dashboard strict smoke mode enums in
+`tools/validation_json_schema_manifest.json` so mode expectations cannot drift
+silently.
 
 Example:
 

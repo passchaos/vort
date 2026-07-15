@@ -353,6 +353,27 @@ def require_header_workflow_manifest_consistency(schemas_def: dict[str, Any]) ->
         )
 
 
+def require_dashboard_strict_mode_manifest_consistency(schemas_def: dict[str, Any]) -> None:
+    expected = json.loads(DASHBOARD_STRICT_MODES.read_text())
+    rows = expected.get("expected_modes")
+    if not isinstance(rows, list) or not rows:
+        raise AssertionError("dashboard strict expected modes must be non-empty")
+    configured_modes = {row.get("mode") for row in rows if isinstance(row, dict)}
+    strict_schema = schemas_def.get("vort.dashboard_strict_smoke", {})
+    check_modes = set(strict_schema.get("item_enums", {}).get("mode", []))
+    if configured_modes != check_modes:
+        raise AssertionError(
+            f"dashboard strict expected modes differ from check mode enum: configured={sorted(configured_modes)!r} manifest={sorted(check_modes)!r}"
+        )
+    mode_count_modes = set(
+        strict_schema.get("collections", {}).get("mode_counts", {}).get("enums", {}).get("mode", [])
+    )
+    if configured_modes != mode_count_modes:
+        raise AssertionError(
+            f"dashboard strict expected modes differ from mode_counts enum: configured={sorted(configured_modes)!r} manifest={sorted(mode_count_modes)!r}"
+        )
+
+
 def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str, Any]) -> None:
     schema = value.get("schema")
     schema_def = schemas_def.get(schema)
@@ -456,6 +477,7 @@ def main() -> int:
     validate_value_against_manifest(json.loads(HEADER_INSPECT_WORKFLOWS.read_text()), schemas_def)
     validate_value_against_manifest(json.loads(DASHBOARD_STRICT_MODES.read_text()), schemas_def)
     require_header_workflow_manifest_consistency(schemas_def)
+    require_dashboard_strict_mode_manifest_consistency(schemas_def)
     print(f"validation_json_docs=ok examples={len(parsed)}")
     return 0
 
