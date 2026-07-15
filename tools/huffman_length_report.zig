@@ -22,6 +22,10 @@ const Row = struct {
     optimal: bool,
     lengths: [max_symbols]u4,
     optimal_lengths: [max_symbols]u4,
+    package_merge_cost: usize,
+    package_merge_gap_bits: isize,
+    package_merge_optimal: bool,
+    package_merge_lengths: [max_symbols]u4,
 };
 
 const fixed_cases = [_]Case{
@@ -97,6 +101,9 @@ fn buildRow(case: Case) Row {
     const lengths = vort.huffman.treeCodeLengths(max_symbols, &case.freqs, case.max_bits);
     const actual = codeLengthCost(&case.freqs, &lengths, case.symbol_count);
     const oracle = bruteForceOptimal(case);
+    const package_merge_lengths = packageMergeCandidate(case);
+    const package_merge_cost = codeLengthCost(&case.freqs, &package_merge_lengths, case.symbol_count);
+    const package_merge_kraft = kraftCost(&package_merge_lengths, case.symbol_count, case.max_bits);
     const kraft = kraftCost(&lengths, case.symbol_count, case.max_bits);
     return .{
         .case_name = case.name,
@@ -110,11 +117,15 @@ fn buildRow(case: Case) Row {
         .optimal = actual == oracle.cost and kraft <= (@as(usize, 1) << case.max_bits),
         .lengths = lengths,
         .optimal_lengths = oracle.lengths,
+        .package_merge_cost = package_merge_cost,
+        .package_merge_gap_bits = @as(isize, @intCast(package_merge_cost)) - @as(isize, @intCast(oracle.cost)),
+        .package_merge_optimal = package_merge_cost == oracle.cost and package_merge_kraft <= (@as(usize, 1) << case.max_bits),
+        .package_merge_lengths = package_merge_lengths,
     };
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,symbol_count,max_bits,optimal_cost,actual_cost,gap_bits,kraft_cost,kraft_limit,optimal,lengths,optimal_lengths\n");
+    try writer.writeAll("case,symbol_count,max_bits,optimal_cost,actual_cost,gap_bits,kraft_cost,kraft_limit,optimal,lengths,optimal_lengths,package_merge_cost,package_merge_gap_bits,package_merge_optimal,package_merge_lengths\n");
     for (rows) |row| {
         try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{},", .{
             row.case_name,
@@ -130,6 +141,8 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
         try writeLengths(writer, row);
         try writer.writeByte(',');
         try writeLengthSlice(writer, row.optimal_lengths[0..row.symbol_count]);
+        try writer.print(",{d},{d},{},", .{ row.package_merge_cost, row.package_merge_gap_bits, row.package_merge_optimal });
+        try writeLengthSlice(writer, row.package_merge_lengths[0..row.symbol_count]);
         try writer.writeByte('\n');
     }
 }
@@ -144,23 +157,33 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
         rows.len - summary.optimal_rows,
         summary.worst_gap_bits,
     });
-    try writer.writeAll("| case | symbols | max bits | optimal cost | actual cost | gap bits | Kraft | optimal? | lengths | oracle lengths |\n");
-    try writer.writeAll("|---|---:|---:|---:|---:|---:|---:|---|---|---|\n");
+    try writer.print("- package-merge optimal rows: {d}\n- package-merge non-optimal rows: {d}\n- package-merge worst gap bits: {d}\n\n", .{
+        summary.package_merge_optimal_rows,
+        rows.len - summary.package_merge_optimal_rows,
+        summary.package_merge_worst_gap_bits,
+    });
+    try writer.writeAll("| case | symbols | max bits | optimal cost | actual cost | gap bits | package-merge cost | package-merge gap | Kraft | optimal? | package-merge optimal? | lengths | oracle lengths | package-merge lengths |\n");
+    try writer.writeAll("|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|---|\n");
     for (rows) |row| {
-        try writer.print("| {s} | {d} | {d} | {d} | {d} | {d} | {d}/{d} | {} | ", .{
+        try writer.print("| {s} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d}/{d} | {} | {} | ", .{
             row.case_name,
             row.symbol_count,
             row.max_bits,
             row.optimal_cost,
             row.actual_cost,
             row.gap_bits,
+            row.package_merge_cost,
+            row.package_merge_gap_bits,
             row.kraft_cost,
             row.kraft_limit,
             row.optimal,
+            row.package_merge_optimal,
         });
         try writeLengths(writer, row);
         try writer.writeAll(" | ");
         try writeLengthSlice(writer, row.optimal_lengths[0..row.symbol_count]);
+        try writer.writeAll(" | ");
+        try writeLengthSlice(writer, row.package_merge_lengths[0..row.symbol_count]);
         try writer.writeAll(" |\n");
     }
 }
@@ -168,6 +191,8 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
 const Summary = struct {
     optimal_rows: usize = 0,
     worst_gap_bits: isize = 0,
+    package_merge_optimal_rows: usize = 0,
+    package_merge_worst_gap_bits: isize = 0,
 };
 
 fn summarizeRows(rows: []const Row) Summary {
@@ -175,6 +200,8 @@ fn summarizeRows(rows: []const Row) Summary {
     for (rows) |row| {
         if (row.optimal) summary.optimal_rows += 1;
         if (row.gap_bits > summary.worst_gap_bits) summary.worst_gap_bits = row.gap_bits;
+        if (row.package_merge_optimal) summary.package_merge_optimal_rows += 1;
+        if (row.package_merge_gap_bits > summary.package_merge_worst_gap_bits) summary.package_merge_worst_gap_bits = row.package_merge_gap_bits;
     }
     return summary;
 }
@@ -228,6 +255,83 @@ fn lengthsLess(lhs: *const [max_symbols]u4, rhs: *const [max_symbols]u4, symbol_
         if (left != right) return left < right;
     }
     return false;
+}
+
+const Package = struct {
+    weight: u64,
+    counts: [max_symbols]u4,
+};
+
+fn packageMergeCandidate(case: Case) [max_symbols]u4 {
+    var leaves: [max_symbols]Package = undefined;
+    for (0..case.symbol_count) |i| {
+        var counts: [max_symbols]u4 = @splat(0);
+        counts[i] = 1;
+        leaves[i] = .{ .weight = case.freqs[i], .counts = counts };
+    }
+    std.mem.sort(Package, leaves[0..case.symbol_count], {}, packageLess);
+
+    var current: [max_symbols * (max_symbols + 1)]Package = undefined;
+    var next: [max_symbols * (max_symbols + 1)]Package = undefined;
+    var current_len = case.symbol_count;
+    @memcpy(current[0..current_len], leaves[0..case.symbol_count]);
+
+    var depth: u4 = 1;
+    while (depth < case.max_bits) : (depth += 1) {
+        var pair_len: usize = 0;
+        var i: usize = 0;
+        while (i + 1 < current_len) : (i += 2) {
+            next[pair_len] = combinePackages(current[i], current[i + 1]);
+            pair_len += 1;
+        }
+        std.mem.sort(Package, next[0..pair_len], {}, packageLess);
+        current_len = mergePackageLists(current.len, &current, leaves[0..case.symbol_count], next[0..pair_len]);
+    }
+
+    const selected_count = 2 * case.symbol_count - 2;
+    var lengths: [max_symbols]u4 = @splat(0);
+    for (current[0..selected_count]) |package| {
+        for (package.counts[0..case.symbol_count], 0..) |count, symbol| lengths[symbol] += count;
+    }
+    return lengths;
+}
+
+fn combinePackages(lhs: Package, rhs: Package) Package {
+    var out = Package{ .weight = lhs.weight + rhs.weight, .counts = @splat(0) };
+    for (&out.counts, lhs.counts, rhs.counts) |*value, left, right| value.* = left + right;
+    return out;
+}
+
+fn packageLess(_: void, lhs: Package, rhs: Package) bool {
+    if (lhs.weight != rhs.weight) return lhs.weight < rhs.weight;
+    var i: usize = max_symbols;
+    while (i > 0) {
+        i -= 1;
+        if (lhs.counts[i] != rhs.counts[i]) return lhs.counts[i] < rhs.counts[i];
+    }
+    return false;
+}
+
+fn mergePackageLists(comptime n: usize, out: *[n]Package, leaves: []const Package, packages: []const Package) usize {
+    var out_len: usize = 0;
+    var leaf_i: usize = 0;
+    var package_i: usize = 0;
+    while (leaf_i < leaves.len or package_i < packages.len) {
+        const take_leaf = if (package_i >= packages.len)
+            true
+        else if (leaf_i >= leaves.len)
+            false
+        else
+            packageLess({}, leaves[leaf_i], packages[package_i]);
+        out[out_len] = if (take_leaf) leaves[leaf_i] else packages[package_i];
+        out_len += 1;
+        if (take_leaf) {
+            leaf_i += 1;
+        } else {
+            package_i += 1;
+        }
+    }
+    return out_len;
 }
 
 fn codeLengthCost(freq_values: *const [max_symbols]u32, lengths: *const [max_symbols]u4, symbol_count: usize) usize {
