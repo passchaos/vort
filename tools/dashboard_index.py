@@ -149,6 +149,9 @@ def dashboard_strict_health(artifacts: list[Path]) -> dict:
             mode_counts = data.get("mode_counts")
             if not isinstance(mode_counts, list):
                 mode_counts = []
+            mode_requirements = data.get("mode_requirements")
+            if not isinstance(mode_requirements, list):
+                mode_requirements = []
             return {
                 "present": True,
                 "ok": bool(data.get("ok")),
@@ -158,6 +161,9 @@ def dashboard_strict_health(artifacts: list[Path]) -> dict:
                 "matched_count": sum(int(row.get("matched") or 0) for row in mode_counts if isinstance(row, dict)),
                 "expected_mode_count": int(data.get("expected_mode_count") or 0),
                 "missing_mode_count": int(data.get("missing_mode_count") or 0),
+                "missing_checks": sum(int(row.get("missing_checks") or 0) for row in mode_requirements if isinstance(row, dict)),
+                "missing_expected_failures": sum(int(row.get("missing_expected_failures") or 0) for row in mode_requirements if isinstance(row, dict)),
+                "missing_matched": sum(int(row.get("missing_matched") or 0) for row in mode_requirements if isinstance(row, dict)),
                 "missing_modes": missing_modes,
             }
     return {
@@ -169,6 +175,9 @@ def dashboard_strict_health(artifacts: list[Path]) -> dict:
         "matched_count": 0,
         "expected_mode_count": 0,
         "missing_mode_count": 0,
+        "missing_checks": 0,
+        "missing_expected_failures": 0,
+        "missing_matched": 0,
         "missing_modes": [],
     }
 
@@ -295,7 +304,7 @@ def main() -> int:
         f"- validation healthy: `{validation_healthy}`",
         f"- validation unhealthy reasons: {len(validation_unhealthy_reasons)}",
         f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing, healthy `{header_healthy}`",
-        f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing), healthy `{strict_healthy}`",
+        f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing modes, checks/expected/matched deltas {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']}), healthy `{strict_healthy}`",
         "",
     ]
     if strict_health["missing_modes"]:
@@ -366,6 +375,9 @@ def main() -> int:
                 "dashboard_strict_matched_count": strict_health["matched_count"],
                 "dashboard_strict_expected_mode_count": strict_health["expected_mode_count"],
                 "dashboard_strict_missing_mode_count": strict_health["missing_mode_count"],
+                "dashboard_strict_missing_checks": strict_health["missing_checks"],
+                "dashboard_strict_missing_expected_failures": strict_health["missing_expected_failures"],
+                "dashboard_strict_missing_matched": strict_health["missing_matched"],
                 "dashboard_strict_missing_modes": strict_health["missing_modes"],
                 "artifacts": records,
             },

@@ -258,6 +258,7 @@ architecture blindly.
 - [x] Dashboard index strict mode fails when aggregate validation health is false and reports unhealthy reasons.
 - [x] Validation JSON schema checker validates dashboard health booleans against their component fields.
 - [x] Dashboard index surfaces dashboard strict expected/missing mode details.
+- [x] Dashboard index surfaces aggregate dashboard strict coverage deltas.
 - [x] Dashboard strict-mode smoke records actual-output truncation limit and truncation flag per check.
 - [x] Dashboard strict-mode smoke records original actual-output length per check.
 - [x] Dashboard strict-mode smoke exercises the actual-output truncation path with a synthetic long-output check.

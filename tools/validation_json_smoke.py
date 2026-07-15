@@ -314,6 +314,9 @@ def main() -> int:
         assert dashboard["dashboard_strict_matched_count"] == sum(row["matched"] for row in dashboard_strict["mode_counts"])
         assert dashboard["dashboard_strict_expected_mode_count"] == dashboard_strict["expected_mode_count"]
         assert dashboard["dashboard_strict_missing_mode_count"] == dashboard_strict["missing_mode_count"]
+        assert dashboard["dashboard_strict_missing_checks"] == sum(row["missing_checks"] for row in dashboard_strict["mode_requirements"])
+        assert dashboard["dashboard_strict_missing_expected_failures"] == sum(row["missing_expected_failures"] for row in dashboard_strict["mode_requirements"])
+        assert dashboard["dashboard_strict_missing_matched"] == sum(row["missing_matched"] for row in dashboard_strict["mode_requirements"])
         assert dashboard["dashboard_strict_missing_modes"] == dashboard_strict["missing_modes"]
         assert dashboard["validation_healthy"] == (
             dashboard["producer_healthy"]

@@ -662,7 +662,8 @@ Top-level fields:
   `dashboard_strict_check_count`, `dashboard_strict_mode_count`,
   `dashboard_strict_expected_failure_count`, `dashboard_strict_matched_count`,
   `dashboard_strict_expected_mode_count`, `dashboard_strict_missing_mode_count`,
-  `dashboard_strict_missing_modes`
+  `dashboard_strict_missing_checks`, `dashboard_strict_missing_expected_failures`,
+  `dashboard_strict_missing_matched`, `dashboard_strict_missing_modes`
 - `artifacts`
 
 Each artifact includes:
@@ -712,6 +713,9 @@ Example:
   "dashboard_strict_matched_count": 0,
   "dashboard_strict_expected_mode_count": 0,
   "dashboard_strict_missing_mode_count": 0,
+  "dashboard_strict_missing_checks": 0,
+  "dashboard_strict_missing_expected_failures": 0,
+  "dashboard_strict_missing_matched": 0,
   "dashboard_strict_missing_modes": [],
   "artifacts": [
     {
