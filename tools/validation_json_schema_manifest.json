@@ -13,6 +13,8 @@
         "header_inspect_required_workflow_count": "int",
         "dashboard_strict_check_count": "int",
         "dashboard_strict_mode_count": "int",
+        "dashboard_strict_expected_failure_count": "int",
+        "dashboard_strict_matched_count": "int",
         "dashboard_strict_expected_mode_count": "int",
         "dashboard_strict_missing_mode_count": "int",
         "dashboard_strict_missing_modes": "list",

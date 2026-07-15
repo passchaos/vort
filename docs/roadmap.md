@@ -250,6 +250,7 @@ architecture blindly.
 - [x] Dashboard strict-mode expected coverage matrix is stored in a schema-checked external JSON config.
 - [x] Validation docs checker cross-checks dashboard strict expected modes against schema mode enums.
 - [x] Dashboard index surfaces dashboard strict-mode check and mode counts.
+- [x] Dashboard index surfaces dashboard strict expected-failure and matched check totals.
 - [x] Dashboard index surfaces dashboard strict expected/missing mode details.
 - [x] Dashboard strict-mode smoke records actual-output truncation limit and truncation flag per check.
 - [x] Dashboard strict-mode smoke records original actual-output length per check.

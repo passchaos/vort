@@ -654,6 +654,7 @@ Top-level fields:
   `header_inspect_missing_workflows`
 - `dashboard_strict_present`, `dashboard_strict_ok`,
   `dashboard_strict_check_count`, `dashboard_strict_mode_count`,
+  `dashboard_strict_expected_failure_count`, `dashboard_strict_matched_count`,
   `dashboard_strict_expected_mode_count`, `dashboard_strict_missing_mode_count`,
   `dashboard_strict_missing_modes`
 - `artifacts`
@@ -692,6 +693,8 @@ Example:
   "dashboard_strict_ok": false,
   "dashboard_strict_check_count": 0,
   "dashboard_strict_mode_count": 0,
+  "dashboard_strict_expected_failure_count": 0,
+  "dashboard_strict_matched_count": 0,
   "dashboard_strict_expected_mode_count": 0,
   "dashboard_strict_missing_mode_count": 0,
   "dashboard_strict_missing_modes": [],
