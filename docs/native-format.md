@@ -156,7 +156,10 @@ caller-supplied dictionary bytes for dictionary-patch/deflate members. Both
 surfaces expose exact-size and output-limited allocator variants for callers that
 need bounded memory use across multi-frame inputs. Auto concatenated variants
 reuse embedded dictionary metadata when present, matching the indexed range auto
-decode behavior for self-contained dictionary streams.
+decode behavior for self-contained dictionary streams. Caller-owned
+concatenated `Into` variants report bytes written, decoded data-frame count, and
+CRC-32 of the concatenated logical payload while avoiding the final output
+allocation.
 
 ## Batch range summary APIs
 

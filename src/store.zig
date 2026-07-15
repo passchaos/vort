@@ -1050,6 +1050,12 @@ pub const RangeBatchDecodeResult = struct {
     }
 };
 
+pub const ConcatenatedDecodeIntoResult = struct {
+    output_written: usize,
+    frame_count: usize,
+    crc32: u32,
+};
+
 pub fn decodeRangeWithSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize) !RangeDecodeResult {
     return decodeRangeWithDictionarySummaryAlloc(allocator, null, input, index, offset, length);
 }
@@ -2783,6 +2789,24 @@ pub fn decodeConcatenatedAutoAllocLimited(allocator: std.mem.Allocator, input: [
     return decodeConcatenatedAutoAllocInternal(allocator, input, max_output_len, null);
 }
 
+pub fn decodeConcatenatedInto(allocator: std.mem.Allocator, input: []const u8, output: []u8) !ConcatenatedDecodeIntoResult {
+    return decodeConcatenatedWithDictionaryIntoInternal(allocator, null, input, output);
+}
+
+pub fn decodeConcatenatedWithDictionaryInto(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, output: []u8) !ConcatenatedDecodeIntoResult {
+    return decodeConcatenatedWithDictionaryIntoInternal(allocator, dict, input, output);
+}
+
+pub fn decodeConcatenatedAutoInto(allocator: std.mem.Allocator, input: []const u8, output: []u8) !ConcatenatedDecodeIntoResult {
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return decodeConcatenatedWithDictionaryIntoInternal(allocator, dict, input, output);
+    } else |err| switch (err) {
+        error.InvalidMagic => return decodeConcatenatedWithDictionaryIntoInternal(allocator, null, input, output),
+        else => return err,
+    }
+}
+
 fn decodeConcatenatedAutoAllocInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize, expected_output_len: ?usize) ![]u8 {
     if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
         defer allocator.free(dict);
@@ -2824,6 +2848,28 @@ fn decodeConcatSpanInto(allocator: std.mem.Allocator, dict: ?[]const u8, span: F
         return decodeDictionaryPatchInto(allocator, dictionary_bytes, span.frame, output);
     }
     return decodeAnyInto(span.frame, output);
+}
+
+fn decodeConcatenatedWithDictionaryIntoInternal(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, output: []u8) !ConcatenatedDecodeIntoResult {
+    var iterator = ConcatIterator.init(input);
+    var written_total: usize = 0;
+    var frame_count: usize = 0;
+    var crc = checksum.Crc32.init();
+    while (try iterator.next()) |span| {
+        const decoded_len = std.math.cast(usize, span.info.uncompressed_size) orelse return error.IntegerOverflow;
+        if (decoded_len > output.len - written_total) return error.OutputTooSmall;
+        const target = output[written_total..][0..decoded_len];
+        const written = try decodeConcatSpanInto(allocator, dict, span, target);
+        if (written != decoded_len) return error.SizeMismatch;
+        crc.update(target);
+        written_total += written;
+        frame_count += 1;
+    }
+    return .{
+        .output_written = written_total,
+        .frame_count = frame_count,
+        .crc32 = crc.digest(),
+    };
 }
 
 /// Bounded-buffer streaming decoder for one complete input frame. The input is
@@ -3078,6 +3124,15 @@ test "concatenated decode supports compressed frames and output bounds" {
     defer std.testing.allocator.free(limited);
     try std.testing.expectEqualSlices(u8, expected, limited);
 
+    var into_out: [expected.len]u8 = undefined;
+    const into = try decodeConcatenatedInto(std.testing.allocator, combined.items, &into_out);
+    try std.testing.expectEqual(expected.len, into.output_written);
+    try std.testing.expectEqual(@as(usize, 2), into.frame_count);
+    try std.testing.expectEqual(checksum.crc32(expected), into.crc32);
+    try std.testing.expectEqualSlices(u8, expected, &into_out);
+
+    var short_out: [expected.len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodeConcatenatedInto(std.testing.allocator, combined.items, &short_out));
     try std.testing.expectError(error.SizeMismatch, decodeConcatenatedAllocExactSize(std.testing.allocator, combined.items, expected.len - 1));
     try std.testing.expectError(error.SizeMismatch, decodeConcatenatedAllocExactSize(std.testing.allocator, combined.items, expected.len + 1));
     try std.testing.expectError(error.OutputLimitExceeded, decodeConcatenatedAllocLimited(std.testing.allocator, combined.items, expected.len - 1));
@@ -3112,6 +3167,13 @@ test "concatenated decode supports caller dictionaries with output bounds" {
     defer std.testing.allocator.free(limited);
     try std.testing.expectEqualSlices(u8, expected, limited);
 
+    var into_out: [expected.len]u8 = undefined;
+    const into = try decodeConcatenatedWithDictionaryInto(std.testing.allocator, dict, combined.items, &into_out);
+    try std.testing.expectEqual(expected.len, into.output_written);
+    try std.testing.expectEqual(@as(usize, 2), into.frame_count);
+    try std.testing.expectEqual(checksum.crc32(expected), into.crc32);
+    try std.testing.expectEqualSlices(u8, expected, &into_out);
+
     try std.testing.expectError(error.SizeMismatch, decodeConcatenatedWithDictionaryAllocExactSize(std.testing.allocator, dict, combined.items, expected.len - 1));
     try std.testing.expectError(error.OutputLimitExceeded, decodeConcatenatedWithDictionaryAllocLimited(std.testing.allocator, dict, combined.items, expected.len - 1));
 }
@@ -3135,6 +3197,13 @@ test "concatenated auto decode uses embedded dictionaries" {
     const limited = try decodeConcatenatedAutoAllocLimited(std.testing.allocator, stream, input.len);
     defer std.testing.allocator.free(limited);
     try std.testing.expectEqualSlices(u8, input, limited);
+
+    var into_out: [input.len]u8 = undefined;
+    const into = try decodeConcatenatedAutoInto(std.testing.allocator, stream, &into_out);
+    try std.testing.expectEqual(input.len, into.output_written);
+    try std.testing.expect(into.frame_count > 0);
+    try std.testing.expectEqual(checksum.crc32(input), into.crc32);
+    try std.testing.expectEqualSlices(u8, input, &into_out);
 
     try std.testing.expectError(error.SizeMismatch, decodeConcatenatedAutoAllocExactSize(std.testing.allocator, stream, input.len - 1));
     try std.testing.expectError(error.OutputLimitExceeded, decodeConcatenatedAutoAllocLimited(std.testing.allocator, stream, input.len - 1));

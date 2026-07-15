@@ -52,6 +52,7 @@ architecture blindly.
 - [x] Concatenated native decode supports non-dictionary compressed frame modes with exact-size and output-limited allocator variants.
 - [x] Concatenated native decode supports caller-supplied dictionaries for dictionary-patch/deflate members.
 - [x] Concatenated native auto decode uses embedded dictionaries for self-contained dictionary streams.
+- [x] Concatenated native caller-owned decode reports bytes, data-frame count, and CRC-32.
 - [x] Deterministic malformed-header/frame smoke corpus.
 - [x] Skippable native frames.
 - [x] In-memory frame indexes for concatenated native store streams.
