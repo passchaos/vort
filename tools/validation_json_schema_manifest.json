@@ -103,6 +103,7 @@
         ]
       },
       "item_fields": {
+        "argv": "list",
         "bytes": "int",
         "command": "str",
         "data_offset": "int",
@@ -135,6 +136,7 @@
       "collections": {
         "negative_items": {
           "fields": {
+            "argv": "list",
             "command": "str",
             "expected_error": "str",
             "matched": "bool",

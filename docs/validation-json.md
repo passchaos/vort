@@ -194,13 +194,13 @@ Important fields:
 - `case_count`, `raw_cases`, `zlib_cases`, `gzip_cases`
   (checked against the `cases` array by validation smoke)
 - `negative_cases`: malformed header cases expected to fail inspection
-- `negative_items`: case-level command/sample/error matches for malformed headers
+- `negative_items`: case-level command/sample/argv/error matches for malformed headers
   (`command` and `expected_error` are enum-checked by the schema manifest)
 - `dictionary_cases`: zlib FDICT/DICTID cases covered
 - `optional_header_cases`, `fhcrc_cases`: gzip optional-header/FHCRC cases covered
 - `cases`: case-level metadata including enum-checked `name`, replayable
-  `command`/`sample`, format, JSON `schema_name`, byte size, data offset, and
-  feature booleans. The manifest cross-checks `format` against `schema_name`
+  `command`/`sample`/`argv`, format, JSON `schema_name`, byte size, data
+  offset, and feature booleans. The manifest cross-checks `format` against `schema_name`
   and `schema_name` against the replay command.
 
 Example:
@@ -220,6 +220,7 @@ Example:
       "name": "raw_reserved_btype",
       "command": "inspect-raw-header-hex",
       "sample": "07",
+      "argv": ["inspect-raw-header-hex", "07"],
       "expected_error": "InvalidDeflateBlockType",
       "matched": true
     }
@@ -233,6 +234,7 @@ Example:
       "schema_name": "vort.zlib_header_info",
       "command": "inspect-zlib-header-hex",
       "sample": "78bb08610235cb4027013a2e067d",
+      "argv": ["inspect-zlib-header-hex", "78bb08610235cb4027013a2e067d"],
       "format": "zlib",
       "bytes": 14,
       "data_offset": 6,

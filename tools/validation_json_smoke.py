@@ -161,9 +161,17 @@ def main() -> int:
         )
         assert header_summary["cases"][0]["command"].startswith("inspect-")
         assert header_summary["cases"][0]["sample"]
+        assert header_summary["cases"][0]["argv"] == [
+            header_summary["cases"][0]["command"],
+            header_summary["cases"][0]["sample"],
+        ]
         assert header_summary["negative_cases"] >= 1
         assert len(header_summary["negative_items"]) == header_summary["negative_cases"]
         assert header_summary["negative_items"][0]["matched"] is True
+        assert header_summary["negative_items"][0]["argv"] == [
+            header_summary["negative_items"][0]["command"],
+            header_summary["negative_items"][0]["sample"],
+        ]
         assert header_summary["dictionary_cases"] >= 1
         assert header_summary["optional_header_cases"] >= 1
         validate_value_against_manifest(header_summary, schemas_def)
