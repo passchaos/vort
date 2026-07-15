@@ -97,3 +97,13 @@ Each block should eventually expose:
 - Differential compatibility tests for any deflate-compatible block mode.
 - Benchmarks against zlib, zlib-ng, zlib-rs, and zstd on the same machine.
 - A documented migration story for experimental v0 frames.
+
+## Frame-index checksum composition
+
+`frameIndexCombinedChecksum` composes the per-frame CRC-32 values recorded in a
+validated frame index into the CRC-32 of the logical concatenated payload. It
+uses the same `crc32Combine` primitive as other blocked/parallel checksum paths,
+so callers that already trust or have validated an index can compute whole-stream
+checksum metadata without decoding or rereading every frame payload. Normal
+sidecar/embedded validation remains responsible for proving that frame bytes and
+index entries match.

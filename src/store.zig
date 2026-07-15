@@ -761,6 +761,23 @@ pub fn validateFrameIndex(index: []const FrameIndexEntry) Error!void {
     }
 }
 
+/// Compose a whole-stream payload CRC from independently indexed frame CRCs.
+///
+/// Frame headers already store the CRC-32 of each uncompressed frame payload.
+/// For indexed/blocked streams this helper computes the CRC-32 of the logical
+/// concatenated payload by combining those per-frame checksums instead of
+/// decoding or rereading every payload byte. Callers should still use the normal
+/// index/frame validation paths when they need to prove the stream bytes match
+/// the index; this helper is purely the checksum-composition primitive.
+pub fn frameIndexCombinedChecksum(index: []const FrameIndexEntry) Error!u32 {
+    try validateFrameIndex(index);
+    var combined = checksum.crc32("");
+    for (index) |entry| {
+        combined = checksum.crc32Combine(combined, entry.checksum, entry.uncompressed_len);
+    }
+    return combined;
+}
+
 pub fn findFrameForOffset(index: []const FrameIndexEntry, uncompressed_offset: u64) ?usize {
     for (index, 0..) |entry, i| {
         if (uncompressed_offset >= entry.uncompressed_offset and uncompressed_offset < entry.uncompressed_offset + entry.uncompressed_len) return i;
@@ -2149,6 +2166,34 @@ test "frame index serializes and decodes as sidecar" {
     }
 }
 
+test "frame index combines frame checksums into whole payload checksum" {
+    const payloads = [_][]const u8{
+        "first block",
+        "second block with more entropy",
+        "third block",
+    };
+    var expected_payload = std.ArrayList(u8).empty;
+    defer expected_payload.deinit(std.testing.allocator);
+    var combined_stream = std.ArrayList(u8).empty;
+    defer combined_stream.deinit(std.testing.allocator);
+    for (payloads) |payload| {
+        try expected_payload.appendSlice(std.testing.allocator, payload);
+        const frame = try encodeBestAlloc(std.testing.allocator, payload);
+        defer std.testing.allocator.free(frame);
+        try combined_stream.appendSlice(std.testing.allocator, frame);
+    }
+
+    const index = try buildFrameIndexAlloc(std.testing.allocator, combined_stream.items);
+    defer std.testing.allocator.free(index);
+    try std.testing.expectEqual(checksum.crc32(expected_payload.items), try frameIndexCombinedChecksum(index));
+
+    const encoded = try encodeFrameIndexAlloc(std.testing.allocator, index);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeFrameIndexAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqual(checksum.crc32(expected_payload.items), try frameIndexCombinedChecksum(decoded));
+}
+
 test "frame index supports seek and range decode" {
     const parts = [_][]const u8{ "alpha", "beta", "gamma" };
     var combined: std.ArrayList(u8) = .empty;
@@ -2549,6 +2594,9 @@ test "blocked best stream selects native modes and supports range decode" {
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 10, 32);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[10..42], range);
+    const embedded = try parseEmbeddedIndexAlloc(std.testing.allocator, stream);
+    defer embedded.deinit(std.testing.allocator);
+    try std.testing.expectEqual(checksum.crc32(input), try frameIndexCombinedChecksum(embedded.entries));
 }
 
 test "sidecar blocked best stream keeps index external" {

@@ -57,6 +57,7 @@ pub const storeEncodeFrameIndexAlloc = store.encodeFrameIndexAlloc;
 pub const storeDecodeFrameIndexAlloc = store.decodeFrameIndexAlloc;
 pub const storeFindFrameForOffset = store.findFrameForOffset;
 pub const storeValidateFrameIndex = store.validateFrameIndex;
+pub const storeFrameIndexCombinedChecksum = store.frameIndexCombinedChecksum;
 pub const storeDecodeRangeAlloc = store.decodeRangeAlloc;
 pub const storeSidecarIndexedStream = store.SidecarIndexedStream;
 pub const storeEncodeSidecarIndexedStreamAlloc = store.encodeSidecarIndexedStreamAlloc;
