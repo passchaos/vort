@@ -321,13 +321,19 @@
       "fields": {
         "deflate_bytes": "int",
         "deflate_offset": "int",
+        "member_index": "int",
         "raw_header": "dict",
         "schema": "str",
         "schema_version": "int",
+        "scope": "str",
         "wrapper": "str",
         "wrapper_bytes": "int"
       },
       "enums": {
+        "scope": [
+          "zlib_stream",
+          "gzip_member"
+        ],
         "wrapper": [
           "zlib",
           "gzip"

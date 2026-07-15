@@ -401,6 +401,8 @@ def main(argv: list[str]) -> int:
     zlib_inner_json = json.loads(run(cli, "inspect-zlib-deflate-header-hex", zlib_frame.hex(), "json"))
     assert zlib_inner_json["schema"] == "vort.wrapped_deflate_header_info"
     assert zlib_inner_json["wrapper"] == "zlib"
+    assert zlib_inner_json["scope"] == "zlib_stream"
+    assert zlib_inner_json["member_index"] == 0
     assert zlib_inner_json["raw_header"]["block_type"] == "fixed"
     cases.append(
         {
@@ -491,6 +493,8 @@ def main(argv: list[str]) -> int:
     gzip_inner_json = json.loads(run(cli, "inspect-gzip-deflate-header-hex", gzip_frame.hex(), "json"))
     assert gzip_inner_json["schema"] == "vort.wrapped_deflate_header_info"
     assert gzip_inner_json["wrapper"] == "gzip"
+    assert gzip_inner_json["scope"] == "gzip_member"
+    assert gzip_inner_json["member_index"] == 0
     assert gzip_inner_json["raw_header"]["block_type"] == "fixed"
     cases.append(
         {
