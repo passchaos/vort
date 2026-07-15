@@ -712,7 +712,7 @@ Produced by:
 
 ```sh
 zig build run-dashboard-strict-dashboard
-python3 tools/dashboard_strict_smoke.py --summary zig-out/vort-dashboard-strict-smoke.json
+python3 tools/dashboard_strict_smoke.py --summary zig-out/vort-dashboard-strict-smoke.json --markdown zig-out/vort-dashboard-strict-smoke.md
 ```
 
 This schema summarizes positive and negative smoke checks for dashboard strict
@@ -731,6 +731,8 @@ Example:
       "name": "all_strict_ok",
       "mode": "all",
       "expected_failure": false,
+      "expected_output": "dashboard_index=",
+      "returncode": 0,
       "matched": true
     }
   ]

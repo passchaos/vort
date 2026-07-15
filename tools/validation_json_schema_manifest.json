@@ -87,9 +87,11 @@
       "item_collection": "checks",
       "item_fields": {
         "expected_failure": "bool",
+        "expected_output": "str",
         "matched": "bool",
         "mode": "str",
-        "name": "str"
+        "name": "str",
+        "returncode": "int"
       },
       "item_enums": {
         "mode": [

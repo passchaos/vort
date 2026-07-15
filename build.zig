@@ -654,7 +654,7 @@ pub fn build(b: *std.Build) void {
     const dashboard_strict_smoke_step = b.step("run-dashboard-strict-smoke", "Validate dashboard strict-mode positive and negative paths");
     dashboard_strict_smoke_step.dependOn(&dashboard_strict_smoke.step);
 
-    const dashboard_strict_dashboard = b.addSystemCommand(&.{ "python3", "tools/dashboard_strict_smoke.py", "--summary", "zig-out/vort-dashboard-strict-smoke.json" });
+    const dashboard_strict_dashboard = b.addSystemCommand(&.{ "python3", "tools/dashboard_strict_smoke.py", "--summary", "zig-out/vort-dashboard-strict-smoke.json", "--markdown", "zig-out/vort-dashboard-strict-smoke.md" });
     const dashboard_strict_dashboard_step = b.step("run-dashboard-strict-dashboard", "Write dashboard strict-mode smoke summary to zig-out");
     dashboard_strict_dashboard_step.dependOn(&dashboard_strict_dashboard.step);
 

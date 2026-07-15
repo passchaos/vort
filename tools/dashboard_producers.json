@@ -16,6 +16,10 @@
       "expected_format": "json",
       "smoke_gate": "zig build run-dashboard-strict-dashboard"
     },
+    "vort-dashboard-strict-smoke.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-dashboard-strict-dashboard"
+    },
     "vort-deflate-decode-stage-report.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build run-deflate-decode-stage-report-csv"
@@ -87,6 +91,7 @@
     "vort-dashboard-index.json": "zig build run-dashboard-index",
     "vort-dashboard-index.md": "zig build run-dashboard-index",
     "vort-dashboard-strict-smoke.json": "zig build run-dashboard-strict-dashboard",
+    "vort-dashboard-strict-smoke.md": "zig build run-dashboard-strict-dashboard",
     "vort-deflate-decode-stage-report.csv": "zig build run-deflate-decode-stage-report-csv",
     "vort-deflate-decode-stage-report.md": "zig build run-deflate-decode-stage-report-dashboard",
     "vort-dictionary-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard",
@@ -114,7 +119,8 @@
     "vort-validation-json-smoke.json",
     "vort-header-inspect-smoke.json",
     "vort-header-inspect-smoke.md",
-    "vort-dashboard-strict-smoke.json"
+    "vort-dashboard-strict-smoke.json",
+    "vort-dashboard-strict-smoke.md"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1

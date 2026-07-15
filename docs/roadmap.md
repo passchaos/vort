@@ -243,6 +243,7 @@ architecture blindly.
 - [x] Dashboard index exposes missing header inspection workflow details in the top-level manifest and strict failure message.
 - [x] Dashboard strict-mode smoke covers producer, smoke-gate, and header-inspection health gates.
 - [x] Dashboard strict-mode smoke writes a schema-checked JSON artifact retained by the dashboard index.
+- [x] Dashboard strict-mode smoke writes a Markdown artifact and records expected-output/returncode fields per check.
 - [x] Dashboard category smoke protects raw/zlib/gzip header inspection validation classification.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
