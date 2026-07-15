@@ -164,7 +164,9 @@ reuse embedded dictionary metadata when present, matching the indexed range auto
 decode behavior for self-contained dictionary streams. Caller-owned
 concatenated `Into` variants report bytes written, decoded data-frame count, and
 CRC-32 of the concatenated logical payload while avoiding the final output
-allocation.
+allocation. Allocator-returning concatenated decoders preflight the stream with
+`inspectConcatenated`, allocate the final output buffer once, and then reuse the
+same `Into` path.
 `inspectEmbeddedDictionary` validates the embedded dictionary skippable metadata
 without allocating dictionary bytes and reports the dictionary ID, content length,
 and skippable-frame offset for auto-decode preflight. Its options variant can
