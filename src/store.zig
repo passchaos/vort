@@ -2340,10 +2340,20 @@ pub fn decodeIndexedRangeInto(allocator: std.mem.Allocator, input: []const u8, o
     return decodeRangeInto(allocator, input, embedded.entries, offset, length, output);
 }
 
+pub fn decodeIndexedRangeIntoWithIndexBuffer(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize, output: []u8, index_buffer: []FrameIndexEntry) !RangeDecodeIntoResult {
+    const decoded_index = try decodeEmbeddedIndex(input, index_buffer);
+    return decodeRangeInto(allocator, input, index_buffer[0..decoded_index.entries_written], offset, length, output);
+}
+
 pub fn decodeIndexedRangesInto(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
     const embedded = try parseEmbeddedIndexAlloc(allocator, input);
     defer embedded.deinit(allocator);
     return decodeRangesInto(allocator, input, embedded.entries, requests, results);
+}
+
+pub fn decodeIndexedRangesIntoWithIndexBuffer(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, index_buffer: []FrameIndexEntry) !void {
+    const decoded_index = try decodeEmbeddedIndex(input, index_buffer);
+    return decodeRangesInto(allocator, input, index_buffer[0..decoded_index.entries_written], requests, results);
 }
 
 pub const SidecarValidationMode = enum {
@@ -2599,10 +2609,20 @@ pub fn decodeSidecarIndexedRangeInto(allocator: std.mem.Allocator, input: []cons
     return decodeRangeInto(allocator, input, index, offset, length, output);
 }
 
+pub fn decodeSidecarIndexedRangeIntoWithIndexBuffer(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize, output: []u8, index_buffer: []FrameIndexEntry) !RangeDecodeIntoResult {
+    const count = try decodeFrameIndex(sidecar_index, index_buffer);
+    return decodeRangeInto(allocator, input, index_buffer[0..count], offset, length, output);
+}
+
 pub fn decodeSidecarIndexedRangesInto(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
     const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
     defer allocator.free(index);
     return decodeRangesInto(allocator, input, index, requests, results);
+}
+
+pub fn decodeSidecarIndexedRangesIntoWithIndexBuffer(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, index_buffer: []FrameIndexEntry) !void {
+    const count = try decodeFrameIndex(sidecar_index, index_buffer);
+    return decodeRangesInto(allocator, input, index_buffer[0..count], requests, results);
 }
 
 pub fn decodeSidecarIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
@@ -3739,6 +3759,13 @@ test "sidecar index bytes support range decode without embedded index" {
     try std.testing.expectEqual(@as(u64, 3), into.offset);
     try std.testing.expectEqualSlices(u8, "habet", &buffer);
     try std.testing.expectEqual(checksum.crc32(&buffer), into.crc32);
+
+    var index_buffer: [2]FrameIndexEntry = undefined;
+    var fast_buffer: [5]u8 = undefined;
+    const fast_into = try decodeSidecarIndexedRangeIntoWithIndexBuffer(std.testing.failing_allocator, stream.items, sidecar, 0, fast_buffer.len, fast_buffer[0..], &index_buffer);
+    try std.testing.expectEqual(fast_buffer.len, fast_into.output_written);
+    try std.testing.expectEqualSlices(u8, "alpha", &fast_buffer);
+    try std.testing.expectEqual(checksum.crc32(&fast_buffer), fast_into.crc32);
 }
 
 test "sidecar index range decode rejects tampered checksum" {
@@ -4184,6 +4211,14 @@ test "indexed deflate stream supports embedded range decode" {
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, 6, 10);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, "alphabeta ", range);
+    const view = try viewEmbeddedIndex(stream);
+    const index_buffer = try std.testing.allocator.alloc(FrameIndexEntry, view.entry_count);
+    defer std.testing.allocator.free(index_buffer);
+    var full_first: [payloads[0].len]u8 = undefined;
+    const into = try decodeIndexedRangeIntoWithIndexBuffer(std.testing.failing_allocator, stream, 0, full_first.len, full_first[0..], index_buffer);
+    try std.testing.expectEqual(full_first.len, into.output_written);
+    try std.testing.expectEqualSlices(u8, payloads[0], &full_first);
+    try std.testing.expectEqual(checksum.crc32(payloads[0]), into.crc32);
 }
 
 test "indexed long-distance stream supports embedded range decode" {

@@ -53,7 +53,9 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureLimitedReject(allocator, deflate_rle_stream));
     try rows.append(allocator, try measureRangeAlloc(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeInto(allocator, indexed_deflate_stream));
+    try rows.append(allocator, try measureRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureBatchRangeInto(allocator, indexed_deflate_stream));
+    try rows.append(allocator, try measureBatchRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureEmbeddedValidation(allocator, self_contained_dict_stream));
 
     var stdout_buffer: [1024]u8 = undefined;
@@ -239,6 +241,18 @@ fn measureRangeInto(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
     return stats("indexed_range_into_full_deflate", stream.len, result.output_written, failing);
 }
 
+fn measureRangeIntoWithIndexBuffer(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const first_len = "hello hello hello hello".len;
+    const out = try backing.alloc(u8, first_len);
+    defer backing.free(out);
+    const view = try vort.storeViewEmbeddedIndex(stream);
+    const index = try backing.alloc(vort.store.FrameIndexEntry, view.entry_count);
+    defer backing.free(index);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.storeDecodeIndexedRangeIntoWithIndexBuffer(failing.allocator(), stream, 0, first_len, out, index);
+    return stats("indexed_range_into_index_buffer", stream.len, result.output_written, failing);
+}
+
 fn measureBatchRangeInto(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
     const index = try vort.storeBuildFrameIndexAlloc(backing, stream);
     defer backing.free(index);
@@ -255,6 +269,27 @@ fn measureBatchRangeInto(backing: std.mem.Allocator, stream: []const u8) !CaseSt
         .{ .offset = index[1].uncompressed_offset, .length = second_len, .output = second },
     }, results[0..]);
     return stats("batch_range_into_fast_paths", stream.len, results[0].output_written + results[1].output_written, failing);
+}
+
+fn measureBatchRangeIntoWithIndexBuffer(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const index = try vort.storeBuildFrameIndexAlloc(backing, stream);
+    defer backing.free(index);
+    const first_len = std.math.cast(usize, index[0].uncompressed_len) orelse return error.IntegerOverflow;
+    const second_len = std.math.cast(usize, index[1].uncompressed_len) orelse return error.IntegerOverflow;
+    const first = try backing.alloc(u8, first_len);
+    defer backing.free(first);
+    const second = try backing.alloc(u8, second_len);
+    defer backing.free(second);
+    const view = try vort.storeViewEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, view.entry_count);
+    defer backing.free(index_buffer);
+    var results: [2]vort.StoreRangeDecodeIntoResult = undefined;
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    try vort.storeDecodeIndexedRangesIntoWithIndexBuffer(failing.allocator(), stream, &.{
+        .{ .offset = 0, .length = first_len, .output = first },
+        .{ .offset = index[1].uncompressed_offset, .length = second_len, .output = second },
+    }, results[0..], index_buffer);
+    return stats("batch_range_into_index_buffer", stream.len, results[0].output_written + results[1].output_written, failing);
 }
 
 fn measureEmbeddedValidation(backing: std.mem.Allocator, stream: []const u8) !CaseStats {

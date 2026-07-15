@@ -58,6 +58,7 @@ architecture blindly.
 - [x] Allocator-returning concatenated native decode preflights total output and reuses caller-owned decode internally.
 - [x] Native allocation report records allocation counts for concatenated alloc/into/auto/limited decode paths.
 - [x] Native allocation report emits retained JSON/Markdown artifacts.
+- [x] Native allocation report compares indexed range decode with and without caller-owned index buffers.
 - [x] Embedded dictionary inspection validates dictionary metadata without allocating dictionary bytes.
 - [x] Embedded dictionary inspection options enforce expected dictionary ID and content length.
 - [x] Auto dictionary range/validation/concatenated decode paths borrow embedded dictionary bytes instead of copying them.
@@ -77,6 +78,7 @@ architecture blindly.
 - [x] Serialized frame indexes carry per-frame checksums validated by range decode.
 - [x] Serialized frame indexes expose entry-count preflight and caller-owned decode APIs.
 - [x] Embedded frame indexes expose borrowed payload views and caller-owned decode APIs.
+- [x] Indexed and sidecar range-into APIs can reuse caller-provided frame-index buffers.
 - [x] Frame indexes can compose per-frame CRC-32 values into a whole-stream checksum without rereading payload bytes.
 - [x] Public frame-index summary API exposes frame count, total uncompressed length, and combined checksum.
 - [x] Validation reports expose frame-count, total-uncompressed, and combined-checksum summaries for successful indexed streams.

@@ -135,6 +135,9 @@ index entries without forcing an allocation.
 Embedded-index helpers mirror that shape: `viewEmbeddedIndex` returns the
 borrowed serialized index payload, payload offset, and entry count, while
 `decodeEmbeddedIndex` fills caller-owned entry storage.
+Indexed and sidecar range decode also expose `WithIndexBuffer` variants that
+reuse caller-owned index entry storage for callers that want to avoid allocating
+while parsing the embedded or sidecar index.
 
 ## Range decode summary APIs
 
