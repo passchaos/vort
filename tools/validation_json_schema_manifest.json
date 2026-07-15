@@ -132,6 +132,9 @@
           "equals": "gzip"
         }
       },
+      "dict_sum_rules": {
+        "negative_cases": "negative_error_counts"
+      },
       "item_collection": "cases",
       "item_enums": {
         "command": [

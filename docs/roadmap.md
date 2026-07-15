@@ -189,6 +189,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection smoke schema-checks argv arrays against command/sample fields.
 - [x] raw/zlib/gzip header inspection smoke checks summary counters against recorded cases.
 - [x] raw/zlib/gzip header inspection smoke moves summary counter checks into the shared schema manifest.
+- [x] raw/zlib/gzip header inspection smoke schema-checks error distribution totals.
 - [x] raw/zlib/gzip header inspection smoke reports structured malformed-header failure items.
 - [x] raw/zlib/gzip header inspection smoke writes a schema-checked dashboard JSON artifact.
 - [x] raw/zlib/gzip header inspection smoke writes a Markdown dashboard artifact.

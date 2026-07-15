@@ -599,6 +599,7 @@ Each schema entry can contain:
 | `fields` | object | Required top-level fields mapped to type names. |
 | `enums` | object | Optional top-level string enum constraints. |
 | `count_rules` | object | Optional top-level count fields that must match list lengths or filtered item counts. |
+| `dict_sum_rules` | object | Optional top-level count fields that must equal the sum of values in a dict field. |
 | `item_collection` | string | Optional nested list field to inspect. |
 | `item_fields` | object | Required fields for the first nested item. |
 | `item_enums` | object | Optional nested item enum constraints. |

@@ -111,6 +111,21 @@ def require_count_rules(value: dict[str, Any], count_rules: dict[str, Any], labe
             raise AssertionError(f"{label}.{count_field}={actual!r} does not match count rule; expected {expected!r}")
 
 
+def require_dict_sum_rules(value: dict[str, Any], dict_sum_rules: dict[str, str], label: str) -> None:
+    for count_field, dict_field in dict_sum_rules.items():
+        if not isinstance(dict_field, str):
+            raise AssertionError(f"{label}.{count_field} dict sum rule must name a dict field")
+        counts = value.get(dict_field)
+        if not isinstance(counts, dict):
+            raise AssertionError(f"{label}.{dict_field} must be a dict for sum rule {count_field}")
+        if not all(isinstance(count, int) and not isinstance(count, bool) for count in counts.values()):
+            raise AssertionError(f"{label}.{dict_field} values must all be integers")
+        expected = sum(counts.values())
+        actual = value.get(count_field)
+        if actual != expected:
+            raise AssertionError(f"{label}.{count_field}={actual!r} does not match sum({dict_field}); expected {expected!r}")
+
+
 def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str, Any]) -> None:
     schema = value.get("schema")
     schema_def = schemas_def.get(schema)
@@ -123,6 +138,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     require_types(value, fields, schema)
     require_enums(value, schema_def.get("enums", {}), schema)
     require_count_rules(value, schema_def.get("count_rules", {}), schema)
+    require_dict_sum_rules(value, schema_def.get("dict_sum_rules", {}), schema)
 
     item_collection = schema_def.get("item_collection")
     if item_collection:
