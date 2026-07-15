@@ -183,6 +183,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection smoke covers malformed dynamic code-length failures through zlib/gzip inner-deflate inspection.
 - [x] zlib/gzip inner-deflate inspection smoke covers oversubscribed code-length alphabet failures.
 - [x] zlib/gzip inner-deflate inspection smoke covers dynamic repeat17 overrun failures.
+- [x] raw/zlib/gzip inner-deflate inspection smoke covers dynamic repeat18 overrun failures.
 - [x] raw/zlib/gzip header inspection smoke records successful zlib/gzip inner-deflate inspection cases.
 - [x] raw/zlib/gzip header inspection smoke covers zlib/gzip inner-deflate file workflows.
 - [x] gzip inner-deflate header inspection smoke covers concatenated gzip first-member behavior.
