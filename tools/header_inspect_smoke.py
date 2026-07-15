@@ -512,6 +512,24 @@ def main(argv: list[str]) -> int:
     assert zlib_dict_inner_json["raw_header"]["schema"] == "vort.raw_deflate_header_info"
     validate_value_against_manifest(zlib_dict_inner_json, schemas_def)
 
+    zlib_dict_inner_with_dict_json = json.loads(
+        run(cli, "inspect-zlib-dict-deflate-header-hex", zlib_dict_frame.hex(), dictionary.decode("ascii"), "json")
+    )
+    assert zlib_dict_inner_with_dict_json["schema"] == "vort.wrapped_deflate_header_info"
+    assert zlib_dict_inner_with_dict_json["wrapper"] == "zlib"
+    assert zlib_dict_inner_with_dict_json["stream_footer_offset"] > zlib_dict_inner_with_dict_json["deflate_offset"]
+    assert zlib_dict_inner_with_dict_json["stream_deflate_bytes"] == zlib_dict_inner_with_dict_json["stream_footer_offset"] - zlib_dict_inner_with_dict_json["deflate_offset"]
+    assert zlib_dict_inner_with_dict_json["stream_output_bytes"] == len(dict_payload)
+    assert zlib_dict_inner_with_dict_json["stream_end_offset"] == zlib_dict_inner_with_dict_json["stream_footer_offset"] + 4
+    assert zlib_dict_inner_with_dict_json["stream_end_offset"] == len(zlib_dict_frame)
+    assert zlib_dict_inner_with_dict_json["stream_footer_adler32"] == (zlib.adler32(dict_payload) & 0xFFFFFFFF)
+    assert zlib_dict_inner_with_dict_json["stream_adler32"] == zlib_dict_inner_with_dict_json["stream_footer_adler32"]
+    assert zlib_dict_inner_with_dict_json["stream_adler32_matches"] is True
+    validate_value_against_manifest(zlib_dict_inner_with_dict_json, schemas_def)
+    wrong_dict = expect_failure(cli, "inspect-zlib-dict-deflate-header-hex", zlib_dict_frame.hex(), "wrong", "json")
+    if "ChecksumMismatch" not in wrong_dict:
+        raise AssertionError(f"expected ChecksumMismatch for wrong zlib inspect dictionary, got {wrong_dict!r}")
+
     gzip_hex = run(cli, "inspect-gzip-header-hex", gzip_frame.hex())
     require_fields(
         gzip_hex,
@@ -711,6 +729,7 @@ def main(argv: list[str]) -> int:
         raw_dynamic_path = tmp_path / "sample-dynamic.raw"
         zlib_path = tmp_path / "sample.zlib"
         zlib_dict_path = tmp_path / "sample-dict.zlib"
+        dictionary_path = tmp_path / "sample.dict"
         gzip_path = tmp_path / "sample.gz"
         gzip_concat_path = tmp_path / "sample-cat.gz"
         gzip_optional_path = tmp_path / "sample-options.gz"
@@ -719,6 +738,7 @@ def main(argv: list[str]) -> int:
         raw_dynamic_path.write_bytes(raw_dynamic_frame)
         zlib_path.write_bytes(zlib_frame)
         zlib_dict_path.write_bytes(zlib_dict_frame)
+        dictionary_path.write_bytes(dictionary)
         gzip_path.write_bytes(gzip_frame)
         gzip_concat_path.write_bytes(gzip_concat_frame)
         gzip_optional_path.write_bytes(gzip_optional_frame)
@@ -737,6 +757,9 @@ def main(argv: list[str]) -> int:
         raw_dynamic_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_dynamic_path), "json"))
         zlib_file_json = json.loads(run(cli, "inspect-zlib-header-file", str(zlib_path), "json"))
         zlib_inner_file_json = json.loads(run(cli, "inspect-zlib-deflate-header-file", str(zlib_path), "json"))
+        zlib_dict_inner_file_json = json.loads(
+            run(cli, "inspect-zlib-dict-deflate-header-file", str(zlib_dict_path), str(dictionary_path), "json")
+        )
         gzip_inner_file_json = json.loads(run(cli, "inspect-gzip-deflate-header-file", str(gzip_path), "json"))
         gzip_optional_file_json = json.loads(run(cli, "inspect-gzip-header-file", str(gzip_optional_path), "json"))
         if raw_file != raw_hex:
@@ -763,6 +786,10 @@ def main(argv: list[str]) -> int:
             raise AssertionError(f"zlib JSON file/hex inspection mismatch: {zlib_file_json!r} != {zlib_json!r}")
         if zlib_inner_file_json != zlib_inner_json:
             raise AssertionError(f"zlib inner JSON file/hex inspection mismatch: {zlib_inner_file_json!r} != {zlib_inner_json!r}")
+        if zlib_dict_inner_file_json != zlib_dict_inner_with_dict_json:
+            raise AssertionError(
+                f"zlib dict inner JSON file/hex inspection mismatch: {zlib_dict_inner_file_json!r} != {zlib_dict_inner_with_dict_json!r}"
+            )
         if gzip_inner_file_json != gzip_inner_json:
             raise AssertionError(f"gzip inner JSON file/hex inspection mismatch: {gzip_inner_file_json!r} != {gzip_inner_json!r}")
         if gzip_optional_file_json != gzip_optional_json:

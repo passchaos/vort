@@ -93,6 +93,7 @@ zig build run -- decode-zlib-hex 7801cb48cdc9c90700062c0215
 zig build run -- inspect-zlib-header-hex 7801cb48cdc9c90700062c0215
 zig build run -- inspect-zlib-header-hex 7801cb48cdc9c90700062c0215 json
 zig build run -- inspect-zlib-deflate-header-hex 7801cb48cdc9c90700062c0215 json
+zig build run -- inspect-zlib-dict-deflate-header-hex 78f908610235cb4027013a2e067d "hello " json
 zig build run -- decode-zlib-dict-hex 78f908610235cb4027013a2e067d "hello "
 python3 - <<'PY'
 import zlib
@@ -108,6 +109,7 @@ p = b"hello hello hello"
 co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, zdict=d)
 open("/tmp/vort-dict.zlib", "wb").write(co.compress(p) + co.flush())
 PY
+zig build run -- inspect-zlib-dict-deflate-header-file /tmp/vort-dict.zlib /tmp/vort.dict json
 zig build run -- decode-zlib-dict-file /tmp/vort-dict.zlib /tmp/vort-dict.out /tmp/vort.dict
 zig build run -- decode-zlib-dict-file /tmp/vort-dict.zlib /tmp/vort-dict-limited.out /tmp/vort.dict 17
 zig build run -- encode-raw-dict-best-file /tmp/vort-dict.out /tmp/vort-dict.raw /tmp/vort.dict default

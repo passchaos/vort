@@ -323,7 +323,9 @@ Produced by:
 
 ```sh
 zig build run -- inspect-zlib-deflate-header-hex 7801cb48cdc9c90700062c0215 json
+zig build run -- inspect-zlib-dict-deflate-header-hex 78f908610235cb4027013a2e067d "hello " json
 zig build run -- inspect-zlib-deflate-header-file /tmp/vort.zlib json
+zig build run -- inspect-zlib-dict-deflate-header-file /tmp/vort-dict.zlib /tmp/vort.dict json
 zig build run -- inspect-gzip-deflate-header-file /tmp/vort.gz json
 zig build run -- inspect-gzip-deflate-header-file /tmp/vort-cat.gz json  # first member
 zig build run -- inspect-gzip-deflate-header-file /tmp/vort-cat.gz json 1
@@ -340,8 +342,9 @@ members. For zlib streams without a preset dictionary requirement,
 `stream_deflate_bytes` reports the exact raw DEFLATE payload length before the
 4-byte Adler-32 footer, and `stream_*adler32*` fields report stored-vs-computed
 checksum diagnostics. These zlib stream diagnostics are `null` when the stream
-requires a preset dictionary because the header-only CLI has no dictionary bytes
-to decode the payload. For gzip, `member_deflate_bytes` is the selected member's
+requires a preset dictionary and the header-only command has no dictionary bytes;
+use `inspect-zlib-dict-deflate-header-*` to supply the dictionary and emit full
+stream diagnostics for FDICT streams. For gzip, `member_deflate_bytes` is the selected member's
 exact raw DEFLATE payload length, `member_footer_offset` points at its 8-byte
 trailer, and `member_end_offset` is the exclusive end offset
 (`member_footer_offset + 8`). `member_output_bytes` is the exact decoded payload

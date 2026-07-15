@@ -844,6 +844,22 @@ pub fn main(init: std.process.Init) !void {
         } else {
             try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
         }
+    } else if (std.mem.eql(u8, command, "inspect-zlib-dict-deflate-header-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const dictionary_path = args.next() orelse return error.MissingCorpusPath;
+        const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const dictionary = try std.Io.Dir.cwd().readFileAlloc(init.io, dictionary_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(dictionary);
+        const wrapper = try vort.parseZlibHeaderInfo(compressed);
+        const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
+        const stream = try vort.inspectZlibStreamAllocWithDictionary(init.gpa, compressed, dictionary);
+        if (output_format == .json) {
+            try printWrappedDeflateHeaderJson(stdout, zlibWrappedDeflateContext(compressed.len, wrapper.data_offset, stream), info);
+        } else {
+            try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
+        }
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -926,6 +942,20 @@ pub fn main(init: std.process.Init) !void {
         const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
         if (output_format == .json) {
             const stream = try inspectZlibStreamForWrappedJson(init.gpa, compressed);
+            try printWrappedDeflateHeaderJson(stdout, zlibWrappedDeflateContext(compressed.len, wrapper.data_offset, stream), info);
+        } else {
+            try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
+        }
+    } else if (std.mem.eql(u8, command, "inspect-zlib-dict-deflate-header-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const dictionary = args.next() orelse return error.MissingCorpusPath;
+        const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const wrapper = try vort.parseZlibHeaderInfo(compressed);
+        const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
+        const stream = try vort.inspectZlibStreamAllocWithDictionary(init.gpa, compressed, dictionary);
+        if (output_format == .json) {
             try printWrappedDeflateHeaderJson(stdout, zlibWrappedDeflateContext(compressed.len, wrapper.data_offset, stream), info);
         } else {
             try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
@@ -1019,8 +1049,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Print parsed zlib header metadata for a file
         \\  inspect-zlib-deflate-header-hex [hex] [text|json]
         \\                              Inspect the raw deflate header inside a zlib stream
+        \\  inspect-zlib-dict-deflate-header-hex [hex] [dict] [text|json]
+        \\                              Inspect a zlib FDICT stream using a preset dictionary
         \\  inspect-zlib-deflate-header-file <in> [text|json]
         \\                              Inspect the raw deflate header inside a zlib file
+        \\  inspect-zlib-dict-deflate-header-file <in> <dict> [text|json]
+        \\                              Inspect a zlib FDICT file using a preset dictionary file
         \\  decode-gzip-hex [hex] [max_output]
         \\                              Decode gzip-wrapped deflate hex to text
         \\  decode-gzip-file <in> <out> [max_output]
