@@ -1994,10 +1994,34 @@ pub fn decodeIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict:
     return decodeRangeWithDictionaryAlloc(allocator, dict, input, embedded.entries, offset, length);
 }
 
+pub fn decodeIndexedRangeWithDictionarySummaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, offset: u64, length: usize) !RangeDecodeResult {
+    const embedded = try parseEmbeddedIndexAlloc(allocator, input);
+    defer embedded.deinit(allocator);
+    return decodeRangeWithDictionarySummaryAlloc(allocator, dict, input, embedded.entries, offset, length);
+}
+
+pub fn decodeIndexedRangeWithDictionaryInto(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
+    const embedded = try parseEmbeddedIndexAlloc(allocator, input);
+    defer embedded.deinit(allocator);
+    return decodeRangeWithDictionaryInto(allocator, dict, input, embedded.entries, offset, length, output);
+}
+
 pub fn decodeSelfContainedDictionaryRangeAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
     const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
     defer allocator.free(dict);
     return decodeIndexedRangeWithDictionaryAlloc(allocator, dict, input, offset, length);
+}
+
+pub fn decodeSelfContainedDictionaryRangeWithSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) !RangeDecodeResult {
+    const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
+    defer allocator.free(dict);
+    return decodeIndexedRangeWithDictionarySummaryAlloc(allocator, dict, input, offset, length);
+}
+
+pub fn decodeSelfContainedDictionaryRangeInto(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
+    const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
+    defer allocator.free(dict);
+    return decodeIndexedRangeWithDictionaryInto(allocator, dict, input, offset, length, output);
 }
 
 pub fn decodeIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
@@ -2006,6 +2030,26 @@ pub fn decodeIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const 
         return decodeIndexedRangeWithDictionaryAlloc(allocator, dict, input, offset, length);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeIndexedRangeAlloc(allocator, input, offset, length),
+        else => return err,
+    }
+}
+
+pub fn decodeIndexedRangeAutoWithSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) !RangeDecodeResult {
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return decodeIndexedRangeWithDictionarySummaryAlloc(allocator, dict, input, offset, length);
+    } else |err| switch (err) {
+        error.InvalidMagic => return decodeIndexedRangeWithSummaryAlloc(allocator, input, offset, length),
+        else => return err,
+    }
+}
+
+pub fn decodeIndexedRangeAutoInto(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return decodeIndexedRangeWithDictionaryInto(allocator, dict, input, offset, length, output);
+    } else |err| switch (err) {
+        error.InvalidMagic => return decodeIndexedRangeInto(allocator, input, offset, length, output),
         else => return err,
     }
 }
@@ -3090,6 +3134,15 @@ test "blocked dictionary best stream supports dictionary range decode" {
     const range = try decodeIndexedRangeWithDictionaryAlloc(std.testing.allocator, dict, stream, 5, 40);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[5..45], range);
+    const summary_range = try decodeIndexedRangeWithDictionarySummaryAlloc(std.testing.allocator, dict, stream, 5, 40);
+    defer summary_range.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, input[5..45], summary_range.bytes);
+    try std.testing.expectEqual(checksum.crc32(input[5..45]), summary_range.crc32);
+    var buffer: [40]u8 = undefined;
+    const into = try decodeIndexedRangeWithDictionaryInto(std.testing.allocator, dict, stream, 5, buffer.len, buffer[0..]);
+    try std.testing.expectEqual(buffer.len, into.output_written);
+    try std.testing.expectEqualSlices(u8, input[5..45], &buffer);
+    try std.testing.expectEqual(checksum.crc32(input[5..45]), into.crc32);
     try std.testing.expectError(error.InvalidDictionaryTraining, decodeIndexedRangeAlloc(std.testing.allocator, stream, 5, 40));
 }
 
@@ -3106,6 +3159,15 @@ test "self-contained dictionary stream embeds dictionary and supports range deco
     const range = try decodeSelfContainedDictionaryRangeAlloc(std.testing.allocator, stream, 7, 64);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[7..71], range);
+    const summary_range = try decodeSelfContainedDictionaryRangeWithSummaryAlloc(std.testing.allocator, stream, 7, 64);
+    defer summary_range.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, input[7..71], summary_range.bytes);
+    try std.testing.expectEqual(checksum.crc32(input[7..71]), summary_range.crc32);
+    var buffer: [64]u8 = undefined;
+    const into = try decodeSelfContainedDictionaryRangeInto(std.testing.allocator, stream, 7, buffer.len, buffer[0..]);
+    try std.testing.expectEqual(buffer.len, into.output_written);
+    try std.testing.expectEqualSlices(u8, input[7..71], &buffer);
+    try std.testing.expectEqual(checksum.crc32(input[7..71]), into.crc32);
 }
 
 test "sidecar self-contained dictionary stream keeps index external" {
@@ -3116,6 +3178,15 @@ test "sidecar self-contained dictionary stream keeps index external" {
     const range = try decodeSidecarIndexedRangeAutoAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, 7, 64);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, input[7..71], range);
+    const summary_range = try decodeSidecarIndexedRangeAutoWithSummaryAlloc(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, 7, 64);
+    defer summary_range.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, input[7..71], summary_range.bytes);
+    try std.testing.expectEqual(checksum.crc32(input[7..71]), summary_range.crc32);
+    var buffer: [64]u8 = undefined;
+    const into = try decodeSidecarIndexedRangeAutoInto(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, 7, buffer.len, buffer[0..]);
+    try std.testing.expectEqual(buffer.len, into.output_written);
+    try std.testing.expectEqualSlices(u8, input[7..71], &buffer);
+    try std.testing.expectEqual(checksum.crc32(input[7..71]), into.crc32);
 }
 
 test "trained dictionary best stream falls back safely and auto range decodes" {
