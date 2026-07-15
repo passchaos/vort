@@ -1119,7 +1119,6 @@ const GzipMemberLocation = struct {
 };
 
 fn locateGzipMember(allocator: std.mem.Allocator, compressed: []const u8, member_index: usize) !GzipMemberLocation {
-    _ = allocator;
     var offset: usize = 0;
     var index: usize = 0;
     while (offset < compressed.len) {
@@ -1127,12 +1126,35 @@ fn locateGzipMember(allocator: std.mem.Allocator, compressed: []const u8, member
         if (index == member_index) {
             return .{ .member_offset = offset, .deflate_offset = offset + header.data_offset };
         }
-        const search_start = offset + header.data_offset;
-        const next_rel = std.mem.indexOfPos(u8, compressed, search_start, "\x1f\x8b\x08") orelse return error.RangeOutOfBounds;
-        offset = next_rel;
+        // To advance across concatenated gzip members, decode just enough of
+        // the raw DEFLATE payload to learn its byte length, then skip the
+        // 8-byte gzip trailer. This avoids guessing from magic-byte scans,
+        // which can collide with compressed payload bytes.
+        const deflate_offset = offset + header.data_offset;
+        const raw_result = try decodeRawForOffset(allocator, compressed[deflate_offset..]);
+        const footer_offset = deflate_offset + raw_result.input_read;
+        if (compressed.len - footer_offset < 8) return error.TruncatedFrame;
+        offset = footer_offset + 8;
         index += 1;
     }
     return error.RangeOutOfBounds;
+}
+
+fn decodeRawForOffset(allocator: std.mem.Allocator, input: []const u8) !vort.deflate.DecodeResult {
+    var capacity: usize = 64 * 1024;
+    while (capacity <= 128 * 1024 * 1024) : (capacity *= 2) {
+        const out = try allocator.alloc(u8, capacity);
+        const decoded = vort.decodeRawDeflate(input, out) catch |err| {
+            allocator.free(out);
+            switch (err) {
+                error.OutputTooSmall => continue,
+                else => return err,
+            }
+        };
+        allocator.free(out);
+        return decoded;
+    }
+    return error.OutputLimitExceeded;
 }
 
 fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.RawDeflateHeaderInfo, output_format: HeaderInspectOutputFormat) !void {

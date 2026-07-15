@@ -336,7 +336,8 @@ starts, remaining bytes after that offset, and the nested raw header object.
 `deflate_span_kind` is currently `header_tail`: `deflate_bytes` is the byte count
 after the wrapper header; for concatenated gzip inputs that includes the
 selected member footer and later members. The optional `member_index` argument
-selects the gzip member to inspect and defaults to `0`.
+selects the gzip member to inspect and defaults to `0`; member traversal uses
+the previous member's decoded raw DEFLATE byte length plus the gzip trailer.
 
 Example:
 
