@@ -145,6 +145,14 @@ def main() -> int:
         assert header_summary["schema"] == "vort.header_inspect_smoke"
         assert header_summary["schema_version"] == 1
         assert header_summary["ok"] is True
+        header_cases = header_summary["cases"]
+        assert header_summary["case_count"] == len(header_cases)
+        assert header_summary["raw_cases"] == sum(1 for case in header_cases if case["format"] == "raw")
+        assert header_summary["zlib_cases"] == sum(1 for case in header_cases if case["format"] == "zlib")
+        assert header_summary["gzip_cases"] == sum(1 for case in header_cases if case["format"] == "gzip")
+        assert header_summary["dictionary_cases"] == sum(1 for case in header_cases if case["has_dictionary"])
+        assert header_summary["optional_header_cases"] == sum(1 for case in header_cases if case["has_optional_fields"])
+        assert header_summary["fhcrc_cases"] == sum(1 for case in header_cases if case["header_crc"])
         assert header_summary["raw_cases"] >= 1
         assert header_summary["cases"][0]["schema_name"] in (
             "vort.raw_deflate_header_info",

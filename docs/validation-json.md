@@ -192,6 +192,7 @@ Important fields:
 - `schema_version`: `1`
 - `ok`: whether the smoke passed
 - `case_count`, `raw_cases`, `zlib_cases`, `gzip_cases`
+  (checked against the `cases` array by validation smoke)
 - `negative_cases`: malformed header cases expected to fail inspection
 - `negative_items`: case-level command/sample/error matches for malformed headers
   (`command` and `expected_error` are enum-checked by the schema manifest)

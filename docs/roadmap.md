@@ -179,6 +179,7 @@ architecture blindly.
 - [x] raw/zlib/gzip header inspection smoke enum-checks successful case names.
 - [x] raw/zlib/gzip header inspection smoke records replayable command/sample fields for each successful case.
 - [x] raw/zlib/gzip header inspection smoke cross-checks case format, schema, and replay command.
+- [x] raw/zlib/gzip header inspection smoke checks summary counters against recorded cases.
 - [x] raw/zlib/gzip header inspection smoke reports structured malformed-header failure items.
 - [x] raw/zlib/gzip header inspection smoke writes a schema-checked dashboard JSON artifact.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
