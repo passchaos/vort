@@ -98,6 +98,7 @@
       "item_collection": "checks",
       "item_fields": {
         "actual_output": "str",
+        "actual_output_bytes": "int",
         "actual_output_limit": "int",
         "actual_output_truncated": "bool",
         "expected_failure": "bool",

@@ -83,6 +83,7 @@ def truncate_output(text: str, limit: int = 240) -> dict[str, object]:
     output = normalized[: limit - 1] + "…" if truncated else normalized
     return {
         "output": output,
+        "bytes": len(normalized),
         "limit": limit,
         "truncated": truncated,
     }
@@ -106,6 +107,7 @@ def check_row(
         "returncode": returncode,
         "expected_output": expected_output,
         "actual_output": actual["output"],
+        "actual_output_bytes": actual["bytes"],
         "actual_output_limit": actual["limit"],
         "actual_output_truncated": actual["truncated"],
     }
@@ -142,12 +144,12 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
         "",
         "## Checks",
         "",
-        "| name | mode | expected failure | returncode | expected output | actual output | truncated | matched |",
-        "| --- | --- | --- | ---: | --- | --- | --- | --- |",
+        "| name | mode | expected failure | returncode | expected output | actual bytes | actual output | truncated | matched |",
+        "| --- | --- | --- | ---: | --- | ---: | --- | --- | --- |",
     ])
     for row in summary["checks"]:
         lines.append(
-            f"| `{row['name']}` | `{row['mode']}` | `{row['expected_failure']}` | {row['returncode']} | `{row['expected_output']}` | `{row['actual_output']}` | `{row['actual_output_truncated']}` | `{row['matched']}` |"
+            f"| `{row['name']}` | `{row['mode']}` | `{row['expected_failure']}` | {row['returncode']} | `{row['expected_output']}` | {row['actual_output_bytes']} | `{row['actual_output']}` | `{row['actual_output_truncated']}` | `{row['matched']}` |"
         )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")

@@ -124,6 +124,7 @@ def main() -> int:
         assert all(
             "expected_output" in row
             and "actual_output" in row
+            and "actual_output_bytes" in row
             and "actual_output_limit" in row
             and "actual_output_truncated" in row
             and "returncode" in row
