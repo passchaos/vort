@@ -833,6 +833,12 @@ pub const RangeRequest = struct {
     length: usize,
 };
 
+pub const RangeIntoRequest = struct {
+    offset: u64,
+    length: usize,
+    output: []u8,
+};
+
 pub const RangeBatchDecodeResult = struct {
     ranges: []RangeDecodeResult,
 
@@ -881,6 +887,21 @@ pub fn decodeRangesWithDictionarySummaryAlloc(allocator: std.mem.Allocator, dict
 
 pub fn decodeRangeInto(allocator: std.mem.Allocator, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
     return decodeRangeWithDictionaryInto(allocator, null, input, index, offset, length, output);
+}
+
+pub fn decodeRangesInto(allocator: std.mem.Allocator, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
+    return decodeRangesWithDictionaryInto(allocator, null, input, index, requests, results);
+}
+
+pub fn decodeRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
+    if (results.len < requests.len) return error.OutputTooSmall;
+    // Decode many ranges with one structural index validation. The individual
+    // range path is still used for frame/header/checksum/dictionary behavior so
+    // batch and single-range calls remain byte-for-byte equivalent.
+    try validateFrameIndex(index);
+    for (requests, 0..) |request, i| {
+        results[i] = try decodeRangeWithDictionaryInto(allocator, dict, input, index, request.offset, request.length, request.output);
+    }
 }
 
 pub fn decodeRangeWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
@@ -1738,6 +1759,12 @@ pub fn decodeIndexedRangeInto(allocator: std.mem.Allocator, input: []const u8, o
     return decodeRangeInto(allocator, input, embedded.entries, offset, length, output);
 }
 
+pub fn decodeIndexedRangesInto(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
+    const embedded = try parseEmbeddedIndexAlloc(allocator, input);
+    defer embedded.deinit(allocator);
+    return decodeRangesInto(allocator, input, embedded.entries, requests, results);
+}
+
 pub const SidecarValidationMode = enum {
     /// Check only sidecar/index structure, frame spans, frame headers, and the
     /// checksum values recorded in frame headers. This is intentionally cheap
@@ -1989,6 +2016,12 @@ pub fn decodeSidecarIndexedRangeInto(allocator: std.mem.Allocator, input: []cons
     return decodeRangeInto(allocator, input, index, offset, length, output);
 }
 
+pub fn decodeSidecarIndexedRangesInto(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
+    const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
+    defer allocator.free(index);
+    return decodeRangesInto(allocator, input, index, requests, results);
+}
+
 pub fn decodeSidecarIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
     const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
     defer allocator.free(index);
@@ -2011,6 +2044,12 @@ pub fn decodeSidecarIndexedRangeWithDictionaryInto(allocator: std.mem.Allocator,
     const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
     defer allocator.free(index);
     return decodeRangeWithDictionaryInto(allocator, dict, input, index, offset, length, output);
+}
+
+pub fn decodeSidecarIndexedRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
+    const index = try decodeFrameIndexAlloc(allocator, sidecar_index);
+    defer allocator.free(index);
+    return decodeRangesWithDictionaryInto(allocator, dict, input, index, requests, results);
 }
 
 pub fn decodeSidecarIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
@@ -2053,6 +2092,16 @@ pub fn decodeSidecarIndexedRangeAutoInto(allocator: std.mem.Allocator, input: []
     }
 }
 
+pub fn decodeSidecarIndexedRangesAutoInto(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return decodeSidecarIndexedRangesWithDictionaryInto(allocator, dict, input, sidecar_index, requests, results);
+    } else |err| switch (err) {
+        error.InvalidMagic => return decodeSidecarIndexedRangesInto(allocator, input, sidecar_index, requests, results),
+        else => return err,
+    }
+}
+
 pub fn decodeIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, offset: u64, length: usize) ![]u8 {
     const embedded = try parseEmbeddedIndexAlloc(allocator, input);
     defer embedded.deinit(allocator);
@@ -2077,6 +2126,12 @@ pub fn decodeIndexedRangeWithDictionaryInto(allocator: std.mem.Allocator, dict: 
     return decodeRangeWithDictionaryInto(allocator, dict, input, embedded.entries, offset, length, output);
 }
 
+pub fn decodeIndexedRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
+    const embedded = try parseEmbeddedIndexAlloc(allocator, input);
+    defer embedded.deinit(allocator);
+    return decodeRangesWithDictionaryInto(allocator, dict, input, embedded.entries, requests, results);
+}
+
 pub fn decodeSelfContainedDictionaryRangeAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
     const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
     defer allocator.free(dict);
@@ -2099,6 +2154,12 @@ pub fn decodeSelfContainedDictionaryRangeInto(allocator: std.mem.Allocator, inpu
     const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
     defer allocator.free(dict);
     return decodeIndexedRangeWithDictionaryInto(allocator, dict, input, offset, length, output);
+}
+
+pub fn decodeSelfContainedDictionaryRangesInto(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
+    const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
+    defer allocator.free(dict);
+    return decodeIndexedRangesWithDictionaryInto(allocator, dict, input, requests, results);
 }
 
 pub fn decodeIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
@@ -2137,6 +2198,16 @@ pub fn decodeIndexedRangeAutoInto(allocator: std.mem.Allocator, input: []const u
         return decodeIndexedRangeWithDictionaryInto(allocator, dict, input, offset, length, output);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeIndexedRangeInto(allocator, input, offset, length, output),
+        else => return err,
+    }
+}
+
+pub fn decodeIndexedRangesAutoInto(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
+    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
+        defer allocator.free(dict);
+        return decodeIndexedRangesWithDictionaryInto(allocator, dict, input, requests, results);
+    } else |err| switch (err) {
+        error.InvalidMagic => return decodeIndexedRangesInto(allocator, input, requests, results),
         else => return err,
     }
 }
@@ -2553,6 +2624,17 @@ test "frame index supports seek and range decode" {
     try std.testing.expectEqual(@as(u64, 3), into.offset);
     try std.testing.expectEqualSlices(u8, "habetaga", &buffer);
     try std.testing.expectEqual(checksum.crc32(&buffer), into.crc32);
+    var batch_a: [5]u8 = undefined;
+    var batch_b: [8]u8 = undefined;
+    var batch_results: [2]RangeDecodeIntoResult = undefined;
+    try decodeRangesInto(std.testing.allocator, combined.items, index, &.{
+        .{ .offset = 0, .length = batch_a.len, .output = batch_a[0..] },
+        .{ .offset = 3, .length = batch_b.len, .output = batch_b[0..] },
+    }, batch_results[0..]);
+    try std.testing.expectEqualSlices(u8, "alpha", &batch_a);
+    try std.testing.expectEqual(checksum.crc32(&batch_a), batch_results[0].crc32);
+    try std.testing.expectEqualSlices(u8, "habetaga", &batch_b);
+    try std.testing.expectEqual(checksum.crc32(&batch_b), batch_results[1].crc32);
     try std.testing.expectError(error.OutputTooSmall, decodeRangeInto(std.testing.allocator, combined.items, index, 3, buffer.len, buffer[0..7]));
 }
 
@@ -3305,6 +3387,17 @@ test "sidecar self-contained dictionary stream keeps index external" {
     try std.testing.expectEqual(buffer.len, into.output_written);
     try std.testing.expectEqualSlices(u8, input[7..71], &buffer);
     try std.testing.expectEqual(checksum.crc32(input[7..71]), into.crc32);
+    var batch_a: [8]u8 = undefined;
+    var batch_b: [64]u8 = undefined;
+    var batch_results: [2]RangeDecodeIntoResult = undefined;
+    try decodeSidecarIndexedRangesAutoInto(std.testing.allocator, sidecar.stream, sidecar.sidecar_index, &.{
+        .{ .offset = 0, .length = batch_a.len, .output = batch_a[0..] },
+        .{ .offset = 7, .length = batch_b.len, .output = batch_b[0..] },
+    }, batch_results[0..]);
+    try std.testing.expectEqualSlices(u8, input[0..8], &batch_a);
+    try std.testing.expectEqual(checksum.crc32(input[0..8]), batch_results[0].crc32);
+    try std.testing.expectEqualSlices(u8, input[7..71], &batch_b);
+    try std.testing.expectEqual(checksum.crc32(input[7..71]), batch_results[1].crc32);
 }
 
 test "trained dictionary best stream falls back safely and auto range decodes" {

@@ -130,7 +130,10 @@ and bounds validation behavior as the byte-slice range APIs.
 `decodeRangesWithSummaryAlloc`, `decodeIndexedRangesWithSummaryAlloc`, and the
 dictionary/sidecar batch variants decode multiple logical ranges after a single
 index parse/validation step. Each returned `RangeDecodeResult` carries its own
-bytes, offset, and CRC-32 summary. The batch APIs are intended for workloads
-such as data-lake readers or archive manifests that need several small slices
-from the same indexed stream without reparsing the embedded or sidecar index for
-each request.
+bytes, offset, and CRC-32 summary. Batch `Into` variants such as
+`decodeRangesInto`, `decodeIndexedRangesInto`, and
+`decodeSidecarIndexedRangesAutoInto` fill caller-owned buffers and return per-
+range write counts plus CRC-32 summaries. The batch APIs are intended for
+workloads such as data-lake readers or archive manifests that need several small
+slices from the same indexed stream without reparsing the embedded or sidecar
+index for each request.
