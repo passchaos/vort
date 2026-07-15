@@ -662,6 +662,10 @@ pub fn build(b: *std.Build) void {
     dashboard_category_smoke_step.dependOn(&dashboard_category_smoke.step);
     dashboard_category_smoke_step.dependOn(dashboard_index_step);
 
+    const dashboard_strict_smoke = b.addSystemCommand(&.{ "python3", "tools/dashboard_strict_smoke.py" });
+    const dashboard_strict_smoke_step = b.step("run-dashboard-strict-smoke", "Validate dashboard strict-mode positive and negative paths");
+    dashboard_strict_smoke_step.dependOn(&dashboard_strict_smoke.step);
+
     const file_corpus_report_exe = b.addExecutable(.{
         .name = "vort-file-corpus-report",
         .root_module = b.createModule(.{
@@ -827,6 +831,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(validation_json_docs_check_step);
     ci_smoke_step.dependOn(dashboard_index_step);
     ci_smoke_step.dependOn(dashboard_category_smoke_step);
+    ci_smoke_step.dependOn(dashboard_strict_smoke_step);
     ci_smoke_step.dependOn(compat_benchmark_step);
     ci_smoke_step.dependOn(standard_corpus_report_step);
     ci_smoke_step.dependOn(standard_multi_corpus_dashboard_step);

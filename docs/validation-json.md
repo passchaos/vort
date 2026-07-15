@@ -626,6 +626,7 @@ Produced by:
 
 ```sh
 zig build run-dashboard-index
+zig build run-dashboard-strict-smoke
 python3 tools/dashboard_index.py --strict-header-inspect
 ```
 

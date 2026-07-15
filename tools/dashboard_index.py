@@ -139,17 +139,18 @@ def artifact_metadata(path: Path) -> str:
     return f"{stat.st_size} bytes, updated `{mtime}`"
 
 
-def header_inspect_health(records: list[dict]) -> dict:
-    for record in records:
-        if record.get("schema") == "vort.header_inspect_smoke":
-            missing_workflows = record.get("missing_workflows")
+def header_inspect_health(artifacts: list[Path]) -> dict:
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") == "vort.header_inspect_smoke":
+            missing_workflows = data.get("missing_workflows")
             if not isinstance(missing_workflows, list):
                 missing_workflows = []
             return {
                 "present": True,
-                "ok": bool(record.get("ok")),
-                "required_workflow_count": int(record.get("required_workflow_count") or 0),
-                "missing_workflow_count": int(record.get("missing_workflow_count") or 0),
+                "ok": bool(data.get("ok")),
+                "required_workflow_count": int(data.get("required_workflow_count") or 0),
+                "missing_workflow_count": int(data.get("missing_workflow_count") or 0),
                 "missing_workflows": missing_workflows,
             }
     return {
@@ -229,7 +230,7 @@ def main() -> int:
         for name in required_smoke_gates(producer_map)
         if name not in records_by_name or not records_by_name[name]["smoke_gate"]
     ]
-    header_health = header_inspect_health(records)
+    header_health = header_inspect_health(artifacts)
 
     lines = [
         "# Vort dashboard index",
