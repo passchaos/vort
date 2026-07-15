@@ -331,27 +331,65 @@ pub fn encodeBestAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
 
 pub fn decodeAnyAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const info = try parseHeader(input);
+    if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) return error.InvalidDictionaryTraining;
+    const payload = try payloadSliceFromInfo(input, info);
+    const output_len = try decodeAnyOutputLen(info);
+    const decoded = try allocator.alloc(u8, output_len);
+    errdefer allocator.free(decoded);
+    const written = try decodeAnyPayloadInto(info, payload, decoded);
+    std.debug.assert(written == decoded.len);
+    return decoded;
+}
+
+pub fn decodeAnyInto(input: []const u8, output: []u8) Error!usize {
+    const info = try parseHeader(input);
+    const payload = try payloadSliceFromInfo(input, info);
+    return decodeAnyPayloadInto(info, payload, output);
+}
+
+fn payloadSliceFromInfo(input: []const u8, info: FrameInfo) Error![]const u8 {
     const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
     const total_len = try encodedSize(payload_len);
     if (input.len < total_len) return error.TruncatedFrame;
-    const payload = input[header_len..total_len];
-    const decoded = switch (info.flags) {
-        flags_none => blk: {
-            if (info.uncompressed_size != info.stored_size) return error.CorruptFrame;
-            const out = try allocator.dupe(u8, payload);
-            break :blk out;
+    return input[header_len..total_len];
+}
+
+fn decodeAnyOutputLen(info: FrameInfo) Error!usize {
+    if (info.flags == flags_none and info.uncompressed_size != info.stored_size) return error.CorruptFrame;
+    return std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow;
+}
+
+fn decodeAnyPayloadInto(info: FrameInfo, payload: []const u8, output: []u8) Error!usize {
+    const output_len = try decodeAnyOutputLen(info);
+    if (output.len < output_len) return error.OutputTooSmall;
+    const target = output[0..output_len];
+    switch (info.flags) {
+        flags_none => {
+            if (payload.len != target.len) return error.CorruptFrame;
+            @memcpy(target, payload);
         },
-        flags_deflate => try deflate.decodeRawAutoAlloc(allocator, payload),
-        flags_rle => try decodeRlePayloadAlloc(allocator, payload, std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow),
+        flags_deflate => {
+            const decoded = deflate.decodeRawAuto(payload, target) catch |err| switch (err) {
+                error.OutputTooSmall => return error.SizeMismatch,
+                else => return err,
+            };
+            if (decoded.output_written != output_len) return error.SizeMismatch;
+            if (decoded.input_read != payload.len) return error.TrailingData;
+        },
+        flags_rle => {
+            const written = try decodeRlePayloadInto(payload, target);
+            if (written != output_len) return error.SizeMismatch;
+        },
         flags_dictionary_patch => return error.InvalidDictionaryTraining,
         flags_dictionary_deflate => return error.InvalidDictionaryTraining,
-        flags_ldm => try decodeLongDistancePayloadAlloc(allocator, payload, std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow),
+        flags_ldm => {
+            const written = try decodeLongDistancePayloadInto(payload, target);
+            if (written != output_len) return error.SizeMismatch;
+        },
         else => return error.CorruptFrame,
-    };
-    errdefer allocator.free(decoded);
-    if (decoded.len != info.uncompressed_size) return error.SizeMismatch;
-    if (checksum.crc32(decoded) != info.checksum) return error.ChecksumMismatch;
-    return decoded;
+    }
+    if (checksum.crc32(target) != info.checksum) return error.ChecksumMismatch;
+    return output_len;
 }
 
 pub fn decodeRleInto(input: []const u8, output: []u8) Error!usize {
@@ -3474,6 +3512,39 @@ test "decodeAnyAlloc preserves old store frames" {
     const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "store", decoded);
+}
+
+test "decodeAnyInto covers non-dictionary native frame modes" {
+    const store_frame = try encodeAlloc(std.testing.allocator, "store payload");
+    defer std.testing.allocator.free(store_frame);
+    var store_out: ["store payload".len]u8 = undefined;
+    try std.testing.expectEqual(store_out.len, try decodeAnyInto(store_frame, &store_out));
+    try std.testing.expectEqualSlices(u8, "store payload", &store_out);
+
+    const deflate_input = "hello hello hello hello";
+    const deflate_frame = try encodeDeflateAlloc(std.testing.allocator, deflate_input);
+    defer std.testing.allocator.free(deflate_frame);
+    var deflate_out: [deflate_input.len]u8 = undefined;
+    try std.testing.expectEqual(deflate_out.len, try decodeAnyInto(deflate_frame, &deflate_out));
+    try std.testing.expectEqualSlices(u8, deflate_input, &deflate_out);
+
+    const rle_input = "aaaaabbbbbbbbbbbbbcccccccccccccccc";
+    const rle_frame = try encodeRleAlloc(std.testing.allocator, rle_input);
+    defer std.testing.allocator.free(rle_frame);
+    var rle_out: [rle_input.len]u8 = undefined;
+    try std.testing.expectEqual(rle_out.len, try decodeAnyInto(rle_frame, &rle_out));
+    try std.testing.expectEqualSlices(u8, rle_input, &rle_out);
+
+    const prefix = deterministicLdmPrefix();
+    const ldm_input = prefix ++ "----" ++ prefix[0..64].*;
+    const ldm_frame = try encodeLongDistanceAlloc(std.testing.allocator, ldm_input, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(ldm_frame);
+    var ldm_out: [ldm_input.len]u8 = undefined;
+    try std.testing.expectEqual(ldm_out.len, try decodeAnyInto(ldm_frame, &ldm_out));
+    try std.testing.expectEqualSlices(u8, ldm_input, &ldm_out);
+
+    var short: ["store payload".len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodeAnyInto(store_frame, &short));
 }
 
 test "indexed deflate stream supports embedded range decode" {

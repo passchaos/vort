@@ -48,6 +48,7 @@ pub const storeEncodeBestWithLongDistanceAlloc = store.encodeBestWithLongDistanc
 pub const storeEncodeBestWithDictionaryAlloc = store.encodeBestWithDictionaryAlloc;
 pub const storeEncodeBestAlloc = store.encodeBestAlloc;
 pub const storeDecodeAnyAlloc = store.decodeAnyAlloc;
+pub const storeDecodeAnyInto = store.decodeAnyInto;
 pub const storeDecodeRleInto = store.decodeRleInto;
 pub const storeDecodeLongDistanceInto = store.decodeLongDistanceInto;
 pub const storeDecodeDictionaryPatchAlloc = store.decodeDictionaryPatchAlloc;

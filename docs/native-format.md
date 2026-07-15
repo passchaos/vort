@@ -125,6 +125,16 @@ offset/CRC-32 summary, avoiding the final range allocation when callers already
 own suitably sized storage. These variants preserve the same index, dictionary,
 and bounds validation behavior as the byte-slice range APIs.
 
+## One-shot decode-into APIs
+
+`decodeAnyInto` provides a caller-owned one-shot decoder for the non-dictionary
+native frame modes: store, deflate, RLE, and LDM. It verifies the same size,
+trailing-data, and CRC-32 contracts as `decodeAnyAlloc`, while avoiding the
+allocator-returning helper's output allocation when the caller already knows the
+frame's target buffer. Dictionary frames still require the dictionary-specific
+decode APIs because their correctness depends on caller-supplied dictionary
+bytes.
+
 ## Batch range summary APIs
 
 `decodeRangesWithSummaryAlloc`, `decodeIndexedRangesWithSummaryAlloc`, and the
