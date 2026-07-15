@@ -241,6 +241,17 @@ def main() -> int:
                 "decode_stage_error_rows": 1,
                 "decode_stage_matched_error_rows": 1,
                 "decode_stage_unmatched_error_rows": 0,
+                "python_zlib_diff_present": True,
+                "python_zlib_diff_ok": True,
+                "python_zlib_diff_healthy": True,
+                "python_zlib_diff_payloads": 1,
+                "python_zlib_diff_match_heavy_payloads": 1,
+                "python_zlib_diff_dynamic_payloads": 1,
+                "python_zlib_diff_dictionary_cases": 1,
+                "python_zlib_diff_zlib_dict_encode_cases": 1,
+                "python_zlib_diff_raw_dict_encode_cases": 1,
+                "python_zlib_diff_cli_successes": 1,
+                "python_zlib_diff_expected_failures": 1,
                 "artifacts": [
                     {
                         "name": "vort-huffman-length-report.csv",

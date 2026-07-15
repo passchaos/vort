@@ -21,6 +21,7 @@ HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
+PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -44,6 +45,8 @@ def write_producer_map(
     include_fuzz_coverage_smoke: bool = True,
     include_decode_stage_exact: bool = True,
     include_decode_stage_smoke: bool = True,
+    include_python_zlib_exact: bool = True,
+    include_python_zlib_smoke: bool = True,
     required_names: list[str] | None = None,
 ) -> None:
     artifact_metadata = {}
@@ -82,6 +85,11 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard",
         }
+    if include_python_zlib_smoke:
+        artifact_metadata[PYTHON_ZLIB_DIFF_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-python-zlib-diff-dashboard",
+        }
     exact = {}
     if include_header_exact:
         exact[HEADER_INSPECT_ARTIFACT] = "zig build run-header-inspect-dashboard"
@@ -97,6 +105,8 @@ def write_producer_map(
         exact[FUZZ_COVERAGE_ARTIFACT] = "zig build run-fuzz-corpus-coverage-smoke"
     if include_decode_stage_exact:
         exact[DECODE_STAGE_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
+    if include_python_zlib_exact:
+        exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
     payload = {
         "schema": "vort.dashboard_producers",
         "schema_version": 1,
@@ -491,6 +501,23 @@ def write_decode_stage_report(path: Path, *, ok: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
+    payload = {
+        "schema": "vort.python_zlib_diff_smoke",
+        "schema_version": 1,
+        "ok": ok,
+        "payloads": 3,
+        "match_heavy_payloads": 1,
+        "dynamic_payloads": 1,
+        "dictionary_cases": 1,
+        "zlib_dict_encode_cases": 1,
+        "raw_dict_encode_cases": 1,
+        "cli_successes": 8 if ok else 0,
+        "expected_failures": 2 if ok else 0,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def write_healthy_artifacts(root: Path) -> None:
     write_header_summary(root / HEADER_INSPECT_ARTIFACT)
     write_dashboard_strict_summary(root / DASHBOARD_STRICT_ARTIFACT)
@@ -499,6 +526,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
+    write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
 
 
 def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
@@ -908,6 +936,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "decode_stage_failed":
                 write_decode_stage_report(fixture_root / DECODE_STAGE_ARTIFACT, ok=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_python_zlib_diff_artifact":
+                (fixture_root / PYTHON_ZLIB_DIFF_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "python_zlib_diff_failed":
+                write_python_zlib_diff_report(fixture_root / PYTHON_ZLIB_DIFF_ARTIFACT, ok=False)
                 write_producer_map(producer_map)
             else:
                 raise AssertionError(f"unsupported validation reason fixture {fixture!r}")

@@ -95,6 +95,7 @@ def main() -> int:
         fuzz_coverage_path = ROOT / "tools" / "fuzz_corpus_expected_coverage.json"
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
         decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
+        python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -172,6 +173,19 @@ def main() -> int:
         assert decode_stage["matched_error_rows"] == decode_stage["error_rows"]
         assert decode_stage["unmatched_error_rows"] == 0
         validate_value_against_manifest(decode_stage, schemas_def)
+        python_zlib_diff = json.loads(python_zlib_diff_path.read_text())
+        assert python_zlib_diff["schema"] == "vort.python_zlib_diff_smoke"
+        assert python_zlib_diff["schema_version"] == 1
+        assert python_zlib_diff["ok"] is True
+        assert python_zlib_diff["payloads"] >= 1
+        assert python_zlib_diff["match_heavy_payloads"] >= 1
+        assert python_zlib_diff["dynamic_payloads"] >= 1
+        assert python_zlib_diff["dictionary_cases"] >= 1
+        assert python_zlib_diff["zlib_dict_encode_cases"] >= 1
+        assert python_zlib_diff["raw_dict_encode_cases"] >= 1
+        assert python_zlib_diff["cli_successes"] >= 1
+        assert python_zlib_diff["expected_failures"] >= 1
+        validate_value_against_manifest(python_zlib_diff, schemas_def)
         run([
             "python3",
             str(ROOT / "tools" / "dashboard_config_index_smoke.py"),
@@ -456,6 +470,7 @@ def main() -> int:
         shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
+        shutil.copyfile(python_zlib_diff_path, root / "vort-python-zlib-diff-smoke.json")
 
         run(
             [
@@ -548,6 +563,17 @@ def main() -> int:
         assert dashboard["decode_stage_error_rows"] == decode_stage["error_rows"]
         assert dashboard["decode_stage_matched_error_rows"] == decode_stage["matched_error_rows"]
         assert dashboard["decode_stage_unmatched_error_rows"] == decode_stage["unmatched_error_rows"]
+        assert dashboard["python_zlib_diff_present"] is True
+        assert dashboard["python_zlib_diff_ok"] is True
+        assert dashboard["python_zlib_diff_healthy"] is True
+        assert dashboard["python_zlib_diff_payloads"] == python_zlib_diff["payloads"]
+        assert dashboard["python_zlib_diff_match_heavy_payloads"] == python_zlib_diff["match_heavy_payloads"]
+        assert dashboard["python_zlib_diff_dynamic_payloads"] == python_zlib_diff["dynamic_payloads"]
+        assert dashboard["python_zlib_diff_dictionary_cases"] == python_zlib_diff["dictionary_cases"]
+        assert dashboard["python_zlib_diff_zlib_dict_encode_cases"] == python_zlib_diff["zlib_dict_encode_cases"]
+        assert dashboard["python_zlib_diff_raw_dict_encode_cases"] == python_zlib_diff["raw_dict_encode_cases"]
+        assert dashboard["python_zlib_diff_cli_successes"] == python_zlib_diff["cli_successes"]
+        assert dashboard["python_zlib_diff_expected_failures"] == python_zlib_diff["expected_failures"]
         assert dashboard["validation_healthy"] == (
             dashboard["producer_healthy"]
             and dashboard["smoke_gate_healthy"]
@@ -557,6 +583,7 @@ def main() -> int:
             and dashboard["huffman_length_healthy"]
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]
+            and dashboard["python_zlib_diff_healthy"]
         )
         assert dashboard["validation_unhealthy_reasons"] == ([] if dashboard["validation_healthy"] else dashboard["validation_unhealthy_reasons"])
         validate_value_against_manifest(dashboard, schemas_def)
@@ -596,6 +623,7 @@ def main() -> int:
                 dashboard_producers_required["schema"],
                 dashboard_producers_required_smoke["schema"],
                 decode_stage["schema"],
+                python_zlib_diff["schema"],
                 fuzz_report["schema"],
                 fuzz_coverage["schema"],
                 fuzz_coverage_smoke["schema"],

@@ -204,6 +204,13 @@
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard"
     },
     {
+      "expected_format": "json",
+      "name": "vort-python-zlib-diff-smoke.json",
+      "producer_step": "zig build run-python-zlib-diff-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-python-zlib-diff-dashboard"
+    },
+    {
       "expected_format": "md",
       "name": "vort-rust-deflate-benchmark-summary.md",
       "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary",

@@ -1230,6 +1230,38 @@ Example:
 }
 ```
 
+## `vort.python_zlib_diff_smoke`
+
+Produced by:
+
+```sh
+zig build run-python-zlib-diff-dashboard
+python3 tools/python_zlib_diff.py zig-out/bin/vort --summary zig-out/vort-python-zlib-diff-smoke.json
+```
+
+This schema summarizes the black-box Python `zlib` differential smoke. It keeps
+raw/zlib/gzip decode vectors, dynamic/adaptive encode vectors, preset-dictionary
+decode/encode vectors, file-command vectors, and expected-failure checks visible
+to dashboard health gates without parsing console text.
+
+Example:
+
+```json
+{
+  "schema": "vort.python_zlib_diff_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "payloads": 11,
+  "match_heavy_payloads": 3,
+  "dynamic_payloads": 3,
+  "dictionary_cases": 3,
+  "zlib_dict_encode_cases": 6,
+  "raw_dict_encode_cases": 5,
+  "cli_successes": 100,
+  "expected_failures": 20
+}
+```
+
 ## `vort.dashboard_index`
 
 Produced by:
@@ -1266,6 +1298,8 @@ Current unhealthy reason values are:
 - `fuzz_coverage_failed`
 - `missing_decode_stage_artifact`
 - `decode_stage_failed`
+- `missing_python_zlib_diff_artifact`
+- `python_zlib_diff_failed`
 
 Top-level fields:
 
@@ -1323,6 +1357,13 @@ Top-level fields:
 - `decode_stage_present`, `decode_stage_ok`, `decode_stage_healthy`,
   `decode_stage_rows`, `decode_stage_error_rows`,
   `decode_stage_matched_error_rows`, `decode_stage_unmatched_error_rows`
+- `python_zlib_diff_present`, `python_zlib_diff_ok`,
+  `python_zlib_diff_healthy`, `python_zlib_diff_payloads`,
+  `python_zlib_diff_match_heavy_payloads`,
+  `python_zlib_diff_dynamic_payloads`, `python_zlib_diff_dictionary_cases`,
+  `python_zlib_diff_zlib_dict_encode_cases`,
+  `python_zlib_diff_raw_dict_encode_cases`, `python_zlib_diff_cli_successes`,
+  `python_zlib_diff_expected_failures`
 - `artifacts`
 
 Each artifact includes:
@@ -1360,7 +1401,8 @@ Example:
     "missing_huffman_length_artifact",
     "missing_fuzz_corpus_artifact",
     "missing_fuzz_coverage_artifact",
-    "missing_decode_stage_artifact"
+    "missing_decode_stage_artifact",
+    "missing_python_zlib_diff_artifact"
   ],
   "header_inspect_present": false,
   "header_inspect_ok": false,
@@ -1434,6 +1476,17 @@ Example:
   "decode_stage_error_rows": 0,
   "decode_stage_matched_error_rows": 0,
   "decode_stage_unmatched_error_rows": 0,
+  "python_zlib_diff_present": false,
+  "python_zlib_diff_ok": false,
+  "python_zlib_diff_healthy": false,
+  "python_zlib_diff_payloads": 0,
+  "python_zlib_diff_match_heavy_payloads": 0,
+  "python_zlib_diff_dynamic_payloads": 0,
+  "python_zlib_diff_dictionary_cases": 0,
+  "python_zlib_diff_zlib_dict_encode_cases": 0,
+  "python_zlib_diff_raw_dict_encode_cases": 0,
+  "python_zlib_diff_cli_successes": 0,
+  "python_zlib_diff_expected_failures": 0,
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",

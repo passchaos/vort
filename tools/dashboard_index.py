@@ -22,6 +22,7 @@ def category_for(path: Path) -> str:
         or "dashboard-config" in name
         or "huffman-length" in name
         or "deflate-decode-stage" in name
+        or "python-zlib-diff" in name
         or "fuzz" in name
     ):
         return "validation"
@@ -320,6 +321,55 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
     }
 
 
+def python_zlib_diff_health(artifacts: list[Path]) -> dict:
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") != "vort.python_zlib_diff_smoke":
+            continue
+        payloads = int(data.get("payloads") or 0)
+        match_heavy_payloads = int(data.get("match_heavy_payloads") or 0)
+        dynamic_payloads = int(data.get("dynamic_payloads") or 0)
+        dictionary_cases = int(data.get("dictionary_cases") or 0)
+        zlib_dict_encode_cases = int(data.get("zlib_dict_encode_cases") or 0)
+        raw_dict_encode_cases = int(data.get("raw_dict_encode_cases") or 0)
+        cli_successes = int(data.get("cli_successes") or 0)
+        expected_failures = int(data.get("expected_failures") or 0)
+        return {
+            "present": True,
+            "ok": bool(data.get("ok")),
+            "payloads": payloads,
+            "match_heavy_payloads": match_heavy_payloads,
+            "dynamic_payloads": dynamic_payloads,
+            "dictionary_cases": dictionary_cases,
+            "zlib_dict_encode_cases": zlib_dict_encode_cases,
+            "raw_dict_encode_cases": raw_dict_encode_cases,
+            "cli_successes": cli_successes,
+            "expected_failures": expected_failures,
+            "healthy": bool(data.get("ok"))
+            and payloads > 0
+            and match_heavy_payloads > 0
+            and dynamic_payloads > 0
+            and dictionary_cases > 0
+            and zlib_dict_encode_cases > 0
+            and raw_dict_encode_cases > 0
+            and cli_successes > 0
+            and expected_failures > 0,
+        }
+    return {
+        "present": False,
+        "ok": False,
+        "payloads": 0,
+        "match_heavy_payloads": 0,
+        "dynamic_payloads": 0,
+        "dictionary_cases": 0,
+        "zlib_dict_encode_cases": 0,
+        "raw_dict_encode_cases": 0,
+        "cli_successes": 0,
+        "expected_failures": 0,
+        "healthy": False,
+    }
+
+
 def artifact_metadata(path: Path) -> str:
     stat = path.stat()
     mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
@@ -502,6 +552,7 @@ def main() -> int:
     huffman_health = huffman_length_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
     decode_stage_health_summary = decode_stage_health(artifacts)
+    python_zlib_health = python_zlib_diff_health(artifacts)
     producer_healthy = len(producer_step_missing) == 0
     smoke_gate_healthy = len(smoke_gate_required_missing) == 0
     header_healthy = (
@@ -530,7 +581,8 @@ def main() -> int:
     huffman_healthy = huffman_health["healthy"]
     fuzz_healthy = fuzz_health["healthy"]
     decode_stage_healthy = decode_stage_health_summary["healthy"]
-    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and sidecar_corrupt_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy
+    python_zlib_healthy = python_zlib_health["healthy"]
+    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and sidecar_corrupt_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy and python_zlib_healthy
     validation_unhealthy_reasons = []
     if not producer_healthy:
         validation_unhealthy_reasons.append("missing_producer_steps")
@@ -570,6 +622,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_decode_stage_artifact")
     elif not decode_stage_healthy:
         validation_unhealthy_reasons.append("decode_stage_failed")
+    if not python_zlib_health["present"]:
+        validation_unhealthy_reasons.append("missing_python_zlib_diff_artifact")
+    elif not python_zlib_healthy:
+        validation_unhealthy_reasons.append("python_zlib_diff_failed")
 
     lines = [
         "# Vort dashboard index",
@@ -590,6 +646,7 @@ def main() -> int:
         f"- huffman length oracle: {huffman_health['optimal_rows']}/{huffman_health['row_count']} production optimal rows, {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} package-merge optimal rows, gaps {huffman_health['worst_gap_bits']}/{huffman_health['package_merge_worst_gap_bits']}, malformed rows {huffman_health['malformed_rows']}, healthy `{huffman_healthy}`",
         f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
+        f"- Python zlib differential: payloads {python_zlib_health['payloads']}, dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
         "",
     ]
     if strict_health["missing_modes"]:
@@ -717,6 +774,17 @@ def main() -> int:
                 "decode_stage_error_rows": decode_stage_health_summary["error_rows"],
                 "decode_stage_matched_error_rows": decode_stage_health_summary["matched_error_rows"],
                 "decode_stage_unmatched_error_rows": decode_stage_health_summary["unmatched_error_rows"],
+                "python_zlib_diff_present": python_zlib_health["present"],
+                "python_zlib_diff_ok": python_zlib_health["ok"],
+                "python_zlib_diff_healthy": python_zlib_healthy,
+                "python_zlib_diff_payloads": python_zlib_health["payloads"],
+                "python_zlib_diff_match_heavy_payloads": python_zlib_health["match_heavy_payloads"],
+                "python_zlib_diff_dynamic_payloads": python_zlib_health["dynamic_payloads"],
+                "python_zlib_diff_dictionary_cases": python_zlib_health["dictionary_cases"],
+                "python_zlib_diff_zlib_dict_encode_cases": python_zlib_health["zlib_dict_encode_cases"],
+                "python_zlib_diff_raw_dict_encode_cases": python_zlib_health["raw_dict_encode_cases"],
+                "python_zlib_diff_cli_successes": python_zlib_health["cli_successes"],
+                "python_zlib_diff_expected_failures": python_zlib_health["expected_failures"],
                 "artifacts": records,
             },
             indent=2,

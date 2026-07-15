@@ -378,6 +378,12 @@ pub fn build(b: *std.Build) void {
     const python_zlib_diff_step = b.step("run-python-zlib-diff", "Run black-box differential smoke against Python zlib");
     python_zlib_diff_step.dependOn(&python_zlib_diff.step);
 
+    const python_zlib_diff_dashboard = b.addSystemCommand(&.{ "python3", "tools/python_zlib_diff.py" });
+    python_zlib_diff_dashboard.addArtifactArg(cli_exe);
+    python_zlib_diff_dashboard.addArgs(&.{ "--summary", "zig-out/vort-python-zlib-diff-smoke.json" });
+    const python_zlib_diff_dashboard_step = b.step("run-python-zlib-diff-dashboard", "Write Python zlib differential smoke summary to zig-out");
+    python_zlib_diff_dashboard_step.dependOn(&python_zlib_diff_dashboard.step);
+
     const gzip_cli_diff = b.addSystemCommand(&.{ "python3", "tools/gzip_cli_diff.py" });
     gzip_cli_diff.addArtifactArg(cli_exe);
     const gzip_cli_diff_step = b.step("run-gzip-cli-diff", "Run black-box differential smoke against system gzip CLI");
@@ -696,6 +702,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     validation_json_smoke.step.dependOn(fuzz_corpus_coverage_smoke_step);
     validation_json_smoke.step.dependOn(deflate_decode_stage_report_dashboard_step);
+    validation_json_smoke.step.dependOn(python_zlib_diff_dashboard_step);
     const validation_json_smoke_step = b.step("run-validation-json-smoke", "Validate CLI and report JSON schema outputs");
     validation_json_smoke_step.dependOn(&validation_json_smoke.step);
 
@@ -706,6 +713,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     validation_json_dashboard.step.dependOn(fuzz_corpus_coverage_smoke_step);
     validation_json_dashboard.step.dependOn(deflate_decode_stage_report_dashboard_step);
+    validation_json_dashboard.step.dependOn(python_zlib_diff_dashboard_step);
     const validation_json_dashboard_step = b.step("run-validation-json-dashboard", "Write validation JSON schema smoke summary to zig-out");
     validation_json_dashboard_step.dependOn(&validation_json_dashboard.step);
 
@@ -747,6 +755,7 @@ pub fn build(b: *std.Build) void {
 
     const dashboard_index = b.addSystemCommand(&.{ "python3", "tools/dashboard_index.py", "--strict-producers", "--strict-smoke-gates", "--strict-header-inspect", "--strict-validation-health" });
     dashboard_index.step.dependOn(sidecar_corrupt_dashboard_step);
+    dashboard_index.step.dependOn(python_zlib_diff_dashboard_step);
     dashboard_index.step.dependOn(validation_json_dashboard_step);
     dashboard_index.step.dependOn(validation_json_docs_negative_smoke_step);
     dashboard_index.step.dependOn(dashboard_config_index_smoke_step);

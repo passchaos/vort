@@ -4,6 +4,7 @@
 This script intentionally uses the built Vort CLI as a black-box process so it
 exercises public command behavior in addition to Python/zlib compatibility.
 """
+import json
 import pathlib
 import re
 import subprocess
@@ -12,11 +13,41 @@ import tempfile
 import zlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-CLI = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "zig-out" / "bin" / "vort"
+CLI = ROOT / "zig-out" / "bin" / "vort"
+SUMMARY_PATH: pathlib.Path | None = None
+
+
+METRICS = {
+    "cli_successes": 0,
+    "expected_failures": 0,
+}
+
+
+def parse_args(argv: list[str]) -> tuple[pathlib.Path, pathlib.Path | None]:
+    cli = ROOT / "zig-out" / "bin" / "vort"
+    summary_path: pathlib.Path | None = None
+    positional: list[str] = []
+    index = 1
+    while index < len(argv):
+        arg = argv[index]
+        if arg == "--summary":
+            if index + 1 >= len(argv):
+                raise SystemExit("usage: python_zlib_diff.py [<vort-cli>] [--summary <path>]")
+            summary_path = pathlib.Path(argv[index + 1])
+            index += 2
+            continue
+        positional.append(arg)
+        index += 1
+    if positional:
+        if len(positional) != 1:
+            raise SystemExit("usage: python_zlib_diff.py [<vort-cli>] [--summary <path>]")
+        cli = pathlib.Path(positional[0])
+    return cli, summary_path
 
 
 def run_cli(*args: str) -> str:
     result = subprocess.run([str(CLI), *args], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE)
+    METRICS["cli_successes"] += 1
     return result.stdout.strip()
 
 
@@ -33,9 +64,17 @@ def expect_cli_failure(*args: str, error_name: str) -> None:
         raise AssertionError(f"expected {args!r} to fail with {error_name}, got stdout={result.stdout!r}")
     if error_name not in result.stderr:
         raise AssertionError(f"expected {error_name} in stderr for {args!r}, got stderr={result.stderr!r}")
+    METRICS["expected_failures"] += 1
+
+
+def write_summary(path: pathlib.Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def main() -> int:
+    global CLI, SUMMARY_PATH
+    CLI, SUMMARY_PATH = parse_args(sys.argv)
     if not CLI.exists():
         raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
 
@@ -387,7 +426,26 @@ def main() -> int:
     assert zlib.decompress(hello_zlib) == b"hello"
     assert zlib.decompress(hello_gzip, wbits=31) == b"hello"
 
-    print(f"python zlib differential smoke: payloads={len(payloads)} match_heavy=3 dynamic_payloads={len(dynamic_payloads)} cli={CLI}")
+    summary = {
+        "schema": "vort.python_zlib_diff_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "payloads": len(payloads),
+        "match_heavy_payloads": 3,
+        "dynamic_payloads": len(dynamic_payloads),
+        "dictionary_cases": len(dict_cases),
+        "zlib_dict_encode_cases": len(zlib_dict_encode_cases),
+        "raw_dict_encode_cases": len(raw_dict_encode_cases),
+        "cli_successes": METRICS["cli_successes"],
+        "expected_failures": METRICS["expected_failures"],
+    }
+    if SUMMARY_PATH is not None:
+        write_summary(SUMMARY_PATH, summary)
+    print(
+        "python zlib differential smoke: "
+        f"payloads={len(payloads)} match_heavy=3 dynamic_payloads={len(dynamic_payloads)} "
+        f"cli_successes={METRICS['cli_successes']} expected_failures={METRICS['expected_failures']} cli={CLI}"
+    )
     return 0
 
 

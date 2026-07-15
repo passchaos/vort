@@ -163,6 +163,7 @@ zig build run-checksum-zlib-diff
 zig build run-zlib-diff
 zig build run-gzip-diff
 zig build run-python-zlib-diff
+zig build run-python-zlib-diff-dashboard
 zig build run-gzip-cli-diff
 zig build run-header-inspect-smoke
 zig build run-header-inspect-dashboard

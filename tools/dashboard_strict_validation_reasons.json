@@ -96,6 +96,16 @@
       "reason": "decode_stage_failed",
       "check": "validation_decode_stage_failed",
       "fixture": "decode_stage_failed"
+    },
+    {
+      "reason": "missing_python_zlib_diff_artifact",
+      "check": "validation_missing_python_zlib_diff_artifact",
+      "fixture": "missing_python_zlib_diff_artifact"
+    },
+    {
+      "reason": "python_zlib_diff_failed",
+      "check": "validation_python_zlib_diff_failed",
+      "fixture": "python_zlib_diff_failed"
     }
   ]
 }

@@ -78,6 +78,17 @@
         "decode_stage_error_rows": "int",
         "decode_stage_matched_error_rows": "int",
         "decode_stage_unmatched_error_rows": "int",
+        "python_zlib_diff_present": "bool",
+        "python_zlib_diff_ok": "bool",
+        "python_zlib_diff_healthy": "bool",
+        "python_zlib_diff_payloads": "int",
+        "python_zlib_diff_match_heavy_payloads": "int",
+        "python_zlib_diff_dynamic_payloads": "int",
+        "python_zlib_diff_dictionary_cases": "int",
+        "python_zlib_diff_zlib_dict_encode_cases": "int",
+        "python_zlib_diff_raw_dict_encode_cases": "int",
+        "python_zlib_diff_cli_successes": "int",
+        "python_zlib_diff_expected_failures": "int",
         "producer_healthy": "bool",
         "producer_step_allowed_missing": "list",
         "producer_step_covered": "int",
@@ -111,7 +122,8 @@
             "sidecar_corrupt_healthy",
             "huffman_length_healthy",
             "fuzz_corpus_healthy",
-            "decode_stage_healthy"
+            "decode_stage_healthy",
+            "python_zlib_diff_healthy"
           ]
         },
         "header_inspect_healthy": {
@@ -209,6 +221,22 @@
           "positive": [
             "sidecar_corrupt_rows"
           ]
+        },
+        "python_zlib_diff_healthy": {
+          "all": [
+            "python_zlib_diff_present",
+            "python_zlib_diff_ok"
+          ],
+          "positive": [
+            "python_zlib_diff_payloads",
+            "python_zlib_diff_match_heavy_payloads",
+            "python_zlib_diff_dynamic_payloads",
+            "python_zlib_diff_dictionary_cases",
+            "python_zlib_diff_zlib_dict_encode_cases",
+            "python_zlib_diff_raw_dict_encode_cases",
+            "python_zlib_diff_cli_successes",
+            "python_zlib_diff_expected_failures"
+          ]
         }
       },
       "collections": {
@@ -271,7 +299,9 @@
           "missing_fuzz_coverage_artifact",
           "fuzz_coverage_failed",
           "missing_decode_stage_artifact",
-          "decode_stage_failed"
+          "decode_stage_failed",
+          "missing_python_zlib_diff_artifact",
+          "python_zlib_diff_failed"
         ]
       },
       "item_collection": "artifacts",
@@ -362,7 +392,9 @@
           "validation_missing_fuzz_coverage_artifact",
           "validation_fuzz_coverage_failed",
           "validation_missing_decode_stage_artifact",
-          "validation_decode_stage_failed"
+          "validation_decode_stage_failed",
+          "validation_missing_python_zlib_diff_artifact",
+          "validation_python_zlib_diff_failed"
         ],
         "fixture": [
           "missing_producer_steps",
@@ -383,7 +415,9 @@
           "missing_fuzz_coverage_artifact",
           "fuzz_coverage_failed",
           "missing_decode_stage_artifact",
-          "decode_stage_failed"
+          "decode_stage_failed",
+          "missing_python_zlib_diff_artifact",
+          "python_zlib_diff_failed"
         ],
         "reason": [
           "missing_producer_steps",
@@ -404,7 +438,9 @@
           "missing_fuzz_coverage_artifact",
           "fuzz_coverage_failed",
           "missing_decode_stage_artifact",
-          "decode_stage_failed"
+          "decode_stage_failed",
+          "missing_python_zlib_diff_artifact",
+          "python_zlib_diff_failed"
         ]
       },
       "item_field_pairs": {
@@ -429,7 +465,9 @@
             "validation_decode_stage_failed": "decode_stage_failed",
             "validation_missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
             "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed",
-            "validation_header_inspect_undercovered": "header_inspect_undercovered"
+            "validation_header_inspect_undercovered": "header_inspect_undercovered",
+            "validation_missing_python_zlib_diff_artifact": "missing_python_zlib_diff_artifact",
+            "validation_python_zlib_diff_failed": "python_zlib_diff_failed"
           }
         },
         "fixture": {
@@ -453,7 +491,9 @@
             "decode_stage_failed": "decode_stage_failed",
             "missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
             "sidecar_corrupt_failed": "sidecar_corrupt_failed",
-            "header_inspect_undercovered": "header_inspect_undercovered"
+            "header_inspect_undercovered": "header_inspect_undercovered",
+            "missing_python_zlib_diff_artifact": "missing_python_zlib_diff_artifact",
+            "python_zlib_diff_failed": "python_zlib_diff_failed"
           }
         }
       }
@@ -546,6 +586,8 @@
           "validation_fuzz_coverage_failed",
           "validation_missing_decode_stage_artifact",
           "validation_decode_stage_failed",
+          "validation_missing_python_zlib_diff_artifact",
+          "validation_python_zlib_diff_failed",
           "truncated_output"
         ]
       },
@@ -655,7 +697,9 @@
               "validation_missing_fuzz_coverage_artifact",
               "validation_fuzz_coverage_failed",
               "validation_missing_decode_stage_artifact",
-              "validation_decode_stage_failed"
+              "validation_decode_stage_failed",
+              "validation_missing_python_zlib_diff_artifact",
+              "validation_python_zlib_diff_failed"
             ],
             "reason": [
               "missing_producer_steps",
@@ -676,7 +720,9 @@
               "missing_fuzz_coverage_artifact",
               "fuzz_coverage_failed",
               "missing_decode_stage_artifact",
-              "decode_stage_failed"
+              "decode_stage_failed",
+              "missing_python_zlib_diff_artifact",
+              "python_zlib_diff_failed"
             ]
           },
           "field_pairs": {
@@ -701,7 +747,9 @@
                 "validation_decode_stage_failed": "decode_stage_failed",
                 "validation_missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
                 "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed",
-                "validation_header_inspect_undercovered": "header_inspect_undercovered"
+                "validation_header_inspect_undercovered": "header_inspect_undercovered",
+                "validation_missing_python_zlib_diff_artifact": "missing_python_zlib_diff_artifact",
+                "validation_python_zlib_diff_failed": "python_zlib_diff_failed"
               }
             }
           }
@@ -2128,6 +2176,35 @@
         "validation_stage": "str"
       }
     },
+    "vort.python_zlib_diff_smoke": {
+      "fields": {
+        "schema": "str",
+        "schema_version": "int",
+        "ok": "bool",
+        "payloads": "int",
+        "match_heavy_payloads": "int",
+        "dynamic_payloads": "int",
+        "dictionary_cases": "int",
+        "zlib_dict_encode_cases": "int",
+        "raw_dict_encode_cases": "int",
+        "cli_successes": "int",
+        "expected_failures": "int"
+      },
+      "boolean_formula_rules": {
+        "ok": {
+          "positive": [
+            "payloads",
+            "match_heavy_payloads",
+            "dynamic_payloads",
+            "dictionary_cases",
+            "zlib_dict_encode_cases",
+            "raw_dict_encode_cases",
+            "cli_successes",
+            "expected_failures"
+          ]
+        }
+      }
+    },
     "vort.validation_json_smoke": {
       "enums": {
         "cli_failure_hint": [
@@ -2170,6 +2247,7 @@
           "vort.dashboard_config_index",
           "vort.dashboard_config_index_negative_smoke",
           "vort.dashboard_config_index_smoke",
+          "vort.python_zlib_diff_smoke",
           "vort.dashboard_index",
           "vort.header_inspect_smoke",
           "vort.header_inspect_required_workflows",

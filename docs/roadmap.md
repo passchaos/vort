@@ -279,6 +279,7 @@ architecture blindly.
 - [x] Dashboard index gates validation health on Huffman length-limit oracle artifacts.
 - [x] Dashboard index gates validation health on fuzz corpus report and coverage-smoke artifacts.
 - [x] Dashboard index gates validation health on deflate decode-stage error-path smoke artifacts.
+- [x] Dashboard index gates validation health on Python zlib differential smoke artifacts.
 - [x] Dashboard strict-mode smoke covers sidecar corrupt, Huffman, fuzz, and decode-stage health failures with isolated negative fixtures.
 - [x] Dashboard index surfaces dashboard strict expected/missing mode details.
 - [x] Dashboard index surfaces aggregate dashboard strict coverage deltas.
