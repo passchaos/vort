@@ -361,6 +361,11 @@ pub fn build(b: *std.Build) void {
     const gzip_cli_diff_step = b.step("run-gzip-cli-diff", "Run black-box differential smoke against system gzip CLI");
     gzip_cli_diff_step.dependOn(&gzip_cli_diff.step);
 
+    const header_inspect_smoke = b.addSystemCommand(&.{ "python3", "tools/header_inspect_smoke.py" });
+    header_inspect_smoke.addArtifactArg(cli_exe);
+    const header_inspect_smoke_step = b.step("run-header-inspect-smoke", "Run zlib/gzip header inspection CLI smoke");
+    header_inspect_smoke_step.dependOn(&header_inspect_smoke.step);
+
     const zlib_family_diff = b.addSystemCommand(&.{ "python3", "tools/zlib_family_diff.py" });
     zlib_family_diff.addArtifactArg(cli_exe);
     const zlib_family_diff_step = b.step("run-zlib-family-diff", "Run optional zlib-ng/zlib-rs differential harness when binaries are available");
@@ -781,6 +786,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(gzip_diff_step);
     ci_smoke_step.dependOn(python_zlib_diff_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
+    ci_smoke_step.dependOn(header_inspect_smoke_step);
     ci_smoke_step.dependOn(zlib_family_diff_step);
     ci_smoke_step.dependOn(rust_deflate_diff_step);
     ci_smoke_step.dependOn(external_probe_step);
