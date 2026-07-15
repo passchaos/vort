@@ -151,3 +151,12 @@ header, size metadata, and full payload CRC-32 before copying the requested
 subrange, but it avoids allocating and materializing a decoded copy of the whole
 store frame. Compressed, dictionary, and LDM frames continue through the normal
 decode/cache path.
+
+## Deflate full-frame range fast path
+
+When a caller-owned range decode request covers an entire native deflate frame,
+the range decoder sends the raw deflate payload directly into the caller's output
+buffer and validates the resulting CRC-32 against the frame header. This avoids
+allocating a temporary whole-frame decoded buffer for common block-aligned range
+reads. Partial deflate-frame ranges still use the decoded-frame cache path so
+subranges can be copied safely after the frame checksum has been verified.

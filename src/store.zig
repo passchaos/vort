@@ -985,6 +985,7 @@ fn decodeRangeWithDictionaryIntoValidated(
         const entry = index[i];
         if (entry.uncompressed_offset >= end) break;
         if (try copyStoredRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
+        if (try copyFullDeflateRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
         const decoded = try decodedFrameForRange(allocator, dict, input, entry, i, decoded_cache);
         defer if (decoded_cache == null) allocator.free(decoded);
         const frame_start = entry.uncompressed_offset;
@@ -1039,6 +1040,39 @@ fn copyStoredRangeIntoIfPossible(
         crc.update(slice);
         written.* += slice.len;
     }
+    return true;
+}
+
+fn copyFullDeflateRangeIntoIfPossible(
+    input: []const u8,
+    entry: FrameIndexEntry,
+    range_offset: u64,
+    range_end: u64,
+    output: []u8,
+    written: *usize,
+    crc: *checksum.Crc32,
+) !bool {
+    if (range_offset > entry.uncompressed_offset) return false;
+    if (range_end < entry.uncompressed_offset + entry.uncompressed_len) return false;
+    if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
+    const frame = input[entry.frame_offset..][0..entry.frame_len];
+    const frame_info = try parseHeader(frame);
+    if (frame_info.flags != flags_deflate) return false;
+    if (entry.frame_len != try frameLenFromInfo(frame_info)) return error.CorruptFrame;
+    if (entry.checksum != frame_info.checksum) return error.ChecksumMismatch;
+    if (entry.uncompressed_len != frame_info.uncompressed_size) return error.CorruptFrame;
+
+    const output_len = std.math.cast(usize, entry.uncompressed_len) orelse return error.IntegerOverflow;
+    const payload_len = std.math.cast(usize, frame_info.stored_size) orelse return error.IntegerOverflow;
+    const payload = frame[header_len..][0..payload_len];
+    const target = output[written.*..][0..output_len];
+    const decoded = try deflate.decodeRawAuto(payload, target);
+    if (decoded.output_written != output_len) return error.SizeMismatch;
+    if (decoded.input_read != payload.len) return error.TrailingData;
+    const actual_crc = checksum.crc32(target);
+    if (actual_crc != frame_info.checksum) return error.ChecksumMismatch;
+    crc.update(target);
+    written.* += target.len;
     return true;
 }
 
@@ -3197,6 +3231,23 @@ test "native deflate frame round trips and records compressed flag" {
     const decoded = try decodeAnyAlloc(std.testing.allocator, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "full deflate frame range decodes into caller buffer without allocation" {
+    const input = "hello hello hello hello";
+    const frame = try encodeDeflateAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_deflate, info.flags);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+
+    var out: [input.len]u8 = undefined;
+    const result = try decodeRangeInto(std.testing.failing_allocator, frame, index, 0, out.len, out[0..]);
+    try std.testing.expectEqual(out.len, result.output_written);
+    try std.testing.expectEqual(@as(u64, 0), result.offset);
+    try std.testing.expectEqualSlices(u8, input, &out);
+    try std.testing.expectEqual(checksum.crc32(input), result.crc32);
 }
 
 test "decodeAnyAlloc preserves old store frames" {
