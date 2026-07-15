@@ -2748,18 +2748,30 @@ pub fn countConcatenatedFrames(input: []const u8) Error!usize {
 
 /// Decode all concatenated non-dictionary native frames into one owned buffer.
 pub fn decodeConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    return decodeConcatenatedAllocInternal(allocator, input, null, null);
+    return decodeConcatenatedWithDictionaryAllocInternal(allocator, null, input, null, null);
 }
 
 pub fn decodeConcatenatedAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
-    return decodeConcatenatedAllocInternal(allocator, input, null, expected_output_len);
+    return decodeConcatenatedWithDictionaryAllocInternal(allocator, null, input, null, expected_output_len);
 }
 
 pub fn decodeConcatenatedAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
-    return decodeConcatenatedAllocInternal(allocator, input, max_output_len, null);
+    return decodeConcatenatedWithDictionaryAllocInternal(allocator, null, input, max_output_len, null);
 }
 
-fn decodeConcatenatedAllocInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize, expected_output_len: ?usize) ![]u8 {
+pub fn decodeConcatenatedWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8) ![]u8 {
+    return decodeConcatenatedWithDictionaryAllocInternal(allocator, dict, input, null, null);
+}
+
+pub fn decodeConcatenatedWithDictionaryAllocExactSize(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeConcatenatedWithDictionaryAllocInternal(allocator, dict, input, null, expected_output_len);
+}
+
+pub fn decodeConcatenatedWithDictionaryAllocLimited(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, max_output_len: usize) ![]u8 {
+    return decodeConcatenatedWithDictionaryAllocInternal(allocator, dict, input, max_output_len, null);
+}
+
+fn decodeConcatenatedWithDictionaryAllocInternal(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, max_output_len: ?usize, expected_output_len: ?usize) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
@@ -2774,7 +2786,7 @@ fn decodeConcatenatedAllocInternal(allocator: std.mem.Allocator, input: []const 
         }
         const old_len = out.items.len;
         try out.resize(allocator, old_len + decoded_len);
-        const written = try decodeAnyInto(span.frame, out.items[old_len..]);
+        const written = try decodeConcatSpanInto(allocator, dict, span, out.items[old_len..]);
         if (written != decoded_len) return error.SizeMismatch;
     }
     if (expected_output_len) |expected| {
@@ -2782,6 +2794,14 @@ fn decodeConcatenatedAllocInternal(allocator: std.mem.Allocator, input: []const 
     }
 
     return out.toOwnedSlice(allocator);
+}
+
+fn decodeConcatSpanInto(allocator: std.mem.Allocator, dict: ?[]const u8, span: FrameSpan, output: []u8) !usize {
+    if (span.info.flags == flags_dictionary_patch or span.info.flags == flags_dictionary_deflate) {
+        const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
+        return decodeDictionaryPatchInto(allocator, dictionary_bytes, span.frame, output);
+    }
+    return decodeAnyInto(span.frame, output);
 }
 
 /// Bounded-buffer streaming decoder for one complete input frame. The input is
@@ -3039,6 +3059,39 @@ test "concatenated decode supports compressed frames and output bounds" {
     try std.testing.expectError(error.SizeMismatch, decodeConcatenatedAllocExactSize(std.testing.allocator, combined.items, expected.len - 1));
     try std.testing.expectError(error.SizeMismatch, decodeConcatenatedAllocExactSize(std.testing.allocator, combined.items, expected.len + 1));
     try std.testing.expectError(error.OutputLimitExceeded, decodeConcatenatedAllocLimited(std.testing.allocator, combined.items, expected.len - 1));
+}
+
+test "concatenated decode supports caller dictionaries with output bounds" {
+    const dict = "alpha beta gamma";
+    const first = "zz alpha beta yy gamma";
+    const second = "alpha beta";
+    const first_frame = try encodeDictionaryPatchAlloc(std.testing.allocator, dict, first, 5);
+    defer std.testing.allocator.free(first_frame);
+    const second_frame = try encodeDictionaryDeflateAlloc(std.testing.allocator, dict, second, 5);
+    defer std.testing.allocator.free(second_frame);
+
+    var combined = std.ArrayList(u8).empty;
+    defer combined.deinit(std.testing.allocator);
+    try combined.appendSlice(std.testing.allocator, first_frame);
+    try combined.appendSlice(std.testing.allocator, second_frame);
+
+    const expected = first ++ second;
+    try std.testing.expectError(error.InvalidDictionaryTraining, decodeConcatenatedAlloc(std.testing.allocator, combined.items));
+
+    const decoded = try decodeConcatenatedWithDictionaryAlloc(std.testing.allocator, dict, combined.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+
+    const exact = try decodeConcatenatedWithDictionaryAllocExactSize(std.testing.allocator, dict, combined.items, expected.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, expected, exact);
+
+    const limited = try decodeConcatenatedWithDictionaryAllocLimited(std.testing.allocator, dict, combined.items, expected.len);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, expected, limited);
+
+    try std.testing.expectError(error.SizeMismatch, decodeConcatenatedWithDictionaryAllocExactSize(std.testing.allocator, dict, combined.items, expected.len - 1));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeConcatenatedWithDictionaryAllocLimited(std.testing.allocator, dict, combined.items, expected.len - 1));
 }
 
 test "concat iterator rejects trailing partial frame" {

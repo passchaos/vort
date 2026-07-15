@@ -50,6 +50,7 @@ architecture blindly.
 - [x] Fully incremental input/output store-frame decoder.
 - [x] Concatenated store-frame iterator and decode helper.
 - [x] Concatenated native decode supports non-dictionary compressed frame modes with exact-size and output-limited allocator variants.
+- [x] Concatenated native decode supports caller-supplied dictionaries for dictionary-patch/deflate members.
 - [x] Deterministic malformed-header/frame smoke corpus.
 - [x] Skippable native frames.
 - [x] In-memory frame indexes for concatenated native store streams.

@@ -151,9 +151,10 @@ frame's target buffer. Allocator-returning callers can use
 metadata. Dictionary frames still require the dictionary-specific decode APIs
 because their correctness depends on caller-supplied dictionary bytes.
 Concatenated native decode now uses the same per-frame decode path for
-non-dictionary store/deflate/RLE/LDM frames, and exposes exact-size and
-output-limited allocator variants for callers that need bounded memory use across
-multi-frame inputs.
+store/deflate/RLE/LDM frames, and dictionary-aware concatenated variants accept
+caller-supplied dictionary bytes for dictionary-patch/deflate members. Both
+surfaces expose exact-size and output-limited allocator variants for callers that
+need bounded memory use across multi-frame inputs.
 
 ## Batch range summary APIs
 
