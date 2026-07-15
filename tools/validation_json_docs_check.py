@@ -14,6 +14,7 @@ DOC = ROOT / "docs" / "validation-json.md"
 MANIFEST = ROOT / "tools" / "validation_json_schema_manifest.json"
 DASHBOARD_PRODUCERS = ROOT / "tools" / "dashboard_producers.json"
 HEADER_INSPECT_WORKFLOWS = ROOT / "tools" / "header_inspect_required_workflows.json"
+DASHBOARD_STRICT_MODES = ROOT / "tools" / "dashboard_strict_expected_modes.json"
 
 TYPE_MAP: dict[str, type | tuple[type, ...]] = {
     "bool": bool,
@@ -453,6 +454,7 @@ def main() -> int:
         validate_value_against_manifest(value, schemas_def)
     validate_value_against_manifest(json.loads(DASHBOARD_PRODUCERS.read_text()), schemas_def)
     validate_value_against_manifest(json.loads(HEADER_INSPECT_WORKFLOWS.read_text()), schemas_def)
+    validate_value_against_manifest(json.loads(DASHBOARD_STRICT_MODES.read_text()), schemas_def)
     require_header_workflow_manifest_consistency(schemas_def)
     print(f"validation_json_docs=ok examples={len(parsed)}")
     return 0

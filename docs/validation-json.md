@@ -712,6 +712,36 @@ Example:
 }
 ```
 
+## `vort.dashboard_strict_expected_modes`
+
+Consumed by:
+
+```sh
+python3 tools/dashboard_strict_smoke.py
+zig build run-dashboard-strict-smoke
+```
+
+This schema defines the required per-mode coverage matrix for dashboard strict
+mode smoke tests. Keeping it external makes strict-gate coverage expectations
+reviewable without editing the smoke script logic.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_strict_expected_modes",
+  "schema_version": 1,
+  "expected_modes": [
+    {
+      "mode": "strict-header-inspect",
+      "min_checks": 3,
+      "min_expected_failures": 3,
+      "min_matched": 3
+    }
+  ]
+}
+```
+
 ## `vort.dashboard_strict_smoke`
 
 Produced by:

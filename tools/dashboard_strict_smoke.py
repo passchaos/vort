@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_INDEX = ROOT / "tools" / "dashboard_index.py"
+EXPECTED_MODES = ROOT / "tools" / "dashboard_strict_expected_modes.json"
 
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -126,19 +127,41 @@ def build_mode_counts(checks: list[dict[str, object]]) -> list[dict[str, object]
     ]
 
 
-EXPECTED_MODE_COUNTS = [
-    {"mode": "all", "min_checks": 1, "min_expected_failures": 0, "min_matched": 1},
-    {"mode": "strict-producers", "min_checks": 1, "min_expected_failures": 1, "min_matched": 1},
-    {"mode": "strict-smoke-gates", "min_checks": 1, "min_expected_failures": 1, "min_matched": 1},
-    {"mode": "strict-header-inspect", "min_checks": 3, "min_expected_failures": 3, "min_matched": 3},
-    {"mode": "synthetic", "min_checks": 1, "min_expected_failures": 0, "min_matched": 1},
-]
+def load_expected_modes() -> list[dict[str, object]]:
+    payload = json.loads(EXPECTED_MODES.read_text())
+    if payload.get("schema") != "vort.dashboard_strict_expected_modes":
+        raise AssertionError("unexpected dashboard strict expected modes schema")
+    if payload.get("schema_version") != 1:
+        raise AssertionError("unsupported dashboard strict expected modes schema version")
+    rows = payload.get("expected_modes")
+    if not isinstance(rows, list) or not rows:
+        raise AssertionError("expected_modes must be a non-empty list")
+    normalized: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise AssertionError(f"expected_modes[{index}] must be an object")
+        mode = row.get("mode")
+        if not isinstance(mode, str):
+            raise AssertionError(f"expected_modes[{index}].mode must be a string")
+        if mode in seen:
+            raise AssertionError(f"duplicate expected mode {mode!r}")
+        seen.add(mode)
+        normalized.append(
+            {
+                "mode": mode,
+                "min_checks": int(row.get("min_checks", 0)),
+                "min_expected_failures": int(row.get("min_expected_failures", 0)),
+                "min_matched": int(row.get("min_matched", 0)),
+            }
+        )
+    return normalized
 
 
-def missing_expected_modes(mode_counts: list[dict[str, object]]) -> list[dict[str, object]]:
+def missing_expected_modes(mode_counts: list[dict[str, object]], expected_modes: list[dict[str, object]]) -> list[dict[str, object]]:
     counts = {str(row["mode"]): row for row in mode_counts}
     missing: list[dict[str, object]] = []
-    for expected in EXPECTED_MODE_COUNTS:
+    for expected in expected_modes:
         row = counts.get(str(expected["mode"]))
         if row is None:
             missing.append(expected)
@@ -263,7 +286,8 @@ def main() -> int:
             raise AssertionError("synthetic long-output check did not exercise truncation")
 
     mode_counts = build_mode_counts(checks)
-    missing_modes = missing_expected_modes(mode_counts)
+    expected_modes = load_expected_modes()
+    missing_modes = missing_expected_modes(mode_counts, expected_modes)
     if missing_modes:
         raise AssertionError(f"missing dashboard strict mode coverage: {missing_modes!r}")
     summary = {
@@ -274,8 +298,8 @@ def main() -> int:
         "checks": checks,
         "mode_count": len(mode_counts),
         "mode_counts": mode_counts,
-        "expected_mode_count": len(EXPECTED_MODE_COUNTS),
-        "expected_modes": EXPECTED_MODE_COUNTS,
+        "expected_mode_count": len(expected_modes),
+        "expected_modes": expected_modes,
         "missing_mode_count": len(missing_modes),
         "missing_modes": missing_modes,
     }

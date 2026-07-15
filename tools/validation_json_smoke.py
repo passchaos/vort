@@ -104,6 +104,10 @@ def main() -> int:
         assert corrupt["rows"] >= 1
         validate_value_against_manifest(corrupt, schemas_def)
 
+        dashboard_strict_modes = json.loads((ROOT / "tools" / "dashboard_strict_expected_modes.json").read_text())
+        assert dashboard_strict_modes["schema"] == "vort.dashboard_strict_expected_modes"
+        assert dashboard_strict_modes["expected_modes"]
+        validate_value_against_manifest(dashboard_strict_modes, schemas_def)
         dashboard_strict_path = root / "vort-dashboard-strict-smoke.json"
         dashboard_strict_markdown_path = root / "vort-dashboard-strict-smoke.md"
         run([
@@ -329,6 +333,7 @@ def main() -> int:
                 ok["schema"],
                 report["schema"],
                 corrupt["schema"],
+                dashboard_strict_modes["schema"],
                 dashboard_strict["schema"],
                 dashboard["schema"],
                 header_summary["schema"],

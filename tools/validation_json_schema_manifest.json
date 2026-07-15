@@ -75,6 +75,29 @@
         "smoke_gate": "str"
       }
     },
+    "vort.dashboard_strict_expected_modes": {
+      "fields": {
+        "expected_modes": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "expected_modes",
+      "item_fields": {
+        "min_checks": "int",
+        "min_expected_failures": "int",
+        "min_matched": "int",
+        "mode": "str"
+      },
+      "item_enums": {
+        "mode": [
+          "all",
+          "strict-producers",
+          "strict-smoke-gates",
+          "strict-header-inspect",
+          "synthetic"
+        ]
+      }
+    },
     "vort.dashboard_strict_smoke": {
       "fields": {
         "check_count": "int",
