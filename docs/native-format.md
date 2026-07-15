@@ -169,7 +169,10 @@ allocation.
 without allocating dictionary bytes and reports the dictionary ID, content length,
 and skippable-frame offset for auto-decode preflight. Its options variant can
 enforce an expected dictionary ID and content length before any decode path
-allocates or copies dictionary bytes.
+allocates or copies dictionary bytes. `parseEmbeddedDictionary` returns a
+borrowed slice into the input stream, and auto dictionary range/validation/
+concatenated paths use that borrowed slice so self-contained dictionary streams
+do not copy dictionary bytes just to decode immediately.
 
 ## Batch range summary APIs
 

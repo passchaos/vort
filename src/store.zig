@@ -1898,7 +1898,7 @@ pub fn inspectEmbeddedDictionaryWithOptions(input: []const u8, options: Embedded
     return inspection;
 }
 
-pub fn parseEmbeddedDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+pub fn parseEmbeddedDictionary(input: []const u8) Error![]const u8 {
     var offset: usize = 0;
     var found: ?[]const u8 = null;
     while (offset < input.len) {
@@ -1925,6 +1925,11 @@ pub fn parseEmbeddedDictionaryAlloc(allocator: std.mem.Allocator, input: []const
         }
     }
     const dict = found orelse return error.InvalidMagic;
+    return dict;
+}
+
+pub fn parseEmbeddedDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const dict = try parseEmbeddedDictionary(input);
     return allocator.dupe(u8, dict);
 }
 
@@ -2384,8 +2389,7 @@ pub fn validateSidecarIndexWithDictionaryAlloc(allocator: std.mem.Allocator, dic
 pub fn validateSidecarIndexWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, options: SidecarValidationOptions) !void {
     if (options.mode == .metadata) return validateSidecarIndexInternalAlloc(allocator, options.dictionary, input, sidecar_index, options);
     if (options.dictionary) |dict| return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index, options);
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return validateSidecarIndexInternalAlloc(allocator, dict, input, sidecar_index, options);
     } else |err| switch (err) {
         error.InvalidMagic => return validateSidecarIndexInternalAlloc(allocator, null, input, sidecar_index, options),
@@ -2396,8 +2400,7 @@ pub fn validateSidecarIndexWithOptionsAlloc(allocator: std.mem.Allocator, input:
 pub fn validateSidecarIndexReportAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, options: SidecarValidationOptions) ValidationReport {
     if (options.mode == .metadata) return validateSidecarIndexReportInternalAlloc(allocator, options.dictionary, input, sidecar_index, options);
     if (options.dictionary) |dict| return validateSidecarIndexReportInternalAlloc(allocator, dict, input, sidecar_index, options);
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return validateSidecarIndexReportInternalAlloc(allocator, dict, input, sidecar_index, options);
     } else |err| switch (err) {
         error.InvalidMagic => return validateSidecarIndexReportInternalAlloc(allocator, null, input, sidecar_index, options),
@@ -2418,8 +2421,7 @@ pub fn validateEmbeddedIndexWithOptionsAlloc(allocator: std.mem.Allocator, input
     defer embedded.deinit(allocator);
     if (options.mode == .metadata) return validateFrameIndexEntriesInternalAlloc(allocator, options.dictionary, input, embedded.entries, options);
     if (options.dictionary) |dict| return validateFrameIndexEntriesInternalAlloc(allocator, dict, input, embedded.entries, options);
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return validateFrameIndexEntriesInternalAlloc(allocator, dict, input, embedded.entries, options);
     } else |err| switch (err) {
         error.InvalidMagic => return validateFrameIndexEntriesInternalAlloc(allocator, null, input, embedded.entries, options),
@@ -2434,8 +2436,7 @@ pub fn validateEmbeddedIndexReportAlloc(allocator: std.mem.Allocator, input: []c
     defer embedded.deinit(allocator);
     if (options.mode == .metadata) return validateFrameIndexEntriesReportInternalAlloc(allocator, options.dictionary, input, embedded.entries, options);
     if (options.dictionary) |dict| return validateFrameIndexEntriesReportInternalAlloc(allocator, dict, input, embedded.entries, options);
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return validateFrameIndexEntriesReportInternalAlloc(allocator, dict, input, embedded.entries, options);
     } else |err| switch (err) {
         error.InvalidMagic => return validateFrameIndexEntriesReportInternalAlloc(allocator, null, input, embedded.entries, options),
@@ -2603,8 +2604,7 @@ pub fn decodeSidecarIndexedRangesWithDictionaryInto(allocator: std.mem.Allocator
 }
 
 pub fn decodeSidecarIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeSidecarIndexedRangeWithDictionaryAlloc(allocator, dict, input, sidecar_index, offset, length);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeSidecarIndexedRangeAlloc(allocator, input, sidecar_index, offset, length),
@@ -2613,8 +2613,7 @@ pub fn decodeSidecarIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: [
 }
 
 pub fn decodeSidecarIndexedRangeAutoWithSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) !RangeDecodeResult {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeSidecarIndexedRangeWithDictionarySummaryAlloc(allocator, dict, input, sidecar_index, offset, length);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeSidecarIndexedRangeWithSummaryAlloc(allocator, input, sidecar_index, offset, length),
@@ -2623,8 +2622,7 @@ pub fn decodeSidecarIndexedRangeAutoWithSummaryAlloc(allocator: std.mem.Allocato
 }
 
 pub fn decodeSidecarIndexedRangesAutoWithSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, requests: []const RangeRequest) !RangeBatchDecodeResult {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeSidecarIndexedRangesWithDictionarySummaryAlloc(allocator, dict, input, sidecar_index, requests);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeSidecarIndexedRangesWithSummaryAlloc(allocator, input, sidecar_index, requests),
@@ -2633,8 +2631,7 @@ pub fn decodeSidecarIndexedRangesAutoWithSummaryAlloc(allocator: std.mem.Allocat
 }
 
 pub fn decodeSidecarIndexedRangeAutoInto(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeSidecarIndexedRangeWithDictionaryInto(allocator, dict, input, sidecar_index, offset, length, output);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeSidecarIndexedRangeInto(allocator, input, sidecar_index, offset, length, output),
@@ -2643,8 +2640,7 @@ pub fn decodeSidecarIndexedRangeAutoInto(allocator: std.mem.Allocator, input: []
 }
 
 pub fn decodeSidecarIndexedRangesAutoInto(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeSidecarIndexedRangesWithDictionaryInto(allocator, dict, input, sidecar_index, requests, results);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeSidecarIndexedRangesInto(allocator, input, sidecar_index, requests, results),
@@ -2683,38 +2679,32 @@ pub fn decodeIndexedRangesWithDictionaryInto(allocator: std.mem.Allocator, dict:
 }
 
 pub fn decodeSelfContainedDictionaryRangeAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
-    const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
-    defer allocator.free(dict);
+    const dict = try parseEmbeddedDictionary(input);
     return decodeIndexedRangeWithDictionaryAlloc(allocator, dict, input, offset, length);
 }
 
 pub fn decodeSelfContainedDictionaryRangeWithSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) !RangeDecodeResult {
-    const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
-    defer allocator.free(dict);
+    const dict = try parseEmbeddedDictionary(input);
     return decodeIndexedRangeWithDictionarySummaryAlloc(allocator, dict, input, offset, length);
 }
 
 pub fn decodeSelfContainedDictionaryRangesWithSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeRequest) !RangeBatchDecodeResult {
-    const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
-    defer allocator.free(dict);
+    const dict = try parseEmbeddedDictionary(input);
     return decodeIndexedRangesWithDictionarySummaryAlloc(allocator, dict, input, requests);
 }
 
 pub fn decodeSelfContainedDictionaryRangeInto(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
-    const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
-    defer allocator.free(dict);
+    const dict = try parseEmbeddedDictionary(input);
     return decodeIndexedRangeWithDictionaryInto(allocator, dict, input, offset, length, output);
 }
 
 pub fn decodeSelfContainedDictionaryRangesInto(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
-    const dict = try parseEmbeddedDictionaryAlloc(allocator, input);
-    defer allocator.free(dict);
+    const dict = try parseEmbeddedDictionary(input);
     return decodeIndexedRangesWithDictionaryInto(allocator, dict, input, requests, results);
 }
 
 pub fn decodeIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeIndexedRangeWithDictionaryAlloc(allocator, dict, input, offset, length);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeIndexedRangeAlloc(allocator, input, offset, length),
@@ -2723,8 +2713,7 @@ pub fn decodeIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const 
 }
 
 pub fn decodeIndexedRangeAutoWithSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) !RangeDecodeResult {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeIndexedRangeWithDictionarySummaryAlloc(allocator, dict, input, offset, length);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeIndexedRangeWithSummaryAlloc(allocator, input, offset, length),
@@ -2733,8 +2722,7 @@ pub fn decodeIndexedRangeAutoWithSummaryAlloc(allocator: std.mem.Allocator, inpu
 }
 
 pub fn decodeIndexedRangesAutoWithSummaryAlloc(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeRequest) !RangeBatchDecodeResult {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeIndexedRangesWithDictionarySummaryAlloc(allocator, dict, input, requests);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeIndexedRangesWithSummaryAlloc(allocator, input, requests),
@@ -2743,8 +2731,7 @@ pub fn decodeIndexedRangesAutoWithSummaryAlloc(allocator: std.mem.Allocator, inp
 }
 
 pub fn decodeIndexedRangeAutoInto(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeIndexedRangeWithDictionaryInto(allocator, dict, input, offset, length, output);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeIndexedRangeInto(allocator, input, offset, length, output),
@@ -2753,8 +2740,7 @@ pub fn decodeIndexedRangeAutoInto(allocator: std.mem.Allocator, input: []const u
 }
 
 pub fn decodeIndexedRangesAutoInto(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeIndexedRangesWithDictionaryInto(allocator, dict, input, requests, results);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeIndexedRangesInto(allocator, input, requests, results),
@@ -2908,8 +2894,7 @@ pub fn decodeConcatenatedWithDictionaryInto(allocator: std.mem.Allocator, dict: 
 }
 
 pub fn decodeConcatenatedAutoInto(allocator: std.mem.Allocator, input: []const u8, output: []u8) !ConcatenatedDecodeIntoResult {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeConcatenatedWithDictionaryIntoInternal(allocator, dict, input, output);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeConcatenatedWithDictionaryIntoInternal(allocator, null, input, output),
@@ -2918,8 +2903,7 @@ pub fn decodeConcatenatedAutoInto(allocator: std.mem.Allocator, input: []const u
 }
 
 fn decodeConcatenatedAutoAllocInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize, expected_output_len: ?usize) ![]u8 {
-    if (parseEmbeddedDictionaryAlloc(allocator, input)) |dict| {
-        defer allocator.free(dict);
+    if (parseEmbeddedDictionary(input)) |dict| {
         return decodeConcatenatedWithDictionaryAllocInternal(allocator, dict, input, max_output_len, expected_output_len);
     } else |err| switch (err) {
         error.InvalidMagic => return decodeConcatenatedWithDictionaryAllocInternal(allocator, null, input, max_output_len, expected_output_len),
@@ -3341,6 +3325,32 @@ test "concatenated auto decode uses embedded dictionaries" {
 
     try std.testing.expectError(error.SizeMismatch, decodeConcatenatedAutoAllocExactSize(std.testing.allocator, stream, input.len - 1));
     try std.testing.expectError(error.OutputLimitExceeded, decodeConcatenatedAutoAllocLimited(std.testing.allocator, stream, input.len - 1));
+}
+
+test "concatenated auto dictionary into borrows embedded dictionary bytes" {
+    const dict = "alpha beta gamma";
+    const input = "zz alpha beta yy gamma";
+    const dict_payload = try encodeEmbeddedDictionaryBytesAlloc(std.testing.allocator, dict);
+    defer std.testing.allocator.free(dict_payload);
+    const dict_frame = try encodeSkippableAlloc(std.testing.allocator, dict_payload);
+    defer std.testing.allocator.free(dict_frame);
+    const data_frame = try encodeDictionaryPatchAlloc(std.testing.allocator, dict, input, 5);
+    defer std.testing.allocator.free(data_frame);
+
+    var stream = std.ArrayList(u8).empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, dict_frame);
+    try stream.appendSlice(std.testing.allocator, data_frame);
+
+    const borrowed = try parseEmbeddedDictionary(stream.items);
+    try std.testing.expectEqualSlices(u8, dict, borrowed);
+
+    var out: [input.len]u8 = undefined;
+    const result = try decodeConcatenatedAutoInto(std.testing.failing_allocator, stream.items, &out);
+    try std.testing.expectEqual(input.len, result.output_written);
+    try std.testing.expectEqual(@as(usize, 1), result.frame_count);
+    try std.testing.expectEqual(checksum.crc32(input), result.crc32);
+    try std.testing.expectEqualSlices(u8, input, &out);
 }
 
 test "concat iterator rejects trailing partial frame" {

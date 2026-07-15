@@ -169,6 +169,7 @@ pub const StoreEmbeddedDictionaryInspection = store.EmbeddedDictionaryInspection
 pub const StoreEmbeddedDictionaryInspectionOptions = store.EmbeddedDictionaryInspectionOptions;
 pub const storeInspectEmbeddedDictionary = store.inspectEmbeddedDictionary;
 pub const storeInspectEmbeddedDictionaryWithOptions = store.inspectEmbeddedDictionaryWithOptions;
+pub const storeParseEmbeddedDictionary = store.parseEmbeddedDictionary;
 pub const storeParseEmbeddedDictionaryAlloc = store.parseEmbeddedDictionaryAlloc;
 pub const storeSummarizeModes = store.summarizeModes;
 pub const storeInspectConcatenated = store.inspectConcatenated;
