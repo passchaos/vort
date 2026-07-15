@@ -36,6 +36,8 @@ pub const Progress = core.Progress;
 pub const StepResult = core.StepResult;
 
 pub const frameModeName = store.frameModeName;
+pub const StoreFrameInspection = store.FrameInspection;
+pub const storeInspectFrame = store.inspectFrame;
 pub const storeEncode = store.encode;
 pub const storeDecode = store.decode;
 pub const storeEncodeAlloc = store.encodeAlloc;

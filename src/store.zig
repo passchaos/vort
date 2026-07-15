@@ -40,6 +40,28 @@ pub fn frameModeName(flags: u8) []const u8 {
     };
 }
 
+pub const FrameInspection = struct {
+    info: FrameInfo,
+    frame_len: usize,
+    payload_len: usize,
+    mode: []const u8,
+    requires_dictionary: bool,
+};
+
+pub fn inspectFrame(input: []const u8) Error!FrameInspection {
+    const info = try parseHeader(input);
+    const payload_len = try storedPayloadLenFromInfo(info);
+    const frame_len = try encodedSize(payload_len);
+    if (input.len < frame_len) return error.TruncatedFrame;
+    return .{
+        .info = info,
+        .frame_len = frame_len,
+        .payload_len = payload_len,
+        .mode = frameModeName(info.flags),
+        .requires_dictionary = info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate,
+    };
+}
+
 pub fn skippableEncodedSize(payload_len: usize) Error!usize {
     if (payload_len > std.math.maxInt(u32)) return error.IntegerOverflow;
     return std.math.add(usize, skippable_header_len, payload_len) catch error.IntegerOverflow;
@@ -2792,6 +2814,28 @@ test "store header exposes size and checksum metadata" {
     try std.testing.expectEqual(@as(u64, input.len), info.uncompressed_size);
     try std.testing.expectEqual(@as(u64, input.len), info.stored_size);
     try std.testing.expectEqual(checksum.crc32(input), info.checksum);
+}
+
+test "native frame inspection exposes mode sizes and dictionary requirement" {
+    const store_frame = try encodeAlloc(std.testing.allocator, "inspect");
+    defer std.testing.allocator.free(store_frame);
+    const store_inspection = try inspectFrame(store_frame);
+    try std.testing.expectEqualStrings("store", store_inspection.mode);
+    try std.testing.expectEqual(store_frame.len, store_inspection.frame_len);
+    try std.testing.expectEqual(@as(usize, "inspect".len), store_inspection.payload_len);
+    try std.testing.expect(!store_inspection.requires_dictionary);
+    try std.testing.expectEqual(@as(u64, "inspect".len), store_inspection.info.uncompressed_size);
+
+    const dict = "alpha beta gamma";
+    const input = "zz alpha beta yy gamma";
+    const dict_frame = try encodeDictionaryPatchAlloc(std.testing.allocator, dict, input, 5);
+    defer std.testing.allocator.free(dict_frame);
+    const dict_inspection = try inspectFrame(dict_frame);
+    try std.testing.expectEqualStrings("dictionary_patch", dict_inspection.mode);
+    try std.testing.expect(dict_inspection.requires_dictionary);
+    try std.testing.expectEqual(dict_frame.len, dict_inspection.frame_len);
+
+    try std.testing.expectError(error.TruncatedFrame, inspectFrame(store_frame[0 .. store_frame.len - 1]));
 }
 
 test "store frame reports malformed and corrupt data" {

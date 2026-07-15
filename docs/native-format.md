@@ -10,6 +10,9 @@ deflate-compressed, RLE-compressed, caller-supplied dictionary-patch, and
 long-distance-reference payload modes. Concatenated v0 streams can embed a
 skippable serialized index with per-frame checksum metadata validated during
 range decode. Sidecar-index validation has explicit modes:
+`inspectFrame` exposes frame mode, encoded length, payload length, raw header
+metadata, and whether the frame requires a caller-supplied dictionary before
+callers allocate decode buffers.
 `SidecarValidationMode.metadata` checks sidecar/index structure and frame-header
 agreement without decoding payloads, while the default
 `SidecarValidationMode.full` decodes each referenced frame so it detects payload

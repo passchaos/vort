@@ -41,6 +41,7 @@ architecture blindly.
 
 - [x] Native `VORT` store frame for uncompressed payloads.
 - [x] Header parsing with explicit version, size, checksum, and corruption errors.
+- [x] Native frame inspection exposes mode, encoded length, payload length, and dictionary requirement before decode allocation.
 - [x] One-shot encode/decode APIs.
 - [x] Allocator-returning convenience APIs.
 - [x] Bounded-output streaming encoder/decoder smoke coverage.
