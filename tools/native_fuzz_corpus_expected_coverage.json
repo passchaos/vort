@@ -4,11 +4,11 @@
   "mode_requirements": [
     {
       "mode": "native",
-      "min_cases": 15,
+      "min_cases": 19,
       "min_accepted": 5,
-      "min_rejected": 10,
-      "min_exact_error_expectations": 10,
-      "min_matched_rows": 15
+      "min_rejected": 14,
+      "min_exact_error_expectations": 14,
+      "min_matched_rows": 19
     }
   ],
   "error_requirements": [
@@ -30,7 +30,7 @@
     {
       "mode": "native",
       "error": "CorruptFrame",
-      "min_count": 3
+      "min_count": 4
     },
     {
       "mode": "native",
@@ -40,12 +40,12 @@
     {
       "mode": "native",
       "error": "TruncatedFrame",
-      "min_count": 1
+      "min_count": 3
     },
     {
       "mode": "native",
       "error": "SizeMismatch",
-      "min_count": 1
+      "min_count": 2
     }
   ]
 }

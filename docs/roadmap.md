@@ -66,6 +66,7 @@ architecture blindly.
 - [x] Native hex fuzz corpus emits JSON/Markdown artifacts and has coverage smoke gates.
 - [x] Native hex fuzz corpus covers RLE, LDM, and dictionary-deflate accept/reject cases.
 - [x] Native hex fuzz corpus covers dictionary-patch malformed opcode errors.
+- [x] Native hex fuzz corpus covers RLE zero/overflow and LDM truncated payload errors.
 - [x] Deterministic malformed-header/frame smoke corpus.
 - [x] Skippable native frames.
 - [x] In-memory frame indexes for concatenated native store streams.
