@@ -1187,6 +1187,10 @@ Current unhealthy reason values are:
 - `missing_dashboard_strict_modes`
 - `missing_huffman_length_artifact`
 - `huffman_length_failed`
+- `missing_fuzz_corpus_artifact`
+- `fuzz_corpus_failed`
+- `missing_fuzz_coverage_artifact`
+- `fuzz_coverage_failed`
 
 Top-level fields:
 
@@ -1220,6 +1224,14 @@ Top-level fields:
   `huffman_length_package_merge_optimal_rows`,
   `huffman_length_package_merge_non_optimal_rows`,
   `huffman_length_package_merge_worst_gap_bits`
+- `fuzz_corpus_present`, `fuzz_corpus_ok`,
+  `fuzz_corpus_coverage_present`, `fuzz_corpus_coverage_ok`,
+  `fuzz_corpus_healthy`, `fuzz_corpus_cases`,
+  `fuzz_corpus_matched_rows`, `fuzz_corpus_unmatched_rows`,
+  `fuzz_corpus_exact_error_expectations`,
+  `fuzz_corpus_mode_count_rows`, `fuzz_corpus_error_count_rows`,
+  `fuzz_corpus_coverage_mode_requirements`,
+  `fuzz_corpus_coverage_error_requirements`
 - `artifacts`
 
 Each artifact includes:
@@ -1253,7 +1265,9 @@ Example:
   "validation_unhealthy_reasons": [
     "missing_header_inspect_artifact",
     "missing_dashboard_strict_artifact",
-    "missing_huffman_length_artifact"
+    "missing_huffman_length_artifact",
+    "missing_fuzz_corpus_artifact",
+    "missing_fuzz_coverage_artifact"
   ],
   "header_inspect_present": false,
   "header_inspect_ok": false,
@@ -1284,6 +1298,19 @@ Example:
   "huffman_length_package_merge_optimal_rows": 0,
   "huffman_length_package_merge_non_optimal_rows": 0,
   "huffman_length_package_merge_worst_gap_bits": 0,
+  "fuzz_corpus_present": false,
+  "fuzz_corpus_ok": false,
+  "fuzz_corpus_coverage_present": false,
+  "fuzz_corpus_coverage_ok": false,
+  "fuzz_corpus_healthy": false,
+  "fuzz_corpus_cases": 0,
+  "fuzz_corpus_matched_rows": 0,
+  "fuzz_corpus_unmatched_rows": 0,
+  "fuzz_corpus_exact_error_expectations": 0,
+  "fuzz_corpus_mode_count_rows": 0,
+  "fuzz_corpus_error_count_rows": 0,
+  "fuzz_corpus_coverage_mode_requirements": 0,
+  "fuzz_corpus_coverage_error_requirements": 0,
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",
@@ -1580,7 +1607,7 @@ Each schema entry can contain:
 | `field_pairs` | object | Optional top-level cross-field equality constraints driven by an allowed map. |
 | `conditional_fields` | list | Optional conditional null/non-null constraints, currently driven by simple field equality predicates. |
 | `numeric_relations` | list | Optional conditional integer comparisons between two fields, with an optional right-hand offset. |
-| `boolean_formula_rules` | object | Optional top-level boolean fields derived from `all` boolean fields and `zero` integer fields. |
+| `boolean_formula_rules` | object | Optional top-level boolean fields derived from `all` boolean fields, `positive` integer fields, and `zero` integer/list fields. |
 | `difference_relations` | list | Optional conditional checks that one integer field equals the difference of two other integer fields. |
 | `equality_flag_relations` | list | Optional conditional checks that a boolean field equals the equality result of two integer fields. |
 | `count_rules` | object | Optional top-level count fields that must match list lengths or filtered item counts. |
@@ -1602,4 +1629,4 @@ named field. Numeric relation operators are `eq`, `ne`, `lt`, `le`, `gt`, and
 relations compare `left == minuend - subtrahend`, equality-flag relations
 compare `flag == (left == right)`, and boolean formula rules compare a target
 boolean to the conjunction of named boolean fields plus zero-valued integer or
-empty-list fields.
+empty-list fields; `positive` fields must be integers greater than zero.

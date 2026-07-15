@@ -199,6 +199,67 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
     }
 
 
+def fuzz_corpus_health(artifacts: list[Path]) -> dict:
+    report = None
+    coverage = None
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        schema = data.get("schema")
+        if schema == "vort.fuzz_corpus_report":
+            report = data
+        elif schema == "vort.fuzz_corpus_coverage_smoke":
+            coverage = data
+
+    def as_int(data: dict | None, field: str) -> int:
+        if not isinstance(data, dict):
+            return 0
+        value = data.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    report_present = isinstance(report, dict)
+    coverage_present = isinstance(coverage, dict)
+    cases = as_int(report, "cases")
+    matched_rows = as_int(report, "matched_rows")
+    exact_error_expectations = as_int(report, "exact_error_expectations")
+    mode_count_rows = as_int(report, "mode_count_rows")
+    error_count_rows = as_int(report, "error_count_rows")
+    coverage_mode_requirements = as_int(coverage, "mode_requirement_count")
+    coverage_error_requirements = as_int(coverage, "error_requirement_count")
+    unmatched_rows = cases - matched_rows
+    report_healthy = (
+        report_present
+        and bool(report.get("ok"))
+        and cases > 0
+        and unmatched_rows == 0
+        and exact_error_expectations > 0
+        and mode_count_rows > 0
+        and error_count_rows > 0
+    )
+    coverage_healthy = (
+        coverage_present
+        and bool(coverage.get("ok"))
+        and coverage_mode_requirements > 0
+        and coverage_error_requirements > 0
+    )
+    return {
+        "present": report_present,
+        "ok": bool(report.get("ok")) if report_present else False,
+        "coverage_present": coverage_present,
+        "coverage_ok": bool(coverage.get("ok")) if coverage_present else False,
+        "cases": cases,
+        "matched_rows": matched_rows,
+        "unmatched_rows": unmatched_rows,
+        "exact_error_expectations": exact_error_expectations,
+        "mode_count_rows": mode_count_rows,
+        "error_count_rows": error_count_rows,
+        "coverage_mode_requirements": coverage_mode_requirements,
+        "coverage_error_requirements": coverage_error_requirements,
+        "report_healthy": report_healthy,
+        "coverage_healthy": coverage_healthy,
+        "healthy": report_healthy and coverage_healthy,
+    }
+
+
 def artifact_metadata(path: Path) -> str:
     stat = path.stat()
     mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
@@ -343,12 +404,14 @@ def main() -> int:
     header_health = header_inspect_health(artifacts)
     strict_health = dashboard_strict_health(artifacts)
     huffman_health = huffman_length_health(artifacts)
+    fuzz_health = fuzz_corpus_health(artifacts)
     producer_healthy = len(producer_step_missing) == 0
     smoke_gate_healthy = len(smoke_gate_required_missing) == 0
     header_healthy = header_health["present"] and header_health["ok"] and header_health["missing_workflow_count"] == 0
     strict_healthy = strict_health["present"] and strict_health["ok"] and strict_health["missing_mode_count"] == 0
     huffman_healthy = huffman_health["healthy"]
-    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and huffman_healthy
+    fuzz_healthy = fuzz_health["healthy"]
+    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and huffman_healthy and fuzz_healthy
     validation_unhealthy_reasons = []
     if not producer_healthy:
         validation_unhealthy_reasons.append("missing_producer_steps")
@@ -370,6 +433,14 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_huffman_length_artifact")
     elif not huffman_healthy:
         validation_unhealthy_reasons.append("huffman_length_failed")
+    if not fuzz_health["present"]:
+        validation_unhealthy_reasons.append("missing_fuzz_corpus_artifact")
+    elif not fuzz_health["report_healthy"]:
+        validation_unhealthy_reasons.append("fuzz_corpus_failed")
+    if not fuzz_health["coverage_present"]:
+        validation_unhealthy_reasons.append("missing_fuzz_coverage_artifact")
+    elif not fuzz_health["coverage_healthy"]:
+        validation_unhealthy_reasons.append("fuzz_coverage_failed")
 
     lines = [
         "# Vort dashboard index",
@@ -386,6 +457,7 @@ def main() -> int:
         f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing, healthy `{header_healthy}`",
         f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing modes, checks/expected/matched deltas {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']}), healthy `{strict_healthy}`",
         f"- huffman length oracle: {huffman_health['optimal_rows']}/{huffman_health['row_count']} production optimal rows, {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} package-merge optimal rows, gaps {huffman_health['worst_gap_bits']}/{huffman_health['package_merge_worst_gap_bits']}, malformed rows {huffman_health['malformed_rows']}, healthy `{huffman_healthy}`",
+        f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
         "",
     ]
     if strict_health["missing_modes"]:
@@ -470,6 +542,19 @@ def main() -> int:
                 "huffman_length_package_merge_optimal_rows": huffman_health["package_merge_optimal_rows"],
                 "huffman_length_package_merge_non_optimal_rows": huffman_health["package_merge_non_optimal_rows"],
                 "huffman_length_package_merge_worst_gap_bits": huffman_health["package_merge_worst_gap_bits"],
+                "fuzz_corpus_present": fuzz_health["present"],
+                "fuzz_corpus_ok": fuzz_health["ok"],
+                "fuzz_corpus_coverage_present": fuzz_health["coverage_present"],
+                "fuzz_corpus_coverage_ok": fuzz_health["coverage_ok"],
+                "fuzz_corpus_healthy": fuzz_healthy,
+                "fuzz_corpus_cases": fuzz_health["cases"],
+                "fuzz_corpus_matched_rows": fuzz_health["matched_rows"],
+                "fuzz_corpus_unmatched_rows": fuzz_health["unmatched_rows"],
+                "fuzz_corpus_exact_error_expectations": fuzz_health["exact_error_expectations"],
+                "fuzz_corpus_mode_count_rows": fuzz_health["mode_count_rows"],
+                "fuzz_corpus_error_count_rows": fuzz_health["error_count_rows"],
+                "fuzz_corpus_coverage_mode_requirements": fuzz_health["coverage_mode_requirements"],
+                "fuzz_corpus_coverage_error_requirements": fuzz_health["coverage_error_requirements"],
                 "artifacts": records,
             },
             indent=2,

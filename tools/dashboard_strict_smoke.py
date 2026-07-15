@@ -17,6 +17,8 @@ VALIDATION_REASONS = ROOT / "tools" / "dashboard_strict_validation_reasons.json"
 HEADER_INSPECT_ARTIFACT = "vort-header-inspect-smoke.json"
 DASHBOARD_STRICT_ARTIFACT = "vort-dashboard-strict-smoke.json"
 HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
+FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
+FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -32,6 +34,10 @@ def write_producer_map(
     include_strict_smoke: bool = True,
     include_huffman_exact: bool = True,
     include_huffman_smoke: bool = True,
+    include_fuzz_corpus_exact: bool = True,
+    include_fuzz_corpus_smoke: bool = True,
+    include_fuzz_coverage_exact: bool = True,
+    include_fuzz_coverage_smoke: bool = True,
     required_names: list[str] | None = None,
 ) -> None:
     artifact_metadata = {}
@@ -50,6 +56,16 @@ def write_producer_map(
             "expected_format": "csv",
             "smoke_gate": "zig build run-huffman-length-report-dashboard",
         }
+    if include_fuzz_corpus_smoke:
+        artifact_metadata[FUZZ_CORPUS_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
+        }
+    if include_fuzz_coverage_smoke:
+        artifact_metadata[FUZZ_COVERAGE_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-fuzz-corpus-coverage-smoke",
+        }
     exact = {}
     if include_header_exact:
         exact[HEADER_INSPECT_ARTIFACT] = "zig build run-header-inspect-dashboard"
@@ -57,6 +73,10 @@ def write_producer_map(
         exact[DASHBOARD_STRICT_ARTIFACT] = "zig build run-dashboard-strict-smoke"
     if include_huffman_exact:
         exact[HUFFMAN_LENGTH_ARTIFACT] = "zig build run-huffman-length-report-dashboard"
+    if include_fuzz_corpus_exact:
+        exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
+    if include_fuzz_coverage_exact:
+        exact[FUZZ_COVERAGE_ARTIFACT] = "zig build run-fuzz-corpus-coverage-smoke"
     payload = {
         "schema": "vort.dashboard_producers",
         "schema_version": 1,
@@ -200,10 +220,132 @@ def write_huffman_length_csv(path: Path, *, optimal: bool = True) -> None:
     path.write_text(",".join(columns) + "\n" + ",".join(row[column] for column in columns) + "\n")
 
 
+def write_fuzz_corpus_report(path: Path, *, ok: bool = True) -> None:
+    matched_rows = 3 if ok else 2
+    payload = {
+        "schema": "vort.fuzz_corpus_report",
+        "schema_version": 1,
+        "ok": ok,
+        "mode": "mixed",
+        "cases": 3,
+        "accepted": 1,
+        "rejected": 2,
+        "exact_error_expectations": 2,
+        "matched_rows": matched_rows,
+        "mode_count_rows": 3,
+        "error_count_rows": 2,
+        "items": [
+            {
+                "index": 0,
+                "mode": "deflate",
+                "input_bytes": 2,
+                "expected": "reject",
+                "expected_error": "InvalidDeflateBlockType",
+                "actual_error": "InvalidDeflateBlockType",
+                "outcome": "rejected",
+                "matched": True,
+            },
+            {
+                "index": 1,
+                "mode": "zlib",
+                "input_bytes": 2,
+                "expected": "reject",
+                "expected_error": "InvalidDeflateBlockType",
+                "actual_error": "InvalidDeflateBlockType" if ok else "ChecksumMismatch",
+                "outcome": "rejected",
+                "matched": ok,
+            },
+            {
+                "index": 2,
+                "mode": "gzip",
+                "input_bytes": 3,
+                "expected": "accept",
+                "expected_error": "",
+                "actual_error": "",
+                "outcome": "accepted",
+                "matched": True,
+            },
+        ],
+        "mode_counts": [
+            {"mode": "deflate", "cases": 1, "accepted": 0, "rejected": 1, "exact_error_expectations": 1, "matched_rows": 1},
+            {"mode": "zlib", "cases": 1, "accepted": 0, "rejected": 1, "exact_error_expectations": 1, "matched_rows": 1 if ok else 0},
+            {"mode": "gzip", "cases": 1, "accepted": 1, "rejected": 0, "exact_error_expectations": 0, "matched_rows": 1},
+        ],
+        "error_counts": [
+            {"mode": "deflate", "error": "InvalidDeflateBlockType", "count": 1},
+            {"mode": "zlib", "error": "InvalidDeflateBlockType" if ok else "ChecksumMismatch", "count": 1},
+        ],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_fuzz_coverage_report(path: Path, *, ok: bool = True) -> None:
+    payload = {
+        "schema": "vort.fuzz_corpus_coverage_smoke",
+        "schema_version": 1,
+        "ok": ok,
+        "report": str(path.with_name(FUZZ_CORPUS_ARTIFACT)),
+        "coverage": str(ROOT / "tools" / "fuzz_corpus_expected_coverage.json"),
+        "mode_requirement_count": 3,
+        "error_requirement_count": 2,
+        "mode_requirements": [
+            {
+                "mode": "deflate",
+                "min_cases": 1,
+                "actual_cases": 1,
+                "min_accepted": 0,
+                "actual_accepted": 0,
+                "min_rejected": 1,
+                "actual_rejected": 1,
+                "min_exact_error_expectations": 1,
+                "actual_exact_error_expectations": 1,
+                "min_matched_rows": 1,
+                "actual_matched_rows": 1,
+                "matched": True,
+            },
+            {
+                "mode": "zlib",
+                "min_cases": 1,
+                "actual_cases": 1,
+                "min_accepted": 0,
+                "actual_accepted": 0,
+                "min_rejected": 1,
+                "actual_rejected": 1,
+                "min_exact_error_expectations": 1,
+                "actual_exact_error_expectations": 1,
+                "min_matched_rows": 1,
+                "actual_matched_rows": 1 if ok else 0,
+                "matched": ok,
+            },
+            {
+                "mode": "gzip",
+                "min_cases": 1,
+                "actual_cases": 1,
+                "min_accepted": 1,
+                "actual_accepted": 1,
+                "min_rejected": 0,
+                "actual_rejected": 0,
+                "min_exact_error_expectations": 0,
+                "actual_exact_error_expectations": 0,
+                "min_matched_rows": 1,
+                "actual_matched_rows": 1,
+                "matched": True,
+            },
+        ],
+        "error_requirements": [
+            {"mode": "deflate", "error": "InvalidDeflateBlockType", "min_count": 1, "actual_count": 1, "matched": True},
+            {"mode": "zlib", "error": "InvalidDeflateBlockType", "min_count": 1, "actual_count": 1 if ok else 0, "matched": ok},
+        ],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def write_healthy_artifacts(root: Path) -> None:
     write_header_summary(root / HEADER_INSPECT_ARTIFACT)
     write_dashboard_strict_summary(root / DASHBOARD_STRICT_ARTIFACT)
     write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
+    write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
+    write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
 
 
 def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
@@ -544,41 +686,31 @@ def main() -> int:
             fixture_root = root / f"validation-{fixture.replace('_', '-')}"
             fixture_root.mkdir()
             producer_map = fixture_root / "producers.json"
+            write_healthy_artifacts(fixture_root)
             if fixture == "missing_producer_steps":
-                write_healthy_artifacts(fixture_root)
                 write_producer_map(producer_map, include_header_exact=False)
             elif fixture == "missing_required_smoke_gates":
-                write_healthy_artifacts(fixture_root)
                 write_producer_map(producer_map, include_header_smoke=False, required_names=[HEADER_INSPECT_ARTIFACT])
             elif fixture == "missing_header_inspect_artifact":
-                write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT)
-                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
+                (fixture_root / HEADER_INSPECT_ARTIFACT).unlink()
                 write_producer_map(producer_map)
             elif fixture == "header_inspect_failed":
                 write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT, ok=False)
-                write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT)
-                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
                 write_producer_map(producer_map)
             elif fixture == "missing_header_workflows":
                 write_header_summary(
                     fixture_root / HEADER_INSPECT_ARTIFACT,
                     missing=[{"command": "inspect-raw-header-file", "workflow": "file", "format": "raw"}],
                 )
-                write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT)
-                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
                 write_producer_map(producer_map)
             elif fixture == "missing_dashboard_strict_artifact":
-                write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT)
-                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
+                (fixture_root / DASHBOARD_STRICT_ARTIFACT).unlink()
                 write_producer_map(producer_map)
             elif fixture == "dashboard_strict_failed":
-                write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT)
                 write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT, ok=False)
-                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
                 write_producer_map(producer_map)
             elif fixture == "missing_dashboard_strict_modes":
                 minimum = len(expected_validation_reasons)
-                write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT)
                 write_dashboard_strict_summary(
                     fixture_root / DASHBOARD_STRICT_ARTIFACT,
                     missing_modes=[
@@ -590,16 +722,24 @@ def main() -> int:
                         }
                     ],
                 )
-                write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT)
                 write_producer_map(producer_map)
             elif fixture == "missing_huffman_length_artifact":
-                write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT)
-                write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT)
+                (fixture_root / HUFFMAN_LENGTH_ARTIFACT).unlink()
                 write_producer_map(producer_map)
             elif fixture == "huffman_length_failed":
-                write_header_summary(fixture_root / HEADER_INSPECT_ARTIFACT)
-                write_dashboard_strict_summary(fixture_root / DASHBOARD_STRICT_ARTIFACT)
                 write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT, optimal=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_fuzz_corpus_artifact":
+                (fixture_root / FUZZ_CORPUS_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "fuzz_corpus_failed":
+                write_fuzz_corpus_report(fixture_root / FUZZ_CORPUS_ARTIFACT, ok=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_fuzz_coverage_artifact":
+                (fixture_root / FUZZ_COVERAGE_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "fuzz_coverage_failed":
+                write_fuzz_coverage_report(fixture_root / FUZZ_COVERAGE_ARTIFACT, ok=False)
                 write_producer_map(producer_map)
             else:
                 raise AssertionError(f"unsupported validation reason fixture {fixture!r}")

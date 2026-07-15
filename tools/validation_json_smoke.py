@@ -9,6 +9,7 @@ successful and failing validation JSON records.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -442,6 +443,8 @@ def main() -> int:
         validate_value_against_manifest(header_summary, schemas_def)
         write_huffman_length_csv(huffman_length_csv_path)
         huffman_length_markdown_path.write_text("# Huffman length smoke\n\nAll rows are optimal.\n")
+        shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
+        shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
 
         run(
             [
@@ -491,12 +494,26 @@ def main() -> int:
         assert dashboard["huffman_length_package_merge_optimal_rows"] == 1
         assert dashboard["huffman_length_package_merge_non_optimal_rows"] == 0
         assert dashboard["huffman_length_package_merge_worst_gap_bits"] == 0
+        assert dashboard["fuzz_corpus_present"] is True
+        assert dashboard["fuzz_corpus_ok"] is True
+        assert dashboard["fuzz_corpus_coverage_present"] is True
+        assert dashboard["fuzz_corpus_coverage_ok"] is True
+        assert dashboard["fuzz_corpus_healthy"] is True
+        assert dashboard["fuzz_corpus_cases"] == fuzz_report["cases"]
+        assert dashboard["fuzz_corpus_matched_rows"] == fuzz_report["matched_rows"]
+        assert dashboard["fuzz_corpus_unmatched_rows"] == 0
+        assert dashboard["fuzz_corpus_exact_error_expectations"] == fuzz_report["exact_error_expectations"]
+        assert dashboard["fuzz_corpus_mode_count_rows"] == fuzz_report["mode_count_rows"]
+        assert dashboard["fuzz_corpus_error_count_rows"] == fuzz_report["error_count_rows"]
+        assert dashboard["fuzz_corpus_coverage_mode_requirements"] == fuzz_coverage_smoke["mode_requirement_count"]
+        assert dashboard["fuzz_corpus_coverage_error_requirements"] == fuzz_coverage_smoke["error_requirement_count"]
         assert dashboard["validation_healthy"] == (
             dashboard["producer_healthy"]
             and dashboard["smoke_gate_healthy"]
             and dashboard["header_inspect_healthy"]
             and dashboard["dashboard_strict_healthy"]
             and dashboard["huffman_length_healthy"]
+            and dashboard["fuzz_corpus_healthy"]
         )
         assert dashboard["validation_unhealthy_reasons"] == ([] if dashboard["validation_healthy"] else dashboard["validation_unhealthy_reasons"])
         validate_value_against_manifest(dashboard, schemas_def)

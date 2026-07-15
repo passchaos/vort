@@ -35,6 +35,19 @@
         "huffman_length_present": "bool",
         "huffman_length_row_count": "int",
         "huffman_length_worst_gap_bits": "int",
+        "fuzz_corpus_present": "bool",
+        "fuzz_corpus_ok": "bool",
+        "fuzz_corpus_coverage_present": "bool",
+        "fuzz_corpus_coverage_ok": "bool",
+        "fuzz_corpus_healthy": "bool",
+        "fuzz_corpus_cases": "int",
+        "fuzz_corpus_matched_rows": "int",
+        "fuzz_corpus_unmatched_rows": "int",
+        "fuzz_corpus_exact_error_expectations": "int",
+        "fuzz_corpus_mode_count_rows": "int",
+        "fuzz_corpus_error_count_rows": "int",
+        "fuzz_corpus_coverage_mode_requirements": "int",
+        "fuzz_corpus_coverage_error_requirements": "int",
         "producer_healthy": "bool",
         "producer_step_allowed_missing": "list",
         "producer_step_covered": "int",
@@ -65,7 +78,8 @@
             "smoke_gate_healthy",
             "header_inspect_healthy",
             "dashboard_strict_healthy",
-            "huffman_length_healthy"
+            "huffman_length_healthy",
+            "fuzz_corpus_healthy"
           ]
         },
         "header_inspect_healthy": {
@@ -99,6 +113,25 @@
           ],
           "positive": [
             "huffman_length_row_count"
+          ]
+        },
+        "fuzz_corpus_healthy": {
+          "all": [
+            "fuzz_corpus_present",
+            "fuzz_corpus_ok",
+            "fuzz_corpus_coverage_present",
+            "fuzz_corpus_coverage_ok"
+          ],
+          "zero": [
+            "fuzz_corpus_unmatched_rows"
+          ],
+          "positive": [
+            "fuzz_corpus_cases",
+            "fuzz_corpus_exact_error_expectations",
+            "fuzz_corpus_mode_count_rows",
+            "fuzz_corpus_error_count_rows",
+            "fuzz_corpus_coverage_mode_requirements",
+            "fuzz_corpus_coverage_error_requirements"
           ]
         }
       },
@@ -153,7 +186,11 @@
           "dashboard_strict_failed",
           "missing_dashboard_strict_modes",
           "missing_huffman_length_artifact",
-          "huffman_length_failed"
+          "huffman_length_failed",
+          "missing_fuzz_corpus_artifact",
+          "fuzz_corpus_failed",
+          "missing_fuzz_coverage_artifact",
+          "fuzz_coverage_failed"
         ]
       },
       "item_collection": "artifacts",
@@ -235,7 +272,11 @@
           "validation_dashboard_strict_failed",
           "validation_missing_dashboard_strict_modes",
           "validation_missing_huffman_length_artifact",
-          "validation_huffman_length_failed"
+          "validation_huffman_length_failed",
+          "validation_missing_fuzz_corpus_artifact",
+          "validation_fuzz_corpus_failed",
+          "validation_missing_fuzz_coverage_artifact",
+          "validation_fuzz_coverage_failed"
         ],
         "fixture": [
           "missing_producer_steps",
@@ -247,7 +288,11 @@
           "dashboard_strict_failed",
           "missing_dashboard_strict_modes",
           "missing_huffman_length_artifact",
-          "huffman_length_failed"
+          "huffman_length_failed",
+          "missing_fuzz_corpus_artifact",
+          "fuzz_corpus_failed",
+          "missing_fuzz_coverage_artifact",
+          "fuzz_coverage_failed"
         ],
         "reason": [
           "missing_producer_steps",
@@ -259,7 +304,11 @@
           "dashboard_strict_failed",
           "missing_dashboard_strict_modes",
           "missing_huffman_length_artifact",
-          "huffman_length_failed"
+          "huffman_length_failed",
+          "missing_fuzz_corpus_artifact",
+          "fuzz_corpus_failed",
+          "missing_fuzz_coverage_artifact",
+          "fuzz_coverage_failed"
         ]
       },
       "item_field_pairs": {
@@ -275,7 +324,11 @@
             "validation_dashboard_strict_failed": "dashboard_strict_failed",
             "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
             "validation_missing_huffman_length_artifact": "missing_huffman_length_artifact",
-            "validation_huffman_length_failed": "huffman_length_failed"
+            "validation_huffman_length_failed": "huffman_length_failed",
+            "validation_missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
+            "validation_fuzz_corpus_failed": "fuzz_corpus_failed",
+            "validation_missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
+            "validation_fuzz_coverage_failed": "fuzz_coverage_failed"
           }
         },
         "fixture": {
@@ -290,7 +343,11 @@
             "dashboard_strict_failed": "dashboard_strict_failed",
             "missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
             "missing_huffman_length_artifact": "missing_huffman_length_artifact",
-            "huffman_length_failed": "huffman_length_failed"
+            "huffman_length_failed": "huffman_length_failed",
+            "missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
+            "fuzz_corpus_failed": "fuzz_corpus_failed",
+            "missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
+            "fuzz_coverage_failed": "fuzz_coverage_failed"
           }
         }
       }
@@ -374,6 +431,10 @@
           "validation_missing_dashboard_strict_modes",
           "validation_missing_huffman_length_artifact",
           "validation_huffman_length_failed",
+          "validation_missing_fuzz_corpus_artifact",
+          "validation_fuzz_corpus_failed",
+          "validation_missing_fuzz_coverage_artifact",
+          "validation_fuzz_coverage_failed",
           "truncated_output"
         ]
       },
@@ -474,7 +535,11 @@
               "validation_dashboard_strict_failed",
               "validation_missing_dashboard_strict_modes",
               "validation_missing_huffman_length_artifact",
-              "validation_huffman_length_failed"
+              "validation_huffman_length_failed",
+              "validation_missing_fuzz_corpus_artifact",
+              "validation_fuzz_corpus_failed",
+              "validation_missing_fuzz_coverage_artifact",
+              "validation_fuzz_coverage_failed"
             ],
             "reason": [
               "missing_producer_steps",
@@ -486,7 +551,11 @@
               "dashboard_strict_failed",
               "missing_dashboard_strict_modes",
               "missing_huffman_length_artifact",
-              "huffman_length_failed"
+              "huffman_length_failed",
+              "missing_fuzz_corpus_artifact",
+              "fuzz_corpus_failed",
+              "missing_fuzz_coverage_artifact",
+              "fuzz_coverage_failed"
             ]
           },
           "field_pairs": {
@@ -502,7 +571,11 @@
                 "validation_dashboard_strict_failed": "dashboard_strict_failed",
                 "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
                 "validation_missing_huffman_length_artifact": "missing_huffman_length_artifact",
-                "validation_huffman_length_failed": "huffman_length_failed"
+                "validation_huffman_length_failed": "huffman_length_failed",
+                "validation_missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
+                "validation_fuzz_corpus_failed": "fuzz_corpus_failed",
+                "validation_missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
+                "validation_fuzz_coverage_failed": "fuzz_coverage_failed"
               }
             }
           }

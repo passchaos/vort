@@ -274,6 +274,9 @@ architecture blindly.
 - [x] Dashboard index reports fine-grained validation unhealthy reasons for missing producers, smoke gates, and coverage artifacts.
 - [x] Dashboard index strict mode fails when aggregate validation health is false and reports unhealthy reasons.
 - [x] Validation JSON schema checker validates dashboard health booleans against their component fields.
+- [x] Dashboard index gates validation health on Huffman length-limit oracle artifacts.
+- [x] Dashboard index gates validation health on fuzz corpus report and coverage-smoke artifacts.
+- [x] Dashboard strict-mode smoke covers Huffman and fuzz health failures with isolated negative fixtures.
 - [x] Dashboard index surfaces dashboard strict expected/missing mode details.
 - [x] Dashboard index surfaces aggregate dashboard strict coverage deltas.
 - [x] Dashboard strict-mode smoke records actual-output truncation limit and truncation flag per check.

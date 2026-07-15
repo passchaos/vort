@@ -231,7 +231,10 @@
     "vort-dashboard-strict-smoke.json",
     "vort-dashboard-strict-smoke.md",
     "vort-huffman-length-report.csv",
-    "vort-huffman-length-report.md"
+    "vort-huffman-length-report.md",
+    "vort-deflate-wrapper-fuzz-corpus.json",
+    "vort-deflate-wrapper-fuzz-corpus.md",
+    "vort-fuzz-corpus-coverage-smoke.json"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1

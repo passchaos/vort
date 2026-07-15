@@ -51,6 +51,26 @@
       "reason": "huffman_length_failed",
       "check": "validation_huffman_length_failed",
       "fixture": "huffman_length_failed"
+    },
+    {
+      "reason": "missing_fuzz_corpus_artifact",
+      "check": "validation_missing_fuzz_corpus_artifact",
+      "fixture": "missing_fuzz_corpus_artifact"
+    },
+    {
+      "reason": "fuzz_corpus_failed",
+      "check": "validation_fuzz_corpus_failed",
+      "fixture": "fuzz_corpus_failed"
+    },
+    {
+      "reason": "missing_fuzz_coverage_artifact",
+      "check": "validation_missing_fuzz_coverage_artifact",
+      "fixture": "missing_fuzz_coverage_artifact"
+    },
+    {
+      "reason": "fuzz_coverage_failed",
+      "check": "validation_fuzz_coverage_failed",
+      "fixture": "fuzz_coverage_failed"
     }
   ]
 }

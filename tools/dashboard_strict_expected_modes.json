@@ -2,11 +2,41 @@
   "schema": "vort.dashboard_strict_expected_modes",
   "schema_version": 1,
   "expected_modes": [
-    {"mode": "all", "min_checks": 1, "min_expected_failures": 0, "min_matched": 1},
-    {"mode": "strict-producers", "min_checks": 1, "min_expected_failures": 1, "min_matched": 1},
-    {"mode": "strict-smoke-gates", "min_checks": 1, "min_expected_failures": 1, "min_matched": 1},
-    {"mode": "strict-header-inspect", "min_checks": 3, "min_expected_failures": 3, "min_matched": 3},
-    {"mode": "synthetic", "min_checks": 1, "min_expected_failures": 0, "min_matched": 1},
-    {"mode": "strict-validation-health", "min_checks": 10, "min_expected_failures": 10, "min_matched": 10}
+    {
+      "mode": "all",
+      "min_checks": 1,
+      "min_expected_failures": 0,
+      "min_matched": 1
+    },
+    {
+      "mode": "strict-producers",
+      "min_checks": 1,
+      "min_expected_failures": 1,
+      "min_matched": 1
+    },
+    {
+      "mode": "strict-smoke-gates",
+      "min_checks": 1,
+      "min_expected_failures": 1,
+      "min_matched": 1
+    },
+    {
+      "mode": "strict-header-inspect",
+      "min_checks": 3,
+      "min_expected_failures": 3,
+      "min_matched": 3
+    },
+    {
+      "mode": "synthetic",
+      "min_checks": 1,
+      "min_expected_failures": 0,
+      "min_matched": 1
+    },
+    {
+      "mode": "strict-validation-health",
+      "min_checks": 14,
+      "min_expected_failures": 14,
+      "min_matched": 14
+    }
   ]
 }
