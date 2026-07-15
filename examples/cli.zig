@@ -846,6 +846,12 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "inspect-gzip-header-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const info = try vort.parseGzipHeaderInfo(compressed);
+        try printGzipHeaderInfo(stdout, compressed.len, info);
     } else if (std.mem.eql(u8, command, "decode-zlib-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -880,6 +886,12 @@ pub fn main(init: std.process.Init) !void {
             try vort.decodeGzipConcatenatedAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "gzip", compressed.len, decoded);
+    } else if (std.mem.eql(u8, command, "inspect-gzip-header-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const info = try vort.parseGzipHeaderInfo(compressed);
+        try printGzipHeaderInfo(stdout, compressed.len, info);
     } else {
         try stdout.print("unknown command: {s}\n\n", .{command});
         try printHelp(stdout);
@@ -921,6 +933,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode gzip-wrapped deflate hex to text
         \\  decode-gzip-file <in> <out> [max_output]
         \\                              Decode a gzip file with an optional output limit
+        \\  inspect-gzip-header-hex [hex]
+        \\                              Print parsed gzip header metadata for hex input
+        \\  inspect-gzip-header-file <in>
+        \\                              Print parsed gzip header metadata for a file
         \\  encode-raw-dict-best-hex [text] [dict] [level]
         \\                              Encode raw deflate that may reference preset dictionary history
         \\  encode-zlib-dict-best-hex [text] [dict] [level]
@@ -995,8 +1011,72 @@ fn printDecoded(stdout: *std.Io.Writer, label: []const u8, compressed_len: usize
 }
 
 fn printHex(stdout: *std.Io.Writer, bytes: []const u8) !void {
-    for (bytes) |byte| try stdout.print("{x:0>2}", .{byte});
+    try printHexInline(stdout, bytes);
     try stdout.print("\n", .{});
+}
+
+fn printHexInline(stdout: *std.Io.Writer, bytes: []const u8) !void {
+    for (bytes) |byte| try stdout.print("{x:0>2}", .{byte});
+}
+
+fn printGzipHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.GzipHeaderInfo) !void {
+    try stdout.print(
+        "gzip_header compressed_bytes={d} data_offset={d} flags=0x{x:0>2} text={} mtime={d} xfl={d} os={d} extra_present={} extra_len={d} extra_hex=",
+        .{
+            compressed_len,
+            info.data_offset,
+            info.flags,
+            info.text,
+            info.mtime,
+            info.xfl,
+            info.os,
+            info.extra != null,
+            if (info.extra) |extra| extra.len else 0,
+        },
+    );
+    if (info.extra) |extra| {
+        try printHexInline(stdout, extra);
+    } else {
+        try stdout.print("null", .{});
+    }
+    try stdout.print(" filename=", .{});
+    try printOptionalJsonBytes(stdout, info.filename);
+    try stdout.print(" comment=", .{});
+    try printOptionalJsonBytes(stdout, info.comment);
+    if (info.header_crc) |crc| {
+        try stdout.print(" header_crc={d}\n", .{crc});
+    } else {
+        try stdout.print(" header_crc=null\n", .{});
+    }
+}
+
+fn printOptionalJsonBytes(stdout: *std.Io.Writer, maybe_bytes: ?[]const u8) !void {
+    if (maybe_bytes) |bytes| {
+        try printJsonBytes(stdout, bytes);
+    } else {
+        try stdout.print("null", .{});
+    }
+}
+
+fn printJsonBytes(stdout: *std.Io.Writer, bytes: []const u8) !void {
+    try stdout.print("\"", .{});
+    for (bytes) |byte| {
+        switch (byte) {
+            '"' => try stdout.print("\\\"", .{}),
+            '\\' => try stdout.print("\\\\", .{}),
+            '\n' => try stdout.print("\\n", .{}),
+            '\r' => try stdout.print("\\r", .{}),
+            '\t' => try stdout.print("\\t", .{}),
+            else => {
+                if (byte >= 0x20 and byte <= 0x7e) {
+                    try stdout.print("{c}", .{byte});
+                } else {
+                    try stdout.print("\\u00{x:0>2}", .{byte});
+                }
+            },
+        }
+    }
+    try stdout.print("\"", .{});
 }
 
 fn printValidationFailure(stdout: *std.Io.Writer, label: []const u8, report: vort.ValidationReport) !void {
