@@ -506,24 +506,34 @@ fn copyLongDistanceMatch(output: []u8, written: *usize, distance: usize, len: us
 
 pub fn decodeDictionaryPatchAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8) ![]u8 {
     const info = try parseHeader(input);
-    const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
-    const total_len = try encodedSize(payload_len);
-    if (input.len < total_len) return error.TruncatedFrame;
-    const payload = input[header_len..total_len];
-    var inflated_patch: ?[]u8 = null;
-    defer if (inflated_patch) |patch| allocator.free(patch);
-    const patch = switch (info.flags) {
-        flags_dictionary_patch => payload,
-        flags_dictionary_deflate => blk: {
-            inflated_patch = try deflate.decodeRawAutoAlloc(allocator, payload);
-            break :blk inflated_patch.?;
-        },
-        else => return error.CorruptFrame,
-    };
-    const decoded = try dictionary.decodePatchAlloc(allocator, dict, patch);
+    const output_len = try dictionaryFrameOutputLen(info);
+    return decodeDictionaryPatchAllocKnownLen(allocator, dict, input, output_len);
+}
+
+pub fn decodeDictionaryPatchAllocExactSize(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, expected_output_len: usize) ![]u8 {
+    const info = try parseHeader(input);
+    const output_len = try dictionaryFrameOutputLen(info);
+    if (output_len != expected_output_len) return error.SizeMismatch;
+    return decodeDictionaryPatchAllocKnownLen(allocator, dict, input, output_len);
+}
+
+pub fn decodeDictionaryPatchAllocLimited(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, max_output_len: usize) ![]u8 {
+    const info = try parseHeader(input);
+    const output_len = try dictionaryFrameOutputLen(info);
+    if (output_len > max_output_len) return error.OutputLimitExceeded;
+    return decodeDictionaryPatchAllocKnownLen(allocator, dict, input, output_len);
+}
+
+fn dictionaryFrameOutputLen(info: FrameInfo) Error!usize {
+    if (info.flags != flags_dictionary_patch and info.flags != flags_dictionary_deflate) return error.CorruptFrame;
+    return std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow;
+}
+
+fn decodeDictionaryPatchAllocKnownLen(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, output_len: usize) ![]u8 {
+    const decoded = try allocator.alloc(u8, output_len);
     errdefer allocator.free(decoded);
-    if (decoded.len != info.uncompressed_size) return error.SizeMismatch;
-    if (checksum.crc32(decoded) != info.checksum) return error.ChecksumMismatch;
+    const written = try decodeDictionaryPatchInto(allocator, dict, input, decoded);
+    std.debug.assert(written == decoded.len);
     return decoded;
 }
 
@@ -4001,6 +4011,24 @@ test "native dictionary patch frame decodes into caller buffer without allocatio
     try std.testing.expectEqualSlices(u8, input, &out);
 }
 
+test "native dictionary patch alloc exact-size and limited variants bound output" {
+    const dict = "alpha beta gamma";
+    const input = "zz alpha beta yy gamma";
+    const frame = try encodeDictionaryPatchAlloc(std.testing.allocator, dict, input, 5);
+    defer std.testing.allocator.free(frame);
+
+    const exact = try decodeDictionaryPatchAllocExactSize(std.testing.allocator, dict, frame, input.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, input, exact);
+
+    const limited = try decodeDictionaryPatchAllocLimited(std.testing.allocator, dict, frame, input.len);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, input, limited);
+
+    try std.testing.expectError(error.SizeMismatch, decodeDictionaryPatchAllocExactSize(std.testing.allocator, dict, frame, input.len - 1));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeDictionaryPatchAllocLimited(std.testing.allocator, dict, frame, input.len - 1));
+}
+
 test "full dictionary patch frame range decodes into caller buffer without allocation" {
     const dict = "alpha beta gamma";
     const input = "zz alpha beta yy gamma";
@@ -4043,6 +4071,12 @@ test "native dictionary deflate frame decodes into caller buffer" {
     const written = try decodeDictionaryPatchInto(std.testing.allocator, dict, frame, &out);
     try std.testing.expectEqual(out.len, written);
     try std.testing.expectEqualSlices(u8, input, &out);
+
+    const exact = try decodeDictionaryPatchAllocExactSize(std.testing.allocator, dict, frame, input.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, input, exact);
+
+    try std.testing.expectError(error.OutputLimitExceeded, decodeDictionaryPatchAllocLimited(std.testing.allocator, dict, frame, input.len - 1));
 }
 
 test "full dictionary deflate frame range decodes into caller buffer" {

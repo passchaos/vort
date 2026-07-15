@@ -201,7 +201,9 @@ validate the frame CRC-32 without allocating a whole decoded frame. Native
 dictionary-deflate frames use the same final patch decode-into step after
 inflating the compressed patch payload; partial dictionary ranges continue to use
 the decoded-frame cache path so subranges share one verified decoded copy within
-batch requests.
+batch requests. Allocator-returning dictionary frame decoders also have
+exact-size and output-limited variants, matching the non-dictionary native safety
+surface while still requiring the caller-supplied dictionary bytes.
 
 ## Long-distance decode-into and full-frame range fast path
 
