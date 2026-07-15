@@ -839,7 +839,7 @@ pub fn main(init: std.process.Init) !void {
         const wrapper = try vort.parseZlibHeaderInfo(compressed);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
         if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, "zlib", compressed.len, 0, wrapper.data_offset, 0, info)
+            try printWrappedDeflateHeaderJson(stdout, "zlib", compressed.len, 0, wrapper.data_offset, 0, null, null, info)
         else
             try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-file")) {
@@ -887,7 +887,7 @@ pub fn main(init: std.process.Init) !void {
         const member = try locateGzipMember(init.gpa, compressed, member_index);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[member.deflate_offset..]);
         if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, "gzip", compressed.len, member.member_offset, member.deflate_offset, member_index, info)
+            try printWrappedDeflateHeaderJson(stdout, "gzip", compressed.len, member.member_offset, member.deflate_offset, member_index, member.member_footer_offset, member.member_end_offset, info)
         else
             try printRawHeaderInfo(stdout, compressed.len - member.deflate_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-hex")) {
@@ -923,7 +923,7 @@ pub fn main(init: std.process.Init) !void {
         const wrapper = try vort.parseZlibHeaderInfo(compressed);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[wrapper.data_offset..]);
         if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, "zlib", compressed.len, 0, wrapper.data_offset, 0, info)
+            try printWrappedDeflateHeaderJson(stdout, "zlib", compressed.len, 0, wrapper.data_offset, 0, null, null, info)
         else
             try printRawHeaderInfo(stdout, compressed.len - wrapper.data_offset, info, output_format);
     } else if (std.mem.eql(u8, command, "decode-zlib-dict-hex")) {
@@ -965,7 +965,7 @@ pub fn main(init: std.process.Init) !void {
         const member = try locateGzipMember(init.gpa, compressed, member_index);
         const info = try vort.parseRawDeflateHeaderInfo(compressed[member.deflate_offset..]);
         if (output_format == .json)
-            try printWrappedDeflateHeaderJson(stdout, "gzip", compressed.len, member.member_offset, member.deflate_offset, member_index, info)
+            try printWrappedDeflateHeaderJson(stdout, "gzip", compressed.len, member.member_offset, member.deflate_offset, member_index, member.member_footer_offset, member.member_end_offset, info)
         else
             try printRawHeaderInfo(stdout, compressed.len - member.deflate_offset, info, output_format);
     } else {
@@ -1116,6 +1116,8 @@ const HeaderInspectOutputFormat = enum { text, json };
 const GzipMemberLocation = struct {
     member_offset: usize,
     deflate_offset: usize,
+    member_footer_offset: usize,
+    member_end_offset: usize,
 };
 
 fn locateGzipMember(allocator: std.mem.Allocator, compressed: []const u8, member_index: usize) !GzipMemberLocation {
@@ -1123,18 +1125,24 @@ fn locateGzipMember(allocator: std.mem.Allocator, compressed: []const u8, member
     var index: usize = 0;
     while (offset < compressed.len) {
         const header = try vort.parseGzipHeaderInfo(compressed[offset..]);
+        const deflate_offset = offset + header.data_offset;
+        const raw_result = try decodeRawForOffset(allocator, compressed[deflate_offset..]);
+        const footer_offset = deflate_offset + raw_result.input_read;
+        if (compressed.len - footer_offset < 8) return error.TruncatedFrame;
+        const end_offset = footer_offset + 8;
         if (index == member_index) {
-            return .{ .member_offset = offset, .deflate_offset = offset + header.data_offset };
+            return .{
+                .member_offset = offset,
+                .deflate_offset = deflate_offset,
+                .member_footer_offset = footer_offset,
+                .member_end_offset = end_offset,
+            };
         }
         // To advance across concatenated gzip members, decode just enough of
         // the raw DEFLATE payload to learn its byte length, then skip the
         // 8-byte gzip trailer. This avoids guessing from magic-byte scans,
         // which can collide with compressed payload bytes.
-        const deflate_offset = offset + header.data_offset;
-        const raw_result = try decodeRawForOffset(allocator, compressed[deflate_offset..]);
-        const footer_offset = deflate_offset + raw_result.input_read;
-        if (compressed.len - footer_offset < 8) return error.TruncatedFrame;
-        offset = footer_offset + 8;
+        offset = end_offset;
         index += 1;
     }
     return error.RangeOutOfBounds;
@@ -1347,13 +1355,19 @@ fn printWrappedDeflateHeaderJson(
     member_offset: usize,
     deflate_offset: usize,
     member_index: usize,
+    member_footer_offset: ?usize,
+    member_end_offset: ?usize,
     info: vort.RawDeflateHeaderInfo,
 ) !void {
     const scope = if (std.mem.eql(u8, wrapper, "gzip")) "gzip_member" else "zlib_stream";
     try stdout.print(
-        "{{\"schema\":\"vort.wrapped_deflate_header_info\",\"schema_version\":1,\"wrapper\":\"{s}\",\"scope\":\"{s}\",\"member_index\":{d},\"member_offset\":{d},\"wrapper_bytes\":{d},\"deflate_offset\":{d},\"deflate_bytes\":{d},\"deflate_span_kind\":\"header_tail\",\"raw_header\":",
+        "{{\"schema\":\"vort.wrapped_deflate_header_info\",\"schema_version\":1,\"wrapper\":\"{s}\",\"scope\":\"{s}\",\"member_index\":{d},\"member_offset\":{d},\"wrapper_bytes\":{d},\"deflate_offset\":{d},\"deflate_bytes\":{d},\"deflate_span_kind\":\"header_tail\",\"member_footer_offset\":",
         .{ wrapper, scope, member_index, member_offset, wrapper_bytes, deflate_offset, wrapper_bytes - deflate_offset },
     );
+    try printOptionalJson(usize, stdout, member_footer_offset);
+    try stdout.print(",\"member_end_offset\":", .{});
+    try printOptionalJson(usize, stdout, member_end_offset);
+    try stdout.print(",\"raw_header\":", .{});
     try printRawHeaderJsonObject(stdout, wrapper_bytes - deflate_offset, info);
     try stdout.print("}}\n", .{});
 }

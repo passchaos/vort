@@ -424,6 +424,8 @@ def main(argv: list[str]) -> int:
     assert zlib_inner_json["scope"] == "zlib_stream"
     assert zlib_inner_json["member_index"] == 0
     assert zlib_inner_json["deflate_span_kind"] == "header_tail"
+    assert zlib_inner_json["member_footer_offset"] is None
+    assert zlib_inner_json["member_end_offset"] is None
     assert zlib_inner_json["raw_header"]["block_type"] == "fixed"
     cases.append(
         {
@@ -517,6 +519,9 @@ def main(argv: list[str]) -> int:
     assert gzip_inner_json["scope"] == "gzip_member"
     assert gzip_inner_json["member_index"] == 0
     assert gzip_inner_json["deflate_span_kind"] == "header_tail"
+    assert gzip_inner_json["member_footer_offset"] > gzip_inner_json["deflate_offset"]
+    assert gzip_inner_json["member_end_offset"] == gzip_inner_json["member_footer_offset"] + 8
+    assert gzip_inner_json["member_end_offset"] == len(gzip_frame)
     assert gzip_inner_json["raw_header"]["block_type"] == "fixed"
     cases.append(
         {
@@ -540,6 +545,8 @@ def main(argv: list[str]) -> int:
     assert gzip_concat_inner_json["wrapper"] == "gzip"
     assert gzip_concat_inner_json["deflate_offset"] == gzip_inner_json["deflate_offset"]
     assert gzip_concat_inner_json["deflate_bytes"] > gzip_inner_json["deflate_bytes"]
+    assert gzip_concat_inner_json["member_footer_offset"] == gzip_inner_json["member_footer_offset"]
+    assert gzip_concat_inner_json["member_end_offset"] == gzip_inner_json["member_end_offset"]
     for key in ("block_type", "final", "data_bit_offset", "header_bits_consumed"):
         assert gzip_concat_inner_json["raw_header"][key] == gzip_inner_json["raw_header"][key]
     cases.append(
@@ -563,6 +570,9 @@ def main(argv: list[str]) -> int:
     assert gzip_second_inner_json["wrapper"] == "gzip"
     assert gzip_second_inner_json["member_index"] == 1
     assert gzip_second_inner_json["member_offset"] > gzip_concat_inner_json["member_offset"]
+    assert gzip_second_inner_json["member_footer_offset"] > gzip_second_inner_json["deflate_offset"]
+    assert gzip_second_inner_json["member_end_offset"] == gzip_second_inner_json["member_footer_offset"] + 8
+    assert gzip_second_inner_json["member_end_offset"] == len(gzip_concat_frame)
     assert gzip_second_inner_json["raw_header"]["block_type"] == "fixed"
 
     gzip_optional_hex = run(cli, "inspect-gzip-header-hex", gzip_optional_frame.hex())

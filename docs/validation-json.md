@@ -335,9 +335,13 @@ scope, member index, total wrapper bytes, byte offset where the DEFLATE payload
 starts, remaining bytes after that offset, and the nested raw header object.
 `deflate_span_kind` is currently `header_tail`: `deflate_bytes` is the byte count
 after the wrapper header; for concatenated gzip inputs that includes the
-selected member footer and later members. The optional `member_index` argument
-selects the gzip member to inspect and defaults to `0`; member traversal uses
-the previous member's decoded raw DEFLATE byte length plus the gzip trailer.
+selected member footer and later members. For gzip, `member_footer_offset` points
+at the selected member's 8-byte trailer and `member_end_offset` is the exclusive
+end offset (`member_footer_offset + 8`); both fields are `null` for zlib because
+the current wrapped-deflate schema reports gzip member boundaries only. The
+optional `member_index` argument selects the gzip member to inspect and defaults
+to `0`; member traversal uses the previous member's decoded raw DEFLATE byte
+length plus the gzip trailer.
 
 Example:
 
@@ -353,6 +357,8 @@ Example:
   "deflate_offset": 2,
   "deflate_bytes": 11,
   "deflate_span_kind": "header_tail",
+  "member_footer_offset": null,
+  "member_end_offset": null,
   "raw_header": {
     "schema": "vort.raw_deflate_header_info",
     "schema_version": 1,

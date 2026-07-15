@@ -333,6 +333,8 @@
         "deflate_bytes": "int",
         "deflate_offset": "int",
         "deflate_span_kind": "str",
+        "member_end_offset": "int?",
+        "member_footer_offset": "int?",
         "member_index": "int",
         "member_offset": "int",
         "raw_header": "dict",
