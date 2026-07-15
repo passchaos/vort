@@ -114,6 +114,24 @@
         "sample": "str",
         "schema_name": "str"
       },
+      "item_field_pairs": {
+        "format": {
+          "target": "schema_name",
+          "allowed": {
+            "raw": "vort.raw_deflate_header_info",
+            "zlib": "vort.zlib_header_info",
+            "gzip": "vort.gzip_header_info"
+          }
+        },
+        "schema_name": {
+          "target": "command",
+          "allowed": {
+            "vort.raw_deflate_header_info": "inspect-raw-header-hex",
+            "vort.zlib_header_info": "inspect-zlib-header-hex",
+            "vort.gzip_header_info": "inspect-gzip-header-hex"
+          }
+        }
+      },
       "collections": {
         "negative_items": {
           "fields": {

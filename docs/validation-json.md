@@ -199,7 +199,8 @@ Important fields:
 - `optional_header_cases`, `fhcrc_cases`: gzip optional-header/FHCRC cases covered
 - `cases`: case-level metadata including enum-checked `name`, replayable
   `command`/`sample`, format, JSON `schema_name`, byte size, data offset, and
-  feature booleans
+  feature booleans. The manifest cross-checks `format` against `schema_name`
+  and `schema_name` against the replay command.
 
 Example:
 
@@ -567,6 +568,7 @@ Each schema entry can contain:
 | `item_collection` | string | Optional nested list field to inspect. |
 | `item_fields` | object | Required fields for the first nested item. |
 | `item_enums` | object | Optional nested item enum constraints. |
+| `item_field_pairs` | object | Optional nested item cross-field equality constraints driven by an allowed map. |
 | `collections` | object | Optional map of additional nested list fields to per-item `fields`/`enums` checks. |
 
 Supported type names are `str`, `int`, `bool`, `list`, `dict`, `str?`, and

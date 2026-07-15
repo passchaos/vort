@@ -59,6 +59,25 @@ def require_enums(value: dict[str, Any], enums: dict[str, list[str]], label: str
             raise AssertionError(f"{label}.{field} has unexpected value {value[field]!r}; allowed={sorted(allowed)}")
 
 
+def require_field_pairs(value: dict[str, Any], field_pairs: dict[str, Any], label: str) -> None:
+    for source_field, pair_def in field_pairs.items():
+        if not isinstance(pair_def, dict):
+            raise AssertionError(f"{label}.{source_field} pair rule must be an object")
+        target_field = pair_def.get("target")
+        allowed = pair_def.get("allowed")
+        if not isinstance(target_field, str) or not isinstance(allowed, dict):
+            raise AssertionError(f"{label}.{source_field} pair rule must define target and allowed map")
+        source_value = value.get(source_field)
+        expected_target = allowed.get(source_value)
+        if expected_target is None:
+            raise AssertionError(f"{label}.{source_field} has no pair rule for {source_value!r}")
+        actual_target = value.get(target_field)
+        if actual_target != expected_target:
+            raise AssertionError(
+                f"{label}.{target_field}={actual_target!r} does not match {source_field}={source_value!r}; expected {expected_target!r}"
+            )
+
+
 def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str, Any]) -> None:
     schema = value.get("schema")
     schema_def = schemas_def.get(schema)
@@ -81,6 +100,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
             item_collection,
             item_fields,
             schema_def.get("item_enums", {}),
+            schema_def.get("item_field_pairs", {}),
             schema,
         )
 
@@ -99,6 +119,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
                 collection_name,
                 item_fields,
                 collection_def.get("enums", {}),
+                collection_def.get("field_pairs", {}),
                 schema,
             )
 
@@ -108,15 +129,20 @@ def validate_item_collection(
     collection_name: str,
     item_fields: dict[str, str],
     item_enums: dict[str, list[str]],
+    item_field_pairs: dict[str, Any],
     schema: str,
 ) -> None:
     items = value.get(collection_name)
     if not isinstance(items, list) or not items:
         raise AssertionError(f"{schema} must include non-empty {collection_name}")
-    label = f"{schema}.{collection_name}[0]"
-    require_fields(items[0], set(item_fields), label)
-    require_types(items[0], item_fields, label)
-    require_enums(items[0], item_enums, label)
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise AssertionError(f"{schema}.{collection_name}[{index}] must be an object")
+        label = f"{schema}.{collection_name}[{index}]"
+        require_fields(item, set(item_fields), label)
+        require_types(item, item_fields, label)
+        require_enums(item, item_enums, label)
+        require_field_pairs(item, item_field_pairs, label)
 
 
 def main() -> int:
