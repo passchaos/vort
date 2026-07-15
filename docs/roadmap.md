@@ -80,6 +80,7 @@ architecture blindly.
 - [x] Embedded frame indexes expose borrowed payload views and caller-owned decode APIs.
 - [x] Indexed and sidecar range-into APIs can reuse caller-provided frame-index buffers.
 - [x] Dictionary-aware indexed and sidecar range-into APIs can reuse caller-provided frame-index buffers.
+- [x] Auto and self-contained dictionary range-into APIs can reuse caller-provided frame-index buffers.
 - [x] Frame indexes can compose per-frame CRC-32 values into a whole-stream checksum without rereading payload bytes.
 - [x] Public frame-index summary API exposes frame count, total uncompressed length, and combined checksum.
 - [x] Validation reports expose frame-count, total-uncompressed, and combined-checksum summaries for successful indexed streams.

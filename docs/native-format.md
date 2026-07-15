@@ -138,7 +138,9 @@ borrowed serialized index payload, payload offset, and entry count, while
 Indexed and sidecar range decode also expose `WithIndexBuffer` variants that
 reuse caller-owned index entry storage for callers that want to avoid allocating
 while parsing the embedded or sidecar index; dictionary-aware range variants
-offer the same index-buffer form for callers that already have dictionary bytes.
+offer the same index-buffer form for callers that already have dictionary bytes,
+and auto/self-contained dictionary variants combine borrowed embedded
+dictionary bytes with caller-owned index storage.
 
 ## Range decode summary APIs
 
