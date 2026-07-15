@@ -34,6 +34,16 @@ def md(text: object) -> str:
     return str(text).replace("|", "\\|")
 
 
+def format_for_command(command: str) -> str:
+    if "raw" in command:
+        return "raw"
+    if "zlib" in command:
+        return "zlib"
+    if "gzip" in command:
+        return "gzip"
+    return "unknown"
+
+
 def write_markdown(path: Path, summary: dict[str, object]) -> None:
     lines = [
         "# Vort header inspect smoke",
@@ -80,12 +90,29 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
             "",
             "## Expected failures",
             "",
-            "| name | command | sample | expected error |",
-            "| --- | --- | --- | --- |",
+            "| format | failures |",
+            "| --- | ---: |",
         ]
     )
-    for item in summary["negative_items"]:
-        lines.append(f"| {md(item['name'])} | `{md(item['command'])}` | `{md(item['sample'])}` | `{md(item['expected_error'])}` |")
+    for format_name in ("raw", "zlib", "gzip"):
+        items = [item for item in summary["negative_items"] if format_for_command(item["command"]) == format_name]
+        lines.append(f"| {md(format_name)} | {len(items)} |")
+    lines.extend([""])
+    for format_name in ("raw", "zlib", "gzip"):
+        items = [item for item in summary["negative_items"] if format_for_command(item["command"]) == format_name]
+        if not items:
+            continue
+        lines.extend(
+            [
+                f"### {format_name}",
+                "",
+                "| name | command | sample | expected error |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for item in items:
+            lines.append(f"| {md(item['name'])} | `{md(item['command'])}` | `{md(item['sample'])}` | `{md(item['expected_error'])}` |")
+        lines.append("")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
 
