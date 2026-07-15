@@ -637,7 +637,7 @@ This schema indexes files in `zig-out`. With `--strict-header-inspect`, index
 generation fails when the header inspect artifact is absent, reports `ok=false`,
 or has missing required workflows. With `--strict-validation-health`, generation
 fails whenever the aggregate `validation_healthy` field is false and reports the
-`validation_unhealthy_reasons` list.
+`validation_unhealthy_reasons` list with specific missing/failed artifact or coverage reasons.
 
 Top-level fields:
 
@@ -695,8 +695,8 @@ Example:
   "smoke_gate_required_missing": [],
   "validation_healthy": false,
   "validation_unhealthy_reasons": [
-    "header_inspect_unhealthy",
-    "dashboard_strict_unhealthy"
+    "missing_header_inspect_artifact",
+    "missing_dashboard_strict_artifact"
   ],
   "header_inspect_present": false,
   "header_inspect_ok": false,

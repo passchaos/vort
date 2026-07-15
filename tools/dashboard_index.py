@@ -283,13 +283,21 @@ def main() -> int:
     validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy
     validation_unhealthy_reasons = []
     if not producer_healthy:
-        validation_unhealthy_reasons.append("missing_producers")
+        validation_unhealthy_reasons.append("missing_producer_steps")
     if not smoke_gate_healthy:
-        validation_unhealthy_reasons.append("missing_smoke_gates")
-    if not header_healthy:
-        validation_unhealthy_reasons.append("header_inspect_unhealthy")
-    if not strict_healthy:
-        validation_unhealthy_reasons.append("dashboard_strict_unhealthy")
+        validation_unhealthy_reasons.append("missing_required_smoke_gates")
+    if not header_health["present"]:
+        validation_unhealthy_reasons.append("missing_header_inspect_artifact")
+    elif not header_health["ok"]:
+        validation_unhealthy_reasons.append("header_inspect_failed")
+    elif header_health["missing_workflow_count"]:
+        validation_unhealthy_reasons.append("missing_header_workflows")
+    if not strict_health["present"]:
+        validation_unhealthy_reasons.append("missing_dashboard_strict_artifact")
+    elif not strict_health["ok"]:
+        validation_unhealthy_reasons.append("dashboard_strict_failed")
+    elif strict_health["missing_mode_count"]:
+        validation_unhealthy_reasons.append("missing_dashboard_strict_modes")
 
     lines = [
         "# Vort dashboard index",

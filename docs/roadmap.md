@@ -255,6 +255,7 @@ architecture blindly.
 - [x] Dashboard index exposes direct header-inspection and dashboard-strict health booleans.
 - [x] Dashboard index exposes producer, smoke-gate, and overall validation health booleans.
 - [x] Dashboard index exposes validation unhealthy reasons with schema-checked reason enums.
+- [x] Dashboard index reports fine-grained validation unhealthy reasons for missing producers, smoke gates, and coverage artifacts.
 - [x] Dashboard index strict mode fails when aggregate validation health is false and reports unhealthy reasons.
 - [x] Validation JSON schema checker validates dashboard health booleans against their component fields.
 - [x] Dashboard index surfaces dashboard strict expected/missing mode details.

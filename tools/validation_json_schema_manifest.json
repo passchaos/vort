@@ -118,10 +118,14 @@
       },
       "list_item_enums": {
         "validation_unhealthy_reasons": [
-          "missing_producers",
-          "missing_smoke_gates",
-          "header_inspect_unhealthy",
-          "dashboard_strict_unhealthy"
+          "missing_producer_steps",
+          "missing_required_smoke_gates",
+          "missing_header_inspect_artifact",
+          "header_inspect_failed",
+          "missing_header_workflows",
+          "missing_dashboard_strict_artifact",
+          "dashboard_strict_failed",
+          "missing_dashboard_strict_modes"
         ]
       },
       "item_collection": "artifacts",
