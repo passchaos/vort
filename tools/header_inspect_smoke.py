@@ -11,6 +11,8 @@ from pathlib import Path
 
 from validation_json_docs_check import load_manifest, validate_value_against_manifest
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def run(cli: str, *args: str) -> str:
     return subprocess.check_output([cli, *args], text=True).strip()
@@ -28,6 +30,13 @@ def require_fields(output: str, fields: dict[str, str]) -> None:
         needle = f"{key}={value}"
         if needle not in output:
             raise AssertionError(f"missing {needle!r} in {output!r}")
+
+
+def require_corpus_samples(samples: list[str]) -> None:
+    corpus = (ROOT / "corpus" / "deflate-wrapper-smoke.hex").read_text()
+    missing = [sample for sample in samples if sample not in corpus]
+    if missing:
+        raise AssertionError(f"header inspect samples missing from deflate-wrapper-smoke.hex: {missing!r}")
 
 
 def md(text: object) -> str:
@@ -218,6 +227,7 @@ def main(argv: list[str]) -> int:
         ("zlib_bad_fcheck", "inspect-zlib-header-hex", "7802", "BadZlibHeader"),
         ("gzip_bad_fhcrc", "inspect-gzip-header-hex", "1f8b0802000000000403a2b2", "BadGzipHeader"),
     ]
+    require_corpus_samples([sample for name, _, sample, _ in negative_cases if "_dynamic_" in name])
     negative_items: list[dict[str, object]] = []
     for name, command, sample, expected_error in negative_cases:
         failed = expect_failure(cli, command, sample)
