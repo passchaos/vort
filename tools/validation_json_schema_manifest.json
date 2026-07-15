@@ -719,7 +719,11 @@
         "ok": "bool",
         "rejected": "int",
         "schema": "str",
-        "schema_version": "int"
+        "schema_version": "int",
+        "mode_count_rows": "int",
+        "error_count_rows": "int",
+        "mode_counts": "list",
+        "error_counts": "list"
       },
       "count_rules": {
         "cases": {
@@ -744,6 +748,12 @@
           "collection": "items",
           "field": "expected_error",
           "not_equals": ""
+        },
+        "mode_count_rows": {
+          "collection": "mode_counts"
+        },
+        "error_count_rows": {
+          "collection": "error_counts"
         }
       },
       "enums": {
@@ -782,6 +792,63 @@
           "accepted",
           "rejected"
         ]
+      },
+      "collection_sum_rules": {
+        "cases": {
+          "collection": "mode_counts",
+          "field": "cases"
+        },
+        "accepted": {
+          "collection": "mode_counts",
+          "field": "accepted"
+        },
+        "rejected": {
+          "collection": "mode_counts",
+          "field": "rejected"
+        },
+        "exact_error_expectations": {
+          "collection": "mode_counts",
+          "field": "exact_error_expectations"
+        },
+        "matched_rows": {
+          "collection": "mode_counts",
+          "field": "matched_rows"
+        }
+      },
+      "collections": {
+        "mode_counts": {
+          "fields": {
+            "accepted": "int",
+            "cases": "int",
+            "exact_error_expectations": "int",
+            "matched_rows": "int",
+            "mode": "str",
+            "rejected": "int"
+          },
+          "enums": {
+            "mode": [
+              "store",
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          }
+        },
+        "error_counts": {
+          "fields": {
+            "count": "int",
+            "error": "str",
+            "mode": "str"
+          },
+          "enums": {
+            "mode": [
+              "store",
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          }
+        }
       }
     },
     "vort.header_inspect_required_workflows": {

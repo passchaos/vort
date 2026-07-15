@@ -961,6 +961,8 @@ Important fields:
 - `cases`, `accepted`, `rejected`
 - `exact_error_expectations`: rows with a non-empty `expected_error`
 - `matched_rows`: rows whose outcome and exact error matched expectations
+- `mode_counts`: per-format aggregate cases, accept/reject counts, exact-error expectations, and matched rows
+- `error_counts`: per-format aggregate actual error-name counts for rejected samples
 - `items`: per-sample rows with mode, input size, expected outcome/error,
   actual outcome/error, and `matched`
 
@@ -977,6 +979,25 @@ Example:
   "rejected": 1,
   "exact_error_expectations": 1,
   "matched_rows": 2,
+  "mode_count_rows": 1,
+  "error_count_rows": 1,
+  "mode_counts": [
+    {
+      "mode": "deflate",
+      "cases": 2,
+      "accepted": 1,
+      "rejected": 1,
+      "exact_error_expectations": 1,
+      "matched_rows": 2
+    }
+  ],
+  "error_counts": [
+    {
+      "mode": "deflate",
+      "error": "TrailingData",
+      "count": 1
+    }
+  ],
   "items": [
     {
       "index": 0,

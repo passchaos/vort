@@ -85,6 +85,21 @@ const ReportRow = struct {
     matched: bool,
 };
 
+const ModeCount = struct {
+    mode: Mode,
+    cases: usize = 0,
+    accepted: usize = 0,
+    rejected: usize = 0,
+    exact_error_expectations: usize = 0,
+    matched_rows: usize = 0,
+};
+
+const ErrorCount = struct {
+    mode: Mode,
+    error_name: []const u8,
+    count: usize,
+};
+
 const State = struct {
     mode: Mode = .store,
     // Expected outcomes are sticky on purpose: corpus files often group many
@@ -469,11 +484,16 @@ fn hexToOwnedBytes(allocator: std.mem.Allocator, hex: []const u8) ![]u8 {
 }
 
 fn writeJson(init: std.process.Init, path: []const u8, state: State) !void {
+    var mode_counts = try collectModeCounts(init.gpa, state.rows.items);
+    defer mode_counts.deinit(init.gpa);
+    var error_counts = try collectErrorCounts(init.gpa, state.rows.items);
+    defer error_counts.deinit(init.gpa);
+
     var writer = std.Io.Writer.Allocating.init(init.gpa);
     defer writer.deinit();
     const w = &writer.writer;
     try w.print(
-        "{{\n  \"schema\": \"vort.fuzz_corpus_report\",\n  \"schema_version\": 1,\n  \"ok\": {},\n  \"mode\": \"{s}\",\n  \"cases\": {d},\n  \"accepted\": {d},\n  \"rejected\": {d},\n  \"exact_error_expectations\": {d},\n  \"matched_rows\": {d},\n  \"items\": [\n",
+        "{{\n  \"schema\": \"vort.fuzz_corpus_report\",\n  \"schema_version\": 1,\n  \"ok\": {},\n  \"mode\": \"{s}\",\n  \"cases\": {d},\n  \"accepted\": {d},\n  \"rejected\": {d},\n  \"exact_error_expectations\": {d},\n  \"matched_rows\": {d},\n  \"mode_count_rows\": {d},\n  \"error_count_rows\": {d},\n  \"mode_counts\": [\n",
         .{
             state.matchedRows() == state.rows.items.len,
             state.modeLabel(),
@@ -482,8 +502,31 @@ fn writeJson(init: std.process.Init, path: []const u8, state: State) !void {
             state.rejected,
             state.exactErrorExpectationCount(),
             state.matchedRows(),
+            mode_counts.items.len,
+            error_counts.items.len,
         },
     );
+    for (mode_counts.items, 0..) |row, i| {
+        try w.print("    {{\"mode\": \"{s}\", \"cases\": {d}, \"accepted\": {d}, \"rejected\": {d}, \"exact_error_expectations\": {d}, \"matched_rows\": {d}}}{s}\n", .{
+            @tagName(row.mode),
+            row.cases,
+            row.accepted,
+            row.rejected,
+            row.exact_error_expectations,
+            row.matched_rows,
+            if (i + 1 == mode_counts.items.len) "" else ",",
+        });
+    }
+    try w.print("  ],\n  \"error_counts\": [\n", .{});
+    for (error_counts.items, 0..) |row, i| {
+        try w.print("    {{\"mode\": \"{s}\", \"error\": ", .{@tagName(row.mode)});
+        try std.json.Stringify.value(row.error_name, .{}, w);
+        try w.print(", \"count\": {d}}}{s}\n", .{
+            row.count,
+            if (i + 1 == error_counts.items.len) "" else ",",
+        });
+    }
+    try w.print("  ],\n  \"items\": [\n", .{});
     for (state.rows.items, 0..) |row, i| {
         try w.print("    {{\"index\": {d}, \"mode\": \"{s}\", \"input_bytes\": {d}, \"expected\": \"{s}\", \"expected_error\": ", .{
             row.index,
@@ -504,6 +547,11 @@ fn writeJson(init: std.process.Init, path: []const u8, state: State) !void {
 }
 
 fn writeMarkdown(init: std.process.Init, path: []const u8, state: State) !void {
+    var mode_counts = try collectModeCounts(init.gpa, state.rows.items);
+    defer mode_counts.deinit(init.gpa);
+    var error_counts = try collectErrorCounts(init.gpa, state.rows.items);
+    defer error_counts.deinit(init.gpa);
+
     var writer = std.Io.Writer.Allocating.init(init.gpa);
     defer writer.deinit();
     const w = &writer.writer;
@@ -517,8 +565,10 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, state: State) !void {
         \\- exact error expectations: {d}
         \\- matched rows: {d}
         \\
-        \\| index | mode | input bytes | expected | expected error | outcome | actual error | matched |
-        \\| ---: | --- | ---: | --- | --- | --- | --- | --- |
+        \\## Mode summary
+        \\
+        \\| mode | cases | accepted | rejected | exact error expectations | matched rows |
+        \\| --- | ---: | ---: | ---: | ---: | ---: |
         \\
     , .{
         state.modeLabel(),
@@ -528,6 +578,39 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, state: State) !void {
         state.exactErrorExpectationCount(),
         state.matchedRows(),
     });
+    for (mode_counts.items) |row| {
+        try w.print("| {s} | {d} | {d} | {d} | {d} | {d} |\n", .{
+            @tagName(row.mode),
+            row.cases,
+            row.accepted,
+            row.rejected,
+            row.exact_error_expectations,
+            row.matched_rows,
+        });
+    }
+    try w.print(
+        \\
+        \\## Error summary
+        \\
+        \\| mode | error | count |
+        \\| --- | --- | ---: |
+        \\
+    , .{});
+    for (error_counts.items) |row| {
+        try w.print("| {s} | `{s}` | {d} |\n", .{
+            @tagName(row.mode),
+            row.error_name,
+            row.count,
+        });
+    }
+    try w.print(
+        \\
+        \\## Samples
+        \\
+        \\| index | mode | input bytes | expected | expected error | outcome | actual error | matched |
+        \\| ---: | --- | ---: | --- | --- | --- | --- | --- |
+        \\
+    , .{});
     for (state.rows.items) |row| {
         try w.print("| {d} | {s} | {d} | {s} | `{s}` | {s} | `{s}` | {} |\n", .{
             row.index,
@@ -545,4 +628,71 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, state: State) !void {
 
 fn expectedLabel(expected: ?Expected) []const u8 {
     return if (expected) |value| @tagName(value) else "any";
+}
+
+fn modeIndex(mode: Mode) usize {
+    return switch (mode) {
+        .store => 0,
+        .deflate => 1,
+        .zlib => 2,
+        .gzip => 3,
+    };
+}
+
+fn collectModeCounts(allocator: std.mem.Allocator, rows: []const ReportRow) !std.ArrayList(ModeCount) {
+    var counts = [_]ModeCount{
+        .{ .mode = .store },
+        .{ .mode = .deflate },
+        .{ .mode = .zlib },
+        .{ .mode = .gzip },
+    };
+    for (rows) |row| {
+        const index = modeIndex(row.mode);
+        counts[index].cases += 1;
+        switch (row.outcome) {
+            .accepted => counts[index].accepted += 1,
+            .rejected => counts[index].rejected += 1,
+        }
+        if (row.expected_error.len != 0) counts[index].exact_error_expectations += 1;
+        if (row.matched) counts[index].matched_rows += 1;
+    }
+
+    var result: std.ArrayList(ModeCount) = .empty;
+    errdefer result.deinit(allocator);
+    for (counts) |row| {
+        if (row.cases != 0) try result.append(allocator, row);
+    }
+    return result;
+}
+
+fn collectErrorCounts(allocator: std.mem.Allocator, rows: []const ReportRow) !std.ArrayList(ErrorCount) {
+    var result: std.ArrayList(ErrorCount) = .empty;
+    errdefer result.deinit(allocator);
+    for (rows) |row| {
+        if (row.outcome != .rejected or row.actual_error.len == 0) continue;
+        var found = false;
+        for (result.items) |*count| {
+            if (count.mode == row.mode and std.mem.eql(u8, count.error_name, row.actual_error)) {
+                count.count += 1;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            try result.append(allocator, .{
+                .mode = row.mode,
+                .error_name = row.actual_error,
+                .count = 1,
+            });
+        }
+    }
+    std.mem.sort(ErrorCount, result.items, {}, errorCountLessThan);
+    return result;
+}
+
+fn errorCountLessThan(_: void, lhs: ErrorCount, rhs: ErrorCount) bool {
+    const lhs_mode = modeIndex(lhs.mode);
+    const rhs_mode = modeIndex(rhs.mode);
+    if (lhs_mode != rhs_mode) return lhs_mode < rhs_mode;
+    return std.mem.lessThan(u8, lhs.error_name, rhs.error_name);
 }
