@@ -70,6 +70,7 @@ def main(argv: list[str]) -> int:
     negative_cases = [
         ("raw_reserved_btype", "inspect-raw-header-hex", "07", "InvalidDeflateBlockType"),
         ("raw_bad_stored_nlen", "inspect-raw-header-hex", "010100ffff78", "StoredLengthMismatch"),
+        ("raw_truncated_dynamic_header", "inspect-raw-header-hex", "05", "TruncatedFrame"),
         ("zlib_bad_fcheck", "inspect-zlib-header-hex", "7802", "BadZlibHeader"),
         ("gzip_bad_fhcrc", "inspect-gzip-header-hex", "1f8b0802000000000403a2b2", "BadGzipHeader"),
     ]

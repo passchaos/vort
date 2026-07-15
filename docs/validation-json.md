@@ -209,7 +209,7 @@ Example:
   "raw_cases": 3,
   "zlib_cases": 2,
   "gzip_cases": 2,
-  "negative_cases": 4,
+  "negative_cases": 5,
   "dictionary_cases": 1,
   "optional_header_cases": 1,
   "fhcrc_cases": 1,
