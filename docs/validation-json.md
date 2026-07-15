@@ -323,6 +323,9 @@ Produced by:
 
 ```sh
 zig build run -- inspect-zlib-deflate-header-hex 7801cb48cdc9c90700062c0215 json
+zig build run -- inspect-zlib-deflate-header-file /tmp/vort.zlib json
+zig build run -- inspect-gzip-deflate-header-file /tmp/vort.gz json
+zig build run -- inspect-gzip-deflate-header-file /tmp/vort-cat.gz json  # first member
 ```
 
 This schema wraps `vort.raw_deflate_header_info` with the zlib/gzip header
