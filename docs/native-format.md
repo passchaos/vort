@@ -136,7 +136,8 @@ bytes, offset, and CRC-32 summary. Batch `Into` variants such as
 range write counts plus CRC-32 summaries. The batch implementation caches
 decoded frame payloads for the duration of one batch, so overlapping or nearby
 ranges in the same indexed frame do not repeatedly decode that frame; allocating
-summary batch APIs reuse the same into/cache path before wrapping the buffers in
+summary batch APIs preflight all request bounds before allocating range buffers,
+then reuse the same into/cache path before wrapping the buffers in
 `RangeDecodeResult` values. The batch APIs are intended for workloads such as
 data-lake readers or archive manifests that need several small slices from the
 same indexed stream without reparsing the embedded or sidecar index for each

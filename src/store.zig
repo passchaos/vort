@@ -867,6 +867,8 @@ pub fn decodeRangesWithSummaryAlloc(allocator: std.mem.Allocator, input: []const
 }
 
 pub fn decodeRangesWithDictionarySummaryAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeRequest) !RangeBatchDecodeResult {
+    try validateFrameIndex(index);
+    try validateBatchRangeRequests(index, requests);
     const ranges = try allocator.alloc(RangeDecodeResult, requests.len);
     errdefer allocator.free(ranges);
     var initialized: usize = 0;
@@ -899,6 +901,16 @@ pub fn decodeRangesWithDictionarySummaryAlloc(allocator: std.mem.Allocator, dict
         ranges[i].crc32 = result.crc32;
     }
     return .{ .ranges = ranges };
+}
+
+fn validateBatchRangeRequests(index: []const FrameIndexEntry, requests: []const RangeRequest) Error!void {
+    const total_uncompressed = if (index.len == 0) 0 else index[index.len - 1].uncompressed_offset + index[index.len - 1].uncompressed_len;
+    for (requests) |request| {
+        if (request.length == 0) continue;
+        const end = std.math.add(u64, request.offset, request.length) catch return error.IntegerOverflow;
+        if (end > total_uncompressed) return error.RangeOutOfBounds;
+        _ = findFrameForOffset(index, request.offset) orelse return error.RangeOutOfBounds;
+    }
 }
 
 pub fn decodeRangeInto(allocator: std.mem.Allocator, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
@@ -2690,6 +2702,10 @@ test "frame index supports seek and range decode" {
     try std.testing.expectEqualSlices(u8, "gamma", batch.ranges[2].bytes);
     try std.testing.expectEqual(checksum.crc32("gamma"), batch.ranges[2].crc32);
     try std.testing.expectError(error.RangeOutOfBounds, decodeRangesWithSummaryAlloc(std.testing.allocator, combined.items, index, &.{
+        .{ .offset = 0, .length = 5 },
+        .{ .offset = 12, .length = 8 },
+    }));
+    try std.testing.expectError(error.RangeOutOfBounds, decodeRangesWithSummaryAlloc(std.testing.failing_allocator, combined.items, index, &.{
         .{ .offset = 0, .length = 5 },
         .{ .offset = 12, .length = 8 },
     }));
