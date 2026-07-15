@@ -17,6 +17,9 @@ corruption that would not change sidecar bytes or frame headers.
 `validateEmbeddedIndexAlloc` and `validateSidecarIndexAlloc` auto-load embedded
 dictionaries in full mode, while `validateSidecarIndexWithDictionaryAlloc` and
 `validateSidecarIndexWithOptionsAlloc` cover external-dictionary streams.
+Full validation decodes frames into a reusable scratch buffer, so validating many
+same-sized or smaller frames avoids repeated decoded-payload allocations while
+preserving the same checksum/error semantics.
 `validateSidecarIndexReportAlloc` and `validateEmbeddedIndexReportAlloc` return
 structured failure context (validation mode, stage, frame index/offset,
 uncompressed offset, numeric frame flags, readable frame mode, recoverability

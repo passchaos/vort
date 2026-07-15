@@ -79,6 +79,7 @@ architecture blindly.
 - [x] Sidecar frame-index bytes can drive dictionary range decode.
 - [x] Sidecar frame-index bytes can auto range-decode streams with embedded dictionaries.
 - [x] Sidecar index validation decodes referenced frames and catches payload corruption, including dictionary streams.
+- [x] Full sidecar/embedded validation reuses decoded-payload scratch buffers across frames.
 - [x] Sidecar index validation exposes explicit metadata-only and full-decode modes for large corpus workflows.
 - [x] Embedded-index validation exposes the same metadata-only/full-decode semantics as sidecar validation.
 - [x] Sidecar and embedded-index validation reports expose structured failure context for diagnostics.

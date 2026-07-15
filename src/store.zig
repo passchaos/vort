@@ -2318,6 +2318,8 @@ fn validateFrameIndexEntriesInternalAlloc(allocator: std.mem.Allocator, dict: ?[
     try validateFrameIndex(index);
     const summary = try frameIndexSummary(index);
     try validateFrameIndexSummaryExpectations(summary, options);
+    var scratch: std.ArrayList(u8) = .empty;
+    defer scratch.deinit(allocator);
     for (index) |entry| {
         if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
         const frame = input[entry.frame_offset..][0..entry.frame_len];
@@ -2332,11 +2334,12 @@ fn validateFrameIndexEntriesInternalAlloc(allocator: std.mem.Allocator, dict: ?[
         // remain unchanged. Decode each referenced frame once to force the
         // normal per-mode checksum and size verification paths to run before a
         // verifier reports the pair as reusable for range reads.
-        const decoded = if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) blk: {
+        try scratch.resize(allocator, std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow);
+        const written = if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) blk: {
             const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
-            break :blk try decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame);
-        } else try decodeAnyAlloc(allocator, frame);
-        allocator.free(decoded);
+            break :blk try decodeDictionaryPatchInto(allocator, dictionary_bytes, frame, scratch.items);
+        } else try decodeAnyInto(frame, scratch.items);
+        if (written != scratch.items.len) return error.SizeMismatch;
     }
 }
 
@@ -2352,6 +2355,8 @@ fn validateFrameIndexEntriesReportInternalAlloc(allocator: std.mem.Allocator, di
     validateFrameIndex(index) catch |err| return validationFailure(options.mode, .index_structure, err, null, null, null);
     const summary = frameIndexSummary(index) catch |err| return validationFailure(options.mode, .index_structure, err, null, null, null);
     validateFrameIndexSummaryExpectations(summary, options) catch |err| return validationFailure(options.mode, .frame_metadata, err, null, null, null);
+    var scratch: std.ArrayList(u8) = .empty;
+    defer scratch.deinit(allocator);
     for (index, 0..) |entry, i| {
         if (input.len - entry.frame_offset < entry.frame_len) return validationFailure(options.mode, .frame_bounds, error.TruncatedFrame, i, entry, null);
         const frame = input[entry.frame_offset..][0..entry.frame_len];
@@ -2360,11 +2365,12 @@ fn validateFrameIndexEntriesReportInternalAlloc(allocator: std.mem.Allocator, di
         if (entry.uncompressed_len != info.uncompressed_size) return validationFailure(options.mode, .frame_metadata, error.CorruptFrame, i, entry, info.flags);
         if (entry.checksum != info.checksum) return validationFailure(options.mode, .frame_metadata, error.ChecksumMismatch, i, entry, info.flags);
         if (options.mode == .metadata) continue;
-        const decoded = if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) blk: {
+        scratch.resize(allocator, std.math.cast(usize, info.uncompressed_size) orelse return validationFailure(options.mode, .frame_metadata, error.IntegerOverflow, i, entry, info.flags)) catch |err| return validationFailure(options.mode, .payload_decode, err, i, entry, info.flags);
+        const written = if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) blk: {
             const dictionary_bytes = dict orelse return validationFailure(options.mode, .payload_decode, error.InvalidDictionaryTraining, i, entry, info.flags);
-            break :blk decodeDictionaryPatchAlloc(allocator, dictionary_bytes, frame) catch |err| return validationFailure(options.mode, .payload_decode, err, i, entry, info.flags);
-        } else decodeAnyAlloc(allocator, frame) catch |err| return validationFailure(options.mode, .payload_decode, err, i, entry, info.flags);
-        allocator.free(decoded);
+            break :blk decodeDictionaryPatchInto(allocator, dictionary_bytes, frame, scratch.items) catch |err| return validationFailure(options.mode, .payload_decode, err, i, entry, info.flags);
+        } else decodeAnyInto(frame, scratch.items) catch |err| return validationFailure(options.mode, .payload_decode, err, i, entry, info.flags);
+        if (written != scratch.items.len) return validationFailure(options.mode, .payload_decode, error.SizeMismatch, i, entry, info.flags);
     }
     return .{
         .ok = true,
@@ -3219,6 +3225,27 @@ test "sidecar index validator decodes frames to catch payload tampering" {
     tampered[header_len] ^= 1;
 
     try std.testing.expectError(error.ChecksumMismatch, validateSidecarIndexAlloc(std.testing.allocator, tampered, sidecar.sidecar_index));
+}
+
+test "sidecar validator reuses payload scratch during full decode" {
+    const payloads = [_][]const u8{
+        "alpha frame",
+        "beta frame",
+        "gamma frame",
+    };
+    const sidecar = try encodeSidecarIndexedStreamAlloc(std.testing.allocator, &payloads);
+    defer sidecar.deinit(std.testing.allocator);
+    const index = try decodeFrameIndexAlloc(std.testing.allocator, sidecar.sidecar_index);
+    defer std.testing.allocator.free(index);
+
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
+    try validateFrameIndexEntriesInternalAlloc(failing.allocator(), null, sidecar.stream, index, .{ .mode = .full });
+    try std.testing.expectEqual(@as(usize, 1), failing.allocations);
+
+    var report_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
+    const report = validateFrameIndexEntriesReportInternalAlloc(report_failing.allocator(), null, sidecar.stream, index, .{ .mode = .full });
+    try std.testing.expect(report.ok);
+    try std.testing.expectEqual(@as(usize, 1), report_failing.allocations);
 }
 
 test "sidecar index metadata validation skips payload decode by design" {
