@@ -3189,6 +3189,26 @@ test "indexed long-distance stream supports embedded range decode" {
     const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, prefix.len + 4, 16);
     defer std.testing.allocator.free(range);
     try std.testing.expectEqualSlices(u8, prefix[0..16], range);
+    const batch = try decodeIndexedRangesWithSummaryAlloc(std.testing.allocator, stream, &.{
+        .{ .offset = prefix.len + 4, .length = 16 },
+        .{ .offset = prefix.len + 20, .length = 16 },
+    });
+    defer batch.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, prefix[0..16], batch.ranges[0].bytes);
+    try std.testing.expectEqual(checksum.crc32(prefix[0..16]), batch.ranges[0].crc32);
+    try std.testing.expectEqualSlices(u8, prefix[16..32], batch.ranges[1].bytes);
+    try std.testing.expectEqual(checksum.crc32(prefix[16..32]), batch.ranges[1].crc32);
+    var first: [16]u8 = undefined;
+    var second: [16]u8 = undefined;
+    var results: [2]RangeDecodeIntoResult = undefined;
+    try decodeIndexedRangesInto(std.testing.allocator, stream, &.{
+        .{ .offset = prefix.len + 4, .length = first.len, .output = first[0..] },
+        .{ .offset = prefix.len + 20, .length = second.len, .output = second[0..] },
+    }, results[0..]);
+    try std.testing.expectEqualSlices(u8, prefix[0..16], &first);
+    try std.testing.expectEqual(checksum.crc32(&first), results[0].crc32);
+    try std.testing.expectEqualSlices(u8, prefix[16..32], &second);
+    try std.testing.expectEqual(checksum.crc32(&second), results[1].crc32);
 }
 
 test "blocked deflate stream splits input and supports range decode" {
@@ -3397,6 +3417,48 @@ test "native dictionary deflate frame decodes with caller dictionary" {
     const decoded = try decodeDictionaryPatchAlloc(std.testing.allocator, dict, frame);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, input, decoded);
+}
+
+test "dictionary deflate indexed stream supports batch range summaries" {
+    const dict = "alpha beta gamma dictionary deflate phrase";
+    const input = (dict ++ " -- payload ") ** 3;
+    const frame = try encodeDictionaryDeflateAlloc(std.testing.allocator, dict, input, 8);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_dictionary_deflate, info.flags);
+
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+    const index_bytes = try encodeFrameIndexAlloc(std.testing.allocator, index);
+    defer std.testing.allocator.free(index_bytes);
+    const index_frame = try encodeSkippableAlloc(std.testing.allocator, index_bytes);
+    defer std.testing.allocator.free(index_frame);
+    var stream = std.ArrayList(u8).empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, frame);
+    try stream.appendSlice(std.testing.allocator, index_frame);
+
+    const batch = try decodeIndexedRangesWithDictionarySummaryAlloc(std.testing.allocator, dict, stream.items, &.{
+        .{ .offset = 0, .length = 16 },
+        .{ .offset = 9, .length = 32 },
+    });
+    defer batch.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, input[0..16], batch.ranges[0].bytes);
+    try std.testing.expectEqual(checksum.crc32(input[0..16]), batch.ranges[0].crc32);
+    try std.testing.expectEqualSlices(u8, input[9..41], batch.ranges[1].bytes);
+    try std.testing.expectEqual(checksum.crc32(input[9..41]), batch.ranges[1].crc32);
+
+    var first: [16]u8 = undefined;
+    var second: [32]u8 = undefined;
+    var results: [2]RangeDecodeIntoResult = undefined;
+    try decodeIndexedRangesWithDictionaryInto(std.testing.allocator, dict, stream.items, &.{
+        .{ .offset = 0, .length = first.len, .output = first[0..] },
+        .{ .offset = 9, .length = second.len, .output = second[0..] },
+    }, results[0..]);
+    try std.testing.expectEqualSlices(u8, input[0..16], &first);
+    try std.testing.expectEqual(checksum.crc32(&first), results[0].crc32);
+    try std.testing.expectEqualSlices(u8, input[9..41], &second);
+    try std.testing.expectEqual(checksum.crc32(&second), results[1].crc32);
 }
 
 test "native dictionary best encoder chooses patch only when smaller" {

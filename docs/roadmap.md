@@ -62,6 +62,7 @@ architecture blindly.
 - [x] Batch range-decode into APIs cache decoded frames within a batch to avoid repeated same-frame decode work.
 - [x] Batch range-decode summary APIs reuse the cached batch-into path and preflight invalid requests.
 - [x] Batch range-decode summary APIs preflight invalid requests before allocating range buffers.
+- [x] Batch range-decode APIs cover LDM and dictionary-deflate indexed frame modes.
 - [x] Sidecar-indexed stream encoder keeps index external.
 - [x] Sidecar frame-index bytes can drive range decode without embedded index.
 - [x] Sidecar frame-index bytes can drive dictionary range decode.
