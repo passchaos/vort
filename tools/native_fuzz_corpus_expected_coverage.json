@@ -1,0 +1,19 @@
+{
+  "schema": "vort.fuzz_corpus_expected_coverage",
+  "schema_version": 1,
+  "mode_requirements": [
+    {
+      "mode": "native",
+      "min_cases": 5,
+      "min_accepted": 2,
+      "min_rejected": 3,
+      "min_exact_error_expectations": 3,
+      "min_matched_rows": 5
+    }
+  ],
+  "error_requirements": [
+    { "mode": "native", "error": "ChecksumMismatch", "min_count": 1 },
+    { "mode": "native", "error": "InvalidDictionaryTraining", "min_count": 1 },
+    { "mode": "native", "error": "OutputLimitExceeded", "min_count": 1 }
+  ]
+}

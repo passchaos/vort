@@ -63,6 +63,7 @@ architecture blindly.
 - [x] Store/native fuzz smoke corpus covers embedded dictionary metadata accept/reject cases.
 - [x] Store/native fuzz smoke corpus covers concatenated dictionary auto decode accept/reject cases.
 - [x] External native hex fuzz corpus covers store and dictionary concatenated accept/reject cases.
+- [x] Native hex fuzz corpus emits JSON/Markdown artifacts and has coverage smoke gates.
 - [x] Deterministic malformed-header/frame smoke corpus.
 - [x] Skippable native frames.
 - [x] In-memory frame indexes for concatenated native store streams.

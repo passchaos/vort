@@ -262,6 +262,18 @@ pub fn build(b: *std.Build) void {
     const native_fuzz_corpus_step = b.step("run-native-fuzz-corpus", "Run native VORT hex-sample fuzz corpus");
     native_fuzz_corpus_step.dependOn(&run_native_fuzz_corpus.step);
 
+    const run_native_fuzz_corpus_dashboard = b.addRunArtifact(fuzz_corpus_exe);
+    run_native_fuzz_corpus_dashboard.addArgs(&.{
+        "--file",
+        "corpus/native-smoke.hex",
+        "--json",
+        "zig-out/vort-native-fuzz-corpus.json",
+        "--markdown",
+        "zig-out/vort-native-fuzz-corpus.md",
+    });
+    const native_fuzz_corpus_dashboard_step = b.step("run-native-fuzz-corpus-dashboard", "Write native VORT fuzz corpus dashboard artifacts");
+    native_fuzz_corpus_dashboard_step.dependOn(&run_native_fuzz_corpus_dashboard.step);
+
     const run_deflate_wrapper_fuzz_corpus_dashboard = b.addRunArtifact(fuzz_corpus_exe);
     run_deflate_wrapper_fuzz_corpus_dashboard.addArgs(&.{
         "--file",
@@ -278,6 +290,20 @@ pub fn build(b: *std.Build) void {
     fuzz_corpus_coverage_smoke.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     const fuzz_corpus_coverage_smoke_step = b.step("run-fuzz-corpus-coverage-smoke", "Validate wrapper fuzz corpus coverage minimums");
     fuzz_corpus_coverage_smoke_step.dependOn(&fuzz_corpus_coverage_smoke.step);
+
+    const native_fuzz_corpus_coverage_smoke = b.addSystemCommand(&.{
+        "python3",
+        "tools/fuzz_corpus_coverage_smoke.py",
+        "--report",
+        "zig-out/vort-native-fuzz-corpus.json",
+        "--coverage",
+        "tools/native_fuzz_corpus_expected_coverage.json",
+        "--summary",
+        "zig-out/vort-native-fuzz-corpus-coverage-smoke.json",
+    });
+    native_fuzz_corpus_coverage_smoke.step.dependOn(native_fuzz_corpus_dashboard_step);
+    const native_fuzz_corpus_coverage_smoke_step = b.step("run-native-fuzz-corpus-coverage-smoke", "Validate native fuzz corpus coverage minimums");
+    native_fuzz_corpus_coverage_smoke_step.dependOn(&native_fuzz_corpus_coverage_smoke.step);
 
     const fuzz_target_exe = b.addExecutable(.{
         .name = "vort-fuzz-target",
@@ -918,6 +944,8 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(fuzz_corpus_step);
     ci_smoke_step.dependOn(deflate_wrapper_fuzz_corpus_step);
     ci_smoke_step.dependOn(native_fuzz_corpus_step);
+    ci_smoke_step.dependOn(native_fuzz_corpus_dashboard_step);
+    ci_smoke_step.dependOn(native_fuzz_corpus_coverage_smoke_step);
     ci_smoke_step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     ci_smoke_step.dependOn(fuzz_corpus_coverage_smoke_step);
     ci_smoke_step.dependOn(fuzz_target_step);

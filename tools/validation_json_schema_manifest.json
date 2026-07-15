@@ -1146,6 +1146,7 @@
       "enums": {
         "mode": [
           "store",
+          "native",
           "deflate",
           "zlib",
           "gzip",
@@ -1171,6 +1172,7 @@
         ],
         "mode": [
           "store",
+          "native",
           "deflate",
           "zlib",
           "gzip"
@@ -1215,6 +1217,7 @@
           "enums": {
             "mode": [
               "store",
+              "native",
               "deflate",
               "zlib",
               "gzip"
@@ -1230,6 +1233,7 @@
           "enums": {
             "mode": [
               "store",
+              "native",
               "deflate",
               "zlib",
               "gzip"
@@ -1257,6 +1261,7 @@
           },
           "enums": {
             "mode": [
+              "native",
               "deflate",
               "zlib",
               "gzip"
@@ -1271,6 +1276,7 @@
           },
           "enums": {
             "mode": [
+              "native",
               "deflate",
               "zlib",
               "gzip"
@@ -1317,6 +1323,7 @@
           },
           "enums": {
             "mode": [
+              "native",
               "deflate",
               "zlib",
               "gzip"
@@ -1333,6 +1340,7 @@
           },
           "enums": {
             "mode": [
+              "native",
               "deflate",
               "zlib",
               "gzip"
