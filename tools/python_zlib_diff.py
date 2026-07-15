@@ -167,6 +167,20 @@ def main() -> int:
     out = run_cli("decode-zlib-dict-hex", zlib_dynamic_dict.hex(), dictionary_text)
     assert int(parse_field(out, "decoded_bytes")) == len(dictionary), out
     assert int(parse_field(out, "crc32")) == (zlib.crc32(dictionary) & 0xFFFFFFFF), out
+    co = zlib.compressobj(level=9, wbits=zlib.MAX_WBITS, zdict=dictionary)
+    zlib_dict_first = co.compress(b"hello hello ") + co.flush()
+    co = zlib.compressobj(level=1, wbits=zlib.MAX_WBITS, strategy=zlib.Z_FIXED, zdict=dictionary)
+    zlib_dict_second = co.compress(b"hello world") + co.flush()
+    zlib_dict_concat = zlib_dict_first + zlib_dict_second
+    zlib_dict_concat_payload = b"hello hello hello world"
+    expect_cli_failure("decode-zlib-concat-hex", zlib_dict_concat.hex(), error_name="NeedDictionary")
+    out = run_cli("decode-zlib-dict-concat-hex", zlib_dict_concat.hex(), dictionary_text)
+    assert int(parse_field(out, "decoded_bytes")) == len(zlib_dict_concat_payload), out
+    assert int(parse_field(out, "crc32")) == (zlib.crc32(zlib_dict_concat_payload) & 0xFFFFFFFF), out
+    limited = run_cli("decode-zlib-dict-concat-hex", zlib_dict_concat.hex(), dictionary_text, str(len(zlib_dict_concat_payload)))
+    assert int(parse_field(limited, "decoded_bytes")) == len(zlib_dict_concat_payload), limited
+    expect_cli_failure("decode-zlib-dict-concat-hex", zlib_dict_concat.hex(), "wrong dictionary", error_name="ChecksumMismatch")
+    expect_cli_failure("decode-zlib-dict-concat-hex", zlib_dict_concat.hex(), dictionary_text, str(len(zlib_dict_concat_payload) - 1), error_name="OutputLimitExceeded")
 
     zlib_file_payload = b"zlib file output limit smoke"
     zlib_file_frame = zlib.compress(zlib_file_payload, level=6)
@@ -218,6 +232,20 @@ def main() -> int:
         assert int(parse_field(out, "decoded_bytes")) == len(zlib_concat_payload), out
         assert concat_limited_path.read_bytes() == zlib_concat_payload, out
         expect_cli_failure("decode-zlib-concat-file", str(concat_path), str(tmp / "concat-too-small.bin"), str(len(zlib_concat_payload) - 1), error_name="OutputLimitExceeded")
+        dict_concat_path = tmp / "dict-concat.zlib"
+        dict_path = tmp / "dict.bin"
+        dict_concat_decoded_path = tmp / "dict-concat-decoded.bin"
+        dict_concat_limited_path = tmp / "dict-concat-limited.bin"
+        dict_concat_path.write_bytes(zlib_dict_concat)
+        dict_path.write_bytes(dictionary)
+        expect_cli_failure("decode-zlib-concat-file", str(dict_concat_path), str(tmp / "dict-concat-no-dict.bin"), error_name="NeedDictionary")
+        out = run_cli("decode-zlib-dict-concat-file", str(dict_concat_path), str(dict_concat_decoded_path), str(dict_path))
+        assert int(parse_field(out, "decoded_bytes")) == len(zlib_dict_concat_payload), out
+        assert dict_concat_decoded_path.read_bytes() == zlib_dict_concat_payload, out
+        out = run_cli("decode-zlib-dict-concat-file", str(dict_concat_path), str(dict_concat_limited_path), str(dict_path), str(len(zlib_dict_concat_payload)))
+        assert int(parse_field(out, "decoded_bytes")) == len(zlib_dict_concat_payload), out
+        assert dict_concat_limited_path.read_bytes() == zlib_dict_concat_payload, out
+        expect_cli_failure("decode-zlib-dict-concat-file", str(dict_concat_path), str(tmp / "dict-concat-too-small.bin"), str(dict_path), str(len(zlib_dict_concat_payload) - 1), error_name="OutputLimitExceeded")
 
     raw_file_payload = b"raw deflate file output limit smoke"
     co = zlib.compressobj(level=6, wbits=-15)

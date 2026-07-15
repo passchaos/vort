@@ -96,6 +96,7 @@ zig build run -- inspect-zlib-header-hex 7801cb48cdc9c90700062c0215 json
 zig build run -- inspect-zlib-deflate-header-hex 7801cb48cdc9c90700062c0215 json
 zig build run -- inspect-zlib-dict-deflate-header-hex 78f908610235cb4027013a2e067d "hello " json
 zig build run -- decode-zlib-dict-hex 78f908610235cb4027013a2e067d "hello "
+zig build run -- decode-zlib-dict-concat-hex 78f908610235cb4027013a2e067d78f908610235cb4027013a2e067d "hello "
 python3 - <<'PY'
 import zlib
 open("/tmp/vort.zlib", "wb").write(zlib.compress(b"hello"))
@@ -115,6 +116,8 @@ PY
 zig build run -- inspect-zlib-dict-deflate-header-file /tmp/vort-dict.zlib /tmp/vort.dict json
 zig build run -- decode-zlib-dict-file /tmp/vort-dict.zlib /tmp/vort-dict.out /tmp/vort.dict
 zig build run -- decode-zlib-dict-file /tmp/vort-dict.zlib /tmp/vort-dict-limited.out /tmp/vort.dict 17
+cat /tmp/vort-dict.zlib /tmp/vort-dict.zlib > /tmp/vort-dict-cat.zlib
+zig build run -- decode-zlib-dict-concat-file /tmp/vort-dict-cat.zlib /tmp/vort-dict-cat.out /tmp/vort.dict
 zig build run -- encode-raw-dict-best-file /tmp/vort-dict.out /tmp/vort-dict.raw /tmp/vort.dict default
 zig build run -- encode-raw-dict-best-split-file /tmp/vort-dict.out /tmp/vort-dict-split.raw /tmp/vort.dict 7 default
 zig build run -- encode-raw-dict-best-adaptive-file /tmp/vort-dict.out /tmp/vort-dict-adaptive.raw /tmp/vort.dict default

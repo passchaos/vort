@@ -309,6 +309,7 @@ architecture blindly.
 - [x] zlib concatenated stream decode supports caller-owned buffers, exact-size alloc, and explicit total output limits.
 - [x] zlib concatenated stream decode supports preset dictionary members.
 - [x] CLI and Python differential smoke cover zlib concatenated hex/file decode.
+- [x] CLI and Python differential smoke cover dictionary-aware zlib concatenated hex/file decode.
 - [x] File CLI exposes non-dictionary raw/gzip best encoders for differential harnesses.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
