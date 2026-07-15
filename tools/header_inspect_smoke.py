@@ -70,6 +70,8 @@ def main(argv: list[str]) -> int:
             "block_type": "fixed",
             "data_bit_offset": "3",
             "data_byte_offset": "1",
+            "header_bits_consumed": "3",
+            "header_bytes_consumed": "1",
         },
     )
     cases: list[dict[str, object]] = [
@@ -87,6 +89,7 @@ def main(argv: list[str]) -> int:
     assert raw_json["schema"] == "vort.raw_deflate_header_info"
     assert raw_json["block_type"] == "fixed"
     assert raw_json["final"] is True
+    assert raw_json["header_bits_consumed"] == 3
     assert raw_json["stored_len"] is None
     validate_value_against_manifest(raw_json, schemas_def)
 
@@ -99,6 +102,7 @@ def main(argv: list[str]) -> int:
             "stored_len": "5",
             "stored_nlen": "65530",
             "stored_payload_offset": "5",
+            "header_bits_consumed": "40",
         },
     )
     cases.append(
@@ -118,6 +122,7 @@ def main(argv: list[str]) -> int:
     assert raw_stored_json["stored_len"] == 5
     assert raw_stored_json["stored_nlen"] == 65530
     assert raw_stored_json["stored_payload_offset"] == 5
+    assert raw_stored_json["header_bits_consumed"] == 40
     validate_value_against_manifest(raw_stored_json, schemas_def)
 
     raw_dynamic_frame_hex = run(cli, "encode-raw-dynamic-hex", payload.decode("ascii"), "default")
@@ -129,6 +134,7 @@ def main(argv: list[str]) -> int:
             "raw_header compressed_bytes": str(len(raw_dynamic_frame)),
             "block_type": "dynamic",
             "dynamic_hlit": "257",
+            "header_bits_consumed": "17",
         },
     )
     cases.append(
@@ -148,6 +154,7 @@ def main(argv: list[str]) -> int:
     assert raw_dynamic_json["dynamic_hlit"] >= 257
     assert raw_dynamic_json["dynamic_hdist"] >= 1
     assert raw_dynamic_json["dynamic_hclen"] >= 4
+    assert raw_dynamic_json["header_bits_consumed"] == 17
     validate_value_against_manifest(raw_dynamic_json, schemas_def)
 
     zlib_hex = run(cli, "inspect-zlib-header-hex", zlib_frame.hex())

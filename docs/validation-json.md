@@ -235,7 +235,8 @@ zig build run -- inspect-raw-header-hex cb48cdc9c90700 json
 
 This schema is the machine-readable form of raw DEFLATE first-block header
 inspection. It reports BFINAL, BTYPE, the bit/byte offsets where the
-block-specific payload begins, dynamic-block HLIT/HDIST/HCLEN values when
+block-specific payload begins, how many header bits were consumed by the
+lightweight inspection, dynamic-block HLIT/HDIST/HCLEN values when
 BTYPE is `dynamic`, and stored-block LEN/NLEN diagnostics when BTYPE is
 `stored`.
 
@@ -250,6 +251,8 @@ Example:
   "block_type": "fixed",
   "data_bit_offset": 3,
   "data_byte_offset": 1,
+  "header_bits_consumed": 3,
+  "header_bytes_consumed": 1,
   "dynamic_hlit": null,
   "dynamic_hdist": null,
   "dynamic_hclen": null,

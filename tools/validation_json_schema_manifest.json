@@ -101,6 +101,8 @@
         "dynamic_hdist": "int?",
         "dynamic_hlit": "int?",
         "final": "bool",
+        "header_bits_consumed": "int",
+        "header_bytes_consumed": "int",
         "schema": "str",
         "schema_version": "int",
         "stored_len": "int?",

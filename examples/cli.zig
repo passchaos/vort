@@ -1063,13 +1063,15 @@ fn printRawHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort.
     if (output_format == .json) return printRawHeaderJson(stdout, compressed_len, info);
 
     try stdout.print(
-        "raw_header compressed_bytes={d} final={} block_type={s} data_bit_offset={d} data_byte_offset={d} stored_len=",
+        "raw_header compressed_bytes={d} final={} block_type={s} data_bit_offset={d} data_byte_offset={d} header_bits_consumed={d} header_bytes_consumed={d} stored_len=",
         .{
             compressed_len,
             info.final,
             @tagName(info.block_type),
             info.data_bit_offset,
             info.data_byte_offset,
+            info.header_bits_consumed,
+            info.header_bytes_consumed,
         },
     );
     try printOptionalJson(u16, stdout, info.stored_len);
@@ -1146,13 +1148,15 @@ fn printGzipHeaderInfo(stdout: *std.Io.Writer, compressed_len: usize, info: vort
 
 fn printRawHeaderJson(stdout: *std.Io.Writer, compressed_len: usize, info: vort.RawDeflateHeaderInfo) !void {
     try stdout.print(
-        "{{\"schema\":\"vort.raw_deflate_header_info\",\"schema_version\":1,\"compressed_bytes\":{d},\"final\":{},\"block_type\":\"{s}\",\"data_bit_offset\":{d},\"data_byte_offset\":{d},\"stored_len\":",
+        "{{\"schema\":\"vort.raw_deflate_header_info\",\"schema_version\":1,\"compressed_bytes\":{d},\"final\":{},\"block_type\":\"{s}\",\"data_bit_offset\":{d},\"data_byte_offset\":{d},\"header_bits_consumed\":{d},\"header_bytes_consumed\":{d},\"stored_len\":",
         .{
             compressed_len,
             info.final,
             @tagName(info.block_type),
             info.data_bit_offset,
             info.data_byte_offset,
+            info.header_bits_consumed,
+            info.header_bytes_consumed,
         },
     );
     try printOptionalJson(u16, stdout, info.stored_len);
