@@ -193,6 +193,7 @@ Important fields:
 - `ok`: whether the smoke passed
 - `case_count`, `raw_cases`, `zlib_cases`, `gzip_cases`
 - `negative_cases`: malformed header cases expected to fail inspection
+- `negative_items`: case-level command/sample/error matches for malformed headers
 - `dictionary_cases`: zlib FDICT/DICTID cases covered
 - `optional_header_cases`, `fhcrc_cases`: gzip optional-header/FHCRC cases covered
 - `cases`: case-level metadata including format, byte size, data offset, and
@@ -210,6 +211,15 @@ Example:
   "zlib_cases": 2,
   "gzip_cases": 2,
   "negative_cases": 5,
+  "negative_items": [
+    {
+      "name": "raw_reserved_btype",
+      "command": "inspect-raw-header-hex",
+      "sample": "07",
+      "expected_error": "InvalidDeflateBlockType",
+      "matched": true
+    }
+  ],
   "dictionary_cases": 1,
   "optional_header_cases": 1,
   "fhcrc_cases": 1,

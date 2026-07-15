@@ -74,10 +74,20 @@ def main(argv: list[str]) -> int:
         ("zlib_bad_fcheck", "inspect-zlib-header-hex", "7802", "BadZlibHeader"),
         ("gzip_bad_fhcrc", "inspect-gzip-header-hex", "1f8b0802000000000403a2b2", "BadGzipHeader"),
     ]
-    for _, command, sample, expected_error in negative_cases:
+    negative_items: list[dict[str, object]] = []
+    for name, command, sample, expected_error in negative_cases:
         failed = expect_failure(cli, command, sample)
         if expected_error not in failed:
             raise AssertionError(f"expected {expected_error!r} in failure output for {command} {sample}, got {failed!r}")
+        negative_items.append(
+            {
+                "name": name,
+                "command": command,
+                "sample": sample,
+                "expected_error": expected_error,
+                "matched": True,
+            }
+        )
 
     raw_hex = run(cli, "inspect-raw-header-hex", raw_frame.hex())
     require_fields(
@@ -367,6 +377,7 @@ def main(argv: list[str]) -> int:
         "optional_header_cases": sum(1 for case in cases if case["has_optional_fields"]),
         "fhcrc_cases": sum(1 for case in cases if case["header_crc"]),
         "negative_cases": len(negative_cases),
+        "negative_items": negative_items,
     }
     if summary_path is not None:
         summary_path.parent.mkdir(parents=True, exist_ok=True)
