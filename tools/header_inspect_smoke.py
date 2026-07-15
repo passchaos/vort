@@ -606,6 +606,8 @@ def main(argv: list[str]) -> int:
         raw_stored_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_stored_path), "json"))
         raw_dynamic_file_json = json.loads(run(cli, "inspect-raw-header-file", str(raw_dynamic_path), "json"))
         zlib_file_json = json.loads(run(cli, "inspect-zlib-header-file", str(zlib_path), "json"))
+        zlib_inner_file_json = json.loads(run(cli, "inspect-zlib-deflate-header-file", str(zlib_path), "json"))
+        gzip_inner_file_json = json.loads(run(cli, "inspect-gzip-deflate-header-file", str(gzip_path), "json"))
         gzip_optional_file_json = json.loads(run(cli, "inspect-gzip-header-file", str(gzip_optional_path), "json"))
         if raw_file != raw_hex:
             raise AssertionError(f"raw file/hex inspection mismatch: {raw_file!r} != {raw_hex!r}")
@@ -629,6 +631,10 @@ def main(argv: list[str]) -> int:
             raise AssertionError(f"raw dynamic JSON file/hex inspection mismatch: {raw_dynamic_file_json!r} != {raw_dynamic_json!r}")
         if zlib_file_json != zlib_json:
             raise AssertionError(f"zlib JSON file/hex inspection mismatch: {zlib_file_json!r} != {zlib_json!r}")
+        if zlib_inner_file_json != zlib_inner_json:
+            raise AssertionError(f"zlib inner JSON file/hex inspection mismatch: {zlib_inner_file_json!r} != {zlib_inner_json!r}")
+        if gzip_inner_file_json != gzip_inner_json:
+            raise AssertionError(f"gzip inner JSON file/hex inspection mismatch: {gzip_inner_file_json!r} != {gzip_inner_json!r}")
         if gzip_optional_file_json != gzip_optional_json:
             raise AssertionError(f"gzip optional JSON file/hex inspection mismatch: {gzip_optional_file_json!r} != {gzip_optional_json!r}")
         if gzip_concat_inner_file_json != gzip_concat_inner_json:

@@ -100,6 +100,7 @@ open("/tmp/vort.zlib", "wb").write(zlib.compress(b"hello"))
 PY
 zig build run -- decode-zlib-file /tmp/vort.zlib /tmp/vort-zlib.out 5
 zig build run -- inspect-zlib-header-file /tmp/vort.zlib
+zig build run -- inspect-zlib-deflate-header-file /tmp/vort.zlib json
 printf "hello " > /tmp/vort.dict && python3 - <<'PY'
 import zlib
 d = b"hello "
@@ -126,6 +127,7 @@ open("/tmp/vort-cat.gz", "wb").write(gzip.compress(b"hello ", mtime=0) + gzip.co
 PY
 zig build run -- decode-gzip-file /tmp/vort.gz /tmp/vort-gzip.out 5
 zig build run -- inspect-gzip-header-file /tmp/vort.gz
+zig build run -- inspect-gzip-deflate-header-file /tmp/vort.gz json
 zig build run -- decode-gzip-file /tmp/vort-cat.gz /tmp/vort-gzip-cat.out 11
 zig build run -- encode-raw-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 fast
 zig build run -- encode-raw-dict-best-hex "hello hello hello" "hello " default
