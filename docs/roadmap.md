@@ -57,6 +57,7 @@ architecture blindly.
 - [x] Concatenated native caller-owned decode reports bytes, data-frame count, and CRC-32.
 - [x] Allocator-returning concatenated native decode preflights total output and reuses caller-owned decode internally.
 - [x] Native allocation report records allocation counts for concatenated alloc/into/auto/limited decode paths.
+- [x] Native allocation report emits retained JSON/Markdown artifacts.
 - [x] Embedded dictionary inspection validates dictionary metadata without allocating dictionary bytes.
 - [x] Embedded dictionary inspection options enforce expected dictionary ID and content length.
 - [x] Auto dictionary range/validation/concatenated decode paths borrow embedded dictionary bytes instead of copying them.

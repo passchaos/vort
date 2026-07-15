@@ -710,6 +710,16 @@ pub fn build(b: *std.Build) void {
     const native_allocation_report_step = b.step("run-native-allocation-report", "Report allocation counts for native decode paths");
     native_allocation_report_step.dependOn(&run_native_allocation_report.step);
 
+    const run_native_allocation_dashboard = b.addRunArtifact(native_allocation_report_exe);
+    run_native_allocation_dashboard.addArgs(&.{
+        "--json",
+        "zig-out/vort-native-allocation-report.json",
+        "--markdown",
+        "zig-out/vort-native-allocation-report.md",
+    });
+    const native_allocation_dashboard_step = b.step("run-native-allocation-report-dashboard", "Write native allocation report artifacts");
+    native_allocation_dashboard_step.dependOn(&run_native_allocation_dashboard.step);
+
     const sidecar_verify_report_exe = b.addExecutable(.{
         .name = "vort-sidecar-verify-report",
         .root_module = b.createModule(.{
@@ -995,6 +1005,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(split_policy_report_step);
     ci_smoke_step.dependOn(native_range_report_step);
     ci_smoke_step.dependOn(native_allocation_report_step);
+    ci_smoke_step.dependOn(native_allocation_dashboard_step);
     ci_smoke_step.dependOn(sidecar_corrupt_smoke_step);
     ci_smoke_step.dependOn(sidecar_corrupt_dashboard_step);
     ci_smoke_step.dependOn(validation_json_smoke_step);

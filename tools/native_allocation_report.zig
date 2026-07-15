@@ -12,6 +12,23 @@ const CaseStats = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
+    defer args.deinit();
+    _ = args.next();
+    var json_path: ?[]const u8 = null;
+    var markdown_path: ?[]const u8 = null;
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--json")) {
+            json_path = args.next() orelse return error.MissingReportPath;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--markdown")) {
+            markdown_path = args.next() orelse return error.MissingReportPath;
+            continue;
+        }
+        return error.UnknownArgument;
+    }
+
     const allocator = init.gpa;
     const deflate_rle_stream = try buildDeflateRleStream(allocator);
     defer allocator.free(deflate_rle_stream);
@@ -28,20 +45,26 @@ pub fn main(init: std.process.Init) !void {
     );
     defer allocator.free(self_contained_dict_stream);
 
+    var rows: std.ArrayList(CaseStats) = .empty;
+    defer rows.deinit(allocator);
+    try rows.append(allocator, try measureConcatAlloc(allocator, deflate_rle_stream));
+    try rows.append(allocator, try measureConcatInto(allocator, deflate_rle_stream));
+    try rows.append(allocator, try measureConcatAutoInto(allocator, dict_stream));
+    try rows.append(allocator, try measureLimitedReject(allocator, deflate_rle_stream));
+    try rows.append(allocator, try measureRangeAlloc(allocator, indexed_deflate_stream));
+    try rows.append(allocator, try measureRangeInto(allocator, indexed_deflate_stream));
+    try rows.append(allocator, try measureBatchRangeInto(allocator, indexed_deflate_stream));
+    try rows.append(allocator, try measureEmbeddedValidation(allocator, self_contained_dict_stream));
+
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.print("case,input_bytes,output_bytes,allocations,deallocations,allocated_bytes,freed_bytes\n", .{});
-
-    try printStats(stdout, try measureConcatAlloc(allocator, deflate_rle_stream));
-    try printStats(stdout, try measureConcatInto(allocator, deflate_rle_stream));
-    try printStats(stdout, try measureConcatAutoInto(allocator, dict_stream));
-    try printStats(stdout, try measureLimitedReject(allocator, deflate_rle_stream));
-    try printStats(stdout, try measureRangeAlloc(allocator, indexed_deflate_stream));
-    try printStats(stdout, try measureRangeInto(allocator, indexed_deflate_stream));
-    try printStats(stdout, try measureBatchRangeInto(allocator, indexed_deflate_stream));
-    try printStats(stdout, try measureEmbeddedValidation(allocator, self_contained_dict_stream));
+    for (rows.items) |row| try printStats(stdout, row);
     try stdout.flush();
+
+    if (json_path) |path| try writeJson(init, path, rows.items);
+    if (markdown_path) |path| try writeMarkdown(init, path, rows.items);
 }
 
 fn printStats(writer: *std.Io.Writer, row: CaseStats) !void {
@@ -54,6 +77,62 @@ fn printStats(writer: *std.Io.Writer, row: CaseStats) !void {
         row.allocated_bytes,
         row.freed_bytes,
     });
+}
+
+fn writeJson(init: std.process.Init, path: []const u8, rows: []const CaseStats) !void {
+    var writer = std.Io.Writer.Allocating.init(init.gpa);
+    defer writer.deinit();
+    const w = &writer.writer;
+    try w.print(
+        "{{\n  \"schema\": \"vort.native_allocation_report\",\n  \"schema_version\": 1,\n  \"case_count\": {d},\n  \"cases\": [\n",
+        .{rows.len},
+    );
+    for (rows, 0..) |row, i| {
+        try w.print(
+            "    {{\"case\": ",
+            .{},
+        );
+        try std.json.Stringify.value(row.name, .{}, w);
+        try w.print(
+            ", \"input_bytes\": {d}, \"output_bytes\": {d}, \"allocations\": {d}, \"deallocations\": {d}, \"allocated_bytes\": {d}, \"freed_bytes\": {d}}}{s}\n",
+            .{
+                row.input_bytes,
+                row.output_bytes,
+                row.allocations,
+                row.deallocations,
+                row.allocated_bytes,
+                row.freed_bytes,
+                if (i + 1 == rows.len) "" else ",",
+            },
+        );
+    }
+    try w.print("  ]\n}}\n", .{});
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
+}
+
+fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const CaseStats) !void {
+    var writer = std.Io.Writer.Allocating.init(init.gpa);
+    defer writer.deinit();
+    const w = &writer.writer;
+    try w.print(
+        \\# Native allocation report
+        \\
+        \\| case | input bytes | output bytes | allocations | deallocations | allocated bytes | freed bytes |
+        \\| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+        \\
+    , .{});
+    for (rows) |row| {
+        try w.print("| {s} | {d} | {d} | {d} | {d} | {d} | {d} |\n", .{
+            row.name,
+            row.input_bytes,
+            row.output_bytes,
+            row.allocations,
+            row.deallocations,
+            row.allocated_bytes,
+            row.freed_bytes,
+        });
+    }
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
 }
 
 fn buildDeflateRleStream(allocator: std.mem.Allocator) ![]u8 {
