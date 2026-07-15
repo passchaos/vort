@@ -248,6 +248,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke reports per-mode check counts in JSON and Markdown artifacts.
 - [x] Dashboard strict-mode smoke records actual-output truncation limit and truncation flag per check.
 - [x] Dashboard strict-mode smoke records original actual-output length per check.
+- [x] Dashboard strict-mode smoke exercises the actual-output truncation path with a synthetic long-output check.
 - [x] Dashboard category smoke protects raw/zlib/gzip header inspection validation classification.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.

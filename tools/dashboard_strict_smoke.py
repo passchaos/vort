@@ -220,6 +220,11 @@ def main() -> int:
         )
         checks.append(check_row("missing_header_workflow", "strict-header-inspect", True, True, missing_workflow_result.returncode, "dashboard_index_header_inspect_missing_workflows=1:inspect-raw-header-file:file", missing_workflow_result.stdout))
 
+        long_output = "dashboard_index_synthetic_long_output=" + ("x" * 512)
+        checks.append(check_row("truncated_output", "synthetic", False, True, 0, "dashboard_index_synthetic_long_output=", long_output))
+        if not checks[-1]["actual_output_truncated"]:
+            raise AssertionError("synthetic long-output check did not exercise truncation")
+
     mode_counts = build_mode_counts(checks)
     summary = {
         "schema": "vort.dashboard_strict_smoke",

@@ -130,6 +130,7 @@ def main() -> int:
             and "returncode" in row
             for row in dashboard_strict["checks"]
         )
+        assert any(row["actual_output_truncated"] is True for row in dashboard_strict["checks"])
         assert "missing_header_workflow" in dashboard_strict_markdown_path.read_text()
         validate_value_against_manifest(dashboard_strict, schemas_def)
 

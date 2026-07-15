@@ -113,7 +113,8 @@
           "all",
           "strict-producers",
           "strict-smoke-gates",
-          "strict-header-inspect"
+          "strict-header-inspect",
+          "synthetic"
         ],
         "name": [
           "all_strict_ok",
@@ -121,7 +122,8 @@
           "missing_smoke_gate",
           "missing_header_inspect",
           "failed_header_inspect",
-          "missing_header_workflow"
+          "missing_header_workflow",
+          "truncated_output"
         ]
       },
       "collections": {
@@ -137,7 +139,8 @@
               "all",
               "strict-producers",
               "strict-smoke-gates",
-              "strict-header-inspect"
+              "strict-header-inspect",
+              "synthetic"
             ]
           }
         }
