@@ -285,6 +285,9 @@ architecture blindly.
 - [x] zlib decode option APIs can ignore Adler-32 and/or allow trailing data
   while preserving strict defaults for PNG compatibility and relaxed-reader
   integrations.
+- [x] zlib header CINFO/window metadata compatibility test verifies Vort reports
+  smaller advertised windows while matching zlib-compatible decode behavior for
+  otherwise-valid streams.
 - [x] zlib wrapper reports preset-dictionary streams as dictionary requirements.
 - [x] Public zlib header metadata parser exposes CMF/FLG, window, FDICT/DICTID, and FLEVEL fields.
 - [x] CLI zlib header inspection prints parsed metadata for hex/file workflows.

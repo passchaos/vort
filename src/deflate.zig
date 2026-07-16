@@ -4895,6 +4895,42 @@ test "zlib header metadata parser exposes wrapper fields" {
     try std.testing.expectError(error.BadZlibHeader, parseZlibHeaderInfo(&.{ 0x78, 0x02 }));
 }
 
+test "zlib decoder accepts smaller advertised CINFO window metadata" {
+    // zlib's CINFO field advertises the compressor window size, but common
+    // decoders accept otherwise-valid streams after that header metadata is
+    // tampered to a smaller value. Keep Vort compatible with that behavior:
+    // parse/report the smaller window while validating corruption through the
+    // deflate payload and Adler/trailing checks.
+    var payload: [2048]u8 = undefined;
+    var state: u32 = 0x1234abcd;
+    for (payload[0..1024]) |*byte| {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        byte.* = @truncate(state);
+    }
+    @memcpy(payload[1024..], payload[0..1024]);
+
+    const encoded = try encodeZlibLevelAlloc(std.testing.allocator, &payload, 9);
+    defer std.testing.allocator.free(encoded);
+    var mutated = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(mutated);
+
+    const cmf: u8 = 0x08; // CM=deflate, CINFO=0 => advertised 256-byte window.
+    const flg_prefix = mutated[1] & 0xe0;
+    var flg: u8 = flg_prefix;
+    while (((@as(u16, cmf) << 8) | flg) % 31 != 0) : (flg += 1) {}
+    mutated[0] = cmf;
+    mutated[1] = flg;
+
+    const info = try parseZlibHeaderInfo(mutated);
+    try std.testing.expectEqual(@as(u8, 8), info.window_bits);
+    try std.testing.expectEqual(@as(usize, 256), info.window_size);
+
+    const decoded = try decodeZlibAlloc(std.testing.allocator, mutated);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
 test "zlib stored wrapper validates checksum header and trailing data" {
     const encoded = try encodeZlibStoredAlloc(std.testing.allocator, "payload");
     defer std.testing.allocator.free(encoded);
