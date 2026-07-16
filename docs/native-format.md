@@ -144,7 +144,9 @@ dictionary bytes with caller-owned index storage.
 Full sidecar/embedded validation can likewise accept caller-provided index and
 payload scratch buffers, letting trusted validation loops avoid parser/scratch
 allocations when their maximum frame sizes are already known; report-producing
-validation APIs expose the same buffer-reuse path.
+validation APIs expose the same buffer-reuse path. Default full validation
+pre-reserves scratch capacity from the largest indexed frame to avoid repeated
+growth across many frames.
 
 ## Range decode summary APIs
 

@@ -2570,6 +2570,10 @@ fn validateFrameIndexEntriesInternalWithScratch(
     try validateFrameIndexSummaryExpectations(summary, options);
     var scratch: std.ArrayList(u8) = .empty;
     defer scratch.deinit(allocator);
+    if (payload_scratch == null and options.mode == .full) {
+        const max_payload_len = try maxIndexedFramePayloadLen(index);
+        if (max_payload_len != 0) try scratch.ensureTotalCapacity(allocator, max_payload_len);
+    }
     for (index) |entry| {
         if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
         const frame = input[entry.frame_offset..][0..entry.frame_len];
@@ -2600,6 +2604,15 @@ fn validateFrameIndexEntriesInternalWithScratch(
     }
 }
 
+fn maxIndexedFramePayloadLen(index: []const FrameIndexEntry) Error!usize {
+    var max_len: usize = 0;
+    for (index) |entry| {
+        const len = std.math.cast(usize, entry.uncompressed_len) orelse return error.IntegerOverflow;
+        max_len = @max(max_len, len);
+    }
+    return max_len;
+}
+
 fn validateSidecarIndexReportInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, sidecar_index: []const u8, options: SidecarValidationOptions) ValidationReport {
     const index = decodeFrameIndexAlloc(allocator, sidecar_index) catch |err| {
         return validationFailure(options.mode, .index_decode, err, null, null, null);
@@ -2625,6 +2638,10 @@ fn validateFrameIndexEntriesReportInternalWithScratch(
     validateFrameIndexSummaryExpectations(summary, options) catch |err| return validationFailure(options.mode, .frame_metadata, err, null, null, null);
     var scratch: std.ArrayList(u8) = .empty;
     defer scratch.deinit(allocator);
+    if (payload_scratch == null and options.mode == .full) {
+        const max_payload_len = maxIndexedFramePayloadLen(index) catch |err| return validationFailure(options.mode, .frame_metadata, err, null, null, null);
+        if (max_payload_len != 0) scratch.ensureTotalCapacity(allocator, max_payload_len) catch |err| return validationFailure(options.mode, .payload_decode, err, null, null, null);
+    }
     for (index, 0..) |entry, i| {
         if (input.len - entry.frame_offset < entry.frame_len) return validationFailure(options.mode, .frame_bounds, error.TruncatedFrame, i, entry, null);
         const frame = input[entry.frame_offset..][0..entry.frame_len];
