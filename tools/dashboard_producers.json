@@ -112,6 +112,10 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-level-report-dashboard"
     },
+    "vort-native-allocation-negative-smoke.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-native-allocation-negative-smoke"
+    },
     "vort-native-allocation-report.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-native-allocation-report-dashboard"
@@ -223,6 +227,7 @@
     "vort-huffman-length-report.md": "zig build run-huffman-length-report-dashboard",
     "vort-level-report.csv": "zig build run-level-report-csv",
     "vort-level-report.md": "zig build run-level-report-dashboard",
+    "vort-native-allocation-negative-smoke.json": "zig build run-native-allocation-negative-smoke",
     "vort-native-allocation-report.json": "zig build run-native-allocation-report-dashboard",
     "vort-native-allocation-report.md": "zig build run-native-allocation-report-dashboard",
     "vort-native-allocation-smoke.json": "zig build run-native-allocation-smoke",
@@ -264,7 +269,8 @@
     "vort-python-zlib-diff-smoke.json",
     "vort-native-allocation-report.json",
     "vort-native-allocation-report.md",
-    "vort-native-allocation-smoke.json"
+    "vort-native-allocation-smoke.json",
+    "vort-native-allocation-negative-smoke.json"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1

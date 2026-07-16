@@ -307,6 +307,13 @@
       "producer_step": "zig build run-native-allocation-smoke",
       "required_smoke_gate": true,
       "smoke_gate": "zig build run-native-allocation-smoke"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-native-allocation-negative-smoke.json",
+      "producer_step": "zig build run-native-allocation-negative-smoke",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-allocation-negative-smoke"
     }
   ],
   "schema": "vort.dashboard_producers_required_artifacts",
