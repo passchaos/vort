@@ -50,6 +50,18 @@ pub const StepResult = struct {
     };
 };
 
+pub const StreamingDiagnostics = struct {
+    phase_name: []const u8,
+    header_received: ?usize = null,
+    frame_input_read: ?usize = null,
+    output_written: usize = 0,
+    expected_output_len: ?usize = null,
+    payload_remaining: ?usize = null,
+    last_error_name: []const u8 = "",
+    last_error_phase_name: []const u8 = "",
+    recoverability_hint_name: []const u8 = "none",
+};
+
 /// Caller-visible format metadata emitted by parsers before payload materialization.
 pub const FrameInfo = struct {
     version: u8,

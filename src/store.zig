@@ -9,6 +9,7 @@ pub const Error = core.Error;
 pub const FrameInfo = core.FrameInfo;
 pub const Progress = core.Progress;
 pub const StepResult = core.StepResult;
+pub const StreamingDiagnostics = core.StreamingDiagnostics;
 
 pub const magic = [_]u8{ 'V', 'O', 'R', 'T' };
 pub const current_version: u8 = 0;
@@ -841,6 +842,38 @@ pub const IncrementalDecoder = struct {
             .header => if (err == error.TruncatedFrame) .truncated_input else .corrupt_header,
             .payload => if (err == error.TruncatedFrame) .truncated_input else .payload_corrupt,
             .done => .none,
+        };
+    }
+
+    fn phaseName(phase: Phase) []const u8 {
+        return switch (phase) {
+            .header => "header",
+            .payload => "payload",
+            .done => "done",
+        };
+    }
+
+    fn hintName(hint: RecoverabilityHint) []const u8 {
+        return switch (hint) {
+            .none => "none",
+            .corrupt_header => "corrupt_header",
+            .truncated_input => "truncated_input",
+            .payload_corrupt => "payload_corrupt",
+        };
+    }
+
+    pub fn diagnostics(self: *const IncrementalDecoder) StreamingDiagnostics {
+        const snap = self.snapshot();
+        return .{
+            .phase_name = phaseName(snap.phase),
+            .header_received = snap.header_received,
+            .frame_input_read = snap.frame_input_read,
+            .output_written = snap.output_written,
+            .expected_output_len = snap.expected_output_len,
+            .payload_remaining = snap.payload_remaining,
+            .last_error_name = snap.last_error_name,
+            .last_error_phase_name = if (snap.last_error_phase) |phase| phaseName(phase) else "",
+            .recoverability_hint_name = hintName(snap.recoverability_hint),
         };
     }
 
@@ -3620,6 +3653,20 @@ pub const Decoder = struct {
         };
     }
 
+    pub fn diagnostics(self: *const Decoder) StreamingDiagnostics {
+        const snap = self.snapshot();
+        return .{
+            .phase_name = if (snap.done) "done" else "payload",
+            .frame_input_read = if (snap.done) header_len + snap.payload_len else null,
+            .output_written = snap.output_written,
+            .expected_output_len = snap.payload_len,
+            .payload_remaining = snap.payload_remaining,
+            .last_error_name = snap.last_error_name,
+            .last_error_phase_name = if (snap.last_error_name.len == 0) "" else "payload",
+            .recoverability_hint_name = if (snap.last_error_name.len == 0) "none" else "payload_corrupt",
+        };
+    }
+
     pub fn step(self: *Decoder, output: []u8) Error!StepResult {
         if (self.done) return .{ .status = .done };
         if (!self.verified) {
@@ -3785,9 +3832,17 @@ test "bounded decoder reset and snapshot expose output progress" {
     try std.testing.expect(decoder.snapshot().verified);
     try std.testing.expectEqual(@as(usize, 5), decoder.snapshot().output_written);
     try std.testing.expectEqual(first.len - 5, decoder.snapshot().payload_remaining);
+    var diagnostics = decoder.diagnostics();
+    try std.testing.expectEqualStrings("payload", diagnostics.phase_name);
+    try std.testing.expectEqual(@as(?usize, first.len), diagnostics.expected_output_len);
+    try std.testing.expectEqual(@as(?usize, first.len - 5), diagnostics.payload_remaining);
+    try std.testing.expectEqualStrings("none", diagnostics.recoverability_hint_name);
     step_result = try decoder.step(out[5..first.len]);
     try std.testing.expectEqual(StepResult.Status.done, step_result.status);
     try std.testing.expect(decoder.snapshot().done);
+    diagnostics = decoder.diagnostics();
+    try std.testing.expectEqualStrings("done", diagnostics.phase_name);
+    try std.testing.expectEqual(@as(?usize, first_len), diagnostics.frame_input_read);
     try std.testing.expectEqualSlices(u8, first, out[0..first.len]);
 
     try decoder.reset(second_encoded[0..second_len]);
@@ -3812,6 +3867,11 @@ test "bounded decoder snapshot reports checksum mismatch" {
     try std.testing.expectEqualStrings("ChecksumMismatch", snap.last_error_name);
     try std.testing.expect(!snap.verified);
     try std.testing.expectEqual(@as(usize, 0), snap.output_written);
+    const diagnostics = decoder.diagnostics();
+    try std.testing.expectEqualStrings("payload", diagnostics.phase_name);
+    try std.testing.expectEqualStrings("ChecksumMismatch", diagnostics.last_error_name);
+    try std.testing.expectEqualStrings("payload", diagnostics.last_error_phase_name);
+    try std.testing.expectEqualStrings("payload_corrupt", diagnostics.recoverability_hint_name);
 }
 
 test "incremental decoder accepts single-byte input and tiny output" {
@@ -3905,6 +3965,10 @@ test "incremental decoder snapshot reports cumulative progress" {
     try std.testing.expectEqual(@as(usize, 5), snap.frame_input_read);
     try std.testing.expectEqual(@as(usize, 0), snap.output_written);
     try std.testing.expectEqual(@as(?usize, null), snap.payload_remaining);
+    var diagnostics = decoder.diagnostics();
+    try std.testing.expectEqualStrings("header", diagnostics.phase_name);
+    try std.testing.expectEqual(@as(?usize, 5), diagnostics.header_received);
+    try std.testing.expectEqualStrings("none", diagnostics.recoverability_hint_name);
 
     step_result = try decoder.step(encoded[5..header_len], out[0..0]);
     try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
@@ -3913,6 +3977,9 @@ test "incremental decoder snapshot reports cumulative progress" {
     try std.testing.expectEqual(header_len, snap.frame_input_read);
     try std.testing.expectEqual(@as(?usize, input.len), snap.expected_output_len);
     try std.testing.expectEqual(@as(?usize, input.len), snap.payload_remaining);
+    diagnostics = decoder.diagnostics();
+    try std.testing.expectEqualStrings("payload", diagnostics.phase_name);
+    try std.testing.expectEqual(@as(?usize, input.len), diagnostics.expected_output_len);
 
     step_result = try decoder.step(encoded[header_len .. header_len + 4], out[0..4]);
     try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
@@ -3956,6 +4023,10 @@ test "incremental decoder snapshot reports header errors" {
     try std.testing.expectEqualStrings("InvalidMagic", snap.last_error_name);
     try std.testing.expectEqual(@as(?IncrementalDecoder.Phase, .header), snap.last_error_phase);
     try std.testing.expectEqual(IncrementalDecoder.RecoverabilityHint.corrupt_header, snap.recoverability_hint);
+    const diagnostics = decoder.diagnostics();
+    try std.testing.expectEqualStrings("InvalidMagic", diagnostics.last_error_name);
+    try std.testing.expectEqualStrings("header", diagnostics.last_error_phase_name);
+    try std.testing.expectEqualStrings("corrupt_header", diagnostics.recoverability_hint_name);
 }
 
 test "incremental decoder reports checksum mismatch after corrupt payload" {
@@ -3974,6 +4045,10 @@ test "incremental decoder reports checksum mismatch after corrupt payload" {
     try std.testing.expectEqualStrings("ChecksumMismatch", snap.last_error_name);
     try std.testing.expectEqual(@as(?IncrementalDecoder.Phase, .payload), snap.last_error_phase);
     try std.testing.expectEqual(IncrementalDecoder.RecoverabilityHint.payload_corrupt, snap.recoverability_hint);
+    const diagnostics = decoder.diagnostics();
+    try std.testing.expectEqualStrings("ChecksumMismatch", diagnostics.last_error_name);
+    try std.testing.expectEqualStrings("payload", diagnostics.last_error_phase_name);
+    try std.testing.expectEqualStrings("payload_corrupt", diagnostics.recoverability_hint_name);
 }
 
 test "concatenated frame iterator and decode helper" {

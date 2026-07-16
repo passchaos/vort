@@ -34,6 +34,7 @@ pub const Error = core.Error;
 pub const FrameInfo = core.FrameInfo;
 pub const Progress = core.Progress;
 pub const StepResult = core.StepResult;
+pub const StreamingDiagnostics = core.StreamingDiagnostics;
 
 pub const frameModeName = store.frameModeName;
 pub const StoreFrameInspection = store.FrameInspection;
