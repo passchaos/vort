@@ -1103,6 +1103,45 @@ pub const RangeIntoRequest = struct {
     output: []u8,
 };
 
+pub const RangeDecodeBuffers = struct {
+    index_buffer: []FrameIndexEntry,
+    /// Scratch used when a range only covers part of a compressed frame. It
+    /// should be sized to the largest frame output callers want to range-read
+    /// without allocating a decoded-frame cache entry.
+    payload_scratch: []u8 = &.{},
+};
+
+pub const RangeBufferSizes = struct {
+    index_entries: usize,
+    payload_scratch_len: usize,
+};
+
+fn rangeScratch(buffers: RangeDecodeBuffers) RangeDecodeScratch {
+    return .{
+        .payload_scratch = if (buffers.payload_scratch.len == 0) null else buffers.payload_scratch,
+    };
+}
+
+pub fn rangeBufferSizesForIndex(index: []const FrameIndexEntry) Error!RangeBufferSizes {
+    return .{
+        .index_entries = index.len,
+        .payload_scratch_len = try maxIndexedFramePayloadLen(index),
+    };
+}
+
+pub fn rangeBufferSizesForSidecarIndex(sidecar_index: []const u8) Error!RangeBufferSizes {
+    const sizing = try serializedFrameIndexSizing(sidecar_index);
+    return .{
+        .index_entries = sizing.entry_count,
+        .payload_scratch_len = sizing.max_uncompressed_len,
+    };
+}
+
+pub fn rangeBufferSizesForEmbeddedIndex(input: []const u8) Error!RangeBufferSizes {
+    const view = try viewEmbeddedIndex(input);
+    return rangeBufferSizesForSidecarIndex(view.payload);
+}
+
 pub const DictionaryRangeDecodeBuffers = struct {
     index_buffer: []FrameIndexEntry,
     /// Scratch used when a range only covers part of a compressed dictionary
@@ -1249,8 +1288,16 @@ pub fn decodeRangeInto(allocator: std.mem.Allocator, input: []const u8, index: [
     return decodeRangeWithDictionaryInto(allocator, null, input, index, offset, length, output);
 }
 
+pub fn decodeRangeIntoWithPayloadScratch(allocator: std.mem.Allocator, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize, output: []u8, payload_scratch: []u8) !RangeDecodeIntoResult {
+    return decodeRangeWithDictionaryIntoWithScratch(allocator, null, input, index, offset, length, output, .{ .payload_scratch = payload_scratch });
+}
+
 pub fn decodeRangesInto(allocator: std.mem.Allocator, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
     return decodeRangesWithDictionaryInto(allocator, null, input, index, requests, results);
+}
+
+pub fn decodeRangesIntoWithPayloadScratch(allocator: std.mem.Allocator, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, payload_scratch: []u8) !void {
+    return decodeRangesWithDictionaryIntoWithScratch(allocator, null, input, index, requests, results, .{ .payload_scratch = payload_scratch });
 }
 
 pub fn decodeRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
@@ -2489,8 +2536,12 @@ pub fn decodeIndexedRangeInto(allocator: std.mem.Allocator, input: []const u8, o
 }
 
 pub fn decodeIndexedRangeIntoWithIndexBuffer(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize, output: []u8, index_buffer: []FrameIndexEntry) !RangeDecodeIntoResult {
-    const decoded_index = try decodeEmbeddedIndex(input, index_buffer);
-    return decodeRangeInto(allocator, input, index_buffer[0..decoded_index.entries_written], offset, length, output);
+    return decodeIndexedRangeIntoWithBuffers(allocator, input, offset, length, output, .{ .index_buffer = index_buffer });
+}
+
+pub fn decodeIndexedRangeIntoWithBuffers(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize, output: []u8, buffers: RangeDecodeBuffers) !RangeDecodeIntoResult {
+    const decoded_index = try decodeEmbeddedIndex(input, buffers.index_buffer);
+    return decodeRangeWithDictionaryIntoWithScratch(allocator, null, input, buffers.index_buffer[0..decoded_index.entries_written], offset, length, output, rangeScratch(buffers));
 }
 
 pub fn decodeIndexedRangesInto(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
@@ -2500,8 +2551,12 @@ pub fn decodeIndexedRangesInto(allocator: std.mem.Allocator, input: []const u8, 
 }
 
 pub fn decodeIndexedRangesIntoWithIndexBuffer(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, index_buffer: []FrameIndexEntry) !void {
-    const decoded_index = try decodeEmbeddedIndex(input, index_buffer);
-    return decodeRangesInto(allocator, input, index_buffer[0..decoded_index.entries_written], requests, results);
+    return decodeIndexedRangesIntoWithBuffers(allocator, input, requests, results, .{ .index_buffer = index_buffer });
+}
+
+pub fn decodeIndexedRangesIntoWithBuffers(allocator: std.mem.Allocator, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, buffers: RangeDecodeBuffers) !void {
+    const decoded_index = try decodeEmbeddedIndex(input, buffers.index_buffer);
+    return decodeRangesWithDictionaryIntoWithScratch(allocator, null, input, buffers.index_buffer[0..decoded_index.entries_written], requests, results, rangeScratch(buffers));
 }
 
 pub const SidecarValidationMode = enum {
@@ -2916,8 +2971,12 @@ pub fn decodeSidecarIndexedRangeInto(allocator: std.mem.Allocator, input: []cons
 }
 
 pub fn decodeSidecarIndexedRangeIntoWithIndexBuffer(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize, output: []u8, index_buffer: []FrameIndexEntry) !RangeDecodeIntoResult {
-    const count = try decodeFrameIndex(sidecar_index, index_buffer);
-    return decodeRangeInto(allocator, input, index_buffer[0..count], offset, length, output);
+    return decodeSidecarIndexedRangeIntoWithBuffers(allocator, input, sidecar_index, offset, length, output, .{ .index_buffer = index_buffer });
+}
+
+pub fn decodeSidecarIndexedRangeIntoWithBuffers(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize, output: []u8, buffers: RangeDecodeBuffers) !RangeDecodeIntoResult {
+    const count = try decodeFrameIndex(sidecar_index, buffers.index_buffer);
+    return decodeRangeWithDictionaryIntoWithScratch(allocator, null, input, buffers.index_buffer[0..count], offset, length, output, rangeScratch(buffers));
 }
 
 pub fn decodeSidecarIndexedRangesInto(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
@@ -2927,8 +2986,12 @@ pub fn decodeSidecarIndexedRangesInto(allocator: std.mem.Allocator, input: []con
 }
 
 pub fn decodeSidecarIndexedRangesIntoWithIndexBuffer(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, index_buffer: []FrameIndexEntry) !void {
-    const count = try decodeFrameIndex(sidecar_index, index_buffer);
-    return decodeRangesInto(allocator, input, index_buffer[0..count], requests, results);
+    return decodeSidecarIndexedRangesIntoWithBuffers(allocator, input, sidecar_index, requests, results, .{ .index_buffer = index_buffer });
+}
+
+pub fn decodeSidecarIndexedRangesIntoWithBuffers(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, buffers: RangeDecodeBuffers) !void {
+    const count = try decodeFrameIndex(sidecar_index, buffers.index_buffer);
+    return decodeRangesWithDictionaryIntoWithScratch(allocator, null, input, buffers.index_buffer[0..count], requests, results, rangeScratch(buffers));
 }
 
 pub fn decodeSidecarIndexedRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
@@ -4728,6 +4791,41 @@ test "indexed deflate stream supports embedded range decode" {
     try std.testing.expectEqual(full_first.len, into.output_written);
     try std.testing.expectEqualSlices(u8, payloads[0], &full_first);
     try std.testing.expectEqual(checksum.crc32(payloads[0]), into.crc32);
+
+    const sizes = try rangeBufferSizesForEmbeddedIndex(stream);
+    try std.testing.expectEqual(payloads.len, sizes.index_entries);
+    var partial: [5]u8 = undefined;
+    const scratch = try std.testing.allocator.alloc(u8, sizes.payload_scratch_len);
+    defer std.testing.allocator.free(scratch);
+    const partial_result = try decodeIndexedRangeIntoWithBuffers(std.testing.failing_allocator, stream, 3, partial.len, partial[0..], .{
+        .index_buffer = index_buffer,
+        .payload_scratch = scratch,
+    });
+    try std.testing.expectEqual(partial.len, partial_result.output_written);
+    try std.testing.expectEqualSlices(u8, payloads[0][3..8], &partial);
+    try std.testing.expectEqual(checksum.crc32(payloads[0][3..8]), partial_result.crc32);
+
+    var first: [5]u8 = undefined;
+    var second: [4]u8 = undefined;
+    var results: [2]RangeDecodeIntoResult = undefined;
+    try decodeIndexedRangesIntoWithBuffers(std.testing.failing_allocator, stream, &.{
+        .{ .offset = 3, .length = first.len, .output = first[0..] },
+        .{ .offset = payloads[0].len + 2, .length = second.len, .output = second[0..] },
+    }, results[0..], .{
+        .index_buffer = index_buffer,
+        .payload_scratch = scratch,
+    });
+    try std.testing.expectEqualSlices(u8, payloads[0][3..8], &first);
+    try std.testing.expectEqual(checksum.crc32(&first), results[0].crc32);
+    try std.testing.expectEqualSlices(u8, payloads[1][2..6], &second);
+    try std.testing.expectEqual(checksum.crc32(&second), results[1].crc32);
+
+    const short_scratch = try std.testing.allocator.alloc(u8, sizes.payload_scratch_len - 1);
+    defer std.testing.allocator.free(short_scratch);
+    try std.testing.expectError(error.OutputTooSmall, decodeIndexedRangeIntoWithBuffers(std.testing.failing_allocator, stream, 3, partial.len, partial[0..], .{
+        .index_buffer = index_buffer,
+        .payload_scratch = short_scratch,
+    }));
 }
 
 test "indexed long-distance stream supports embedded range decode" {

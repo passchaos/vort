@@ -137,8 +137,9 @@ borrowed serialized index payload, payload offset, and entry count, while
 `decodeEmbeddedIndex` fills caller-owned entry storage.
 Indexed and sidecar range decode also expose `WithIndexBuffer` variants that
 reuse caller-owned index entry storage for callers that want to avoid allocating
-while parsing the embedded or sidecar index; dictionary-aware range variants
-offer a richer `DictionaryRangeDecodeBuffers` form for callers that already have
+while parsing the embedded or sidecar index; non-dictionary compressed range
+variants can use `RangeDecodeBuffers`/payload scratch for partial-frame reads,
+while dictionary-aware range variants offer a richer `DictionaryRangeDecodeBuffers` form for callers that already have
 dictionary bytes, and auto/self-contained dictionary variants combine borrowed
 embedded dictionary bytes with the same caller-owned index/payload/patch storage.
 Full sidecar/embedded validation can likewise accept caller-provided index,
@@ -239,7 +240,10 @@ When a caller-owned range decode request covers an entire native deflate frame,
 the range decoder sends the raw deflate payload directly into the caller's output
 buffer and validates the resulting CRC-32 against the frame header. This avoids
 allocating a temporary whole-frame decoded buffer for common block-aligned range
-reads. Partial deflate-frame ranges still use the decoded-frame cache path so
+reads. Partial deflate-frame ranges can provide `RangeDecodeBuffers.payload_scratch`
+or use the lower-level `decodeRangeIntoWithPayloadScratch` helpers to verify the
+whole frame in caller-owned storage before copying the requested subrange; callers
+that omit payload scratch keep the heap-backed decoded-frame cache path so
 subranges can be copied safely after the frame checksum has been verified.
 
 ## RLE decode-into and range fast path

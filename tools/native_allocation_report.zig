@@ -65,6 +65,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureRangeAlloc(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeInto(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
+    try rows.append(allocator, try measureDeflatePartialRangeIntoWithScratch(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureBatchRangeInto(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureBatchRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureDictionaryRangeIntoWithIndexBuffer(allocator, dict_indexed_stream));
@@ -334,6 +335,24 @@ fn measureRangeIntoWithIndexBuffer(backing: std.mem.Allocator, stream: []const u
     var failing = std.testing.FailingAllocator.init(backing, .{});
     const result = try vort.storeDecodeIndexedRangeIntoWithIndexBuffer(failing.allocator(), stream, 0, first_len, out, index);
     return stats("indexed_range_into_index_buffer", stream.len, result.output_written, failing);
+}
+
+fn measureDeflatePartialRangeIntoWithScratch(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const range_offset = 3;
+    const range_len = 5;
+    const out = try backing.alloc(u8, range_len);
+    defer backing.free(out);
+    const sizes = try vort.storeRangeBufferSizesForEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.storeDecodeIndexedRangeIntoWithBuffers(failing.allocator(), stream, range_offset, out.len, out, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    return stats("indexed_partial_range_into_scratch", stream.len, result.output_written, failing);
 }
 
 fn measureBatchRangeInto(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
