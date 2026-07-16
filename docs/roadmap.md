@@ -635,6 +635,9 @@ architecture blindly.
 - [x] Hash-chain parsers spend their match-check budget on viable prefix
   candidates with a bounded walk cap, reducing collision waste for shallow
   fastest/dictionary searches while preserving parser runtime limits.
+- [x] Best raw/zlib/gzip one-shot encoders compare against the production
+  default parser output and keep the smaller frame, preventing fixed-cost
+  optimal parsing from regressing dynamic Huffman size on mixed payloads.
 - [x] Compression-level report validating parser/cost-model settings and round trips.
 - [x] Compression-level report exposes incompressible stored fast-path decisions.
 - [x] Compression-level report accepts ad-hoc file corpora.
