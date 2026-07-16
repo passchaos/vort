@@ -66,6 +66,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureBatchRangeInto(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureBatchRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureDictionaryRangeIntoWithIndexBuffer(allocator, dict_indexed_stream));
+    try rows.append(allocator, try measureDictionaryDeflateRangeIntoWithPatchScratch(allocator, dict_deflate_indexed_stream));
     try rows.append(allocator, try measureEmbeddedValidation(allocator, self_contained_dict_stream));
     try rows.append(allocator, try measureEmbeddedValidationWithBuffers(allocator, indexed_store_stream));
     try rows.append(allocator, try measureEmbeddedValidationReportWithBuffers(allocator, indexed_store_stream));
@@ -356,6 +357,19 @@ fn measureDictionaryRangeIntoWithIndexBuffer(backing: std.mem.Allocator, stream:
     var failing = std.testing.FailingAllocator.init(backing, .{});
     const result = try vort.storeDecodeIndexedRangeWithDictionaryIntoWithIndexBuffer(failing.allocator(), dict, stream, 0, out.len, out, index_buffer);
     return stats("dictionary_range_into_index_buffer", stream.len, result.output_written, failing);
+}
+
+fn measureDictionaryDeflateRangeIntoWithPatchScratch(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const out = try backing.alloc(u8, dictionary_deflate_input.len);
+    defer backing.free(out);
+    const view = try vort.storeViewEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, view.entry_count);
+    defer backing.free(index_buffer);
+    const patch_scratch = try backing.alloc(u8, try vort.maxDictionaryPatchSizeForDecodedLen(dictionary_deflate_input.len));
+    defer backing.free(patch_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.storeDecodeIndexedRangeWithDictionaryIntoWithBuffers(failing.allocator(), dictionary_deflate_dict, stream, 0, out.len, out, .{ .index_buffer = index_buffer, .patch_scratch = patch_scratch });
+    return stats("dictionary_deflate_range_into_patch_scratch", stream.len, result.output_written, failing);
 }
 
 fn measureEmbeddedValidation(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
