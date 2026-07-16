@@ -49,9 +49,15 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             @setEvalBranchQuota(200000);
             if (lengths.len > max_symbols) return error.CorruptFrame;
             var counts: [max_code_bits + 1]u16 = @splat(0);
-            for (lengths) |bits| {
+            var active_symbols: [max_symbols]u16 = undefined;
+            var active_len: usize = 0;
+            for (lengths, 0..) |bits, symbol| {
                 if (bits > max_code_bits) return error.CorruptFrame;
-                if (bits != 0) counts[bits] += 1;
+                if (bits != 0) {
+                    counts[bits] += 1;
+                    active_symbols[active_len] = @intCast(symbol);
+                    active_len += 1;
+                }
             }
 
             var available: i32 = 1;
@@ -68,8 +74,8 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             }
 
             var table = Self{ .len = 0 };
-            for (lengths, 0..) |bits, symbol| {
-                if (bits == 0) continue;
+            for (active_symbols[0..active_len]) |symbol| {
+                const bits = lengths[symbol];
                 const canonical = next_code[bits];
                 next_code[bits] += 1;
                 const entry = Entry{

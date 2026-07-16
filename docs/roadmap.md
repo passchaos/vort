@@ -680,6 +680,9 @@ architecture blindly.
   decode, and total caller-buffer timing to identify the next hot path.
 - [x] Dynamic Huffman length parsing writes directly into literal/distance
   arrays, avoiding the combined temporary buffer and final split copies.
+- [x] Huffman table initialization records active symbols during length
+  validation and builds canonical entries from that compact list, avoiding a
+  second full-length scan for sparse dynamic alphabets.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
