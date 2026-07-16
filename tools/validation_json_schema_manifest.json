@@ -1166,6 +1166,27 @@
         }
       }
     },
+    "vort.native_allocation_negative_smoke": {
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "expected_failure": "bool",
+        "matched": "bool",
+        "name": "str",
+        "returncode": "int"
+      }
+    },
     "vort.fuzz_corpus_report": {
       "fields": {
         "accepted": "int",

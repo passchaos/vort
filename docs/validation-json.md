@@ -1920,6 +1920,56 @@ Example:
 }
 ```
 
+## `vort.native_allocation_negative_smoke`
+
+Produced by:
+
+```sh
+zig build run-native-allocation-negative-smoke
+```
+
+This report proves the native allocation smoke gate fails on representative bad
+reports, including over-budget allocation counts, missing required cases, and
+allocation/free imbalance.
+
+Top-level fields:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `schema` | string | Always `vort.native_allocation_negative_smoke`. |
+| `schema_version` | integer | Currently `1`. |
+| `ok` | boolean | True when all negative cases failed as expected. |
+| `case_count` | integer | Number of negative cases. |
+| `cases` | list | Per-case negative smoke results. |
+
+Each `cases` item includes:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `name` | string | Stable negative case label. |
+| `expected_failure` | boolean | Always true for these negative cases. |
+| `returncode` | integer | Process return code from the smoke gate. |
+| `matched` | boolean | True when the gate failed and mentioned the expected case. |
+
+Example:
+
+```json
+{
+  "schema": "vort.native_allocation_negative_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "cases": [
+    {
+      "name": "over_budget",
+      "expected_failure": true,
+      "returncode": 1,
+      "matched": true
+    }
+  ]
+}
+```
+
 ## `vort.validation_json_schema_manifest`
 
 Consumed by:

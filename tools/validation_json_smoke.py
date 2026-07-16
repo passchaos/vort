@@ -98,6 +98,7 @@ def main() -> int:
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
         native_allocation_smoke_path = ROOT / "zig-out" / "vort-native-allocation-smoke.json"
+        native_allocation_negative_smoke_path = ROOT / "zig-out" / "vort-native-allocation-negative-smoke.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -201,6 +202,13 @@ def main() -> int:
         assert native_allocation_smoke["required_zero_allocation_cases"] >= 1
         assert native_allocation_smoke["cases"]
         validate_value_against_manifest(native_allocation_smoke, schemas_def)
+        native_allocation_negative_smoke = json.loads(native_allocation_negative_smoke_path.read_text())
+        assert native_allocation_negative_smoke["schema"] == "vort.native_allocation_negative_smoke"
+        assert native_allocation_negative_smoke["schema_version"] == 1
+        assert native_allocation_negative_smoke["ok"] is True
+        assert native_allocation_negative_smoke["case_count"] >= 1
+        assert native_allocation_negative_smoke["cases"]
+        validate_value_against_manifest(native_allocation_negative_smoke, schemas_def)
         run([
             "python3",
             str(ROOT / "tools" / "dashboard_config_index_smoke.py"),
