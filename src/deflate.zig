@@ -3131,8 +3131,9 @@ pub fn reconstructPngScanline(filter: u8, filtered: []const u8, previous: ?[]con
 /// The compressed wrapper must be complete when `init`/`reset` is called. The
 /// decoder validates the zlib header/footer and raw DEFLATE payload into
 /// caller-owned scratch, then `step` drains that decoded scratch through bounded
-/// caller output buffers. Both the compressed-join scratch used by chunked
-/// initializers and the decoded scratch must outlive the decoder/drain cycle.
+/// caller output buffers. Legacy chunked initializers also require a compressed
+/// join scratch buffer; `*Direct` chunked initializers decode from caller chunks
+/// directly and only require the decoded-output scratch to outlive the drain.
 pub const ZlibDecoder = struct {
     decoded: []const u8 = &.{},
     frame_len: usize = 0,
@@ -3197,6 +3198,18 @@ pub const ZlibDecoder = struct {
         return self;
     }
 
+    pub fn initFromChunksDirect(chunks: []const []const u8, output_scratch: []u8) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetFromChunksDirect(chunks, output_scratch);
+        return self;
+    }
+
+    pub fn initFromChunksExactSizeDirect(chunks: []const []const u8, output_scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetFromChunksExactSizeDirect(chunks, output_scratch, expected_output_len);
+        return self;
+    }
+
     pub fn initWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) Error!ZlibDecoder {
         var self = ZlibDecoder{};
         try self.resetWithDictionary(input, dictionary, scratch);
@@ -3218,6 +3231,18 @@ pub const ZlibDecoder = struct {
     pub fn initFromChunksWithDictionaryExactSize(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
         var self = ZlibDecoder{};
         try self.resetFromChunksWithDictionaryExactSize(chunks, dictionary, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunksWithDictionaryDirect(chunks: []const []const u8, dictionary: []const u8, output_scratch: []u8) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetFromChunksWithDictionaryDirect(chunks, dictionary, output_scratch);
+        return self;
+    }
+
+    pub fn initFromChunksWithDictionaryExactSizeDirect(chunks: []const []const u8, dictionary: []const u8, output_scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetFromChunksWithDictionaryExactSizeDirect(chunks, dictionary, output_scratch, expected_output_len);
         return self;
     }
 
@@ -3250,6 +3275,25 @@ pub const ZlibDecoder = struct {
         return self.resetExactSize(joined, output_scratch, expected_output_len);
     }
 
+    pub fn resetFromChunksDirect(self: *ZlibDecoder, chunks: []const []const u8, output_scratch: []u8) Error!void {
+        const written = decodeZlibChunksInto(chunks, output_scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        self.* = .{
+            .decoded = output_scratch[0..written],
+            .frame_len = try chunksTotalLen(chunks),
+        };
+    }
+
+    pub fn resetFromChunksExactSizeDirect(self: *ZlibDecoder, chunks: []const []const u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        try self.resetFromChunksDirect(chunks, output_scratch);
+        if (self.decoded.len != expected_output_len) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+    }
+
     pub fn resetFromChunksWithDictionary(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
         const joined = try joinChunks(chunks, compressed_scratch);
         return self.resetWithDictionary(joined, dictionary, output_scratch);
@@ -3258,6 +3302,25 @@ pub const ZlibDecoder = struct {
     pub fn resetFromChunksWithDictionaryExactSize(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
         const joined = try joinChunks(chunks, compressed_scratch);
         return self.resetWithDictionaryExactSize(joined, dictionary, output_scratch, expected_output_len);
+    }
+
+    pub fn resetFromChunksWithDictionaryDirect(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, output_scratch: []u8) Error!void {
+        const written = decodeZlibChunksIntoWithDictionary(chunks, output_scratch, dictionary) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        self.* = .{
+            .decoded = output_scratch[0..written],
+            .frame_len = try chunksTotalLen(chunks),
+        };
+    }
+
+    pub fn resetFromChunksWithDictionaryExactSizeDirect(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        try self.resetFromChunksWithDictionaryDirect(chunks, dictionary, output_scratch);
+        if (self.decoded.len != expected_output_len) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
     }
 
     pub fn resetWithDictionary(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8) Error!void {
@@ -3418,9 +3481,11 @@ fn pngImageOutputLen(info: PngImageInfo) Error!usize {
 ///
 /// This is still a full-wrapper zlib decoder internally: `init`/`reset`
 /// validates and materializes the IDAT zlib payload into caller-owned
-/// `zlib_scratch`. The row-facing API then drains exactly one filtered PNG
-/// scanline at a time, reconstructs it with filter methods 0..4, and keeps the
-/// previous reconstructed row in caller-owned scratch for the next prediction.
+/// `zlib_scratch`. Direct chunked initializers avoid a compressed join scratch
+/// and decode IDAT chunks straight into that zlib scratch. The row-facing API
+/// then drains exactly one filtered PNG scanline at a time, reconstructs it with
+/// filter methods 0..4, and keeps the previous reconstructed row in
+/// caller-owned scratch for the next prediction.
 pub const PngZlibScanlineDecoder = struct {
     zlib: ZlibDecoder = .{},
     filtered_row_scratch: []u8 = &.{},
@@ -3500,6 +3565,30 @@ pub const PngZlibScanlineDecoder = struct {
         return initFromChunks(chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel);
     }
 
+    pub fn initFromChunksDirect(
+        chunks: []const []const u8,
+        zlib_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        row_len: usize,
+        row_count: usize,
+        bytes_per_pixel: usize,
+    ) Error!PngZlibScanlineDecoder {
+        var self = PngZlibScanlineDecoder{};
+        try self.resetFromChunksDirect(chunks, zlib_scratch, filtered_row_scratch, previous_row_scratch, row_len, row_count, bytes_per_pixel);
+        return self;
+    }
+
+    pub fn initFromChunksWithInfoDirect(
+        chunks: []const []const u8,
+        zlib_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+    ) Error!PngZlibScanlineDecoder {
+        return initFromChunksDirect(chunks, zlib_scratch, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel);
+    }
+
     pub fn reset(
         self: *PngZlibScanlineDecoder,
         input: []const u8,
@@ -3564,6 +3653,38 @@ pub const PngZlibScanlineDecoder = struct {
         info: PngImageInfo,
     ) Error!void {
         return self.resetFromChunks(chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel);
+    }
+
+    pub fn resetFromChunksDirect(
+        self: *PngZlibScanlineDecoder,
+        chunks: []const []const u8,
+        zlib_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        row_len: usize,
+        row_count: usize,
+        bytes_per_pixel: usize,
+    ) Error!void {
+        const expected_payload_len = try validateConfig(row_len, row_count, bytes_per_pixel, filtered_row_scratch, previous_row_scratch);
+        self.* = .{
+            .filtered_row_scratch = filtered_row_scratch[0..row_len],
+            .previous_row_scratch = previous_row_scratch[0..row_len],
+            .row_len = row_len,
+            .row_count = row_count,
+            .bytes_per_pixel = bytes_per_pixel,
+        };
+        self.zlib = try ZlibDecoder.initFromChunksExactSizeDirect(chunks, zlib_scratch, expected_payload_len);
+    }
+
+    pub fn resetFromChunksWithInfoDirect(
+        self: *PngZlibScanlineDecoder,
+        chunks: []const []const u8,
+        zlib_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+    ) Error!void {
+        return self.resetFromChunksDirect(chunks, zlib_scratch, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel);
     }
 
     fn validateConfig(row_len: usize, row_count: usize, bytes_per_pixel: usize, filtered_row_scratch: []u8, previous_row_scratch: []u8) Error!usize {
@@ -3667,6 +3788,20 @@ pub fn decodePngZlibImageFromChunks(
     return drainPngZlibImage(&decoder, output[0..output_len]);
 }
 
+pub fn decodePngZlibImageFromChunksDirect(
+    chunks: []const []const u8,
+    zlib_scratch: []u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngImageInfo,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    const output_len = try pngImageOutputLen(info);
+    if (output.len < output_len) return error.OutputTooSmall;
+    var decoder = try PngZlibScanlineDecoder.initFromChunksWithInfoDirect(chunks, zlib_scratch, filtered_row_scratch, previous_row_scratch, info);
+    return drainPngZlibImage(&decoder, output[0..output_len]);
+}
+
 fn drainPngZlibImage(decoder: *PngZlibScanlineDecoder, output: []u8) Error!PngImageDecodeResult {
     var offset: usize = 0;
     var zlib_input_read: usize = 0;
@@ -3711,6 +3846,19 @@ pub fn decodePngAdam7ZlibImageFromChunks(
 ) Error!PngAdam7ImageDecodeResult {
     try validatePngAdam7DecodeBuffers(info, filtered_row_scratch, previous_row_scratch, output);
     var zlib = try ZlibDecoder.initFromChunksExactSize(chunks, compressed_scratch, zlib_scratch, info.zlib_payload_len);
+    return drainPngAdam7ZlibImage(&zlib, filtered_row_scratch, previous_row_scratch, info, output[0..info.image_output_len]);
+}
+
+pub fn decodePngAdam7ZlibImageFromChunksDirect(
+    chunks: []const []const u8,
+    zlib_scratch: []u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngAdam7Info,
+    output: []u8,
+) Error!PngAdam7ImageDecodeResult {
+    try validatePngAdam7DecodeBuffers(info, filtered_row_scratch, previous_row_scratch, output);
+    var zlib = try ZlibDecoder.initFromChunksExactSizeDirect(chunks, zlib_scratch, info.zlib_payload_len);
     return drainPngAdam7ZlibImage(&zlib, filtered_row_scratch, previous_row_scratch, info, output[0..info.image_output_len]);
 }
 
@@ -5297,6 +5445,14 @@ test "zlib decoder drains PNG-like payload from caller scratch" {
     try std.testing.expectEqualSlices(u8, &png_like, &out);
     try std.testing.expectError(error.OutputTooSmall, ZlibDecoder.initFromChunksExactSize(&chunks, compressed_scratch[0 .. encoded.len - 1], &scratch, png_like.len));
 
+    var direct_chunk_decoder = try ZlibDecoder.initFromChunksExactSizeDirect(&chunks, &scratch, png_like.len);
+    @memset(&out, 0);
+    const direct_chunk_step = try direct_chunk_decoder.step(&out);
+    try std.testing.expectEqual(core.StepResult.Status.done, direct_chunk_step.status);
+    try std.testing.expectEqual(encoded.len, direct_chunk_step.progress.input_read);
+    try std.testing.expectEqualSlices(u8, &png_like, &out);
+    try std.testing.expectError(error.OutputTooSmall, ZlibDecoder.initFromChunksExactSizeDirect(&chunks, scratch[0 .. scratch.len - 1], png_like.len));
+
     try std.testing.expectError(error.OutputTooSmall, ZlibDecoder.initExactSize(encoded, scratch[0 .. scratch.len - 1], png_like.len));
     try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initExactSize(encoded, &scratch, png_like.len - 1));
     try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initExactSize(encoded, &scratch, png_like.len + 1));
@@ -5315,6 +5471,7 @@ test "zlib decoder drains varied PNG-like chunks from caller scratch" {
     var compressed_scratch: [2048]u8 = undefined;
     var scratch: [png_like.len]u8 = undefined;
     var decoder = try ZlibDecoder.initFromChunksExactSize(&chunks, &compressed_scratch, &scratch, png_like.len);
+    var direct_decoder = try ZlibDecoder.initFromChunksExactSizeDirect(&chunks, &scratch, png_like.len);
     var out: [png_like.len]u8 = undefined;
     var written: usize = 0;
     while (true) {
@@ -5325,6 +5482,10 @@ test "zlib decoder drains varied PNG-like chunks from caller scratch" {
         if (step.status == .done) break;
         try std.testing.expectEqual(core.StepResult.Status.need_output, step.status);
     }
+    try std.testing.expectEqualSlices(u8, &png_like, &out);
+    @memset(&out, 0);
+    const direct_step = try direct_decoder.step(&out);
+    try std.testing.expectEqual(core.StepResult.Status.done, direct_step.status);
     try std.testing.expectEqualSlices(u8, &png_like, &out);
 }
 
@@ -5341,6 +5502,12 @@ test "zlib decoder drains PNG scanlines from chunked IDAT scratch" {
     var compressed_scratch: [2048]u8 = undefined;
     var scratch: [png_like.len]u8 = undefined;
     var decoder = try ZlibDecoder.initFromChunksExactSize(&chunks, &compressed_scratch, &scratch, png_like.len);
+    var direct_decoder = try ZlibDecoder.initFromChunksExactSizeDirect(&chunks, &scratch, png_like.len);
+    var direct_first_row: [3]u8 = undefined;
+    const direct_first_step = try direct_decoder.stepPngScanline(&direct_first_row);
+    try std.testing.expectEqual(@as(u8, 0), direct_first_step.filter.?);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, direct_first_step.status);
+    try std.testing.expectEqualSlices(u8, png_like[1..4], &direct_first_row);
 
     const widths = [_]usize{ 1, 2, 8, 17 };
     const channels = [_]usize{ 3, 4 };
@@ -5627,6 +5794,13 @@ test "png adam7 zlib image helper reconstructs interlaced RGB chunks" {
     try std.testing.expectEqual(@as(usize, 11), result.rows);
     try std.testing.expectEqual(expected_image.len, result.output_written);
     try std.testing.expectEqual(encoded.len, result.zlib_input_read);
+    try std.testing.expectEqualSlices(u8, &expected_image, &image);
+    @memset(&image, 0);
+    const direct_result = try decodePngAdam7ZlibImageFromChunksDirect(&chunks, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image);
+    try std.testing.expectEqual(@as(usize, 7), direct_result.passes);
+    try std.testing.expectEqual(@as(usize, 11), direct_result.rows);
+    try std.testing.expectEqual(expected_image.len, direct_result.output_written);
+    try std.testing.expectEqual(encoded.len, direct_result.zlib_input_read);
     try std.testing.expectEqualSlices(u8, &expected_image, &image);
 
     var single_image: [expected_image.len]u8 = undefined;
@@ -5977,6 +6151,12 @@ test "png zlib image helper reconstructs full image from IDAT chunks" {
     try std.testing.expectEqual(expected_image.len, result.output_written);
     try std.testing.expectEqual(encoded.len, result.zlib_input_read);
     try std.testing.expectEqualSlices(u8, &expected_image, &image);
+    @memset(&image, 0);
+    const direct_result = try decodePngZlibImageFromChunksDirect(&chunks, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image);
+    try std.testing.expectEqual(row_count, direct_result.rows);
+    try std.testing.expectEqual(expected_image.len, direct_result.output_written);
+    try std.testing.expectEqual(encoded.len, direct_result.zlib_input_read);
+    try std.testing.expectEqualSlices(u8, &expected_image, &image);
 
     var single_image: [expected_image.len]u8 = undefined;
     const single = try decodePngZlibImage(encoded, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &single_image);
@@ -6025,6 +6205,10 @@ test "png zlib image helper covers sub-byte indexed rows" {
     try std.testing.expectEqual(expected_image.len, result.output_written);
     try std.testing.expectEqual(encoded.len, result.zlib_input_read);
     try std.testing.expectEqualSlices(u8, &expected_image, &image);
+    @memset(&image, 0);
+    const direct_result = try decodePngZlibImageFromChunksDirect(&chunks, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image);
+    try std.testing.expectEqual(@as(usize, 3), direct_result.rows);
+    try std.testing.expectEqualSlices(u8, &expected_image, &image);
 }
 
 test "zlib decoder supports preset dictionary streams" {
@@ -6052,6 +6236,13 @@ test "zlib decoder supports preset dictionary streams" {
     try std.testing.expectEqual(encoded.len, chunk_step.progress.input_read);
     try std.testing.expectEqualSlices(u8, input, &out);
     try std.testing.expectError(error.OutputTooSmall, ZlibDecoder.initFromChunksWithDictionaryExactSize(&chunks, dict, compressed_scratch[0 .. encoded.len - 1], &scratch, input.len));
+
+    var direct_chunk_decoder = try ZlibDecoder.initFromChunksWithDictionaryExactSizeDirect(&chunks, dict, &scratch, input.len);
+    @memset(&out, 0);
+    const direct_chunk_step = try direct_chunk_decoder.step(&out);
+    try std.testing.expectEqual(core.StepResult.Status.done, direct_chunk_step.status);
+    try std.testing.expectEqual(encoded.len, direct_chunk_step.progress.input_read);
+    try std.testing.expectEqualSlices(u8, input, &out);
 
     try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initWithDictionaryExactSize(encoded, dict, &scratch, input.len - 1));
     try std.testing.expectError(error.NeedDictionary, ZlibDecoder.init(encoded, &scratch));
