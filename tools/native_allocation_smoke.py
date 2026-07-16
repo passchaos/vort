@@ -33,7 +33,10 @@ ZERO_ALLOCATION_CASES = [
     "embedded_validation_report_with_buffers",
     "embedded_compressed_validation_with_buffers",
     "embedded_compressed_validation_report_with_buffers",
+    "sidecar_compressed_validation_with_buffers",
+    "sidecar_compressed_validation_report_with_buffers",
     "embedded_ldm_validation_with_buffers",
+    "sidecar_ldm_validation_with_buffers",
     "dictionary_deflate_validation_with_buffers",
     "dictionary_deflate_validation_report_with_buffers",
 ]

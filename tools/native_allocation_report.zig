@@ -81,7 +81,10 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureEmbeddedValidationReportWithBuffers(allocator, indexed_store_stream));
     try rows.append(allocator, try measureEmbeddedCompressedValidationWithBuffers(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureEmbeddedCompressedValidationReportWithBuffers(allocator, indexed_deflate_stream));
+    try rows.append(allocator, try measureSidecarCompressedValidationWithBuffers(allocator));
+    try rows.append(allocator, try measureSidecarCompressedValidationReportWithBuffers(allocator));
     try rows.append(allocator, try measureEmbeddedLdmValidationWithBuffers(allocator));
+    try rows.append(allocator, try measureSidecarLdmValidationWithBuffers(allocator));
     try rows.append(allocator, try measureDictionaryDeflateValidationWithBuffers(allocator, dict_deflate_indexed_stream));
     try rows.append(allocator, try measureDictionaryDeflateValidationReportWithBuffers(allocator, dict_deflate_indexed_stream));
 
@@ -661,6 +664,71 @@ fn measureEmbeddedLdmValidationWithBuffers(backing: std.mem.Allocator) !CaseStat
         .payload_scratch = payload_scratch,
     });
     return stats("embedded_ldm_validation_with_buffers", stream.len, 0, failing);
+}
+
+fn measureSidecarCompressedValidationWithBuffers(backing: std.mem.Allocator) !CaseStats {
+    const payload = "hello hello hello hello";
+    const frame = try vort.storeEncodeDeflateAlloc(backing, payload);
+    defer backing.free(frame);
+    const index = try vort.storeBuildFrameIndexAlloc(backing, frame);
+    defer backing.free(index);
+    const sidecar = try vort.storeEncodeFrameIndexAlloc(backing, index);
+    defer backing.free(sidecar);
+    const sizes = try vort.storeSidecarValidationBufferSizesForSidecarIndex(sidecar);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    try vort.storeValidateSidecarIndexWithOptionsAndBuffersAlloc(failing.allocator(), frame, sidecar, .{ .mode = .full }, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    return stats("sidecar_compressed_validation_with_buffers", frame.len + sidecar.len, 0, failing);
+}
+
+fn measureSidecarCompressedValidationReportWithBuffers(backing: std.mem.Allocator) !CaseStats {
+    const payload = "hello hello hello hello";
+    const frame = try vort.storeEncodeDeflateAlloc(backing, payload);
+    defer backing.free(frame);
+    const index = try vort.storeBuildFrameIndexAlloc(backing, frame);
+    defer backing.free(index);
+    const sidecar = try vort.storeEncodeFrameIndexAlloc(backing, index);
+    defer backing.free(sidecar);
+    const sizes = try vort.storeSidecarValidationBufferSizesForSidecarIndex(sidecar);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const report = vort.storeValidateSidecarIndexReportWithOptionsAndBuffersAlloc(failing.allocator(), frame, sidecar, .{ .mode = .full }, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    try std.testing.expect(report.ok);
+    return stats("sidecar_compressed_validation_report_with_buffers", frame.len + sidecar.len, 0, failing);
+}
+
+fn measureSidecarLdmValidationWithBuffers(backing: std.mem.Allocator) !CaseStats {
+    const prefix = deterministicLdmPrefix();
+    const payload = prefix ++ "----" ++ prefix[0..1024].*;
+    const frame = try vort.storeEncodeLongDistanceAlloc(backing, payload, .{ .min_distance = 32769, .min_length = 16 });
+    defer backing.free(frame);
+    const index = try vort.storeBuildFrameIndexAlloc(backing, frame);
+    defer backing.free(index);
+    const sidecar = try vort.storeEncodeFrameIndexAlloc(backing, index);
+    defer backing.free(sidecar);
+    const sizes = try vort.storeSidecarValidationBufferSizesForSidecarIndex(sidecar);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    try vort.storeValidateSidecarIndexWithOptionsAndBuffersAlloc(failing.allocator(), frame, sidecar, .{ .mode = .full }, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    return stats("sidecar_ldm_validation_with_buffers", frame.len + sidecar.len, 0, failing);
 }
 
 fn measureDictionaryDeflateValidationWithBuffers(backing: std.mem.Allocator, stream: []const u8) !CaseStats {

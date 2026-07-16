@@ -4617,6 +4617,53 @@ test "embedded compressed validation reuses caller-provided buffers" {
     try std.testing.expect(ldm_report.ok);
 }
 
+test "sidecar compressed validation reuses caller-provided buffers" {
+    const deflate_payload = "hello hello hello hello";
+    const deflate_frame = try encodeDeflateAlloc(std.testing.allocator, deflate_payload);
+    defer std.testing.allocator.free(deflate_frame);
+    const deflate_index = try buildFrameIndexAlloc(std.testing.allocator, deflate_frame);
+    defer std.testing.allocator.free(deflate_index);
+    const deflate_sidecar = try encodeFrameIndexAlloc(std.testing.allocator, deflate_index);
+    defer std.testing.allocator.free(deflate_sidecar);
+    const deflate_sizes = try sidecarValidationBufferSizesForSidecarIndex(deflate_sidecar);
+    const deflate_index_buffer = try std.testing.allocator.alloc(FrameIndexEntry, deflate_sizes.index_entries);
+    defer std.testing.allocator.free(deflate_index_buffer);
+    const deflate_payload_scratch = try std.testing.allocator.alloc(u8, deflate_sizes.payload_scratch_len);
+    defer std.testing.allocator.free(deflate_payload_scratch);
+    try validateSidecarIndexWithOptionsAndBuffersAlloc(std.testing.failing_allocator, deflate_frame, deflate_sidecar, .{ .mode = .full }, .{
+        .index_buffer = deflate_index_buffer,
+        .payload_scratch = deflate_payload_scratch,
+    });
+    const deflate_report = validateSidecarIndexReportWithOptionsAndBuffersAlloc(std.testing.failing_allocator, deflate_frame, deflate_sidecar, .{ .mode = .full }, .{
+        .index_buffer = deflate_index_buffer,
+        .payload_scratch = deflate_payload_scratch,
+    });
+    try std.testing.expect(deflate_report.ok);
+
+    const prefix = deterministicLdmPrefix();
+    const ldm_payload = prefix ++ "----" ++ prefix[0..1024].*;
+    const ldm_frame = try encodeLongDistanceAlloc(std.testing.allocator, ldm_payload, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(ldm_frame);
+    const ldm_index = try buildFrameIndexAlloc(std.testing.allocator, ldm_frame);
+    defer std.testing.allocator.free(ldm_index);
+    const ldm_sidecar = try encodeFrameIndexAlloc(std.testing.allocator, ldm_index);
+    defer std.testing.allocator.free(ldm_sidecar);
+    const ldm_sizes = try sidecarValidationBufferSizesForSidecarIndex(ldm_sidecar);
+    const ldm_index_buffer = try std.testing.allocator.alloc(FrameIndexEntry, ldm_sizes.index_entries);
+    defer std.testing.allocator.free(ldm_index_buffer);
+    const ldm_payload_scratch = try std.testing.allocator.alloc(u8, ldm_sizes.payload_scratch_len);
+    defer std.testing.allocator.free(ldm_payload_scratch);
+    try validateSidecarIndexWithOptionsAndBuffersAlloc(std.testing.failing_allocator, ldm_frame, ldm_sidecar, .{ .mode = .full }, .{
+        .index_buffer = ldm_index_buffer,
+        .payload_scratch = ldm_payload_scratch,
+    });
+    const ldm_report = validateSidecarIndexReportWithOptionsAndBuffersAlloc(std.testing.failing_allocator, ldm_frame, ldm_sidecar, .{ .mode = .full }, .{
+        .index_buffer = ldm_index_buffer,
+        .payload_scratch = ldm_payload_scratch,
+    });
+    try std.testing.expect(ldm_report.ok);
+}
+
 test "sidecar index bytes support dictionary range decode" {
     const dict = "dictionary-only phrase with enough length to beat stored framing";
     const input = (dict ++ "!") ** 2;
