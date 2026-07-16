@@ -176,7 +176,7 @@ caller-owned patch scratch through `initWithDictionary`/`resetWithDictionary`.
 
 `ZlibDecoder` accepts a complete zlib-wrapped deflate stream, decodes it into
 caller-owned scratch, and then drains the result through bounded output chunks.
-This is the wrapper shape used by PNG IDAT data, so PNG-like zlib payloads can use
+This is the wrapper shape used by PNG IDAT data, so multi-filter PNG-like zlib payloads can use
 Vort without an output allocation when the decoded size is known or preflighted.
 
 ## Range decode summary APIs

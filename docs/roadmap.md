@@ -414,7 +414,7 @@ architecture blindly.
 - [x] zlib wrapper integration for fixed-Huffman blocks.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
 - [x] zlib wrapper integration for multi-block dynamic streams.
-- [x] ZlibDecoder drains PNG-like zlib-wrapped payloads through reusable caller-owned scratch and bounded output.
+- [x] ZlibDecoder drains multi-filter PNG-like zlib-wrapped payloads through reusable caller-owned scratch and bounded output.
 - [x] gzip wrapper and CRC/ISIZE verification for stored blocks.
 - [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC validation.
 - [x] gzip encoders can emit configurable MTIME/XFL/OS plus FEXTRA/FNAME/FCOMMENT/FHCRC metadata while preserving deterministic defaults.
