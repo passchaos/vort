@@ -704,6 +704,9 @@ architecture blindly.
 - [x] FastDecoder construction now optimistically fills lookup entries first and
   only clears/refills when short codes do not fully cover the table, avoiding an
   extra coverage pass for complete dynamic alphabets.
+- [x] FastDecoder lookup construction writes exact-width codes directly instead
+  of running the replicated-entry fill loop once, shaving setup work for dense
+  dynamic lookup tables.
 - [x] Dynamic literal/length decode selects a 9-bit lookup for very short-code
   blocks and a 10-bit lookup otherwise, preserving tiny-block setup wins without
   regressing larger corpus decode throughput.

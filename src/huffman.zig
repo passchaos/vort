@@ -142,6 +142,11 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             var covered: usize = 0;
             for (self.table.entries[0..self.table.len]) |entry| {
                 if (entry.bits > lookup_bits) continue;
+                if (entry.bits == lookup_bits) {
+                    self.lookup[entry.code] = .{ .symbol = entry.symbol, .bits = entry.bits };
+                    covered += 1;
+                    continue;
+                }
                 const fill = @as(usize, 1) << @intCast(lookup_bits - entry.bits);
                 covered += fill;
                 var i: usize = 0;
