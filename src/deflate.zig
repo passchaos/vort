@@ -916,7 +916,7 @@ const DynamicCodingPlan = struct {
         };
         lit_freqs[256] = 1;
         completeLiteralFrequencySet(&lit_freqs);
-        completeDistanceFrequencySet(&dist_freqs);
+        if (hasDistanceSymbols(&dist_freqs)) completeDistanceFrequencySet(&dist_freqs);
 
         var lit_lengths_full = huffman.treeCodeLengths(286, &lit_freqs, 15);
         var dist_lengths_full = huffman.treeCodeLengths(30, &dist_freqs, 15);
@@ -1111,6 +1111,11 @@ fn completeLiteralFrequencySet(freqs: *[286]u32) void {
             }
         }
     }
+}
+
+fn hasDistanceSymbols(freqs: *const [30]u32) bool {
+    for (freqs.*) |freq| if (freq != 0) return true;
+    return false;
 }
 
 fn completeDistanceFrequencySet(freqs: *[30]u32) void {
@@ -5276,9 +5281,9 @@ test "raw deflate header parser exposes first block metadata" {
     var literal_hist_total: u16 = 0;
     for (dynamic_info.dynamic_literal_length_histogram) |count| literal_hist_total += count;
     try std.testing.expectEqual(dynamic_info.dynamic_hlit.?, literal_hist_total);
-    try std.testing.expect(dynamic_info.dynamic_distance_nonzero.? >= 1);
+    try std.testing.expectEqual(@as(u16, 0), dynamic_info.dynamic_distance_nonzero.?);
     try std.testing.expectEqual(dynamic_info.dynamic_hdist.? - dynamic_info.dynamic_distance_nonzero.?, dynamic_info.dynamic_distance_zero.?);
-    try std.testing.expect(dynamic_info.dynamic_distance_max_bits.? >= 1);
+    try std.testing.expectEqual(@as(u8, 0), dynamic_info.dynamic_distance_max_bits.?);
     var distance_hist_total: u16 = 0;
     for (dynamic_info.dynamic_distance_length_histogram) |count| distance_hist_total += count;
     try std.testing.expectEqual(dynamic_info.dynamic_hdist.?, distance_hist_total);
@@ -7849,6 +7854,23 @@ test "dynamic literal encoder round trips through raw zlib and gzip decoders" {
         defer std.testing.allocator.free(gzip_decoded);
         try std.testing.expectEqualSlices(u8, case, gzip_decoded);
     }
+}
+
+test "dynamic literal encoder omits unused distance alphabet" {
+    const input = "literal-only dynamic blocks should not need distance codes";
+    const raw = try encodeRawDynamicLiteralAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(raw);
+
+    const info = try parseRawDeflateHeaderInfo(raw);
+    try std.testing.expectEqual(RawDeflateBlockType.dynamic, info.block_type);
+    try std.testing.expectEqual(@as(u16, 1), info.dynamic_hdist.?);
+    try std.testing.expectEqual(@as(u16, 0), info.dynamic_distance_nonzero.?);
+    try std.testing.expectEqual(info.dynamic_hdist.?, info.dynamic_distance_zero.?);
+    try std.testing.expectEqual(@as(u8, 0), info.dynamic_distance_max_bits.?);
+
+    const decoded = try decodeRawDynamicAllocStrict(std.testing.allocator, raw);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "zlib and gzip dynamic literal wrappers preserve literal-only raw stream" {

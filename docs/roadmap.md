@@ -638,6 +638,9 @@ architecture blindly.
 - [x] Best raw/zlib/gzip one-shot encoders compare against production default
   and filtered parser outputs and keep the smaller frame, preventing fixed-cost
   optimal parsing from regressing dynamic Huffman size on mixed payloads.
+- [x] Dynamic literal-only blocks omit unused distance code lengths, shrinking
+  headers for Huffman-only and literal-only zlib/gzip/raw deflate payloads while
+  remaining valid for streams that never decode a distance symbol.
 - [x] Compression-level report validating parser/cost-model settings and round trips.
 - [x] Compression-level report exposes incompressible stored fast-path decisions.
 - [x] Compression-level report accepts ad-hoc file corpora.
