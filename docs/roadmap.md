@@ -282,6 +282,9 @@ architecture blindly.
 - [x] File CLI and Python differential smoke cover raw preset-dictionary one-shot/split/adaptive file encode.
 - [x] zlib/gzip wrappers reject truncated non-final raw deflate streams across stored/fixed/dynamic blocks.
 - [x] zlib wrapper and Adler verification for stored blocks.
+- [x] zlib decode option APIs can ignore Adler-32 and/or allow trailing data
+  while preserving strict defaults for PNG compatibility and relaxed-reader
+  integrations.
 - [x] zlib wrapper reports preset-dictionary streams as dictionary requirements.
 - [x] Public zlib header metadata parser exposes CMF/FLG, window, FDICT/DICTID, and FLEVEL fields.
 - [x] CLI zlib header inspection prints parsed metadata for hex/file workflows.

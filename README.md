@@ -290,6 +290,12 @@ const zlib_exact = try vort.decodeZlibAllocExactSize(allocator, zlib_bytes, "pay
 defer allocator.free(zlib_exact);
 const zlib_bounded = try vort.decodeZlibAllocLimited(allocator, zlib_bytes, 1024);
 defer allocator.free(zlib_bounded);
+const zlib_relaxed = try vort.decodeZlibAllocWithOptions(
+    allocator,
+    zlib_bytes,
+    .{ .ignore_adler = true, .allow_trailing_data = true },
+);
+defer allocator.free(zlib_relaxed);
 var zlib_out: [1024]u8 = undefined;
 const zlib_written = try vort.decodeZlib(zlib_bytes, &zlib_out);
 var zlib_cat: std.ArrayList(u8) = .empty;

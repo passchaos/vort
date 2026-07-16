@@ -237,6 +237,11 @@ pub const ZlibStreamInfo = struct {
     adler32_matches: bool,
 };
 
+pub const ZlibDecodeOptions = struct {
+    ignore_adler: bool = false,
+    allow_trailing_data: bool = false,
+};
+
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
         .fastest => .{ .parser = .hash, .lz77_options = .{ .window_len = 8 * 1024, .max_chain = 4, .nice_len = 8, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4, .max_match = 64, .min_savings_bits = 8 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
@@ -2560,14 +2565,22 @@ fn writeZlibHeader(output: []u8, dictionary: ?[]const u8) void {
 }
 
 fn validateZlibFooter(input: []const u8, footer_offset: usize, actual: u32) Error!void {
-    try validateZlibFooterPartial(input, footer_offset, actual);
-    if (footer_offset + 4 != input.len) return error.TrailingData;
+    try validateZlibFooterWithOptions(input, footer_offset, actual, .{});
+}
+
+fn validateZlibFooterWithOptions(input: []const u8, footer_offset: usize, actual: u32, options: ZlibDecodeOptions) Error!void {
+    try validateZlibFooterPartialWithOptions(input, footer_offset, actual, options);
+    if (!options.allow_trailing_data and footer_offset + 4 != input.len) return error.TrailingData;
 }
 
 fn validateZlibFooterPartial(input: []const u8, footer_offset: usize, actual: u32) Error!void {
+    try validateZlibFooterPartialWithOptions(input, footer_offset, actual, .{});
+}
+
+fn validateZlibFooterPartialWithOptions(input: []const u8, footer_offset: usize, actual: u32, options: ZlibDecodeOptions) Error!void {
     if (footer_offset > input.len or input.len - footer_offset < 4) return error.TruncatedFrame;
     const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-    if (actual != expected) return error.ChecksumMismatch;
+    if (!options.ignore_adler and actual != expected) return error.ChecksumMismatch;
 }
 
 pub fn inspectZlibStreamAlloc(allocator: std.mem.Allocator, input: []const u8) !ZlibStreamInfo {
@@ -2645,6 +2658,14 @@ pub fn decodeZlib(input: []const u8, output: []u8) Error!usize {
 
 pub fn decodeZlibWithDictionary(input: []const u8, output: []u8, dictionary: []const u8) Error!usize {
     return decodeZlibWithOptionalDictionary(input, output, dictionary);
+}
+
+pub fn decodeZlibWithOptions(input: []const u8, output: []u8, options: ZlibDecodeOptions) Error!usize {
+    return decodeZlibWithOptionalDictionaryAndOptions(input, output, null, options);
+}
+
+pub fn decodeZlibWithDictionaryAndOptions(input: []const u8, output: []u8, dictionary: []const u8, options: ZlibDecodeOptions) Error!usize {
+    return decodeZlibWithOptionalDictionaryAndOptions(input, output, dictionary, options);
 }
 
 fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
@@ -3642,18 +3663,22 @@ fn drainPngAdam7ZlibImage(
 }
 
 fn decodeZlibWithOptionalDictionary(input: []const u8, output: []u8, dictionary: ?[]const u8) Error!usize {
+    return decodeZlibWithOptionalDictionaryAndOptions(input, output, dictionary, .{});
+}
+
+fn decodeZlibWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
 
     if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) |stored| {
         const footer_offset = header.data_offset + stored.result.input_read;
-        try validateZlibFooter(input, footer_offset, stored.digest);
+        try validateZlibFooterWithOptions(input, footer_offset, stored.digest, options);
         return stored.result.output_written;
     }
 
     const raw = try decodeRawAutoWithDictionary(input[header.data_offset..], raw_dictionary, output);
     const footer_offset = header.data_offset + raw.input_read;
-    try validateZlibFooter(input, footer_offset, checksum.adler32(output[0..raw.output_written]));
+    try validateZlibFooterWithOptions(input, footer_offset, checksum.adler32(output[0..raw.output_written]), options);
     return raw.output_written;
 }
 
@@ -3690,6 +3715,14 @@ pub fn decodeZlibAllocWithDictionary(allocator: std.mem.Allocator, input: []cons
     return decodeZlibAllocWithOptionalDictionary(allocator, input, dictionary);
 }
 
+pub fn decodeZlibAllocWithOptions(allocator: std.mem.Allocator, input: []const u8, options: ZlibDecodeOptions) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, null, options, null);
+}
+
+pub fn decodeZlibAllocWithDictionaryAndOptions(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: ZlibDecodeOptions) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, options, null);
+}
+
 pub fn decodeZlibAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
     return decodeZlibAllocWithOptionalDictionaryExactSize(allocator, input, null, expected_output_len);
 }
@@ -3698,12 +3731,28 @@ pub fn decodeZlibAllocWithDictionaryExactSize(allocator: std.mem.Allocator, inpu
     return decodeZlibAllocWithOptionalDictionaryExactSize(allocator, input, dictionary, expected_output_len);
 }
 
+pub fn decodeZlibAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator, input, null, options, expected_output_len);
+}
+
+pub fn decodeZlibAllocWithDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator, input, dictionary, options, expected_output_len);
+}
+
 pub fn decodeZlibAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
     return decodeZlibAllocWithOptionalDictionaryLimited(allocator, input, null, max_output_len);
 }
 
 pub fn decodeZlibAllocWithDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
     return decodeZlibAllocWithOptionalDictionaryLimited(allocator, input, dictionary, max_output_len);
+}
+
+pub fn decodeZlibAllocWithOptionsLimited(allocator: std.mem.Allocator, input: []const u8, options: ZlibDecodeOptions, max_output_len: usize) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, null, options, max_output_len);
+}
+
+pub fn decodeZlibAllocWithDictionaryAndOptionsLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: ZlibDecodeOptions, max_output_len: usize) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, options, max_output_len);
 }
 
 pub fn decodeZlibConcatenated(input: []const u8, output: []u8) Error!usize {
@@ -3771,6 +3820,10 @@ fn decodeZlibAllocWithOptionalDictionary(allocator: std.mem.Allocator, input: []
     return decodeZlibAllocWithOptionalDictionaryLimited(allocator, input, dictionary, null);
 }
 
+fn decodeZlibAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, .{}, max_output_len);
+}
+
 fn decodeZlibConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
     if (input.len == 0) return error.TruncatedFrame;
 
@@ -3789,28 +3842,32 @@ fn decodeZlibConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
     return out.toOwnedSlice(allocator);
 }
 
-fn decodeZlibAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
+fn decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, max_output_len: ?usize) ![]u8 {
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
 
     if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, input[header.data_offset..], max_output_len)) |stored| {
         errdefer stored.deinit(allocator);
         const footer_offset = header.data_offset + stored.result.input_read;
-        try validateZlibFooter(input, footer_offset, stored.digest);
+        try validateZlibFooterWithOptions(input, footer_offset, stored.digest, options);
         return stored.result.bytes;
     }
 
     const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[header.data_offset..], raw_dictionary, max_output_len);
     errdefer raw.deinit(allocator);
     const footer_offset = header.data_offset + raw.input_read;
-    try validateZlibFooter(input, footer_offset, checksum.adler32(raw.bytes));
+    try validateZlibFooterWithOptions(input, footer_offset, checksum.adler32(raw.bytes), options);
     return raw.bytes;
 }
 
 fn decodeZlibAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, expected_output_len: usize) ![]u8 {
+    return decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator, input, dictionary, .{}, expected_output_len);
+}
+
+fn decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
-    const written = decodeZlibWithOptionalDictionary(input, out, dictionary) catch |err| switch (err) {
+    const written = decodeZlibWithOptionalDictionaryAndOptions(input, out, dictionary, options) catch |err| switch (err) {
         error.OutputTooSmall => return error.SizeMismatch,
         else => return err,
     };
@@ -4861,6 +4918,60 @@ test "zlib stored wrapper validates checksum header and trailing data" {
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeZlibStored(with_trailing[0 .. encoded.len + 1], &out));
     try std.testing.expectError(error.TrailingData, decodeZlibStoredAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]));
+}
+
+test "zlib relaxed decode options ignore Adler and trailing bytes" {
+    const encoded = try encodeZlibLevelAlloc(std.testing.allocator, "payload", 6);
+    defer std.testing.allocator.free(encoded);
+
+    var bad_checksum = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_checksum);
+    bad_checksum[bad_checksum.len - 1] ^= 1;
+
+    var out: [32]u8 = undefined;
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlib(bad_checksum, &out));
+    try std.testing.expectEqual(@as(usize, 7), try decodeZlibWithOptions(bad_checksum, &out, .{ .ignore_adler = true }));
+    try std.testing.expectEqualSlices(u8, "payload", out[0..7]);
+
+    var with_trailing: [64]u8 = undefined;
+    @memcpy(with_trailing[0..encoded.len], encoded);
+    with_trailing[encoded.len] = 0xaa;
+    const trailing = with_trailing[0 .. encoded.len + 1];
+    try std.testing.expectError(error.TrailingData, decodeZlib(trailing, &out));
+    try std.testing.expectEqual(@as(usize, 7), try decodeZlibWithOptions(trailing, &out, .{ .allow_trailing_data = true }));
+
+    var bad_checksum_with_trailing = try std.testing.allocator.dupe(u8, trailing);
+    defer std.testing.allocator.free(bad_checksum_with_trailing);
+    bad_checksum_with_trailing[encoded.len - 1] ^= 1;
+    const relaxed = ZlibDecodeOptions{ .ignore_adler = true, .allow_trailing_data = true };
+    try std.testing.expectEqual(@as(usize, 7), try decodeZlibWithOptions(bad_checksum_with_trailing, &out, relaxed));
+
+    const alloc = try decodeZlibAllocWithOptions(std.testing.allocator, bad_checksum_with_trailing, relaxed);
+    defer std.testing.allocator.free(alloc);
+    try std.testing.expectEqualSlices(u8, "payload", alloc);
+
+    const exact = try decodeZlibAllocWithOptionsExactSize(std.testing.allocator, bad_checksum_with_trailing, relaxed, 7);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, "payload", exact);
+
+    try std.testing.expectError(error.OutputLimitExceeded, decodeZlibAllocWithOptionsLimited(std.testing.allocator, bad_checksum_with_trailing, relaxed, 6));
+    const limited = try decodeZlibAllocWithOptionsLimited(std.testing.allocator, bad_checksum_with_trailing, relaxed, 7);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, "payload", limited);
+
+    const dictionary = "pay";
+    const dict_encoded = try encodeZlibLevelWithDictionaryAlloc(std.testing.allocator, "payload", dictionary, 6);
+    defer std.testing.allocator.free(dict_encoded);
+    var dict_bad = try std.testing.allocator.alloc(u8, dict_encoded.len + 1);
+    defer std.testing.allocator.free(dict_bad);
+    @memcpy(dict_bad[0..dict_encoded.len], dict_encoded);
+    dict_bad[dict_encoded.len - 1] ^= 1;
+    dict_bad[dict_encoded.len] = 0xbb;
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibWithDictionary(dict_bad, &out, dictionary));
+    try std.testing.expectEqual(@as(usize, 7), try decodeZlibWithDictionaryAndOptions(dict_bad, &out, dictionary, relaxed));
+    const dict_alloc = try decodeZlibAllocWithDictionaryAndOptionsLimited(std.testing.allocator, dict_bad, dictionary, relaxed, 7);
+    defer std.testing.allocator.free(dict_alloc);
+    try std.testing.expectEqualSlices(u8, "payload", dict_alloc);
 }
 
 const png_like_varied_len: usize = 1020;
