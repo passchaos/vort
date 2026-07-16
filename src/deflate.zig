@@ -2679,6 +2679,27 @@ fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]cons
     return compressed_scratch[0..total];
 }
 
+pub fn decodeZlibChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
+    return decodeZlibChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, output, null, .{});
+}
+
+pub fn decodeZlibChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: ZlibDecodeOptions) Error!usize {
+    return decodeZlibChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, output, null, options);
+}
+
+pub fn decodeZlibChunksWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: []const u8) Error!usize {
+    return decodeZlibChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, output, dictionary, .{});
+}
+
+pub fn decodeZlibChunksWithDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: []const u8, options: ZlibDecodeOptions) Error!usize {
+    return decodeZlibChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, output, dictionary, options);
+}
+
+fn decodeZlibChunksWithOptionalDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeZlibWithOptionalDictionaryAndOptions(joined, output, dictionary, options);
+}
+
 fn chunksTotalLen(chunks: []const []const u8) Error!usize {
     var total: usize = 0;
     for (chunks) |chunk| {
@@ -3755,6 +3776,54 @@ pub fn decodeZlibAllocWithDictionaryAndOptionsLimited(allocator: std.mem.Allocat
     return decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, options, max_output_len);
 }
 
+pub fn decodeZlibChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator, chunks, null, .{}, null);
+}
+
+pub fn decodeZlibChunksAllocWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, options: ZlibDecodeOptions) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator, chunks, null, options, null);
+}
+
+pub fn decodeZlibChunksAllocWithDictionary(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: []const u8) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator, chunks, dictionary, .{}, null);
+}
+
+pub fn decodeZlibChunksAllocWithDictionaryAndOptions(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: []const u8, options: ZlibDecodeOptions) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator, chunks, dictionary, options, null);
+}
+
+pub fn decodeZlibChunksAllocExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, expected_output_len: usize) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator, chunks, null, .{}, expected_output_len);
+}
+
+pub fn decodeZlibChunksAllocWithDictionaryExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator, chunks, dictionary, .{}, expected_output_len);
+}
+
+pub fn decodeZlibChunksAllocWithOptionsExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator, chunks, null, options, expected_output_len);
+}
+
+pub fn decodeZlibChunksAllocWithDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: []const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator, chunks, dictionary, options, expected_output_len);
+}
+
+pub fn decodeZlibChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, max_output_len: usize) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator, chunks, null, .{}, max_output_len);
+}
+
+pub fn decodeZlibChunksAllocWithDictionaryLimited(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator, chunks, dictionary, .{}, max_output_len);
+}
+
+pub fn decodeZlibChunksAllocWithOptionsLimited(allocator: std.mem.Allocator, chunks: []const []const u8, options: ZlibDecodeOptions, max_output_len: usize) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator, chunks, null, options, max_output_len);
+}
+
+pub fn decodeZlibChunksAllocWithDictionaryAndOptionsLimited(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: []const u8, options: ZlibDecodeOptions, max_output_len: usize) ![]u8 {
+    return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator, chunks, dictionary, options, max_output_len);
+}
+
 pub fn decodeZlibConcatenated(input: []const u8, output: []u8) Error!usize {
     return decodeZlibConcatenatedWithOptionalDictionary(input, output, null);
 }
@@ -3818,6 +3887,22 @@ fn decodeZlibConcatenatedAllocWithOptionalDictionaryExactSize(allocator: std.mem
 
 fn decodeZlibAllocWithOptionalDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8) ![]u8 {
     return decodeZlibAllocWithOptionalDictionaryLimited(allocator, input, dictionary, null);
+}
+
+fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, max_output_len: ?usize) ![]u8 {
+    const compressed_len = try chunksTotalLen(chunks);
+    const compressed = try allocator.alloc(u8, compressed_len);
+    defer allocator.free(compressed);
+    const joined = try joinChunks(chunks, compressed);
+    return decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator, joined, dictionary, options, max_output_len);
+}
+
+fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
+    const compressed_len = try chunksTotalLen(chunks);
+    const compressed = try allocator.alloc(u8, compressed_len);
+    defer allocator.free(compressed);
+    const joined = try joinChunks(chunks, compressed);
+    return decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator, joined, dictionary, options, expected_output_len);
 }
 
 fn decodeZlibAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
@@ -5881,6 +5966,67 @@ test "zlib decoder supports preset dictionary streams" {
 
     try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initWithDictionaryExactSize(encoded, dict, &scratch, input.len - 1));
     try std.testing.expectError(error.NeedDictionary, ZlibDecoder.init(encoded, &scratch));
+}
+
+test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
+    const input = "chunked zlib payload";
+    const encoded = try encodeZlibLevelAlloc(std.testing.allocator, input, 6);
+    defer std.testing.allocator.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..2],
+        encoded[2 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+    };
+    var compressed_scratch: [128]u8 = undefined;
+    var output: [input.len]u8 = undefined;
+    try std.testing.expectEqual(input.len, try decodeZlibChunks(&chunks, &compressed_scratch, &output));
+    try std.testing.expectEqualSlices(u8, input, &output);
+
+    const alloc = try decodeZlibChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(alloc);
+    try std.testing.expectEqualSlices(u8, input, alloc);
+
+    const exact = try decodeZlibChunksAllocExactSize(std.testing.allocator, &chunks, input.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, input, exact);
+
+    const limited = try decodeZlibChunksAllocLimited(std.testing.allocator, &chunks, input.len);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, input, limited);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeZlibChunksAllocLimited(std.testing.allocator, &chunks, input.len - 1));
+
+    var relaxed_frame = try std.testing.allocator.alloc(u8, encoded.len + 1);
+    defer std.testing.allocator.free(relaxed_frame);
+    @memcpy(relaxed_frame[0..encoded.len], encoded);
+    relaxed_frame[encoded.len - 1] ^= 1;
+    relaxed_frame[encoded.len] = 0xaa;
+    const relaxed_chunks = [_][]const u8{
+        relaxed_frame[0..3],
+        relaxed_frame[3 .. relaxed_frame.len - 1],
+        relaxed_frame[relaxed_frame.len - 1 ..],
+    };
+    const relaxed = ZlibDecodeOptions{ .ignore_adler = true, .allow_trailing_data = true };
+    try std.testing.expectEqual(input.len, try decodeZlibChunksWithOptions(&relaxed_chunks, &compressed_scratch, &output, relaxed));
+    try std.testing.expectEqualSlices(u8, input, &output);
+    const relaxed_alloc = try decodeZlibChunksAllocWithOptionsLimited(std.testing.allocator, &relaxed_chunks, relaxed, input.len);
+    defer std.testing.allocator.free(relaxed_alloc);
+    try std.testing.expectEqualSlices(u8, input, relaxed_alloc);
+
+    const dict = "chunked ";
+    const dict_frame = try encodeZlibLevelWithDictionaryAlloc(std.testing.allocator, input, dict, 6);
+    defer std.testing.allocator.free(dict_frame);
+    const dict_chunks = [_][]const u8{
+        dict_frame[0..6],
+        dict_frame[6 .. dict_frame.len - 3],
+        dict_frame[dict_frame.len - 3 ..],
+    };
+    try std.testing.expectEqual(input.len, try decodeZlibChunksWithDictionary(&dict_chunks, &compressed_scratch, &output, dict));
+    try std.testing.expectEqualSlices(u8, input, &output);
+    const dict_exact = try decodeZlibChunksAllocWithDictionaryExactSize(std.testing.allocator, &dict_chunks, dict, input.len);
+    defer std.testing.allocator.free(dict_exact);
+    try std.testing.expectEqualSlices(u8, input, dict_exact);
+    try std.testing.expectError(error.NeedDictionary, decodeZlibChunksAlloc(std.testing.allocator, &dict_chunks));
+    try std.testing.expectError(error.OutputTooSmall, decodeZlibChunks(&chunks, compressed_scratch[0 .. encoded.len - 1], &output));
 }
 
 test "zlib decoder diagnostics cover wrapper errors" {

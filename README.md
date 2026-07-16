@@ -299,6 +299,10 @@ const zlib_relaxed = try vort.decodeZlibAllocWithOptions(
 defer allocator.free(zlib_relaxed);
 var zlib_out: [1024]u8 = undefined;
 const zlib_written = try vort.decodeZlib(zlib_bytes, &zlib_out);
+const zlib_chunks = [_][]const u8{ zlib_bytes[0..2], zlib_bytes[2..] };
+var zlib_join_scratch: [1024]u8 = undefined;
+const zlib_chunked_written = try vort.decodeZlibChunks(&zlib_chunks, &zlib_join_scratch, &zlib_out);
+_ = zlib_chunked_written;
 var zlib_cat: std.ArrayList(u8) = .empty;
 defer zlib_cat.deinit(allocator);
 try zlib_cat.appendSlice(allocator, zlib_bytes);
