@@ -607,6 +607,9 @@ architecture blindly.
 - [x] Level-specific maximum match length parser setting.
 - [x] Level-specific match window parser setting.
 - [x] Production optimal parser with full level/strategy configs.
+- [x] zlib-style numeric compression-level helpers for raw/zlib/gzip encoders,
+  including stored level 0 and 1..9 option mapping for callers such as PNG
+  encoders that expose numeric DEFLATE levels.
 - [x] Backward-scan LZ77 parser uses word-at-a-time match length for repeated/text payload speed.
 - [x] Lazy hash parser uses a stack-resident tiny-input table for source/text chunks below one deflate window.
 - [x] Huffman code generation, simple length building, and canonical-code validation.

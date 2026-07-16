@@ -268,6 +268,8 @@ defer allocator.free(decoded);
 
 const raw = try vort.encodeRawFixedDeflateAlloc(allocator, "payload");
 defer allocator.free(raw);
+const raw_level_6 = try vort.encodeRawLevelAlloc(allocator, "payload", 6);
+defer allocator.free(raw_level_6);
 const raw_exact = try vort.decodeRawDeflateAllocExactSize(allocator, raw, "payload".len);
 defer allocator.free(raw_exact);
 const bounded = try vort.decodeRawDeflateAllocLimited(allocator, raw, 1024);
@@ -275,6 +277,10 @@ defer allocator.free(bounded);
 
 const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);
+const zlib_level_6 = try vort.encodeZlibLevelAlloc(allocator, "payload", 6);
+defer allocator.free(zlib_level_6);
+const zlib_level_options = try vort.optionsForZlibLevel(6);
+_ = zlib_level_options; // numeric zlib levels 1..9; level 0 uses stored helpers
 const zlib_header = try vort.parseZlibHeaderInfo(zlib_bytes);
 _ = zlib_header.window_bits; // 15 for the default 32 KiB deflate window
 const zlib_stream = try vort.inspectZlibStreamAlloc(allocator, zlib_bytes);
@@ -299,6 +305,8 @@ defer allocator.free(zlib_concatenated);
 
 const gzip_bytes = try vort.encodeGzipFixedAlloc(allocator, "payload");
 defer allocator.free(gzip_bytes);
+const gzip_level_6 = try vort.encodeGzipLevelAlloc(allocator, "payload", 6);
+defer allocator.free(gzip_level_6);
 const gzip_with_metadata = try vort.encodeGzipBestWithHeaderAlloc(
     allocator,
     "payload",

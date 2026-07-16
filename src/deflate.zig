@@ -246,6 +246,25 @@ pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     };
 }
 
+/// Map zlib-style numeric compression levels 1..9 onto Vort's current deflate
+/// planning policies. Level 0 is intentionally not represented as
+/// `CompressionOptions` because it is a stored/no-compression mode; use
+/// `encodeZlibLevelAlloc` or `encodeZlibStored*` when callers need zlib level 0.
+pub fn optionsForZlibLevel(level: u4) Error!CompressionOptions {
+    return switch (level) {
+        1 => optionsForLevel(.fastest),
+        2 => .{ .parser = .hash, .lz77_options = .{ .window_len = 16 * 1024, .max_chain = 8, .nice_len = 16, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4, .max_match = 96, .min_savings_bits = 6 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 24 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1536, .search_step = 24 * 1024 } },
+        3 => optionsForLevel(.fast),
+        4 => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 32, .nice_len = 32, .max_candidates = 2, .lazy_min_gain = 2, .min_match = 3, .max_match = 160, .min_savings_bits = 2 }, .split_options = .{ .min_block_len = 12 * 1024, .max_block_len = max_stored_block_len, .sample_len = 3072, .search_step = 12 * 1024 } },
+        5 => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 64, .nice_len = 48, .max_candidates = 3, .lazy_min_gain = 1, .min_match = 3, .max_match = 224, .min_savings_bits = 1 }, .split_options = .{ .min_block_len = 10 * 1024, .max_block_len = max_stored_block_len, .sample_len = 3584, .search_step = 10 * 1024 } },
+        6 => optionsForLevel(.default),
+        7 => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 256, .nice_len = 96, .max_candidates = 6, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 6 * 1024, .max_block_len = max_stored_block_len, .sample_len = 6144, .search_step = 6 * 1024 } },
+        8 => .{ .parser = .optimal, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 384, .nice_len = 128, .max_candidates = @max(4, lz77.max_optimal_candidates / 2), .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 5 * 1024, .max_block_len = max_stored_block_len, .sample_len = 7168, .search_step = 5 * 1024 } },
+        9 => optionsForLevel(.best),
+        else => error.InvalidBlockPlan,
+    };
+}
+
 pub const OwnedDecodeResult = struct {
     bytes: []u8,
     input_read: usize,
@@ -384,6 +403,16 @@ pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []c
     errdefer writer.deinit(allocator);
     try writeBestTokensBlock(allocator, &writer, input, plan.tokens, true, options);
     return writer.toOwnedSlice(allocator);
+}
+
+pub fn encodeRawLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) ![]u8 {
+    if (level == 0) return encodeRawStoredAlloc(allocator, input);
+    return encodeRawBestAlloc(allocator, input, try optionsForZlibLevel(level));
+}
+
+pub fn encodeRawLevelWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, level: u4) ![]u8 {
+    if (level == 0) return encodeRawStoredAlloc(allocator, input);
+    return encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, try optionsForZlibLevel(level));
 }
 
 pub const DynamicPlanStats = struct {
@@ -2412,6 +2441,16 @@ pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []
     return encodeZlibBestTokensAlloc(allocator, input, dictionary, plan.tokens, options);
 }
 
+pub fn encodeZlibLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) ![]u8 {
+    if (level == 0) return encodeZlibStoredAlloc(allocator, input);
+    return encodeZlibBestAlloc(allocator, input, try optionsForZlibLevel(level));
+}
+
+pub fn encodeZlibLevelWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, level: u4) ![]u8 {
+    if (level == 0) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
+    return encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, try optionsForZlibLevel(level));
+}
+
 pub fn encodeZlibBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeZlibStoredSplitAlloc(allocator, input, block_len);
     return encodeZlibBestSplitDirectAlloc(allocator, input, null, block_len, options);
@@ -3875,6 +3914,15 @@ pub fn encodeGzipBestWithHeaderAlloc(allocator: std.mem.Allocator, input: []cons
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     return encodeGzipBestTokensWithHeaderAlloc(allocator, input, plan.tokens, options, header_options);
+}
+
+pub fn encodeGzipLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4) ![]u8 {
+    return encodeGzipLevelWithHeaderAlloc(allocator, input, level, .{});
+}
+
+pub fn encodeGzipLevelWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, level: u4, header_options: GzipHeaderOptions) ![]u8 {
+    if (level == 0) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
+    return encodeGzipBestWithHeaderAlloc(allocator, input, try optionsForZlibLevel(level), header_options);
 }
 
 pub fn encodeGzipBestSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
@@ -7135,6 +7183,80 @@ test "compression level presets configure match windows and lazy thresholds" {
     try std.testing.expectEqual(@as(usize, 3), optionsForLevel(.fast).lz77_options.lazy_min_gain);
     try std.testing.expectEqual(@as(usize, 1), optionsForLevel(.default).lz77_options.lazy_min_gain);
     try std.testing.expectEqual(@as(usize, 1), optionsForLevel(.best).lz77_options.lazy_min_gain);
+}
+
+test "zlib numeric compression levels map to stable Vort presets" {
+    try std.testing.expectError(error.InvalidBlockPlan, optionsForZlibLevel(0));
+    try std.testing.expectEqual(optionsForLevel(.fastest).parser, (try optionsForZlibLevel(1)).parser);
+    try std.testing.expectEqual(optionsForLevel(.fast).parser, (try optionsForZlibLevel(3)).parser);
+    try std.testing.expectEqual(optionsForLevel(.default).parser, (try optionsForZlibLevel(6)).parser);
+    try std.testing.expectEqual(optionsForLevel(.best).parser, (try optionsForZlibLevel(9)).parser);
+    try std.testing.expectEqual(optionsForLevel(.fastest).lz77_options.max_chain, (try optionsForZlibLevel(1)).lz77_options.max_chain);
+    try std.testing.expect((try optionsForZlibLevel(2)).lz77_options.max_chain > (try optionsForZlibLevel(1)).lz77_options.max_chain);
+    try std.testing.expectEqual(ParserMode.lazy, (try optionsForZlibLevel(4)).parser);
+    try std.testing.expect((try optionsForZlibLevel(5)).lz77_options.max_chain > (try optionsForZlibLevel(4)).lz77_options.max_chain);
+    try std.testing.expect((try optionsForZlibLevel(7)).lz77_options.max_chain > (try optionsForZlibLevel(6)).lz77_options.max_chain);
+    try std.testing.expectEqual(ParserMode.optimal, (try optionsForZlibLevel(8)).parser);
+    try std.testing.expect((try optionsForZlibLevel(8)).lz77_options.max_chain < (try optionsForZlibLevel(9)).lz77_options.max_chain);
+    try std.testing.expectError(error.InvalidBlockPlan, optionsForZlibLevel(10));
+}
+
+test "zlib numeric level encoders round trip raw zlib and gzip wrappers" {
+    const input = "png rows and common zlib payloads want numeric levels" ** 4;
+    const dictionary = "png rows and common ";
+    inline for (0..10) |level_usize| {
+        const level: u4 = @intCast(level_usize);
+
+        const raw = try encodeRawLevelAlloc(std.testing.allocator, input, level);
+        defer std.testing.allocator.free(raw);
+        const raw_decoded = try decodeRawAutoAlloc(std.testing.allocator, raw);
+        defer std.testing.allocator.free(raw_decoded);
+        try std.testing.expectEqualSlices(u8, input, raw_decoded);
+        if (level == 0) {
+            const stored = try encodeRawStoredAlloc(std.testing.allocator, input);
+            defer std.testing.allocator.free(stored);
+            try std.testing.expectEqualSlices(u8, stored, raw);
+        }
+
+        const zlib_frame = try encodeZlibLevelAlloc(std.testing.allocator, input, level);
+        defer std.testing.allocator.free(zlib_frame);
+        const zlib_decoded = try decodeZlibAlloc(std.testing.allocator, zlib_frame);
+        defer std.testing.allocator.free(zlib_decoded);
+        try std.testing.expectEqualSlices(u8, input, zlib_decoded);
+
+        const gzip_frame = try encodeGzipLevelAlloc(std.testing.allocator, input, level);
+        defer std.testing.allocator.free(gzip_frame);
+        const gzip_decoded = try decodeGzipAlloc(std.testing.allocator, gzip_frame);
+        defer std.testing.allocator.free(gzip_decoded);
+        try std.testing.expectEqualSlices(u8, input, gzip_decoded);
+
+        const raw_dict = try encodeRawLevelWithDictionaryAlloc(std.testing.allocator, input, dictionary, level);
+        defer std.testing.allocator.free(raw_dict);
+        const raw_dict_decoded = try decodeRawAutoAllocWithDictionary(std.testing.allocator, raw_dict, dictionary);
+        defer std.testing.allocator.free(raw_dict_decoded);
+        try std.testing.expectEqualSlices(u8, input, raw_dict_decoded);
+
+        const zlib_dict = try encodeZlibLevelWithDictionaryAlloc(std.testing.allocator, input, dictionary, level);
+        defer std.testing.allocator.free(zlib_dict);
+        const zlib_dict_decoded = try decodeZlibAllocWithDictionary(std.testing.allocator, zlib_dict, dictionary);
+        defer std.testing.allocator.free(zlib_dict_decoded);
+        try std.testing.expectEqualSlices(u8, input, zlib_dict_decoded);
+
+        if (level == 0) {
+            const zlib_stored = try encodeZlibStoredAlloc(std.testing.allocator, input);
+            defer std.testing.allocator.free(zlib_stored);
+            try std.testing.expectEqualSlices(u8, zlib_stored, zlib_frame);
+
+            const zlib_stored_dict = try encodeZlibStoredWithDictionaryAlloc(std.testing.allocator, input, dictionary);
+            defer std.testing.allocator.free(zlib_stored_dict);
+            try std.testing.expectEqualSlices(u8, zlib_stored_dict, zlib_dict);
+        }
+    }
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRawLevelAlloc(std.testing.allocator, input, 10));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRawLevelWithDictionaryAlloc(std.testing.allocator, input, dictionary, 10));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeZlibLevelAlloc(std.testing.allocator, input, 10));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeZlibLevelWithDictionaryAlloc(std.testing.allocator, input, dictionary, 10));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeGzipLevelAlloc(std.testing.allocator, input, 10));
 }
 
 test "best level uses production optimal parser with full strategy wrappers" {
