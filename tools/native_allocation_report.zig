@@ -34,6 +34,8 @@ pub fn main(init: std.process.Init) !void {
     defer allocator.free(deflate_rle_stream);
     const indexed_deflate_stream = try buildIndexedDeflateStream(allocator);
     defer allocator.free(indexed_deflate_stream);
+    const indexed_store_stream = try buildIndexedStoreStream(allocator);
+    defer allocator.free(indexed_store_stream);
     const dict_stream = try buildEmbeddedDictionaryPatchStream(allocator);
     defer allocator.free(dict_stream);
     const dict_indexed_stream = try buildDictionaryPatchIndexedStream(allocator);
@@ -60,6 +62,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureBatchRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureDictionaryRangeIntoWithIndexBuffer(allocator, dict_indexed_stream));
     try rows.append(allocator, try measureEmbeddedValidation(allocator, self_contained_dict_stream));
+    try rows.append(allocator, try measureEmbeddedValidationWithBuffers(allocator, indexed_store_stream));
 
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
@@ -175,6 +178,11 @@ fn buildIndexedDeflateStream(allocator: std.mem.Allocator) ![]u8 {
         "bye bye bye bye bye",
     };
     return vort.storeEncodeIndexedDeflateStreamAlloc(allocator, &payloads);
+}
+
+fn buildIndexedStoreStream(allocator: std.mem.Allocator) ![]u8 {
+    const payloads = [_][]const u8{ "alpha", "beta", "gamma" };
+    return vort.storeEncodeIndexedStreamAlloc(allocator, &payloads);
 }
 
 fn buildDictionaryPatchIndexedStream(allocator: std.mem.Allocator) ![]u8 {
@@ -330,6 +338,19 @@ fn measureEmbeddedValidation(backing: std.mem.Allocator, stream: []const u8) !Ca
     var failing = std.testing.FailingAllocator.init(backing, .{});
     try vort.storeValidateEmbeddedIndexAlloc(failing.allocator(), stream);
     return stats("embedded_validation_borrowed_dict", stream.len, 0, failing);
+}
+
+fn measureEmbeddedValidationWithBuffers(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const view = try vort.storeViewEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, view.entry_count);
+    defer backing.free(index_buffer);
+    var payload_scratch: [16]u8 = undefined;
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    try vort.storeValidateEmbeddedIndexWithOptionsAndBuffersAlloc(failing.allocator(), stream, .{ .mode = .full }, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch[0..],
+    });
+    return stats("embedded_validation_with_buffers", stream.len, 0, failing);
 }
 
 fn stats(name: []const u8, input_len: usize, output_len: usize, failing: std.testing.FailingAllocator) CaseStats {

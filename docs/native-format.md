@@ -141,6 +141,9 @@ while parsing the embedded or sidecar index; dictionary-aware range variants
 offer the same index-buffer form for callers that already have dictionary bytes,
 and auto/self-contained dictionary variants combine borrowed embedded
 dictionary bytes with caller-owned index storage.
+Full sidecar/embedded validation can likewise accept caller-provided index and
+payload scratch buffers, letting trusted validation loops avoid parser/scratch
+allocations when their maximum frame sizes are already known.
 
 ## Range decode summary APIs
 
