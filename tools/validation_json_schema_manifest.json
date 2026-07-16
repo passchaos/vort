@@ -1118,6 +1118,29 @@
         "output_bytes": "int"
       }
     },
+    "vort.native_allocation_smoke": {
+      "fields": {
+        "cases": "list",
+        "ok": "bool",
+        "report": "str",
+        "required_zero_allocation_cases": "int",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "required_zero_allocation_cases": {
+          "collection": "cases"
+        }
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "allocated_bytes": "int",
+        "allocations": "int",
+        "case": "str",
+        "matched": "bool",
+        "present": "bool"
+      }
+    },
     "vort.fuzz_corpus_report": {
       "fields": {
         "accepted": "int",

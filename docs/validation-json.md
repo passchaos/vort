@@ -1833,6 +1833,59 @@ Example:
 }
 ```
 
+## `vort.native_allocation_smoke`
+
+Produced by:
+
+```sh
+zig build run-native-allocation-smoke
+```
+
+This smoke report gates the allocation report by requiring selected
+caller-owned/native decode paths to remain zero-allocation.
+
+Top-level fields:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `schema` | string | Always `vort.native_allocation_smoke`. |
+| `schema_version` | integer | Currently `1`. |
+| `ok` | boolean | True when every required zero-allocation case matched. |
+| `report` | string | Native allocation report path that was checked. |
+| `required_zero_allocation_cases` | integer | Number of case rows checked. |
+| `cases` | list | Per-case gate results. |
+
+Each `cases` item includes:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `case` | string | Case label from the native allocation report. |
+| `present` | boolean | Whether the case row existed in the report. |
+| `allocations` | integer | Observed allocation count. |
+| `allocated_bytes` | integer | Observed allocated byte count. |
+| `matched` | boolean | True when the case was present and both allocation counters were zero. |
+
+Example:
+
+```json
+{
+  "schema": "vort.native_allocation_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "report": "zig-out/vort-native-allocation-report.json",
+  "required_zero_allocation_cases": 1,
+  "cases": [
+    {
+      "case": "concat_into",
+      "present": true,
+      "allocations": 0,
+      "allocated_bytes": 0,
+      "matched": true
+    }
+  ]
+}
+```
+
 ## `vort.validation_json_schema_manifest`
 
 Consumed by:
