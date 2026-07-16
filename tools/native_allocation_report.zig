@@ -66,6 +66,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureRangeInto(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureDeflatePartialRangeIntoWithScratch(allocator, indexed_deflate_stream));
+    try rows.append(allocator, try measureSidecarDeflatePartialRangeIntoWithScratch(allocator));
     try rows.append(allocator, try measureBatchRangeInto(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureBatchRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureDictionaryRangeIntoWithIndexBuffer(allocator, dict_indexed_stream));
@@ -74,6 +75,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureEmbeddedDictionaryDeflateAutoRangeIntoWithBuffers(allocator, embedded_dict_deflate_stream));
     try rows.append(allocator, try measureEmbeddedDictionaryDeflateSelfRangeIntoWithBuffers(allocator, embedded_dict_deflate_stream));
     try rows.append(allocator, try measureLongDistancePartialRangeIntoWithScratch(allocator));
+    try rows.append(allocator, try measureSidecarLongDistancePartialRangeIntoWithScratch(allocator));
     try rows.append(allocator, try measureEmbeddedValidation(allocator, self_contained_dict_stream));
     try rows.append(allocator, try measureEmbeddedValidationWithBuffers(allocator, indexed_store_stream));
     try rows.append(allocator, try measureEmbeddedValidationReportWithBuffers(allocator, indexed_store_stream));
@@ -356,6 +358,31 @@ fn measureDeflatePartialRangeIntoWithScratch(backing: std.mem.Allocator, stream:
     return stats("indexed_partial_range_into_scratch", stream.len, result.output_written, failing);
 }
 
+fn measureSidecarDeflatePartialRangeIntoWithScratch(backing: std.mem.Allocator) !CaseStats {
+    const input = "hello hello hello hello";
+    const frame = try vort.storeEncodeDeflateAlloc(backing, input);
+    defer backing.free(frame);
+    const index = try vort.storeBuildFrameIndexAlloc(backing, frame);
+    defer backing.free(index);
+    const sidecar = try vort.storeEncodeFrameIndexAlloc(backing, index);
+    defer backing.free(sidecar);
+    const range_offset = 3;
+    const range_len = 5;
+    const out = try backing.alloc(u8, range_len);
+    defer backing.free(out);
+    const sizes = try vort.storeRangeBufferSizesForSidecarIndex(sidecar);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.storeDecodeSidecarIndexedRangeIntoWithBuffers(failing.allocator(), frame, sidecar, range_offset, out.len, out, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    return stats("sidecar_partial_range_into_scratch", frame.len + sidecar.len, result.output_written, failing);
+}
+
 fn measureBatchRangeInto(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
     const index = try vort.storeBuildFrameIndexAlloc(backing, stream);
     defer backing.free(index);
@@ -515,6 +542,32 @@ fn measureLongDistancePartialRangeIntoWithScratch(backing: std.mem.Allocator) !C
         .payload_scratch = payload_scratch,
     });
     return stats("ldm_partial_range_into_scratch", stream.items.len, result.output_written, failing);
+}
+
+fn measureSidecarLongDistancePartialRangeIntoWithScratch(backing: std.mem.Allocator) !CaseStats {
+    const prefix = deterministicLdmPrefix();
+    const input = prefix ++ "----" ++ prefix[0..1024].*;
+    const frame = try vort.storeEncodeLongDistanceAlloc(backing, input, .{ .min_distance = 32769, .min_length = 16 });
+    defer backing.free(frame);
+    const index = try vort.storeBuildFrameIndexAlloc(backing, frame);
+    defer backing.free(index);
+    const sidecar = try vort.storeEncodeFrameIndexAlloc(backing, index);
+    defer backing.free(sidecar);
+    const range_offset = prefix.len + 4;
+    const range_len = 16;
+    const out = try backing.alloc(u8, range_len);
+    defer backing.free(out);
+    const sizes = try vort.storeRangeBufferSizesForSidecarIndex(sidecar);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.storeDecodeSidecarIndexedRangeIntoWithBuffers(failing.allocator(), frame, sidecar, range_offset, out.len, out, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    return stats("sidecar_ldm_partial_range_into_scratch", frame.len + sidecar.len, result.output_written, failing);
 }
 
 fn deterministicLdmPrefix() [33_000]u8 {

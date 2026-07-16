@@ -4243,6 +4243,66 @@ test "sidecar index bytes support range decode without embedded index" {
     try std.testing.expectEqual(checksum.crc32(&fast_buffer), fast_into.crc32);
 }
 
+test "sidecar deflate range into can reuse caller buffers without allocation" {
+    const input = "hello hello hello hello";
+    const frame = try encodeDeflateAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_deflate, info.flags);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+    const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, index);
+    defer std.testing.allocator.free(sidecar);
+    const sizes = try rangeBufferSizesForSidecarIndex(sidecar);
+    const index_buffer = try std.testing.allocator.alloc(FrameIndexEntry, sizes.index_entries);
+    defer std.testing.allocator.free(index_buffer);
+    const payload_scratch = try std.testing.allocator.alloc(u8, sizes.payload_scratch_len);
+    defer std.testing.allocator.free(payload_scratch);
+
+    var out: [5]u8 = undefined;
+    const result = try decodeSidecarIndexedRangeIntoWithBuffers(std.testing.failing_allocator, frame, sidecar, 3, out.len, out[0..], .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    try std.testing.expectEqual(out.len, result.output_written);
+    try std.testing.expectEqualSlices(u8, input[3..8], &out);
+    try std.testing.expectEqual(checksum.crc32(input[3..8]), result.crc32);
+
+    const short_scratch = try std.testing.allocator.alloc(u8, sizes.payload_scratch_len - 1);
+    defer std.testing.allocator.free(short_scratch);
+    try std.testing.expectError(error.OutputTooSmall, decodeSidecarIndexedRangeIntoWithBuffers(std.testing.failing_allocator, frame, sidecar, 3, out.len, out[0..], .{
+        .index_buffer = index_buffer,
+        .payload_scratch = short_scratch,
+    }));
+}
+
+test "sidecar LDM range into can reuse caller buffers without allocation" {
+    const prefix = deterministicLdmPrefix();
+    const input = prefix ++ "----" ++ prefix[0..1024].*;
+    const frame = try encodeLongDistanceAlloc(std.testing.allocator, input, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(frame);
+    const info = try parseHeader(frame);
+    try std.testing.expectEqual(flags_ldm, info.flags);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+    const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, index);
+    defer std.testing.allocator.free(sidecar);
+    const sizes = try rangeBufferSizesForSidecarIndex(sidecar);
+    const index_buffer = try std.testing.allocator.alloc(FrameIndexEntry, sizes.index_entries);
+    defer std.testing.allocator.free(index_buffer);
+    const payload_scratch = try std.testing.allocator.alloc(u8, sizes.payload_scratch_len);
+    defer std.testing.allocator.free(payload_scratch);
+
+    var out: [16]u8 = undefined;
+    const result = try decodeSidecarIndexedRangeIntoWithBuffers(std.testing.failing_allocator, frame, sidecar, prefix.len + 4, out.len, out[0..], .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    try std.testing.expectEqual(out.len, result.output_written);
+    try std.testing.expectEqualSlices(u8, prefix[0..16], &out);
+    try std.testing.expectEqual(checksum.crc32(prefix[0..16]), result.crc32);
+}
+
 test "sidecar index range decode rejects tampered checksum" {
     const frame = try encodeAlloc(std.testing.allocator, "checksum sidecar");
     defer std.testing.allocator.free(frame);

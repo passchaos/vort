@@ -241,10 +241,11 @@ the range decoder sends the raw deflate payload directly into the caller's outpu
 buffer and validates the resulting CRC-32 against the frame header. This avoids
 allocating a temporary whole-frame decoded buffer for common block-aligned range
 reads. Partial deflate/LDM-frame ranges can provide `RangeDecodeBuffers.payload_scratch`
-or use the lower-level `decodeRangeIntoWithPayloadScratch` helpers to verify the
-whole frame in caller-owned storage before copying the requested subrange; callers
-that omit payload scratch keep the heap-backed decoded-frame cache path so
-subranges can be copied safely after the frame checksum has been verified.
+through embedded-index or sidecar-index `WithBuffers` APIs, or use the lower-level
+`decodeRangeIntoWithPayloadScratch` helpers to verify the whole frame in
+caller-owned storage before copying the requested subrange; callers that omit
+payload scratch keep the heap-backed decoded-frame cache path so subranges can be
+copied safely after the frame checksum has been verified.
 
 ## RLE decode-into and range fast path
 

@@ -119,6 +119,7 @@ architecture blindly.
 - [x] Full-frame native deflate range-decode into path writes directly to caller buffers without temporary decode allocation.
 - [x] Partial native deflate range-decode can reuse caller-owned payload scratch at zero allocations.
 - [x] Partial native LDM range-decode can reuse caller-owned payload scratch at zero allocations.
+- [x] Sidecar partial native deflate/LDM range-decode can reuse caller-owned payload scratch at zero allocations.
 - [x] Dictionary patch codec exposes caller-owned decode-into and decoded-size helpers.
 - [x] Full-frame native dictionary-patch range-decode into path writes directly to caller buffers without temporary decoded-frame allocation.
 - [x] Native dictionary-deflate frame decode-into uses caller buffers after inflating the patch payload.
