@@ -613,17 +613,21 @@ fn findBestHashMatch(input: []const u8, pos: usize, options: GreedyOptions, head
     const h = hash3(input[pos..][0..3]) & (head.len - 1);
     var candidate_i = head[h];
     var checked: usize = 0;
+    var walked: usize = 0;
+    const max_walks = maxHashChainWalks(options, minimum);
     const max_len = @min(maxMatch(options), input.len - pos);
     var best = MatchCandidate{};
-    while (candidate_i >= 0 and checked < options.max_chain) : (checked += 1) {
+    while (candidate_i >= 0 and checked < options.max_chain and walked < max_walks) : (walked += 1) {
         const candidate: usize = @intCast(candidate_i);
         const distance = pos - candidate;
         if (distance == 0 or distance > options.window_len) break;
         if (best.length == max_len) break;
-        if (input[candidate + best.length] != input[pos + best.length]) {
+        const required_prefix = @max(best.length, minimum - 1);
+        if (input[candidate + required_prefix] != input[pos + required_prefix]) {
             candidate_i = prev[candidate];
             continue;
         }
+        checked += 1;
         const len = matchLength(input, candidate, pos, max_len);
         if (len >= minimum and len > best.length) {
             best = .{ .length = len, .distance = distance };
@@ -632,6 +636,11 @@ fn findBestHashMatch(input: []const u8, pos: usize, options: GreedyOptions, head
         candidate_i = prev[candidate];
     }
     return best;
+}
+
+fn maxHashChainWalks(options: GreedyOptions, minimum: usize) usize {
+    if (minimum <= min_match_len or options.max_chain > 8) return options.max_chain;
+    return options.max_chain * 4;
 }
 
 fn findBestCombinedHashMatch(dict: []const u8, input: []const u8, current: usize, options: GreedyOptions, head: []const isize, prev: []const isize) MatchCandidate {
@@ -643,17 +652,21 @@ fn findBestCombinedHashMatch(dict: []const u8, input: []const u8, current: usize
     const h = hash3At(dict, input, current) & (head.len - 1);
     var candidate_i = head[h];
     var checked: usize = 0;
+    var walked: usize = 0;
+    const max_walks = maxHashChainWalks(options, minimum);
     const max_len = @min(maxMatch(options), input.len - pos);
     var best = MatchCandidate{};
-    while (candidate_i >= 0 and checked < options.max_chain) : (checked += 1) {
+    while (candidate_i >= 0 and checked < options.max_chain and walked < max_walks) : (walked += 1) {
         const candidate: usize = @intCast(candidate_i);
         const distance = current - candidate;
         if (distance == 0 or distance > options.window_len) break;
         if (best.length == max_len) break;
-        if (byteAt(dict, input, candidate + best.length) != input[pos + best.length]) {
+        const required_prefix = @max(best.length, minimum - 1);
+        if (byteAt(dict, input, candidate + required_prefix) != input[pos + required_prefix]) {
             candidate_i = prev[candidate];
             continue;
         }
+        checked += 1;
         const len = combinedMatchLength(dict, input, candidate, current, max_len);
         if (len >= minimum and len > best.length) {
             best = .{ .length = len, .distance = distance };
@@ -1002,6 +1015,32 @@ test "hash greedy planner round trips repeated data" {
     try std.testing.expectEqualSlices(u8, input, replayed);
 }
 
+test "hash planner skips non-viable prefixes before spending match budget" {
+    const input = "abcdabceabcd";
+    const options: GreedyOptions = .{
+        .max_chain = 1,
+        .nice_len = 16,
+        .min_match = 4,
+        .max_match = 16,
+        .min_savings_bits = 0,
+    };
+
+    const plan = try hashGreedyPlanAlloc(std.testing.allocator, input, options);
+    defer plan.deinit(std.testing.allocator);
+    const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+
+    var saw_deeper_match = false;
+    for (plan.tokens) |token| switch (token) {
+        .match => |m| {
+            if (m.length >= 4 and m.distance == 8) saw_deeper_match = true;
+        },
+        else => {},
+    };
+    try std.testing.expect(saw_deeper_match);
+}
+
 test "tiny hash greedy planner round trips small repeated data" {
     const input = "abcabcabcabc" ** 16;
     const plan = try hashGreedyPlanTinyAlloc(std.testing.allocator, input, .{ .window_len = 8 * 1024, .max_chain = 4, .nice_len = 8, .max_candidates = 1, .min_match = 4, .max_match = 64, .min_savings_bits = 8 });
@@ -1096,6 +1135,30 @@ test "dictionary-backed hash and lazy planners can emit preset-history matches" 
             },
             else => return error.TestExpectedEqual,
         }
+    }
+}
+
+test "dictionary hash planner skips non-viable prefix collisions" {
+    const dictionary = "abcdabce";
+    const input = "abcd";
+    const options: GreedyOptions = .{
+        .max_chain = 1,
+        .nice_len = 16,
+        .min_match = 4,
+        .max_match = 16,
+        .min_savings_bits = 0,
+    };
+
+    const plan = try hashGreedyPlanAllocWithDictionary(std.testing.allocator, input, dictionary, options);
+    defer plan.deinit(std.testing.allocator);
+    try expectPlanStatsConsistent(plan, input.len);
+    try std.testing.expectEqual(@as(usize, 1), plan.tokens.len);
+    switch (plan.tokens[0]) {
+        .match => |m| {
+            try std.testing.expectEqual(@as(u16, 4), m.length);
+            try std.testing.expectEqual(@as(u16, 8), m.distance);
+        },
+        else => return error.TestExpectedEqual,
     }
 }
 

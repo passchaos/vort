@@ -632,6 +632,9 @@ architecture blindly.
 - [x] Tuned fastest preset's shallow parser budget to a 16 KiB window, six-entry
   hash-chain scan, and 96-byte match cap so speed-oriented Silesia/source
   dashboards keep better matches without moving to the heavier fast preset.
+- [x] Hash-chain parsers spend their match-check budget on viable prefix
+  candidates with a bounded walk cap, reducing collision waste for shallow
+  fastest/dictionary searches while preserving parser runtime limits.
 - [x] Compression-level report validating parser/cost-model settings and round trips.
 - [x] Compression-level report exposes incompressible stored fast-path decisions.
 - [x] Compression-level report accepts ad-hoc file corpora.
