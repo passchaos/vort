@@ -66,6 +66,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureAnyDecoderDictionaryDeflate(allocator));
     try rows.append(allocator, try measureZlibDecoderPngLike(allocator));
     try rows.append(allocator, try measureZlibDecoderPngLikeChunks(allocator));
+    try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
     try rows.append(allocator, try measureRangeAlloc(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeInto(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
@@ -399,6 +400,29 @@ fn measureZlibDecoderPngLikeChunks(backing: std.mem.Allocator) !CaseStats {
     const result = try decoder.step(out);
     try std.testing.expectEqual(out.len, result.progress.output_written);
     return stats("zlib_decoder_png_like_chunks_scratch", encoded.len, result.progress.output_written, failing);
+}
+
+fn measureZlibDecoderDictionaryChunks(backing: std.mem.Allocator) !CaseStats {
+    const dict = "hello ";
+    const input = "hello hello hello";
+    const encoded = try vort.encodeZlibBestWithDictionaryAlloc(backing, input, dict, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..6],
+        encoded[6 .. encoded.len - 2],
+        encoded[encoded.len - 2 ..],
+    };
+    const compressed_scratch = try backing.alloc(u8, encoded.len);
+    defer backing.free(compressed_scratch);
+    const output_scratch = try backing.alloc(u8, input.len);
+    defer backing.free(output_scratch);
+    const out = try backing.alloc(u8, input.len);
+    defer backing.free(out);
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    var decoder = try vort.ZlibDecoder.initFromChunksWithDictionaryExactSize(&chunks, dict, compressed_scratch, output_scratch, input.len);
+    const result = try decoder.step(out);
+    try std.testing.expectEqual(out.len, result.progress.output_written);
+    return stats("zlib_decoder_dictionary_chunks_scratch", encoded.len, result.progress.output_written, failing);
 }
 
 fn measureRangeAlloc(backing: std.mem.Allocator, stream: []const u8) !CaseStats {

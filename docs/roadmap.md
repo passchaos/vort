@@ -416,6 +416,7 @@ architecture blindly.
 - [x] zlib wrapper integration for multi-block dynamic streams.
 - [x] ZlibDecoder drains multi-filter PNG-like zlib-wrapped payloads through reusable caller-owned scratch and bounded output.
 - [x] ZlibDecoder initializes from caller-provided zlib byte chunks for multi-IDAT-style PNG payloads without allocation.
+- [x] ZlibDecoder chunk initialization supports preset dictionary zlib streams without allocation.
 - [x] ZlibDecoder exact-size initializers reject decoded-size mismatches for PNG/IHDR-sized buffers.
 - [x] ZlibDecoder reports bad-header, missing-dictionary, truncated-footer, and Adler mismatch diagnostics.
 - [x] gzip wrapper and CRC/ISIZE verification for stored blocks.
