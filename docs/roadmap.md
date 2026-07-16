@@ -39,6 +39,9 @@ architecture blindly.
 - [x] Python zlib differential smoke covers malformed zlib/gzip wrapper cases
   (bad headers, checksum/size mismatches, trailing data, truncated frames) and
   exposes their counts in validation/dashboard JSON health.
+- [x] Python zlib differential smoke covers malformed raw/zlib/gzip deflate
+  payloads (invalid Huffman codes, dynamic header failures, and invalid
+  matches) with dashboard/schema health counts.
 
 ## Milestone 2: native frame plumbing
 

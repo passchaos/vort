@@ -604,6 +604,7 @@ def main() -> int:
         assert dashboard["python_zlib_diff_zlib_dict_encode_cases"] == python_zlib_diff["zlib_dict_encode_cases"]
         assert dashboard["python_zlib_diff_raw_dict_encode_cases"] == python_zlib_diff["raw_dict_encode_cases"]
         assert dashboard["python_zlib_diff_malformed_wrapper_cases"] == python_zlib_diff["malformed_wrapper_cases"]
+        assert dashboard["python_zlib_diff_malformed_deflate_cases"] == python_zlib_diff["malformed_deflate_cases"]
         assert dashboard["python_zlib_diff_cli_successes"] == python_zlib_diff["cli_successes"]
         assert dashboard["python_zlib_diff_expected_failures"] == python_zlib_diff["expected_failures"]
         assert dashboard["validation_healthy"] == (

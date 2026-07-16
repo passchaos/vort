@@ -249,6 +249,27 @@ def main() -> int:
             raise AssertionError(f"unknown python malformed behavior: {python_behavior}")
         expect_cli_failure(command, frame.hex(), error_name=expected_error)
 
+    malformed_deflate_cases = [
+        ("raw", "decode-raw-hex", bytes.fromhex("4b043e00"), "InvalidHuffmanCode", -zlib.MAX_WBITS),
+        ("raw", "decode-raw-hex", bytes.fromhex("cb402701"), "InvalidMatch", -zlib.MAX_WBITS),
+        ("raw", "decode-raw-hex", bytes.fromhex("05000224"), "InvalidDynamicBlockHeader", -zlib.MAX_WBITS),
+        ("raw", "decode-raw-hex", bytes.fromhex("0dc181000000000090ff6b08"), "InvalidMatch", -zlib.MAX_WBITS),
+        ("zlib", "decode-zlib-hex", bytes.fromhex("78014b043e0000000000"), "InvalidHuffmanCode", zlib.MAX_WBITS),
+        ("zlib", "decode-zlib-hex", bytes.fromhex("7801cb40270100000000"), "InvalidMatch", zlib.MAX_WBITS),
+        ("zlib", "decode-zlib-hex", bytes.fromhex("78010500022400000000"), "InvalidDynamicBlockHeader", zlib.MAX_WBITS),
+        ("gzip", "decode-gzip-hex", bytes.fromhex("1f8b08000000000004034b043e000000000000000000"), "InvalidHuffmanCode", 31),
+        ("gzip", "decode-gzip-hex", bytes.fromhex("1f8b0800000000000403cb4027010000000000000000"), "InvalidMatch", 31),
+        ("gzip", "decode-gzip-hex", bytes.fromhex("1f8b0800000000000403050002240000000000000000"), "InvalidDynamicBlockHeader", 31),
+    ]
+    for frame_format, command, frame, expected_error, wbits in malformed_deflate_cases:
+        try:
+            zlib.decompress(frame, wbits=wbits)
+        except zlib.error:
+            pass
+        else:
+            raise AssertionError(f"python zlib unexpectedly accepted malformed deflate {frame_format} frame: {frame.hex()}")
+        expect_cli_failure(command, frame.hex(), error_name=expected_error)
+
     zlib_file_payload = b"zlib file output limit smoke"
     zlib_file_frame = zlib.compress(zlib_file_payload, level=6)
     zlib_file_missing_footer = zlib_file_frame[:-4]
@@ -465,6 +486,7 @@ def main() -> int:
         "zlib_dict_encode_cases": len(zlib_dict_encode_cases),
         "raw_dict_encode_cases": len(raw_dict_encode_cases),
         "malformed_wrapper_cases": len(malformed_wrapper_cases),
+        "malformed_deflate_cases": len(malformed_deflate_cases),
         "cli_successes": METRICS["cli_successes"],
         "expected_failures": METRICS["expected_failures"],
     }
@@ -474,6 +496,7 @@ def main() -> int:
         "python zlib differential smoke: "
         f"payloads={len(payloads)} match_heavy=3 dynamic_payloads={len(dynamic_payloads)} "
         f"malformed_wrapper_cases={len(malformed_wrapper_cases)} "
+        f"malformed_deflate_cases={len(malformed_deflate_cases)} "
         f"cli_successes={METRICS['cli_successes']} expected_failures={METRICS['expected_failures']} cli={CLI}"
     )
     return 0
