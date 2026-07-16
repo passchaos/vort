@@ -769,10 +769,22 @@ pub const IncrementalDecoder = struct {
     header: [header_len]u8 = undefined,
     header_received: usize = 0,
     info: FrameInfo = undefined,
+    payload_len: usize = 0,
     payload_remaining: usize = 0,
+    frame_input_read: usize = 0,
+    output_written: usize = 0,
     crc: checksum.Crc32 = .{},
 
-    const Phase = enum { header, payload, done };
+    pub const Phase = enum { header, payload, done };
+
+    pub const Snapshot = struct {
+        phase: Phase,
+        header_received: usize,
+        frame_input_read: usize,
+        output_written: usize,
+        expected_output_len: ?usize,
+        payload_remaining: ?usize,
+    };
 
     pub fn init() IncrementalDecoder {
         return .{ .crc = checksum.Crc32.init() };
@@ -782,8 +794,22 @@ pub const IncrementalDecoder = struct {
         self.phase = .header;
         self.header_received = 0;
         self.info = undefined;
+        self.payload_len = 0;
         self.payload_remaining = 0;
+        self.frame_input_read = 0;
+        self.output_written = 0;
         self.crc = checksum.Crc32.init();
+    }
+
+    pub fn snapshot(self: *const IncrementalDecoder) Snapshot {
+        return .{
+            .phase = self.phase,
+            .header_received = self.header_received,
+            .frame_input_read = self.frame_input_read,
+            .output_written = self.output_written,
+            .expected_output_len = if (self.phase == .header) null else self.payload_len,
+            .payload_remaining = if (self.phase == .header) null else self.payload_remaining,
+        };
     }
 
     pub fn step(self: *IncrementalDecoder, input: []const u8, output: []u8) Error!StepResult {
@@ -806,10 +832,12 @@ pub const IncrementalDecoder = struct {
                     @memcpy(self.header[self.header_received..][0..n], input[read..][0..n]);
                     self.header_received += n;
                     read += n;
+                    self.frame_input_read += n;
                     if (self.header_received != header_len) continue;
 
                     self.info = try parseHeader(&self.header);
-                    self.payload_remaining = try payloadLenFromInfo(self.info);
+                    self.payload_len = try payloadLenFromInfo(self.info);
+                    self.payload_remaining = self.payload_len;
                     self.crc = checksum.Crc32.init();
                     self.phase = .payload;
                 },
@@ -842,6 +870,8 @@ pub const IncrementalDecoder = struct {
                     self.payload_remaining -= n;
                     read += n;
                     written += n;
+                    self.frame_input_read += n;
+                    self.output_written += n;
                 },
                 .done => {
                     return .{
@@ -3738,6 +3768,58 @@ test "streaming encoder and incremental decoder reset for reuse" {
     try std.testing.expectEqualSlices(u8, second, out[0..second.len]);
 }
 
+test "incremental decoder snapshot reports cumulative progress" {
+    const input = "snapshot diagnostics";
+    var encoded: [128]u8 = undefined;
+    const encoded_len = try encode(input, &encoded);
+    var decoder = IncrementalDecoder.init();
+    try std.testing.expectEqual(IncrementalDecoder.Phase.header, decoder.snapshot().phase);
+    try std.testing.expectEqual(@as(?usize, null), decoder.snapshot().expected_output_len);
+
+    var out: [input.len]u8 = undefined;
+    var step_result = try decoder.step(encoded[0..5], out[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, step_result.status);
+    var snap = decoder.snapshot();
+    try std.testing.expectEqual(IncrementalDecoder.Phase.header, snap.phase);
+    try std.testing.expectEqual(@as(usize, 5), snap.header_received);
+    try std.testing.expectEqual(@as(usize, 5), snap.frame_input_read);
+    try std.testing.expectEqual(@as(usize, 0), snap.output_written);
+    try std.testing.expectEqual(@as(?usize, null), snap.payload_remaining);
+
+    step_result = try decoder.step(encoded[5..header_len], out[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
+    snap = decoder.snapshot();
+    try std.testing.expectEqual(IncrementalDecoder.Phase.payload, snap.phase);
+    try std.testing.expectEqual(header_len, snap.frame_input_read);
+    try std.testing.expectEqual(@as(?usize, input.len), snap.expected_output_len);
+    try std.testing.expectEqual(@as(?usize, input.len), snap.payload_remaining);
+
+    step_result = try decoder.step(encoded[header_len .. header_len + 4], out[0..4]);
+    try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
+    snap = decoder.snapshot();
+    try std.testing.expectEqual(IncrementalDecoder.Phase.payload, snap.phase);
+    try std.testing.expectEqual(header_len + 4, snap.frame_input_read);
+    try std.testing.expectEqual(@as(usize, 4), snap.output_written);
+    try std.testing.expectEqual(@as(?usize, input.len - 4), snap.payload_remaining);
+    try std.testing.expectEqualSlices(u8, input[0..4], out[0..4]);
+
+    step_result = try decoder.step(encoded[header_len + 4 .. encoded_len], out[4..]);
+    try std.testing.expectEqual(StepResult.Status.done, step_result.status);
+    snap = decoder.snapshot();
+    try std.testing.expectEqual(IncrementalDecoder.Phase.done, snap.phase);
+    try std.testing.expectEqual(encoded_len, snap.frame_input_read);
+    try std.testing.expectEqual(input.len, snap.output_written);
+    try std.testing.expectEqual(@as(?usize, 0), snap.payload_remaining);
+    try std.testing.expectEqualSlices(u8, input, &out);
+
+    decoder.reset();
+    snap = decoder.snapshot();
+    try std.testing.expectEqual(IncrementalDecoder.Phase.header, snap.phase);
+    try std.testing.expectEqual(@as(usize, 0), snap.frame_input_read);
+    try std.testing.expectEqual(@as(usize, 0), snap.output_written);
+    try std.testing.expectEqual(@as(?usize, null), snap.expected_output_len);
+}
+
 test "incremental decoder reports checksum mismatch after corrupt payload" {
     var encoded: [128]u8 = undefined;
     const encoded_len = try encode("payload", &encoded);
@@ -3746,6 +3828,11 @@ test "incremental decoder reports checksum mismatch after corrupt payload" {
     var decoder = IncrementalDecoder.init();
     var out: [32]u8 = undefined;
     try std.testing.expectError(error.ChecksumMismatch, decoder.step(encoded[0..encoded_len], &out));
+    const snap = decoder.snapshot();
+    try std.testing.expectEqual(IncrementalDecoder.Phase.payload, snap.phase);
+    try std.testing.expectEqual(encoded_len, snap.frame_input_read);
+    try std.testing.expectEqual(@as(usize, "payload".len), snap.output_written);
+    try std.testing.expectEqual(@as(?usize, 0), snap.payload_remaining);
 }
 
 test "concatenated frame iterator and decode helper" {

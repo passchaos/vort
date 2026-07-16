@@ -160,7 +160,10 @@ payload and patch scratch explicitly.
 `Encoder` and `IncrementalDecoder` support caller-owned state reuse via `reset`.
 This lets streaming callers process multiple store frames without reallocating or
 reinitializing state objects, while retaining explicit progress accounting and
-checksum verification at frame boundaries.
+checksum verification at frame boundaries. `IncrementalDecoder.snapshot` exposes
+its current phase, cumulative frame input bytes, emitted output bytes, expected
+payload length, and remaining payload bytes so callers can attach byte-accurate
+diagnostics to stalled or corrupt streaming sessions.
 
 ## Range decode summary APIs
 
