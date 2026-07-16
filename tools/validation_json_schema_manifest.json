@@ -1123,11 +1123,16 @@
         "cases": "list",
         "ok": "bool",
         "report": "str",
+        "budget_cases": "list",
+        "required_budget_cases": "int",
         "required_zero_allocation_cases": "int",
         "schema": "str",
         "schema_version": "int"
       },
       "count_rules": {
+        "required_budget_cases": {
+          "collection": "budget_cases"
+        },
         "required_zero_allocation_cases": {
           "collection": "cases"
         }
@@ -1139,6 +1144,19 @@
         "case": "str",
         "matched": "bool",
         "present": "bool"
+      },
+      "collections": {
+        "budget_cases": {
+          "fields": {
+            "allocated_bytes": "int",
+            "allocations": "int",
+            "case": "str",
+            "matched": "bool",
+            "max_allocated_bytes": "int",
+            "max_allocations": "int",
+            "present": "bool"
+          }
+        }
       }
     },
     "vort.fuzz_corpus_report": {

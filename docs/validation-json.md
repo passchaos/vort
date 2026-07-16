@@ -1852,8 +1852,10 @@ Top-level fields:
 | `schema_version` | integer | Currently `1`. |
 | `ok` | boolean | True when every required zero-allocation case matched. |
 | `report` | string | Native allocation report path that was checked. |
-| `required_zero_allocation_cases` | integer | Number of case rows checked. |
-| `cases` | list | Per-case gate results. |
+| `required_zero_allocation_cases` | integer | Number of zero-allocation case rows checked. |
+| `required_budget_cases` | integer | Number of allocation-budget case rows checked. |
+| `cases` | list | Per-case zero-allocation gate results. |
+| `budget_cases` | list | Per-case allocation-budget gate results. |
 
 Each `cases` item includes:
 
@@ -1865,6 +1867,14 @@ Each `cases` item includes:
 | `allocated_bytes` | integer | Observed allocated byte count. |
 | `matched` | boolean | True when the case was present and both allocation counters were zero. |
 
+Each `budget_cases` item includes the same `case`, `present`, `allocations`,
+`allocated_bytes`, and `matched` fields plus:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `max_allocations` | integer | Maximum allowed allocation calls for the case. |
+| `max_allocated_bytes` | integer | Maximum allowed allocated bytes for the case. |
+
 Example:
 
 ```json
@@ -1874,12 +1884,24 @@ Example:
   "ok": true,
   "report": "zig-out/vort-native-allocation-report.json",
   "required_zero_allocation_cases": 1,
+  "required_budget_cases": 1,
   "cases": [
     {
       "case": "concat_into",
       "present": true,
       "allocations": 0,
       "allocated_bytes": 0,
+      "matched": true
+    }
+  ],
+  "budget_cases": [
+    {
+      "case": "concat_alloc",
+      "present": true,
+      "allocations": 1,
+      "allocated_bytes": 49,
+      "max_allocations": 1,
+      "max_allocated_bytes": 49,
       "matched": true
     }
   ]

@@ -25,6 +25,14 @@ ZERO_ALLOCATION_CASES = [
     "embedded_validation_report_with_buffers",
 ]
 
+ALLOCATION_BUDGETS = {
+    "concat_alloc": {"max_allocations": 1, "max_allocated_bytes": 49},
+    "indexed_range_alloc_full_deflate": {"max_allocations": 2, "max_allocated_bytes": 103},
+    "indexed_range_into_full_deflate": {"max_allocations": 1, "max_allocated_bytes": 80},
+    "batch_range_into_fast_paths": {"max_allocations": 1, "max_allocated_bytes": 80},
+    "embedded_validation_borrowed_dict": {"max_allocations": 8, "max_allocated_bytes": 2081},
+}
+
 
 def load_json(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text())
@@ -68,13 +76,41 @@ def main() -> int:
             "matched": allocations == 0 and allocated_bytes == 0,
         })
 
+    budget_rows: list[dict[str, object]] = []
+    for name, budget in ALLOCATION_BUDGETS.items():
+        row = rows.get(name)
+        if row is None:
+            budget_rows.append({
+                "case": name,
+                "present": False,
+                "allocations": None,
+                "allocated_bytes": None,
+                "max_allocations": budget["max_allocations"],
+                "max_allocated_bytes": budget["max_allocated_bytes"],
+                "matched": False,
+            })
+            continue
+        allocations = int_value(row, "allocations")
+        allocated_bytes = int_value(row, "allocated_bytes")
+        budget_rows.append({
+            "case": name,
+            "present": True,
+            "allocations": allocations,
+            "allocated_bytes": allocated_bytes,
+            "max_allocations": budget["max_allocations"],
+            "max_allocated_bytes": budget["max_allocated_bytes"],
+            "matched": allocations <= budget["max_allocations"] and allocated_bytes <= budget["max_allocated_bytes"],
+        })
+
     summary = {
         "schema": "vort.native_allocation_smoke",
         "schema_version": 1,
-        "ok": all(bool(row["matched"]) for row in case_rows),
+        "ok": all(bool(row["matched"]) for row in case_rows) and all(bool(row["matched"]) for row in budget_rows),
         "report": report_path.as_posix(),
         "required_zero_allocation_cases": len(case_rows),
+        "required_budget_cases": len(budget_rows),
         "cases": case_rows,
+        "budget_cases": budget_rows,
     }
 
     if args.summary:
@@ -85,7 +121,7 @@ def main() -> int:
     if not summary["ok"]:
         print(json.dumps(summary, indent=2, sort_keys=True))
         return 1
-    print(f"native_allocation_smoke=ok zero_allocation_cases={len(case_rows)}")
+    print(f"native_allocation_smoke=ok zero_allocation_cases={len(case_rows)} budget_cases={len(budget_rows)}")
     return 0
 
 
