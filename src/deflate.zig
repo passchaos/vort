@@ -270,10 +270,30 @@ pub fn optionsForZlibLevel(level: u4) Error!CompressionOptions {
     };
 }
 
-fn defaultFallbackOptions(options: CompressionOptions) ?CompressionOptions {
+const BestFallbackCandidates = struct {
+    items: [2]CompressionOptions = undefined,
+    len: usize = 0,
+
+    fn append(self: *BestFallbackCandidates, options: CompressionOptions) void {
+        self.items[self.len] = options;
+        self.len += 1;
+    }
+
+    fn slice(self: *const BestFallbackCandidates) []const CompressionOptions {
+        return self.items[0..self.len];
+    }
+};
+
+fn bestFallbackCandidates(options: CompressionOptions) BestFallbackCandidates {
     const normalized = normalizeOptionsForStrategy(options);
-    if (normalized.strategy == .default and normalized.parser == .optimal) return optionsForLevel(.default);
-    return null;
+    var candidates = BestFallbackCandidates{};
+    if (normalized.strategy == .default and normalized.parser == .optimal) {
+        candidates.append(optionsForLevel(.default));
+        var filtered = options;
+        filtered.strategy = .filtered;
+        candidates.append(filtered);
+    }
+    return candidates;
 }
 
 pub const OwnedDecodeResult = struct {
@@ -375,7 +395,7 @@ pub fn encodeRawBestAlloc(allocator: std.mem.Allocator, input: []const u8, optio
     try writeBestTokensBlock(allocator, &writer, input, plan.tokens, true, options);
     const encoded = try writer.toOwnedSlice(allocator);
     errdefer allocator.free(encoded);
-    if (defaultFallbackOptions(options)) |fallback_options| {
+    for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeRawBestAlloc(allocator, input, fallback_options);
         errdefer allocator.free(fallback);
         if (fallback.len < encoded.len) {
@@ -426,7 +446,7 @@ pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []c
     try writeBestTokensBlock(allocator, &writer, input, plan.tokens, true, options);
     const encoded = try writer.toOwnedSlice(allocator);
     errdefer allocator.free(encoded);
-    if (defaultFallbackOptions(options)) |fallback_options| {
+    for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, fallback_options);
         errdefer allocator.free(fallback);
         if (fallback.len < encoded.len) {
@@ -2472,7 +2492,7 @@ pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     defer plan.deinit(allocator);
     const encoded = try encodeZlibBestTokensAlloc(allocator, input, null, plan.tokens, options);
     errdefer allocator.free(encoded);
-    if (defaultFallbackOptions(options)) |fallback_options| {
+    for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeZlibBestAlloc(allocator, input, fallback_options);
         errdefer allocator.free(fallback);
         if (fallback.len < encoded.len) {
@@ -2490,7 +2510,7 @@ pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []
     defer plan.deinit(allocator);
     const encoded = try encodeZlibBestTokensAlloc(allocator, input, dictionary, plan.tokens, options);
     errdefer allocator.free(encoded);
-    if (defaultFallbackOptions(options)) |fallback_options| {
+    for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, fallback_options);
         errdefer allocator.free(fallback);
         if (fallback.len < encoded.len) {
@@ -4460,7 +4480,7 @@ pub fn encodeGzipBestWithHeaderAlloc(allocator: std.mem.Allocator, input: []cons
     defer plan.deinit(allocator);
     const encoded = try encodeGzipBestTokensWithHeaderAlloc(allocator, input, plan.tokens, options, header_options);
     errdefer allocator.free(encoded);
-    if (defaultFallbackOptions(options)) |fallback_options| {
+    for (bestFallbackCandidates(options).slice()) |fallback_options| {
         const fallback = try encodeGzipBestWithHeaderAlloc(allocator, input, fallback_options, header_options);
         errdefer allocator.free(fallback);
         if (fallback.len < encoded.len) {
@@ -8050,6 +8070,32 @@ fn fillBestFallbackRegressionInput(out: []u8) void {
         const noise: u8 = @truncate(seed >> 24);
         byte.* = if (i % 5 == 0) noise else "0123456789abcdef"[(i + (i / 257)) % 16];
     }
+}
+
+fn fillBestFilteredFallbackRegressionInput(out: []u8) void {
+    var seed: u32 = 0x7654321;
+    for (out, 0..) |*byte, i| {
+        seed = seed *% 1103515245 +% 12345;
+        const noise: u8 = @truncate(seed >> 24);
+        byte.* = if (i % 11 < 7) "abcdefghijklmnop"[(i + (i / 31)) % 16] else noise;
+    }
+}
+
+test "best preset can keep filtered parser output when it is smaller" {
+    var input: [4096]u8 = undefined;
+    fillBestFilteredFallbackRegressionInput(&input);
+
+    var filtered_best_options = optionsForLevel(.best);
+    filtered_best_options.strategy = .filtered;
+
+    const filtered = try encodeRawBestAlloc(std.testing.allocator, &input, filtered_best_options);
+    defer std.testing.allocator.free(filtered);
+    const best = try encodeRawBestAlloc(std.testing.allocator, &input, optionsForLevel(.best));
+    defer std.testing.allocator.free(best);
+    try std.testing.expect(best.len <= filtered.len);
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, best);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &input, decoded);
 }
 
 test "best preset falls back when default parser writes smaller frames" {
