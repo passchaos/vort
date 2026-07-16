@@ -81,7 +81,127 @@ pub const BitReader = struct {
             self.byte_index += 1;
         }
     }
+
+    pub fn readAlignedBytes(self: *BitReader, output: []u8) Error!void {
+        if (self.bit_index != 0) return error.CorruptFrame;
+        if (self.byte_index > self.input.len or self.input.len - self.byte_index < output.len) return error.TruncatedFrame;
+        @memcpy(output, self.input[self.byte_index..][0..output.len]);
+        self.byte_index += output.len;
+    }
+
+    pub fn readAlignedInt(self: *BitReader, comptime T: type, endian: std.builtin.Endian) Error!T {
+        var bytes: [@sizeOf(T)]u8 = undefined;
+        try self.readAlignedBytes(&bytes);
+        return std.mem.readInt(T, &bytes, endian);
+    }
 };
+
+pub const ChunkedBitReader = struct {
+    chunks: []const []const u8,
+    byte_index: usize = 0,
+    bit_index: u3 = 0,
+    total_len: usize = 0,
+
+    pub fn init(chunks: []const []const u8) Error!ChunkedBitReader {
+        return initAt(chunks, 0);
+    }
+
+    pub fn initAt(chunks: []const []const u8, byte_offset: usize) Error!ChunkedBitReader {
+        const total = try chunksTotalLen(chunks);
+        if (byte_offset > total) return error.TruncatedFrame;
+        return .{
+            .chunks = chunks,
+            .byte_index = byte_offset,
+            .total_len = total,
+        };
+    }
+
+    pub fn bitPosition(self: ChunkedBitReader) usize {
+        return self.byte_index * 8 + self.bit_index;
+    }
+
+    pub fn byteOffset(self: ChunkedBitReader) usize {
+        return self.byte_index + @intFromBool(self.bit_index != 0);
+    }
+
+    pub fn readBits(self: *ChunkedBitReader, comptime T: type, count: u6) Error!T {
+        if (count > @bitSizeOf(T)) return error.CorruptFrame;
+        const result = self.peekBitsPadded(T, count);
+        try self.skipBits(count);
+        return result;
+    }
+
+    pub fn peekBits(self: ChunkedBitReader, comptime T: type, count: u6) Error!T {
+        var copy = self;
+        return copy.readBits(T, count);
+    }
+
+    pub fn skipBits(self: *ChunkedBitReader, count: u6) Error!void {
+        if (self.byte_index > self.total_len) return error.TruncatedFrame;
+        const remaining_bits = (self.total_len - self.byte_index) * 8 - @as(usize, self.bit_index);
+        if (@as(usize, count) > remaining_bits) return error.TruncatedFrame;
+
+        const new_bit_index = @as(usize, self.bit_index) + count;
+        self.byte_index += new_bit_index / 8;
+        self.bit_index = @intCast(new_bit_index % 8);
+    }
+
+    pub fn peekBitsPadded(self: ChunkedBitReader, comptime T: type, count: u6) T {
+        std.debug.assert(count <= @bitSizeOf(T));
+        if (count == 0 or self.byte_index >= self.total_len) return 0;
+
+        const requested_bits = @as(usize, self.bit_index) + @as(usize, count);
+        const requested_bytes = (requested_bits + 7) / 8;
+        var window: u128 = 0;
+        var i: usize = 0;
+        while (i < requested_bytes) : (i += 1) {
+            const byte = self.byteAt(self.byte_index + i) orelse break;
+            window |= @as(u128, byte) << @intCast(i * 8);
+        }
+        const shifted = window >> self.bit_index;
+        const mask = (@as(u128, 1) << @intCast(count)) - 1;
+        return @intCast(shifted & mask);
+    }
+
+    pub fn alignToByte(self: *ChunkedBitReader) void {
+        if (self.bit_index != 0) {
+            self.bit_index = 0;
+            self.byte_index += 1;
+        }
+    }
+
+    pub fn readAlignedBytes(self: *ChunkedBitReader, output: []u8) Error!void {
+        if (self.bit_index != 0) return error.CorruptFrame;
+        if (self.byte_index > self.total_len or self.total_len - self.byte_index < output.len) return error.TruncatedFrame;
+        for (output, 0..) |*byte, i| {
+            byte.* = self.byteAt(self.byte_index + i) orelse return error.TruncatedFrame;
+        }
+        self.byte_index += output.len;
+    }
+
+    pub fn readAlignedInt(self: *ChunkedBitReader, comptime T: type, endian: std.builtin.Endian) Error!T {
+        var bytes: [@sizeOf(T)]u8 = undefined;
+        try self.readAlignedBytes(&bytes);
+        return std.mem.readInt(T, &bytes, endian);
+    }
+
+    fn byteAt(self: ChunkedBitReader, absolute_offset: usize) ?u8 {
+        var remaining = absolute_offset;
+        for (self.chunks) |chunk| {
+            if (remaining < chunk.len) return chunk[remaining];
+            remaining -= chunk.len;
+        }
+        return null;
+    }
+};
+
+fn chunksTotalLen(chunks: []const []const u8) Error!usize {
+    var total: usize = 0;
+    for (chunks) |chunk| {
+        total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
+    }
+    return total;
+}
 
 pub const BitWriter = struct {
     bytes: std.ArrayList(u8) = .empty,
@@ -149,6 +269,31 @@ test "BitReader peekBitsPadded uses zero padding past input" {
     try std.testing.expectEqual(@as(u8, 0), reader.peekBitsPadded(u8, 8));
     try std.testing.expectError(error.TruncatedFrame, reader.readBits(u8, 5));
     try std.testing.expectEqual(@as(u4, 0), try reader.readBits(u4, 4));
+}
+
+test "ChunkedBitReader matches contiguous bit and aligned-byte reads" {
+    const bytes = [_]u8{ 0b1010_1101, 0b0000_0011, 0x34, 0x12, 0xaa, 0xbb };
+    const chunks = [_][]const u8{
+        bytes[0..1],
+        bytes[1..3],
+        bytes[3..],
+    };
+    var chunked = try ChunkedBitReader.init(&chunks);
+    try std.testing.expectEqual(@as(u3, 0b101), try chunked.readBits(u3, 3));
+    try std.testing.expectEqual(@as(u5, 0b10101), try chunked.readBits(u5, 5));
+    try std.testing.expectEqual(@as(u2, 0b11), try chunked.readBits(u2, 2));
+    try std.testing.expectEqual(@as(usize, 10), chunked.bitPosition());
+    chunked.alignToByte();
+    try std.testing.expectEqual(@as(usize, 2), chunked.byteOffset());
+    try std.testing.expectEqual(@as(u16, 0x1234), try chunked.readAlignedInt(u16, .little));
+    var tail: [2]u8 = undefined;
+    try chunked.readAlignedBytes(&tail);
+    try std.testing.expectEqualSlices(u8, &.{ 0xaa, 0xbb }, &tail);
+    try std.testing.expectError(error.TruncatedFrame, chunked.readBits(u1, 1));
+
+    var offset_reader = try ChunkedBitReader.initAt(&chunks, 2);
+    try std.testing.expectEqual(@as(u16, 0x1234), try offset_reader.readAlignedInt(u16, .little));
+    try std.testing.expectError(error.TruncatedFrame, ChunkedBitReader.initAt(&chunks, bytes.len + 1));
 }
 
 test "BitWriter emits LSB-first bytes readable by BitReader" {

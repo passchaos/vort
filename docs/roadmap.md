@@ -291,9 +291,11 @@ architecture blindly.
 - [x] zlib decode option APIs can ignore Adler-32 and/or allow trailing data
   while preserving strict defaults for PNG compatibility and relaxed-reader
   integrations.
-- [x] Public zlib chunked decode helpers join caller-provided chunks into caller
-  scratch or allocator-owned buffers, covering strict, relaxed, exact-size,
-  output-limited, and preset-dictionary variants.
+- [x] Public zlib chunked decode helpers cover strict, relaxed, exact-size,
+  output-limited, and preset-dictionary variants. Caller-buffer variants can
+  still join into caller scratch, while allocator-returning variants now decode
+  directly from chunked input through a chunk-aware bit reader instead of first
+  allocating a contiguous compressed copy.
 - [x] zlib relaxed decode options report/gate covers strict rejection, relaxed
   success, exact/limited allocator variants, output-limit rejection, and preset
   dictionary streams.

@@ -1507,7 +1507,6 @@ fn decodeRawAutoAppendPartialWithDictionary(
     max_output_len: ?usize,
 ) !DecodeResult {
     if (input.len == 0) return error.TruncatedFrame;
-    const start_len = out.items.len;
     if (try planRawStoredOnly(input)) |plan| {
         try appendRawStoredOnlyPlanned(allocator, input[0..plan.input_read], out, plan, max_output_len);
         return .{ .input_read = plan.input_read, .output_written = plan.output_len };
@@ -1516,23 +1515,35 @@ fn decodeRawAutoAppendPartialWithDictionary(
     try reserveInflateAppendOutputHint(allocator, out, input.len, max_output_len);
 
     var reader = bitstream.BitReader.init(input);
+    return decodeRawAutoAppendPartialWithDictionaryFromReader(allocator, &reader, 0, dictionary, out, max_output_len);
+}
+
+fn decodeRawAutoAppendPartialWithDictionaryFromReader(
+    allocator: std.mem.Allocator,
+    reader: anytype,
+    raw_base_offset: usize,
+    dictionary: []const u8,
+    out: *std.ArrayList(u8),
+    max_output_len: ?usize,
+) !DecodeResult {
+    const start_len = out.items.len;
     while (true) {
         const final = (try reader.readBits(u1, 1)) != 0;
         const block_type = try reader.readBits(u2, 2);
         switch (block_type) {
-            0 => try decodeStoredBlockFromReader(allocator, &reader, out, max_output_len),
-            1 => try decodeFixedBlockFromReaderFromBase(allocator, &reader, out, dictionary, start_len, max_output_len),
+            0 => try decodeStoredBlockFromReader(allocator, reader, out, max_output_len),
+            1 => try decodeFixedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len),
             2 => {
-                const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &reader);
+                const parsed = try huffman.parseDynamicLengthsAfterHeader(final, reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
-                try decodeCompressedBlockFromReaderFromBase(allocator, &reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
+                try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
             },
             else => return error.InvalidDeflateBlockType,
         }
-        if (final) return .{ .input_read = reader.byteOffset(), .output_written = out.items.len - start_len };
+        if (final) return .{ .input_read = reader.byteOffset() - raw_base_offset, .output_written = out.items.len - start_len };
     }
 }
 
@@ -1589,24 +1600,28 @@ pub fn decodeRawAutoWithDictionary(input: []const u8, dictionary: []const u8, ou
     if (try decodeRawStoredOnlyIntoMaybe(input, output)) |stored| return stored;
 
     var reader = bitstream.BitReader.init(input);
+    return decodeRawAutoWithDictionaryFromReader(&reader, 0, dictionary, output);
+}
+
+fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize, dictionary: []const u8, output: []u8) Error!DecodeResult {
     var out_offset: usize = 0;
     while (true) {
         const final = (try reader.readBits(u1, 1)) != 0;
         const block_type = try reader.readBits(u2, 2);
         switch (block_type) {
-            0 => try decodeStoredBlockIntoReader(&reader, output, &out_offset),
-            1 => try decodeFixedBlockIntoReader(&reader, output, &out_offset, dictionary),
+            0 => try decodeStoredBlockIntoReader(reader, output, &out_offset),
+            1 => try decodeFixedBlockIntoReader(reader, output, &out_offset, dictionary),
             2 => {
-                const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &reader);
+                const parsed = try huffman.parseDynamicLengthsAfterHeader(final, reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
-                try decodeCompressedBlockIntoReader(&reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
+                try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
             },
             else => return error.InvalidDeflateBlockType,
         }
-        if (final) return .{ .input_read = reader.byteOffset(), .output_written = out_offset };
+        if (final) return .{ .input_read = reader.byteOffset() - raw_base_offset, .output_written = out_offset };
     }
 }
 
@@ -1870,35 +1885,26 @@ pub fn decodeRawStoredAllocLimited(allocator: std.mem.Allocator, input: []const 
     return result.bytes;
 }
 
-fn decodeStoredBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), max_output_len: ?usize) !void {
+fn decodeStoredBlockFromReader(allocator: std.mem.Allocator, reader: anytype, out: *std.ArrayList(u8), max_output_len: ?usize) !void {
     reader.alignToByte();
-    const offset = reader.byte_index;
-    if (reader.input.len - offset < 4) return error.TruncatedFrame;
-    const len = std.mem.readInt(u16, reader.input[offset..][0..2], .little);
-    const nlen = std.mem.readInt(u16, reader.input[offset + 2 ..][0..2], .little);
+    const len = try reader.readAlignedInt(u16, .little);
+    const nlen = try reader.readAlignedInt(u16, .little);
     if (nlen != ~len) return error.StoredLengthMismatch;
     const chunk_len: usize = len;
-    if (reader.input.len - offset - 4 < chunk_len) return error.TruncatedFrame;
     try ensureOutputLimit(out.items.len, chunk_len, max_output_len);
-    try out.appendSlice(allocator, reader.input[offset + 4 ..][0..chunk_len]);
-    reader.byte_index = offset + 4 + chunk_len;
-    reader.bit_index = 0;
+    const dest = try out.addManyAsSlice(allocator, chunk_len);
+    try reader.readAlignedBytes(dest);
 }
 
-fn decodeStoredBlockIntoReader(reader: *bitstream.BitReader, output: []u8, out_offset: *usize) Error!void {
+fn decodeStoredBlockIntoReader(reader: anytype, output: []u8, out_offset: *usize) Error!void {
     reader.alignToByte();
-    const offset = reader.byte_index;
-    if (reader.input.len - offset < 4) return error.TruncatedFrame;
-    const len = std.mem.readInt(u16, reader.input[offset..][0..2], .little);
-    const nlen = std.mem.readInt(u16, reader.input[offset + 2 ..][0..2], .little);
+    const len = try reader.readAlignedInt(u16, .little);
+    const nlen = try reader.readAlignedInt(u16, .little);
     if (nlen != ~len) return error.StoredLengthMismatch;
     const chunk_len: usize = len;
-    if (reader.input.len - offset - 4 < chunk_len) return error.TruncatedFrame;
     if (output.len - out_offset.* < chunk_len) return error.OutputTooSmall;
-    @memcpy(output[out_offset.*..][0..chunk_len], reader.input[offset + 4 ..][0..chunk_len]);
+    try reader.readAlignedBytes(output[out_offset.*..][0..chunk_len]);
     out_offset.* += chunk_len;
-    reader.byte_index = offset + 4 + chunk_len;
-    reader.bit_index = 0;
 }
 
 fn reserveInflateOutputHint(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input_len: usize, max_output_len: ?usize) !void {
@@ -1926,11 +1932,11 @@ fn inflateOutputCapacityHint(input_len: usize) usize {
     return @min(input_len *| 64, 1 << 20);
 }
 
-fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), dictionary: []const u8, max_output_len: ?usize) !void {
+fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: anytype, out: *std.ArrayList(u8), dictionary: []const u8, max_output_len: ?usize) !void {
     try decodeFixedBlockFromReaderFromBase(allocator, reader, out, dictionary, 0, max_output_len);
 }
 
-fn decodeFixedBlockFromReaderFromBase(allocator: std.mem.Allocator, reader: *bitstream.BitReader, out: *std.ArrayList(u8), dictionary: []const u8, history_start: usize, max_output_len: ?usize) !void {
+fn decodeFixedBlockFromReaderFromBase(allocator: std.mem.Allocator, reader: anytype, out: *std.ArrayList(u8), dictionary: []const u8, history_start: usize, max_output_len: ?usize) !void {
     while (true) {
         const symbol = (try huffman.decodeFixedLiteralFast(reader)).value;
         if (symbol < 256) {
@@ -1949,7 +1955,7 @@ fn decodeFixedBlockFromReaderFromBase(allocator: std.mem.Allocator, reader: *bit
     }
 }
 
-fn decodeFixedBlockIntoReader(reader: *bitstream.BitReader, output: []u8, out_offset: *usize, dictionary: []const u8) Error!void {
+fn decodeFixedBlockIntoReader(reader: anytype, output: []u8, out_offset: *usize, dictionary: []const u8) Error!void {
     while (true) {
         const symbol = (try huffman.decodeFixedLiteralFast(reader)).value;
         if (symbol < 256) {
@@ -1972,7 +1978,7 @@ fn decodeFixedBlockIntoReader(reader: *bitstream.BitReader, output: []u8, out_of
 
 fn decodeCompressedBlockFromReader(
     allocator: std.mem.Allocator,
-    reader: *bitstream.BitReader,
+    reader: anytype,
     out: *std.ArrayList(u8),
     dictionary: []const u8,
     max_output_len: ?usize,
@@ -1984,7 +1990,7 @@ fn decodeCompressedBlockFromReader(
 
 fn decodeCompressedBlockFromReaderFromBase(
     allocator: std.mem.Allocator,
-    reader: *bitstream.BitReader,
+    reader: anytype,
     out: *std.ArrayList(u8),
     dictionary: []const u8,
     history_start: usize,
@@ -2011,7 +2017,7 @@ fn decodeCompressedBlockFromReaderFromBase(
 }
 
 fn decodeCompressedBlockIntoReader(
-    reader: *bitstream.BitReader,
+    reader: anytype,
     output: []u8,
     out_offset: *usize,
     dictionary: []const u8,
@@ -2038,7 +2044,7 @@ fn decodeCompressedBlockIntoReader(
     }
 }
 
-fn decodeLength(symbol: u16, reader: *bitstream.BitReader) Error!usize {
+fn decodeLength(symbol: u16, reader: anytype) Error!usize {
     if (symbol < 257 or symbol > 285) return error.InvalidHuffmanCode;
     const index = symbol - 257;
     const entry = length_table[index];
@@ -2046,7 +2052,7 @@ fn decodeLength(symbol: u16, reader: *bitstream.BitReader) Error!usize {
     return entry.base + extra;
 }
 
-fn decodeDistance(symbol: u16, reader: *bitstream.BitReader) Error!usize {
+fn decodeDistance(symbol: u16, reader: anytype) Error!usize {
     if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
     const entry = distance_table[symbol];
     const extra = if (entry.extra_bits == 0) 0 else try reader.readBits(u16, entry.extra_bits);
@@ -2698,6 +2704,62 @@ pub fn decodeZlibChunksWithDictionaryAndOptions(chunks: []const []const u8, comp
 fn decodeZlibChunksWithOptionalDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return decodeZlibWithOptionalDictionaryAndOptions(joined, output, dictionary, options);
+}
+
+fn chunkByteAt(chunks: []const []const u8, offset: usize) ?u8 {
+    var remaining = offset;
+    for (chunks) |chunk| {
+        if (remaining < chunk.len) return chunk[remaining];
+        remaining -= chunk.len;
+    }
+    return null;
+}
+
+fn readChunkedBigU32(chunks: []const []const u8, offset: usize) Error!u32 {
+    var value: u32 = 0;
+    for (0..4) |i| {
+        const byte_offset = std.math.add(usize, offset, i) catch return error.IntegerOverflow;
+        const byte = chunkByteAt(chunks, byte_offset) orelse return error.TruncatedFrame;
+        value = (value << 8) | byte;
+    }
+    return value;
+}
+
+fn parseZlibHeaderFromChunks(chunks: []const []const u8, dictionary: ?[]const u8) Error!ZlibHeader {
+    const cmf = chunkByteAt(chunks, 0) orelse return error.TruncatedFrame;
+    const flg = chunkByteAt(chunks, 1) orelse return error.TruncatedFrame;
+    if ((cmf & 0x0f) != 8) return error.BadZlibHeader;
+    const cinfo = cmf >> 4;
+    if (cinfo > 7) return error.BadZlibHeader;
+    const combined: u16 = (@as(u16, cmf) << 8) | flg;
+    if (combined % 31 != 0) return error.BadZlibHeader;
+
+    const uses_dictionary = (flg & 0x20) != 0;
+    if (!uses_dictionary) return .{ .data_offset = 2, .uses_dictionary = false };
+
+    const dictionary_id = try readChunkedBigU32(chunks, 2);
+    const actual_dictionary = dictionary orelse return error.NeedDictionary;
+    if (checksum.adler32(actual_dictionary) != dictionary_id) return error.ChecksumMismatch;
+    return .{ .data_offset = 6, .uses_dictionary = true };
+}
+
+fn validateZlibFooterChunksWithOptions(chunks: []const []const u8, footer_offset: usize, actual: u32, options: ZlibDecodeOptions) Error!void {
+    const total_len = try chunksTotalLen(chunks);
+    if (footer_offset > total_len or total_len - footer_offset < 4) return error.TruncatedFrame;
+    const expected = try readChunkedBigU32(chunks, footer_offset);
+    if (!options.ignore_adler and actual != expected) return error.ChecksumMismatch;
+    if (!options.allow_trailing_data and footer_offset + 4 != total_len) return error.TrailingData;
+}
+
+fn decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks: []const []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
+    const header = try parseZlibHeaderFromChunks(chunks, dictionary);
+    const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+
+    var reader = try bitstream.ChunkedBitReader.initAt(chunks, header.data_offset);
+    const raw = try decodeRawAutoWithDictionaryFromReader(&reader, header.data_offset, raw_dictionary, output);
+    const footer_offset = header.data_offset + raw.input_read;
+    try validateZlibFooterChunksWithOptions(chunks, footer_offset, checksum.adler32(output[0..raw.output_written]), options);
+    return raw.output_written;
 }
 
 fn chunksTotalLen(chunks: []const []const u8) Error!usize {
@@ -3891,18 +3953,29 @@ fn decodeZlibAllocWithOptionalDictionary(allocator: std.mem.Allocator, input: []
 
 fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, max_output_len: ?usize) ![]u8 {
     const compressed_len = try chunksTotalLen(chunks);
-    const compressed = try allocator.alloc(u8, compressed_len);
-    defer allocator.free(compressed);
-    const joined = try joinChunks(chunks, compressed);
-    return decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator, joined, dictionary, options, max_output_len);
+    const header = try parseZlibHeaderFromChunks(chunks, dictionary);
+    const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try reserveInflateAppendOutputHint(allocator, &out, compressed_len, max_output_len);
+
+    var reader = try bitstream.ChunkedBitReader.initAt(chunks, header.data_offset);
+    const raw = try decodeRawAutoAppendPartialWithDictionaryFromReader(allocator, &reader, header.data_offset, raw_dictionary, &out, max_output_len);
+    const footer_offset = header.data_offset + raw.input_read;
+    try validateZlibFooterChunksWithOptions(chunks, footer_offset, checksum.adler32(out.items), options);
+    return out.toOwnedSlice(allocator);
 }
 
 fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
-    const compressed_len = try chunksTotalLen(chunks);
-    const compressed = try allocator.alloc(u8, compressed_len);
-    defer allocator.free(compressed);
-    const joined = try joinChunks(chunks, compressed);
-    return decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator, joined, dictionary, options, expected_output_len);
+    const out = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(out);
+    const written = decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks, out, dictionary, options) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return out;
 }
 
 fn decodeZlibAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
@@ -5986,14 +6059,42 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     defer std.testing.allocator.free(alloc);
     try std.testing.expectEqualSlices(u8, input, alloc);
 
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 2 });
+    const direct_alloc = try decodeZlibChunksAlloc(failing.allocator(), &chunks);
+    defer failing.allocator().free(direct_alloc);
+    try std.testing.expectEqualSlices(u8, input, direct_alloc);
+    // Unknown-size allocation still grows/shrinks the output buffer, but the
+    // chunked path must not spend an additional heap allocation joining the
+    // compressed zlib chunks before inflate.
+    try std.testing.expectEqual(@as(usize, 2), failing.allocations);
+
     const exact = try decodeZlibChunksAllocExactSize(std.testing.allocator, &chunks, input.len);
     defer std.testing.allocator.free(exact);
     try std.testing.expectEqualSlices(u8, input, exact);
+
+    var exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
+    const direct_exact = try decodeZlibChunksAllocExactSize(exact_failing.allocator(), &chunks, input.len);
+    defer exact_failing.allocator().free(direct_exact);
+    try std.testing.expectEqualSlices(u8, input, direct_exact);
+    try std.testing.expectEqual(@as(usize, 1), exact_failing.allocations);
 
     const limited = try decodeZlibChunksAllocLimited(std.testing.allocator, &chunks, input.len);
     defer std.testing.allocator.free(limited);
     try std.testing.expectEqualSlices(u8, input, limited);
     try std.testing.expectError(error.OutputLimitExceeded, decodeZlibChunksAllocLimited(std.testing.allocator, &chunks, input.len - 1));
+
+    const stored = try encodeZlibStoredAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(stored);
+    const stored_chunks = [_][]const u8{
+        stored[0..3],
+        stored[3 .. stored.len - 2],
+        stored[stored.len - 2 ..],
+    };
+    var stored_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
+    const stored_direct = try decodeZlibChunksAllocExactSize(stored_failing.allocator(), &stored_chunks, input.len);
+    defer stored_failing.allocator().free(stored_direct);
+    try std.testing.expectEqualSlices(u8, input, stored_direct);
+    try std.testing.expectEqual(@as(usize, 1), stored_failing.allocations);
 
     var relaxed_frame = try std.testing.allocator.alloc(u8, encoded.len + 1);
     defer std.testing.allocator.free(relaxed_frame);

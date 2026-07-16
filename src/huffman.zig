@@ -83,7 +83,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             return table;
         }
 
-        pub fn decode(self: *const Self, reader: *bitstream.BitReader) Error!Symbol {
+        pub fn decode(self: *const Self, reader: anytype) Error!Symbol {
             var code: u16 = 0;
             var bits: u4 = 1;
             while (bits <= max_code_bits) {
@@ -125,7 +125,7 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             return decoder;
         }
 
-        pub fn decode(self: *const Self, reader: *bitstream.BitReader) Error!Symbol {
+        pub fn decode(self: *const Self, reader: anytype) Error!Symbol {
             const peek = reader.peekBitsPadded(u16, lookup_bits);
             const entry = self.lookup[peek & ((@as(usize, 1) << lookup_bits) - 1)];
             if (entry.bits != 0) {
@@ -155,7 +155,7 @@ pub const DynamicLengths = struct {
     code_length_symbol_histogram: [19]u16 = @splat(0),
 };
 
-pub fn parseDynamicHeader(reader: *bitstream.BitReader) Error!DynamicHeader {
+pub fn parseDynamicHeader(reader: anytype) Error!DynamicHeader {
     const final = (try reader.readBits(u1, 1)) != 0;
     const block_type = try reader.readBits(u2, 2);
     if (block_type != 0b10) return error.InvalidDeflateBlockType;
@@ -179,11 +179,11 @@ pub fn parseDynamicHeader(reader: *bitstream.BitReader) Error!DynamicHeader {
     };
 }
 
-pub fn parseDynamicLengths(reader: *bitstream.BitReader) Error!DynamicLengths {
+pub fn parseDynamicLengths(reader: anytype) Error!DynamicLengths {
     return parseDynamicLengthsBody(try parseDynamicHeader(reader), reader);
 }
 
-pub fn parseDynamicLengthsAfterHeader(final: bool, reader: *bitstream.BitReader) Error!DynamicLengths {
+pub fn parseDynamicLengthsAfterHeader(final: bool, reader: anytype) Error!DynamicLengths {
     const hlit: u16 = @as(u16, try reader.readBits(u5, 5)) + 257;
     const hdist: u16 = @as(u16, try reader.readBits(u5, 5)) + 1;
     const hclen: u8 = @as(u8, try reader.readBits(u4, 4)) + 4;
@@ -203,7 +203,7 @@ pub fn parseDynamicLengthsAfterHeader(final: bool, reader: *bitstream.BitReader)
     }, reader);
 }
 
-pub fn parseDynamicLengthsBody(header: DynamicHeader, reader: *bitstream.BitReader) Error!DynamicLengths {
+pub fn parseDynamicLengthsBody(header: DynamicHeader, reader: anytype) Error!DynamicLengths {
     const code_lengths = try CodeLengthTable.init(&header.code_length_lengths);
     const code_decoder = FastDecoder(19, 7).init(code_lengths);
     var combined: [286 + 30]u4 = @splat(0);
@@ -457,7 +457,7 @@ pub const fixed_literal_lookup = blk: {
     break :blk lookup;
 };
 
-pub fn decodeFixedLiteralFast(reader: *bitstream.BitReader) Error!Symbol {
+pub fn decodeFixedLiteralFast(reader: anytype) Error!Symbol {
     const peek = reader.peekBitsPadded(u16, 9);
     const entry = fixed_literal_lookup[peek & 0x1ff];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
@@ -476,7 +476,7 @@ pub const fixed_distance_lookup = blk: {
     break :blk lookup;
 };
 
-pub fn decodeFixedDistanceFast(reader: *bitstream.BitReader) Error!Symbol {
+pub fn decodeFixedDistanceFast(reader: anytype) Error!Symbol {
     const peek = reader.peekBitsPadded(u16, 5);
     const entry = fixed_distance_lookup[peek & 0x1f];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
