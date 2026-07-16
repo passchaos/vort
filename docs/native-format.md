@@ -138,9 +138,9 @@ borrowed serialized index payload, payload offset, and entry count, while
 Indexed and sidecar range decode also expose `WithIndexBuffer` variants that
 reuse caller-owned index entry storage for callers that want to avoid allocating
 while parsing the embedded or sidecar index; dictionary-aware range variants
-offer the same index-buffer form for callers that already have dictionary bytes,
-and auto/self-contained dictionary variants combine borrowed embedded
-dictionary bytes with caller-owned index storage.
+offer a richer `DictionaryRangeDecodeBuffers` form for callers that already have
+dictionary bytes, and auto/self-contained dictionary variants combine borrowed
+embedded dictionary bytes with the same caller-owned index/payload/patch storage.
 Full sidecar/embedded validation can likewise accept caller-provided index,
 payload scratch, and dictionary-deflate patch scratch buffers, letting trusted
 validation loops avoid parser/scratch allocations when their maximum frame sizes
@@ -258,9 +258,10 @@ dictionary range reads can materialize into the caller's target buffer and then
 validate the frame CRC-32 without allocating a whole decoded frame. Native
 dictionary-deflate frames use the same final patch decode-into step after
 inflating the compressed patch payload. Dictionary range reads
-can provide `DictionaryRangeDecodeBuffers` through the indexed or sidecar
-`WithBuffers` APIs so index parsing, full-frame dictionary-deflate patch
-inflation, and partial decoded-frame materialization reuse caller-owned storage.
+can provide `DictionaryRangeDecodeBuffers` through the indexed, sidecar, auto,
+or self-contained dictionary `WithBuffers` APIs so index parsing, full-frame
+dictionary-deflate patch inflation, and partial decoded-frame materialization
+reuse caller-owned storage.
 `dictionaryRangeBufferSizesForIndex`, `dictionaryRangeBufferSizesForSidecarIndex`,
 and `dictionaryRangeBufferSizesForEmbeddedIndex` preflight the required entry
 count, largest decoded-frame `payload_scratch`, and matching maximum

@@ -45,6 +45,8 @@ pub fn main(init: std.process.Init) !void {
     defer allocator.free(dict_indexed_stream);
     const dict_deflate_indexed_stream = try buildDictionaryDeflateIndexedStream(allocator);
     defer allocator.free(dict_deflate_indexed_stream);
+    const embedded_dict_deflate_stream = try buildEmbeddedDictionaryDeflateIndexedStream(allocator);
+    defer allocator.free(embedded_dict_deflate_stream);
     const self_contained_dict_stream = try vort.storeEncodeSelfContainedDictionaryStreamAlloc(
         allocator,
         ("self-contained dictionary phrase for native streams" ++ "!") ** 3,
@@ -68,6 +70,8 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureDictionaryRangeIntoWithIndexBuffer(allocator, dict_indexed_stream));
     try rows.append(allocator, try measureDictionaryDeflateRangeIntoWithPatchScratch(allocator, dict_deflate_indexed_stream));
     try rows.append(allocator, try measureDictionaryDeflatePartialRangeIntoWithScratch(allocator, dict_deflate_indexed_stream));
+    try rows.append(allocator, try measureEmbeddedDictionaryDeflateAutoRangeIntoWithBuffers(allocator, embedded_dict_deflate_stream));
+    try rows.append(allocator, try measureEmbeddedDictionaryDeflateSelfRangeIntoWithBuffers(allocator, embedded_dict_deflate_stream));
     try rows.append(allocator, try measureEmbeddedValidation(allocator, self_contained_dict_stream));
     try rows.append(allocator, try measureEmbeddedValidationWithBuffers(allocator, indexed_store_stream));
     try rows.append(allocator, try measureEmbeddedValidationReportWithBuffers(allocator, indexed_store_stream));
@@ -225,6 +229,30 @@ fn buildDictionaryDeflateIndexedStream(allocator: std.mem.Allocator) ![]u8 {
     var stream = std.ArrayList(u8).empty;
     errdefer stream.deinit(allocator);
     try stream.appendSlice(allocator, frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
+fn buildEmbeddedDictionaryDeflateIndexedStream(allocator: std.mem.Allocator) ![]u8 {
+    const dict_payload = try embeddedDictionaryPayloadAlloc(allocator, dictionary_deflate_dict);
+    defer allocator.free(dict_payload);
+    const dict_frame = try vort.storeEncodeSkippableAlloc(allocator, dict_payload);
+    defer allocator.free(dict_frame);
+    const data_frame = try vort.storeEncodeDictionaryDeflateAlloc(allocator, dictionary_deflate_dict, dictionary_deflate_input, 8);
+    defer allocator.free(data_frame);
+    var stream_without_index = std.ArrayList(u8).empty;
+    defer stream_without_index.deinit(allocator);
+    try stream_without_index.appendSlice(allocator, dict_frame);
+    try stream_without_index.appendSlice(allocator, data_frame);
+    const index = try vort.storeBuildFrameIndexAlloc(allocator, stream_without_index.items);
+    defer allocator.free(index);
+    const index_bytes = try vort.storeEncodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try vort.storeEncodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    var stream = std.ArrayList(u8).empty;
+    errdefer stream.deinit(allocator);
+    try stream.appendSlice(allocator, stream_without_index.items);
     try stream.appendSlice(allocator, index_frame);
     return stream.toOwnedSlice(allocator);
 }
@@ -392,6 +420,48 @@ fn measureDictionaryDeflatePartialRangeIntoWithScratch(backing: std.mem.Allocato
         .patch_scratch = patch_scratch,
     });
     return stats("dictionary_deflate_partial_range_into_scratch", stream.len, result.output_written, failing);
+}
+
+fn measureEmbeddedDictionaryDeflateAutoRangeIntoWithBuffers(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const range_offset = 9;
+    const range_len = 32;
+    const out = try backing.alloc(u8, range_len);
+    defer backing.free(out);
+    const sizes = try vort.storeDictionaryRangeBufferSizesForEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    const patch_scratch = try backing.alloc(u8, sizes.patch_scratch_len);
+    defer backing.free(patch_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.storeDecodeIndexedRangeAutoIntoWithBuffers(failing.allocator(), stream, range_offset, out.len, out, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+        .patch_scratch = patch_scratch,
+    });
+    return stats("dictionary_deflate_auto_range_into_buffers", stream.len, result.output_written, failing);
+}
+
+fn measureEmbeddedDictionaryDeflateSelfRangeIntoWithBuffers(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const range_offset = 9;
+    const range_len = 32;
+    const out = try backing.alloc(u8, range_len);
+    defer backing.free(out);
+    const sizes = try vort.storeDictionaryRangeBufferSizesForEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    const patch_scratch = try backing.alloc(u8, sizes.patch_scratch_len);
+    defer backing.free(patch_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.storeDecodeSelfContainedDictionaryRangeIntoWithBuffers(failing.allocator(), stream, range_offset, out.len, out, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+        .patch_scratch = patch_scratch,
+    });
+    return stats("dictionary_deflate_self_range_into_buffers", stream.len, result.output_written, failing);
 }
 
 fn measureEmbeddedValidation(backing: std.mem.Allocator, stream: []const u8) !CaseStats {

@@ -1782,8 +1782,8 @@ This report records allocator activity for representative native decode paths so
 caller-owned APIs and allocation preflight optimizations have a retained
 regression baseline. It includes dictionary-deflate range and validation rows
 that prove caller-owned index, payload, and patch scratch buffers sized through
-the public preflight helpers keep full-frame and partial range decode plus
-validation/report-producing validation paths allocation-free.
+the public preflight helpers keep full-frame, partial, auto, and self-contained
+range decode plus validation/report-producing validation paths allocation-free.
 
 Top-level fields:
 
