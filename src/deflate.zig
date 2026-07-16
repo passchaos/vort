@@ -2645,6 +2645,18 @@ pub const ZlibDecoder = struct {
         return self;
     }
 
+    pub fn initFromChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetFromChunks(chunks, compressed_scratch, output_scratch);
+        return self;
+    }
+
+    pub fn initFromChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetFromChunksExactSize(chunks, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
     pub fn initWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) Error!ZlibDecoder {
         var self = ZlibDecoder{};
         try self.resetWithDictionary(input, dictionary, scratch);
@@ -2676,6 +2688,16 @@ pub const ZlibDecoder = struct {
         }
     }
 
+    pub fn resetFromChunks(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        const joined = try joinChunks(chunks, compressed_scratch);
+        return self.reset(joined, output_scratch);
+    }
+
+    pub fn resetFromChunksExactSize(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        const joined = try joinChunks(chunks, compressed_scratch);
+        return self.resetExactSize(joined, output_scratch, expected_output_len);
+    }
+
     pub fn resetWithDictionary(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8) Error!void {
         const written = decodeZlibWithDictionary(input, scratch, dictionary) catch |err| {
             self.recordError(err);
@@ -2693,6 +2715,20 @@ pub const ZlibDecoder = struct {
             self.recordError(error.SizeMismatch);
             return error.SizeMismatch;
         }
+    }
+
+    fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
+        var total: usize = 0;
+        for (chunks) |chunk| {
+            total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
+        }
+        if (compressed_scratch.len < total) return error.OutputTooSmall;
+        var offset: usize = 0;
+        for (chunks) |chunk| {
+            @memcpy(compressed_scratch[offset..][0..chunk.len], chunk);
+            offset += chunk.len;
+        }
+        return compressed_scratch[0..total];
     }
 
     pub fn snapshot(self: *const ZlibDecoder) Snapshot {
@@ -3804,6 +3840,20 @@ test "zlib decoder drains PNG-like payload from caller scratch" {
     }
     try std.testing.expectEqualSlices(u8, &png_like, &out);
     try std.testing.expectEqualStrings("done", decoder.diagnostics().phase_name);
+
+    var compressed_scratch: [128]u8 = undefined;
+    const chunks = [_][]const u8{
+        encoded[0..5],
+        encoded[5 .. encoded.len - 3],
+        encoded[encoded.len - 3 ..],
+    };
+    var chunk_decoder = try ZlibDecoder.initFromChunksExactSize(&chunks, &compressed_scratch, &scratch, png_like.len);
+    @memset(&out, 0);
+    const chunk_step = try chunk_decoder.step(&out);
+    try std.testing.expectEqual(core.StepResult.Status.done, chunk_step.status);
+    try std.testing.expectEqual(encoded.len, chunk_step.progress.input_read);
+    try std.testing.expectEqualSlices(u8, &png_like, &out);
+    try std.testing.expectError(error.OutputTooSmall, ZlibDecoder.initFromChunksExactSize(&chunks, compressed_scratch[0 .. encoded.len - 1], &scratch, png_like.len));
 
     try std.testing.expectError(error.OutputTooSmall, ZlibDecoder.initExactSize(encoded, scratch[0 .. scratch.len - 1], png_like.len));
     try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initExactSize(encoded, &scratch, png_like.len - 1));
