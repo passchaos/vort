@@ -91,6 +91,15 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
         }
 
         pub fn decode(self: *const Self, reader: anytype) Error!Symbol {
+            const decoded = try self.decodeValueWithBits(reader);
+            return .{ .value = decoded.value, .bits = decoded.bits };
+        }
+
+        pub fn decodeValue(self: *const Self, reader: anytype) Error!u16 {
+            return (try self.decodeValueWithBits(reader)).value;
+        }
+
+        fn decodeValueWithBits(self: *const Self, reader: anytype) Error!Symbol {
             var code: u16 = 0;
             var bits: u4 = 1;
             while (bits <= max_code_bits) {
@@ -162,7 +171,7 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
                 reader.advanceBitsAssumeAvailable(entry.bits);
                 return entry.symbol;
             }
-            return (try self.table.decode(reader)).value;
+            return try self.table.decodeValue(reader);
         }
     };
 }

@@ -696,6 +696,8 @@ architecture blindly.
   only the numeric symbol is needed in hot loops.
 - [x] `FastDecoder.decodeValue` now returns directly from the lookup fast path,
   avoiding the internal Symbol construction used by full decode metadata calls.
+- [x] `HuffmanTable.decodeValue` provides the same value-only path for long-code
+  fallback decoding, so FastDecoder fallback misses also avoid Symbol materialization.
 - [x] FastDecoder construction skips zeroing the lookup table when short codes
   fully cover it, cutting setup work for complete dynamic literal/distance
   alphabets while preserving fallback entries for incomplete tables.
