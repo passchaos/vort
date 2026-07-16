@@ -4576,6 +4576,47 @@ test "embedded index validator accepts caller-provided buffers" {
     try std.testing.expectEqualStrings("OutputTooSmall", short_report.error_name);
 }
 
+test "embedded compressed validation reuses caller-provided buffers" {
+    const deflate_payloads = [_][]const u8{ "hello hello hello hello", "bye bye bye bye bye" };
+    const deflate_stream = try encodeIndexedDeflateStreamAlloc(std.testing.allocator, &deflate_payloads);
+    defer std.testing.allocator.free(deflate_stream);
+    const deflate_sizes = try sidecarValidationBufferSizesForEmbeddedIndex(deflate_stream);
+    const deflate_index_buffer = try std.testing.allocator.alloc(FrameIndexEntry, deflate_sizes.index_entries);
+    defer std.testing.allocator.free(deflate_index_buffer);
+    const deflate_payload_scratch = try std.testing.allocator.alloc(u8, deflate_sizes.payload_scratch_len);
+    defer std.testing.allocator.free(deflate_payload_scratch);
+    try validateEmbeddedIndexWithOptionsAndBuffersAlloc(std.testing.failing_allocator, deflate_stream, .{ .mode = .full }, .{
+        .index_buffer = deflate_index_buffer,
+        .payload_scratch = deflate_payload_scratch,
+    });
+    const deflate_report = validateEmbeddedIndexReportWithOptionsAndBuffersAlloc(std.testing.failing_allocator, deflate_stream, .{ .mode = .full }, .{
+        .index_buffer = deflate_index_buffer,
+        .payload_scratch = deflate_payload_scratch,
+    });
+    try std.testing.expect(deflate_report.ok);
+
+    const prefix = deterministicLdmPrefix();
+    const ldm_payloads = [_][]const u8{prefix ++ "----" ++ prefix[0..1024].*};
+    const ldm_stream = try encodeIndexedLongDistanceStreamAlloc(std.testing.allocator, &ldm_payloads, .{ .min_distance = 32769, .min_length = 16 });
+    defer std.testing.allocator.free(ldm_stream);
+    const summary = try summarizeModes(ldm_stream);
+    try std.testing.expect(summary.ldm > 0);
+    const ldm_sizes = try sidecarValidationBufferSizesForEmbeddedIndex(ldm_stream);
+    const ldm_index_buffer = try std.testing.allocator.alloc(FrameIndexEntry, ldm_sizes.index_entries);
+    defer std.testing.allocator.free(ldm_index_buffer);
+    const ldm_payload_scratch = try std.testing.allocator.alloc(u8, ldm_sizes.payload_scratch_len);
+    defer std.testing.allocator.free(ldm_payload_scratch);
+    try validateEmbeddedIndexWithOptionsAndBuffersAlloc(std.testing.failing_allocator, ldm_stream, .{ .mode = .full }, .{
+        .index_buffer = ldm_index_buffer,
+        .payload_scratch = ldm_payload_scratch,
+    });
+    const ldm_report = validateEmbeddedIndexReportWithOptionsAndBuffersAlloc(std.testing.failing_allocator, ldm_stream, .{ .mode = .full }, .{
+        .index_buffer = ldm_index_buffer,
+        .payload_scratch = ldm_payload_scratch,
+    });
+    try std.testing.expect(ldm_report.ok);
+}
+
 test "sidecar index bytes support dictionary range decode" {
     const dict = "dictionary-only phrase with enough length to beat stored framing";
     const input = (dict ++ "!") ** 2;

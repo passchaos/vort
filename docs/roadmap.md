@@ -97,6 +97,7 @@ architecture blindly.
 - [x] Sidecar validation options can enforce expected whole-stream length and combined checksum from frame-index metadata.
 - [x] Sidecar and embedded validation can reuse caller-provided index and payload scratch buffers.
 - [x] Sidecar and embedded validation expose sizing helpers for caller-owned index, payload, and patch buffers.
+- [x] Embedded deflate/LDM validation can reuse caller-owned payload scratch at zero allocations.
 - [x] Sidecar and embedded validation reports can reuse caller-provided index and payload scratch buffers.
 - [x] Default full validation pre-reserves scratch for the largest indexed frame to avoid repeated growth.
 - [x] Indexed and sidecar range-decode summary APIs return range bytes with CRC-32 summaries.

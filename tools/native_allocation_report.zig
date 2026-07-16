@@ -79,6 +79,9 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureEmbeddedValidation(allocator, self_contained_dict_stream));
     try rows.append(allocator, try measureEmbeddedValidationWithBuffers(allocator, indexed_store_stream));
     try rows.append(allocator, try measureEmbeddedValidationReportWithBuffers(allocator, indexed_store_stream));
+    try rows.append(allocator, try measureEmbeddedCompressedValidationWithBuffers(allocator, indexed_deflate_stream));
+    try rows.append(allocator, try measureEmbeddedCompressedValidationReportWithBuffers(allocator, indexed_deflate_stream));
+    try rows.append(allocator, try measureEmbeddedLdmValidationWithBuffers(allocator));
     try rows.append(allocator, try measureDictionaryDeflateValidationWithBuffers(allocator, dict_deflate_indexed_stream));
     try rows.append(allocator, try measureDictionaryDeflateValidationReportWithBuffers(allocator, dict_deflate_indexed_stream));
 
@@ -611,6 +614,53 @@ fn measureEmbeddedValidationReportWithBuffers(backing: std.mem.Allocator, stream
     });
     try std.testing.expect(report.ok);
     return stats("embedded_validation_report_with_buffers", stream.len, 0, failing);
+}
+
+fn measureEmbeddedCompressedValidationWithBuffers(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const sizes = try vort.storeSidecarValidationBufferSizesForEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    try vort.storeValidateEmbeddedIndexWithOptionsAndBuffersAlloc(failing.allocator(), stream, .{ .mode = .full }, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    return stats("embedded_compressed_validation_with_buffers", stream.len, 0, failing);
+}
+
+fn measureEmbeddedCompressedValidationReportWithBuffers(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const sizes = try vort.storeSidecarValidationBufferSizesForEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const report = vort.storeValidateEmbeddedIndexReportWithOptionsAndBuffersAlloc(failing.allocator(), stream, .{ .mode = .full }, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    try std.testing.expect(report.ok);
+    return stats("embedded_compressed_validation_report_with_buffers", stream.len, 0, failing);
+}
+
+fn measureEmbeddedLdmValidationWithBuffers(backing: std.mem.Allocator) !CaseStats {
+    const prefix = deterministicLdmPrefix();
+    const payloads = [_][]const u8{prefix ++ "----" ++ prefix[0..1024].*};
+    const stream = try vort.storeEncodeIndexedLongDistanceStreamAlloc(backing, &payloads, .{ .min_distance = 32769, .min_length = 16 });
+    defer backing.free(stream);
+    const sizes = try vort.storeSidecarValidationBufferSizesForEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    try vort.storeValidateEmbeddedIndexWithOptionsAndBuffersAlloc(failing.allocator(), stream, .{ .mode = .full }, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    return stats("embedded_ldm_validation_with_buffers", stream.len, 0, failing);
 }
 
 fn measureDictionaryDeflateValidationWithBuffers(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
