@@ -133,15 +133,6 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
         }
 
         pub fn decode(self: *const Self, reader: anytype) Error!Symbol {
-            const decoded = try self.decodeValueWithBits(reader);
-            return .{ .value = decoded.value, .bits = decoded.bits };
-        }
-
-        pub fn decodeValue(self: *const Self, reader: anytype) Error!u16 {
-            return (try self.decodeValueWithBits(reader)).value;
-        }
-
-        fn decodeValueWithBits(self: *const Self, reader: anytype) Error!Symbol {
             const peek = reader.peekBitsPadded(u16, lookup_bits);
             const entry = self.lookup[peek & ((@as(usize, 1) << lookup_bits) - 1)];
             if (entry.bits != 0) {
@@ -149,6 +140,16 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
                 return .{ .value = entry.symbol, .bits = entry.bits };
             }
             return self.table.decode(reader);
+        }
+
+        pub fn decodeValue(self: *const Self, reader: anytype) Error!u16 {
+            const peek = reader.peekBitsPadded(u16, lookup_bits);
+            const entry = self.lookup[peek & ((@as(usize, 1) << lookup_bits) - 1)];
+            if (entry.bits != 0) {
+                try reader.skipBits(entry.bits);
+                return entry.symbol;
+            }
+            return (try self.table.decode(reader)).value;
         }
     };
 }

@@ -694,6 +694,8 @@ architecture blindly.
 - [x] Dynamic deflate block decode uses a `FastDecoder.decodeValue` path for
   literal/length and distance symbols, avoiding Symbol struct construction when
   only the numeric symbol is needed in hot loops.
+- [x] `FastDecoder.decodeValue` now returns directly from the lookup fast path,
+  avoiding the internal Symbol construction used by full decode metadata calls.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
