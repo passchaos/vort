@@ -678,6 +678,8 @@ architecture blindly.
 - [x] Dynamic decode stage benchmark breaks small dynamic blocks into length
   parsing, literal-table construction, distance-table construction, payload
   decode, and total caller-buffer timing to identify the next hot path.
+- [x] Dynamic Huffman length parsing writes directly into literal/distance
+  arrays, avoiding the combined temporary buffer and final split copies.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

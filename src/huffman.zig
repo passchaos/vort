@@ -206,51 +206,69 @@ pub fn parseDynamicLengthsAfterHeader(final: bool, reader: anytype) Error!Dynami
 pub fn parseDynamicLengthsBody(header: DynamicHeader, reader: anytype) Error!DynamicLengths {
     const code_lengths = try CodeLengthTable.init(&header.code_length_lengths);
     const code_decoder = FastDecoder(19, 7).init(code_lengths);
-    var combined: [286 + 30]u4 = @splat(0);
     const total = header.hlit + header.hdist;
-    var symbol_histogram: [19]u16 = @splat(0);
+    var parsed = DynamicLengths{ .header = header };
     var pos: usize = 0;
     while (pos < total) {
         const symbol = (try code_decoder.decode(reader)).value;
-        symbol_histogram[symbol] += 1;
+        parsed.code_length_symbol_histogram[symbol] += 1;
         switch (symbol) {
             0...15 => {
-                combined[pos] = @intCast(symbol);
+                setDynamicLength(&parsed, header, pos, @intCast(symbol));
                 pos += 1;
             },
             16 => {
                 if (pos == 0) return error.InvalidDynamicBlockHeader;
                 const count: usize = @as(usize, try reader.readBits(u2, 2)) + 3;
                 if (pos + count > total) return error.InvalidDynamicBlockHeader;
-                @memset(combined[pos..][0..count], combined[pos - 1]);
+                const value = getDynamicLength(parsed, header, pos - 1);
+                setDynamicLengthRun(&parsed, header, pos, count, value);
                 pos += count;
             },
             17 => {
                 const count: usize = @as(usize, try reader.readBits(u3, 3)) + 3;
                 if (pos + count > total) return error.InvalidDynamicBlockHeader;
-                @memset(combined[pos..][0..count], 0);
+                setDynamicLengthRun(&parsed, header, pos, count, 0);
                 pos += count;
             },
             18 => {
                 const count: usize = @as(usize, try reader.readBits(u7, 7)) + 11;
                 if (pos + count > total) return error.InvalidDynamicBlockHeader;
-                @memset(combined[pos..][0..count], 0);
+                setDynamicLengthRun(&parsed, header, pos, count, 0);
                 pos += count;
             },
             else => return error.InvalidDynamicBlockHeader,
         }
     }
 
-    var parsed = DynamicLengths{ .header = header };
-    @memcpy(parsed.literal_lengths[0..header.hlit], combined[0..header.hlit]);
-    @memcpy(parsed.distance_lengths[0..header.hdist], combined[header.hlit..][0..header.hdist]);
-    parsed.code_length_symbol_histogram = symbol_histogram;
     // A dynamic literal/length alphabet without the end-of-block symbol cannot
     // terminate a compressed block. Reject it at header parse time so wrappers
     // consistently report a malformed dynamic header instead of decoding until
     // the bitstream happens to run out.
     if (parsed.literal_lengths[256] == 0) return error.InvalidDynamicBlockHeader;
     return parsed;
+}
+
+fn setDynamicLength(parsed: *DynamicLengths, header: DynamicHeader, pos: usize, value: u4) void {
+    if (pos < header.hlit) {
+        parsed.literal_lengths[pos] = value;
+    } else {
+        parsed.distance_lengths[pos - header.hlit] = value;
+    }
+}
+
+fn getDynamicLength(parsed: DynamicLengths, header: DynamicHeader, pos: usize) u4 {
+    return if (pos < header.hlit) parsed.literal_lengths[pos] else parsed.distance_lengths[pos - header.hlit];
+}
+
+fn setDynamicLengthRun(parsed: *DynamicLengths, header: DynamicHeader, pos: usize, count: usize, value: u4) void {
+    const literal_end = @min(pos + count, header.hlit);
+    if (pos < literal_end) @memset(parsed.literal_lengths[pos..literal_end], value);
+    if (pos + count > header.hlit) {
+        const dist_start = if (pos > header.hlit) pos - header.hlit else 0;
+        const dist_end = pos + count - header.hlit;
+        @memset(parsed.distance_lengths[dist_start..dist_end], value);
+    }
 }
 
 pub fn simpleCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n]u4 {
