@@ -133,6 +133,33 @@ pub fn build(b: *std.Build) void {
     const deflate_decode_stage_report_dashboard_step = b.step("run-deflate-decode-stage-report-dashboard", "Write raw inflate vs zlib wrapper/checksum stage dashboard to zig-out");
     deflate_decode_stage_report_dashboard_step.dependOn(&run_deflate_decode_stage_report_dashboard.step);
 
+    const zlib_relaxed_report_exe = b.addExecutable(.{
+        .name = "vort-zlib-relaxed-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zlib_relaxed_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+
+    const run_zlib_relaxed_report = b.addRunArtifact(zlib_relaxed_report_exe);
+    run_zlib_relaxed_report.addArgs(&.{ "--json", "zig-out/vort-zlib-relaxed-report.json" });
+    const zlib_relaxed_report_step = b.step("run-zlib-relaxed-report", "Write zlib relaxed decode options JSON report");
+    zlib_relaxed_report_step.dependOn(&run_zlib_relaxed_report.step);
+
+    const zlib_relaxed_report_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/zlib_relaxed_report_gate.py",
+        "--summary",
+        "zig-out/vort-zlib-relaxed-report-gate.json",
+    });
+    zlib_relaxed_report_gate.step.dependOn(zlib_relaxed_report_step);
+    const zlib_relaxed_report_gate_step = b.step("run-zlib-relaxed-report-gate", "Validate zlib relaxed decode options report budgets");
+    zlib_relaxed_report_gate_step.dependOn(&zlib_relaxed_report_gate.step);
+
     const zlib_encode_bench_exe = b.addExecutable(.{
         .name = "vort-zlib-encode-bench",
         .root_module = b.createModule(.{
@@ -991,6 +1018,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_bench_exe.step);
     check_step.dependOn(&corpus_decode_bench_exe.step);
     check_step.dependOn(&zlib_decode_bench_exe.step);
+    check_step.dependOn(&zlib_relaxed_report_exe.step);
     check_step.dependOn(&deflate_decode_stage_report_exe.step);
     check_step.dependOn(&zlib_encode_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
@@ -1035,6 +1063,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zlib_diff_step);
     ci_smoke_step.dependOn(gzip_diff_step);
     ci_smoke_step.dependOn(python_zlib_diff_step);
+    ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(header_inspect_smoke_step);
     ci_smoke_step.dependOn(header_inspect_dashboard_step);

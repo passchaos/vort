@@ -233,6 +233,7 @@ zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report -- --iterations 1000
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-dashboard  # writes CSV/Markdown/JSON decode-stage artifacts
+zig build run-zlib-relaxed-report-gate
 zig build bench-corpus-decode -Doptimize=ReleaseFast
 zig build bench-deflate-encode -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-rust-deflate-bench

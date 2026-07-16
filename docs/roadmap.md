@@ -291,6 +291,9 @@ architecture blindly.
 - [x] zlib decode option APIs can ignore Adler-32 and/or allow trailing data
   while preserving strict defaults for PNG compatibility and relaxed-reader
   integrations.
+- [x] zlib relaxed decode options report/gate covers strict rejection, relaxed
+  success, exact/limited allocator variants, output-limit rejection, and preset
+  dictionary streams.
 - [x] zlib header CINFO/window metadata compatibility test verifies Vort reports
   smaller advertised windows while matching zlib-compatible decode behavior for
   otherwise-valid streams.
