@@ -706,6 +706,9 @@ architecture blindly.
   so adaptive literal lookup selection avoids a second per-block scan.
 - [x] Dynamic code-length decoding uses the value-only Huffman fast path,
   avoiding Symbol construction while parsing literal/distance code lengths.
+- [x] Huffman fast lookup hits advance bit readers through an availability
+  check plus unchecked offset update, avoiding the full `skipBits` path in
+  dynamic literal/distance hot loops for contiguous and chunked readers.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

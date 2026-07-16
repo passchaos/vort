@@ -37,6 +37,16 @@ pub const BitReader = struct {
         const remaining_bits = (self.input.len - self.byte_index) * 8 - @as(usize, self.bit_index);
         if (@as(usize, count) > remaining_bits) return error.TruncatedFrame;
 
+        self.advanceBitsAssumeAvailable(count);
+    }
+
+    pub fn hasBits(self: BitReader, count: u6) bool {
+        if (self.byte_index > self.input.len) return false;
+        const remaining_bits = (self.input.len - self.byte_index) * 8 - @as(usize, self.bit_index);
+        return @as(usize, count) <= remaining_bits;
+    }
+
+    pub fn advanceBitsAssumeAvailable(self: *BitReader, count: u6) void {
         const new_bit_index = @as(usize, self.bit_index) + count;
         self.byte_index += new_bit_index / 8;
         self.bit_index = @intCast(new_bit_index % 8);
@@ -141,6 +151,16 @@ pub const ChunkedBitReader = struct {
         const remaining_bits = (self.total_len - self.byte_index) * 8 - @as(usize, self.bit_index);
         if (@as(usize, count) > remaining_bits) return error.TruncatedFrame;
 
+        self.advanceBitsAssumeAvailable(count);
+    }
+
+    pub fn hasBits(self: ChunkedBitReader, count: u6) bool {
+        if (self.byte_index > self.total_len) return false;
+        const remaining_bits = (self.total_len - self.byte_index) * 8 - @as(usize, self.bit_index);
+        return @as(usize, count) <= remaining_bits;
+    }
+
+    pub fn advanceBitsAssumeAvailable(self: *ChunkedBitReader, count: u6) void {
         const new_bit_index = @as(usize, self.bit_index) + count;
         self.byte_index += new_bit_index / 8;
         self.bit_index = @intCast(new_bit_index % 8);
@@ -263,6 +283,15 @@ test "BitReader skipBits advances without reading values" {
     try std.testing.expectError(error.TruncatedFrame, reader.skipBits(1));
 }
 
+test "BitReader hasBits and unchecked advance match skipBits" {
+    var reader = BitReader.init(&.{ 0b1010_1101, 0b0000_0011 });
+    try std.testing.expect(reader.hasBits(10));
+    reader.advanceBitsAssumeAvailable(10);
+    try std.testing.expectEqual(@as(usize, 10), reader.bitPosition());
+    try std.testing.expect(reader.hasBits(6));
+    try std.testing.expect(!reader.hasBits(7));
+}
+
 test "BitReader peekBitsPadded uses zero padding past input" {
     var reader = BitReader.init(&.{0b0000_1011});
     try reader.skipBits(4);
@@ -294,6 +323,17 @@ test "ChunkedBitReader matches contiguous bit and aligned-byte reads" {
     var offset_reader = try ChunkedBitReader.initAt(&chunks, 2);
     try std.testing.expectEqual(@as(u16, 0x1234), try offset_reader.readAlignedInt(u16, .little));
     try std.testing.expectError(error.TruncatedFrame, ChunkedBitReader.initAt(&chunks, bytes.len + 1));
+}
+
+test "ChunkedBitReader hasBits and unchecked advance match skipBits" {
+    const bytes = [_]u8{ 0b1010_1101, 0b0000_0011 };
+    const chunks = [_][]const u8{ bytes[0..1], bytes[1..] };
+    var reader = try ChunkedBitReader.init(&chunks);
+    try std.testing.expect(reader.hasBits(10));
+    reader.advanceBitsAssumeAvailable(10);
+    try std.testing.expectEqual(@as(usize, 10), reader.bitPosition());
+    try std.testing.expect(reader.hasBits(6));
+    try std.testing.expect(!reader.hasBits(7));
 }
 
 test "BitWriter emits LSB-first bytes readable by BitReader" {

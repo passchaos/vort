@@ -141,7 +141,8 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             const peek = reader.peekBitsPadded(u16, lookup_bits);
             const entry = self.lookup[peek & ((@as(usize, 1) << lookup_bits) - 1)];
             if (entry.bits != 0) {
-                try reader.skipBits(entry.bits);
+                if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+                reader.advanceBitsAssumeAvailable(entry.bits);
                 return .{ .value = entry.symbol, .bits = entry.bits };
             }
             return self.table.decode(reader);
@@ -151,7 +152,8 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             const peek = reader.peekBitsPadded(u16, lookup_bits);
             const entry = self.lookup[peek & ((@as(usize, 1) << lookup_bits) - 1)];
             if (entry.bits != 0) {
-                try reader.skipBits(entry.bits);
+                if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+                reader.advanceBitsAssumeAvailable(entry.bits);
                 return entry.symbol;
             }
             return (try self.table.decode(reader)).value;
