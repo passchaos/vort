@@ -2613,12 +2613,24 @@ pub const ZlibDecoder = struct {
     frame_len: usize = 0,
     offset: usize = 0,
     done: bool = false,
+    last_error_name: []const u8 = "",
+    last_recoverability_hint: RecoverabilityHint = .none,
+
+    pub const RecoverabilityHint = enum {
+        none,
+        corrupt_header,
+        truncated_input,
+        payload_corrupt,
+        retry_with_dictionary,
+    };
 
     pub const Snapshot = struct {
         output_written: usize,
         expected_output_len: usize,
         payload_remaining: usize,
         done: bool,
+        last_error_name: []const u8,
+        recoverability_hint: RecoverabilityHint,
     };
 
     pub fn init(input: []const u8, scratch: []u8) Error!ZlibDecoder {
@@ -2634,7 +2646,10 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn reset(self: *ZlibDecoder, input: []const u8, scratch: []u8) Error!void {
-        const written = try decodeZlib(input, scratch);
+        const written = decodeZlib(input, scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
         self.* = .{
             .decoded = scratch[0..written],
             .frame_len = input.len,
@@ -2642,7 +2657,10 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetWithDictionary(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8) Error!void {
-        const written = try decodeZlibWithDictionary(input, scratch, dictionary);
+        const written = decodeZlibWithDictionary(input, scratch, dictionary) catch |err| {
+            self.recordError(err);
+            return err;
+        };
         self.* = .{
             .decoded = scratch[0..written],
             .frame_len = input.len,
@@ -2655,6 +2673,28 @@ pub const ZlibDecoder = struct {
             .expected_output_len = self.decoded.len,
             .payload_remaining = self.decoded.len - self.offset,
             .done = self.done,
+            .last_error_name = self.last_error_name,
+            .recoverability_hint = self.last_recoverability_hint,
+        };
+    }
+
+    fn recordError(self: *ZlibDecoder, err: Error) void {
+        self.last_error_name = @errorName(err);
+        self.last_recoverability_hint = switch (err) {
+            error.BadZlibHeader, error.InvalidDeflateBlockType, error.InvalidDynamicBlockHeader, error.InvalidHuffmanCode => .corrupt_header,
+            error.TruncatedFrame => .truncated_input,
+            error.NeedDictionary, error.InvalidDictionaryTraining => .retry_with_dictionary,
+            else => .payload_corrupt,
+        };
+    }
+
+    fn hintName(hint: RecoverabilityHint) []const u8 {
+        return switch (hint) {
+            .none => "none",
+            .corrupt_header => "corrupt_header",
+            .truncated_input => "truncated_input",
+            .payload_corrupt => "payload_corrupt",
+            .retry_with_dictionary => "retry_with_dictionary",
         };
     }
 
@@ -2666,6 +2706,9 @@ pub const ZlibDecoder = struct {
             .output_written = snap.output_written,
             .expected_output_len = snap.expected_output_len,
             .payload_remaining = snap.payload_remaining,
+            .last_error_name = snap.last_error_name,
+            .last_error_phase_name = if (snap.last_error_name.len == 0) "" else "payload",
+            .recoverability_hint_name = hintName(snap.recoverability_hint),
         };
     }
 
@@ -3749,6 +3792,35 @@ test "zlib decoder supports preset dictionary streams" {
     try std.testing.expectEqual(core.StepResult.Status.done, step.status);
     try std.testing.expectEqualSlices(u8, input, &out);
     try std.testing.expectError(error.NeedDictionary, ZlibDecoder.init(encoded, &scratch));
+}
+
+test "zlib decoder diagnostics cover wrapper errors" {
+    var scratch: [32]u8 = undefined;
+    var decoder = ZlibDecoder{};
+    try std.testing.expectError(error.BadZlibHeader, decoder.reset(&.{ 0x78, 0x02 }, &scratch));
+    try std.testing.expectEqualStrings("BadZlibHeader", decoder.snapshot().last_error_name);
+    try std.testing.expectEqual(ZlibDecoder.RecoverabilityHint.corrupt_header, decoder.snapshot().recoverability_hint);
+    try std.testing.expectEqualStrings("corrupt_header", decoder.diagnostics().recoverability_hint_name);
+
+    const encoded = try encodeZlibFixedAlloc(std.testing.allocator, "payload");
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectError(error.TruncatedFrame, decoder.reset(encoded[0 .. encoded.len - 2], &scratch));
+    try std.testing.expectEqualStrings("TruncatedFrame", decoder.snapshot().last_error_name);
+    try std.testing.expectEqual(ZlibDecoder.RecoverabilityHint.truncated_input, decoder.snapshot().recoverability_hint);
+
+    const corrupt = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(corrupt);
+    corrupt[corrupt.len - 1] ^= 1;
+    try std.testing.expectError(error.ChecksumMismatch, decoder.reset(corrupt, &scratch));
+    try std.testing.expectEqualStrings("ChecksumMismatch", decoder.snapshot().last_error_name);
+    try std.testing.expectEqual(ZlibDecoder.RecoverabilityHint.payload_corrupt, decoder.snapshot().recoverability_hint);
+
+    const dict = "hello ";
+    const with_dict = try encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, "hello hello", dict, optionsForLevel(.default));
+    defer std.testing.allocator.free(with_dict);
+    try std.testing.expectError(error.NeedDictionary, decoder.reset(with_dict, &scratch));
+    try std.testing.expectEqualStrings("NeedDictionary", decoder.snapshot().last_error_name);
+    try std.testing.expectEqual(ZlibDecoder.RecoverabilityHint.retry_with_dictionary, decoder.snapshot().recoverability_hint);
 }
 
 test "zlib concatenated streams decode in sequence" {
