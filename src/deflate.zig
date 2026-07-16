@@ -1353,7 +1353,7 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
     const dist_decoder = makeDynamicDistanceDecoder(dist_table);
 
     while (true) {
-        const symbol = (try lit_decoder.decode(&reader)).value;
+        const symbol = try lit_decoder.decodeValue(&reader);
         if (symbol < 256) {
             try out.append(allocator, @intCast(symbol));
         } else if (symbol == 256) {
@@ -1361,7 +1361,7 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
             return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, &reader);
-            const distance_symbol = (try dist_decoder.decode(&reader)).value;
+            const distance_symbol = try dist_decoder.decodeValue(&reader);
             const distance = try decodeDistance(distance_symbol, &reader);
             try appendMatch(allocator, &out, length, distance);
         } else {
@@ -2073,7 +2073,7 @@ fn decodeCompressedBlockFromReaderFromBase(
     dist_table: anytype,
 ) !void {
     while (true) {
-        const symbol = (try lit_table.decode(reader)).value;
+        const symbol = try lit_table.decodeValue(reader);
         if (symbol < 256) {
             try ensureOutputLimit(out.items.len, 1, max_output_len);
             try out.append(allocator, @intCast(symbol));
@@ -2081,7 +2081,7 @@ fn decodeCompressedBlockFromReaderFromBase(
             return;
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, reader);
-            const distance_symbol = (try dist_table.decode(reader)).value;
+            const distance_symbol = try dist_table.decodeValue(reader);
             const distance = try decodeDistance(distance_symbol, reader);
             try appendMatchWithDictionaryFromBase(allocator, out, dictionary, history_start, length, distance, max_output_len);
         } else {
@@ -2099,7 +2099,7 @@ fn decodeCompressedBlockIntoReader(
     dist_table: anytype,
 ) Error!void {
     while (true) {
-        const symbol = (try lit_table.decode(reader)).value;
+        const symbol = try lit_table.decodeValue(reader);
         if (symbol < 256) {
             if (out_offset.* == output.len) return error.OutputTooSmall;
             output[out_offset.*] = @intCast(symbol);
@@ -2108,7 +2108,7 @@ fn decodeCompressedBlockIntoReader(
             return;
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, reader);
-            const distance_symbol = (try dist_table.decode(reader)).value;
+            const distance_symbol = try dist_table.decodeValue(reader);
             const distance = try decodeDistance(distance_symbol, reader);
             try copyMatchWithDictionary(output[0..out_offset.*], dictionary, output[out_offset.*..], length, distance);
             out_offset.* += length;

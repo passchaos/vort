@@ -691,6 +691,9 @@ architecture blindly.
 - [x] Dynamic literal/length decoding uses a 9-bit fast lookup table, cutting
   per-block lookup construction for small dynamic streams while preserving the
   fallback path for longer canonical codes.
+- [x] Dynamic deflate block decode uses a `FastDecoder.decodeValue` path for
+  literal/length and distance symbols, avoiding Symbol struct construction when
+  only the numeric symbol is needed in hot loops.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

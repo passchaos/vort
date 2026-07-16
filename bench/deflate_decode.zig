@@ -190,7 +190,7 @@ fn printStage(stdout: *std.Io.Writer, elapsed_ns_signed: i128, name: []const u8,
 
 fn decodeDynamicPayloadForBench(reader: *bitstream.BitReader, output: []u8, out_offset: *usize, lit_decoder: anytype, dist_decoder: anytype) !void {
     while (true) {
-        const symbol = (try lit_decoder.decode(reader)).value;
+        const symbol = try lit_decoder.decodeValue(reader);
         if (symbol < 256) {
             if (out_offset.* == output.len) return error.OutputTooSmall;
             output[out_offset.*] = @intCast(symbol);
@@ -199,7 +199,7 @@ fn decodeDynamicPayloadForBench(reader: *bitstream.BitReader, output: []u8, out_
             return;
         } else if (symbol <= 285) {
             const length = try decodeLengthForBench(symbol, reader);
-            const distance_symbol = (try dist_decoder.decode(reader)).value;
+            const distance_symbol = try dist_decoder.decodeValue(reader);
             const distance = try decodeDistanceForBench(distance_symbol, reader);
             try copyMatchForBench(output[0..out_offset.*], output[out_offset.*..], length, distance);
             out_offset.* += length;
