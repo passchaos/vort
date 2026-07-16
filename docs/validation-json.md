@@ -1848,8 +1848,8 @@ zig build run-native-allocation-smoke
 
 This smoke report gates the allocation report by requiring selected
 caller-owned/native decode paths to remain zero-allocation, including AnyDecoder,
-ZlibDecoder chunk/dictionary/varied-PNG decode, GzipDecoder single-member and
-concatenated chunk scratch decode, embedded and sidecar partial deflate/LDM range decode, embedded/sidecar
+ZlibDecoder chunk/dictionary/varied-PNG scanline decode, GzipDecoder single-member
+and concatenated chunk scratch decode, embedded and sidecar partial deflate/LDM range decode, embedded/sidecar
 deflate/LDM validation, and dictionary-deflate range/validation with caller-owned
 payload/patch scratch.
 

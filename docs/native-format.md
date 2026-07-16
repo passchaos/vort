@@ -181,8 +181,13 @@ result through bounded output chunks.
 This is the wrapper shape used by PNG IDAT data, so multi-filter RGB/RGBA PNG-like zlib payloads—including varied row widths—can use
 Vort without an output allocation when the decoded size is known or preflighted.
 Exact-size initializers reject streams whose decoded size differs from the caller's
-PNG/IHDR-derived expectation before any bounded-output drain begins. `ZlibDecoder` also records wrapper/header, missing-dictionary, truncation, and
-Adler-32 mismatch diagnostics through the shared `StreamingDiagnostics` surface.
+PNG/IHDR-derived expectation before any bounded-output drain begins. For PNG
+consumers that want scanline-sized reads, `stepPngScanline` drains exactly one
+decoded row at a time, returns the row filter byte separately, validates the
+filter method range 0..4, and copies only the row payload bytes into the caller's
+row buffer. `ZlibDecoder` also records wrapper/header, missing-dictionary,
+truncation, Adler-32 mismatch, and PNG row-boundary diagnostics through the
+shared `StreamingDiagnostics` surface.
 
 `GzipDecoder` provides the same caller-owned bounded-output shape for ordinary
 gzip-wrapped deflate streams. It accepts either a complete gzip member or

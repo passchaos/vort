@@ -2654,6 +2654,21 @@ pub const ZlibDecoder = struct {
         recoverability_hint: RecoverabilityHint,
     };
 
+    pub const PngScanlineStep = struct {
+        /// PNG filter method byte for the row that was just drained. This is
+        /// null only when the decoder was already complete and no row was read.
+        filter: ?u8 = null,
+        /// Pixel/filter-payload bytes copied into the caller row buffer. The
+        /// leading filter byte is intentionally excluded because PNG filters are
+        /// control metadata rather than reconstructed pixel data.
+        row_bytes: usize = 0,
+        /// Bytes consumed from the decoded zlib payload for this row, including
+        /// the leading filter byte.
+        decoded_consumed: usize = 0,
+        progress: core.Progress = .{},
+        status: core.StepResult.Status = .need_output,
+    };
+
     pub fn init(input: []const u8, scratch: []u8) Error!ZlibDecoder {
         var self = ZlibDecoder{};
         try self.reset(input, scratch);
@@ -2815,6 +2830,42 @@ pub const ZlibDecoder = struct {
         if (self.offset == self.decoded.len) self.done = true;
         return .{
             .progress = .{ .input_read = if (self.done) self.frame_len else 0, .output_written = n },
+            .status = if (self.done) .done else .need_output,
+        };
+    }
+
+    pub fn stepPngScanline(self: *ZlibDecoder, row_output: []u8) Error!PngScanlineStep {
+        if (self.done) return .{ .status = .done };
+        const decoded_consumed = std.math.add(usize, 1, row_output.len) catch {
+            self.recordError(error.IntegerOverflow);
+            return error.IntegerOverflow;
+        };
+        if (self.decoded.len - self.offset < decoded_consumed) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+
+        const filter = self.decoded[self.offset];
+        if (filter > 4) {
+            // PNG filter methods are currently defined as 0..4. Catching this
+            // before copying row bytes gives image decoders an exact failing row
+            // boundary rather than surfacing a later reconstruction mismatch.
+            self.recordError(error.CorruptFrame);
+            return error.CorruptFrame;
+        }
+
+        const row_start = self.offset + 1;
+        @memcpy(row_output, self.decoded[row_start..][0..row_output.len]);
+        self.offset += decoded_consumed;
+        if (self.offset == self.decoded.len) self.done = true;
+        return .{
+            .filter = filter,
+            .row_bytes = row_output.len,
+            .decoded_consumed = decoded_consumed,
+            .progress = .{
+                .input_read = if (self.done) self.frame_len else 0,
+                .output_written = row_output.len,
+            },
             .status = if (self.done) .done else .need_output,
         };
     }
@@ -4145,6 +4196,66 @@ test "zlib decoder drains varied PNG-like chunks from caller scratch" {
         try std.testing.expectEqual(core.StepResult.Status.need_output, step.status);
     }
     try std.testing.expectEqualSlices(u8, &png_like, &out);
+}
+
+test "zlib decoder drains PNG scanlines from chunked IDAT scratch" {
+    const png_like = pngLikeVariedIdatFixture();
+    const encoded = try encodeZlibBestAlloc(std.testing.allocator, &png_like, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..7],
+        encoded[7 .. encoded.len / 2],
+        encoded[encoded.len / 2 .. encoded.len - 5],
+        encoded[encoded.len - 5 ..],
+    };
+    var compressed_scratch: [2048]u8 = undefined;
+    var scratch: [png_like.len]u8 = undefined;
+    var decoder = try ZlibDecoder.initFromChunksExactSize(&chunks, &compressed_scratch, &scratch, png_like.len);
+
+    const widths = [_]usize{ 1, 2, 8, 17 };
+    const channels = [_]usize{ 3, 4 };
+    const filters = [_]u8{ 0, 1, 2, 3, 4 };
+    var row: [17 * 4]u8 = undefined;
+    var fixture_offset: usize = 0;
+    var row_count: usize = 0;
+    for (filters) |filter| {
+        for (channels) |channel_count| {
+            for (widths) |width| {
+                const row_len = width * channel_count;
+                const step = try decoder.stepPngScanline(row[0..row_len]);
+                try std.testing.expectEqual(filter, step.filter.?);
+                try std.testing.expectEqual(row_len, step.row_bytes);
+                try std.testing.expectEqual(row_len + 1, step.decoded_consumed);
+                try std.testing.expectEqual(row_len, step.progress.output_written);
+                try std.testing.expectEqual(filter, png_like[fixture_offset]);
+                try std.testing.expectEqualSlices(u8, png_like[fixture_offset + 1 ..][0..row_len], row[0..row_len]);
+                fixture_offset += row_len + 1;
+                row_count += 1;
+                if (fixture_offset == png_like.len) {
+                    try std.testing.expectEqual(core.StepResult.Status.done, step.status);
+                    try std.testing.expectEqual(encoded.len, step.progress.input_read);
+                } else {
+                    try std.testing.expectEqual(core.StepResult.Status.need_output, step.status);
+                    try std.testing.expectEqual(@as(usize, 0), step.progress.input_read);
+                }
+            }
+        }
+    }
+    try std.testing.expectEqual(png_like.len, fixture_offset);
+    try std.testing.expectEqual(@as(usize, 40), row_count);
+    try std.testing.expectEqual(core.StepResult.Status.done, (try decoder.stepPngScanline(row[0..0])).status);
+
+    var malformed = png_like;
+    malformed[0] = 5;
+    const bad_filter = try encodeZlibBestAlloc(std.testing.allocator, &malformed, optionsForLevel(.default));
+    defer std.testing.allocator.free(bad_filter);
+    var bad_decoder = try ZlibDecoder.initExactSize(bad_filter, &scratch, malformed.len);
+    try std.testing.expectError(error.CorruptFrame, bad_decoder.stepPngScanline(row[0..3]));
+    try std.testing.expectEqualStrings("CorruptFrame", bad_decoder.snapshot().last_error_name);
+    try std.testing.expectEqual(ZlibDecoder.RecoverabilityHint.payload_corrupt, bad_decoder.snapshot().recoverability_hint);
+
+    var mismatch_decoder = try ZlibDecoder.initExactSize(encoded, &scratch, png_like.len);
+    try std.testing.expectError(error.SizeMismatch, mismatch_decoder.stepPngScanline(scratch[0..scratch.len]));
 }
 
 test "zlib decoder supports preset dictionary streams" {

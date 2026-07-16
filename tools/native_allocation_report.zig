@@ -67,6 +67,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureZlibDecoderPngLike(allocator));
     try rows.append(allocator, try measureZlibDecoderPngLikeChunks(allocator));
     try rows.append(allocator, try measureZlibDecoderPngLikeVariedChunks(allocator));
+    try rows.append(allocator, try measureZlibDecoderPngScanlines(allocator));
     try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
     try rows.append(allocator, try measureGzipDecoderScratch(allocator));
     try rows.append(allocator, try measureGzipDecoderConcatenatedChunks(allocator));
@@ -461,6 +462,43 @@ fn measureZlibDecoderPngLikeVariedChunks(backing: std.mem.Allocator) !CaseStats 
     const result = try decoder.step(out);
     try std.testing.expectEqual(out.len, result.progress.output_written);
     return stats("zlib_decoder_png_varied_chunks_scratch", encoded.len, result.progress.output_written, failing);
+}
+
+fn measureZlibDecoderPngScanlines(backing: std.mem.Allocator) !CaseStats {
+    const png_like = pngLikeVariedIdatFixture();
+    const encoded = try vort.encodeZlibBestAlloc(backing, &png_like, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..7],
+        encoded[7 .. encoded.len / 2],
+        encoded[encoded.len / 2 .. encoded.len - 5],
+        encoded[encoded.len - 5 ..],
+    };
+    const compressed_scratch = try backing.alloc(u8, encoded.len);
+    defer backing.free(compressed_scratch);
+    const output_scratch = try backing.alloc(u8, png_like.len);
+    defer backing.free(output_scratch);
+    const row = try backing.alloc(u8, 17 * 4);
+    defer backing.free(row);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    var decoder = try vort.ZlibDecoder.initFromChunksExactSize(&chunks, compressed_scratch, output_scratch, png_like.len);
+    const widths = [_]usize{ 1, 2, 8, 17 };
+    const channels = [_]usize{ 3, 4 };
+    const filters = [_]u8{ 0, 1, 2, 3, 4 };
+    var output_bytes: usize = 0;
+    for (filters) |filter| {
+        for (channels) |channel_count| {
+            for (widths) |width| {
+                const row_len = width * channel_count;
+                const result = try decoder.stepPngScanline(row[0..row_len]);
+                try std.testing.expectEqual(filter, result.filter.?);
+                output_bytes += result.progress.output_written;
+            }
+        }
+    }
+    try std.testing.expect(decoder.snapshot().done);
+    return stats("zlib_decoder_png_scanline_scratch", encoded.len, output_bytes, failing);
 }
 
 fn measureZlibDecoderDictionaryChunks(backing: std.mem.Allocator) !CaseStats {
