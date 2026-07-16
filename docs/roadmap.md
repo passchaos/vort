@@ -672,6 +672,9 @@ architecture blindly.
 - [x] Deflate decode hot-path benchmark reports allocator-returning,
   exact-size allocation, and caller-buffer rows for each raw/zlib/gzip sample,
   separating allocation overhead from inflate-core throughput.
+- [x] Deflate decode hot-path benchmark includes dynamic-block stage rows for
+  header inspection and total caller-buffer decode, exposing how much small
+  dynamic streams spend before payload copying.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
