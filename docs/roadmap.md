@@ -674,6 +674,9 @@ architecture blindly.
 - [x] Automated per-file Silesia throughput report.
 - [x] Markdown benchmark dashboard export for Silesia suite.
 - [x] Standard corpus Markdown dashboard per-codec summary totals.
+- [x] Standard corpus report records Vort fastest and default zlib rows side by
+  side, so speed-oriented and stronger-ratio presets are compared against
+  gzip, zlib-ng, zlib-rs, and zstd without relying on a single proxy row.
 - [x] External file/directory throughput dashboard input mode.
 - [x] External tar-archive throughput dashboard input mode.
 - [x] Full-size Silesia Markdown dashboard export.
