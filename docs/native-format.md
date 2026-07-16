@@ -257,19 +257,22 @@ variant. Native dictionary-patch frames can use this path directly, so full-fram
 dictionary range reads can materialize into the caller's target buffer and then
 validate the frame CRC-32 without allocating a whole decoded frame. Native
 dictionary-deflate frames use the same final patch decode-into step after
-inflating the compressed patch payload. Full-frame dictionary-deflate range reads
-can provide `DictionaryRangeDecodeBuffers.patch_scratch` through the indexed or
-sidecar `WithBuffers` APIs so both index parsing and patch inflation reuse
-caller-owned storage. Partial dictionary ranges continue to use the decoded-frame
-cache path so subranges share one verified decoded copy within batch requests;
-when patch scratch is supplied, the cached frame allocation remains the only
-required per-frame allocation for dictionary-deflate partial reads. Allocator-
-returning dictionary frame decoders also have exact-size and output-limited
-variants, matching the non-dictionary native safety surface while still requiring
-the caller-supplied dictionary bytes. Deflate-wrapped dictionary patches bound
-the intermediate inflated patch size from the declared decoded output length and
-reject non-progress literal operations, so a small final payload cannot force
-unbounded patch materialization.
+inflating the compressed patch payload. Dictionary range reads
+can provide `DictionaryRangeDecodeBuffers` through the indexed or sidecar
+`WithBuffers` APIs so index parsing, full-frame dictionary-deflate patch
+inflation, and partial decoded-frame materialization reuse caller-owned storage.
+`payload_scratch` should hold the largest decoded frame a caller wants to serve
+without allocating a cache entry, while `patch_scratch` should hold the matching
+maximum dictionary patch size. When payload scratch is supplied to batch reads,
+the implementation favors deterministic zero-allocation re-decode over the lazy
+heap-backed decoded-frame cache; callers that omit payload scratch keep the cache
+behavior so nearby subranges share one verified decoded copy within a batch.
+Allocator-returning dictionary frame decoders also have exact-size and
+output-limited variants, matching the non-dictionary native safety surface while
+still requiring the caller-supplied dictionary bytes. Deflate-wrapped dictionary
+patches bound the intermediate inflated patch size from the declared decoded
+output length and reject non-progress literal operations, so a small final
+payload cannot force unbounded patch materialization.
 
 ## Long-distance decode-into and full-frame range fast path
 

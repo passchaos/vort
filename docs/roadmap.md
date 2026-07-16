@@ -120,6 +120,7 @@ architecture blindly.
 - [x] Full-frame native dictionary-patch range-decode into path writes directly to caller buffers without temporary decoded-frame allocation.
 - [x] Native dictionary-deflate frame decode-into uses caller buffers after inflating the patch payload.
 - [x] Full-frame native dictionary-deflate range-decode can reuse caller-owned patch scratch and index buffers at zero allocations.
+- [x] Partial native dictionary-deflate range-decode can reuse caller-owned payload and patch scratch at zero allocations.
 - [x] Native dictionary-patch/deflate allocator decoders expose exact-size and output-limited variants.
 - [x] Native dictionary-deflate patch inflation is bounded by declared decoded output size.
 - [x] Dictionary patch decoder rejects non-progress literal operations.

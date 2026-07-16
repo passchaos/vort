@@ -1076,15 +1076,27 @@ pub const RangeIntoRequest = struct {
 
 pub const DictionaryRangeDecodeBuffers = struct {
     index_buffer: []FrameIndexEntry,
-    /// Scratch used when range decode takes the dictionary-deflate fast path.
-    /// It should be sized to maxPatchSizeForDecodedLen(max frame output) for
-    /// streams where callers want dictionary-deflate full-frame reads to stay
+    /// Scratch used when a range only covers part of a compressed dictionary
+    /// frame. It should be sized to the largest frame output callers want to
+    /// range-read without allocating a decoded-frame cache entry.
+    payload_scratch: []u8 = &.{},
+    /// Scratch used when range decode inflates a dictionary-deflate patch. It
+    /// should be sized to maxPatchSizeForDecodedLen(max frame output) for
+    /// streams where callers want dictionary-deflate reads to stay
     /// allocation-free.
     patch_scratch: []u8 = &.{},
 };
 
-fn dictionaryRangePatchScratch(buffers: DictionaryRangeDecodeBuffers) ?[]u8 {
-    return if (buffers.patch_scratch.len == 0) null else buffers.patch_scratch;
+const RangeDecodeScratch = struct {
+    payload_scratch: ?[]u8 = null,
+    patch_scratch: ?[]u8 = null,
+};
+
+fn dictionaryRangeScratch(buffers: DictionaryRangeDecodeBuffers) RangeDecodeScratch {
+    return .{
+        .payload_scratch = if (buffers.payload_scratch.len == 0) null else buffers.payload_scratch,
+        .patch_scratch = if (buffers.patch_scratch.len == 0) null else buffers.patch_scratch,
+    };
 }
 
 pub const RangeBatchDecodeResult = struct {
@@ -1184,14 +1196,14 @@ pub fn decodeRangesInto(allocator: std.mem.Allocator, input: []const u8, index: 
 }
 
 pub fn decodeRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
-    return decodeRangesWithDictionaryIntoWithOptionalPatchScratch(allocator, dict, input, index, requests, results, null);
+    return decodeRangesWithDictionaryIntoWithScratch(allocator, dict, input, index, requests, results, .{});
 }
 
 pub fn decodeRangesWithDictionaryIntoWithPatchScratch(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, patch_scratch: []u8) !void {
-    return decodeRangesWithDictionaryIntoWithOptionalPatchScratch(allocator, dict, input, index, requests, results, patch_scratch);
+    return decodeRangesWithDictionaryIntoWithScratch(allocator, dict, input, index, requests, results, .{ .patch_scratch = patch_scratch });
 }
 
-fn decodeRangesWithDictionaryIntoWithOptionalPatchScratch(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, patch_scratch: ?[]u8) !void {
+fn decodeRangesWithDictionaryIntoWithScratch(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, scratch: RangeDecodeScratch) !void {
     // Decode many ranges with one structural index validation and one decoded
     // copy per referenced frame. This matters for small random reads over
     // indexed streams where several logical ranges often land in the same
@@ -1200,8 +1212,13 @@ fn decodeRangesWithDictionaryIntoWithOptionalPatchScratch(allocator: std.mem.All
     try validateBatchRangeIntoRequests(index, requests, results);
     var decoded_cache = LazyDecodedFrameCache.init(allocator, index.len);
     defer decoded_cache.deinit();
+    // Caller-owned payload scratch is intentionally used without the cache
+    // index array: that preserves the allocation-free contract for callers that
+    // prefer deterministic memory use over avoiding repeated decodes of the same
+    // partial frame within one batch.
+    const cache = if (scratch.payload_scratch == null) &decoded_cache else null;
     for (requests, 0..) |request, i| {
-        results[i] = try decodeRangeWithDictionaryIntoValidated(allocator, dict, input, index, request.offset, request.length, request.output, &decoded_cache, patch_scratch);
+        results[i] = try decodeRangeWithDictionaryIntoValidated(allocator, dict, input, index, request.offset, request.length, request.output, cache, scratch);
     }
 }
 
@@ -1246,17 +1263,17 @@ fn validateBatchRangeIntoRequests(index: []const FrameIndexEntry, requests: []co
 }
 
 pub fn decodeRangeWithDictionaryInto(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize, output: []u8) !RangeDecodeIntoResult {
-    return decodeRangeWithDictionaryIntoWithOptionalPatchScratch(allocator, dict, input, index, offset, length, output, null);
+    return decodeRangeWithDictionaryIntoWithScratch(allocator, dict, input, index, offset, length, output, .{});
 }
 
 pub fn decodeRangeWithDictionaryIntoWithPatchScratch(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize, output: []u8, patch_scratch: []u8) !RangeDecodeIntoResult {
-    return decodeRangeWithDictionaryIntoWithOptionalPatchScratch(allocator, dict, input, index, offset, length, output, patch_scratch);
+    return decodeRangeWithDictionaryIntoWithScratch(allocator, dict, input, index, offset, length, output, .{ .patch_scratch = patch_scratch });
 }
 
-fn decodeRangeWithDictionaryIntoWithOptionalPatchScratch(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize, output: []u8, patch_scratch: ?[]u8) !RangeDecodeIntoResult {
+fn decodeRangeWithDictionaryIntoWithScratch(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize, output: []u8, scratch: RangeDecodeScratch) !RangeDecodeIntoResult {
     if (output.len < length) return error.OutputTooSmall;
     try validateFrameIndex(index);
-    return decodeRangeWithDictionaryIntoValidated(allocator, dict, input, index, offset, length, output, null, patch_scratch);
+    return decodeRangeWithDictionaryIntoValidated(allocator, dict, input, index, offset, length, output, null, scratch);
 }
 
 fn decodeRangeWithDictionaryIntoValidated(
@@ -1268,7 +1285,7 @@ fn decodeRangeWithDictionaryIntoValidated(
     length: usize,
     output: []u8,
     decoded_cache: ?*LazyDecodedFrameCache,
-    patch_scratch: ?[]u8,
+    scratch: RangeDecodeScratch,
 ) !RangeDecodeIntoResult {
     var crc = checksum.Crc32.init();
     if (length == 0) {
@@ -1288,10 +1305,10 @@ fn decodeRangeWithDictionaryIntoValidated(
         if (try copyStoredRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
         if (try copyRleRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
         if (try copyFullDeflateRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
-        if (try copyFullDictionaryRangeIntoIfPossible(allocator, dict, input, entry, offset, end, output, &written, &crc, patch_scratch)) continue;
+        if (try copyFullDictionaryRangeIntoIfPossible(allocator, dict, input, entry, offset, end, output, &written, &crc, scratch.patch_scratch)) continue;
         if (try copyFullLongDistanceRangeIntoIfPossible(input, entry, offset, end, output, &written, &crc)) continue;
-        const decoded = try decodedFrameForRange(allocator, dict, input, entry, i, decoded_cache, patch_scratch);
-        defer if (decoded_cache == null) allocator.free(decoded);
+        const decoded = try decodedFrameForRange(allocator, dict, input, entry, i, decoded_cache, scratch);
+        defer if (decoded_cache == null and scratch.payload_scratch == null) allocator.free(decoded);
         const frame_start = entry.uncompressed_offset;
         const frame_end = entry.uncompressed_offset + entry.uncompressed_len;
         const copy_start = if (offset > frame_start) offset - frame_start else 0;
@@ -1505,19 +1522,32 @@ fn decodedFrameForRange(
     entry: FrameIndexEntry,
     index_position: usize,
     decoded_cache: ?*LazyDecodedFrameCache,
-    patch_scratch: ?[]u8,
+    scratch: RangeDecodeScratch,
 ) ![]u8 {
+    if (scratch.payload_scratch) |buffer| {
+        const written = try decodeIndexedFramePayloadInto(allocator, dict, input, entry, buffer, scratch.patch_scratch);
+        return buffer[0..written];
+    }
     if (decoded_cache) |lazy_cache| {
         const cache = try lazy_cache.slice();
         if (cache[index_position]) |decoded| return decoded;
-        const decoded = try decodeIndexedFramePayloadAlloc(allocator, dict, input, entry, patch_scratch);
+        const decoded = try decodeIndexedFramePayloadAlloc(allocator, dict, input, entry, scratch.patch_scratch);
         cache[index_position] = decoded;
         return decoded;
     }
-    return decodeIndexedFramePayloadAlloc(allocator, dict, input, entry, patch_scratch);
+    return decodeIndexedFramePayloadAlloc(allocator, dict, input, entry, scratch.patch_scratch);
 }
 
 fn decodeIndexedFramePayloadAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, entry: FrameIndexEntry, patch_scratch: ?[]u8) ![]u8 {
+    const output_len = std.math.cast(usize, entry.uncompressed_len) orelse return error.IntegerOverflow;
+    const decoded = try allocator.alloc(u8, output_len);
+    errdefer allocator.free(decoded);
+    const written = try decodeIndexedFramePayloadInto(allocator, dict, input, entry, decoded, patch_scratch);
+    if (written != output_len) return error.SizeMismatch;
+    return decoded;
+}
+
+fn decodeIndexedFramePayloadInto(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, entry: FrameIndexEntry, output: []u8, patch_scratch: ?[]u8) !usize {
     if (input.len - entry.frame_offset < entry.frame_len) return error.TruncatedFrame;
     const frame = input[entry.frame_offset..][0..entry.frame_len];
     const frame_info = try parseHeader(frame);
@@ -1525,19 +1555,17 @@ fn decodeIndexedFramePayloadAlloc(allocator: std.mem.Allocator, dict: ?[]const u
     if (entry.checksum != frame_info.checksum) return error.ChecksumMismatch;
     if (entry.uncompressed_len != frame_info.uncompressed_size) return error.CorruptFrame;
     const output_len = std.math.cast(usize, entry.uncompressed_len) orelse return error.IntegerOverflow;
+    if (output.len < output_len) return error.OutputTooSmall;
+    const target = output[0..output_len];
     if (frame_info.flags == flags_dictionary_patch or frame_info.flags == flags_dictionary_deflate) {
         const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
-        const decoded = try allocator.alloc(u8, output_len);
-        errdefer allocator.free(decoded);
-        const written = try decodeDictionaryPatchIntoWithOptionalPatchScratch(allocator, dictionary_bytes, frame, decoded, patch_scratch);
+        const written = try decodeDictionaryPatchIntoWithOptionalPatchScratch(allocator, dictionary_bytes, frame, target, patch_scratch);
         if (written != output_len) return error.SizeMismatch;
-        return decoded;
+        return written;
     }
-    const decoded = try allocator.alloc(u8, output_len);
-    errdefer allocator.free(decoded);
-    const written = try decodeAnyInto(frame, decoded);
+    const written = try decodeAnyInto(frame, target);
     if (written != output_len) return error.SizeMismatch;
-    return decoded;
+    return written;
 }
 
 pub fn decodeRangeWithDictionaryAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, offset: u64, length: usize) ![]u8 {
@@ -2842,7 +2870,7 @@ pub fn decodeSidecarIndexedRangeWithDictionaryIntoWithIndexBuffer(allocator: std
 
 pub fn decodeSidecarIndexedRangeWithDictionaryIntoWithBuffers(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize, output: []u8, buffers: DictionaryRangeDecodeBuffers) !RangeDecodeIntoResult {
     const count = try decodeFrameIndex(sidecar_index, buffers.index_buffer);
-    return decodeRangeWithDictionaryIntoWithOptionalPatchScratch(allocator, dict, input, buffers.index_buffer[0..count], offset, length, output, dictionaryRangePatchScratch(buffers));
+    return decodeRangeWithDictionaryIntoWithScratch(allocator, dict, input, buffers.index_buffer[0..count], offset, length, output, dictionaryRangeScratch(buffers));
 }
 
 pub fn decodeSidecarIndexedRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
@@ -2857,7 +2885,7 @@ pub fn decodeSidecarIndexedRangesWithDictionaryIntoWithIndexBuffer(allocator: st
 
 pub fn decodeSidecarIndexedRangesWithDictionaryIntoWithBuffers(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, sidecar_index: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, buffers: DictionaryRangeDecodeBuffers) !void {
     const count = try decodeFrameIndex(sidecar_index, buffers.index_buffer);
-    return decodeRangesWithDictionaryIntoWithOptionalPatchScratch(allocator, dict, input, buffers.index_buffer[0..count], requests, results, dictionaryRangePatchScratch(buffers));
+    return decodeRangesWithDictionaryIntoWithScratch(allocator, dict, input, buffers.index_buffer[0..count], requests, results, dictionaryRangeScratch(buffers));
 }
 
 pub fn decodeSidecarIndexedRangeAutoAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, offset: u64, length: usize) ![]u8 {
@@ -2953,7 +2981,7 @@ pub fn decodeIndexedRangeWithDictionaryIntoWithIndexBuffer(allocator: std.mem.Al
 
 pub fn decodeIndexedRangeWithDictionaryIntoWithBuffers(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, offset: u64, length: usize, output: []u8, buffers: DictionaryRangeDecodeBuffers) !RangeDecodeIntoResult {
     const decoded_index = try decodeEmbeddedIndex(input, buffers.index_buffer);
-    return decodeRangeWithDictionaryIntoWithOptionalPatchScratch(allocator, dict, input, buffers.index_buffer[0..decoded_index.entries_written], offset, length, output, dictionaryRangePatchScratch(buffers));
+    return decodeRangeWithDictionaryIntoWithScratch(allocator, dict, input, buffers.index_buffer[0..decoded_index.entries_written], offset, length, output, dictionaryRangeScratch(buffers));
 }
 
 pub fn decodeIndexedRangesWithDictionaryInto(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult) !void {
@@ -2968,7 +2996,7 @@ pub fn decodeIndexedRangesWithDictionaryIntoWithIndexBuffer(allocator: std.mem.A
 
 pub fn decodeIndexedRangesWithDictionaryIntoWithBuffers(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, requests: []const RangeIntoRequest, results: []RangeDecodeIntoResult, buffers: DictionaryRangeDecodeBuffers) !void {
     const decoded_index = try decodeEmbeddedIndex(input, buffers.index_buffer);
-    return decodeRangesWithDictionaryIntoWithOptionalPatchScratch(allocator, dict, input, buffers.index_buffer[0..decoded_index.entries_written], requests, results, dictionaryRangePatchScratch(buffers));
+    return decodeRangesWithDictionaryIntoWithScratch(allocator, dict, input, buffers.index_buffer[0..decoded_index.entries_written], requests, results, dictionaryRangeScratch(buffers));
 }
 
 pub fn decodeSelfContainedDictionaryRangeAlloc(allocator: std.mem.Allocator, input: []const u8, offset: u64, length: usize) ![]u8 {
@@ -5182,6 +5210,49 @@ test "dictionary deflate indexed stream supports batch range summaries" {
     }, full_results[0..], patch_scratch[0..]);
     try std.testing.expectEqualSlices(u8, input, &full);
     try std.testing.expectEqual(checksum.crc32(input), full_results[0].crc32);
+
+    var partial: [32]u8 = undefined;
+    var payload_scratch: [input.len]u8 = undefined;
+    const partial_result = try decodeIndexedRangeWithDictionaryIntoWithBuffers(std.testing.failing_allocator, dict, stream.items, 9, partial.len, partial[0..], .{
+        .index_buffer = index_buffer[0..],
+        .payload_scratch = payload_scratch[0..],
+        .patch_scratch = patch_scratch[0..],
+    });
+    try std.testing.expectEqual(partial.len, partial_result.output_written);
+    try std.testing.expectEqualSlices(u8, input[9..41], &partial);
+    try std.testing.expectEqual(checksum.crc32(input[9..41]), partial_result.crc32);
+
+    @memset(first[0..], '!');
+    @memset(second[0..], '!');
+    try decodeIndexedRangesWithDictionaryIntoWithBuffers(std.testing.failing_allocator, dict, stream.items, &.{
+        .{ .offset = 0, .length = first.len, .output = first[0..] },
+        .{ .offset = 9, .length = second.len, .output = second[0..] },
+    }, results[0..], .{
+        .index_buffer = index_buffer[0..],
+        .payload_scratch = payload_scratch[0..],
+        .patch_scratch = patch_scratch[0..],
+    });
+    try std.testing.expectEqualSlices(u8, input[0..16], &first);
+    try std.testing.expectEqual(checksum.crc32(&first), results[0].crc32);
+    try std.testing.expectEqualSlices(u8, input[9..41], &second);
+    try std.testing.expectEqual(checksum.crc32(&second), results[1].crc32);
+
+    var sidecar_partial: [32]u8 = undefined;
+    const sidecar_partial_result = try decodeSidecarIndexedRangeWithDictionaryIntoWithBuffers(std.testing.failing_allocator, dict, frame, index_bytes, 9, sidecar_partial.len, sidecar_partial[0..], .{
+        .index_buffer = sidecar_index_buffer[0..],
+        .payload_scratch = payload_scratch[0..],
+        .patch_scratch = patch_scratch[0..],
+    });
+    try std.testing.expectEqual(sidecar_partial.len, sidecar_partial_result.output_written);
+    try std.testing.expectEqualSlices(u8, input[9..41], &sidecar_partial);
+    try std.testing.expectEqual(checksum.crc32(input[9..41]), sidecar_partial_result.crc32);
+
+    var short_payload_scratch: [payload_scratch.len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodeIndexedRangeWithDictionaryIntoWithBuffers(std.testing.failing_allocator, dict, stream.items, 9, partial.len, partial[0..], .{
+        .index_buffer = index_buffer[0..],
+        .payload_scratch = short_payload_scratch[0..],
+        .patch_scratch = patch_scratch[0..],
+    }));
 
     try std.testing.expectError(error.InvalidDictionaryTraining, decodeIndexedRangesWithSummaryAlloc(std.testing.allocator, stream.items, &.{
         .{ .offset = 0, .length = 16 },

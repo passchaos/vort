@@ -22,6 +22,7 @@ ZERO_ALLOCATION_CASES = [
     "batch_range_into_index_buffer",
     "dictionary_range_into_index_buffer",
     "dictionary_deflate_range_into_patch_scratch",
+    "dictionary_deflate_partial_range_into_scratch",
     "embedded_validation_with_buffers",
     "embedded_validation_report_with_buffers",
     "dictionary_deflate_validation_with_buffers",
