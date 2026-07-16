@@ -26,11 +26,11 @@ ZERO_ALLOCATION_CASES = [
 ]
 
 ALLOCATION_BUDGETS = {
-    "concat_alloc": {"max_allocations": 1, "max_allocated_bytes": 49},
-    "indexed_range_alloc_full_deflate": {"max_allocations": 2, "max_allocated_bytes": 103},
-    "indexed_range_into_full_deflate": {"max_allocations": 1, "max_allocated_bytes": 80},
-    "batch_range_into_fast_paths": {"max_allocations": 1, "max_allocated_bytes": 80},
-    "embedded_validation_borrowed_dict": {"max_allocations": 8, "max_allocated_bytes": 2081},
+    "concat_alloc": {"max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 49, "max_freed_bytes": 49},
+    "indexed_range_alloc_full_deflate": {"max_allocations": 2, "max_deallocations": 2, "max_allocated_bytes": 103, "max_freed_bytes": 103},
+    "indexed_range_into_full_deflate": {"max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
+    "batch_range_into_fast_paths": {"max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
+    "embedded_validation_borrowed_dict": {"max_allocations": 8, "max_deallocations": 8, "max_allocated_bytes": 2081, "max_freed_bytes": 2081},
 }
 
 
@@ -64,16 +64,20 @@ def main() -> int:
     for name in ZERO_ALLOCATION_CASES:
         row = rows.get(name)
         if row is None:
-            case_rows.append({"case": name, "present": False, "allocations": None, "allocated_bytes": None, "matched": False})
+            case_rows.append({"case": name, "present": False, "allocations": None, "deallocations": None, "allocated_bytes": None, "freed_bytes": None, "matched": False})
             continue
         allocations = int_value(row, "allocations")
+        deallocations = int_value(row, "deallocations")
         allocated_bytes = int_value(row, "allocated_bytes")
+        freed_bytes = int_value(row, "freed_bytes")
         case_rows.append({
             "case": name,
             "present": True,
             "allocations": allocations,
+            "deallocations": deallocations,
             "allocated_bytes": allocated_bytes,
-            "matched": allocations == 0 and allocated_bytes == 0,
+            "freed_bytes": freed_bytes,
+            "matched": allocations == 0 and deallocations == 0 and allocated_bytes == 0 and freed_bytes == 0,
         })
 
     budget_rows: list[dict[str, object]] = []
@@ -84,22 +88,41 @@ def main() -> int:
                 "case": name,
                 "present": False,
                 "allocations": None,
+                "deallocations": None,
                 "allocated_bytes": None,
+                "freed_bytes": None,
                 "max_allocations": budget["max_allocations"],
+                "max_deallocations": budget["max_deallocations"],
                 "max_allocated_bytes": budget["max_allocated_bytes"],
+                "max_freed_bytes": budget["max_freed_bytes"],
+                "balanced": False,
                 "matched": False,
             })
             continue
         allocations = int_value(row, "allocations")
+        deallocations = int_value(row, "deallocations")
         allocated_bytes = int_value(row, "allocated_bytes")
+        freed_bytes = int_value(row, "freed_bytes")
+        balanced = allocations == deallocations and allocated_bytes == freed_bytes
         budget_rows.append({
             "case": name,
             "present": True,
             "allocations": allocations,
+            "deallocations": deallocations,
             "allocated_bytes": allocated_bytes,
+            "freed_bytes": freed_bytes,
             "max_allocations": budget["max_allocations"],
+            "max_deallocations": budget["max_deallocations"],
             "max_allocated_bytes": budget["max_allocated_bytes"],
-            "matched": allocations <= budget["max_allocations"] and allocated_bytes <= budget["max_allocated_bytes"],
+            "max_freed_bytes": budget["max_freed_bytes"],
+            "balanced": balanced,
+            "matched": (
+                allocations <= budget["max_allocations"]
+                and deallocations <= budget["max_deallocations"]
+                and allocated_bytes <= budget["max_allocated_bytes"]
+                and freed_bytes <= budget["max_freed_bytes"]
+                and balanced
+            ),
         })
 
     summary = {

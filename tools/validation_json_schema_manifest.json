@@ -1142,6 +1142,8 @@
         "allocated_bytes": "int",
         "allocations": "int",
         "case": "str",
+        "deallocations": "int",
+        "freed_bytes": "int",
         "matched": "bool",
         "present": "bool"
       },
@@ -1150,10 +1152,15 @@
           "fields": {
             "allocated_bytes": "int",
             "allocations": "int",
+            "balanced": "bool",
             "case": "str",
+            "deallocations": "int",
+            "freed_bytes": "int",
             "matched": "bool",
             "max_allocated_bytes": "int",
             "max_allocations": "int",
+            "max_deallocations": "int",
+            "max_freed_bytes": "int",
             "present": "bool"
           }
         }

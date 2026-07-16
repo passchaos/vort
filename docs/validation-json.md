@@ -1864,8 +1864,10 @@ Each `cases` item includes:
 | `case` | string | Case label from the native allocation report. |
 | `present` | boolean | Whether the case row existed in the report. |
 | `allocations` | integer | Observed allocation count. |
+| `deallocations` | integer | Observed deallocation count. |
 | `allocated_bytes` | integer | Observed allocated byte count. |
-| `matched` | boolean | True when the case was present and both allocation counters were zero. |
+| `freed_bytes` | integer | Observed freed byte count. |
+| `matched` | boolean | True when the case was present and all allocation counters were zero. |
 
 Each `budget_cases` item includes the same `case`, `present`, `allocations`,
 `allocated_bytes`, and `matched` fields plus:
@@ -1873,7 +1875,10 @@ Each `budget_cases` item includes the same `case`, `present`, `allocations`,
 | field | type | meaning |
 | --- | --- | --- |
 | `max_allocations` | integer | Maximum allowed allocation calls for the case. |
+| `max_deallocations` | integer | Maximum allowed deallocation calls for the case. |
 | `max_allocated_bytes` | integer | Maximum allowed allocated bytes for the case. |
+| `max_freed_bytes` | integer | Maximum allowed freed bytes for the case. |
+| `balanced` | boolean | True when allocation/free counts and bytes match exactly. |
 
 Example:
 
@@ -1890,7 +1895,9 @@ Example:
       "case": "concat_into",
       "present": true,
       "allocations": 0,
+      "deallocations": 0,
       "allocated_bytes": 0,
+      "freed_bytes": 0,
       "matched": true
     }
   ],
@@ -1899,9 +1906,14 @@ Example:
       "case": "concat_alloc",
       "present": true,
       "allocations": 1,
+      "deallocations": 1,
       "allocated_bytes": 49,
+      "freed_bytes": 49,
       "max_allocations": 1,
+      "max_deallocations": 1,
       "max_allocated_bytes": 49,
+      "max_freed_bytes": 49,
+      "balanced": true,
       "matched": true
     }
   ]

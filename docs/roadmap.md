@@ -61,6 +61,7 @@ architecture blindly.
 - [x] Native allocation report compares indexed range decode with and without caller-owned index buffers.
 - [x] Native allocation smoke gates key caller-owned decode paths at zero allocations.
 - [x] Native allocation smoke gates non-zero allocation paths with maximum allocation/byte budgets.
+- [x] Native allocation smoke verifies allocation/free count and byte balance.
 - [x] Native allocation smoke/report artifacts are validated by the shared JSON schema manifest.
 - [x] Native allocation report/smoke artifacts are indexed in the dashboard producer manifests.
 - [x] Embedded dictionary inspection validates dictionary metadata without allocating dictionary bytes.
