@@ -172,6 +172,13 @@ and uses caller-owned payload scratch for compressed native frames before draini
 bounded output chunks; dictionary-patch/deflate members additionally accept
 caller-owned patch scratch through `initWithDictionary`/`resetWithDictionary`.
 
+## Zlib bounded-output decoder
+
+`ZlibDecoder` accepts a complete zlib-wrapped deflate stream, decodes it into
+caller-owned scratch, and then drains the result through bounded output chunks.
+This is the wrapper shape used by PNG IDAT data, so PNG-like zlib payloads can use
+Vort without an output allocation when the decoded size is known or preflighted.
+
 ## Range decode summary APIs
 
 `decodeRangeWithSummaryAlloc`, `decodeIndexedRangeWithSummaryAlloc`, and the

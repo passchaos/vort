@@ -64,6 +64,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureLimitedReject(allocator, deflate_rle_stream));
     try rows.append(allocator, try measureAnyDecoderCompressed(allocator));
     try rows.append(allocator, try measureAnyDecoderDictionaryDeflate(allocator));
+    try rows.append(allocator, try measureZlibDecoderPngLike(allocator));
     try rows.append(allocator, try measureRangeAlloc(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeInto(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
@@ -350,6 +351,26 @@ fn measureAnyDecoderDictionaryDeflate(backing: std.mem.Allocator) !CaseStats {
     const result = try decoder.step(out);
     try std.testing.expectEqual(out.len, result.progress.output_written);
     return stats("any_decoder_dictionary_deflate_scratch", frame.len, result.progress.output_written, failing);
+}
+
+fn measureZlibDecoderPngLike(backing: std.mem.Allocator) !CaseStats {
+    const png_like = [_]u8{
+        0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff,
+        0x01, 0x00, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15,
+        0x02, 'a',  'a',  'a',  'a',  'a',  'a',  'a',  'a',
+        0x04, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80,
+    };
+    const encoded = try vort.encodeZlibBestAlloc(backing, &png_like, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const scratch = try backing.alloc(u8, png_like.len);
+    defer backing.free(scratch);
+    const out = try backing.alloc(u8, png_like.len);
+    defer backing.free(out);
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    var decoder = try vort.ZlibDecoder.init(encoded, scratch);
+    const result = try decoder.step(out);
+    try std.testing.expectEqual(out.len, result.progress.output_written);
+    return stats("zlib_decoder_png_like_scratch", encoded.len, result.progress.output_written, failing);
 }
 
 fn measureRangeAlloc(backing: std.mem.Allocator, stream: []const u8) !CaseStats {

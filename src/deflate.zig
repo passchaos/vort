@@ -2608,6 +2608,82 @@ pub fn decodeZlibWithDictionary(input: []const u8, output: []u8, dictionary: []c
     return decodeZlibWithOptionalDictionary(input, output, dictionary);
 }
 
+pub const ZlibDecoder = struct {
+    decoded: []const u8 = &.{},
+    frame_len: usize = 0,
+    offset: usize = 0,
+    done: bool = false,
+
+    pub const Snapshot = struct {
+        output_written: usize,
+        expected_output_len: usize,
+        payload_remaining: usize,
+        done: bool,
+    };
+
+    pub fn init(input: []const u8, scratch: []u8) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.reset(input, scratch);
+        return self;
+    }
+
+    pub fn initWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetWithDictionary(input, dictionary, scratch);
+        return self;
+    }
+
+    pub fn reset(self: *ZlibDecoder, input: []const u8, scratch: []u8) Error!void {
+        const written = try decodeZlib(input, scratch);
+        self.* = .{
+            .decoded = scratch[0..written],
+            .frame_len = input.len,
+        };
+    }
+
+    pub fn resetWithDictionary(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8) Error!void {
+        const written = try decodeZlibWithDictionary(input, scratch, dictionary);
+        self.* = .{
+            .decoded = scratch[0..written],
+            .frame_len = input.len,
+        };
+    }
+
+    pub fn snapshot(self: *const ZlibDecoder) Snapshot {
+        return .{
+            .output_written = self.offset,
+            .expected_output_len = self.decoded.len,
+            .payload_remaining = self.decoded.len - self.offset,
+            .done = self.done,
+        };
+    }
+
+    pub fn diagnostics(self: *const ZlibDecoder) core.StreamingDiagnostics {
+        const snap = self.snapshot();
+        return .{
+            .phase_name = if (snap.done) "done" else "payload",
+            .frame_input_read = if (snap.done) self.frame_len else null,
+            .output_written = snap.output_written,
+            .expected_output_len = snap.expected_output_len,
+            .payload_remaining = snap.payload_remaining,
+        };
+    }
+
+    pub fn step(self: *ZlibDecoder, output: []u8) Error!core.StepResult {
+        if (self.done) return .{ .status = .done };
+        if (output.len == 0) return .{ .status = .need_output };
+        const remaining = self.decoded[self.offset..];
+        const n = @min(output.len, remaining.len);
+        @memcpy(output[0..n], remaining[0..n]);
+        self.offset += n;
+        if (self.offset == self.decoded.len) self.done = true;
+        return .{
+            .progress = .{ .input_read = if (self.done) self.frame_len else 0, .output_written = n },
+            .status = if (self.done) .done else .need_output,
+        };
+    }
+};
+
 fn decodeZlibWithOptionalDictionary(input: []const u8, output: []u8, dictionary: ?[]const u8) Error!usize {
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
@@ -3622,6 +3698,52 @@ test "zlib stored wrapper validates checksum header and trailing data" {
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeZlibStored(with_trailing[0 .. encoded.len + 1], &out));
     try std.testing.expectError(error.TrailingData, decodeZlibStoredAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]));
+}
+
+test "zlib decoder drains PNG-like payload from caller scratch" {
+    const png_like = [_]u8{
+        0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff,
+        0x01, 0x00, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0d, 0x15,
+        0x02, 'a',  'a',  'a',  'a',  'a',  'a',  'a',  'a',
+        0x04, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80,
+    };
+    const encoded = try encodeZlibBestAlloc(std.testing.allocator, &png_like, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    var scratch: [png_like.len]u8 = undefined;
+    var decoder = try ZlibDecoder.init(encoded, &scratch);
+    try std.testing.expectEqual(png_like.len, decoder.snapshot().expected_output_len);
+    try std.testing.expectEqualStrings("payload", decoder.diagnostics().phase_name);
+    var out: [png_like.len]u8 = undefined;
+    var written: usize = 0;
+    while (true) {
+        var chunk: [7]u8 = undefined;
+        const step = try decoder.step(&chunk);
+        @memcpy(out[written..][0..step.progress.output_written], chunk[0..step.progress.output_written]);
+        written += step.progress.output_written;
+        if (step.status == .done) {
+            try std.testing.expectEqual(encoded.len, step.progress.input_read);
+            break;
+        }
+        try std.testing.expectEqual(core.StepResult.Status.need_output, step.status);
+    }
+    try std.testing.expectEqualSlices(u8, &png_like, &out);
+    try std.testing.expectEqualStrings("done", decoder.diagnostics().phase_name);
+
+    try std.testing.expectError(error.OutputTooSmall, ZlibDecoder.init(encoded, scratch[0 .. scratch.len - 1]));
+}
+
+test "zlib decoder supports preset dictionary streams" {
+    const dict = "hello ";
+    const input = "hello hello hello";
+    const encoded = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, input, dict, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    var scratch: [input.len]u8 = undefined;
+    var decoder = try ZlibDecoder.initWithDictionary(encoded, dict, &scratch);
+    var out: [input.len]u8 = undefined;
+    const step = try decoder.step(&out);
+    try std.testing.expectEqual(core.StepResult.Status.done, step.status);
+    try std.testing.expectEqualSlices(u8, input, &out);
+    try std.testing.expectError(error.NeedDictionary, ZlibDecoder.init(encoded, &scratch));
 }
 
 test "zlib concatenated streams decode in sequence" {

@@ -309,6 +309,7 @@ pub const inspectZlibStreamAllocWithDictionary = deflate.inspectZlibStreamAllocW
 pub const inspectZlibStreamAllocWithDictionaryLimited = deflate.inspectZlibStreamAllocWithDictionaryLimited;
 pub const decodeZlibStored = deflate.decodeZlibStored;
 pub const decodeZlibStoredWithDictionary = deflate.decodeZlibStoredWithDictionary;
+pub const ZlibDecoder = deflate.ZlibDecoder;
 pub const encodeZlibStoredAlloc = deflate.encodeZlibStoredAlloc;
 pub const encodeZlibStoredWithDictionaryAlloc = deflate.encodeZlibStoredWithDictionaryAlloc;
 pub const decodeZlibStoredAlloc = deflate.decodeZlibStoredAlloc;
