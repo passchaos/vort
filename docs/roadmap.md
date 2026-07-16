@@ -443,6 +443,8 @@ architecture blindly.
 - [x] ZlibDecoder initializes from caller-provided zlib byte chunks for multi-IDAT-style PNG payloads without allocation.
 - [x] ZlibDecoder direct chunk initializers decode multi-IDAT-style zlib chunks
   without requiring a compressed join scratch buffer.
+- [x] ZlibDecoder direct chunk initializers include strict, relaxed-option,
+  exact-size, and preset-dictionary variants without compressed join scratch.
 - [x] ZlibDecoder chunk smoke covers varied RGB/RGBA PNG-like rows across widths 1, 2, 8, and 17 with filters 0-4.
 - [x] ZlibDecoder drains PNG-style scanlines one row at a time, returning filter bytes separately from caller-owned row payload buffers.
 - [x] PNG scanline reconstruction supports filter methods 0-4 with caller-owned previous/current row buffers.
@@ -450,6 +452,8 @@ architecture blindly.
 - [x] PngZlibScanlineDecoder and PNG-like image helpers expose direct chunk
   decode variants that avoid compressed join scratch while preserving caller-owned
   zlib row/output buffers.
+- [x] PNG-like direct chunk helpers expose relaxed-option variants for
+  checksum/trailing-tolerant integrations without compressed join scratch.
 - [x] PNG scanline metadata helper derives row bytes, filter stride, and exact zlib payload length from IHDR-style width/height/bit-depth/color-type values.
 - [x] PNG-like zlib image helper reconstructs IDAT chunks into caller-owned full-image buffers without allocation.
 - [x] PNG zlib decode buffer-size helpers expose caller-owned scratch/output lengths and cover sub-byte indexed/grayscale-style rows.
