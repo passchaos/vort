@@ -121,20 +121,26 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
 
         pub fn init(table: HuffmanTable(max_symbols)) Self {
             var decoder = Self{ .table = table };
+            const covered = decoder.fillLookup();
+            if (covered == decoder.lookup.len) return decoder;
+
+            @memset(&decoder.lookup, .{ .symbol = 0, .bits = 0 });
+            _ = decoder.fillLookup();
+            return decoder;
+        }
+
+        fn fillLookup(self: *Self) usize {
             var covered: usize = 0;
-            for (table.entries[0..table.len]) |entry| {
-                if (entry.bits <= lookup_bits) covered += @as(usize, 1) << @intCast(lookup_bits - entry.bits);
-            }
-            if (covered != decoder.lookup.len) @memset(&decoder.lookup, .{ .symbol = 0, .bits = 0 });
-            for (table.entries[0..table.len]) |entry| {
+            for (self.table.entries[0..self.table.len]) |entry| {
                 if (entry.bits > lookup_bits) continue;
                 const fill = @as(usize, 1) << @intCast(lookup_bits - entry.bits);
+                covered += fill;
                 var i: usize = 0;
                 while (i < fill) : (i += 1) {
-                    decoder.lookup[entry.code | (i << entry.bits)] = .{ .symbol = entry.symbol, .bits = entry.bits };
+                    self.lookup[entry.code | (i << entry.bits)] = .{ .symbol = entry.symbol, .bits = entry.bits };
                 }
             }
-            return decoder;
+            return covered;
         }
 
         pub fn decode(self: *const Self, reader: anytype) Error!Symbol {

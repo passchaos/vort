@@ -699,6 +699,9 @@ architecture blindly.
 - [x] FastDecoder construction skips zeroing the lookup table when short codes
   fully cover it, cutting setup work for complete dynamic literal/distance
   alphabets while preserving fallback entries for incomplete tables.
+- [x] FastDecoder construction now optimistically fills lookup entries first and
+  only clears/refills when short codes do not fully cover the table, avoiding an
+  extra coverage pass for complete dynamic alphabets.
 - [x] Dynamic literal/length decode selects a 9-bit lookup for very short-code
   blocks and a 10-bit lookup otherwise, preserving tiny-block setup wins without
   regressing larger corpus decode throughput.
