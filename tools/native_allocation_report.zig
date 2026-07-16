@@ -66,6 +66,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureAnyDecoderDictionaryDeflate(allocator));
     try rows.append(allocator, try measureZlibDecoderPngLike(allocator));
     try rows.append(allocator, try measureZlibDecoderPngLikeChunks(allocator));
+    try rows.append(allocator, try measureZlibDecoderPngLikeVariedChunks(allocator));
     try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
     try rows.append(allocator, try measureRangeAlloc(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeInto(allocator, indexed_deflate_stream));
@@ -355,6 +356,32 @@ fn measureAnyDecoderDictionaryDeflate(backing: std.mem.Allocator) !CaseStats {
     return stats("any_decoder_dictionary_deflate_scratch", frame.len, result.progress.output_written, failing);
 }
 
+const png_like_varied_len: usize = 1020;
+
+fn pngLikeVariedIdatFixture() [png_like_varied_len]u8 {
+    const widths = [_]usize{ 1, 2, 8, 17 };
+    const channels = [_]usize{ 3, 4 };
+    const filters = [_]u8{ 0, 1, 2, 3, 4 };
+    var out: [png_like_varied_len]u8 = undefined;
+    var offset: usize = 0;
+    for (filters) |filter| {
+        for (channels) |channel_count| {
+            for (widths) |width| {
+                out[offset] = filter;
+                offset += 1;
+                const row_len = width * channel_count;
+                for (0..row_len) |i| {
+                    const value = @as(u32, filter) * 37 + @as(u32, @intCast(channel_count)) * 19 + @as(u32, @intCast(width)) * 11 + @as(u32, @intCast(i)) * 7;
+                    out[offset] = @truncate(value);
+                    offset += 1;
+                }
+            }
+        }
+    }
+    std.debug.assert(offset == out.len);
+    return out;
+}
+
 fn pngLikeIdatFixture() [150]u8 {
     return .{
         // RGB rows: filter byte + 4 pixels * 3 bytes.
@@ -409,6 +436,29 @@ fn measureZlibDecoderPngLikeChunks(backing: std.mem.Allocator) !CaseStats {
     const result = try decoder.step(out);
     try std.testing.expectEqual(out.len, result.progress.output_written);
     return stats("zlib_decoder_png_like_chunks_scratch", encoded.len, result.progress.output_written, failing);
+}
+
+fn measureZlibDecoderPngLikeVariedChunks(backing: std.mem.Allocator) !CaseStats {
+    const png_like = pngLikeVariedIdatFixture();
+    const encoded = try vort.encodeZlibBestAlloc(backing, &png_like, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..7],
+        encoded[7 .. encoded.len / 2],
+        encoded[encoded.len / 2 .. encoded.len - 5],
+        encoded[encoded.len - 5 ..],
+    };
+    const compressed_scratch = try backing.alloc(u8, encoded.len);
+    defer backing.free(compressed_scratch);
+    const output_scratch = try backing.alloc(u8, png_like.len);
+    defer backing.free(output_scratch);
+    const out = try backing.alloc(u8, png_like.len);
+    defer backing.free(out);
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    var decoder = try vort.ZlibDecoder.initFromChunksExactSize(&chunks, compressed_scratch, output_scratch, png_like.len);
+    const result = try decoder.step(out);
+    try std.testing.expectEqual(out.len, result.progress.output_written);
+    return stats("zlib_decoder_png_varied_chunks_scratch", encoded.len, result.progress.output_written, failing);
 }
 
 fn measureZlibDecoderDictionaryChunks(backing: std.mem.Allocator) !CaseStats {

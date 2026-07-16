@@ -22,6 +22,7 @@ ZERO_ALLOCATION_CASES = [
     "any_decoder_dictionary_deflate_scratch",
     "zlib_decoder_png_like_scratch",
     "zlib_decoder_png_like_chunks_scratch",
+    "zlib_decoder_png_varied_chunks_scratch",
     "zlib_decoder_dictionary_chunks_scratch",
     "indexed_range_into_index_buffer",
     "indexed_partial_range_into_scratch",

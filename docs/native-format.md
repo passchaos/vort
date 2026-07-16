@@ -178,7 +178,7 @@ caller-owned patch scratch through `initWithDictionary`/`resetWithDictionary`.
 zlib byte chunks (for example concatenated PNG IDAT chunk data), including preset
 dictionary streams, decodes it into caller-owned scratch, and then drains the
 result through bounded output chunks.
-This is the wrapper shape used by PNG IDAT data, so multi-filter RGB/RGBA PNG-like zlib payloads can use
+This is the wrapper shape used by PNG IDAT data, so multi-filter RGB/RGBA PNG-like zlib payloads—including varied row widths—can use
 Vort without an output allocation when the decoded size is known or preflighted.
 Exact-size initializers reject streams whose decoded size differs from the caller's
 PNG/IHDR-derived expectation before any bounded-output drain begins. `ZlibDecoder` also records wrapper/header, missing-dictionary, truncation, and

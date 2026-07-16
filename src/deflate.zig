@@ -3829,6 +3829,32 @@ test "zlib stored wrapper validates checksum header and trailing data" {
     try std.testing.expectError(error.TrailingData, decodeZlibStoredAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]));
 }
 
+const png_like_varied_len: usize = 1020;
+
+fn pngLikeVariedIdatFixture() [png_like_varied_len]u8 {
+    const widths = [_]usize{ 1, 2, 8, 17 };
+    const channels = [_]usize{ 3, 4 };
+    const filters = [_]u8{ 0, 1, 2, 3, 4 };
+    var out: [png_like_varied_len]u8 = undefined;
+    var offset: usize = 0;
+    for (filters) |filter| {
+        for (channels) |channel_count| {
+            for (widths) |width| {
+                out[offset] = filter;
+                offset += 1;
+                const row_len = width * channel_count;
+                for (0..row_len) |i| {
+                    const value = @as(u32, filter) * 37 + @as(u32, @intCast(channel_count)) * 19 + @as(u32, @intCast(width)) * 11 + @as(u32, @intCast(i)) * 7;
+                    out[offset] = @truncate(value);
+                    offset += 1;
+                }
+            }
+        }
+    }
+    std.debug.assert(offset == out.len);
+    return out;
+}
+
 fn pngLikeIdatFixture() [150]u8 {
     return .{
         // RGB rows: filter byte + 4 pixels * 3 bytes.
@@ -3889,6 +3915,32 @@ test "zlib decoder drains PNG-like payload from caller scratch" {
     try std.testing.expectError(error.OutputTooSmall, ZlibDecoder.initExactSize(encoded, scratch[0 .. scratch.len - 1], png_like.len));
     try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initExactSize(encoded, &scratch, png_like.len - 1));
     try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initExactSize(encoded, &scratch, png_like.len + 1));
+}
+
+test "zlib decoder drains varied PNG-like chunks from caller scratch" {
+    const png_like = pngLikeVariedIdatFixture();
+    const encoded = try encodeZlibBestAlloc(std.testing.allocator, &png_like, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..7],
+        encoded[7 .. encoded.len / 2],
+        encoded[encoded.len / 2 .. encoded.len - 5],
+        encoded[encoded.len - 5 ..],
+    };
+    var compressed_scratch: [2048]u8 = undefined;
+    var scratch: [png_like.len]u8 = undefined;
+    var decoder = try ZlibDecoder.initFromChunksExactSize(&chunks, &compressed_scratch, &scratch, png_like.len);
+    var out: [png_like.len]u8 = undefined;
+    var written: usize = 0;
+    while (true) {
+        var chunk: [31]u8 = undefined;
+        const step = try decoder.step(&chunk);
+        @memcpy(out[written..][0..step.progress.output_written], chunk[0..step.progress.output_written]);
+        written += step.progress.output_written;
+        if (step.status == .done) break;
+        try std.testing.expectEqual(core.StepResult.Status.need_output, step.status);
+    }
+    try std.testing.expectEqualSlices(u8, &png_like, &out);
 }
 
 test "zlib decoder supports preset dictionary streams" {
