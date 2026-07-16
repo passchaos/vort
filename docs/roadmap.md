@@ -626,6 +626,9 @@ architecture blindly.
 - [x] Compression level presets for fast/default/best strategy configs.
 - [x] Fast preset skips dynamic block candidate generation.
 - [x] Fastest preset with shallow hash-chain search for speed.
+- [x] Fastest preset can select dynamic Huffman blocks while retaining the
+  shallow hash-chain search, improving source/text compression ratio for
+  speed-oriented corpus dashboards without changing the parser budget.
 - [x] Compression-level report validating parser/cost-model settings and round trips.
 - [x] Compression-level report exposes incompressible stored fast-path decisions.
 - [x] Compression-level report accepts ad-hoc file corpora.

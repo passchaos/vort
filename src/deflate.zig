@@ -244,7 +244,7 @@ pub const ZlibDecodeOptions = struct {
 
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
-        .fastest => .{ .parser = .hash, .lz77_options = .{ .window_len = 8 * 1024, .max_chain = 4, .nice_len = 8, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4, .max_match = 64, .min_savings_bits = 8 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
+        .fastest => .{ .parser = .hash, .lz77_options = .{ .window_len = 8 * 1024, .max_chain = 4, .nice_len = 8, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4, .max_match = 64, .min_savings_bits = 8 }, .block_selection = .stored_fixed_dynamic, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
         .fast => .{ .parser = .hash, .lz77_options = .{ .window_len = 16 * 1024, .max_chain = 32, .nice_len = 16, .max_candidates = 2, .lazy_min_gain = 3, .min_match = 4, .max_match = 128, .min_savings_bits = 4 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 16 * 1024, .max_block_len = max_stored_block_len, .sample_len = 2048, .search_step = 16 * 1024 } },
         .default => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 128, .nice_len = 64, .max_candidates = 4, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 1 }, .split_options = .{ .min_block_len = 8 * 1024, .max_block_len = max_stored_block_len, .sample_len = 4096, .search_step = 8 * 1024 } },
         .best => .{ .parser = .optimal, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 512, .nice_len = 128, .max_candidates = lz77.max_optimal_candidates, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 4 * 1024, .max_block_len = max_stored_block_len, .sample_len = 8192, .search_step = 4 * 1024 } },
@@ -376,7 +376,7 @@ pub fn usesStoredFastPath(input: []const u8, options: CompressionOptions) bool {
     if (normalized.strategy != .default) return false;
     if (normalized.parser != .hash and normalized.parser != .lazy) return false;
     if (normalized.parser == .lazy and normalized.block_selection != .stored_fixed_dynamic) return false;
-    if (normalized.parser == .hash and normalized.block_selection != .stored_fixed) return false;
+    if (normalized.parser == .hash and normalized.block_selection != .stored_fixed and normalized.block_selection != .stored_fixed_dynamic) return false;
     return looksIncompressible(input);
 }
 
@@ -7941,6 +7941,40 @@ test "compression level presets configure match windows and lazy thresholds" {
     try std.testing.expectEqual(@as(usize, 3), optionsForLevel(.fast).lz77_options.lazy_min_gain);
     try std.testing.expectEqual(@as(usize, 1), optionsForLevel(.default).lz77_options.lazy_min_gain);
     try std.testing.expectEqual(@as(usize, 1), optionsForLevel(.best).lz77_options.lazy_min_gain);
+
+    try std.testing.expectEqual(BlockSelection.stored_fixed_dynamic, optionsForLevel(.fastest).block_selection);
+    try std.testing.expectEqual(BlockSelection.stored_fixed, optionsForLevel(.fast).block_selection);
+    try std.testing.expectEqual(BlockSelection.stored_fixed_dynamic, optionsForLevel(.default).block_selection);
+    try std.testing.expectEqual(BlockSelection.stored_fixed_dynamic, optionsForLevel(.best).block_selection);
+
+    try std.testing.expectEqual(@as(usize, 4), optionsForLevel(.fastest).lz77_options.min_match);
+    try std.testing.expectEqual(@as(usize, 4), optionsForLevel(.fast).lz77_options.min_match);
+    try std.testing.expectEqual(@as(usize, 3), optionsForLevel(.default).lz77_options.min_match);
+    try std.testing.expectEqual(@as(usize, 3), optionsForLevel(.best).lz77_options.min_match);
+}
+
+test "fastest preset can choose dynamic blocks for source-like payloads" {
+    const input =
+        \\const std = @import("std");
+        \\pub fn checksum(bytes: []const u8) u32 {
+        \\    var value: u32 = 0;
+        \\    for (bytes) |byte| value = value *% 33 + byte;
+        \\    return value;
+        \\}
+        \\
+    ** 16;
+    var legacy = optionsForLevel(.fastest);
+    legacy.block_selection = .stored_fixed;
+
+    const tuned = try encodeRawBestAlloc(std.testing.allocator, input, optionsForLevel(.fastest));
+    defer std.testing.allocator.free(tuned);
+    const legacy_encoded = try encodeRawBestAlloc(std.testing.allocator, input, legacy);
+    defer std.testing.allocator.free(legacy_encoded);
+
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, tuned);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
+    try std.testing.expect(tuned.len < legacy_encoded.len);
 }
 
 test "zlib numeric compression levels map to stable Vort presets" {
