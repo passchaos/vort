@@ -710,6 +710,21 @@ pub fn build(b: *std.Build) void {
     const native_allocation_report_step = b.step("run-native-allocation-report", "Report allocation counts for native decode paths");
     native_allocation_report_step.dependOn(&run_native_allocation_report.step);
 
+    const png_scratch_report_exe = b.addExecutable(.{
+        .name = "vort-png-scratch-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/png_scratch_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_png_scratch_report = b.addRunArtifact(png_scratch_report_exe);
+    const png_scratch_report_step = b.step("run-png-scratch-report", "Report PNG zlib/Adam7 caller-owned scratch footprints");
+    png_scratch_report_step.dependOn(&run_png_scratch_report.step);
+
     const run_native_allocation_dashboard = b.addRunArtifact(native_allocation_report_exe);
     run_native_allocation_dashboard.addArgs(&.{
         "--json",
