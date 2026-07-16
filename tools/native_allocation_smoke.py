@@ -26,6 +26,7 @@ ZERO_ALLOCATION_CASES = [
     "dictionary_deflate_partial_range_into_scratch",
     "dictionary_deflate_auto_range_into_buffers",
     "dictionary_deflate_self_range_into_buffers",
+    "ldm_partial_range_into_scratch",
     "embedded_validation_with_buffers",
     "embedded_validation_report_with_buffers",
     "dictionary_deflate_validation_with_buffers",

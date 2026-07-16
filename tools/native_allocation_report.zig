@@ -73,6 +73,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureDictionaryDeflatePartialRangeIntoWithScratch(allocator, dict_deflate_indexed_stream));
     try rows.append(allocator, try measureEmbeddedDictionaryDeflateAutoRangeIntoWithBuffers(allocator, embedded_dict_deflate_stream));
     try rows.append(allocator, try measureEmbeddedDictionaryDeflateSelfRangeIntoWithBuffers(allocator, embedded_dict_deflate_stream));
+    try rows.append(allocator, try measureLongDistancePartialRangeIntoWithScratch(allocator));
     try rows.append(allocator, try measureEmbeddedValidation(allocator, self_contained_dict_stream));
     try rows.append(allocator, try measureEmbeddedValidationWithBuffers(allocator, indexed_store_stream));
     try rows.append(allocator, try measureEmbeddedValidationReportWithBuffers(allocator, indexed_store_stream));
@@ -481,6 +482,49 @@ fn measureEmbeddedDictionaryDeflateSelfRangeIntoWithBuffers(backing: std.mem.All
         .patch_scratch = patch_scratch,
     });
     return stats("dictionary_deflate_self_range_into_buffers", stream.len, result.output_written, failing);
+}
+
+fn measureLongDistancePartialRangeIntoWithScratch(backing: std.mem.Allocator) !CaseStats {
+    const prefix = deterministicLdmPrefix();
+    const input = prefix ++ "----" ++ prefix[0..1024].*;
+    const frame = try vort.storeEncodeLongDistanceAlloc(backing, input, .{ .min_distance = 32769, .min_length = 16 });
+    defer backing.free(frame);
+    const index = try vort.storeBuildFrameIndexAlloc(backing, frame);
+    defer backing.free(index);
+    const index_bytes = try vort.storeEncodeFrameIndexAlloc(backing, index);
+    defer backing.free(index_bytes);
+    const index_frame = try vort.storeEncodeSkippableAlloc(backing, index_bytes);
+    defer backing.free(index_frame);
+    var stream = std.ArrayList(u8).empty;
+    defer stream.deinit(backing);
+    try stream.appendSlice(backing, frame);
+    try stream.appendSlice(backing, index_frame);
+
+    const range_offset = prefix.len + 4;
+    const range_len = 16;
+    const out = try backing.alloc(u8, range_len);
+    defer backing.free(out);
+    const sizes = try vort.storeRangeBufferSizesForEmbeddedIndex(stream.items);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
+    defer backing.free(payload_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.storeDecodeIndexedRangeIntoWithBuffers(failing.allocator(), stream.items, range_offset, out.len, out, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    return stats("ldm_partial_range_into_scratch", stream.items.len, result.output_written, failing);
+}
+
+fn deterministicLdmPrefix() [33_000]u8 {
+    var out: [33_000]u8 = undefined;
+    var x: u32 = 0x12345678;
+    for (&out) |*byte| {
+        x = x *% 1664525 +% 1013904223;
+        byte.* = @truncate(x >> 24);
+    }
+    return out;
 }
 
 fn measureEmbeddedValidation(backing: std.mem.Allocator, stream: []const u8) !CaseStats {

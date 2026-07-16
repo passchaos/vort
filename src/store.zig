@@ -4861,6 +4861,42 @@ test "indexed long-distance stream supports embedded range decode" {
     try std.testing.expectEqual(checksum.crc32(&first), results[0].crc32);
     try std.testing.expectEqualSlices(u8, prefix[16..32], &second);
     try std.testing.expectEqual(checksum.crc32(&second), results[1].crc32);
+
+    const sizes = try rangeBufferSizesForEmbeddedIndex(stream);
+    const index_buffer = try std.testing.allocator.alloc(FrameIndexEntry, sizes.index_entries);
+    defer std.testing.allocator.free(index_buffer);
+    const payload_scratch = try std.testing.allocator.alloc(u8, sizes.payload_scratch_len);
+    defer std.testing.allocator.free(payload_scratch);
+    var partial: [16]u8 = undefined;
+    const into = try decodeIndexedRangeIntoWithBuffers(std.testing.failing_allocator, stream, prefix.len + 4, partial.len, partial[0..], .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    try std.testing.expectEqual(partial.len, into.output_written);
+    try std.testing.expectEqualSlices(u8, prefix[0..16], &partial);
+    try std.testing.expectEqual(checksum.crc32(prefix[0..16]), into.crc32);
+
+    @memset(first[0..], '!');
+    @memset(second[0..], '!');
+    try decodeIndexedRangesIntoWithBuffers(std.testing.failing_allocator, stream, &.{
+        .{ .offset = prefix.len + 4, .length = first.len, .output = first[0..] },
+        .{ .offset = prefix.len + 20, .length = second.len, .output = second[0..] },
+    }, results[0..], .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+    });
+    try std.testing.expectEqualSlices(u8, prefix[0..16], &first);
+    try std.testing.expectEqual(checksum.crc32(&first), results[0].crc32);
+    try std.testing.expectEqualSlices(u8, prefix[16..32], &second);
+    try std.testing.expectEqual(checksum.crc32(&second), results[1].crc32);
+
+    const short_scratch = try std.testing.allocator.alloc(u8, sizes.payload_scratch_len - 1);
+    defer std.testing.allocator.free(short_scratch);
+    try std.testing.expectError(error.OutputTooSmall, decodeIndexedRangeIntoWithBuffers(std.testing.failing_allocator, stream, prefix.len + 4, partial.len, partial[0..], .{
+        .index_buffer = index_buffer,
+        .payload_scratch = short_scratch,
+    }));
+
     @memset(first[0..], '!');
     @memset(second[0..], '!');
     try std.testing.expectError(error.RangeOutOfBounds, decodeIndexedRangesInto(std.testing.allocator, stream, &.{

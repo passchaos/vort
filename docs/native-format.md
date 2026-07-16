@@ -240,7 +240,7 @@ When a caller-owned range decode request covers an entire native deflate frame,
 the range decoder sends the raw deflate payload directly into the caller's output
 buffer and validates the resulting CRC-32 against the frame header. This avoids
 allocating a temporary whole-frame decoded buffer for common block-aligned range
-reads. Partial deflate-frame ranges can provide `RangeDecodeBuffers.payload_scratch`
+reads. Partial deflate/LDM-frame ranges can provide `RangeDecodeBuffers.payload_scratch`
 or use the lower-level `decodeRangeIntoWithPayloadScratch` helpers to verify the
 whole frame in caller-owned storage before copying the requested subrange; callers
 that omit payload scratch keep the heap-backed decoded-frame cache path so
@@ -284,8 +284,10 @@ payload cannot force unbounded patch materialization.
 
 ## Long-distance decode-into and full-frame range fast path
 
-Native LDM frames also expose a caller-owned decode path. Literal operations copy
-directly into the provided buffer, while match operations replay from already
+Native LDM frames also expose a caller-owned decode path, and partial LDM range
+reads use the same `RangeDecodeBuffers.payload_scratch` zero-allocation path as
+partial deflate reads. Literal operations copy directly into the provided buffer,
+while match operations replay from already
 produced bytes one byte at a time so overlapping back-references keep the same
 semantics as the allocator-returning decoder. Full-frame LDM range reads now use
 that decoder to fill the caller range buffer and validate the frame CRC-32
