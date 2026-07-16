@@ -5330,6 +5330,33 @@ test "png adam7 zlib image helper reconstructs interlaced sub-byte chunks" {
     try std.testing.expectEqualSlices(u8, &expected_image, &image);
 }
 
+test "png adam7 zlib image helper rejects corrupt logical payloads" {
+    const info = try pngAdam7Info(1, 1, 1, .indexed);
+    var compressed_scratch: [64]u8 = undefined;
+    var zlib_scratch: [8]u8 = undefined;
+    var filtered_row_scratch: [1]u8 = undefined;
+    var previous_row_scratch: [1]u8 = undefined;
+    var image: [1]u8 = undefined;
+
+    const bad_filter_payload = [_]u8{ 5, 0 };
+    const bad_filter = try encodeZlibBestAlloc(std.testing.allocator, &bad_filter_payload, optionsForLevel(.default));
+    defer std.testing.allocator.free(bad_filter);
+    const bad_filter_chunks = [_][]const u8{ bad_filter[0 .. bad_filter.len / 2], bad_filter[bad_filter.len / 2 ..] };
+    try std.testing.expectError(error.CorruptFrame, decodePngAdam7ZlibImageFromChunks(&bad_filter_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+
+    const short_payload = [_]u8{0};
+    const short = try encodeZlibBestAlloc(std.testing.allocator, &short_payload, optionsForLevel(.default));
+    defer std.testing.allocator.free(short);
+    const short_chunks = [_][]const u8{short};
+    try std.testing.expectError(error.SizeMismatch, decodePngAdam7ZlibImageFromChunks(&short_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+
+    const trailing_payload = [_]u8{ 0, 0, 0 };
+    const trailing = try encodeZlibBestAlloc(std.testing.allocator, &trailing_payload, optionsForLevel(.default));
+    defer std.testing.allocator.free(trailing);
+    const trailing_chunks = [_][]const u8{trailing};
+    try std.testing.expectError(error.SizeMismatch, decodePngAdam7ZlibImageFromChunks(&trailing_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+}
+
 test "zlib decoder reconstructs PNG scanlines from chunked IDAT scratch" {
     const bpp = 3;
     const row_len = 12;

@@ -76,6 +76,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measurePngAdam7Placement(allocator));
     try rows.append(allocator, try measurePngAdam7ImageDecode(allocator));
     try rows.append(allocator, try measurePngAdam7SubByteImageDecode(allocator));
+    try rows.append(allocator, try measurePngAdam7CorruptReject(allocator));
     try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
     try rows.append(allocator, try measureGzipDecoderScratch(allocator));
     try rows.append(allocator, try measureGzipDecoderConcatenatedChunks(allocator));
@@ -904,6 +905,28 @@ fn measurePngAdam7SubByteImageDecode(backing: std.mem.Allocator) !CaseStats {
     const result = try vort.decodePngAdam7ZlibImageFromChunks(&chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, output);
     try std.testing.expectEqualSlices(u8, &expected_image, output);
     return stats("png_adam7_subbyte_image_decode_scratch", encoded.len, result.output_written, failing);
+}
+
+fn measurePngAdam7CorruptReject(backing: std.mem.Allocator) !CaseStats {
+    const info = try vort.pngAdam7Info(1, 1, 1, .indexed);
+    const payload = [_]u8{ 5, 0 };
+    const encoded = try vort.encodeZlibBestAlloc(backing, &payload, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const compressed_scratch = try backing.alloc(u8, encoded.len);
+    defer backing.free(compressed_scratch);
+    const zlib_scratch = try backing.alloc(u8, info.zlib_payload_len);
+    defer backing.free(zlib_scratch);
+    const filtered_row_scratch = try backing.alloc(u8, 1);
+    defer backing.free(filtered_row_scratch);
+    const previous_row_scratch = try backing.alloc(u8, 1);
+    defer backing.free(previous_row_scratch);
+    const output = try backing.alloc(u8, info.image_output_len);
+    defer backing.free(output);
+    const chunks = [_][]const u8{ encoded[0 .. encoded.len / 2], encoded[encoded.len / 2 ..] };
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    try std.testing.expectError(error.CorruptFrame, vort.decodePngAdam7ZlibImageFromChunks(&chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, output));
+    return stats("png_adam7_corrupt_reject_scratch", encoded.len, 0, failing);
 }
 
 fn writePngPackedPixelForReport(row: []u8, pixel_index: usize, bits_per_pixel: usize, value: u8) void {
