@@ -773,9 +773,18 @@ pub const IncrementalDecoder = struct {
     payload_remaining: usize = 0,
     frame_input_read: usize = 0,
     output_written: usize = 0,
+    last_error_name: []const u8 = "",
+    last_error_phase: ?Phase = null,
+    last_recoverability_hint: RecoverabilityHint = .none,
     crc: checksum.Crc32 = .{},
 
     pub const Phase = enum { header, payload, done };
+    pub const RecoverabilityHint = enum {
+        none,
+        corrupt_header,
+        truncated_input,
+        payload_corrupt,
+    };
 
     pub const Snapshot = struct {
         phase: Phase,
@@ -784,6 +793,9 @@ pub const IncrementalDecoder = struct {
         output_written: usize,
         expected_output_len: ?usize,
         payload_remaining: ?usize,
+        last_error_name: []const u8,
+        last_error_phase: ?Phase,
+        recoverability_hint: RecoverabilityHint,
     };
 
     pub fn init() IncrementalDecoder {
@@ -798,6 +810,9 @@ pub const IncrementalDecoder = struct {
         self.payload_remaining = 0;
         self.frame_input_read = 0;
         self.output_written = 0;
+        self.last_error_name = "";
+        self.last_error_phase = null;
+        self.last_recoverability_hint = .none;
         self.crc = checksum.Crc32.init();
     }
 
@@ -809,6 +824,23 @@ pub const IncrementalDecoder = struct {
             .output_written = self.output_written,
             .expected_output_len = if (self.phase == .header) null else self.payload_len,
             .payload_remaining = if (self.phase == .header) null else self.payload_remaining,
+            .last_error_name = self.last_error_name,
+            .last_error_phase = self.last_error_phase,
+            .recoverability_hint = self.last_recoverability_hint,
+        };
+    }
+
+    fn recordError(self: *IncrementalDecoder, phase: Phase, err: Error) void {
+        self.last_error_name = @errorName(err);
+        self.last_error_phase = phase;
+        self.last_recoverability_hint = recoverabilityHint(phase, err);
+    }
+
+    fn recoverabilityHint(phase: Phase, err: Error) RecoverabilityHint {
+        return switch (phase) {
+            .header => if (err == error.TruncatedFrame) .truncated_input else .corrupt_header,
+            .payload => if (err == error.TruncatedFrame) .truncated_input else .payload_corrupt,
+            .done => .none,
         };
     }
 
@@ -835,15 +867,24 @@ pub const IncrementalDecoder = struct {
                     self.frame_input_read += n;
                     if (self.header_received != header_len) continue;
 
-                    self.info = try parseHeader(&self.header);
-                    self.payload_len = try payloadLenFromInfo(self.info);
+                    self.info = parseHeader(&self.header) catch |err| {
+                        self.recordError(.header, err);
+                        return err;
+                    };
+                    self.payload_len = payloadLenFromInfo(self.info) catch |err| {
+                        self.recordError(.header, err);
+                        return err;
+                    };
                     self.payload_remaining = self.payload_len;
                     self.crc = checksum.Crc32.init();
                     self.phase = .payload;
                 },
                 .payload => {
                     if (self.payload_remaining == 0) {
-                        if (self.crc.digest() != self.info.checksum) return error.ChecksumMismatch;
+                        if (self.crc.digest() != self.info.checksum) {
+                            self.recordError(.payload, error.ChecksumMismatch);
+                            return error.ChecksumMismatch;
+                        }
                         self.phase = .done;
                         return .{
                             .progress = .{ .input_read = read, .output_written = written },
@@ -3775,6 +3816,9 @@ test "incremental decoder snapshot reports cumulative progress" {
     var decoder = IncrementalDecoder.init();
     try std.testing.expectEqual(IncrementalDecoder.Phase.header, decoder.snapshot().phase);
     try std.testing.expectEqual(@as(?usize, null), decoder.snapshot().expected_output_len);
+    try std.testing.expectEqualStrings("", decoder.snapshot().last_error_name);
+    try std.testing.expectEqual(@as(?IncrementalDecoder.Phase, null), decoder.snapshot().last_error_phase);
+    try std.testing.expectEqual(IncrementalDecoder.RecoverabilityHint.none, decoder.snapshot().recoverability_hint);
 
     var out: [input.len]u8 = undefined;
     var step_result = try decoder.step(encoded[0..5], out[0..0]);
@@ -3818,6 +3862,24 @@ test "incremental decoder snapshot reports cumulative progress" {
     try std.testing.expectEqual(@as(usize, 0), snap.frame_input_read);
     try std.testing.expectEqual(@as(usize, 0), snap.output_written);
     try std.testing.expectEqual(@as(?usize, null), snap.expected_output_len);
+    try std.testing.expectEqualStrings("", snap.last_error_name);
+    try std.testing.expectEqual(@as(?IncrementalDecoder.Phase, null), snap.last_error_phase);
+    try std.testing.expectEqual(IncrementalDecoder.RecoverabilityHint.none, snap.recoverability_hint);
+}
+
+test "incremental decoder snapshot reports header errors" {
+    var bad_header: [header_len]u8 = undefined;
+    @memset(&bad_header, 0);
+    var decoder = IncrementalDecoder.init();
+    var out: [1]u8 = undefined;
+    try std.testing.expectError(error.InvalidMagic, decoder.step(&bad_header, &out));
+    const snap = decoder.snapshot();
+    try std.testing.expectEqual(IncrementalDecoder.Phase.header, snap.phase);
+    try std.testing.expectEqual(header_len, snap.header_received);
+    try std.testing.expectEqual(header_len, snap.frame_input_read);
+    try std.testing.expectEqualStrings("InvalidMagic", snap.last_error_name);
+    try std.testing.expectEqual(@as(?IncrementalDecoder.Phase, .header), snap.last_error_phase);
+    try std.testing.expectEqual(IncrementalDecoder.RecoverabilityHint.corrupt_header, snap.recoverability_hint);
 }
 
 test "incremental decoder reports checksum mismatch after corrupt payload" {
@@ -3833,6 +3895,9 @@ test "incremental decoder reports checksum mismatch after corrupt payload" {
     try std.testing.expectEqual(encoded_len, snap.frame_input_read);
     try std.testing.expectEqual(@as(usize, "payload".len), snap.output_written);
     try std.testing.expectEqual(@as(?usize, 0), snap.payload_remaining);
+    try std.testing.expectEqualStrings("ChecksumMismatch", snap.last_error_name);
+    try std.testing.expectEqual(@as(?IncrementalDecoder.Phase, .payload), snap.last_error_phase);
+    try std.testing.expectEqual(IncrementalDecoder.RecoverabilityHint.payload_corrupt, snap.recoverability_hint);
 }
 
 test "concatenated frame iterator and decode helper" {

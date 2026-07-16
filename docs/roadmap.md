@@ -52,6 +52,7 @@ architecture blindly.
 - [x] Fully incremental input/output store-frame decoder.
 - [x] Store-frame streaming encoder and incremental decoder can reset for caller-owned state reuse.
 - [x] Store-frame incremental decoder exposes snapshot diagnostics for phase, byte progress, expected output, and remaining payload.
+- [x] Store-frame incremental decoder snapshots retain the latest header/payload error name, phase, and recoverability hint.
 - [x] Concatenated store-frame iterator and decode helper.
 - [x] Concatenated native decode supports non-dictionary compressed frame modes with exact-size and output-limited allocator variants.
 - [x] Concatenated native decode supports caller-supplied dictionaries for dictionary-patch/deflate members.
