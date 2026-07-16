@@ -188,12 +188,15 @@ filter method range 0..4, and copies only the row payload bytes into the caller'
 row buffer. `reconstructPngScanline` and `stepPngScanlineReconstruct` implement
 PNG filter methods 0 through 4 with caller-owned current/previous row buffers, so
 library callers can progress from IDAT zlib bytes to reconstructed scanlines
-without allocating intermediate image rows. `PngZlibScanlineDecoder` packages the
-chunked zlib decode scratch, filtered-row scratch, previous-row scratch, and row
-metadata into a reusable row pipeline for callers that want one API to produce
-reconstructed rows from IDAT chunks. `ZlibDecoder` also records wrapper/header,
-missing-dictionary, truncation, Adler-32 mismatch, and PNG row-boundary
-diagnostics through the shared `StreamingDiagnostics` surface.
+without allocating intermediate image rows. `pngImageInfo` computes PNG/IHDR
+row length, filter stride, and exact zlib payload size from width, height, bit
+depth, and color type, including sub-byte grayscale/indexed rows.
+`PngZlibScanlineDecoder` packages the chunked zlib decode scratch, filtered-row
+scratch, previous-row scratch, and row metadata into a reusable row pipeline for
+callers that want one API to produce reconstructed rows from IDAT chunks.
+`ZlibDecoder` also records wrapper/header, missing-dictionary, truncation,
+Adler-32 mismatch, and PNG row-boundary diagnostics through the shared
+`StreamingDiagnostics` surface.
 
 `GzipDecoder` provides the same caller-owned bounded-output shape for ordinary
 gzip-wrapped deflate streams. It accepts either a complete gzip member or

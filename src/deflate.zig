@@ -2630,6 +2630,94 @@ pub const PngFilterMethod = enum(u8) {
     paeth = 4,
 };
 
+pub const PngColorType = enum(u8) {
+    grayscale = 0,
+    truecolor = 2,
+    indexed = 3,
+    grayscale_alpha = 4,
+    truecolor_alpha = 6,
+};
+
+pub const PngImageInfo = struct {
+    width: usize,
+    height: usize,
+    bit_depth: u8,
+    color_type: PngColorType,
+    samples_per_pixel: u8,
+    bits_per_pixel: u16,
+    /// Bytes in one filtered scanline after the leading PNG filter byte. This is
+    /// ceil(width * samples_per_pixel * bit_depth / 8).
+    row_len: usize,
+    /// PNG filter predictor stride in bytes. For sub-byte formats PNG rounds
+    /// this up to one byte, so callers can use the same row reconstruction
+    /// surface for indexed/grayscale bit depths below 8.
+    bytes_per_pixel: usize,
+    /// Exact decoded zlib payload bytes for all scanlines, including one filter
+    /// byte per row. Useful for exact-size zlib/IDAT decode preflight.
+    zlib_payload_len: usize,
+};
+
+pub fn parsePngColorType(color_type: u8) Error!PngColorType {
+    return switch (color_type) {
+        0 => .grayscale,
+        2 => .truecolor,
+        3 => .indexed,
+        4 => .grayscale_alpha,
+        6 => .truecolor_alpha,
+        else => error.CorruptFrame,
+    };
+}
+
+fn pngSamplesPerPixelAndValidateDepth(color_type: PngColorType, bit_depth: u8) Error!u8 {
+    return switch (color_type) {
+        .grayscale => switch (bit_depth) {
+            1, 2, 4, 8, 16 => 1,
+            else => error.CorruptFrame,
+        },
+        .truecolor => switch (bit_depth) {
+            8, 16 => 3,
+            else => error.CorruptFrame,
+        },
+        .indexed => switch (bit_depth) {
+            1, 2, 4, 8 => 1,
+            else => error.CorruptFrame,
+        },
+        .grayscale_alpha => switch (bit_depth) {
+            8, 16 => 2,
+            else => error.CorruptFrame,
+        },
+        .truecolor_alpha => switch (bit_depth) {
+            8, 16 => 4,
+            else => error.CorruptFrame,
+        },
+    };
+}
+
+pub fn pngImageInfo(width: usize, height: usize, bit_depth: u8, color_type: PngColorType) Error!PngImageInfo {
+    if (width == 0 or height == 0) return error.CorruptFrame;
+    const samples_per_pixel = try pngSamplesPerPixelAndValidateDepth(color_type, bit_depth);
+    const bits_per_pixel = @as(u16, samples_per_pixel) * @as(u16, bit_depth);
+    const total_row_bits = std.math.mul(usize, width, @as(usize, bits_per_pixel)) catch return error.IntegerOverflow;
+    const row_bits_with_rounding = std.math.add(usize, total_row_bits, 7) catch return error.IntegerOverflow;
+    const row_len = row_bits_with_rounding / 8;
+    const bytes_per_pixel = @max(@as(usize, 1), (@as(usize, bits_per_pixel) + 7) / 8);
+    return .{
+        .width = width,
+        .height = height,
+        .bit_depth = bit_depth,
+        .color_type = color_type,
+        .samples_per_pixel = samples_per_pixel,
+        .bits_per_pixel = bits_per_pixel,
+        .row_len = row_len,
+        .bytes_per_pixel = bytes_per_pixel,
+        .zlib_payload_len = try pngScanlinePayloadLen(row_len, height),
+    };
+}
+
+pub fn pngImageInfoFromColorType(width: usize, height: usize, bit_depth: u8, color_type: u8) Error!PngImageInfo {
+    return pngImageInfo(width, height, bit_depth, try parsePngColorType(color_type));
+}
+
 fn parsePngFilterMethod(filter: u8) Error!PngFilterMethod {
     return switch (filter) {
         0 => .none,
@@ -3041,6 +3129,27 @@ pub const PngZlibScanlineDecoder = struct {
         return self;
     }
 
+    pub fn initWithInfo(
+        input: []const u8,
+        zlib_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+    ) Error!PngZlibScanlineDecoder {
+        return init(input, zlib_scratch, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel);
+    }
+
+    pub fn initFromChunksWithInfo(
+        chunks: []const []const u8,
+        compressed_scratch: []u8,
+        zlib_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+    ) Error!PngZlibScanlineDecoder {
+        return initFromChunks(chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel);
+    }
+
     pub fn reset(
         self: *PngZlibScanlineDecoder,
         input: []const u8,
@@ -3060,6 +3169,17 @@ pub const PngZlibScanlineDecoder = struct {
             .bytes_per_pixel = bytes_per_pixel,
         };
         self.zlib = try ZlibDecoder.initExactSize(input, zlib_scratch, expected_payload_len);
+    }
+
+    pub fn resetWithInfo(
+        self: *PngZlibScanlineDecoder,
+        input: []const u8,
+        zlib_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+    ) Error!void {
+        return self.reset(input, zlib_scratch, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel);
     }
 
     pub fn resetFromChunks(
@@ -3082,6 +3202,18 @@ pub const PngZlibScanlineDecoder = struct {
             .bytes_per_pixel = bytes_per_pixel,
         };
         self.zlib = try ZlibDecoder.initFromChunksExactSize(chunks, compressed_scratch, zlib_scratch, expected_payload_len);
+    }
+
+    pub fn resetFromChunksWithInfo(
+        self: *PngZlibScanlineDecoder,
+        chunks: []const []const u8,
+        compressed_scratch: []u8,
+        zlib_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+    ) Error!void {
+        return self.resetFromChunks(chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel);
     }
 
     fn validateConfig(row_len: usize, row_count: usize, bytes_per_pixel: usize, filtered_row_scratch: []u8, previous_row_scratch: []u8) Error!usize {
@@ -4597,6 +4729,34 @@ test "png scanline reconstruction filters round trip" {
     try std.testing.expectError(error.SizeMismatch, reconstructPngScanline(2, filtered_payload[1..][0..row_len], short_output[0..], bpp, &reconstructed[0]));
 }
 
+test "png image info computes scanline metadata" {
+    const rgb = try pngImageInfo(17, 5, 8, .truecolor);
+    try std.testing.expectEqual(@as(u8, 3), rgb.samples_per_pixel);
+    try std.testing.expectEqual(@as(u16, 24), rgb.bits_per_pixel);
+    try std.testing.expectEqual(@as(usize, 51), rgb.row_len);
+    try std.testing.expectEqual(@as(usize, 3), rgb.bytes_per_pixel);
+    try std.testing.expectEqual(@as(usize, 260), rgb.zlib_payload_len);
+
+    const rgba16 = try pngImageInfoFromColorType(2, 3, 16, 6);
+    try std.testing.expectEqual(PngColorType.truecolor_alpha, rgba16.color_type);
+    try std.testing.expectEqual(@as(u8, 4), rgba16.samples_per_pixel);
+    try std.testing.expectEqual(@as(u16, 64), rgba16.bits_per_pixel);
+    try std.testing.expectEqual(@as(usize, 16), rgba16.row_len);
+    try std.testing.expectEqual(@as(usize, 8), rgba16.bytes_per_pixel);
+    try std.testing.expectEqual(@as(usize, 51), rgba16.zlib_payload_len);
+
+    const indexed1 = try pngImageInfo(13, 7, 1, .indexed);
+    try std.testing.expectEqual(@as(usize, 2), indexed1.row_len);
+    try std.testing.expectEqual(@as(usize, 1), indexed1.bytes_per_pixel);
+    try std.testing.expectEqual(@as(usize, 21), indexed1.zlib_payload_len);
+
+    try std.testing.expectError(error.CorruptFrame, pngImageInfo(0, 1, 8, .truecolor));
+    try std.testing.expectError(error.CorruptFrame, pngImageInfo(1, 0, 8, .truecolor));
+    try std.testing.expectError(error.CorruptFrame, pngImageInfo(1, 1, 4, .truecolor));
+    try std.testing.expectError(error.CorruptFrame, pngImageInfoFromColorType(1, 1, 8, 1));
+    try std.testing.expectError(error.IntegerOverflow, pngImageInfo(std.math.maxInt(usize), 1, 16, .truecolor_alpha));
+}
+
 test "zlib decoder reconstructs PNG scanlines from chunked IDAT scratch" {
     const bpp = 3;
     const row_len = 12;
@@ -4681,7 +4841,11 @@ test "png zlib scanline decoder reconstructs rows from chunked IDAT scratch" {
     var zlib_scratch: [filtered_payload.len]u8 = undefined;
     var filtered_row_scratch: [row_len]u8 = undefined;
     var previous_row_scratch: [row_len]u8 = undefined;
-    var decoder = try PngZlibScanlineDecoder.initFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, row_len, row_count, bpp);
+    const info = try pngImageInfo(row_len / bpp, row_count, 8, .truecolor);
+    try std.testing.expectEqual(row_len, info.row_len);
+    try std.testing.expectEqual(bpp, info.bytes_per_pixel);
+    try std.testing.expectEqual(filtered_payload.len, info.zlib_payload_len);
+    var decoder = try PngZlibScanlineDecoder.initFromChunksWithInfo(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info);
 
     var output: [row_len]u8 = undefined;
     for (0..row_count) |row_index| {
@@ -4703,11 +4867,10 @@ test "png zlib scanline decoder reconstructs rows from chunked IDAT scratch" {
     try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().rows_remaining);
     try std.testing.expectEqual(core.StepResult.Status.done, (try decoder.step(output[0..0])).status);
 
-    try std.testing.expectError(error.OutputTooSmall, PngZlibScanlineDecoder.initFromChunks(&chunks, &compressed_scratch, &zlib_scratch, filtered_row_scratch[0 .. row_len - 1], &previous_row_scratch, row_len, row_count, bpp));
-    try std.testing.expectError(error.CorruptFrame, PngZlibScanlineDecoder.initFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, row_len, row_count, 0));
-    try std.testing.expectError(error.SizeMismatch, PngZlibScanlineDecoder.initFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, row_len, row_count + 1, bpp));
+    try std.testing.expectError(error.OutputTooSmall, PngZlibScanlineDecoder.initFromChunksWithInfo(&chunks, &compressed_scratch, &zlib_scratch, filtered_row_scratch[0 .. row_len - 1], &previous_row_scratch, info));
+    try std.testing.expectError(error.SizeMismatch, PngZlibScanlineDecoder.initFromChunksWithInfo(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, try pngImageInfo(row_len / bpp, row_count + 1, 8, .truecolor)));
 
-    var step_decoder = try PngZlibScanlineDecoder.initFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, row_len, row_count, bpp);
+    var step_decoder = try PngZlibScanlineDecoder.initFromChunksWithInfo(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info);
     try std.testing.expectError(error.OutputTooSmall, step_decoder.step(output[0 .. row_len - 1]));
     try std.testing.expectEqualStrings("OutputTooSmall", step_decoder.diagnostics().last_error_name);
 }

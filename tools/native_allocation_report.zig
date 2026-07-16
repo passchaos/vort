@@ -621,6 +621,10 @@ fn measurePngZlibScanlinePipeline(backing: std.mem.Allocator) !CaseStats {
         encoded[5 .. encoded.len - 4],
         encoded[encoded.len - 4 ..],
     };
+    const info = try vort.pngImageInfo(row_len / bpp, row_count, 8, .truecolor);
+    try std.testing.expectEqual(row_len, info.row_len);
+    try std.testing.expectEqual(bpp, info.bytes_per_pixel);
+    try std.testing.expectEqual(filtered_payload.len, info.zlib_payload_len);
     const compressed_scratch = try backing.alloc(u8, encoded.len);
     defer backing.free(compressed_scratch);
     const zlib_scratch = try backing.alloc(u8, filtered_payload.len);
@@ -633,7 +637,7 @@ fn measurePngZlibScanlinePipeline(backing: std.mem.Allocator) !CaseStats {
     defer backing.free(output);
 
     const failing = std.testing.FailingAllocator.init(backing, .{});
-    var decoder = try vort.PngZlibScanlineDecoder.initFromChunks(&chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, row_len, row_count, bpp);
+    var decoder = try vort.PngZlibScanlineDecoder.initFromChunksWithInfo(&chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info);
     var output_bytes: usize = 0;
     for (0..row_count) |row_index| {
         const result = try decoder.step(output);
