@@ -3064,6 +3064,11 @@ fn pngScanlinePayloadLen(row_len: usize, row_count: usize) Error!usize {
     return std.math.mul(usize, stride, row_count) catch return error.IntegerOverflow;
 }
 
+fn pngImageOutputLen(info: PngImageInfo) Error!usize {
+    if (info.row_len == 0 or info.height == 0) return error.CorruptFrame;
+    return std.math.mul(usize, info.row_len, info.height) catch return error.IntegerOverflow;
+}
+
 /// PNG-oriented zlib row pipeline built from caller-owned buffers.
 ///
 /// This is still a full-wrapper zlib decoder internally: `init`/`reset`
@@ -3274,6 +3279,61 @@ pub const PngZlibScanlineDecoder = struct {
         };
     }
 };
+
+pub const PngImageDecodeResult = struct {
+    rows: usize,
+    output_written: usize,
+    zlib_input_read: usize,
+};
+
+pub fn decodePngZlibImage(
+    input: []const u8,
+    zlib_scratch: []u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngImageInfo,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    const output_len = try pngImageOutputLen(info);
+    if (output.len < output_len) return error.OutputTooSmall;
+    var decoder = try PngZlibScanlineDecoder.initWithInfo(input, zlib_scratch, filtered_row_scratch, previous_row_scratch, info);
+    return drainPngZlibImage(&decoder, output[0..output_len]);
+}
+
+pub fn decodePngZlibImageFromChunks(
+    chunks: []const []const u8,
+    compressed_scratch: []u8,
+    zlib_scratch: []u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngImageInfo,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    const output_len = try pngImageOutputLen(info);
+    if (output.len < output_len) return error.OutputTooSmall;
+    var decoder = try PngZlibScanlineDecoder.initFromChunksWithInfo(chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info);
+    return drainPngZlibImage(&decoder, output[0..output_len]);
+}
+
+fn drainPngZlibImage(decoder: *PngZlibScanlineDecoder, output: []u8) Error!PngImageDecodeResult {
+    var offset: usize = 0;
+    var zlib_input_read: usize = 0;
+    for (0..decoder.row_count) |_| {
+        const row = output[offset..][0..decoder.row_len];
+        const step = try decoder.step(row);
+        offset += step.row_bytes;
+        zlib_input_read += step.progress.input_read;
+    }
+    if (!decoder.snapshot().done) {
+        decoder.zlib.recordError(error.SizeMismatch);
+        return error.SizeMismatch;
+    }
+    return .{
+        .rows = decoder.row_count,
+        .output_written = offset,
+        .zlib_input_read = zlib_input_read,
+    };
+}
 
 fn decodeZlibWithOptionalDictionary(input: []const u8, output: []u8, dictionary: ?[]const u8) Error!usize {
     const header = try parseZlibHeader(input, dictionary);
@@ -4873,6 +4933,57 @@ test "png zlib scanline decoder reconstructs rows from chunked IDAT scratch" {
     var step_decoder = try PngZlibScanlineDecoder.initFromChunksWithInfo(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info);
     try std.testing.expectError(error.OutputTooSmall, step_decoder.step(output[0 .. row_len - 1]));
     try std.testing.expectEqualStrings("OutputTooSmall", step_decoder.diagnostics().last_error_name);
+}
+
+test "png zlib image helper reconstructs full image from IDAT chunks" {
+    const bpp = 3;
+    const row_len = 12;
+    const row_count = 5;
+    var rows: [row_count][row_len]u8 = undefined;
+    var expected_image: [row_count * row_len]u8 = undefined;
+    var filtered_payload: [row_count * (row_len + 1)]u8 = undefined;
+
+    var payload_offset: usize = 0;
+    var image_offset: usize = 0;
+    var previous: ?[]const u8 = null;
+    for (0..row_count) |row_index| {
+        rows[row_index] = pngReconstructionRow(row_len, row_index);
+        @memcpy(expected_image[image_offset..][0..row_len], &rows[row_index]);
+        image_offset += row_len;
+        const filter: u8 = @intCast(row_index);
+        filtered_payload[payload_offset] = filter;
+        filterPngScanlineForTest(filter, &rows[row_index], previous, bpp, filtered_payload[payload_offset + 1 ..][0..row_len]);
+        previous = &rows[row_index];
+        payload_offset += row_len + 1;
+    }
+
+    const encoded = try encodeZlibBestAlloc(std.testing.allocator, &filtered_payload, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..5],
+        encoded[5 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+    };
+    var compressed_scratch: [256]u8 = undefined;
+    var zlib_scratch: [filtered_payload.len]u8 = undefined;
+    var filtered_row_scratch: [row_len]u8 = undefined;
+    var previous_row_scratch: [row_len]u8 = undefined;
+    const info = try pngImageInfo(row_len / bpp, row_count, 8, .truecolor);
+    var image: [expected_image.len]u8 = undefined;
+    const result = try decodePngZlibImageFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image);
+    try std.testing.expectEqual(row_count, result.rows);
+    try std.testing.expectEqual(expected_image.len, result.output_written);
+    try std.testing.expectEqual(encoded.len, result.zlib_input_read);
+    try std.testing.expectEqualSlices(u8, &expected_image, &image);
+
+    var single_image: [expected_image.len]u8 = undefined;
+    const single = try decodePngZlibImage(encoded, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &single_image);
+    try std.testing.expectEqualSlices(u8, &expected_image, &single_image);
+    try std.testing.expectEqual(encoded.len, single.zlib_input_read);
+
+    try std.testing.expectError(error.OutputTooSmall, decodePngZlibImageFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, image[0 .. image.len - 1]));
+    var too_tall_image: [(row_count + 1) * row_len]u8 = undefined;
+    try std.testing.expectError(error.SizeMismatch, decodePngZlibImageFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, try pngImageInfo(row_len / bpp, row_count + 1, 8, .truecolor), &too_tall_image));
 }
 
 test "zlib decoder supports preset dictionary streams" {

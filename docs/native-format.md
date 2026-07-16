@@ -194,6 +194,9 @@ depth, and color type, including sub-byte grayscale/indexed rows.
 `PngZlibScanlineDecoder` packages the chunked zlib decode scratch, filtered-row
 scratch, previous-row scratch, and row metadata into a reusable row pipeline for
 callers that want one API to produce reconstructed rows from IDAT chunks.
+`decodePngZlibImageFromChunks` drains the same pipeline into a caller-owned full
+image buffer when the caller wants a complete reconstructed image without a
+separate row loop.
 `ZlibDecoder` also records wrapper/header, missing-dictionary, truncation,
 Adler-32 mismatch, and PNG row-boundary diagnostics through the shared
 `StreamingDiagnostics` surface.
