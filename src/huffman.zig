@@ -59,6 +59,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                     active_len += 1;
                 }
             }
+            if (active_len == 0) return Self{};
 
             var available: i32 = 1;
             for (1..max_code_bits + 1) |bits| {

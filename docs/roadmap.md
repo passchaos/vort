@@ -686,6 +686,8 @@ architecture blindly.
 - [x] Huffman table initialization uses the target's bit-reverse primitive for
   canonical code reversal, removing the per-symbol bit loop in dynamic table
   construction.
+- [x] Huffman table initialization returns immediately for empty alphabets,
+  avoiding fixed validation/setup loops for literal-only dynamic distance tables.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
