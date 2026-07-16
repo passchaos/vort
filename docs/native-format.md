@@ -191,6 +191,8 @@ library callers can progress from IDAT zlib bytes to reconstructed scanlines
 without allocating intermediate image rows. `pngImageInfo` computes PNG/IHDR
 row length, filter stride, and exact zlib payload size from width, height, bit
 depth, and color type, including sub-byte grayscale/indexed rows.
+`pngZlibDecodeBufferSizes` and `pngIdatChunksScratchLen` expose the caller-owned
+scratch and output sizes needed by the row and full-image helpers.
 `PngZlibScanlineDecoder` packages the chunked zlib decode scratch, filtered-row
 scratch, previous-row scratch, and row metadata into a reusable row pipeline for
 callers that want one API to produce reconstructed rows from IDAT chunks.

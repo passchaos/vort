@@ -71,6 +71,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureZlibDecoderPngReconstruct(allocator));
     try rows.append(allocator, try measurePngZlibScanlinePipeline(allocator));
     try rows.append(allocator, try measurePngZlibImageDecode(allocator));
+    try rows.append(allocator, try measurePngZlibSubByteImageDecode(allocator));
     try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
     try rows.append(allocator, try measureGzipDecoderScratch(allocator));
     try rows.append(allocator, try measureGzipDecoderConcatenatedChunks(allocator));
@@ -696,6 +697,43 @@ fn measurePngZlibImageDecode(backing: std.mem.Allocator) !CaseStats {
     try std.testing.expectEqual(expected_image.len, result.output_written);
     try std.testing.expectEqualSlices(u8, &expected_image, output);
     return stats("png_zlib_image_decode_scratch", encoded.len, result.output_written, failing);
+}
+
+fn measurePngZlibSubByteImageDecode(backing: std.mem.Allocator) !CaseStats {
+    const info = try vort.pngImageInfo(13, 3, 1, .indexed);
+    const sizes = try vort.pngZlibDecodeBufferSizes(info);
+    const filtered_payload = [_]u8{
+        0, 0b1010_1010, 0b1000_0000,
+        1, 0b0000_1111, 0b1111_0000,
+        2, 0b0011_0011, 0b0101_0101,
+    };
+    const expected_image = [_]u8{
+        0b1010_1010, 0b1000_0000,
+        0b0000_1111, 0b1111_1111,
+        0b0100_0010, 0b0101_0100,
+    };
+    const encoded = try vort.encodeZlibBestAlloc(backing, &filtered_payload, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..4],
+        encoded[4 .. encoded.len - 2],
+        encoded[encoded.len - 2 ..],
+    };
+    const compressed_scratch = try backing.alloc(u8, try vort.pngIdatChunksScratchLen(&chunks));
+    defer backing.free(compressed_scratch);
+    const zlib_scratch = try backing.alloc(u8, sizes.zlib_scratch_len);
+    defer backing.free(zlib_scratch);
+    const filtered_row_scratch = try backing.alloc(u8, sizes.filtered_row_scratch_len);
+    defer backing.free(filtered_row_scratch);
+    const previous_row_scratch = try backing.alloc(u8, sizes.previous_row_scratch_len);
+    defer backing.free(previous_row_scratch);
+    const output = try backing.alloc(u8, sizes.image_output_len);
+    defer backing.free(output);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.decodePngZlibImageFromChunks(&chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, output);
+    try std.testing.expectEqualSlices(u8, &expected_image, output);
+    return stats("png_zlib_subbyte_image_decode_scratch", encoded.len, result.output_written, failing);
 }
 
 fn measureZlibDecoderDictionaryChunks(backing: std.mem.Allocator) !CaseStats {

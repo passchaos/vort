@@ -422,6 +422,7 @@ architecture blindly.
 - [x] PngZlibScanlineDecoder packages chunked zlib IDAT decode and PNG row reconstruction into a caller-owned row pipeline.
 - [x] PNG scanline metadata helper derives row bytes, filter stride, and exact zlib payload length from IHDR-style width/height/bit-depth/color-type values.
 - [x] PNG-like zlib image helper reconstructs IDAT chunks into caller-owned full-image buffers without allocation.
+- [x] PNG zlib decode buffer-size helpers expose caller-owned scratch/output lengths and cover sub-byte indexed/grayscale-style rows.
 - [x] ZlibDecoder chunk initialization supports preset dictionary zlib streams without allocation.
 - [x] ZlibDecoder exact-size initializers reject decoded-size mismatches for PNG/IHDR-sized buffers.
 - [x] ZlibDecoder reports bad-header, missing-dictionary, truncated-footer, and Adler mismatch diagnostics.

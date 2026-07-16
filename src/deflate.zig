@@ -2609,10 +2609,7 @@ pub fn decodeZlibWithDictionary(input: []const u8, output: []u8, dictionary: []c
 }
 
 fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
-    var total: usize = 0;
-    for (chunks) |chunk| {
-        total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
-    }
+    const total = try chunksTotalLen(chunks);
     if (compressed_scratch.len < total) return error.OutputTooSmall;
     var offset: usize = 0;
     for (chunks) |chunk| {
@@ -2620,6 +2617,18 @@ fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]cons
         offset += chunk.len;
     }
     return compressed_scratch[0..total];
+}
+
+fn chunksTotalLen(chunks: []const []const u8) Error!usize {
+    var total: usize = 0;
+    for (chunks) |chunk| {
+        total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
+    }
+    return total;
+}
+
+pub fn pngIdatChunksScratchLen(chunks: []const []const u8) Error!usize {
+    return chunksTotalLen(chunks);
 }
 
 pub const PngFilterMethod = enum(u8) {
@@ -2655,6 +2664,17 @@ pub const PngImageInfo = struct {
     /// Exact decoded zlib payload bytes for all scanlines, including one filter
     /// byte per row. Useful for exact-size zlib/IDAT decode preflight.
     zlib_payload_len: usize,
+};
+
+pub const PngZlibDecodeBufferSizes = struct {
+    /// Exact decoded IDAT/zlib payload size, including one filter byte per row.
+    zlib_scratch_len: usize,
+    /// Scratch needed to hold one filtered row before PNG filter reconstruction.
+    filtered_row_scratch_len: usize,
+    /// Scratch needed to hold the previous reconstructed row for filters 2..4.
+    previous_row_scratch_len: usize,
+    /// Reconstructed image bytes produced by `decodePngZlibImage*`.
+    image_output_len: usize,
 };
 
 pub fn parsePngColorType(color_type: u8) Error!PngColorType {
@@ -2716,6 +2736,15 @@ pub fn pngImageInfo(width: usize, height: usize, bit_depth: u8, color_type: PngC
 
 pub fn pngImageInfoFromColorType(width: usize, height: usize, bit_depth: u8, color_type: u8) Error!PngImageInfo {
     return pngImageInfo(width, height, bit_depth, try parsePngColorType(color_type));
+}
+
+pub fn pngZlibDecodeBufferSizes(info: PngImageInfo) Error!PngZlibDecodeBufferSizes {
+    return .{
+        .zlib_scratch_len = info.zlib_payload_len,
+        .filtered_row_scratch_len = info.row_len,
+        .previous_row_scratch_len = info.row_len,
+        .image_output_len = try pngImageOutputLen(info),
+    };
 }
 
 fn parsePngFilterMethod(filter: u8) Error!PngFilterMethod {
@@ -4809,6 +4838,11 @@ test "png image info computes scanline metadata" {
     try std.testing.expectEqual(@as(usize, 2), indexed1.row_len);
     try std.testing.expectEqual(@as(usize, 1), indexed1.bytes_per_pixel);
     try std.testing.expectEqual(@as(usize, 21), indexed1.zlib_payload_len);
+    const sizes = try pngZlibDecodeBufferSizes(indexed1);
+    try std.testing.expectEqual(indexed1.zlib_payload_len, sizes.zlib_scratch_len);
+    try std.testing.expectEqual(indexed1.row_len, sizes.filtered_row_scratch_len);
+    try std.testing.expectEqual(indexed1.row_len, sizes.previous_row_scratch_len);
+    try std.testing.expectEqual(@as(usize, 14), sizes.image_output_len);
 
     try std.testing.expectError(error.CorruptFrame, pngImageInfo(0, 1, 8, .truecolor));
     try std.testing.expectError(error.CorruptFrame, pngImageInfo(1, 0, 8, .truecolor));
@@ -4984,6 +5018,45 @@ test "png zlib image helper reconstructs full image from IDAT chunks" {
     try std.testing.expectError(error.OutputTooSmall, decodePngZlibImageFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, image[0 .. image.len - 1]));
     var too_tall_image: [(row_count + 1) * row_len]u8 = undefined;
     try std.testing.expectError(error.SizeMismatch, decodePngZlibImageFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, try pngImageInfo(row_len / bpp, row_count + 1, 8, .truecolor), &too_tall_image));
+}
+
+test "png zlib image helper covers sub-byte indexed rows" {
+    const info = try pngImageInfo(13, 3, 1, .indexed);
+    const sizes = try pngZlibDecodeBufferSizes(info);
+    try std.testing.expectEqual(@as(usize, 2), info.row_len);
+    try std.testing.expectEqual(@as(usize, 1), info.bytes_per_pixel);
+    try std.testing.expectEqual(@as(usize, 9), info.zlib_payload_len);
+    try std.testing.expectEqual(@as(usize, 6), sizes.image_output_len);
+
+    const filtered_payload = [_]u8{
+        0, 0b1010_1010, 0b1000_0000,
+        1, 0b0000_1111, 0b1111_0000,
+        2, 0b0011_0011, 0b0101_0101,
+    };
+    const expected_image = [_]u8{
+        0b1010_1010, 0b1000_0000,
+        0b0000_1111, 0b1111_1111,
+        0b0100_0010, 0b0101_0100,
+    };
+    const encoded = try encodeZlibBestAlloc(std.testing.allocator, &filtered_payload, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..4],
+        encoded[4 .. encoded.len - 2],
+        encoded[encoded.len - 2 ..],
+    };
+    try std.testing.expectEqual(encoded.len, try pngIdatChunksScratchLen(&chunks));
+
+    var compressed_scratch: [128]u8 = undefined;
+    var zlib_scratch: [filtered_payload.len]u8 = undefined;
+    var filtered_row_scratch: [2]u8 = undefined;
+    var previous_row_scratch: [2]u8 = undefined;
+    var image: [expected_image.len]u8 = undefined;
+    const result = try decodePngZlibImageFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image);
+    try std.testing.expectEqual(@as(usize, 3), result.rows);
+    try std.testing.expectEqual(expected_image.len, result.output_written);
+    try std.testing.expectEqual(encoded.len, result.zlib_input_read);
+    try std.testing.expectEqualSlices(u8, &expected_image, &image);
 }
 
 test "zlib decoder supports preset dictionary streams" {
