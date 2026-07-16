@@ -704,6 +704,8 @@ architecture blindly.
   regressing larger corpus decode throughput.
 - [x] Dynamic length parsing records the literal alphabet's maximum code length
   so adaptive literal lookup selection avoids a second per-block scan.
+- [x] Dynamic code-length decoding uses the value-only Huffman fast path,
+  avoiding Symbol construction while parsing literal/distance code lengths.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

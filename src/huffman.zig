@@ -233,7 +233,7 @@ pub fn parseDynamicLengthsBody(header: DynamicHeader, reader: anytype) Error!Dyn
     var parsed = DynamicLengths{ .header = header };
     var pos: usize = 0;
     while (pos < total) {
-        const symbol = (try code_decoder.decode(reader)).value;
+        const symbol = try code_decoder.decodeValue(reader);
         parsed.code_length_symbol_histogram[symbol] += 1;
         switch (symbol) {
             0...15 => {
