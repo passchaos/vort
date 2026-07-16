@@ -831,6 +831,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(fuzz_corpus_coverage_smoke_step);
     validation_json_smoke.step.dependOn(deflate_decode_stage_report_dashboard_step);
     validation_json_smoke.step.dependOn(python_zlib_diff_dashboard_step);
+    validation_json_smoke.step.dependOn(zlib_relaxed_report_step);
     validation_json_smoke.step.dependOn(native_allocation_dashboard_step);
     validation_json_smoke.step.dependOn(native_allocation_smoke_step);
     validation_json_smoke.step.dependOn(native_allocation_negative_smoke_step);
@@ -846,6 +847,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.step.dependOn(fuzz_corpus_coverage_smoke_step);
     validation_json_dashboard.step.dependOn(deflate_decode_stage_report_dashboard_step);
     validation_json_dashboard.step.dependOn(python_zlib_diff_dashboard_step);
+    validation_json_dashboard.step.dependOn(zlib_relaxed_report_step);
     validation_json_dashboard.step.dependOn(native_allocation_dashboard_step);
     validation_json_dashboard.step.dependOn(native_allocation_smoke_step);
     validation_json_dashboard.step.dependOn(native_allocation_negative_smoke_step);
@@ -892,6 +894,7 @@ pub fn build(b: *std.Build) void {
     const dashboard_index = b.addSystemCommand(&.{ "python3", "tools/dashboard_index.py", "--strict-producers", "--strict-smoke-gates", "--strict-header-inspect", "--strict-validation-health" });
     dashboard_index.step.dependOn(sidecar_corrupt_dashboard_step);
     dashboard_index.step.dependOn(python_zlib_diff_dashboard_step);
+    dashboard_index.step.dependOn(zlib_relaxed_report_step);
     dashboard_index.step.dependOn(validation_json_dashboard_step);
     dashboard_index.step.dependOn(validation_json_docs_negative_smoke_step);
     dashboard_index.step.dependOn(dashboard_config_index_smoke_step);

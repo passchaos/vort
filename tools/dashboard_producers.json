@@ -128,6 +128,18 @@
       "expected_format": "json",
       "smoke_gate": "zig build run-native-allocation-smoke"
     },
+    "vort-native-fuzz-corpus-coverage-smoke.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-native-fuzz-corpus-coverage-smoke"
+    },
+    "vort-native-fuzz-corpus.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-native-fuzz-corpus-dashboard"
+    },
+    "vort-native-fuzz-corpus.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-native-fuzz-corpus-dashboard"
+    },
     "vort-native-parallel-dashboard.md": {
       "expected_format": "md",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard"
@@ -135,6 +147,14 @@
     "vort-native-thread-pool-full-dashboard.md": {
       "expected_format": "md",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard"
+    },
+    "vort-png-scratch-report.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-png-scratch-report-dashboard"
+    },
+    "vort-png-scratch-report.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-png-scratch-report-dashboard"
     },
     "vort-python-zlib-diff-smoke.json": {
       "expected_format": "json",
@@ -183,6 +203,14 @@
     "vort-validation-json-smoke.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-validation-json-dashboard"
+    },
+    "vort-zlib-relaxed-report-gate.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-zlib-relaxed-report-gate"
+    },
+    "vort-zlib-relaxed-report.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-zlib-relaxed-report-gate"
     }
   },
   "contains": [
@@ -231,8 +259,13 @@
     "vort-native-allocation-report.json": "zig build run-native-allocation-report-dashboard",
     "vort-native-allocation-report.md": "zig build run-native-allocation-report-dashboard",
     "vort-native-allocation-smoke.json": "zig build run-native-allocation-smoke",
+    "vort-native-fuzz-corpus-coverage-smoke.json": "zig build run-native-fuzz-corpus-coverage-smoke",
+    "vort-native-fuzz-corpus.json": "zig build run-native-fuzz-corpus-dashboard",
+    "vort-native-fuzz-corpus.md": "zig build run-native-fuzz-corpus-dashboard",
     "vort-native-parallel-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard",
     "vort-native-thread-pool-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard",
+    "vort-png-scratch-report.json": "zig build run-png-scratch-report-dashboard",
+    "vort-png-scratch-report.md": "zig build run-png-scratch-report-dashboard",
     "vort-python-zlib-diff-smoke.json": "zig build run-python-zlib-diff-dashboard",
     "vort-rust-deflate-benchmark-summary.md": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary",
     "vort-rust-deflate-decode-bench.csv": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv",
@@ -244,33 +277,42 @@
     "vort-standard-multi-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-multi-corpus-dashboard",
     "vort-standard-multi-corpus-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-dashboard",
     "vort-validation-json-docs-negative-smoke.json": "zig build run-validation-json-docs-negative-smoke",
-    "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard"
+    "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
+    "vort-zlib-relaxed-report-gate.json": "zig build run-zlib-relaxed-report-gate",
+    "vort-zlib-relaxed-report.json": "zig build run-zlib-relaxed-report"
   },
   "required_smoke_gates": [
-    "vort-sidecar-corrupt-smoke.json",
-    "vort-sidecar-corrupt-smoke.md",
-    "vort-validation-json-smoke.json",
-    "vort-validation-json-docs-negative-smoke.json",
-    "vort-header-inspect-smoke.json",
-    "vort-header-inspect-smoke.md",
+    "vort-dashboard-category-negative-smoke.json",
+    "vort-dashboard-config-index-negative-smoke.json",
+    "vort-dashboard-config-index-smoke.json",
     "vort-dashboard-producers-negative-smoke.json",
     "vort-dashboard-producers-required-smoke.json",
-    "vort-dashboard-category-negative-smoke.json",
-    "vort-dashboard-config-index-smoke.json",
-    "vort-dashboard-config-index-negative-smoke.json",
     "vort-dashboard-strict-smoke.json",
     "vort-dashboard-strict-smoke.md",
-    "vort-huffman-length-report.csv",
-    "vort-huffman-length-report.md",
+    "vort-deflate-decode-stage-report.json",
     "vort-deflate-wrapper-fuzz-corpus.json",
     "vort-deflate-wrapper-fuzz-corpus.md",
     "vort-fuzz-corpus-coverage-smoke.json",
-    "vort-deflate-decode-stage-report.json",
-    "vort-python-zlib-diff-smoke.json",
+    "vort-header-inspect-smoke.json",
+    "vort-header-inspect-smoke.md",
+    "vort-huffman-length-report.csv",
+    "vort-huffman-length-report.md",
+    "vort-native-allocation-negative-smoke.json",
     "vort-native-allocation-report.json",
     "vort-native-allocation-report.md",
     "vort-native-allocation-smoke.json",
-    "vort-native-allocation-negative-smoke.json"
+    "vort-native-fuzz-corpus-coverage-smoke.json",
+    "vort-native-fuzz-corpus.json",
+    "vort-native-fuzz-corpus.md",
+    "vort-png-scratch-report.json",
+    "vort-png-scratch-report.md",
+    "vort-python-zlib-diff-smoke.json",
+    "vort-sidecar-corrupt-smoke.json",
+    "vort-sidecar-corrupt-smoke.md",
+    "vort-validation-json-docs-negative-smoke.json",
+    "vort-validation-json-smoke.json",
+    "vort-zlib-relaxed-report-gate.json",
+    "vort-zlib-relaxed-report.json"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1

@@ -294,6 +294,8 @@ architecture blindly.
 - [x] zlib relaxed decode options report/gate covers strict rejection, relaxed
   success, exact/limited allocator variants, output-limit rejection, and preset
   dictionary streams.
+- [x] zlib relaxed decode report is indexed in validation/dashboard producer
+  metadata with schema documentation and required smoke-gate coverage.
 - [x] zlib header CINFO/window metadata compatibility test verifies Vort reports
   smaller advertised windows while matching zlib-compatible decode behavior for
   otherwise-valid streams.

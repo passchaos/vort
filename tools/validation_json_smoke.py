@@ -96,6 +96,7 @@ def main() -> int:
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
         decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
+        zlib_relaxed_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.json"
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
         native_allocation_smoke_path = ROOT / "zig-out" / "vort-native-allocation-smoke.json"
         native_allocation_negative_smoke_path = ROOT / "zig-out" / "vort-native-allocation-negative-smoke.json"
@@ -190,6 +191,14 @@ def main() -> int:
         assert python_zlib_diff["cli_successes"] >= 1
         assert python_zlib_diff["expected_failures"] >= 1
         validate_value_against_manifest(python_zlib_diff, schemas_def)
+        zlib_relaxed = json.loads(zlib_relaxed_path.read_text())
+        assert zlib_relaxed["schema"] == "vort.zlib_relaxed_report"
+        assert zlib_relaxed["schema_version"] == 1
+        assert zlib_relaxed["strict_rejections"] >= 2
+        assert zlib_relaxed["relaxed_successes"] >= 5
+        assert zlib_relaxed["dictionary_successes"] >= 2
+        assert zlib_relaxed["limited_rejections"] >= 1
+        validate_value_against_manifest(zlib_relaxed, schemas_def)
         native_allocation = json.loads(native_allocation_path.read_text())
         assert native_allocation["schema"] == "vort.native_allocation_report"
         assert native_allocation["schema_version"] == 1
@@ -657,6 +666,7 @@ def main() -> int:
                 dashboard_producers_required_smoke["schema"],
                 decode_stage["schema"],
                 python_zlib_diff["schema"],
+                zlib_relaxed["schema"],
                 png_scratch["schema"],
                 fuzz_report["schema"],
                 fuzz_coverage["schema"],

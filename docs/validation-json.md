@@ -1937,6 +1937,32 @@ Example:
 }
 ```
 
+## `vort.zlib_relaxed_report`
+
+Produced by:
+
+```sh
+zig build run-zlib-relaxed-report
+zig build run-zlib-relaxed-report-gate
+```
+
+This schema records direct public-API coverage for relaxed zlib decode options,
+including strict rejection, relaxed success, dictionary-aware relaxed decode, and
+output-limit rejection behavior.
+
+Example:
+
+```json
+{
+  "schema": "vort.zlib_relaxed_report",
+  "schema_version": 1,
+  "strict_rejections": 2,
+  "relaxed_successes": 5,
+  "dictionary_successes": 2,
+  "limited_rejections": 1
+}
+```
+
 ## `vort.png_scratch_report`
 
 Produced by:

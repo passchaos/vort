@@ -190,6 +190,55 @@
       "smoke_gate": "zig build run-level-report-dashboard"
     },
     {
+      "expected_format": "json",
+      "name": "vort-native-allocation-negative-smoke.json",
+      "producer_step": "zig build run-native-allocation-negative-smoke",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-allocation-negative-smoke"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-native-allocation-report.json",
+      "producer_step": "zig build run-native-allocation-report-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-allocation-report-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-native-allocation-report.md",
+      "producer_step": "zig build run-native-allocation-report-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-allocation-report-dashboard"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-native-allocation-smoke.json",
+      "producer_step": "zig build run-native-allocation-smoke",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-allocation-smoke"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-native-fuzz-corpus-coverage-smoke.json",
+      "producer_step": "zig build run-native-fuzz-corpus-coverage-smoke",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-fuzz-corpus-coverage-smoke"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-native-fuzz-corpus.json",
+      "producer_step": "zig build run-native-fuzz-corpus-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-fuzz-corpus-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-native-fuzz-corpus.md",
+      "producer_step": "zig build run-native-fuzz-corpus-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-fuzz-corpus-dashboard"
+    },
+    {
       "expected_format": "md",
       "name": "vort-native-parallel-dashboard.md",
       "producer_step": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard",
@@ -202,6 +251,20 @@
       "producer_step": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard",
       "required_smoke_gate": false,
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-png-scratch-report.json",
+      "producer_step": "zig build run-png-scratch-report-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-png-scratch-report-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-png-scratch-report.md",
+      "producer_step": "zig build run-png-scratch-report-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-png-scratch-report-dashboard"
     },
     {
       "expected_format": "json",
@@ -289,31 +352,17 @@
     },
     {
       "expected_format": "json",
-      "name": "vort-native-allocation-report.json",
-      "producer_step": "zig build run-native-allocation-report-dashboard",
+      "name": "vort-zlib-relaxed-report-gate.json",
+      "producer_step": "zig build run-zlib-relaxed-report-gate",
       "required_smoke_gate": true,
-      "smoke_gate": "zig build run-native-allocation-report-dashboard"
-    },
-    {
-      "expected_format": "md",
-      "name": "vort-native-allocation-report.md",
-      "producer_step": "zig build run-native-allocation-report-dashboard",
-      "required_smoke_gate": true,
-      "smoke_gate": "zig build run-native-allocation-report-dashboard"
+      "smoke_gate": "zig build run-zlib-relaxed-report-gate"
     },
     {
       "expected_format": "json",
-      "name": "vort-native-allocation-smoke.json",
-      "producer_step": "zig build run-native-allocation-smoke",
+      "name": "vort-zlib-relaxed-report.json",
+      "producer_step": "zig build run-zlib-relaxed-report",
       "required_smoke_gate": true,
-      "smoke_gate": "zig build run-native-allocation-smoke"
-    },
-    {
-      "expected_format": "json",
-      "name": "vort-native-allocation-negative-smoke.json",
-      "producer_step": "zig build run-native-allocation-negative-smoke",
-      "required_smoke_gate": true,
-      "smoke_gate": "zig build run-native-allocation-negative-smoke"
+      "smoke_gate": "zig build run-zlib-relaxed-report-gate"
     }
   ],
   "schema": "vort.dashboard_producers_required_artifacts",
