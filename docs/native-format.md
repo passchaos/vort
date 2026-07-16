@@ -145,12 +145,14 @@ Full sidecar/embedded validation can likewise accept caller-provided index,
 payload scratch, and dictionary-deflate patch scratch buffers, letting trusted
 validation loops avoid parser/scratch allocations when their maximum frame sizes
 are already known; report-producing validation APIs expose the same buffer-reuse
-path. `SidecarValidationBuffers.patch_scratch` is only needed for full
-validation of dictionary-deflate frames and should be sized to
-`maxDictionaryPatchSizeForDecodedLen(max_frame_output)`. Default full validation
-pre-reserves payload scratch capacity from the largest indexed frame to avoid
-repeated growth across many frames, while callers that need dictionary-deflate
-validation to stay zero-allocation should provide the patch scratch explicitly.
+path. `sidecarValidationBufferSizesForIndex`,
+`sidecarValidationBufferSizesForSidecarIndex`, and
+`sidecarValidationBufferSizesForEmbeddedIndex` preflight the required validation
+entry count, payload scratch length, and dictionary-deflate patch scratch length.
+Default full validation pre-reserves payload scratch capacity from the largest
+indexed frame to avoid repeated growth across many frames, while callers that
+need dictionary-deflate validation to stay zero-allocation should provide both
+payload and patch scratch explicitly.
 
 ## Range decode summary APIs
 

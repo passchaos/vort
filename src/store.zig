@@ -2540,6 +2540,39 @@ pub const SidecarValidationBuffers = struct {
     patch_scratch: []u8 = &.{},
 };
 
+pub const SidecarValidationBufferSizes = struct {
+    index_entries: usize,
+    payload_scratch_len: usize,
+    patch_scratch_len: usize,
+};
+
+pub fn sidecarValidationBufferSizesForIndex(index: []const FrameIndexEntry) Error!SidecarValidationBufferSizes {
+    const range_sizes = try dictionaryRangeBufferSizesForIndex(index);
+    return .{
+        .index_entries = range_sizes.index_entries,
+        .payload_scratch_len = range_sizes.payload_scratch_len,
+        .patch_scratch_len = range_sizes.patch_scratch_len,
+    };
+}
+
+pub fn sidecarValidationBufferSizesForSidecarIndex(sidecar_index: []const u8) Error!SidecarValidationBufferSizes {
+    const range_sizes = try dictionaryRangeBufferSizesForSidecarIndex(sidecar_index);
+    return .{
+        .index_entries = range_sizes.index_entries,
+        .payload_scratch_len = range_sizes.payload_scratch_len,
+        .patch_scratch_len = range_sizes.patch_scratch_len,
+    };
+}
+
+pub fn sidecarValidationBufferSizesForEmbeddedIndex(input: []const u8) Error!SidecarValidationBufferSizes {
+    const range_sizes = try dictionaryRangeBufferSizesForEmbeddedIndex(input);
+    return .{
+        .index_entries = range_sizes.index_entries,
+        .payload_scratch_len = range_sizes.payload_scratch_len,
+        .patch_scratch_len = range_sizes.patch_scratch_len,
+    };
+}
+
 fn validationPatchScratch(buffers: SidecarValidationBuffers) ?[]u8 {
     return if (buffers.patch_scratch.len == 0) null else buffers.patch_scratch;
 }
@@ -4459,7 +4492,7 @@ test "dictionary deflate validation reuses caller patch scratch" {
     defer std.testing.allocator.free(index);
     const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, index);
     defer std.testing.allocator.free(sidecar);
-    const index_sizes = try dictionaryRangeBufferSizesForSidecarIndex(sidecar);
+    const index_sizes = try sidecarValidationBufferSizesForSidecarIndex(sidecar);
     const index_frame = try encodeSkippableAlloc(std.testing.allocator, sidecar);
     defer std.testing.allocator.free(index_frame);
 
@@ -4479,6 +4512,10 @@ test "dictionary deflate validation reuses caller patch scratch" {
         .payload_scratch = payload_scratch,
         .patch_scratch = patch_scratch,
     };
+    const direct_sizes = try sidecarValidationBufferSizesForIndex(index);
+    try std.testing.expectEqual(index_sizes, direct_sizes);
+    const embedded_sizes = try sidecarValidationBufferSizesForEmbeddedIndex(stream.items);
+    try std.testing.expectEqual(index_sizes, embedded_sizes);
 
     try validateSidecarIndexWithOptionsAndBuffersAlloc(std.testing.failing_allocator, frame, sidecar, .{ .mode = .full, .dictionary = dict }, buffers);
     const sidecar_report = validateSidecarIndexReportWithOptionsAndBuffersAlloc(std.testing.failing_allocator, frame, sidecar, .{ .mode = .full, .dictionary = dict }, buffers);
