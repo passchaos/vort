@@ -250,6 +250,7 @@ def main() -> int:
                 "python_zlib_diff_dictionary_cases": 1,
                 "python_zlib_diff_zlib_dict_encode_cases": 1,
                 "python_zlib_diff_raw_dict_encode_cases": 1,
+                "python_zlib_diff_malformed_wrapper_cases": 1,
                 "python_zlib_diff_cli_successes": 1,
                 "python_zlib_diff_expected_failures": 1,
                 "artifacts": [

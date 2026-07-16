@@ -36,6 +36,9 @@ architecture blindly.
 - [x] Architecture-specific IEEE CRC32 implementation / dispatch.
 - [x] Differential checksum smoke against Zig std reference implementations.
 - [x] Differential checksum tests against Python zlib and local/system gzip wrapper trailers.
+- [x] Python zlib differential smoke covers malformed zlib/gzip wrapper cases
+  (bad headers, checksum/size mismatches, trailing data, truncated frames) and
+  exposes their counts in validation/dashboard JSON health.
 
 ## Milestone 2: native frame plumbing
 

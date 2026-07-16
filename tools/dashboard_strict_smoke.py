@@ -512,6 +512,7 @@ def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
         "dictionary_cases": 1,
         "zlib_dict_encode_cases": 1,
         "raw_dict_encode_cases": 1,
+        "malformed_wrapper_cases": 1,
         "cli_successes": 8 if ok else 0,
         "expected_failures": 2 if ok else 0,
     }

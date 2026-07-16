@@ -1274,6 +1274,7 @@ Example:
   "dictionary_cases": 3,
   "zlib_dict_encode_cases": 6,
   "raw_dict_encode_cases": 5,
+  "malformed_wrapper_cases": 8,
   "cli_successes": 100,
   "expected_failures": 20
 }
@@ -1379,7 +1380,8 @@ Top-level fields:
   `python_zlib_diff_match_heavy_payloads`,
   `python_zlib_diff_dynamic_payloads`, `python_zlib_diff_dictionary_cases`,
   `python_zlib_diff_zlib_dict_encode_cases`,
-  `python_zlib_diff_raw_dict_encode_cases`, `python_zlib_diff_cli_successes`,
+  `python_zlib_diff_raw_dict_encode_cases`,
+  `python_zlib_diff_malformed_wrapper_cases`, `python_zlib_diff_cli_successes`,
   `python_zlib_diff_expected_failures`
 - `artifacts`
 
@@ -1502,6 +1504,7 @@ Example:
   "python_zlib_diff_dictionary_cases": 0,
   "python_zlib_diff_zlib_dict_encode_cases": 0,
   "python_zlib_diff_raw_dict_encode_cases": 0,
+  "python_zlib_diff_malformed_wrapper_cases": 0,
   "python_zlib_diff_cli_successes": 0,
   "python_zlib_diff_expected_failures": 0,
   "artifacts": [

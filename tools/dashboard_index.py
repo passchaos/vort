@@ -332,6 +332,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
         dictionary_cases = int(data.get("dictionary_cases") or 0)
         zlib_dict_encode_cases = int(data.get("zlib_dict_encode_cases") or 0)
         raw_dict_encode_cases = int(data.get("raw_dict_encode_cases") or 0)
+        malformed_wrapper_cases = int(data.get("malformed_wrapper_cases") or 0)
         cli_successes = int(data.get("cli_successes") or 0)
         expected_failures = int(data.get("expected_failures") or 0)
         return {
@@ -343,6 +344,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
             "dictionary_cases": dictionary_cases,
             "zlib_dict_encode_cases": zlib_dict_encode_cases,
             "raw_dict_encode_cases": raw_dict_encode_cases,
+            "malformed_wrapper_cases": malformed_wrapper_cases,
             "cli_successes": cli_successes,
             "expected_failures": expected_failures,
             "healthy": bool(data.get("ok"))
@@ -352,6 +354,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
             and dictionary_cases > 0
             and zlib_dict_encode_cases > 0
             and raw_dict_encode_cases > 0
+            and malformed_wrapper_cases > 0
             and cli_successes > 0
             and expected_failures > 0,
         }
@@ -364,6 +367,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
         "dictionary_cases": 0,
         "zlib_dict_encode_cases": 0,
         "raw_dict_encode_cases": 0,
+        "malformed_wrapper_cases": 0,
         "cli_successes": 0,
         "expected_failures": 0,
         "healthy": False,
@@ -783,6 +787,7 @@ def main() -> int:
                 "python_zlib_diff_dictionary_cases": python_zlib_health["dictionary_cases"],
                 "python_zlib_diff_zlib_dict_encode_cases": python_zlib_health["zlib_dict_encode_cases"],
                 "python_zlib_diff_raw_dict_encode_cases": python_zlib_health["raw_dict_encode_cases"],
+                "python_zlib_diff_malformed_wrapper_cases": python_zlib_health["malformed_wrapper_cases"],
                 "python_zlib_diff_cli_successes": python_zlib_health["cli_successes"],
                 "python_zlib_diff_expected_failures": python_zlib_health["expected_failures"],
                 "artifacts": records,

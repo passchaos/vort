@@ -251,6 +251,7 @@
             "python_zlib_diff_dictionary_cases",
             "python_zlib_diff_zlib_dict_encode_cases",
             "python_zlib_diff_raw_dict_encode_cases",
+            "python_zlib_diff_malformed_wrapper_cases",
             "python_zlib_diff_cli_successes",
             "python_zlib_diff_expected_failures"
           ]
@@ -404,6 +405,7 @@
         "python_zlib_diff_expected_failures": "int",
         "python_zlib_diff_healthy": "bool",
         "python_zlib_diff_match_heavy_payloads": "int",
+        "python_zlib_diff_malformed_wrapper_cases": "int",
         "python_zlib_diff_ok": "bool",
         "python_zlib_diff_payloads": "int",
         "python_zlib_diff_present": "bool",
@@ -1916,6 +1918,7 @@
             "dictionary_cases",
             "zlib_dict_encode_cases",
             "raw_dict_encode_cases",
+            "malformed_wrapper_cases",
             "cli_successes",
             "expected_failures"
           ]
@@ -1927,6 +1930,7 @@
         "dynamic_payloads": "int",
         "expected_failures": "int",
         "match_heavy_payloads": "int",
+        "malformed_wrapper_cases": "int",
         "ok": "bool",
         "payloads": "int",
         "raw_dict_encode_cases": "int",

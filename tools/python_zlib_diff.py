@@ -221,6 +221,34 @@ def main() -> int:
     expect_cli_failure("decode-zlib-dict-concat-hex", zlib_dict_concat.hex(), "wrong dictionary", error_name="ChecksumMismatch")
     expect_cli_failure("decode-zlib-dict-concat-hex", zlib_dict_concat.hex(), dictionary_text, str(len(zlib_dict_concat_payload) - 1), error_name="OutputLimitExceeded")
 
+    malformed_wrapper_cases = [
+        ("zlib", "decode-zlib-hex", bytes.fromhex("0000"), "BadZlibHeader", "error"),
+        ("zlib", "decode-zlib-hex", bytes.fromhex("7801cb48cdc9c90700062c0214"), "ChecksumMismatch", "error"),
+        ("zlib", "decode-zlib-hex", bytes.fromhex("7801cb48cdc9c90700062c021558"), "TrailingData", "unused"),
+        ("zlib", "decode-zlib-hex", bytes.fromhex("7801cb48cdc9c90700062c"), "TruncatedFrame", "error"),
+        ("gzip", "decode-gzip-hex", bytes.fromhex("0000"), "TruncatedFrame", "error"),
+        ("gzip", "decode-gzip-hex", bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a6103705000000"), "ChecksumMismatch", "error"),
+        ("gzip", "decode-gzip-hex", bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a610360500000058"), "TruncatedFrame", "unused"),
+        ("gzip", "decode-gzip-hex", bytes.fromhex("1f8b0800000000000403cb48cdc9c9070086a610"), "TruncatedFrame", "error"),
+    ]
+    for frame_format, command, frame, expected_error, python_behavior in malformed_wrapper_cases:
+        if python_behavior == "error":
+            try:
+                zlib.decompress(frame, wbits=31 if frame_format == "gzip" else zlib.MAX_WBITS)
+            except zlib.error:
+                pass
+            else:
+                raise AssertionError(f"python zlib unexpectedly accepted malformed {frame_format} frame: {frame.hex()}")
+        elif python_behavior == "unused":
+            decompressor = zlib.decompressobj(wbits=31 if frame_format == "gzip" else zlib.MAX_WBITS)
+            decompressor.decompress(frame)
+            decompressor.flush()
+            if not decompressor.unused_data:
+                raise AssertionError(f"python zlib did not expose trailing data for {frame_format} frame: {frame.hex()}")
+        else:
+            raise AssertionError(f"unknown python malformed behavior: {python_behavior}")
+        expect_cli_failure(command, frame.hex(), error_name=expected_error)
+
     zlib_file_payload = b"zlib file output limit smoke"
     zlib_file_frame = zlib.compress(zlib_file_payload, level=6)
     zlib_file_missing_footer = zlib_file_frame[:-4]
@@ -436,6 +464,7 @@ def main() -> int:
         "dictionary_cases": len(dict_cases),
         "zlib_dict_encode_cases": len(zlib_dict_encode_cases),
         "raw_dict_encode_cases": len(raw_dict_encode_cases),
+        "malformed_wrapper_cases": len(malformed_wrapper_cases),
         "cli_successes": METRICS["cli_successes"],
         "expected_failures": METRICS["expected_failures"],
     }
@@ -444,6 +473,7 @@ def main() -> int:
     print(
         "python zlib differential smoke: "
         f"payloads={len(payloads)} match_heavy=3 dynamic_payloads={len(dynamic_payloads)} "
+        f"malformed_wrapper_cases={len(malformed_wrapper_cases)} "
         f"cli_successes={METRICS['cli_successes']} expected_failures={METRICS['expected_failures']} cli={CLI}"
     )
     return 0
