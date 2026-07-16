@@ -2701,6 +2701,22 @@ pub fn decodeZlibChunksWithDictionaryAndOptions(chunks: []const []const u8, comp
     return decodeZlibChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, output, dictionary, options);
 }
 
+pub fn decodeZlibChunksInto(chunks: []const []const u8, output: []u8) Error!usize {
+    return decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks, output, null, .{});
+}
+
+pub fn decodeZlibChunksIntoWithOptions(chunks: []const []const u8, output: []u8, options: ZlibDecodeOptions) Error!usize {
+    return decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks, output, null, options);
+}
+
+pub fn decodeZlibChunksIntoWithDictionary(chunks: []const []const u8, output: []u8, dictionary: []const u8) Error!usize {
+    return decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks, output, dictionary, .{});
+}
+
+pub fn decodeZlibChunksIntoWithDictionaryAndOptions(chunks: []const []const u8, output: []u8, dictionary: []const u8, options: ZlibDecodeOptions) Error!usize {
+    return decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks, output, dictionary, options);
+}
+
 fn decodeZlibChunksWithOptionalDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return decodeZlibWithOptionalDictionaryAndOptions(joined, output, dictionary, options);
@@ -6054,6 +6070,11 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     var output: [input.len]u8 = undefined;
     try std.testing.expectEqual(input.len, try decodeZlibChunks(&chunks, &compressed_scratch, &output));
     try std.testing.expectEqualSlices(u8, input, &output);
+    @memset(&output, 0);
+    try std.testing.expectEqual(input.len, try decodeZlibChunksInto(&chunks, &output));
+    try std.testing.expectEqualSlices(u8, input, &output);
+    var short_output: [input.len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodeZlibChunksInto(&chunks, &short_output));
 
     const alloc = try decodeZlibChunksAlloc(std.testing.allocator, &chunks);
     defer std.testing.allocator.free(alloc);
@@ -6109,6 +6130,9 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     const relaxed = ZlibDecodeOptions{ .ignore_adler = true, .allow_trailing_data = true };
     try std.testing.expectEqual(input.len, try decodeZlibChunksWithOptions(&relaxed_chunks, &compressed_scratch, &output, relaxed));
     try std.testing.expectEqualSlices(u8, input, &output);
+    @memset(&output, 0);
+    try std.testing.expectEqual(input.len, try decodeZlibChunksIntoWithOptions(&relaxed_chunks, &output, relaxed));
+    try std.testing.expectEqualSlices(u8, input, &output);
     const relaxed_alloc = try decodeZlibChunksAllocWithOptionsLimited(std.testing.allocator, &relaxed_chunks, relaxed, input.len);
     defer std.testing.allocator.free(relaxed_alloc);
     try std.testing.expectEqualSlices(u8, input, relaxed_alloc);
@@ -6123,6 +6147,10 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     };
     try std.testing.expectEqual(input.len, try decodeZlibChunksWithDictionary(&dict_chunks, &compressed_scratch, &output, dict));
     try std.testing.expectEqualSlices(u8, input, &output);
+    @memset(&output, 0);
+    try std.testing.expectEqual(input.len, try decodeZlibChunksIntoWithDictionary(&dict_chunks, &output, dict));
+    try std.testing.expectEqualSlices(u8, input, &output);
+    try std.testing.expectEqual(input.len, try decodeZlibChunksIntoWithDictionaryAndOptions(&dict_chunks, &output, dict, .{}));
     const dict_exact = try decodeZlibChunksAllocWithDictionaryExactSize(std.testing.allocator, &dict_chunks, dict, input.len);
     defer std.testing.allocator.free(dict_exact);
     try std.testing.expectEqualSlices(u8, input, dict_exact);

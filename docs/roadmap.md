@@ -292,10 +292,11 @@ architecture blindly.
   while preserving strict defaults for PNG compatibility and relaxed-reader
   integrations.
 - [x] Public zlib chunked decode helpers cover strict, relaxed, exact-size,
-  output-limited, and preset-dictionary variants. Caller-buffer variants can
-  still join into caller scratch, while allocator-returning variants now decode
-  directly from chunked input through a chunk-aware bit reader instead of first
-  allocating a contiguous compressed copy.
+  output-limited, and preset-dictionary variants. Legacy caller-buffer variants
+  can still join into caller scratch, while the new `decodeZlibChunksInto*` and
+  allocator-returning variants decode directly from chunked input through a
+  chunk-aware bit reader instead of first materializing a contiguous compressed
+  copy.
 - [x] zlib relaxed decode options report/gate covers strict rejection, relaxed
   success, exact/limited allocator variants, output-limit rejection, and preset
   dictionary streams.
