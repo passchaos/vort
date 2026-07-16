@@ -1770,6 +1770,69 @@ Example:
 }
 ```
 
+## `vort.native_allocation_report`
+
+Produced by:
+
+```sh
+zig build run-native-allocation-report-dashboard
+```
+
+This report records allocator activity for representative native decode paths so
+caller-owned APIs and allocation preflight optimizations have a retained
+regression baseline.
+
+Top-level fields:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `schema` | string | Always `vort.native_allocation_report`. |
+| `schema_version` | integer | Currently `1`. |
+| `case_count` | integer | Number of rows in `cases`. |
+| `cases` | list | Allocation measurements for individual decode paths. |
+
+Each `cases` item includes:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `case` | string | Stable case label. |
+| `input_bytes` | integer | Encoded input size. |
+| `output_bytes` | integer | Decoded output bytes, or zero for reject/validation cases. |
+| `allocations` | integer | Allocation calls observed by the counting allocator. |
+| `deallocations` | integer | Free calls observed by the counting allocator. |
+| `allocated_bytes` | integer | Bytes allocated by the measured path. |
+| `freed_bytes` | integer | Bytes freed by the measured path. |
+
+Example:
+
+```json
+{
+  "schema": "vort.native_allocation_report",
+  "schema_version": 1,
+  "case_count": 2,
+  "cases": [
+    {
+      "case": "concat_alloc",
+      "input_bytes": 79,
+      "output_bytes": 49,
+      "allocations": 1,
+      "deallocations": 1,
+      "allocated_bytes": 49,
+      "freed_bytes": 49
+    },
+    {
+      "case": "concat_into",
+      "input_bytes": 79,
+      "output_bytes": 49,
+      "allocations": 0,
+      "deallocations": 0,
+      "allocated_bytes": 0,
+      "freed_bytes": 0
+    }
+  ]
+}
+```
+
 ## `vort.validation_json_schema_manifest`
 
 Consumed by:

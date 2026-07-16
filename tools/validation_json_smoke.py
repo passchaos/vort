@@ -96,6 +96,7 @@ def main() -> int:
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
         decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
+        native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -186,6 +187,12 @@ def main() -> int:
         assert python_zlib_diff["cli_successes"] >= 1
         assert python_zlib_diff["expected_failures"] >= 1
         validate_value_against_manifest(python_zlib_diff, schemas_def)
+        native_allocation = json.loads(native_allocation_path.read_text())
+        assert native_allocation["schema"] == "vort.native_allocation_report"
+        assert native_allocation["schema_version"] == 1
+        assert native_allocation["case_count"] >= 1
+        assert native_allocation["cases"]
+        validate_value_against_manifest(native_allocation, schemas_def)
         run([
             "python3",
             str(ROOT / "tools" / "dashboard_config_index_smoke.py"),

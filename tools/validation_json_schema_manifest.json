@@ -1095,6 +1095,29 @@
         }
       }
     },
+    "vort.native_allocation_report": {
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "allocated_bytes": "int",
+        "allocations": "int",
+        "case": "str",
+        "deallocations": "int",
+        "freed_bytes": "int",
+        "input_bytes": "int",
+        "output_bytes": "int"
+      }
+    },
     "vort.fuzz_corpus_report": {
       "fields": {
         "accepted": "int",
