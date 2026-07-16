@@ -2639,9 +2639,21 @@ pub const ZlibDecoder = struct {
         return self;
     }
 
+    pub fn initExactSize(input: []const u8, scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetExactSize(input, scratch, expected_output_len);
+        return self;
+    }
+
     pub fn initWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) Error!ZlibDecoder {
         var self = ZlibDecoder{};
         try self.resetWithDictionary(input, dictionary, scratch);
+        return self;
+    }
+
+    pub fn initWithDictionaryExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetWithDictionaryExactSize(input, dictionary, scratch, expected_output_len);
         return self;
     }
 
@@ -2656,6 +2668,14 @@ pub const ZlibDecoder = struct {
         };
     }
 
+    pub fn resetExactSize(self: *ZlibDecoder, input: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
+        try self.reset(input, scratch);
+        if (self.decoded.len != expected_output_len) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+    }
+
     pub fn resetWithDictionary(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8) Error!void {
         const written = decodeZlibWithDictionary(input, scratch, dictionary) catch |err| {
             self.recordError(err);
@@ -2665,6 +2685,14 @@ pub const ZlibDecoder = struct {
             .decoded = scratch[0..written],
             .frame_len = input.len,
         };
+    }
+
+    pub fn resetWithDictionaryExactSize(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
+        try self.resetWithDictionary(input, dictionary, scratch);
+        if (self.decoded.len != expected_output_len) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
     }
 
     pub fn snapshot(self: *const ZlibDecoder) Snapshot {
@@ -3758,7 +3786,7 @@ test "zlib decoder drains PNG-like payload from caller scratch" {
     const encoded = try encodeZlibBestAlloc(std.testing.allocator, &png_like, optionsForLevel(.default));
     defer std.testing.allocator.free(encoded);
     var scratch: [png_like.len]u8 = undefined;
-    var decoder = try ZlibDecoder.init(encoded, &scratch);
+    var decoder = try ZlibDecoder.initExactSize(encoded, &scratch, png_like.len);
     try std.testing.expectEqual(png_like.len, decoder.snapshot().expected_output_len);
     try std.testing.expectEqualStrings("payload", decoder.diagnostics().phase_name);
     var out: [png_like.len]u8 = undefined;
@@ -3777,7 +3805,9 @@ test "zlib decoder drains PNG-like payload from caller scratch" {
     try std.testing.expectEqualSlices(u8, &png_like, &out);
     try std.testing.expectEqualStrings("done", decoder.diagnostics().phase_name);
 
-    try std.testing.expectError(error.OutputTooSmall, ZlibDecoder.init(encoded, scratch[0 .. scratch.len - 1]));
+    try std.testing.expectError(error.OutputTooSmall, ZlibDecoder.initExactSize(encoded, scratch[0 .. scratch.len - 1], png_like.len));
+    try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initExactSize(encoded, &scratch, png_like.len - 1));
+    try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initExactSize(encoded, &scratch, png_like.len + 1));
 }
 
 test "zlib decoder supports preset dictionary streams" {
@@ -3786,11 +3816,12 @@ test "zlib decoder supports preset dictionary streams" {
     const encoded = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, input, dict, optionsForLevel(.default));
     defer std.testing.allocator.free(encoded);
     var scratch: [input.len]u8 = undefined;
-    var decoder = try ZlibDecoder.initWithDictionary(encoded, dict, &scratch);
+    var decoder = try ZlibDecoder.initWithDictionaryExactSize(encoded, dict, &scratch, input.len);
     var out: [input.len]u8 = undefined;
     const step = try decoder.step(&out);
     try std.testing.expectEqual(core.StepResult.Status.done, step.status);
     try std.testing.expectEqualSlices(u8, input, &out);
+    try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initWithDictionaryExactSize(encoded, dict, &scratch, input.len - 1));
     try std.testing.expectError(error.NeedDictionary, ZlibDecoder.init(encoded, &scratch));
 }
 

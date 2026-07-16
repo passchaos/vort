@@ -415,6 +415,7 @@ architecture blindly.
 - [x] zlib wrapper integration for single final dynamic-Huffman blocks.
 - [x] zlib wrapper integration for multi-block dynamic streams.
 - [x] ZlibDecoder drains multi-filter PNG-like zlib-wrapped payloads through reusable caller-owned scratch and bounded output.
+- [x] ZlibDecoder exact-size initializers reject decoded-size mismatches for PNG/IHDR-sized buffers.
 - [x] ZlibDecoder reports bad-header, missing-dictionary, truncated-footer, and Adler mismatch diagnostics.
 - [x] gzip wrapper and CRC/ISIZE verification for stored blocks.
 - [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC validation.
