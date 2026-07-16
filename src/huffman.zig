@@ -174,6 +174,7 @@ pub const DynamicLengths = struct {
     header: DynamicHeader,
     literal_lengths: [286]u4 = @splat(0),
     distance_lengths: [30]u4 = @splat(0),
+    literal_max_bits: u4 = 0,
     code_length_symbol_histogram: [19]u16 = @splat(0),
 };
 
@@ -274,6 +275,7 @@ pub fn parseDynamicLengthsBody(header: DynamicHeader, reader: anytype) Error!Dyn
 fn setDynamicLength(parsed: *DynamicLengths, header: DynamicHeader, pos: usize, value: u4) void {
     if (pos < header.hlit) {
         parsed.literal_lengths[pos] = value;
+        parsed.literal_max_bits = @max(parsed.literal_max_bits, value);
     } else {
         parsed.distance_lengths[pos - header.hlit] = value;
     }
@@ -285,7 +287,10 @@ fn getDynamicLength(parsed: DynamicLengths, header: DynamicHeader, pos: usize) u
 
 fn setDynamicLengthRun(parsed: *DynamicLengths, header: DynamicHeader, pos: usize, count: usize, value: u4) void {
     const literal_end = @min(pos + count, header.hlit);
-    if (pos < literal_end) @memset(parsed.literal_lengths[pos..literal_end], value);
+    if (pos < literal_end) {
+        @memset(parsed.literal_lengths[pos..literal_end], value);
+        parsed.literal_max_bits = @max(parsed.literal_max_bits, value);
+    }
     if (pos + count > header.hlit) {
         const dist_start = if (pos > header.hlit) pos - header.hlit else 0;
         const dist_end = pos + count - header.hlit;

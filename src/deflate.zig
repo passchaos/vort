@@ -1372,9 +1372,7 @@ pub fn decodeRawDynamicAllocStrict(allocator: std.mem.Allocator, input: []const 
 const DynamicDistanceDecoder = huffman.FastDecoder(30, 8);
 
 fn dynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
-    var max_bits: u4 = 0;
-    for (parsed.literal_lengths[0..parsed.header.hlit]) |bits| max_bits = @max(max_bits, bits);
-    return if (max_bits <= 4) 9 else 10;
+    return if (parsed.literal_max_bits <= 4) 9 else 10;
 }
 
 fn makeDynamicDistanceDecoder(table: huffman.HuffmanTable(30)) DynamicDistanceDecoder {

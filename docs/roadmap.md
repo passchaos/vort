@@ -702,6 +702,8 @@ architecture blindly.
 - [x] Dynamic literal/length decode selects a 9-bit lookup for very short-code
   blocks and a 10-bit lookup otherwise, preserving tiny-block setup wins without
   regressing larger corpus decode throughput.
+- [x] Dynamic length parsing records the literal alphabet's maximum code length
+  so adaptive literal lookup selection avoids a second per-block scan.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
