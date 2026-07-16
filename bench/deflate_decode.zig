@@ -1,5 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
+const bitstream = vort.bitstream;
+const huffman = vort.huffman;
 
 const Case = struct {
     name: []const u8,
@@ -92,16 +94,53 @@ fn decodeAndChecksum(allocator: std.mem.Allocator, case: Case, mode: DecodeMode)
 fn runDynamicStageBench(io: std.Io, stdout: *std.Io.Writer, iterations: usize) !u64 {
     const frame = [_]u8{ 0x3d, 0xc6, 0x39, 0x11, 0x00, 0x00, 0x0c, 0x02, 0x30, 0x2b, 0xb5, 0x52, 0x1e, 0xff, 0x96, 0x38, 0x16, 0x96, 0x5c, 0x1e, 0x94, 0xcb, 0x6d, 0x01 };
     var mix: u64 = 0;
+    var parsed: huffman.DynamicLengths = undefined;
 
     {
         const start = std.Io.Clock.awake.now(io);
         for (0..iterations) |_| {
-            const info = try vort.parseRawDeflateHeaderInfo(&frame);
-            mix +%= info.header_bits_consumed;
-            mix +%= info.dynamic_literal_nonzero orelse 0;
-            mix +%= info.dynamic_distance_nonzero orelse 0;
+            var reader = bitstream.BitReader.init(&frame);
+            parsed = try huffman.parseDynamicLengths(&reader);
+            mix +%= reader.byteOffset();
+            mix +%= parsed.header.hlit;
+            mix +%= parsed.header.hdist;
         }
-        try printStage(stdout, start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds(), "raw-dynamic-small-header-info", iterations, frame.len);
+        try printStage(stdout, start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds(), "raw-dynamic-small-parse-lengths", iterations, frame.len);
+    }
+
+    {
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| {
+            const table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+            mix +%= table.len;
+        }
+        try printStage(stdout, start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds(), "raw-dynamic-small-lit-table", iterations, frame.len);
+    }
+
+    {
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| {
+            const table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+            mix +%= table.len;
+        }
+        try printStage(stdout, start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds(), "raw-dynamic-small-dist-table", iterations, frame.len);
+    }
+
+    {
+        const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+        const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+        const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+        const dist_decoder = huffman.FastDecoder(30, 8).init(dist_table);
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| {
+            var reader = bitstream.BitReader.init(&frame);
+            _ = try huffman.parseDynamicLengths(&reader);
+            var scratch: [64]u8 = undefined;
+            var out_offset: usize = 0;
+            try decodeDynamicPayloadForBench(&reader, &scratch, &out_offset, &lit_decoder, &dist_decoder);
+            mix +%= vort.crc32(scratch[0..out_offset]);
+        }
+        try printStage(stdout, start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds(), "raw-dynamic-small-payload", iterations, frame.len);
     }
 
     {
@@ -127,4 +166,52 @@ fn printStage(stdout: *std.Io.Writer, elapsed_ns_signed: i128, name: []const u8,
         elapsed_s,
         elapsed_ns / @as(f64, @floatFromInt(iterations)),
     });
+}
+
+fn decodeDynamicPayloadForBench(reader: *bitstream.BitReader, output: []u8, out_offset: *usize, lit_decoder: anytype, dist_decoder: anytype) !void {
+    while (true) {
+        const symbol = (try lit_decoder.decode(reader)).value;
+        if (symbol < 256) {
+            if (out_offset.* == output.len) return error.OutputTooSmall;
+            output[out_offset.*] = @intCast(symbol);
+            out_offset.* += 1;
+        } else if (symbol == 256) {
+            return;
+        } else if (symbol <= 285) {
+            const length = try decodeLengthForBench(symbol, reader);
+            const distance_symbol = (try dist_decoder.decode(reader)).value;
+            const distance = try decodeDistanceForBench(distance_symbol, reader);
+            try copyMatchForBench(output[0..out_offset.*], output[out_offset.*..], length, distance);
+            out_offset.* += length;
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
+}
+
+fn decodeLengthForBench(symbol: u16, reader: *bitstream.BitReader) !usize {
+    const bases = [_]u16{ 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258 };
+    const extras = [_]u4{ 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0 };
+    if (symbol < 257 or symbol > 285) return error.InvalidHuffmanCode;
+    const index = symbol - 257;
+    const extra = if (extras[index] == 0) 0 else try reader.readBits(u16, extras[index]);
+    return bases[index] + extra;
+}
+
+fn decodeDistanceForBench(symbol: u16, reader: *bitstream.BitReader) !usize {
+    const bases = [_]u16{ 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577 };
+    const extras = [_]u4{ 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13 };
+    if (symbol >= bases.len) return error.InvalidHuffmanCode;
+    const extra = if (extras[symbol] == 0) 0 else try reader.readBits(u16, extras[symbol]);
+    return bases[symbol] + extra;
+}
+
+fn copyMatchForBench(history: []const u8, dest: []u8, length: usize, distance: usize) !void {
+    if (distance == 0 or distance > history.len) return error.InvalidMatch;
+    if (dest.len < length) return error.OutputTooSmall;
+    var i: usize = 0;
+    while (i < length) : (i += 1) {
+        const absolute = history.len + i - distance;
+        dest[i] = if (absolute < history.len) history[absolute] else dest[absolute - history.len];
+    }
 }

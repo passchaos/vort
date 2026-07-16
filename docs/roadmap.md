@@ -675,6 +675,9 @@ architecture blindly.
 - [x] Deflate decode hot-path benchmark includes dynamic-block stage rows for
   header inspection and total caller-buffer decode, exposing how much small
   dynamic streams spend before payload copying.
+- [x] Dynamic decode stage benchmark breaks small dynamic blocks into length
+  parsing, literal-table construction, distance-table construction, payload
+  decode, and total caller-buffer timing to identify the next hot path.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
