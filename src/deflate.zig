@@ -2608,6 +2608,27 @@ pub fn decodeZlibWithDictionary(input: []const u8, output: []u8, dictionary: []c
     return decodeZlibWithOptionalDictionary(input, output, dictionary);
 }
 
+fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
+    var total: usize = 0;
+    for (chunks) |chunk| {
+        total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
+    }
+    if (compressed_scratch.len < total) return error.OutputTooSmall;
+    var offset: usize = 0;
+    for (chunks) |chunk| {
+        @memcpy(compressed_scratch[offset..][0..chunk.len], chunk);
+        offset += chunk.len;
+    }
+    return compressed_scratch[0..total];
+}
+
+/// Bounded-output zlib wrapper decoder.
+///
+/// The compressed wrapper must be complete when `init`/`reset` is called. The
+/// decoder validates the zlib header/footer and raw DEFLATE payload into
+/// caller-owned scratch, then `step` drains that decoded scratch through bounded
+/// caller output buffers. Both the compressed-join scratch used by chunked
+/// initializers and the decoded scratch must outlive the decoder/drain cycle.
 pub const ZlibDecoder = struct {
     decoded: []const u8 = &.{},
     frame_len: usize = 0,
@@ -2737,20 +2758,6 @@ pub const ZlibDecoder = struct {
             self.recordError(error.SizeMismatch);
             return error.SizeMismatch;
         }
-    }
-
-    fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
-        var total: usize = 0;
-        for (chunks) |chunk| {
-            total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
-        }
-        if (compressed_scratch.len < total) return error.OutputTooSmall;
-        var offset: usize = 0;
-        for (chunks) |chunk| {
-            @memcpy(compressed_scratch[offset..][0..chunk.len], chunk);
-            offset += chunk.len;
-        }
-        return compressed_scratch[0..total];
     }
 
     pub fn snapshot(self: *const ZlibDecoder) Snapshot {
@@ -3295,6 +3302,149 @@ pub fn decodeGzip(input: []const u8, output: []u8) Error!usize {
     try validateGzipFooter(input, footer_offset, checksum.crc32Best(payload), raw.output_written);
     return raw.output_written;
 }
+
+/// Bounded-output gzip wrapper decoder.
+///
+/// This mirrors `ZlibDecoder` for gzip members: callers provide all compressed
+/// input up front, the decoder validates the gzip header/footer and DEFLATE
+/// payload into caller-owned decoded scratch, and `step` drains that scratch in
+/// bounded output chunks. Chunked initializers only concatenate gzip bytes into
+/// caller scratch before validation; they do not represent true incremental
+/// parsing yet.
+pub const GzipDecoder = struct {
+    decoded: []const u8 = &.{},
+    frame_len: usize = 0,
+    offset: usize = 0,
+    done: bool = false,
+    last_error_name: []const u8 = "",
+    last_recoverability_hint: RecoverabilityHint = .none,
+
+    pub const RecoverabilityHint = enum {
+        none,
+        corrupt_header,
+        truncated_input,
+        payload_corrupt,
+    };
+
+    pub const Snapshot = struct {
+        output_written: usize,
+        expected_output_len: usize,
+        payload_remaining: usize,
+        done: bool,
+        last_error_name: []const u8,
+        recoverability_hint: RecoverabilityHint,
+    };
+
+    pub fn init(input: []const u8, scratch: []u8) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.reset(input, scratch);
+        return self;
+    }
+
+    pub fn initExactSize(input: []const u8, scratch: []u8, expected_output_len: usize) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetExactSize(input, scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetFromChunks(chunks, compressed_scratch, output_scratch);
+        return self;
+    }
+
+    pub fn initFromChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetFromChunksExactSize(chunks, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn reset(self: *GzipDecoder, input: []const u8, scratch: []u8) Error!void {
+        const written = decodeGzip(input, scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        self.* = .{
+            .decoded = scratch[0..written],
+            .frame_len = input.len,
+        };
+    }
+
+    pub fn resetExactSize(self: *GzipDecoder, input: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
+        try self.reset(input, scratch);
+        if (self.decoded.len != expected_output_len) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+    }
+
+    pub fn resetFromChunks(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        const joined = try joinChunks(chunks, compressed_scratch);
+        return self.reset(joined, output_scratch);
+    }
+
+    pub fn resetFromChunksExactSize(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        const joined = try joinChunks(chunks, compressed_scratch);
+        return self.resetExactSize(joined, output_scratch, expected_output_len);
+    }
+
+    pub fn snapshot(self: *const GzipDecoder) Snapshot {
+        return .{
+            .output_written = self.offset,
+            .expected_output_len = self.decoded.len,
+            .payload_remaining = self.decoded.len - self.offset,
+            .done = self.done,
+            .last_error_name = self.last_error_name,
+            .recoverability_hint = self.last_recoverability_hint,
+        };
+    }
+
+    fn recordError(self: *GzipDecoder, err: Error) void {
+        self.last_error_name = @errorName(err);
+        self.last_recoverability_hint = switch (err) {
+            error.BadGzipHeader, error.InvalidDeflateBlockType, error.InvalidDynamicBlockHeader, error.InvalidHuffmanCode => .corrupt_header,
+            error.TruncatedFrame => .truncated_input,
+            else => .payload_corrupt,
+        };
+    }
+
+    fn hintName(hint: RecoverabilityHint) []const u8 {
+        return switch (hint) {
+            .none => "none",
+            .corrupt_header => "corrupt_header",
+            .truncated_input => "truncated_input",
+            .payload_corrupt => "payload_corrupt",
+        };
+    }
+
+    pub fn diagnostics(self: *const GzipDecoder) core.StreamingDiagnostics {
+        const snap = self.snapshot();
+        return .{
+            .phase_name = if (snap.done) "done" else "payload",
+            .frame_input_read = if (snap.done) self.frame_len else null,
+            .output_written = snap.output_written,
+            .expected_output_len = snap.expected_output_len,
+            .payload_remaining = snap.payload_remaining,
+            .last_error_name = snap.last_error_name,
+            .last_error_phase_name = if (snap.last_error_name.len == 0) "" else "payload",
+            .recoverability_hint_name = hintName(snap.recoverability_hint),
+        };
+    }
+
+    pub fn step(self: *GzipDecoder, output: []u8) Error!core.StepResult {
+        if (self.done) return .{ .status = .done };
+        if (output.len == 0) return .{ .status = .need_output };
+        const remaining = self.decoded[self.offset..];
+        const n = @min(output.len, remaining.len);
+        @memcpy(output[0..n], remaining[0..n]);
+        self.offset += n;
+        if (self.offset == self.decoded.len) self.done = true;
+        return .{
+            .progress = .{ .input_read = if (self.done) self.frame_len else 0, .output_written = n },
+            .status = if (self.done) .done else .need_output,
+        };
+    }
+};
 
 pub fn decodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return decodeGzipStoredAllocLimitedInternal(allocator, input, null);
@@ -4253,6 +4403,73 @@ test "gzip stored wrapper validates crc size header and trailing data" {
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeGzipStored(with_trailing[0 .. encoded.len + 1], &out));
     try std.testing.expectError(error.TrailingData, decodeGzipStoredAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]));
+}
+
+test "gzip decoder drains bounded output from caller scratch" {
+    const input = "gzip bounded decoder payload";
+    const encoded = try encodeGzipBestAlloc(std.testing.allocator, input, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    var scratch: [input.len]u8 = undefined;
+    var decoder = try GzipDecoder.initExactSize(encoded, &scratch, input.len);
+    var out: [input.len]u8 = undefined;
+    var written: usize = 0;
+    while (true) {
+        var chunk: [6]u8 = undefined;
+        const step = try decoder.step(&chunk);
+        @memcpy(out[written..][0..step.progress.output_written], chunk[0..step.progress.output_written]);
+        written += step.progress.output_written;
+        if (step.status == .done) {
+            try std.testing.expectEqual(encoded.len, step.progress.input_read);
+            break;
+        }
+        try std.testing.expectEqual(core.StepResult.Status.need_output, step.status);
+    }
+    try std.testing.expectEqualSlices(u8, input, &out);
+    try std.testing.expectEqualStrings("done", decoder.diagnostics().phase_name);
+
+    var compressed_scratch: [128]u8 = undefined;
+    const chunks = [_][]const u8{
+        encoded[0..4],
+        encoded[4 .. encoded.len - 8],
+        encoded[encoded.len - 8 ..],
+    };
+    var chunk_decoder = try GzipDecoder.initFromChunksExactSize(&chunks, &compressed_scratch, &scratch, input.len);
+    @memset(&out, 0);
+    const chunk_step = try chunk_decoder.step(&out);
+    try std.testing.expectEqual(core.StepResult.Status.done, chunk_step.status);
+    try std.testing.expectEqual(encoded.len, chunk_step.progress.input_read);
+    try std.testing.expectEqualSlices(u8, input, &out);
+    try std.testing.expectError(error.OutputTooSmall, GzipDecoder.initFromChunksExactSize(&chunks, compressed_scratch[0 .. encoded.len - 1], &scratch, input.len));
+
+    try std.testing.expectError(error.OutputTooSmall, GzipDecoder.initExactSize(encoded, scratch[0 .. scratch.len - 1], input.len));
+    try std.testing.expectError(error.SizeMismatch, GzipDecoder.initExactSize(encoded, &scratch, input.len + 1));
+}
+
+test "gzip decoder diagnostics cover wrapper errors" {
+    var scratch: [32]u8 = undefined;
+    var decoder = GzipDecoder{};
+    try std.testing.expectError(error.BadGzipHeader, decoder.reset(&.{ 0x1f, 0x8b, 0x00, 0, 0, 0, 0, 0, 0, 3 }, &scratch));
+    try std.testing.expectEqualStrings("BadGzipHeader", decoder.snapshot().last_error_name);
+    try std.testing.expectEqual(GzipDecoder.RecoverabilityHint.corrupt_header, decoder.snapshot().recoverability_hint);
+
+    const encoded = try encodeGzipBestAlloc(std.testing.allocator, "payload", optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectError(error.TruncatedFrame, decoder.reset(encoded[0 .. encoded.len - 4], &scratch));
+    try std.testing.expectEqual(GzipDecoder.RecoverabilityHint.truncated_input, decoder.snapshot().recoverability_hint);
+
+    const corrupt = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(corrupt);
+    corrupt[corrupt.len - 8] ^= 1;
+    try std.testing.expectError(error.ChecksumMismatch, decoder.reset(corrupt, &scratch));
+    try std.testing.expectEqualStrings("ChecksumMismatch", decoder.snapshot().last_error_name);
+    try std.testing.expectEqual(GzipDecoder.RecoverabilityHint.payload_corrupt, decoder.snapshot().recoverability_hint);
+
+    const bad_size = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_size);
+    bad_size[bad_size.len - 4] ^= 1;
+    try std.testing.expectError(error.SizeMismatch, decoder.reset(bad_size, &scratch));
+    try std.testing.expectEqualStrings("SizeMismatch", decoder.snapshot().last_error_name);
+    try std.testing.expectEqual(GzipDecoder.RecoverabilityHint.payload_corrupt, decoder.snapshot().recoverability_hint);
 }
 
 test "raw fixed Huffman literal/match inflate matches zlib fixed vectors" {

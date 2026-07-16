@@ -184,6 +184,17 @@ Exact-size initializers reject streams whose decoded size differs from the calle
 PNG/IHDR-derived expectation before any bounded-output drain begins. `ZlibDecoder` also records wrapper/header, missing-dictionary, truncation, and
 Adler-32 mismatch diagnostics through the shared `StreamingDiagnostics` surface.
 
+`GzipDecoder` provides the same caller-owned bounded-output shape for ordinary
+gzip-wrapped deflate streams. It accepts either a complete gzip member or
+caller-provided gzip byte chunks, decodes and validates that member into
+caller-provided scratch, then drains the scratch through caller-sized output
+chunks without requiring an allocator in the decode/drain path. Exact-size
+initialization is intended for callers that already know the uncompressed length
+from surrounding metadata; it rejects length mismatches before exposing any
+payload bytes. Gzip header, truncation, CRC-32, and ISIZE failures are retained
+in the shared diagnostics view with recoverability hints for corrupt headers,
+truncated input, or payload/footer corruption.
+
 ## Range decode summary APIs
 
 `decodeRangeWithSummaryAlloc`, `decodeIndexedRangeWithSummaryAlloc`, and the

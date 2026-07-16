@@ -68,6 +68,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureZlibDecoderPngLikeChunks(allocator));
     try rows.append(allocator, try measureZlibDecoderPngLikeVariedChunks(allocator));
     try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
+    try rows.append(allocator, try measureGzipDecoderScratch(allocator));
     try rows.append(allocator, try measureRangeAlloc(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeInto(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
@@ -482,6 +483,28 @@ fn measureZlibDecoderDictionaryChunks(backing: std.mem.Allocator) !CaseStats {
     const result = try decoder.step(out);
     try std.testing.expectEqual(out.len, result.progress.output_written);
     return stats("zlib_decoder_dictionary_chunks_scratch", encoded.len, result.progress.output_written, failing);
+}
+
+fn measureGzipDecoderScratch(backing: std.mem.Allocator) !CaseStats {
+    const input = "gzip bounded decoder payload";
+    const encoded = try vort.encodeGzipBestAlloc(backing, input, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const scratch = try backing.alloc(u8, input.len);
+    defer backing.free(scratch);
+    const compressed_scratch = try backing.alloc(u8, encoded.len);
+    defer backing.free(compressed_scratch);
+    const out = try backing.alloc(u8, input.len);
+    defer backing.free(out);
+    const chunks = [_][]const u8{
+        encoded[0..4],
+        encoded[4 .. encoded.len - 8],
+        encoded[encoded.len - 8 ..],
+    };
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    var decoder = try vort.GzipDecoder.initFromChunksExactSize(&chunks, compressed_scratch, scratch, input.len);
+    const result = try decoder.step(out);
+    try std.testing.expectEqual(out.len, result.progress.output_written);
+    return stats("gzip_decoder_scratch", encoded.len, result.progress.output_written, failing);
 }
 
 fn measureRangeAlloc(backing: std.mem.Allocator, stream: []const u8) !CaseStats {

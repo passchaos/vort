@@ -337,6 +337,7 @@ pub const encodeGzipFixedAlloc = deflate.encodeGzipFixedAlloc;
 pub const encodeGzipBestAlloc = deflate.encodeGzipBestAlloc;
 pub const encodeGzipBestSplitAlloc = deflate.encodeGzipBestSplitAlloc;
 pub const encodeGzipBestAdaptiveSplitAlloc = deflate.encodeGzipBestAdaptiveSplitAlloc;
+pub const GzipDecoder = deflate.GzipDecoder;
 pub const GzipHeaderOptions = deflate.GzipHeaderOptions;
 pub const GzipHeaderInfo = deflate.GzipHeaderInfo;
 pub const GzipMemberInfo = deflate.GzipMemberInfo;
