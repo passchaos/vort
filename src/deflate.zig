@@ -5271,6 +5271,65 @@ test "png adam7 zlib image helper reconstructs interlaced RGB chunks" {
     try std.testing.expectError(error.SizeMismatch, decodePngAdam7ZlibImageFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, try pngAdam7Info(6, 5, 8, .truecolor), &too_wide_image));
 }
 
+test "png adam7 zlib image helper reconstructs interlaced sub-byte chunks" {
+    const info = try pngAdam7Info(5, 5, 2, .indexed);
+    const sizes = pngAdam7DecodeBufferSizes(info);
+    var expected_pixels: [25]u8 = @splat(0);
+    for (0..info.image.height) |y| {
+        for (0..info.image.width) |x| {
+            expected_pixels[y * info.image.width + x] = @intCast((x + y * 2) & 0x3);
+        }
+    }
+    var expected_image: [10]u8 = @splat(0);
+    for (0..info.image.height) |y| {
+        const row = expected_image[y * info.image.row_len ..][0..info.image.row_len];
+        for (0..info.image.width) |x| writePngPackedPixel(row, x, info.image.bits_per_pixel, expected_pixels[y * info.image.width + x]);
+    }
+
+    var filtered_payload: [64]u8 = undefined;
+    var payload_offset: usize = 0;
+    var pass_row: [8]u8 = undefined;
+    var filtered_row: [8]u8 = undefined;
+    var previous_row: [8]u8 = undefined;
+    for (info.passes) |pass| {
+        if (pass.isEmpty()) continue;
+        var has_previous = false;
+        for (0..pass.height) |row_index| {
+            @memset(pass_row[0..pass.row_len], 0);
+            for (0..pass.width) |pass_x| {
+                const dest_x = pass.x_start + pass_x * pass.x_step;
+                const dest_y = pass.y_start + row_index * pass.y_step;
+                writePngPackedPixel(pass_row[0..pass.row_len], pass_x, info.image.bits_per_pixel, expected_pixels[dest_y * info.image.width + dest_x]);
+            }
+            const filter: u8 = @intCast((@as(usize, pass.pass_index) + row_index - 1) % 5);
+            const previous = if (has_previous) previous_row[0..pass.row_len] else null;
+            filterPngScanlineForTest(filter, pass_row[0..pass.row_len], previous, pass.bytes_per_pixel, filtered_row[0..pass.row_len]);
+            filtered_payload[payload_offset] = filter;
+            @memcpy(filtered_payload[payload_offset + 1 ..][0..pass.row_len], filtered_row[0..pass.row_len]);
+            payload_offset += pass.row_len + 1;
+            @memcpy(previous_row[0..pass.row_len], pass_row[0..pass.row_len]);
+            has_previous = true;
+        }
+    }
+    try std.testing.expectEqual(info.zlib_payload_len, payload_offset);
+
+    const encoded = try encodeZlibBestAlloc(std.testing.allocator, filtered_payload[0..payload_offset], optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..4],
+        encoded[4 .. encoded.len - 2],
+        encoded[encoded.len - 2 ..],
+    };
+    var compressed_scratch: [128]u8 = undefined;
+    var zlib_scratch: [64]u8 = undefined;
+    var filtered_row_scratch: [8]u8 = undefined;
+    var previous_row_scratch: [8]u8 = undefined;
+    var image: [expected_image.len]u8 = undefined;
+    const result = try decodePngAdam7ZlibImageFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image);
+    try std.testing.expectEqual(sizes.image_output_len, result.output_written);
+    try std.testing.expectEqualSlices(u8, &expected_image, &image);
+}
+
 test "zlib decoder reconstructs PNG scanlines from chunked IDAT scratch" {
     const bpp = 3;
     const row_len = 12;
