@@ -69,6 +69,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureZlibDecoderPngLikeVariedChunks(allocator));
     try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
     try rows.append(allocator, try measureGzipDecoderScratch(allocator));
+    try rows.append(allocator, try measureGzipDecoderConcatenatedChunks(allocator));
     try rows.append(allocator, try measureRangeAlloc(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeInto(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
@@ -505,6 +506,43 @@ fn measureGzipDecoderScratch(backing: std.mem.Allocator) !CaseStats {
     const result = try decoder.step(out);
     try std.testing.expectEqual(out.len, result.progress.output_written);
     return stats("gzip_decoder_scratch", encoded.len, result.progress.output_written, failing);
+}
+
+fn measureGzipDecoderConcatenatedChunks(backing: std.mem.Allocator) !CaseStats {
+    const plain = "hello world";
+    const first = try vort.encodeGzipFixedAlloc(backing, "hello ");
+    defer backing.free(first);
+    const empty = try vort.encodeGzipFixedAlloc(backing, "");
+    defer backing.free(empty);
+    const third = try vort.encodeGzipFixedAlloc(backing, "world");
+    defer backing.free(third);
+    const total = first.len + empty.len + third.len;
+    const encoded = try backing.alloc(u8, total);
+    defer backing.free(encoded);
+    var offset: usize = 0;
+    @memcpy(encoded[offset..][0..first.len], first);
+    offset += first.len;
+    @memcpy(encoded[offset..][0..empty.len], empty);
+    offset += empty.len;
+    @memcpy(encoded[offset..][0..third.len], third);
+
+    const chunks = [_][]const u8{
+        encoded[0 .. first.len - 1],
+        encoded[first.len - 1 .. first.len + empty.len + 2],
+        encoded[first.len + empty.len + 2 ..],
+    };
+    const scratch = try backing.alloc(u8, plain.len);
+    defer backing.free(scratch);
+    const compressed_scratch = try backing.alloc(u8, encoded.len);
+    defer backing.free(compressed_scratch);
+    const out = try backing.alloc(u8, plain.len);
+    defer backing.free(out);
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    var decoder = try vort.GzipDecoder.initConcatenatedFromChunksExactSize(&chunks, compressed_scratch, scratch, plain.len);
+    const result = try decoder.step(out);
+    try std.testing.expectEqual(out.len, result.progress.output_written);
+    try std.testing.expectEqualSlices(u8, plain, out);
+    return stats("gzip_decoder_concatenated_chunks_scratch", encoded.len, result.progress.output_written, failing);
 }
 
 fn measureRangeAlloc(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
