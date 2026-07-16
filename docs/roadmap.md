@@ -86,6 +86,7 @@ architecture blindly.
 - [x] Validation reports expose frame-count, total-uncompressed, and combined-checksum summaries for successful indexed streams.
 - [x] Sidecar validation options can enforce expected whole-stream length and combined checksum from frame-index metadata.
 - [x] Sidecar and embedded validation can reuse caller-provided index and payload scratch buffers.
+- [x] Sidecar and embedded validation reports can reuse caller-provided index and payload scratch buffers.
 - [x] Indexed and sidecar range-decode summary APIs return range bytes with CRC-32 summaries.
 - [x] Indexed and sidecar range-decode into APIs fill caller-owned buffers while returning range CRC-32 summaries.
 - [x] Dictionary-backed embedded and sidecar auto range-decode summary APIs support CRC-32 summaries and caller-owned buffers.
