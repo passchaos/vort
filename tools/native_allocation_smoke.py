@@ -24,6 +24,7 @@ ZERO_ALLOCATION_CASES = [
     "zlib_decoder_png_like_chunks_scratch",
     "zlib_decoder_png_varied_chunks_scratch",
     "zlib_decoder_png_scanline_scratch",
+    "zlib_decoder_png_reconstruct_scratch",
     "zlib_decoder_dictionary_chunks_scratch",
     "gzip_decoder_scratch",
     "gzip_decoder_concatenated_chunks_scratch",

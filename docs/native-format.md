@@ -185,9 +185,12 @@ PNG/IHDR-derived expectation before any bounded-output drain begins. For PNG
 consumers that want scanline-sized reads, `stepPngScanline` drains exactly one
 decoded row at a time, returns the row filter byte separately, validates the
 filter method range 0..4, and copies only the row payload bytes into the caller's
-row buffer. `ZlibDecoder` also records wrapper/header, missing-dictionary,
-truncation, Adler-32 mismatch, and PNG row-boundary diagnostics through the
-shared `StreamingDiagnostics` surface.
+row buffer. `reconstructPngScanline` and `stepPngScanlineReconstruct` implement
+PNG filter methods 0 through 4 with caller-owned current/previous row buffers, so
+library callers can progress from IDAT zlib bytes to reconstructed scanlines
+without allocating intermediate image rows. `ZlibDecoder` also records
+wrapper/header, missing-dictionary, truncation, Adler-32 mismatch, and PNG
+row-boundary diagnostics through the shared `StreamingDiagnostics` surface.
 
 `GzipDecoder` provides the same caller-owned bounded-output shape for ordinary
 gzip-wrapped deflate streams. It accepts either a complete gzip member or

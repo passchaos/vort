@@ -68,6 +68,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureZlibDecoderPngLikeChunks(allocator));
     try rows.append(allocator, try measureZlibDecoderPngLikeVariedChunks(allocator));
     try rows.append(allocator, try measureZlibDecoderPngScanlines(allocator));
+    try rows.append(allocator, try measureZlibDecoderPngReconstruct(allocator));
     try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
     try rows.append(allocator, try measureGzipDecoderScratch(allocator));
     try rows.append(allocator, try measureGzipDecoderConcatenatedChunks(allocator));
@@ -404,6 +405,49 @@ fn pngLikeIdatFixture() [150]u8 {
     };
 }
 
+fn pngReconstructionRow(comptime row_len: usize, row_index: usize) [row_len]u8 {
+    var row: [row_len]u8 = undefined;
+    for (&row, 0..) |*byte, i| {
+        const value = @as(u32, @intCast(row_index)) * 29 + @as(u32, @intCast(i)) * 17 + @as(u32, @intCast(i / 3)) * 11;
+        byte.* = @truncate(value);
+    }
+    return row;
+}
+
+fn pngPaethPredictorForReport(left: u8, up: u8, up_left: u8) u8 {
+    const a: i32 = left;
+    const b: i32 = up;
+    const c: i32 = up_left;
+    const p = a + b - c;
+    const pa = if (p - a < 0) -(p - a) else p - a;
+    const pb = if (p - b < 0) -(p - b) else p - b;
+    const pc = if (p - c < 0) -(p - c) else p - c;
+    if (pa <= pb and pa <= pc) return left;
+    if (pb <= pc) return up;
+    return up_left;
+}
+
+fn filterPngScanlineForReport(filter: u8, row: []const u8, previous: ?[]const u8, bytes_per_pixel: usize, filtered: []u8) void {
+    std.debug.assert(filtered.len == row.len);
+    for (row, 0..) |pixel, i| {
+        const left: u8 = if (i >= bytes_per_pixel) row[i - bytes_per_pixel] else 0;
+        const up: u8 = if (previous) |prev| prev[i] else 0;
+        const up_left: u8 = if (i >= bytes_per_pixel) blk: {
+            if (previous) |prev| break :blk prev[i - bytes_per_pixel];
+            break :blk 0;
+        } else 0;
+        const prediction: u8 = switch (filter) {
+            0 => 0,
+            1 => left,
+            2 => up,
+            3 => @intCast((@as(u16, left) + @as(u16, up)) / 2),
+            4 => pngPaethPredictorForReport(left, up, up_left),
+            else => unreachable,
+        };
+        filtered[i] = pixel -% prediction;
+    }
+}
+
 fn measureZlibDecoderPngLike(backing: std.mem.Allocator) !CaseStats {
     const png_like = pngLikeIdatFixture();
     const encoded = try vort.encodeZlibBestAlloc(backing, &png_like, vort.deflate.optionsForLevel(.default));
@@ -499,6 +543,57 @@ fn measureZlibDecoderPngScanlines(backing: std.mem.Allocator) !CaseStats {
     }
     try std.testing.expect(decoder.snapshot().done);
     return stats("zlib_decoder_png_scanline_scratch", encoded.len, output_bytes, failing);
+}
+
+fn measureZlibDecoderPngReconstruct(backing: std.mem.Allocator) !CaseStats {
+    const bpp = 3;
+    const row_len = 12;
+    const row_count = 5;
+    var rows: [row_count][row_len]u8 = undefined;
+    var filtered_payload: [row_count * (row_len + 1)]u8 = undefined;
+    var payload_offset: usize = 0;
+    var previous: ?[]const u8 = null;
+    for (0..row_count) |row_index| {
+        rows[row_index] = pngReconstructionRow(row_len, row_index);
+        const filter: u8 = @intCast(row_index);
+        filtered_payload[payload_offset] = filter;
+        filterPngScanlineForReport(filter, &rows[row_index], previous, bpp, filtered_payload[payload_offset + 1 ..][0..row_len]);
+        previous = &rows[row_index];
+        payload_offset += row_len + 1;
+    }
+
+    const encoded = try vort.encodeZlibBestAlloc(backing, &filtered_payload, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..5],
+        encoded[5 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+    };
+    const compressed_scratch = try backing.alloc(u8, encoded.len);
+    defer backing.free(compressed_scratch);
+    const decode_scratch = try backing.alloc(u8, filtered_payload.len);
+    defer backing.free(decode_scratch);
+    const filtered_row = try backing.alloc(u8, row_len);
+    defer backing.free(filtered_row);
+    const previous_row = try backing.alloc(u8, row_len);
+    defer backing.free(previous_row);
+    const output = try backing.alloc(u8, row_len);
+    defer backing.free(output);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    var decoder = try vort.ZlibDecoder.initFromChunksExactSize(&chunks, compressed_scratch, decode_scratch, filtered_payload.len);
+    var previous_row_slice: ?[]const u8 = null;
+    var output_bytes: usize = 0;
+    for (0..row_count) |row_index| {
+        const result = try decoder.stepPngScanlineReconstruct(filtered_row, previous_row_slice, bpp, output);
+        try std.testing.expectEqual(@as(u8, @intCast(row_index)), result.filter.?);
+        try std.testing.expectEqualSlices(u8, &rows[row_index], output);
+        output_bytes += result.progress.output_written;
+        @memcpy(previous_row, output);
+        previous_row_slice = previous_row;
+    }
+    try std.testing.expect(decoder.snapshot().done);
+    return stats("zlib_decoder_png_reconstruct_scratch", encoded.len, output_bytes, failing);
 }
 
 fn measureZlibDecoderDictionaryChunks(backing: std.mem.Allocator) !CaseStats {

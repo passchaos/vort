@@ -2622,6 +2622,77 @@ fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]cons
     return compressed_scratch[0..total];
 }
 
+pub const PngFilterMethod = enum(u8) {
+    none = 0,
+    sub = 1,
+    up = 2,
+    average = 3,
+    paeth = 4,
+};
+
+fn parsePngFilterMethod(filter: u8) Error!PngFilterMethod {
+    return switch (filter) {
+        0 => .none,
+        1 => .sub,
+        2 => .up,
+        3 => .average,
+        4 => .paeth,
+        else => error.CorruptFrame,
+    };
+}
+
+fn pngPaethPredictor(left: u8, up: u8, up_left: u8) u8 {
+    const a: i32 = left;
+    const b: i32 = up;
+    const c: i32 = up_left;
+    const p = a + b - c;
+    const pa = absI32(p - a);
+    const pb = absI32(p - b);
+    const pc = absI32(p - c);
+    if (pa <= pb and pa <= pc) return left;
+    if (pb <= pc) return up;
+    return up_left;
+}
+
+fn absI32(value: i32) i32 {
+    return if (value < 0) -value else value;
+}
+
+/// Reconstruct one PNG scanline payload in caller-owned output storage.
+///
+/// `filtered` excludes the leading PNG filter byte; pass that byte separately as
+/// `filter`. `previous` is the already-reconstructed previous row, or null for
+/// the first row. `bytes_per_pixel` is PNG's filter byte stride, rounded up to at
+/// least one byte by the caller for sub-byte color formats. Arithmetic is
+/// modulo 256 as required by the PNG filter specification.
+pub fn reconstructPngScanline(filter: u8, filtered: []const u8, previous: ?[]const u8, bytes_per_pixel: usize, output: []u8) Error!usize {
+    const method = try parsePngFilterMethod(filter);
+    if (bytes_per_pixel == 0) return error.CorruptFrame;
+    if (output.len < filtered.len) return error.OutputTooSmall;
+    if (previous) |prev| {
+        if (prev.len != filtered.len) return error.SizeMismatch;
+    }
+
+    const reconstructed = output[0..filtered.len];
+    for (filtered, 0..) |raw, i| {
+        const left: u8 = if (i >= bytes_per_pixel) reconstructed[i - bytes_per_pixel] else 0;
+        const up: u8 = if (previous) |prev| prev[i] else 0;
+        const up_left: u8 = if (i >= bytes_per_pixel) blk: {
+            if (previous) |prev| break :blk prev[i - bytes_per_pixel];
+            break :blk 0;
+        } else 0;
+        const prediction: u8 = switch (method) {
+            .none => 0,
+            .sub => left,
+            .up => up,
+            .average => @intCast((@as(u16, left) + @as(u16, up)) / 2),
+            .paeth => pngPaethPredictor(left, up, up_left),
+        };
+        reconstructed[i] = raw +% prediction;
+    }
+    return filtered.len;
+}
+
 /// Bounded-output zlib wrapper decoder.
 ///
 /// The compressed wrapper must be complete when `init`/`reset` is called. The
@@ -2868,6 +2939,34 @@ pub const ZlibDecoder = struct {
             },
             .status = if (self.done) .done else .need_output,
         };
+    }
+
+    pub fn stepPngScanlineReconstruct(self: *ZlibDecoder, filtered_row_scratch: []u8, previous_row: ?[]const u8, bytes_per_pixel: usize, output: []u8) Error!PngScanlineStep {
+        if (self.done) return .{ .status = .done };
+        if (filtered_row_scratch.len < output.len) {
+            self.recordError(error.OutputTooSmall);
+            return error.OutputTooSmall;
+        }
+        if (previous_row) |prev| {
+            if (prev.len != output.len) {
+                self.recordError(error.SizeMismatch);
+                return error.SizeMismatch;
+            }
+        }
+        if (bytes_per_pixel == 0) {
+            self.recordError(error.CorruptFrame);
+            return error.CorruptFrame;
+        }
+
+        const filtered = filtered_row_scratch[0..output.len];
+        const result = try self.stepPngScanline(filtered);
+        if (result.filter) |filter| {
+            _ = reconstructPngScanline(filter, filtered, previous_row, bytes_per_pixel, output) catch |err| {
+                self.recordError(err);
+                return err;
+            };
+        }
+        return result;
     }
 };
 
@@ -4129,6 +4228,36 @@ fn pngLikeIdatFixture() [150]u8 {
     };
 }
 
+fn pngReconstructionRow(comptime row_len: usize, row_index: usize) [row_len]u8 {
+    var row: [row_len]u8 = undefined;
+    for (&row, 0..) |*byte, i| {
+        const value = @as(u32, @intCast(row_index)) * 29 + @as(u32, @intCast(i)) * 17 + @as(u32, @intCast(i / 3)) * 11;
+        byte.* = @truncate(value);
+    }
+    return row;
+}
+
+fn filterPngScanlineForTest(filter: u8, row: []const u8, previous: ?[]const u8, bytes_per_pixel: usize, filtered: []u8) void {
+    std.debug.assert(filtered.len == row.len);
+    for (row, 0..) |pixel, i| {
+        const left: u8 = if (i >= bytes_per_pixel) row[i - bytes_per_pixel] else 0;
+        const up: u8 = if (previous) |prev| prev[i] else 0;
+        const up_left: u8 = if (i >= bytes_per_pixel) blk: {
+            if (previous) |prev| break :blk prev[i - bytes_per_pixel];
+            break :blk 0;
+        } else 0;
+        const prediction: u8 = switch (filter) {
+            0 => 0,
+            1 => left,
+            2 => up,
+            3 => @intCast((@as(u16, left) + @as(u16, up)) / 2),
+            4 => pngPaethPredictor(left, up, up_left),
+            else => unreachable,
+        };
+        filtered[i] = pixel -% prediction;
+    }
+}
+
 test "zlib decoder drains PNG-like payload from caller scratch" {
     const png_like = pngLikeIdatFixture();
     const encoded = try encodeZlibBestAlloc(std.testing.allocator, &png_like, optionsForLevel(.default));
@@ -4256,6 +4385,98 @@ test "zlib decoder drains PNG scanlines from chunked IDAT scratch" {
 
     var mismatch_decoder = try ZlibDecoder.initExactSize(encoded, &scratch, png_like.len);
     try std.testing.expectError(error.SizeMismatch, mismatch_decoder.stepPngScanline(scratch[0..scratch.len]));
+}
+
+test "png scanline reconstruction filters round trip" {
+    const bpp = 3;
+    const row_len = 12;
+    const row_count = 5;
+    var rows: [row_count][row_len]u8 = undefined;
+    var filtered_payload: [row_count * (row_len + 1)]u8 = undefined;
+
+    var offset: usize = 0;
+    var previous: ?[]const u8 = null;
+    for (0..row_count) |row_index| {
+        rows[row_index] = pngReconstructionRow(row_len, row_index);
+        const filter: u8 = @intCast(row_index);
+        filtered_payload[offset] = filter;
+        filterPngScanlineForTest(filter, &rows[row_index], previous, bpp, filtered_payload[offset + 1 ..][0..row_len]);
+        previous = &rows[row_index];
+        offset += row_len + 1;
+    }
+
+    var reconstructed: [row_count][row_len]u8 = undefined;
+    previous = null;
+    offset = 0;
+    for (0..row_count) |row_index| {
+        const filter = filtered_payload[offset];
+        const written = try reconstructPngScanline(filter, filtered_payload[offset + 1 ..][0..row_len], previous, bpp, &reconstructed[row_index]);
+        try std.testing.expectEqual(row_len, written);
+        try std.testing.expectEqualSlices(u8, &rows[row_index], &reconstructed[row_index]);
+        previous = &reconstructed[row_index];
+        offset += row_len + 1;
+    }
+
+    var short_output: [row_len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, reconstructPngScanline(0, filtered_payload[1..][0..row_len], null, bpp, &short_output));
+    try std.testing.expectError(error.CorruptFrame, reconstructPngScanline(5, filtered_payload[1..][0..row_len], null, bpp, &reconstructed[0]));
+    try std.testing.expectError(error.CorruptFrame, reconstructPngScanline(0, filtered_payload[1..][0..row_len], null, 0, &reconstructed[0]));
+    try std.testing.expectError(error.SizeMismatch, reconstructPngScanline(2, filtered_payload[1..][0..row_len], short_output[0..], bpp, &reconstructed[0]));
+}
+
+test "zlib decoder reconstructs PNG scanlines from chunked IDAT scratch" {
+    const bpp = 3;
+    const row_len = 12;
+    const row_count = 5;
+    var rows: [row_count][row_len]u8 = undefined;
+    var filtered_payload: [row_count * (row_len + 1)]u8 = undefined;
+
+    var payload_offset: usize = 0;
+    var previous: ?[]const u8 = null;
+    for (0..row_count) |row_index| {
+        rows[row_index] = pngReconstructionRow(row_len, row_index);
+        const filter: u8 = @intCast(row_index);
+        filtered_payload[payload_offset] = filter;
+        filterPngScanlineForTest(filter, &rows[row_index], previous, bpp, filtered_payload[payload_offset + 1 ..][0..row_len]);
+        previous = &rows[row_index];
+        payload_offset += row_len + 1;
+    }
+
+    const encoded = try encodeZlibBestAlloc(std.testing.allocator, &filtered_payload, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..5],
+        encoded[5 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+    };
+    var compressed_scratch: [256]u8 = undefined;
+    var decode_scratch: [filtered_payload.len]u8 = undefined;
+    var decoder = try ZlibDecoder.initFromChunksExactSize(&chunks, &compressed_scratch, &decode_scratch, filtered_payload.len);
+
+    var filtered_row: [row_len]u8 = undefined;
+    var previous_row: [row_len]u8 = undefined;
+    var output: [row_len]u8 = undefined;
+    var previous_row_slice: ?[]const u8 = null;
+    for (0..row_count) |row_index| {
+        const step = try decoder.stepPngScanlineReconstruct(&filtered_row, previous_row_slice, bpp, &output);
+        try std.testing.expectEqual(@as(u8, @intCast(row_index)), step.filter.?);
+        try std.testing.expectEqual(row_len, step.row_bytes);
+        try std.testing.expectEqualSlices(u8, &rows[row_index], &output);
+        @memcpy(&previous_row, &output);
+        previous_row_slice = &previous_row;
+        if (row_index + 1 == row_count) {
+            try std.testing.expectEqual(core.StepResult.Status.done, step.status);
+            try std.testing.expectEqual(encoded.len, step.progress.input_read);
+        } else {
+            try std.testing.expectEqual(core.StepResult.Status.need_output, step.status);
+        }
+    }
+    try std.testing.expectEqual(core.StepResult.Status.done, (try decoder.stepPngScanlineReconstruct(filtered_row[0..0], null, bpp, output[0..0])).status);
+
+    var error_decoder = try ZlibDecoder.initExactSize(encoded, &decode_scratch, filtered_payload.len);
+    try std.testing.expectError(error.OutputTooSmall, error_decoder.stepPngScanlineReconstruct(filtered_row[0 .. row_len - 1], null, bpp, &output));
+    try std.testing.expectError(error.CorruptFrame, error_decoder.stepPngScanlineReconstruct(&filtered_row, null, 0, &output));
+    try std.testing.expectError(error.SizeMismatch, error_decoder.stepPngScanlineReconstruct(&filtered_row, previous_row[0 .. row_len - 1], bpp, &output));
 }
 
 test "zlib decoder supports preset dictionary streams" {
