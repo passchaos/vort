@@ -99,6 +99,7 @@ def main() -> int:
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
         native_allocation_smoke_path = ROOT / "zig-out" / "vort-native-allocation-smoke.json"
         native_allocation_negative_smoke_path = ROOT / "zig-out" / "vort-native-allocation-negative-smoke.json"
+        png_scratch_path = ROOT / "zig-out" / "vort-png-scratch-report.json"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -209,6 +210,13 @@ def main() -> int:
         assert native_allocation_negative_smoke["case_count"] >= 1
         assert native_allocation_negative_smoke["cases"]
         validate_value_against_manifest(native_allocation_negative_smoke, schemas_def)
+        png_scratch = json.loads(png_scratch_path.read_text())
+        assert png_scratch["schema"] == "vort.png_scratch_report"
+        assert png_scratch["schema_version"] == 1
+        assert png_scratch["case_count"] >= 1
+        assert png_scratch["cases"]
+        assert any(case["interlace"] == "adam7" for case in png_scratch["cases"])
+        validate_value_against_manifest(png_scratch, schemas_def)
         run([
             "python3",
             str(ROOT / "tools" / "dashboard_config_index_smoke.py"),
@@ -647,6 +655,7 @@ def main() -> int:
                 dashboard_producers_required_smoke["schema"],
                 decode_stage["schema"],
                 python_zlib_diff["schema"],
+                png_scratch["schema"],
                 fuzz_report["schema"],
                 fuzz_coverage["schema"],
                 fuzz_coverage_smoke["schema"],

@@ -1931,6 +1931,70 @@ Example:
 }
 ```
 
+## `vort.png_scratch_report`
+
+Produced by:
+
+```sh
+zig build run-png-scratch-report-dashboard
+```
+
+This report records caller-owned scratch and output footprint baselines for
+representative PNG-like zlib decode paths. It includes non-interlaced and Adam7
+cases across RGB8, packed indexed rows, and RGBA16 so future incremental inflate
+work can prove peak `zlib_scratch_bytes` reductions against a stable baseline.
+
+Top-level fields:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `schema` | string | Always `vort.png_scratch_report`. |
+| `schema_version` | integer | Currently `1`. |
+| `case_count` | integer | Number of rows in `cases`. |
+| `cases` | list | Scratch footprint rows. |
+
+Each `cases` item includes:
+
+| field | type | meaning |
+| --- | --- | --- |
+| `case` | string | Stable case label. |
+| `interlace` | string | `none` or `adam7`. |
+| `width` / `height` | integer | PNG-like dimensions. |
+| `bit_depth` | integer | PNG bit depth. |
+| `color_type` | string | PNG color type name. |
+| `zlib_scratch_bytes` | integer | Exact decoded IDAT/zlib payload scratch. |
+| `filtered_row_scratch_bytes` | integer | One filtered row scratch. |
+| `previous_row_scratch_bytes` | integer | Previous reconstructed row scratch. |
+| `image_output_bytes` | integer | Final reconstructed image output bytes. |
+| `working_scratch_bytes` | integer | Sum of zlib, filtered-row, and previous-row scratch. |
+| `total_caller_owned_bytes` | integer | Working scratch plus output bytes. |
+
+Example:
+
+```json
+{
+  "schema": "vort.png_scratch_report",
+  "schema_version": 1,
+  "case_count": 1,
+  "cases": [
+    {
+      "case": "png_rgb8_adam7",
+      "interlace": "adam7",
+      "width": 5,
+      "height": 5,
+      "bit_depth": 8,
+      "color_type": "truecolor",
+      "zlib_scratch_bytes": 86,
+      "filtered_row_scratch_bytes": 15,
+      "previous_row_scratch_bytes": 15,
+      "image_output_bytes": 75,
+      "working_scratch_bytes": 116,
+      "total_caller_owned_bytes": 191
+    }
+  ]
+}
+```
+
 ## `vort.native_allocation_negative_smoke`
 
 Produced by:

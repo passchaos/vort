@@ -2,110 +2,269 @@
   "schema": "vort.validation_json_schema_manifest",
   "schema_version": 1,
   "schemas": {
-    "vort.dashboard_index": {
+    "vort.dashboard_category_expected_artifacts": {
       "fields": {
-        "artifact_count": "int",
-        "artifacts": "list",
-        "header_inspect_missing_workflow_count": "int",
-        "header_inspect_missing_workflows": "list",
-        "header_inspect_ok": "bool",
-        "header_inspect_present": "bool",
-        "header_inspect_healthy": "bool",
-        "header_inspect_case_count": "int",
-        "header_inspect_raw_cases": "int",
-        "header_inspect_zlib_cases": "int",
-        "header_inspect_gzip_cases": "int",
-        "header_inspect_negative_cases": "int",
-        "header_inspect_raw_negative_cases": "int",
-        "header_inspect_zlib_negative_cases": "int",
-        "header_inspect_gzip_negative_cases": "int",
-        "header_inspect_command_count": "int",
-        "header_inspect_command_successes": "int",
-        "header_inspect_command_failures": "int",
-        "header_inspect_workflow_count": "int",
-        "header_inspect_workflow_successes": "int",
-        "header_inspect_dictionary_cases": "int",
-        "header_inspect_optional_header_cases": "int",
-        "header_inspect_fhcrc_cases": "int",
-        "header_inspect_required_workflow_count": "int",
-        "dashboard_strict_check_count": "int",
-        "dashboard_strict_mode_count": "int",
-        "dashboard_strict_expected_failure_count": "int",
-        "dashboard_strict_matched_count": "int",
-        "dashboard_strict_expected_mode_count": "int",
-        "dashboard_strict_missing_mode_count": "int",
-        "dashboard_strict_missing_checks": "int",
-        "dashboard_strict_missing_expected_failures": "int",
-        "dashboard_strict_missing_matched": "int",
-        "dashboard_strict_missing_modes": "list",
-        "dashboard_strict_ok": "bool",
-        "dashboard_strict_present": "bool",
-        "dashboard_strict_healthy": "bool",
-        "sidecar_corrupt_present": "bool",
-        "sidecar_corrupt_healthy": "bool",
-        "sidecar_corrupt_rows": "int",
-        "sidecar_corrupt_metadata_ok_rows": "int",
-        "sidecar_corrupt_full_rejected_rows": "int",
-        "sidecar_corrupt_metadata_failed_rows": "int",
-        "sidecar_corrupt_full_not_rejected_rows": "int",
-        "huffman_length_healthy": "bool",
-        "huffman_length_malformed_rows": "int",
-        "huffman_length_non_optimal_rows": "int",
-        "huffman_length_optimal_rows": "int",
-        "huffman_length_package_merge_non_optimal_rows": "int",
-        "huffman_length_package_merge_optimal_rows": "int",
-        "huffman_length_package_merge_worst_gap_bits": "int",
-        "huffman_length_present": "bool",
-        "huffman_length_row_count": "int",
-        "huffman_length_worst_gap_bits": "int",
-        "fuzz_corpus_present": "bool",
-        "fuzz_corpus_ok": "bool",
-        "fuzz_corpus_coverage_present": "bool",
-        "fuzz_corpus_coverage_ok": "bool",
-        "fuzz_corpus_healthy": "bool",
-        "fuzz_corpus_cases": "int",
-        "fuzz_corpus_matched_rows": "int",
-        "fuzz_corpus_unmatched_rows": "int",
-        "fuzz_corpus_exact_error_expectations": "int",
-        "fuzz_corpus_mode_count_rows": "int",
-        "fuzz_corpus_error_count_rows": "int",
-        "fuzz_corpus_coverage_mode_requirements": "int",
-        "fuzz_corpus_coverage_error_requirements": "int",
-        "decode_stage_present": "bool",
-        "decode_stage_ok": "bool",
-        "decode_stage_healthy": "bool",
-        "decode_stage_rows": "int",
-        "decode_stage_error_rows": "int",
-        "decode_stage_matched_error_rows": "int",
-        "decode_stage_unmatched_error_rows": "int",
-        "python_zlib_diff_present": "bool",
-        "python_zlib_diff_ok": "bool",
-        "python_zlib_diff_healthy": "bool",
-        "python_zlib_diff_payloads": "int",
-        "python_zlib_diff_match_heavy_payloads": "int",
-        "python_zlib_diff_dynamic_payloads": "int",
-        "python_zlib_diff_dictionary_cases": "int",
-        "python_zlib_diff_zlib_dict_encode_cases": "int",
-        "python_zlib_diff_raw_dict_encode_cases": "int",
-        "python_zlib_diff_cli_successes": "int",
-        "python_zlib_diff_expected_failures": "int",
-        "producer_healthy": "bool",
-        "producer_step_allowed_missing": "list",
-        "producer_step_covered": "int",
-        "producer_step_missing": "list",
+        "expected_artifacts": "list",
         "schema": "str",
-        "schema_version": "int",
-        "smoke_gate_covered": "int",
-        "smoke_gate_healthy": "bool",
-        "smoke_gate_missing": "list",
-        "smoke_gate_required_missing": "list",
-        "validation_healthy": "bool",
-        "validation_unhealthy_reasons": "list"
+        "schema_version": "int"
       },
+      "item_collection": "expected_artifacts",
+      "item_enums": {
+        "category": [
+          "validation",
+          "benchmark",
+          "corpus and ratio",
+          "native parallel",
+          "other"
+        ]
+      },
+      "item_fields": {
+        "category": "str",
+        "name": "str",
+        "require_present": "bool",
+        "require_producer_step": "bool",
+        "require_smoke_gate": "bool"
+      }
+    },
+    "vort.dashboard_category_negative_smoke": {
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "cases",
+      "item_enums": {
+        "name": [
+          "classifier_category_mismatch",
+          "missing_required_artifact",
+          "manifest_category_mismatch",
+          "missing_required_producer_step",
+          "missing_required_smoke_gate"
+        ]
+      },
+      "item_fields": {
+        "actual_output": "str",
+        "actual_output_bytes": "int",
+        "actual_output_limit": "int",
+        "actual_output_truncated": "bool",
+        "expected_failure": "bool",
+        "expected_output": "str",
+        "matched": "bool",
+        "name": "str",
+        "returncode": "int"
+      }
+    },
+    "vort.dashboard_config_index": {
+      "count_rules": {
+        "config_count": {
+          "collection": "configs"
+        }
+      },
+      "fields": {
+        "config_count": "int",
+        "configs": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "configs",
+      "item_fields": {
+        "consumer": "str",
+        "docs_section": "str",
+        "path": "str",
+        "schema_name": "str",
+        "validation_step": "str"
+      }
+    },
+    "vort.dashboard_config_index_negative_smoke": {
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "cases",
+      "item_enums": {
+        "name": [
+          "missing_config_path",
+          "schema_mismatch",
+          "missing_docs_section",
+          "missing_build_step",
+          "missing_consumer",
+          "unchecked_validation_json_schema"
+        ]
+      },
+      "item_fields": {
+        "actual_output": "str",
+        "actual_output_bytes": "int",
+        "actual_output_limit": "int",
+        "actual_output_truncated": "bool",
+        "expected_failure": "bool",
+        "expected_output": "str",
+        "matched": "bool",
+        "name": "str",
+        "returncode": "int"
+      }
+    },
+    "vort.dashboard_config_index_smoke": {
+      "count_rules": {
+        "config_count": {
+          "collection": "configs"
+        }
+      },
+      "fields": {
+        "config_count": "int",
+        "configs": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "configs",
+      "item_fields": {
+        "consumer": "str",
+        "consumer_exists": "bool",
+        "docs_section": "str",
+        "docs_section_present": "bool",
+        "manifest_schema_present": "bool",
+        "matched": "bool",
+        "path": "str",
+        "path_exists": "bool",
+        "schema_matches": "bool",
+        "schema_name": "str",
+        "validation_json_smoke_checked": "bool",
+        "validation_step": "str",
+        "validation_step_present": "bool"
+      }
+    },
+    "vort.dashboard_index": {
       "boolean_formula_rules": {
+        "dashboard_strict_healthy": {
+          "all": [
+            "dashboard_strict_present",
+            "dashboard_strict_ok"
+          ],
+          "zero": [
+            "dashboard_strict_missing_mode_count"
+          ]
+        },
+        "decode_stage_healthy": {
+          "all": [
+            "decode_stage_present",
+            "decode_stage_ok"
+          ],
+          "positive": [
+            "decode_stage_rows",
+            "decode_stage_error_rows",
+            "decode_stage_matched_error_rows"
+          ],
+          "zero": [
+            "decode_stage_unmatched_error_rows"
+          ]
+        },
+        "fuzz_corpus_healthy": {
+          "all": [
+            "fuzz_corpus_present",
+            "fuzz_corpus_ok",
+            "fuzz_corpus_coverage_present",
+            "fuzz_corpus_coverage_ok"
+          ],
+          "positive": [
+            "fuzz_corpus_cases",
+            "fuzz_corpus_exact_error_expectations",
+            "fuzz_corpus_mode_count_rows",
+            "fuzz_corpus_error_count_rows",
+            "fuzz_corpus_coverage_mode_requirements",
+            "fuzz_corpus_coverage_error_requirements"
+          ],
+          "zero": [
+            "fuzz_corpus_unmatched_rows"
+          ]
+        },
+        "header_inspect_healthy": {
+          "all": [
+            "header_inspect_present",
+            "header_inspect_ok"
+          ],
+          "positive": [
+            "header_inspect_case_count",
+            "header_inspect_raw_cases",
+            "header_inspect_zlib_cases",
+            "header_inspect_gzip_cases",
+            "header_inspect_negative_cases",
+            "header_inspect_raw_negative_cases",
+            "header_inspect_zlib_negative_cases",
+            "header_inspect_gzip_negative_cases",
+            "header_inspect_command_count",
+            "header_inspect_command_successes",
+            "header_inspect_command_failures",
+            "header_inspect_workflow_count",
+            "header_inspect_workflow_successes",
+            "header_inspect_dictionary_cases",
+            "header_inspect_optional_header_cases",
+            "header_inspect_fhcrc_cases"
+          ],
+          "zero": [
+            "header_inspect_missing_workflow_count"
+          ]
+        },
+        "huffman_length_healthy": {
+          "all": [
+            "huffman_length_present"
+          ],
+          "positive": [
+            "huffman_length_row_count"
+          ],
+          "zero": [
+            "huffman_length_non_optimal_rows",
+            "huffman_length_malformed_rows",
+            "huffman_length_worst_gap_bits",
+            "huffman_length_package_merge_non_optimal_rows",
+            "huffman_length_package_merge_worst_gap_bits"
+          ]
+        },
         "producer_healthy": {
           "zero": [
             "producer_step_missing"
+          ]
+        },
+        "python_zlib_diff_healthy": {
+          "all": [
+            "python_zlib_diff_present",
+            "python_zlib_diff_ok"
+          ],
+          "positive": [
+            "python_zlib_diff_payloads",
+            "python_zlib_diff_match_heavy_payloads",
+            "python_zlib_diff_dynamic_payloads",
+            "python_zlib_diff_dictionary_cases",
+            "python_zlib_diff_zlib_dict_encode_cases",
+            "python_zlib_diff_raw_dict_encode_cases",
+            "python_zlib_diff_cli_successes",
+            "python_zlib_diff_expected_failures"
+          ]
+        },
+        "sidecar_corrupt_healthy": {
+          "all": [
+            "sidecar_corrupt_present"
+          ],
+          "positive": [
+            "sidecar_corrupt_rows"
+          ],
+          "zero": [
+            "sidecar_corrupt_metadata_failed_rows",
+            "sidecar_corrupt_full_not_rejected_rows"
           ]
         },
         "smoke_gate_healthy": {
@@ -125,127 +284,30 @@
             "decode_stage_healthy",
             "python_zlib_diff_healthy"
           ]
-        },
-        "header_inspect_healthy": {
-          "all": [
-            "header_inspect_present",
-            "header_inspect_ok"
-          ],
-          "zero": [
-            "header_inspect_missing_workflow_count"
-          ],
-          "positive": [
-            "header_inspect_case_count",
-            "header_inspect_raw_cases",
-            "header_inspect_zlib_cases",
-            "header_inspect_gzip_cases",
-            "header_inspect_negative_cases",
-            "header_inspect_raw_negative_cases",
-            "header_inspect_zlib_negative_cases",
-            "header_inspect_gzip_negative_cases",
-            "header_inspect_command_count",
-            "header_inspect_command_successes",
-            "header_inspect_command_failures",
-            "header_inspect_workflow_count",
-            "header_inspect_workflow_successes",
-            "header_inspect_dictionary_cases",
-            "header_inspect_optional_header_cases",
-            "header_inspect_fhcrc_cases"
-          ]
-        },
-        "dashboard_strict_healthy": {
-          "all": [
-            "dashboard_strict_present",
-            "dashboard_strict_ok"
-          ],
-          "zero": [
-            "dashboard_strict_missing_mode_count"
-          ]
-        },
-        "huffman_length_healthy": {
-          "all": [
-            "huffman_length_present"
-          ],
-          "zero": [
-            "huffman_length_non_optimal_rows",
-            "huffman_length_malformed_rows",
-            "huffman_length_worst_gap_bits",
-            "huffman_length_package_merge_non_optimal_rows",
-            "huffman_length_package_merge_worst_gap_bits"
-          ],
-          "positive": [
-            "huffman_length_row_count"
-          ]
-        },
-        "fuzz_corpus_healthy": {
-          "all": [
-            "fuzz_corpus_present",
-            "fuzz_corpus_ok",
-            "fuzz_corpus_coverage_present",
-            "fuzz_corpus_coverage_ok"
-          ],
-          "zero": [
-            "fuzz_corpus_unmatched_rows"
-          ],
-          "positive": [
-            "fuzz_corpus_cases",
-            "fuzz_corpus_exact_error_expectations",
-            "fuzz_corpus_mode_count_rows",
-            "fuzz_corpus_error_count_rows",
-            "fuzz_corpus_coverage_mode_requirements",
-            "fuzz_corpus_coverage_error_requirements"
-          ]
-        },
-        "decode_stage_healthy": {
-          "all": [
-            "decode_stage_present",
-            "decode_stage_ok"
-          ],
-          "zero": [
-            "decode_stage_unmatched_error_rows"
-          ],
-          "positive": [
-            "decode_stage_rows",
-            "decode_stage_error_rows",
-            "decode_stage_matched_error_rows"
-          ]
-        },
-        "sidecar_corrupt_healthy": {
-          "all": [
-            "sidecar_corrupt_present"
-          ],
-          "zero": [
-            "sidecar_corrupt_metadata_failed_rows",
-            "sidecar_corrupt_full_not_rejected_rows"
-          ],
-          "positive": [
-            "sidecar_corrupt_rows"
-          ]
-        },
-        "python_zlib_diff_healthy": {
-          "all": [
-            "python_zlib_diff_present",
-            "python_zlib_diff_ok"
-          ],
-          "positive": [
-            "python_zlib_diff_payloads",
-            "python_zlib_diff_match_heavy_payloads",
-            "python_zlib_diff_dynamic_payloads",
-            "python_zlib_diff_dictionary_cases",
-            "python_zlib_diff_zlib_dict_encode_cases",
-            "python_zlib_diff_raw_dict_encode_cases",
-            "python_zlib_diff_cli_successes",
-            "python_zlib_diff_expected_failures"
-          ]
         }
       },
       "collections": {
-        "header_inspect_missing_workflows": {
-          "fields": {
-            "command": "str",
-            "format": "str",
-            "workflow": "str"
+        "dashboard_strict_missing_modes": {
+          "allow_empty": true,
+          "enums": {
+            "mode": [
+              "all",
+              "strict-producers",
+              "strict-smoke-gates",
+              "strict-header-inspect",
+              "strict-validation-health",
+              "synthetic"
+            ]
           },
+          "fields": {
+            "min_checks": "int",
+            "min_expected_failures": "int",
+            "min_matched": "int",
+            "mode": "str"
+          }
+        },
+        "header_inspect_missing_workflows": {
+          "allow_empty": true,
           "enums": {
             "format": [
               "raw",
@@ -257,52 +319,111 @@
               "file"
             ]
           },
-          "allow_empty": true
-        },
-        "dashboard_strict_missing_modes": {
           "fields": {
-            "min_checks": "int",
-            "min_expected_failures": "int",
-            "min_matched": "int",
-            "mode": "str"
-          },
-          "enums": {
-            "mode": [
-              "all",
-              "strict-producers",
-              "strict-smoke-gates",
-              "strict-header-inspect",
-              "strict-validation-health",
-              "synthetic"
-            ]
-          },
-          "allow_empty": true
+            "command": "str",
+            "format": "str",
+            "workflow": "str"
+          }
         }
       },
-      "list_item_enums": {
-        "validation_unhealthy_reasons": [
-          "missing_producer_steps",
-          "missing_required_smoke_gates",
-          "missing_header_inspect_artifact",
-          "header_inspect_failed",
-          "missing_header_workflows",
-          "header_inspect_undercovered",
-          "missing_dashboard_strict_artifact",
-          "dashboard_strict_failed",
-          "missing_dashboard_strict_modes",
-          "missing_sidecar_corrupt_artifact",
-          "sidecar_corrupt_failed",
-          "missing_huffman_length_artifact",
-          "huffman_length_failed",
-          "missing_fuzz_corpus_artifact",
-          "fuzz_corpus_failed",
-          "missing_fuzz_coverage_artifact",
-          "fuzz_coverage_failed",
-          "missing_decode_stage_artifact",
-          "decode_stage_failed",
-          "missing_python_zlib_diff_artifact",
-          "python_zlib_diff_failed"
-        ]
+      "fields": {
+        "artifact_count": "int",
+        "artifacts": "list",
+        "dashboard_strict_check_count": "int",
+        "dashboard_strict_expected_failure_count": "int",
+        "dashboard_strict_expected_mode_count": "int",
+        "dashboard_strict_healthy": "bool",
+        "dashboard_strict_matched_count": "int",
+        "dashboard_strict_missing_checks": "int",
+        "dashboard_strict_missing_expected_failures": "int",
+        "dashboard_strict_missing_matched": "int",
+        "dashboard_strict_missing_mode_count": "int",
+        "dashboard_strict_missing_modes": "list",
+        "dashboard_strict_mode_count": "int",
+        "dashboard_strict_ok": "bool",
+        "dashboard_strict_present": "bool",
+        "decode_stage_error_rows": "int",
+        "decode_stage_healthy": "bool",
+        "decode_stage_matched_error_rows": "int",
+        "decode_stage_ok": "bool",
+        "decode_stage_present": "bool",
+        "decode_stage_rows": "int",
+        "decode_stage_unmatched_error_rows": "int",
+        "fuzz_corpus_cases": "int",
+        "fuzz_corpus_coverage_error_requirements": "int",
+        "fuzz_corpus_coverage_mode_requirements": "int",
+        "fuzz_corpus_coverage_ok": "bool",
+        "fuzz_corpus_coverage_present": "bool",
+        "fuzz_corpus_error_count_rows": "int",
+        "fuzz_corpus_exact_error_expectations": "int",
+        "fuzz_corpus_healthy": "bool",
+        "fuzz_corpus_matched_rows": "int",
+        "fuzz_corpus_mode_count_rows": "int",
+        "fuzz_corpus_ok": "bool",
+        "fuzz_corpus_present": "bool",
+        "fuzz_corpus_unmatched_rows": "int",
+        "header_inspect_case_count": "int",
+        "header_inspect_command_count": "int",
+        "header_inspect_command_failures": "int",
+        "header_inspect_command_successes": "int",
+        "header_inspect_dictionary_cases": "int",
+        "header_inspect_fhcrc_cases": "int",
+        "header_inspect_gzip_cases": "int",
+        "header_inspect_gzip_negative_cases": "int",
+        "header_inspect_healthy": "bool",
+        "header_inspect_missing_workflow_count": "int",
+        "header_inspect_missing_workflows": "list",
+        "header_inspect_negative_cases": "int",
+        "header_inspect_ok": "bool",
+        "header_inspect_optional_header_cases": "int",
+        "header_inspect_present": "bool",
+        "header_inspect_raw_cases": "int",
+        "header_inspect_raw_negative_cases": "int",
+        "header_inspect_required_workflow_count": "int",
+        "header_inspect_workflow_count": "int",
+        "header_inspect_workflow_successes": "int",
+        "header_inspect_zlib_cases": "int",
+        "header_inspect_zlib_negative_cases": "int",
+        "huffman_length_healthy": "bool",
+        "huffman_length_malformed_rows": "int",
+        "huffman_length_non_optimal_rows": "int",
+        "huffman_length_optimal_rows": "int",
+        "huffman_length_package_merge_non_optimal_rows": "int",
+        "huffman_length_package_merge_optimal_rows": "int",
+        "huffman_length_package_merge_worst_gap_bits": "int",
+        "huffman_length_present": "bool",
+        "huffman_length_row_count": "int",
+        "huffman_length_worst_gap_bits": "int",
+        "producer_healthy": "bool",
+        "producer_step_allowed_missing": "list",
+        "producer_step_covered": "int",
+        "producer_step_missing": "list",
+        "python_zlib_diff_cli_successes": "int",
+        "python_zlib_diff_dictionary_cases": "int",
+        "python_zlib_diff_dynamic_payloads": "int",
+        "python_zlib_diff_expected_failures": "int",
+        "python_zlib_diff_healthy": "bool",
+        "python_zlib_diff_match_heavy_payloads": "int",
+        "python_zlib_diff_ok": "bool",
+        "python_zlib_diff_payloads": "int",
+        "python_zlib_diff_present": "bool",
+        "python_zlib_diff_raw_dict_encode_cases": "int",
+        "python_zlib_diff_zlib_dict_encode_cases": "int",
+        "schema": "str",
+        "schema_version": "int",
+        "sidecar_corrupt_full_not_rejected_rows": "int",
+        "sidecar_corrupt_full_rejected_rows": "int",
+        "sidecar_corrupt_healthy": "bool",
+        "sidecar_corrupt_metadata_failed_rows": "int",
+        "sidecar_corrupt_metadata_ok_rows": "int",
+        "sidecar_corrupt_present": "bool",
+        "sidecar_corrupt_rows": "int",
+        "smoke_gate_covered": "int",
+        "smoke_gate_healthy": "bool",
+        "smoke_gate_missing": "list",
+        "smoke_gate_required_missing": "list",
+        "validation_healthy": "bool",
+        "validation_unhealthy_reasons": "list"
       },
       "item_collection": "artifacts",
       "item_enums": {
@@ -334,6 +455,131 @@
         "schema_version": "int?",
         "size_bytes": "int",
         "smoke_gate": "str"
+      },
+      "list_item_enums": {
+        "validation_unhealthy_reasons": [
+          "missing_producer_steps",
+          "missing_required_smoke_gates",
+          "missing_header_inspect_artifact",
+          "header_inspect_failed",
+          "missing_header_workflows",
+          "header_inspect_undercovered",
+          "missing_dashboard_strict_artifact",
+          "dashboard_strict_failed",
+          "missing_dashboard_strict_modes",
+          "missing_sidecar_corrupt_artifact",
+          "sidecar_corrupt_failed",
+          "missing_huffman_length_artifact",
+          "huffman_length_failed",
+          "missing_fuzz_corpus_artifact",
+          "fuzz_corpus_failed",
+          "missing_fuzz_coverage_artifact",
+          "fuzz_coverage_failed",
+          "missing_decode_stage_artifact",
+          "decode_stage_failed",
+          "missing_python_zlib_diff_artifact",
+          "python_zlib_diff_failed"
+        ]
+      }
+    },
+    "vort.dashboard_producers": {
+      "fields": {
+        "allow_missing": "dict",
+        "artifact_metadata": "dict",
+        "contains": "list",
+        "exact": "dict",
+        "required_smoke_gates": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "contains",
+      "item_fields": {
+        "match": "str",
+        "producer_step": "str"
+      }
+    },
+    "vort.dashboard_producers_negative_smoke": {
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "cases",
+      "item_enums": {
+        "name": [
+          "expected_format_mismatch",
+          "missing_producer_step",
+          "missing_present_smoke_gate",
+          "missing_absent_smoke_gate",
+          "allow_missing_exact",
+          "contains_producer_step"
+        ]
+      },
+      "item_fields": {
+        "actual_output": "str",
+        "actual_output_bytes": "int",
+        "actual_output_limit": "int",
+        "actual_output_truncated": "bool",
+        "expected_failure": "bool",
+        "expected_output": "str",
+        "matched": "bool",
+        "name": "str",
+        "returncode": "int"
+      }
+    },
+    "vort.dashboard_producers_required_artifacts": {
+      "fields": {
+        "required_artifacts": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "required_artifacts",
+      "item_fields": {
+        "expected_format": "str",
+        "name": "str",
+        "producer_step": "str",
+        "required_smoke_gate": "bool",
+        "smoke_gate": "str"
+      }
+    },
+    "vort.dashboard_producers_required_smoke": {
+      "count_rules": {
+        "artifact_count": {
+          "collection": "cases"
+        },
+        "required_smoke_gate_count": {
+          "collection": "cases",
+          "equals": true,
+          "field": "required_smoke_gate"
+        }
+      },
+      "fields": {
+        "artifact_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "required_smoke_gate_count": "int",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "configured_expected_format": "str",
+        "configured_producer_step": "str",
+        "configured_required_smoke_gate": "bool",
+        "configured_smoke_gate": "str",
+        "expected_format": "str",
+        "matched": "bool",
+        "name": "str",
+        "producer_step": "str",
+        "required_smoke_gate": "bool",
+        "smoke_gate": "str"
       }
     },
     "vort.dashboard_strict_expected_modes": {
@@ -343,12 +589,6 @@
         "schema_version": "int"
       },
       "item_collection": "expected_modes",
-      "item_fields": {
-        "min_checks": "int",
-        "min_expected_failures": "int",
-        "min_matched": "int",
-        "mode": "str"
-      },
       "item_enums": {
         "mode": [
           "all",
@@ -358,6 +598,270 @@
           "strict-validation-health",
           "synthetic"
         ]
+      },
+      "item_fields": {
+        "min_checks": "int",
+        "min_expected_failures": "int",
+        "min_matched": "int",
+        "mode": "str"
+      }
+    },
+    "vort.dashboard_strict_smoke": {
+      "collection_sum_rules": {
+        "check_count": {
+          "collection": "mode_counts",
+          "field": "checks"
+        }
+      },
+      "collections": {
+        "expected_modes": {
+          "enums": {
+            "mode": [
+              "all",
+              "strict-producers",
+              "strict-smoke-gates",
+              "strict-header-inspect",
+              "strict-validation-health",
+              "synthetic"
+            ]
+          },
+          "fields": {
+            "min_checks": "int",
+            "min_expected_failures": "int",
+            "min_matched": "int",
+            "mode": "str"
+          }
+        },
+        "missing_modes": {
+          "allow_empty": true,
+          "enums": {
+            "mode": [
+              "all",
+              "strict-producers",
+              "strict-smoke-gates",
+              "strict-header-inspect",
+              "strict-validation-health",
+              "synthetic"
+            ]
+          },
+          "fields": {
+            "min_checks": "int",
+            "min_expected_failures": "int",
+            "min_matched": "int",
+            "mode": "str"
+          }
+        },
+        "mode_counts": {
+          "enums": {
+            "mode": [
+              "all",
+              "strict-producers",
+              "strict-smoke-gates",
+              "strict-header-inspect",
+              "strict-validation-health",
+              "synthetic"
+            ]
+          },
+          "fields": {
+            "checks": "int",
+            "expected_failures": "int",
+            "matched": "int",
+            "mode": "str"
+          }
+        },
+        "mode_requirements": {
+          "enums": {
+            "mode": [
+              "all",
+              "strict-producers",
+              "strict-smoke-gates",
+              "strict-header-inspect",
+              "strict-validation-health",
+              "synthetic"
+            ]
+          },
+          "fields": {
+            "checks": "int",
+            "expected_failures": "int",
+            "matched": "int",
+            "min_checks": "int",
+            "min_expected_failures": "int",
+            "min_matched": "int",
+            "missing_checks": "int",
+            "missing_expected_failures": "int",
+            "missing_matched": "int",
+            "mode": "str"
+          }
+        },
+        "validation_unhealthy_reason_checks": {
+          "enums": {
+            "check": [
+              "validation_missing_producer_steps",
+              "validation_missing_required_smoke_gates",
+              "validation_missing_header_inspect_artifact",
+              "validation_header_inspect_failed",
+              "validation_missing_header_workflows",
+              "validation_header_inspect_undercovered",
+              "validation_missing_dashboard_strict_artifact",
+              "validation_dashboard_strict_failed",
+              "validation_missing_dashboard_strict_modes",
+              "validation_missing_sidecar_corrupt_artifact",
+              "validation_sidecar_corrupt_failed",
+              "validation_missing_huffman_length_artifact",
+              "validation_huffman_length_failed",
+              "validation_missing_fuzz_corpus_artifact",
+              "validation_fuzz_corpus_failed",
+              "validation_missing_fuzz_coverage_artifact",
+              "validation_fuzz_coverage_failed",
+              "validation_missing_decode_stage_artifact",
+              "validation_decode_stage_failed",
+              "validation_missing_python_zlib_diff_artifact",
+              "validation_python_zlib_diff_failed"
+            ],
+            "reason": [
+              "missing_producer_steps",
+              "missing_required_smoke_gates",
+              "missing_header_inspect_artifact",
+              "header_inspect_failed",
+              "missing_header_workflows",
+              "header_inspect_undercovered",
+              "missing_dashboard_strict_artifact",
+              "dashboard_strict_failed",
+              "missing_dashboard_strict_modes",
+              "missing_sidecar_corrupt_artifact",
+              "sidecar_corrupt_failed",
+              "missing_huffman_length_artifact",
+              "huffman_length_failed",
+              "missing_fuzz_corpus_artifact",
+              "fuzz_corpus_failed",
+              "missing_fuzz_coverage_artifact",
+              "fuzz_coverage_failed",
+              "missing_decode_stage_artifact",
+              "decode_stage_failed",
+              "missing_python_zlib_diff_artifact",
+              "python_zlib_diff_failed"
+            ]
+          },
+          "field_pairs": {
+            "check": {
+              "allowed": {
+                "validation_dashboard_strict_failed": "dashboard_strict_failed",
+                "validation_decode_stage_failed": "decode_stage_failed",
+                "validation_fuzz_corpus_failed": "fuzz_corpus_failed",
+                "validation_fuzz_coverage_failed": "fuzz_coverage_failed",
+                "validation_header_inspect_failed": "header_inspect_failed",
+                "validation_header_inspect_undercovered": "header_inspect_undercovered",
+                "validation_huffman_length_failed": "huffman_length_failed",
+                "validation_missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
+                "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
+                "validation_missing_decode_stage_artifact": "missing_decode_stage_artifact",
+                "validation_missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
+                "validation_missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
+                "validation_missing_header_inspect_artifact": "missing_header_inspect_artifact",
+                "validation_missing_header_workflows": "missing_header_workflows",
+                "validation_missing_huffman_length_artifact": "missing_huffman_length_artifact",
+                "validation_missing_producer_steps": "missing_producer_steps",
+                "validation_missing_python_zlib_diff_artifact": "missing_python_zlib_diff_artifact",
+                "validation_missing_required_smoke_gates": "missing_required_smoke_gates",
+                "validation_missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
+                "validation_python_zlib_diff_failed": "python_zlib_diff_failed",
+                "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed"
+              },
+              "target": "reason"
+            }
+          },
+          "fields": {
+            "check": "str",
+            "matched": "bool",
+            "reason": "str"
+          }
+        }
+      },
+      "count_rules": {
+        "check_count": {
+          "collection": "checks"
+        },
+        "expected_mode_count": {
+          "collection": "expected_modes"
+        },
+        "missing_mode_count": {
+          "collection": "missing_modes"
+        },
+        "mode_count": {
+          "collection": "mode_counts"
+        },
+        "validation_unhealthy_reason_count": {
+          "collection": "validation_unhealthy_reason_checks"
+        }
+      },
+      "fields": {
+        "check_count": "int",
+        "checks": "list",
+        "expected_mode_count": "int",
+        "expected_modes": "list",
+        "missing_mode_count": "int",
+        "missing_modes": "list",
+        "mode_count": "int",
+        "mode_counts": "list",
+        "mode_requirements": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int",
+        "validation_unhealthy_reason_checks": "list",
+        "validation_unhealthy_reason_count": "int"
+      },
+      "item_collection": "checks",
+      "item_enums": {
+        "mode": [
+          "all",
+          "strict-producers",
+          "strict-smoke-gates",
+          "strict-header-inspect",
+          "strict-validation-health",
+          "synthetic"
+        ],
+        "name": [
+          "all_strict_ok",
+          "missing_producer",
+          "missing_smoke_gate",
+          "missing_header_inspect",
+          "failed_header_inspect",
+          "missing_header_workflow",
+          "validation_missing_producer_steps",
+          "validation_missing_required_smoke_gates",
+          "validation_missing_header_inspect_artifact",
+          "validation_header_inspect_failed",
+          "validation_missing_header_workflows",
+          "validation_header_inspect_undercovered",
+          "validation_missing_dashboard_strict_artifact",
+          "validation_dashboard_strict_failed",
+          "validation_missing_dashboard_strict_modes",
+          "validation_missing_sidecar_corrupt_artifact",
+          "validation_sidecar_corrupt_failed",
+          "validation_missing_huffman_length_artifact",
+          "validation_huffman_length_failed",
+          "validation_missing_fuzz_corpus_artifact",
+          "validation_fuzz_corpus_failed",
+          "validation_missing_fuzz_coverage_artifact",
+          "validation_fuzz_coverage_failed",
+          "validation_missing_decode_stage_artifact",
+          "validation_decode_stage_failed",
+          "validation_missing_python_zlib_diff_artifact",
+          "validation_python_zlib_diff_failed",
+          "truncated_output"
+        ]
+      },
+      "item_fields": {
+        "actual_output": "str",
+        "actual_output_bytes": "int",
+        "actual_output_limit": "int",
+        "actual_output_truncated": "bool",
+        "expected_failure": "bool",
+        "expected_output": "str",
+        "matched": "bool",
+        "mode": "str",
+        "name": "str",
+        "returncode": "int"
       }
     },
     "vort.dashboard_strict_validation_reasons": {
@@ -367,11 +871,6 @@
         "schema_version": "int"
       },
       "item_collection": "expected_reasons",
-      "item_fields": {
-        "check": "str",
-        "fixture": "str",
-        "reason": "str"
-      },
       "item_enums": {
         "check": [
           "validation_missing_producer_steps",
@@ -445,794 +944,353 @@
       },
       "item_field_pairs": {
         "check": {
-          "target": "reason",
           "allowed": {
-            "validation_missing_producer_steps": "missing_producer_steps",
-            "validation_missing_required_smoke_gates": "missing_required_smoke_gates",
-            "validation_missing_header_inspect_artifact": "missing_header_inspect_artifact",
-            "validation_header_inspect_failed": "header_inspect_failed",
-            "validation_missing_header_workflows": "missing_header_workflows",
-            "validation_missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
             "validation_dashboard_strict_failed": "dashboard_strict_failed",
-            "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
-            "validation_missing_huffman_length_artifact": "missing_huffman_length_artifact",
-            "validation_huffman_length_failed": "huffman_length_failed",
-            "validation_missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
-            "validation_fuzz_corpus_failed": "fuzz_corpus_failed",
-            "validation_missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
-            "validation_fuzz_coverage_failed": "fuzz_coverage_failed",
-            "validation_missing_decode_stage_artifact": "missing_decode_stage_artifact",
             "validation_decode_stage_failed": "decode_stage_failed",
-            "validation_missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
-            "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed",
+            "validation_fuzz_corpus_failed": "fuzz_corpus_failed",
+            "validation_fuzz_coverage_failed": "fuzz_coverage_failed",
+            "validation_header_inspect_failed": "header_inspect_failed",
             "validation_header_inspect_undercovered": "header_inspect_undercovered",
+            "validation_huffman_length_failed": "huffman_length_failed",
+            "validation_missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
+            "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
+            "validation_missing_decode_stage_artifact": "missing_decode_stage_artifact",
+            "validation_missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
+            "validation_missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
+            "validation_missing_header_inspect_artifact": "missing_header_inspect_artifact",
+            "validation_missing_header_workflows": "missing_header_workflows",
+            "validation_missing_huffman_length_artifact": "missing_huffman_length_artifact",
+            "validation_missing_producer_steps": "missing_producer_steps",
             "validation_missing_python_zlib_diff_artifact": "missing_python_zlib_diff_artifact",
-            "validation_python_zlib_diff_failed": "python_zlib_diff_failed"
-          }
+            "validation_missing_required_smoke_gates": "missing_required_smoke_gates",
+            "validation_missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
+            "validation_python_zlib_diff_failed": "python_zlib_diff_failed",
+            "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed"
+          },
+          "target": "reason"
         },
         "fixture": {
-          "target": "reason",
           "allowed": {
-            "missing_producer_steps": "missing_producer_steps",
-            "missing_required_smoke_gates": "missing_required_smoke_gates",
-            "missing_header_inspect_artifact": "missing_header_inspect_artifact",
-            "header_inspect_failed": "header_inspect_failed",
-            "missing_header_workflows": "missing_header_workflows",
-            "missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
             "dashboard_strict_failed": "dashboard_strict_failed",
-            "missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
-            "missing_huffman_length_artifact": "missing_huffman_length_artifact",
-            "huffman_length_failed": "huffman_length_failed",
-            "missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
-            "fuzz_corpus_failed": "fuzz_corpus_failed",
-            "missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
-            "fuzz_coverage_failed": "fuzz_coverage_failed",
-            "missing_decode_stage_artifact": "missing_decode_stage_artifact",
             "decode_stage_failed": "decode_stage_failed",
-            "missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
-            "sidecar_corrupt_failed": "sidecar_corrupt_failed",
+            "fuzz_corpus_failed": "fuzz_corpus_failed",
+            "fuzz_coverage_failed": "fuzz_coverage_failed",
+            "header_inspect_failed": "header_inspect_failed",
             "header_inspect_undercovered": "header_inspect_undercovered",
+            "huffman_length_failed": "huffman_length_failed",
+            "missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
+            "missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
+            "missing_decode_stage_artifact": "missing_decode_stage_artifact",
+            "missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
+            "missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
+            "missing_header_inspect_artifact": "missing_header_inspect_artifact",
+            "missing_header_workflows": "missing_header_workflows",
+            "missing_huffman_length_artifact": "missing_huffman_length_artifact",
+            "missing_producer_steps": "missing_producer_steps",
             "missing_python_zlib_diff_artifact": "missing_python_zlib_diff_artifact",
-            "python_zlib_diff_failed": "python_zlib_diff_failed"
-          }
-        }
-      }
-    },
-    "vort.dashboard_strict_smoke": {
-      "fields": {
-        "check_count": "int",
-        "checks": "list",
-        "mode_count": "int",
-        "mode_counts": "list",
-        "mode_requirements": "list",
-        "expected_mode_count": "int",
-        "expected_modes": "list",
-        "missing_mode_count": "int",
-        "missing_modes": "list",
-        "ok": "bool",
-        "schema": "str",
-        "schema_version": "int",
-        "validation_unhealthy_reason_count": "int",
-        "validation_unhealthy_reason_checks": "list"
-      },
-      "count_rules": {
-        "check_count": {
-          "collection": "checks"
-        },
-        "mode_count": {
-          "collection": "mode_counts"
-        },
-        "expected_mode_count": {
-          "collection": "expected_modes"
-        },
-        "missing_mode_count": {
-          "collection": "missing_modes"
-        },
-        "validation_unhealthy_reason_count": {
-          "collection": "validation_unhealthy_reason_checks"
-        }
-      },
-      "collection_sum_rules": {
-        "check_count": {
-          "collection": "mode_counts",
-          "field": "checks"
-        }
-      },
-      "item_collection": "checks",
-      "item_fields": {
-        "actual_output": "str",
-        "actual_output_bytes": "int",
-        "actual_output_limit": "int",
-        "actual_output_truncated": "bool",
-        "expected_failure": "bool",
-        "expected_output": "str",
-        "matched": "bool",
-        "mode": "str",
-        "name": "str",
-        "returncode": "int"
-      },
-      "item_enums": {
-        "mode": [
-          "all",
-          "strict-producers",
-          "strict-smoke-gates",
-          "strict-header-inspect",
-          "strict-validation-health",
-          "synthetic"
-        ],
-        "name": [
-          "all_strict_ok",
-          "missing_producer",
-          "missing_smoke_gate",
-          "missing_header_inspect",
-          "failed_header_inspect",
-          "missing_header_workflow",
-          "validation_missing_producer_steps",
-          "validation_missing_required_smoke_gates",
-          "validation_missing_header_inspect_artifact",
-          "validation_header_inspect_failed",
-          "validation_missing_header_workflows",
-          "validation_header_inspect_undercovered",
-          "validation_missing_dashboard_strict_artifact",
-          "validation_dashboard_strict_failed",
-          "validation_missing_dashboard_strict_modes",
-          "validation_missing_sidecar_corrupt_artifact",
-          "validation_sidecar_corrupt_failed",
-          "validation_missing_huffman_length_artifact",
-          "validation_huffman_length_failed",
-          "validation_missing_fuzz_corpus_artifact",
-          "validation_fuzz_corpus_failed",
-          "validation_missing_fuzz_coverage_artifact",
-          "validation_fuzz_coverage_failed",
-          "validation_missing_decode_stage_artifact",
-          "validation_decode_stage_failed",
-          "validation_missing_python_zlib_diff_artifact",
-          "validation_python_zlib_diff_failed",
-          "truncated_output"
-        ]
-      },
-      "collections": {
-        "mode_counts": {
-          "fields": {
-            "checks": "int",
-            "expected_failures": "int",
-            "matched": "int",
-            "mode": "str"
+            "missing_required_smoke_gates": "missing_required_smoke_gates",
+            "missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
+            "python_zlib_diff_failed": "python_zlib_diff_failed",
+            "sidecar_corrupt_failed": "sidecar_corrupt_failed"
           },
-          "enums": {
-            "mode": [
-              "all",
-              "strict-producers",
-              "strict-smoke-gates",
-              "strict-header-inspect",
-              "strict-validation-health",
-              "synthetic"
-            ]
-          }
-        },
-        "expected_modes": {
-          "fields": {
-            "min_checks": "int",
-            "min_expected_failures": "int",
-            "min_matched": "int",
-            "mode": "str"
-          },
-          "enums": {
-            "mode": [
-              "all",
-              "strict-producers",
-              "strict-smoke-gates",
-              "strict-header-inspect",
-              "strict-validation-health",
-              "synthetic"
-            ]
-          }
-        },
-        "mode_requirements": {
-          "fields": {
-            "checks": "int",
-            "expected_failures": "int",
-            "matched": "int",
-            "min_checks": "int",
-            "min_expected_failures": "int",
-            "min_matched": "int",
-            "missing_checks": "int",
-            "missing_expected_failures": "int",
-            "missing_matched": "int",
-            "mode": "str"
-          },
-          "enums": {
-            "mode": [
-              "all",
-              "strict-producers",
-              "strict-smoke-gates",
-              "strict-header-inspect",
-              "strict-validation-health",
-              "synthetic"
-            ]
-          }
-        },
-        "missing_modes": {
-          "fields": {
-            "min_checks": "int",
-            "min_expected_failures": "int",
-            "min_matched": "int",
-            "mode": "str"
-          },
-          "enums": {
-            "mode": [
-              "all",
-              "strict-producers",
-              "strict-smoke-gates",
-              "strict-header-inspect",
-              "strict-validation-health",
-              "synthetic"
-            ]
-          },
-          "allow_empty": true
-        },
-        "validation_unhealthy_reason_checks": {
-          "fields": {
-            "check": "str",
-            "matched": "bool",
-            "reason": "str"
-          },
-          "enums": {
-            "check": [
-              "validation_missing_producer_steps",
-              "validation_missing_required_smoke_gates",
-              "validation_missing_header_inspect_artifact",
-              "validation_header_inspect_failed",
-              "validation_missing_header_workflows",
-              "validation_header_inspect_undercovered",
-              "validation_missing_dashboard_strict_artifact",
-              "validation_dashboard_strict_failed",
-              "validation_missing_dashboard_strict_modes",
-              "validation_missing_sidecar_corrupt_artifact",
-              "validation_sidecar_corrupt_failed",
-              "validation_missing_huffman_length_artifact",
-              "validation_huffman_length_failed",
-              "validation_missing_fuzz_corpus_artifact",
-              "validation_fuzz_corpus_failed",
-              "validation_missing_fuzz_coverage_artifact",
-              "validation_fuzz_coverage_failed",
-              "validation_missing_decode_stage_artifact",
-              "validation_decode_stage_failed",
-              "validation_missing_python_zlib_diff_artifact",
-              "validation_python_zlib_diff_failed"
-            ],
-            "reason": [
-              "missing_producer_steps",
-              "missing_required_smoke_gates",
-              "missing_header_inspect_artifact",
-              "header_inspect_failed",
-              "missing_header_workflows",
-              "header_inspect_undercovered",
-              "missing_dashboard_strict_artifact",
-              "dashboard_strict_failed",
-              "missing_dashboard_strict_modes",
-              "missing_sidecar_corrupt_artifact",
-              "sidecar_corrupt_failed",
-              "missing_huffman_length_artifact",
-              "huffman_length_failed",
-              "missing_fuzz_corpus_artifact",
-              "fuzz_corpus_failed",
-              "missing_fuzz_coverage_artifact",
-              "fuzz_coverage_failed",
-              "missing_decode_stage_artifact",
-              "decode_stage_failed",
-              "missing_python_zlib_diff_artifact",
-              "python_zlib_diff_failed"
-            ]
-          },
-          "field_pairs": {
-            "check": {
-              "target": "reason",
-              "allowed": {
-                "validation_missing_producer_steps": "missing_producer_steps",
-                "validation_missing_required_smoke_gates": "missing_required_smoke_gates",
-                "validation_missing_header_inspect_artifact": "missing_header_inspect_artifact",
-                "validation_header_inspect_failed": "header_inspect_failed",
-                "validation_missing_header_workflows": "missing_header_workflows",
-                "validation_missing_dashboard_strict_artifact": "missing_dashboard_strict_artifact",
-                "validation_dashboard_strict_failed": "dashboard_strict_failed",
-                "validation_missing_dashboard_strict_modes": "missing_dashboard_strict_modes",
-                "validation_missing_huffman_length_artifact": "missing_huffman_length_artifact",
-                "validation_huffman_length_failed": "huffman_length_failed",
-                "validation_missing_fuzz_corpus_artifact": "missing_fuzz_corpus_artifact",
-                "validation_fuzz_corpus_failed": "fuzz_corpus_failed",
-                "validation_missing_fuzz_coverage_artifact": "missing_fuzz_coverage_artifact",
-                "validation_fuzz_coverage_failed": "fuzz_coverage_failed",
-                "validation_missing_decode_stage_artifact": "missing_decode_stage_artifact",
-                "validation_decode_stage_failed": "decode_stage_failed",
-                "validation_missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
-                "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed",
-                "validation_header_inspect_undercovered": "header_inspect_undercovered",
-                "validation_missing_python_zlib_diff_artifact": "missing_python_zlib_diff_artifact",
-                "validation_python_zlib_diff_failed": "python_zlib_diff_failed"
-              }
-            }
-          }
-        }
-      }
-    },
-    "vort.dashboard_category_expected_artifacts": {
-      "fields": {
-        "expected_artifacts": "list",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "item_collection": "expected_artifacts",
-      "item_fields": {
-        "category": "str",
-        "name": "str",
-        "require_present": "bool",
-        "require_producer_step": "bool",
-        "require_smoke_gate": "bool"
-      },
-      "item_enums": {
-        "category": [
-          "validation",
-          "benchmark",
-          "corpus and ratio",
-          "native parallel",
-          "other"
-        ]
-      }
-    },
-    "vort.dashboard_category_negative_smoke": {
-      "fields": {
-        "case_count": "int",
-        "cases": "list",
-        "ok": "bool",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "count_rules": {
-        "case_count": {
-          "collection": "cases"
+          "target": "reason"
         }
       },
-      "item_collection": "cases",
       "item_fields": {
-        "actual_output": "str",
-        "actual_output_bytes": "int",
-        "actual_output_limit": "int",
-        "actual_output_truncated": "bool",
-        "expected_failure": "bool",
-        "expected_output": "str",
-        "matched": "bool",
-        "name": "str",
-        "returncode": "int"
-      },
-      "item_enums": {
-        "name": [
-          "classifier_category_mismatch",
-          "missing_required_artifact",
-          "manifest_category_mismatch",
-          "missing_required_producer_step",
-          "missing_required_smoke_gate"
-        ]
-      }
-    },
-    "vort.dashboard_config_index": {
-      "fields": {
-        "config_count": "int",
-        "configs": "list",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "count_rules": {
-        "config_count": {
-          "collection": "configs"
-        }
-      },
-      "item_collection": "configs",
-      "item_fields": {
-        "consumer": "str",
-        "docs_section": "str",
-        "path": "str",
-        "schema_name": "str",
-        "validation_step": "str"
-      }
-    },
-    "vort.dashboard_config_index_negative_smoke": {
-      "fields": {
-        "case_count": "int",
-        "cases": "list",
-        "ok": "bool",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "count_rules": {
-        "case_count": {
-          "collection": "cases"
-        }
-      },
-      "item_collection": "cases",
-      "item_fields": {
-        "actual_output": "str",
-        "actual_output_bytes": "int",
-        "actual_output_limit": "int",
-        "actual_output_truncated": "bool",
-        "expected_failure": "bool",
-        "expected_output": "str",
-        "matched": "bool",
-        "name": "str",
-        "returncode": "int"
-      },
-      "item_enums": {
-        "name": [
-          "missing_config_path",
-          "schema_mismatch",
-          "missing_docs_section",
-          "missing_build_step",
-          "missing_consumer",
-          "unchecked_validation_json_schema"
-        ]
-      }
-    },
-    "vort.dashboard_config_index_smoke": {
-      "fields": {
-        "config_count": "int",
-        "configs": "list",
-        "ok": "bool",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "count_rules": {
-        "config_count": {
-          "collection": "configs"
-        }
-      },
-      "item_collection": "configs",
-      "item_fields": {
-        "consumer": "str",
-        "consumer_exists": "bool",
-        "docs_section": "str",
-        "docs_section_present": "bool",
-        "manifest_schema_present": "bool",
-        "matched": "bool",
-        "path": "str",
-        "path_exists": "bool",
-        "schema_matches": "bool",
-        "schema_name": "str",
-        "validation_json_smoke_checked": "bool",
-        "validation_step": "str",
-        "validation_step_present": "bool"
-      }
-    },
-    "vort.dashboard_producers": {
-      "fields": {
-        "allow_missing": "dict",
-        "artifact_metadata": "dict",
-        "contains": "list",
-        "exact": "dict",
-        "required_smoke_gates": "list",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "item_collection": "contains",
-      "item_fields": {
-        "match": "str",
-        "producer_step": "str"
-      }
-    },
-    "vort.dashboard_producers_negative_smoke": {
-      "fields": {
-        "case_count": "int",
-        "cases": "list",
-        "ok": "bool",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "count_rules": {
-        "case_count": {
-          "collection": "cases"
-        }
-      },
-      "item_collection": "cases",
-      "item_fields": {
-        "actual_output": "str",
-        "actual_output_bytes": "int",
-        "actual_output_limit": "int",
-        "actual_output_truncated": "bool",
-        "expected_failure": "bool",
-        "expected_output": "str",
-        "matched": "bool",
-        "name": "str",
-        "returncode": "int"
-      },
-      "item_enums": {
-        "name": [
-          "expected_format_mismatch",
-          "missing_producer_step",
-          "missing_present_smoke_gate",
-          "missing_absent_smoke_gate",
-          "allow_missing_exact",
-          "contains_producer_step"
-        ]
-      }
-    },
-    "vort.dashboard_producers_required_artifacts": {
-      "fields": {
-        "required_artifacts": "list",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "item_collection": "required_artifacts",
-      "item_fields": {
-        "expected_format": "str",
-        "name": "str",
-        "producer_step": "str",
-        "required_smoke_gate": "bool",
-        "smoke_gate": "str"
-      }
-    },
-    "vort.dashboard_producers_required_smoke": {
-      "fields": {
-        "artifact_count": "int",
-        "cases": "list",
-        "ok": "bool",
-        "required_smoke_gate_count": "int",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "count_rules": {
-        "artifact_count": {
-          "collection": "cases"
-        },
-        "required_smoke_gate_count": {
-          "collection": "cases",
-          "field": "required_smoke_gate",
-          "equals": true
-        }
-      },
-      "item_collection": "cases",
-      "item_fields": {
-        "configured_expected_format": "str",
-        "configured_producer_step": "str",
-        "configured_required_smoke_gate": "bool",
-        "configured_smoke_gate": "str",
-        "expected_format": "str",
-        "matched": "bool",
-        "name": "str",
-        "producer_step": "str",
-        "required_smoke_gate": "bool",
-        "smoke_gate": "str"
+        "check": "str",
+        "fixture": "str",
+        "reason": "str"
       }
     },
     "vort.deflate_decode_stage_report": {
-      "fields": {
-        "schema": "str",
-        "schema_version": "int",
-        "ok": "bool",
-        "rows": "int",
-        "error_rows": "int",
-        "matched_error_rows": "int",
-        "unmatched_error_rows": "int",
-        "items": "list",
-        "error_items": "list"
-      },
       "boolean_formula_rules": {
         "ok": {
-          "zero": [
-            "unmatched_error_rows"
-          ],
           "positive": [
             "rows",
             "error_rows",
             "matched_error_rows"
+          ],
+          "zero": [
+            "unmatched_error_rows"
           ]
         }
       },
-      "count_rules": {
-        "rows": {
-          "collection": "items"
-        },
-        "error_rows": {
-          "collection": "error_items"
-        },
-        "matched_error_rows": {
-          "collection": "error_items",
-          "field": "matched",
-          "equals": true
-        },
-        "unmatched_error_rows": {
-          "collection": "error_items",
-          "field": "matched",
-          "equals": false
-        }
-      },
-      "item_collection": "items",
-      "item_fields": {
-        "case": "str",
-        "input_bytes": "int",
-        "zlib_bytes": "int",
-        "gzip_bytes": "int",
-        "raw_bytes": "int",
-        "iterations": "int",
-        "raw_mib_s": "float",
-        "raw_exact_mib_s": "float",
-        "raw_into_mib_s": "float",
-        "zlib_mib_s": "float",
-        "zlib_exact_mib_s": "float",
-        "zlib_into_mib_s": "float",
-        "gzip_mib_s": "float",
-        "gzip_exact_mib_s": "float",
-        "gzip_into_mib_s": "float",
-        "zlib_wrapper_time_ratio": "float",
-        "zlib_wrapper_exact_time_ratio": "float",
-        "zlib_wrapper_into_time_ratio": "float",
-        "gzip_wrapper_time_ratio": "float",
-        "gzip_wrapper_exact_time_ratio": "float",
-        "gzip_wrapper_into_time_ratio": "float",
-        "raw_alloc_exact_time_ratio": "float",
-        "raw_alloc_into_time_ratio": "float",
-        "zlib_alloc_exact_time_ratio": "float",
-        "zlib_alloc_into_time_ratio": "float",
-        "gzip_alloc_exact_time_ratio": "float",
-        "gzip_alloc_into_time_ratio": "float",
-        "mix": "int"
-      },
       "collections": {
         "error_items": {
-          "fields": {
-            "case": "str",
-            "wrapper": "str",
-            "input_bytes": "int",
-            "expected_error": "str",
-            "actual_error": "str",
-            "matched": "bool"
-          },
           "enums": {
             "wrapper": [
               "raw",
               "zlib",
               "gzip"
             ]
+          },
+          "fields": {
+            "actual_error": "str",
+            "case": "str",
+            "expected_error": "str",
+            "input_bytes": "int",
+            "matched": "bool",
+            "wrapper": "str"
           }
         }
-      }
-    },
-    "vort.native_allocation_report": {
-      "fields": {
-        "case_count": "int",
-        "cases": "list",
-        "schema": "str",
-        "schema_version": "int"
       },
       "count_rules": {
-        "case_count": {
-          "collection": "cases"
+        "error_rows": {
+          "collection": "error_items"
+        },
+        "matched_error_rows": {
+          "collection": "error_items",
+          "equals": true,
+          "field": "matched"
+        },
+        "rows": {
+          "collection": "items"
+        },
+        "unmatched_error_rows": {
+          "collection": "error_items",
+          "equals": false,
+          "field": "matched"
         }
       },
-      "item_collection": "cases",
+      "fields": {
+        "error_items": "list",
+        "error_rows": "int",
+        "items": "list",
+        "matched_error_rows": "int",
+        "ok": "bool",
+        "rows": "int",
+        "schema": "str",
+        "schema_version": "int",
+        "unmatched_error_rows": "int"
+      },
+      "item_collection": "items",
       "item_fields": {
-        "allocated_bytes": "int",
-        "allocations": "int",
         "case": "str",
-        "deallocations": "int",
-        "freed_bytes": "int",
+        "gzip_alloc_exact_time_ratio": "float",
+        "gzip_alloc_into_time_ratio": "float",
+        "gzip_bytes": "int",
+        "gzip_exact_mib_s": "float",
+        "gzip_into_mib_s": "float",
+        "gzip_mib_s": "float",
+        "gzip_wrapper_exact_time_ratio": "float",
+        "gzip_wrapper_into_time_ratio": "float",
+        "gzip_wrapper_time_ratio": "float",
         "input_bytes": "int",
-        "output_bytes": "int"
+        "iterations": "int",
+        "mix": "int",
+        "raw_alloc_exact_time_ratio": "float",
+        "raw_alloc_into_time_ratio": "float",
+        "raw_bytes": "int",
+        "raw_exact_mib_s": "float",
+        "raw_into_mib_s": "float",
+        "raw_mib_s": "float",
+        "zlib_alloc_exact_time_ratio": "float",
+        "zlib_alloc_into_time_ratio": "float",
+        "zlib_bytes": "int",
+        "zlib_exact_mib_s": "float",
+        "zlib_into_mib_s": "float",
+        "zlib_mib_s": "float",
+        "zlib_wrapper_exact_time_ratio": "float",
+        "zlib_wrapper_into_time_ratio": "float",
+        "zlib_wrapper_time_ratio": "float"
       }
     },
-    "vort.native_allocation_smoke": {
+    "vort.fuzz_corpus_coverage_smoke": {
+      "collections": {
+        "error_requirements": {
+          "enums": {
+            "mode": [
+              "native",
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          },
+          "fields": {
+            "actual_count": "int",
+            "error": "str",
+            "matched": "bool",
+            "min_count": "int",
+            "mode": "str"
+          }
+        },
+        "mode_requirements": {
+          "enums": {
+            "mode": [
+              "native",
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          },
+          "fields": {
+            "actual_accepted": "int",
+            "actual_cases": "int",
+            "actual_exact_error_expectations": "int",
+            "actual_matched_rows": "int",
+            "actual_rejected": "int",
+            "matched": "bool",
+            "min_accepted": "int",
+            "min_cases": "int",
+            "min_exact_error_expectations": "int",
+            "min_matched_rows": "int",
+            "min_rejected": "int",
+            "mode": "str"
+          }
+        }
+      },
+      "count_rules": {
+        "error_requirement_count": {
+          "collection": "error_requirements"
+        },
+        "mode_requirement_count": {
+          "collection": "mode_requirements"
+        }
+      },
       "fields": {
-        "cases": "list",
+        "coverage": "str",
+        "error_requirement_count": "int",
+        "error_requirements": "list",
+        "mode_requirement_count": "int",
+        "mode_requirements": "list",
         "ok": "bool",
         "report": "str",
-        "budget_cases": "list",
-        "required_budget_cases": "int",
-        "required_zero_allocation_cases": "int",
         "schema": "str",
         "schema_version": "int"
-      },
-      "count_rules": {
-        "required_budget_cases": {
-          "collection": "budget_cases"
-        },
-        "required_zero_allocation_cases": {
-          "collection": "cases"
-        }
-      },
-      "item_collection": "cases",
-      "item_fields": {
-        "allocated_bytes": "int",
-        "allocations": "int",
-        "case": "str",
-        "deallocations": "int",
-        "freed_bytes": "int",
-        "matched": "bool",
-        "present": "bool"
-      },
-      "collections": {
-        "budget_cases": {
-          "fields": {
-            "allocated_bytes": "int",
-            "allocations": "int",
-            "balanced": "bool",
-            "case": "str",
-            "deallocations": "int",
-            "freed_bytes": "int",
-            "matched": "bool",
-            "max_allocated_bytes": "int",
-            "max_allocations": "int",
-            "max_deallocations": "int",
-            "max_freed_bytes": "int",
-            "present": "bool"
-          }
-        }
       }
     },
-    "vort.native_allocation_negative_smoke": {
-      "fields": {
-        "case_count": "int",
-        "cases": "list",
-        "ok": "bool",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "count_rules": {
-        "case_count": {
-          "collection": "cases"
+    "vort.fuzz_corpus_expected_coverage": {
+      "collections": {
+        "error_requirements": {
+          "enums": {
+            "mode": [
+              "native",
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          },
+          "fields": {
+            "error": "str",
+            "min_count": "int",
+            "mode": "str"
+          }
+        },
+        "mode_requirements": {
+          "enums": {
+            "mode": [
+              "native",
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          },
+          "fields": {
+            "min_accepted": "int",
+            "min_cases": "int",
+            "min_exact_error_expectations": "int",
+            "min_matched_rows": "int",
+            "min_rejected": "int",
+            "mode": "str"
+          }
         }
       },
-      "item_collection": "cases",
-      "item_fields": {
-        "expected_failure": "bool",
-        "matched": "bool",
-        "name": "str",
-        "returncode": "int"
+      "fields": {
+        "error_requirements": "list",
+        "mode_requirements": "list",
+        "schema": "str",
+        "schema_version": "int"
       }
     },
     "vort.fuzz_corpus_report": {
-      "fields": {
-        "accepted": "int",
-        "cases": "int",
-        "exact_error_expectations": "int",
-        "items": "list",
-        "matched_rows": "int",
-        "mode": "str",
-        "ok": "bool",
-        "rejected": "int",
-        "schema": "str",
-        "schema_version": "int",
-        "mode_count_rows": "int",
-        "error_count_rows": "int",
-        "mode_counts": "list",
-        "error_counts": "list"
+      "collection_sum_rules": {
+        "accepted": {
+          "collection": "mode_counts",
+          "field": "accepted"
+        },
+        "cases": {
+          "collection": "mode_counts",
+          "field": "cases"
+        },
+        "exact_error_expectations": {
+          "collection": "mode_counts",
+          "field": "exact_error_expectations"
+        },
+        "matched_rows": {
+          "collection": "mode_counts",
+          "field": "matched_rows"
+        },
+        "rejected": {
+          "collection": "mode_counts",
+          "field": "rejected"
+        }
+      },
+      "collections": {
+        "error_counts": {
+          "enums": {
+            "mode": [
+              "store",
+              "native",
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          },
+          "fields": {
+            "count": "int",
+            "error": "str",
+            "mode": "str"
+          }
+        },
+        "mode_counts": {
+          "enums": {
+            "mode": [
+              "store",
+              "native",
+              "deflate",
+              "zlib",
+              "gzip"
+            ]
+          },
+          "fields": {
+            "accepted": "int",
+            "cases": "int",
+            "exact_error_expectations": "int",
+            "matched_rows": "int",
+            "mode": "str",
+            "rejected": "int"
+          }
+        }
       },
       "count_rules": {
+        "accepted": {
+          "collection": "items",
+          "equals": "accepted",
+          "field": "outcome"
+        },
         "cases": {
           "collection": "items"
         },
-        "accepted": {
-          "collection": "items",
-          "field": "outcome",
-          "equals": "accepted"
-        },
-        "rejected": {
-          "collection": "items",
-          "field": "outcome",
-          "equals": "rejected"
-        },
-        "matched_rows": {
-          "collection": "items",
-          "field": "matched",
-          "equals": true
+        "error_count_rows": {
+          "collection": "error_counts"
         },
         "exact_error_expectations": {
           "collection": "items",
           "field": "expected_error",
           "not_equals": ""
         },
+        "matched_rows": {
+          "collection": "items",
+          "equals": true,
+          "field": "matched"
+        },
         "mode_count_rows": {
           "collection": "mode_counts"
         },
-        "error_count_rows": {
-          "collection": "error_counts"
+        "rejected": {
+          "collection": "items",
+          "equals": "rejected",
+          "field": "outcome"
         }
       },
       "enums": {
@@ -1245,17 +1303,23 @@
           "mixed"
         ]
       },
-      "item_collection": "items",
-      "item_fields": {
-        "actual_error": "str",
-        "expected": "str",
-        "expected_error": "str",
-        "index": "int",
-        "input_bytes": "int",
-        "matched": "bool",
+      "fields": {
+        "accepted": "int",
+        "cases": "int",
+        "error_count_rows": "int",
+        "error_counts": "list",
+        "exact_error_expectations": "int",
+        "items": "list",
+        "matched_rows": "int",
         "mode": "str",
-        "outcome": "str"
+        "mode_count_rows": "int",
+        "mode_counts": "list",
+        "ok": "bool",
+        "rejected": "int",
+        "schema": "str",
+        "schema_version": "int"
       },
+      "item_collection": "items",
       "item_enums": {
         "expected": [
           "any",
@@ -1274,171 +1338,34 @@
           "rejected"
         ]
       },
-      "collection_sum_rules": {
-        "cases": {
-          "collection": "mode_counts",
-          "field": "cases"
-        },
-        "accepted": {
-          "collection": "mode_counts",
-          "field": "accepted"
-        },
-        "rejected": {
-          "collection": "mode_counts",
-          "field": "rejected"
-        },
-        "exact_error_expectations": {
-          "collection": "mode_counts",
-          "field": "exact_error_expectations"
-        },
-        "matched_rows": {
-          "collection": "mode_counts",
-          "field": "matched_rows"
-        }
-      },
-      "collections": {
-        "mode_counts": {
-          "fields": {
-            "accepted": "int",
-            "cases": "int",
-            "exact_error_expectations": "int",
-            "matched_rows": "int",
-            "mode": "str",
-            "rejected": "int"
-          },
-          "enums": {
-            "mode": [
-              "store",
-              "native",
-              "deflate",
-              "zlib",
-              "gzip"
-            ]
-          }
-        },
-        "error_counts": {
-          "fields": {
-            "count": "int",
-            "error": "str",
-            "mode": "str"
-          },
-          "enums": {
-            "mode": [
-              "store",
-              "native",
-              "deflate",
-              "zlib",
-              "gzip"
-            ]
-          }
-        }
+      "item_fields": {
+        "actual_error": "str",
+        "expected": "str",
+        "expected_error": "str",
+        "index": "int",
+        "input_bytes": "int",
+        "matched": "bool",
+        "mode": "str",
+        "outcome": "str"
       }
     },
-    "vort.fuzz_corpus_expected_coverage": {
+    "vort.gzip_header_info": {
       "fields": {
-        "error_requirements": "list",
-        "mode_requirements": "list",
+        "comment": "str?",
+        "compressed_bytes": "int",
+        "data_offset": "int",
+        "extra_hex": "str?",
+        "extra_len": "int",
+        "extra_present": "bool",
+        "filename": "str?",
+        "flags": "int",
+        "header_crc": "int?",
+        "mtime": "int",
+        "os": "int",
         "schema": "str",
-        "schema_version": "int"
-      },
-      "collections": {
-        "mode_requirements": {
-          "fields": {
-            "min_accepted": "int",
-            "min_cases": "int",
-            "min_exact_error_expectations": "int",
-            "min_matched_rows": "int",
-            "min_rejected": "int",
-            "mode": "str"
-          },
-          "enums": {
-            "mode": [
-              "native",
-              "deflate",
-              "zlib",
-              "gzip"
-            ]
-          }
-        },
-        "error_requirements": {
-          "fields": {
-            "error": "str",
-            "min_count": "int",
-            "mode": "str"
-          },
-          "enums": {
-            "mode": [
-              "native",
-              "deflate",
-              "zlib",
-              "gzip"
-            ]
-          }
-        }
-      }
-    },
-    "vort.fuzz_corpus_coverage_smoke": {
-      "fields": {
-        "coverage": "str",
-        "error_requirement_count": "int",
-        "error_requirements": "list",
-        "mode_requirement_count": "int",
-        "mode_requirements": "list",
-        "ok": "bool",
-        "report": "str",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "count_rules": {
-        "mode_requirement_count": {
-          "collection": "mode_requirements"
-        },
-        "error_requirement_count": {
-          "collection": "error_requirements"
-        }
-      },
-      "collections": {
-        "mode_requirements": {
-          "fields": {
-            "actual_accepted": "int",
-            "actual_cases": "int",
-            "actual_exact_error_expectations": "int",
-            "actual_matched_rows": "int",
-            "actual_rejected": "int",
-            "matched": "bool",
-            "min_accepted": "int",
-            "min_cases": "int",
-            "min_exact_error_expectations": "int",
-            "min_matched_rows": "int",
-            "min_rejected": "int",
-            "mode": "str"
-          },
-          "enums": {
-            "mode": [
-              "native",
-              "deflate",
-              "zlib",
-              "gzip"
-            ]
-          }
-        },
-        "error_requirements": {
-          "fields": {
-            "actual_count": "int",
-            "error": "str",
-            "matched": "bool",
-            "min_count": "int",
-            "mode": "str"
-          },
-          "enums": {
-            "mode": [
-              "native",
-              "deflate",
-              "zlib",
-              "gzip"
-            ]
-          }
-        }
+        "schema_version": "int",
+        "text": "bool",
+        "xfl": "int"
       }
     },
     "vort.header_inspect_required_workflows": {
@@ -1448,11 +1375,6 @@
         "schema_version": "int"
       },
       "item_collection": "required_workflows",
-      "item_fields": {
-        "command": "str",
-        "format": "str",
-        "workflow": "str"
-      },
       "item_enums": {
         "format": [
           "raw",
@@ -1463,40 +1385,200 @@
           "hex",
           "file"
         ]
+      },
+      "item_fields": {
+        "command": "str",
+        "format": "str",
+        "workflow": "str"
       }
     },
     "vort.header_inspect_smoke": {
-      "fields": {
-        "case_count": "int",
-        "cases": "list",
-        "command_count": "int",
-        "command_coverage": "list",
-        "command_failures": "int",
-        "command_successes": "int",
-        "dictionary_cases": "int",
-        "fhcrc_cases": "int",
-        "gzip_cases": "int",
-        "help_workflow_count": "int",
-        "help_workflows": "list",
-        "negative_cases": "int",
-        "negative_error_counts": "dict",
-        "negative_items": "list",
-        "ok": "bool",
-        "optional_header_cases": "int",
-        "raw_negative_cases": "int",
-        "raw_cases": "int",
-        "required_workflow_count": "int",
-        "required_workflows": "list",
-        "missing_workflow_count": "int",
-        "missing_workflows": "list",
-        "schema": "str",
-        "schema_version": "int",
-        "gzip_negative_cases": "int",
-        "workflow_count": "int",
-        "workflow_coverage": "list",
-        "workflow_successes": "int",
-        "zlib_negative_cases": "int",
-        "zlib_cases": "int"
+      "collection_sum_rules": {
+        "command_failures": {
+          "collection": "command_coverage",
+          "field": "failures"
+        },
+        "command_successes": {
+          "collection": "command_coverage",
+          "field": "successes"
+        },
+        "workflow_successes": {
+          "collection": "workflow_coverage",
+          "field": "successes"
+        }
+      },
+      "collections": {
+        "command_coverage": {
+          "enums": {
+            "command": [
+              "inspect-raw-header-hex",
+              "inspect-raw-header-file",
+              "inspect-zlib-header-hex",
+              "inspect-zlib-header-file",
+              "inspect-zlib-deflate-header-hex",
+              "inspect-zlib-deflate-header-file",
+              "inspect-zlib-dict-deflate-header-hex",
+              "inspect-zlib-dict-deflate-header-file",
+              "inspect-gzip-header-hex",
+              "inspect-gzip-header-file",
+              "inspect-gzip-deflate-header-hex",
+              "inspect-gzip-deflate-header-file"
+            ],
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ]
+          },
+          "fields": {
+            "command": "str",
+            "failures": "int",
+            "format": "str",
+            "successes": "int"
+          }
+        },
+        "help_workflows": {
+          "enums": {
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ],
+            "workflow": [
+              "hex",
+              "file"
+            ]
+          },
+          "fields": {
+            "command": "str",
+            "format": "str",
+            "workflow": "str"
+          }
+        },
+        "missing_workflows": {
+          "allow_empty": true,
+          "enums": {
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ],
+            "workflow": [
+              "hex",
+              "file"
+            ]
+          },
+          "fields": {
+            "command": "str",
+            "format": "str",
+            "workflow": "str"
+          }
+        },
+        "negative_items": {
+          "enums": {
+            "command": [
+              "inspect-raw-header-hex",
+              "inspect-raw-header-file",
+              "inspect-zlib-header-hex",
+              "inspect-zlib-header-file",
+              "inspect-zlib-deflate-header-hex",
+              "inspect-zlib-deflate-header-file",
+              "inspect-zlib-dict-deflate-header-hex",
+              "inspect-zlib-dict-deflate-header-file",
+              "inspect-gzip-header-hex",
+              "inspect-gzip-header-file",
+              "inspect-gzip-deflate-header-hex",
+              "inspect-gzip-deflate-header-file"
+            ],
+            "expected_error": [
+              "BadGzipHeader",
+              "BadZlibHeader",
+              "InvalidDeflateBlockType",
+              "InvalidDynamicBlockHeader",
+              "InvalidHuffmanCode",
+              "StoredLengthMismatch",
+              "TruncatedFrame",
+              "ChecksumMismatch"
+            ],
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ]
+          },
+          "field_pairs": {
+            "format": {
+              "allowed": {
+                "gzip": [
+                  "inspect-gzip-header-hex",
+                  "inspect-gzip-deflate-header-hex"
+                ],
+                "raw": "inspect-raw-header-hex",
+                "zlib": [
+                  "inspect-zlib-header-hex",
+                  "inspect-zlib-deflate-header-hex",
+                  "inspect-zlib-dict-deflate-header-hex"
+                ]
+              },
+              "target": "command"
+            }
+          },
+          "fields": {
+            "argv": "list",
+            "command": "str",
+            "expected_error": "str",
+            "format": "str",
+            "matched": "bool",
+            "name": "str",
+            "sample": "str"
+          },
+          "list_field_pairs": {
+            "argv": {
+              "fields": [
+                "command",
+                "sample"
+              ],
+              "prefix": true
+            }
+          }
+        },
+        "required_workflows": {
+          "enums": {
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ],
+            "workflow": [
+              "hex",
+              "file"
+            ]
+          },
+          "fields": {
+            "command": "str",
+            "format": "str",
+            "workflow": "str"
+          }
+        },
+        "workflow_coverage": {
+          "enums": {
+            "format": [
+              "raw",
+              "zlib",
+              "gzip"
+            ],
+            "workflow": [
+              "hex",
+              "file"
+            ]
+          },
+          "fields": {
+            "command": "str",
+            "format": "str",
+            "successes": "int",
+            "workflow": "str"
+          }
+        }
       },
       "count_rules": {
         "case_count": {
@@ -1508,83 +1590,113 @@
         "command_failures": {
           "collection": "negative_items"
         },
-        "workflow_count": {
-          "collection": "workflow_coverage"
+        "dictionary_cases": {
+          "collection": "cases",
+          "equals": true,
+          "field": "has_dictionary"
         },
-        "required_workflow_count": {
-          "collection": "required_workflows"
+        "fhcrc_cases": {
+          "collection": "cases",
+          "equals": true,
+          "field": "header_crc"
         },
-        "missing_workflow_count": {
-          "collection": "missing_workflows"
+        "gzip_cases": {
+          "collection": "cases",
+          "equals": "gzip",
+          "field": "format"
+        },
+        "gzip_negative_cases": {
+          "collection": "negative_items",
+          "equals": "gzip",
+          "field": "format"
         },
         "help_workflow_count": {
           "collection": "help_workflows"
         },
-        "raw_cases": {
-          "collection": "cases",
-          "field": "format",
-          "equals": "raw"
-        },
-        "zlib_cases": {
-          "collection": "cases",
-          "field": "format",
-          "equals": "zlib"
-        },
-        "gzip_cases": {
-          "collection": "cases",
-          "field": "format",
-          "equals": "gzip"
-        },
-        "dictionary_cases": {
-          "collection": "cases",
-          "field": "has_dictionary",
-          "equals": true
-        },
-        "optional_header_cases": {
-          "collection": "cases",
-          "field": "has_optional_fields",
-          "equals": true
-        },
-        "fhcrc_cases": {
-          "collection": "cases",
-          "field": "header_crc",
-          "equals": true
+        "missing_workflow_count": {
+          "collection": "missing_workflows"
         },
         "negative_cases": {
           "collection": "negative_items"
         },
+        "optional_header_cases": {
+          "collection": "cases",
+          "equals": true,
+          "field": "has_optional_fields"
+        },
+        "raw_cases": {
+          "collection": "cases",
+          "equals": "raw",
+          "field": "format"
+        },
         "raw_negative_cases": {
           "collection": "negative_items",
-          "field": "format",
-          "equals": "raw"
+          "equals": "raw",
+          "field": "format"
+        },
+        "required_workflow_count": {
+          "collection": "required_workflows"
+        },
+        "workflow_count": {
+          "collection": "workflow_coverage"
+        },
+        "zlib_cases": {
+          "collection": "cases",
+          "equals": "zlib",
+          "field": "format"
         },
         "zlib_negative_cases": {
           "collection": "negative_items",
-          "field": "format",
-          "equals": "zlib"
-        },
-        "gzip_negative_cases": {
-          "collection": "negative_items",
-          "field": "format",
-          "equals": "gzip"
+          "equals": "zlib",
+          "field": "format"
         }
+      },
+      "dict_key_enums": {
+        "negative_error_counts": [
+          "BadGzipHeader",
+          "BadZlibHeader",
+          "InvalidDeflateBlockType",
+          "InvalidDynamicBlockHeader",
+          "InvalidHuffmanCode",
+          "StoredLengthMismatch",
+          "TruncatedFrame",
+          "ChecksumMismatch"
+        ]
       },
       "dict_sum_rules": {
         "negative_cases": "negative_error_counts"
       },
-      "collection_sum_rules": {
-        "command_successes": {
-          "collection": "command_coverage",
-          "field": "successes"
-        },
-        "command_failures": {
-          "collection": "command_coverage",
-          "field": "failures"
-        },
-        "workflow_successes": {
-          "collection": "workflow_coverage",
-          "field": "successes"
-        }
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "command_count": "int",
+        "command_coverage": "list",
+        "command_failures": "int",
+        "command_successes": "int",
+        "dictionary_cases": "int",
+        "fhcrc_cases": "int",
+        "gzip_cases": "int",
+        "gzip_negative_cases": "int",
+        "help_workflow_count": "int",
+        "help_workflows": "list",
+        "missing_workflow_count": "int",
+        "missing_workflows": "list",
+        "negative_cases": "int",
+        "negative_error_counts": "dict",
+        "negative_items": "list",
+        "ok": "bool",
+        "optional_header_cases": "int",
+        "raw_cases": "int",
+        "raw_negative_cases": "int",
+        "required_workflow_count": "int",
+        "required_workflows": "list",
+        "schema": "str",
+        "schema_version": "int",
+        "workflow_count": "int",
+        "workflow_coverage": "list",
+        "workflow_successes": "int",
+        "zlib_cases": "int",
+        "zlib_negative_cases": "int"
       },
       "item_collection": "cases",
       "item_enums": {
@@ -1621,6 +1733,35 @@
           "vort.wrapped_deflate_header_info"
         ]
       },
+      "item_field_pairs": {
+        "format": {
+          "allowed": {
+            "gzip": [
+              "vort.gzip_header_info",
+              "vort.wrapped_deflate_header_info"
+            ],
+            "raw": "vort.raw_deflate_header_info",
+            "zlib": [
+              "vort.zlib_header_info",
+              "vort.wrapped_deflate_header_info"
+            ]
+          },
+          "target": "schema_name"
+        },
+        "schema_name": {
+          "allowed": {
+            "vort.gzip_header_info": "inspect-gzip-header-hex",
+            "vort.raw_deflate_header_info": "inspect-raw-header-hex",
+            "vort.wrapped_deflate_header_info": [
+              "inspect-zlib-deflate-header-hex",
+              "inspect-zlib-dict-deflate-header-hex",
+              "inspect-gzip-deflate-header-hex"
+            ],
+            "vort.zlib_header_info": "inspect-zlib-header-hex"
+          },
+          "target": "command"
+        }
+      },
       "item_fields": {
         "argv": "list",
         "bytes": "int",
@@ -1635,35 +1776,6 @@
         "sample": "str",
         "schema_name": "str"
       },
-      "item_field_pairs": {
-        "format": {
-          "target": "schema_name",
-          "allowed": {
-            "raw": "vort.raw_deflate_header_info",
-            "zlib": [
-              "vort.zlib_header_info",
-              "vort.wrapped_deflate_header_info"
-            ],
-            "gzip": [
-              "vort.gzip_header_info",
-              "vort.wrapped_deflate_header_info"
-            ]
-          }
-        },
-        "schema_name": {
-          "target": "command",
-          "allowed": {
-            "vort.raw_deflate_header_info": "inspect-raw-header-hex",
-            "vort.wrapped_deflate_header_info": [
-              "inspect-zlib-deflate-header-hex",
-              "inspect-zlib-dict-deflate-header-hex",
-              "inspect-gzip-deflate-header-hex"
-            ],
-            "vort.zlib_header_info": "inspect-zlib-header-hex",
-            "vort.gzip_header_info": "inspect-gzip-header-hex"
-          }
-        }
-      },
       "item_list_field_pairs": {
         "argv": {
           "fields": [
@@ -1672,194 +1784,165 @@
           ],
           "prefix": true
         }
+      }
+    },
+    "vort.native_allocation_negative_smoke": {
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
       },
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "expected_failure": "bool",
+        "matched": "bool",
+        "name": "str",
+        "returncode": "int"
+      }
+    },
+    "vort.native_allocation_report": {
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "allocated_bytes": "int",
+        "allocations": "int",
+        "case": "str",
+        "deallocations": "int",
+        "freed_bytes": "int",
+        "input_bytes": "int",
+        "output_bytes": "int"
+      }
+    },
+    "vort.native_allocation_smoke": {
       "collections": {
-        "command_coverage": {
+        "budget_cases": {
           "fields": {
-            "command": "str",
-            "failures": "int",
-            "format": "str",
-            "successes": "int"
-          },
-          "enums": {
-            "command": [
-              "inspect-raw-header-hex",
-              "inspect-raw-header-file",
-              "inspect-zlib-header-hex",
-              "inspect-zlib-header-file",
-              "inspect-zlib-deflate-header-hex",
-              "inspect-zlib-deflate-header-file",
-              "inspect-zlib-dict-deflate-header-hex",
-              "inspect-zlib-dict-deflate-header-file",
-              "inspect-gzip-header-hex",
-              "inspect-gzip-header-file",
-              "inspect-gzip-deflate-header-hex",
-              "inspect-gzip-deflate-header-file"
-            ],
-            "format": [
-              "raw",
-              "zlib",
-              "gzip"
-            ]
-          }
-        },
-        "workflow_coverage": {
-          "fields": {
-            "command": "str",
-            "format": "str",
-            "successes": "int",
-            "workflow": "str"
-          },
-          "enums": {
-            "format": [
-              "raw",
-              "zlib",
-              "gzip"
-            ],
-            "workflow": [
-              "hex",
-              "file"
-            ]
-          }
-        },
-        "required_workflows": {
-          "fields": {
-            "command": "str",
-            "format": "str",
-            "workflow": "str"
-          },
-          "enums": {
-            "format": [
-              "raw",
-              "zlib",
-              "gzip"
-            ],
-            "workflow": [
-              "hex",
-              "file"
-            ]
-          }
-        },
-        "missing_workflows": {
-          "fields": {
-            "command": "str",
-            "format": "str",
-            "workflow": "str"
-          },
-          "enums": {
-            "format": [
-              "raw",
-              "zlib",
-              "gzip"
-            ],
-            "workflow": [
-              "hex",
-              "file"
-            ]
-          },
-          "allow_empty": true
-        },
-        "help_workflows": {
-          "fields": {
-            "command": "str",
-            "format": "str",
-            "workflow": "str"
-          },
-          "enums": {
-            "format": [
-              "raw",
-              "zlib",
-              "gzip"
-            ],
-            "workflow": [
-              "hex",
-              "file"
-            ]
-          }
-        },
-        "negative_items": {
-          "fields": {
-            "argv": "list",
-            "command": "str",
-            "expected_error": "str",
-            "format": "str",
+            "allocated_bytes": "int",
+            "allocations": "int",
+            "balanced": "bool",
+            "case": "str",
+            "deallocations": "int",
+            "freed_bytes": "int",
             "matched": "bool",
-            "name": "str",
-            "sample": "str"
-          },
-          "enums": {
-            "command": [
-              "inspect-raw-header-hex",
-              "inspect-raw-header-file",
-              "inspect-zlib-header-hex",
-              "inspect-zlib-header-file",
-              "inspect-zlib-deflate-header-hex",
-              "inspect-zlib-deflate-header-file",
-              "inspect-zlib-dict-deflate-header-hex",
-              "inspect-zlib-dict-deflate-header-file",
-              "inspect-gzip-header-hex",
-              "inspect-gzip-header-file",
-              "inspect-gzip-deflate-header-hex",
-              "inspect-gzip-deflate-header-file"
-            ],
-            "format": [
-              "raw",
-              "zlib",
-              "gzip"
-            ],
-            "expected_error": [
-              "BadGzipHeader",
-              "BadZlibHeader",
-              "InvalidDeflateBlockType",
-              "InvalidDynamicBlockHeader",
-              "InvalidHuffmanCode",
-              "StoredLengthMismatch",
-              "TruncatedFrame",
-              "ChecksumMismatch"
-            ]
-          },
-          "list_field_pairs": {
-            "argv": {
-              "fields": [
-                "command",
-                "sample"
-              ],
-              "prefix": true
-            }
-          },
-          "field_pairs": {
-            "format": {
-              "target": "command",
-              "allowed": {
-                "raw": "inspect-raw-header-hex",
-                "zlib": [
-                  "inspect-zlib-header-hex",
-                  "inspect-zlib-deflate-header-hex",
-                  "inspect-zlib-dict-deflate-header-hex"
-                ],
-                "gzip": [
-                  "inspect-gzip-header-hex",
-                  "inspect-gzip-deflate-header-hex"
-                ]
-              }
-            }
+            "max_allocated_bytes": "int",
+            "max_allocations": "int",
+            "max_deallocations": "int",
+            "max_freed_bytes": "int",
+            "present": "bool"
           }
         }
       },
-      "dict_key_enums": {
-        "negative_error_counts": [
-          "BadGzipHeader",
-          "BadZlibHeader",
-          "InvalidDeflateBlockType",
-          "InvalidDynamicBlockHeader",
-          "InvalidHuffmanCode",
-          "StoredLengthMismatch",
-          "TruncatedFrame",
-          "ChecksumMismatch"
-        ]
+      "count_rules": {
+        "required_budget_cases": {
+          "collection": "budget_cases"
+        },
+        "required_zero_allocation_cases": {
+          "collection": "cases"
+        }
+      },
+      "fields": {
+        "budget_cases": "list",
+        "cases": "list",
+        "ok": "bool",
+        "report": "str",
+        "required_budget_cases": "int",
+        "required_zero_allocation_cases": "int",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "allocated_bytes": "int",
+        "allocations": "int",
+        "case": "str",
+        "deallocations": "int",
+        "freed_bytes": "int",
+        "matched": "bool",
+        "present": "bool"
+      }
+    },
+    "vort.png_scratch_report": {
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "bit_depth": "int",
+        "case": "str",
+        "color_type": "str",
+        "filtered_row_scratch_bytes": "int",
+        "height": "int",
+        "image_output_bytes": "int",
+        "interlace": "str",
+        "previous_row_scratch_bytes": "int",
+        "total_caller_owned_bytes": "int",
+        "width": "int",
+        "working_scratch_bytes": "int",
+        "zlib_scratch_bytes": "int"
+      }
+    },
+    "vort.python_zlib_diff_smoke": {
+      "boolean_formula_rules": {
+        "ok": {
+          "positive": [
+            "payloads",
+            "match_heavy_payloads",
+            "dynamic_payloads",
+            "dictionary_cases",
+            "zlib_dict_encode_cases",
+            "raw_dict_encode_cases",
+            "cli_successes",
+            "expected_failures"
+          ]
+        }
+      },
+      "fields": {
+        "cli_successes": "int",
+        "dictionary_cases": "int",
+        "dynamic_payloads": "int",
+        "expected_failures": "int",
+        "match_heavy_payloads": "int",
+        "ok": "bool",
+        "payloads": "int",
+        "raw_dict_encode_cases": "int",
+        "schema": "str",
+        "schema_version": "int",
+        "zlib_dict_encode_cases": "int"
       }
     },
     "vort.raw_deflate_header_info": {
+      "enums": {
+        "block_type": [
+          "stored",
+          "fixed",
+          "dynamic"
+        ]
+      },
       "fields": {
         "block_type": "str",
         "compressed_bytes": "int",
@@ -1870,8 +1953,8 @@
         "dynamic_code_length_repeat_prev": "int?",
         "dynamic_code_length_repeat_zero_long": "int?",
         "dynamic_code_length_repeat_zero_short": "int?",
-        "dynamic_distance_max_bits": "int?",
         "dynamic_distance_length_histogram": "list",
+        "dynamic_distance_max_bits": "int?",
         "dynamic_distance_nonzero": "int?",
         "dynamic_distance_zero": "int?",
         "dynamic_has_eob": "bool?",
@@ -1880,8 +1963,8 @@
         "dynamic_hlit": "int?",
         "dynamic_lengths_bit_offset": "int?",
         "dynamic_lengths_byte_offset": "int?",
-        "dynamic_literal_max_bits": "int?",
         "dynamic_literal_length_histogram": "list",
+        "dynamic_literal_max_bits": "int?",
         "dynamic_literal_nonzero": "int?",
         "dynamic_literal_zero": "int?",
         "final": "bool",
@@ -1892,297 +1975,24 @@
         "stored_len": "int?",
         "stored_nlen": "int?",
         "stored_payload_offset": "int?"
-      },
-      "enums": {
-        "block_type": [
-          "stored",
-          "fixed",
-          "dynamic"
-        ]
-      }
-    },
-    "vort.wrapped_deflate_header_info": {
-      "fields": {
-        "deflate_bytes": "int",
-        "deflate_offset": "int",
-        "deflate_span_kind": "str",
-        "exact_deflate_bytes": "int?",
-        "stream_adler32": "int?",
-        "stream_adler32_matches": "bool?",
-        "stream_deflate_bytes": "int?",
-        "stream_end_offset": "int?",
-        "stream_footer_adler32": "int?",
-        "stream_footer_offset": "int?",
-        "stream_output_bytes": "int?",
-        "member_crc32": "int?",
-        "member_crc32_matches": "bool?",
-        "member_deflate_bytes": "int?",
-        "member_end_offset": "int?",
-        "member_footer_crc32": "int?",
-        "member_footer_isize": "int?",
-        "member_footer_offset": "int?",
-        "member_index": "int",
-        "member_isize": "int?",
-        "member_isize_matches": "bool?",
-        "member_output_bytes": "int?",
-        "member_offset": "int",
-        "raw_header": "dict",
-        "schema": "str",
-        "schema_version": "int",
-        "scope": "str",
-        "wrapper": "str",
-        "wrapper_bytes": "int"
-      },
-      "enums": {
-        "deflate_span_kind": [
-          "header_tail"
-        ],
-        "scope": [
-          "zlib_stream",
-          "gzip_member"
-        ],
-        "wrapper": [
-          "zlib",
-          "gzip"
-        ]
-      },
-      "field_pairs": {
-        "wrapper": {
-          "target": "scope",
-          "allowed": {
-            "zlib": "zlib_stream",
-            "gzip": "gzip_member"
-          }
-        }
-      },
-      "conditional_fields": [
-        {
-          "when": {
-            "field": "wrapper",
-            "equals": "zlib"
-          },
-          "null": [
-            "member_deflate_bytes",
-            "member_output_bytes",
-            "member_footer_offset",
-            "member_end_offset",
-            "member_footer_crc32",
-            "member_crc32",
-            "member_crc32_matches",
-            "member_footer_isize",
-            "member_isize",
-            "member_isize_matches"
-          ]
-        },
-        {
-          "when": {
-            "field": "wrapper",
-            "equals": "gzip"
-          },
-          "null": [
-            "stream_deflate_bytes",
-            "stream_output_bytes",
-            "stream_footer_offset",
-            "stream_end_offset",
-            "stream_footer_adler32",
-            "stream_adler32",
-            "stream_adler32_matches"
-          ]
-        },
-        {
-          "when": {
-            "field": "wrapper",
-            "equals": "gzip"
-          },
-          "non_null": [
-            "member_deflate_bytes",
-            "member_output_bytes",
-            "member_footer_offset",
-            "member_end_offset",
-            "member_footer_crc32",
-            "member_crc32",
-            "member_crc32_matches",
-            "member_footer_isize",
-            "member_isize",
-            "member_isize_matches"
-          ]
-        }
-      ],
-      "numeric_relations": [
-        {
-          "when": {
-            "field": "stream_footer_offset",
-            "not_equals": null
-          },
-          "left": "stream_footer_offset",
-          "op": "gt",
-          "right": "deflate_offset"
-        },
-        {
-          "when": {
-            "field": "stream_end_offset",
-            "not_equals": null
-          },
-          "left": "stream_end_offset",
-          "op": "eq",
-          "right": "stream_footer_offset",
-          "offset": 4
-        },
-        {
-          "when": {
-            "field": "stream_end_offset",
-            "not_equals": null
-          },
-          "left": "stream_end_offset",
-          "op": "le",
-          "right": "wrapper_bytes"
-        },
-        {
-          "when": {
-            "field": "wrapper",
-            "equals": "gzip"
-          },
-          "left": "member_footer_offset",
-          "op": "gt",
-          "right": "deflate_offset"
-        },
-        {
-          "when": {
-            "field": "wrapper",
-            "equals": "gzip"
-          },
-          "left": "member_end_offset",
-          "op": "eq",
-          "right": "member_footer_offset",
-          "offset": 8
-        },
-        {
-          "when": {
-            "field": "wrapper",
-            "equals": "gzip"
-          },
-          "left": "member_end_offset",
-          "op": "le",
-          "right": "wrapper_bytes"
-        },
-        {
-          "when": {
-            "field": "wrapper",
-            "equals": "gzip"
-          },
-          "left": "member_isize",
-          "op": "eq",
-          "right": "member_output_bytes"
-        }
-      ],
-      "difference_relations": [
-        {
-          "when": {
-            "field": "stream_deflate_bytes",
-            "not_equals": null
-          },
-          "left": "stream_deflate_bytes",
-          "minuend": "stream_footer_offset",
-          "subtrahend": "deflate_offset"
-        },
-        {
-          "when": {
-            "field": "stream_deflate_bytes",
-            "not_equals": null
-          },
-          "left": "exact_deflate_bytes",
-          "minuend": "stream_footer_offset",
-          "subtrahend": "deflate_offset"
-        },
-        {
-          "when": {
-            "field": "wrapper",
-            "equals": "gzip"
-          },
-          "left": "member_deflate_bytes",
-          "minuend": "member_footer_offset",
-          "subtrahend": "deflate_offset"
-        },
-        {
-          "when": {
-            "field": "wrapper",
-            "equals": "gzip"
-          },
-          "left": "exact_deflate_bytes",
-          "minuend": "member_footer_offset",
-          "subtrahend": "deflate_offset"
-        }
-      ],
-      "equality_flag_relations": [
-        {
-          "when": {
-            "field": "stream_adler32_matches",
-            "not_equals": null
-          },
-          "left": "stream_footer_adler32",
-          "right": "stream_adler32",
-          "flag": "stream_adler32_matches"
-        },
-        {
-          "when": {
-            "field": "wrapper",
-            "equals": "gzip"
-          },
-          "left": "member_footer_crc32",
-          "right": "member_crc32",
-          "flag": "member_crc32_matches"
-        },
-        {
-          "when": {
-            "field": "wrapper",
-            "equals": "gzip"
-          },
-          "left": "member_footer_isize",
-          "right": "member_isize",
-          "flag": "member_isize_matches"
-        }
-      ],
-      "nested_schema_fields": {
-        "raw_header": "vort.raw_deflate_header_info"
-      }
-    },
-    "vort.zlib_header_info": {
-      "fields": {
-        "cmf": "int",
-        "compressed_bytes": "int",
-        "compression_method": "int",
-        "data_offset": "int",
-        "dictionary_id": "int?",
-        "fcheck": "int",
-        "flevel": "int",
-        "flg": "int",
-        "schema": "str",
-        "schema_version": "int",
-        "uses_dictionary": "bool",
-        "window_bits": "int",
-        "window_size": "int"
-      }
-    },
-    "vort.gzip_header_info": {
-      "fields": {
-        "comment": "str?",
-        "compressed_bytes": "int",
-        "data_offset": "int",
-        "extra_hex": "str?",
-        "extra_len": "int",
-        "extra_present": "bool",
-        "filename": "str?",
-        "flags": "int",
-        "header_crc": "int?",
-        "mtime": "int",
-        "os": "int",
-        "schema": "str",
-        "schema_version": "int",
-        "text": "bool",
-        "xfl": "int"
       }
     },
     "vort.sidecar_corrupt_smoke_report": {
+      "count_rules": {
+        "full_rejected_rows": {
+          "collection": "items",
+          "equals": true,
+          "field": "full_rejected"
+        },
+        "metadata_ok_rows": {
+          "collection": "items",
+          "equals": true,
+          "field": "metadata_ok"
+        },
+        "rows": {
+          "collection": "items"
+        }
+      },
       "fields": {
         "full_rejected_rows": "int",
         "items": "list",
@@ -2199,21 +2009,6 @@
         "metadata_ok": "bool",
         "sidecar_bytes": "int",
         "stream_bytes": "int"
-      },
-      "count_rules": {
-        "rows": {
-          "collection": "items"
-        },
-        "metadata_ok_rows": {
-          "collection": "items",
-          "field": "metadata_ok",
-          "equals": true
-        },
-        "full_rejected_rows": {
-          "collection": "items",
-          "field": "full_rejected",
-          "equals": true
-        }
       }
     },
     "vort.sidecar_verify_report": {
@@ -2265,50 +2060,54 @@
         ]
       },
       "item_fields": {
+        "combined_checksum": "int?",
+        "crc32": "int",
+        "entries": "int",
         "error": "str",
         "frame_index": "int?",
         "frame_mode": "str",
         "mode": "str",
         "recoverability_hint": "str",
         "sidecar": "str",
+        "sidecar_bytes": "int",
         "status": "str",
         "stream": "str",
-        "validation_stage": "str",
-        "combined_checksum": "int?",
         "stream_bytes": "int",
-        "sidecar_bytes": "int",
-        "entries": "int",
         "total_uncompressed": "int",
-        "crc32": "int"
+        "validation_stage": "str"
       }
     },
-    "vort.python_zlib_diff_smoke": {
-      "fields": {
-        "schema": "str",
-        "schema_version": "int",
-        "ok": "bool",
-        "payloads": "int",
-        "match_heavy_payloads": "int",
-        "dynamic_payloads": "int",
-        "dictionary_cases": "int",
-        "zlib_dict_encode_cases": "int",
-        "raw_dict_encode_cases": "int",
-        "cli_successes": "int",
-        "expected_failures": "int"
-      },
-      "boolean_formula_rules": {
-        "ok": {
-          "positive": [
-            "payloads",
-            "match_heavy_payloads",
-            "dynamic_payloads",
-            "dictionary_cases",
-            "zlib_dict_encode_cases",
-            "raw_dict_encode_cases",
-            "cli_successes",
-            "expected_failures"
-          ]
+    "vort.validation_json_docs_negative_smoke": {
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
         }
+      },
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "cases",
+      "item_enums": {
+        "name": [
+          "missing_reason_config",
+          "strict_validation_min_checks_shortfall",
+          "strict_validation_mode_missing",
+          "reason_check_pair_mismatch",
+          "reason_fixture_pair_mismatch",
+          "validation_smoke_checked_schema_enum",
+          "boolean_formula_positive_field"
+        ]
+      },
+      "item_fields": {
+        "actual_error": "str",
+        "expected_error": "str",
+        "expected_failure": "bool",
+        "matched": "bool",
+        "name": "str"
       }
     },
     "vort.validation_json_smoke": {
@@ -2323,8 +2122,8 @@
       },
       "fields": {
         "checked_schemas": "list",
-        "cli_failure_ok": "bool",
         "cli_failure_hint": "str",
+        "cli_failure_ok": "bool",
         "cli_success_ok": "bool",
         "corrupt_rows": "int",
         "ok": "bool",
@@ -2354,6 +2153,7 @@
           "vort.dashboard_config_index_negative_smoke",
           "vort.dashboard_config_index_smoke",
           "vort.python_zlib_diff_smoke",
+          "vort.png_scratch_report",
           "vort.dashboard_index",
           "vort.header_inspect_smoke",
           "vort.header_inspect_required_workflows",
@@ -2362,39 +2162,6 @@
           "vort.wrapped_deflate_header_info",
           "vort.zlib_header_info",
           "vort.gzip_header_info"
-        ]
-      }
-    },
-    "vort.validation_json_docs_negative_smoke": {
-      "fields": {
-        "case_count": "int",
-        "cases": "list",
-        "ok": "bool",
-        "schema": "str",
-        "schema_version": "int"
-      },
-      "count_rules": {
-        "case_count": {
-          "collection": "cases"
-        }
-      },
-      "item_collection": "cases",
-      "item_fields": {
-        "actual_error": "str",
-        "expected_error": "str",
-        "expected_failure": "bool",
-        "matched": "bool",
-        "name": "str"
-      },
-      "item_enums": {
-        "name": [
-          "missing_reason_config",
-          "strict_validation_min_checks_shortfall",
-          "strict_validation_mode_missing",
-          "reason_check_pair_mismatch",
-          "reason_fixture_pair_mismatch",
-          "validation_smoke_checked_schema_enum",
-          "boolean_formula_positive_field"
         ]
       }
     },
@@ -2436,7 +2203,9 @@
         ]
       },
       "fields": {
+        "combined_checksum": "int?",
         "error": "str",
+        "frame_count": "int",
         "frame_flags": "int?",
         "frame_index": "int?",
         "frame_mode": "str",
@@ -2450,10 +2219,270 @@
         "stage": "str",
         "stream_bytes": "int",
         "target": "str",
-        "uncompressed_offset": "int?",
-        "frame_count": "int",
         "total_uncompressed": "int",
-        "combined_checksum": "int?"
+        "uncompressed_offset": "int?"
+      }
+    },
+    "vort.wrapped_deflate_header_info": {
+      "conditional_fields": [
+        {
+          "null": [
+            "member_deflate_bytes",
+            "member_output_bytes",
+            "member_footer_offset",
+            "member_end_offset",
+            "member_footer_crc32",
+            "member_crc32",
+            "member_crc32_matches",
+            "member_footer_isize",
+            "member_isize",
+            "member_isize_matches"
+          ],
+          "when": {
+            "equals": "zlib",
+            "field": "wrapper"
+          }
+        },
+        {
+          "null": [
+            "stream_deflate_bytes",
+            "stream_output_bytes",
+            "stream_footer_offset",
+            "stream_end_offset",
+            "stream_footer_adler32",
+            "stream_adler32",
+            "stream_adler32_matches"
+          ],
+          "when": {
+            "equals": "gzip",
+            "field": "wrapper"
+          }
+        },
+        {
+          "non_null": [
+            "member_deflate_bytes",
+            "member_output_bytes",
+            "member_footer_offset",
+            "member_end_offset",
+            "member_footer_crc32",
+            "member_crc32",
+            "member_crc32_matches",
+            "member_footer_isize",
+            "member_isize",
+            "member_isize_matches"
+          ],
+          "when": {
+            "equals": "gzip",
+            "field": "wrapper"
+          }
+        }
+      ],
+      "difference_relations": [
+        {
+          "left": "stream_deflate_bytes",
+          "minuend": "stream_footer_offset",
+          "subtrahend": "deflate_offset",
+          "when": {
+            "field": "stream_deflate_bytes",
+            "not_equals": null
+          }
+        },
+        {
+          "left": "exact_deflate_bytes",
+          "minuend": "stream_footer_offset",
+          "subtrahend": "deflate_offset",
+          "when": {
+            "field": "stream_deflate_bytes",
+            "not_equals": null
+          }
+        },
+        {
+          "left": "member_deflate_bytes",
+          "minuend": "member_footer_offset",
+          "subtrahend": "deflate_offset",
+          "when": {
+            "equals": "gzip",
+            "field": "wrapper"
+          }
+        },
+        {
+          "left": "exact_deflate_bytes",
+          "minuend": "member_footer_offset",
+          "subtrahend": "deflate_offset",
+          "when": {
+            "equals": "gzip",
+            "field": "wrapper"
+          }
+        }
+      ],
+      "enums": {
+        "deflate_span_kind": [
+          "header_tail"
+        ],
+        "scope": [
+          "zlib_stream",
+          "gzip_member"
+        ],
+        "wrapper": [
+          "zlib",
+          "gzip"
+        ]
+      },
+      "equality_flag_relations": [
+        {
+          "flag": "stream_adler32_matches",
+          "left": "stream_footer_adler32",
+          "right": "stream_adler32",
+          "when": {
+            "field": "stream_adler32_matches",
+            "not_equals": null
+          }
+        },
+        {
+          "flag": "member_crc32_matches",
+          "left": "member_footer_crc32",
+          "right": "member_crc32",
+          "when": {
+            "equals": "gzip",
+            "field": "wrapper"
+          }
+        },
+        {
+          "flag": "member_isize_matches",
+          "left": "member_footer_isize",
+          "right": "member_isize",
+          "when": {
+            "equals": "gzip",
+            "field": "wrapper"
+          }
+        }
+      ],
+      "field_pairs": {
+        "wrapper": {
+          "allowed": {
+            "gzip": "gzip_member",
+            "zlib": "zlib_stream"
+          },
+          "target": "scope"
+        }
+      },
+      "fields": {
+        "deflate_bytes": "int",
+        "deflate_offset": "int",
+        "deflate_span_kind": "str",
+        "exact_deflate_bytes": "int?",
+        "member_crc32": "int?",
+        "member_crc32_matches": "bool?",
+        "member_deflate_bytes": "int?",
+        "member_end_offset": "int?",
+        "member_footer_crc32": "int?",
+        "member_footer_isize": "int?",
+        "member_footer_offset": "int?",
+        "member_index": "int",
+        "member_isize": "int?",
+        "member_isize_matches": "bool?",
+        "member_offset": "int",
+        "member_output_bytes": "int?",
+        "raw_header": "dict",
+        "schema": "str",
+        "schema_version": "int",
+        "scope": "str",
+        "stream_adler32": "int?",
+        "stream_adler32_matches": "bool?",
+        "stream_deflate_bytes": "int?",
+        "stream_end_offset": "int?",
+        "stream_footer_adler32": "int?",
+        "stream_footer_offset": "int?",
+        "stream_output_bytes": "int?",
+        "wrapper": "str",
+        "wrapper_bytes": "int"
+      },
+      "nested_schema_fields": {
+        "raw_header": "vort.raw_deflate_header_info"
+      },
+      "numeric_relations": [
+        {
+          "left": "stream_footer_offset",
+          "op": "gt",
+          "right": "deflate_offset",
+          "when": {
+            "field": "stream_footer_offset",
+            "not_equals": null
+          }
+        },
+        {
+          "left": "stream_end_offset",
+          "offset": 4,
+          "op": "eq",
+          "right": "stream_footer_offset",
+          "when": {
+            "field": "stream_end_offset",
+            "not_equals": null
+          }
+        },
+        {
+          "left": "stream_end_offset",
+          "op": "le",
+          "right": "wrapper_bytes",
+          "when": {
+            "field": "stream_end_offset",
+            "not_equals": null
+          }
+        },
+        {
+          "left": "member_footer_offset",
+          "op": "gt",
+          "right": "deflate_offset",
+          "when": {
+            "equals": "gzip",
+            "field": "wrapper"
+          }
+        },
+        {
+          "left": "member_end_offset",
+          "offset": 8,
+          "op": "eq",
+          "right": "member_footer_offset",
+          "when": {
+            "equals": "gzip",
+            "field": "wrapper"
+          }
+        },
+        {
+          "left": "member_end_offset",
+          "op": "le",
+          "right": "wrapper_bytes",
+          "when": {
+            "equals": "gzip",
+            "field": "wrapper"
+          }
+        },
+        {
+          "left": "member_isize",
+          "op": "eq",
+          "right": "member_output_bytes",
+          "when": {
+            "equals": "gzip",
+            "field": "wrapper"
+          }
+        }
+      ]
+    },
+    "vort.zlib_header_info": {
+      "fields": {
+        "cmf": "int",
+        "compressed_bytes": "int",
+        "compression_method": "int",
+        "data_offset": "int",
+        "dictionary_id": "int?",
+        "fcheck": "int",
+        "flevel": "int",
+        "flg": "int",
+        "schema": "str",
+        "schema_version": "int",
+        "uses_dictionary": "bool",
+        "window_bits": "int",
+        "window_size": "int"
       }
     }
   }

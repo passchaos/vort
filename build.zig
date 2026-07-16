@@ -725,6 +725,16 @@ pub fn build(b: *std.Build) void {
     const png_scratch_report_step = b.step("run-png-scratch-report", "Report PNG zlib/Adam7 caller-owned scratch footprints");
     png_scratch_report_step.dependOn(&run_png_scratch_report.step);
 
+    const run_png_scratch_report_dashboard = b.addRunArtifact(png_scratch_report_exe);
+    run_png_scratch_report_dashboard.addArgs(&.{
+        "--json",
+        "zig-out/vort-png-scratch-report.json",
+        "--markdown",
+        "zig-out/vort-png-scratch-report.md",
+    });
+    const png_scratch_report_dashboard_step = b.step("run-png-scratch-report-dashboard", "Write PNG scratch footprint report artifacts");
+    png_scratch_report_dashboard_step.dependOn(&run_png_scratch_report_dashboard.step);
+
     const run_native_allocation_dashboard = b.addRunArtifact(native_allocation_report_exe);
     run_native_allocation_dashboard.addArgs(&.{
         "--json",
@@ -797,6 +807,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(native_allocation_dashboard_step);
     validation_json_smoke.step.dependOn(native_allocation_smoke_step);
     validation_json_smoke.step.dependOn(native_allocation_negative_smoke_step);
+    validation_json_smoke.step.dependOn(png_scratch_report_dashboard_step);
     const validation_json_smoke_step = b.step("run-validation-json-smoke", "Validate CLI and report JSON schema outputs");
     validation_json_smoke_step.dependOn(&validation_json_smoke.step);
 
@@ -811,6 +822,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.step.dependOn(native_allocation_dashboard_step);
     validation_json_dashboard.step.dependOn(native_allocation_smoke_step);
     validation_json_dashboard.step.dependOn(native_allocation_negative_smoke_step);
+    validation_json_dashboard.step.dependOn(png_scratch_report_dashboard_step);
     const validation_json_dashboard_step = b.step("run-validation-json-dashboard", "Write validation JSON schema smoke summary to zig-out");
     validation_json_dashboard_step.dependOn(&validation_json_dashboard.step);
 
