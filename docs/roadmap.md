@@ -688,6 +688,9 @@ architecture blindly.
   construction.
 - [x] Huffman table initialization returns immediately for empty alphabets,
   avoiding fixed validation/setup loops for literal-only dynamic distance tables.
+- [x] Dynamic literal/length decoding uses a 9-bit fast lookup table, cutting
+  per-block lookup construction for small dynamic streams while preserving the
+  fallback path for longer canonical codes.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

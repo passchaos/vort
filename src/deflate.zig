@@ -1349,7 +1349,7 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
     const parsed = try huffman.parseDynamicLengths(&reader);
     const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
     const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-    const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+    const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
     const dist_decoder = makeDynamicDistanceDecoder(dist_table);
 
     while (true) {
@@ -1415,7 +1415,7 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+                const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
                 try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
             },
@@ -1593,7 +1593,7 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+                const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
                 try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
             },
@@ -1689,7 +1689,7 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+                const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
                 try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
             },

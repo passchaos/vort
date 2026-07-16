@@ -128,8 +128,28 @@ fn runDynamicStageBench(io: std.Io, stdout: *std.Io.Writer, iterations: usize) !
 
     {
         const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| {
+            const decoder = huffman.FastDecoder(286, 9).init(lit_table);
+            mix +%= decoder.table.len;
+        }
+        try printStage(stdout, start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds(), "raw-dynamic-small-lit-fastdecoder", iterations, frame.len);
+    }
+
+    {
         const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-        const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| {
+            const decoder = huffman.FastDecoder(30, 8).init(dist_table);
+            mix +%= decoder.table.len;
+        }
+        try printStage(stdout, start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds(), "raw-dynamic-small-dist-fastdecoder", iterations, frame.len);
+    }
+
+    {
+        const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+        const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+        const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
         const dist_decoder = huffman.FastDecoder(30, 8).init(dist_table);
         const start = std.Io.Clock.awake.now(io);
         for (0..iterations) |_| {
