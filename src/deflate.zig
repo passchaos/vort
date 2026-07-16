@@ -1976,12 +1976,12 @@ fn reserveInflateAppendOutputHint(allocator: std.mem.Allocator, out: *std.ArrayL
 }
 
 fn inflateOutputCapacityHint(input_len: usize) usize {
-    // Highly compressible DEFLATE frames in the Rust baseline corpus often
-    // expand by hundreds of times (for example repeated/RLE payloads). The
-    // previous 4x hint made allocator-returning decode repeatedly grow the
-    // output ArrayList while the caller-buffer API avoided that cost entirely.
-    // A 64x hint is still capped at 1 MiB, so it improves common compressed
-    // frames without over-reserving unbounded memory for hostile streams.
+    // Tiny DEFLATE frames dominate CLI/API smoke paths and benchmark loops.
+    // Reserving 64x for a 20-byte dynamic frame over-allocates and then asks
+    // `toOwnedSlice` to shrink the buffer. Use a smaller floor for tiny inputs
+    // while retaining the larger capped expansion hint for real compressed
+    // payloads where repeated reallocations are much more expensive.
+    if (input_len <= 64) return input_len *| 8;
     return @min(input_len *| 64, 1 << 20);
 }
 
@@ -8512,8 +8512,10 @@ test "dynamic bit cost model predicts dynamic token byte length" {
 
 test "inflate output capacity hint expands compressed frames but stays capped" {
     try std.testing.expectEqual(@as(usize, 0), inflateOutputCapacityHint(0));
-    try std.testing.expectEqual(@as(usize, 64), inflateOutputCapacityHint(1));
-    try std.testing.expectEqual(@as(usize, 2048), inflateOutputCapacityHint(32));
+    try std.testing.expectEqual(@as(usize, 8), inflateOutputCapacityHint(1));
+    try std.testing.expectEqual(@as(usize, 256), inflateOutputCapacityHint(32));
+    try std.testing.expectEqual(@as(usize, 512), inflateOutputCapacityHint(64));
+    try std.testing.expectEqual(@as(usize, 4160), inflateOutputCapacityHint(65));
     try std.testing.expectEqual(@as(usize, 1 << 20), inflateOutputCapacityHint(64 * 1024));
     try std.testing.expectEqual(@as(usize, 1 << 20), inflateOutputCapacityHint(std.math.maxInt(usize)));
 }
