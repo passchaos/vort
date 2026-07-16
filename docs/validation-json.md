@@ -1942,7 +1942,7 @@ Example:
 Produced by:
 
 ```sh
-zig build run-zlib-relaxed-report
+zig build run-zlib-relaxed-report  # writes JSON and Markdown artifacts
 zig build run-zlib-relaxed-report-gate
 ```
 

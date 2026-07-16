@@ -8,9 +8,14 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     var json_path: ?[]const u8 = null;
+    var markdown_path: ?[]const u8 = null;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--json")) {
             json_path = args.next() orelse return error.MissingJsonPath;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--markdown")) {
+            markdown_path = args.next() orelse return error.MissingMarkdownPath;
             continue;
         }
         return error.UnknownArgument;
@@ -80,6 +85,7 @@ pub fn main(init: std.process.Init) !void {
     try stdout_writer.interface.flush();
 
     if (json_path) |path| try writeJson(init, path, strict_rejections, relaxed_successes, dictionary_successes, limited_rejections);
+    if (markdown_path) |path| try writeMarkdown(init, path, strict_rejections, relaxed_successes, dictionary_successes, limited_rejections);
 }
 
 fn expectZlibError(expected: anyerror, frame: []const u8, options: vort.ZlibDecodeOptions) !void {
@@ -125,6 +131,16 @@ fn writeJson(init: std.process.Init, path: []const u8, strict_rejections: usize,
     defer writer.deinit();
     try writer.writer.print(
         "{{\n  \"schema\": \"vort.zlib_relaxed_report\",\n  \"schema_version\": 1,\n  \"strict_rejections\": {d},\n  \"relaxed_successes\": {d},\n  \"dictionary_successes\": {d},\n  \"limited_rejections\": {d}\n}}\n",
+        .{ strict_rejections, relaxed_successes, dictionary_successes, limited_rejections },
+    );
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
+}
+
+fn writeMarkdown(init: std.process.Init, path: []const u8, strict_rejections: usize, relaxed_successes: usize, dictionary_successes: usize, limited_rejections: usize) !void {
+    var writer = std.Io.Writer.Allocating.init(init.gpa);
+    defer writer.deinit();
+    try writer.writer.print(
+        "# zlib relaxed decode report\n\n| metric | value |\n| --- | ---: |\n| strict rejections | {d} |\n| relaxed successes | {d} |\n| dictionary successes | {d} |\n| limited rejections | {d} |\n",
         .{ strict_rejections, relaxed_successes, dictionary_successes, limited_rejections },
     );
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });

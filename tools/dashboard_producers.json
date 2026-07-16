@@ -211,6 +211,10 @@
     "vort-zlib-relaxed-report.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-zlib-relaxed-report-gate"
+    },
+    "vort-zlib-relaxed-report.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-zlib-relaxed-report-gate"
     }
   },
   "contains": [
@@ -279,7 +283,8 @@
     "vort-validation-json-docs-negative-smoke.json": "zig build run-validation-json-docs-negative-smoke",
     "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
     "vort-zlib-relaxed-report-gate.json": "zig build run-zlib-relaxed-report-gate",
-    "vort-zlib-relaxed-report.json": "zig build run-zlib-relaxed-report"
+    "vort-zlib-relaxed-report.json": "zig build run-zlib-relaxed-report",
+    "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report"
   },
   "required_smoke_gates": [
     "vort-dashboard-category-negative-smoke.json",
@@ -312,7 +317,8 @@
     "vort-validation-json-docs-negative-smoke.json",
     "vort-validation-json-smoke.json",
     "vort-zlib-relaxed-report-gate.json",
-    "vort-zlib-relaxed-report.json"
+    "vort-zlib-relaxed-report.json",
+    "vort-zlib-relaxed-report.md"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1

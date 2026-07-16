@@ -296,6 +296,8 @@ architecture blindly.
   dictionary streams.
 - [x] zlib relaxed decode report is indexed in validation/dashboard producer
   metadata with schema documentation and required smoke-gate coverage.
+- [x] zlib relaxed decode report emits a Markdown dashboard alongside JSON for
+  human review of strict/relaxed/dictionary/output-limit coverage.
 - [x] zlib header CINFO/window metadata compatibility test verifies Vort reports
   smaller advertised windows while matching zlib-compatible decode behavior for
   otherwise-valid streams.

@@ -363,6 +363,13 @@
       "producer_step": "zig build run-zlib-relaxed-report",
       "required_smoke_gate": true,
       "smoke_gate": "zig build run-zlib-relaxed-report-gate"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-zlib-relaxed-report.md",
+      "producer_step": "zig build run-zlib-relaxed-report",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-zlib-relaxed-report-gate"
     }
   ],
   "schema": "vort.dashboard_producers_required_artifacts",

@@ -146,7 +146,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const run_zlib_relaxed_report = b.addRunArtifact(zlib_relaxed_report_exe);
-    run_zlib_relaxed_report.addArgs(&.{ "--json", "zig-out/vort-zlib-relaxed-report.json" });
+    run_zlib_relaxed_report.addArgs(&.{ "--json", "zig-out/vort-zlib-relaxed-report.json", "--markdown", "zig-out/vort-zlib-relaxed-report.md" });
     const zlib_relaxed_report_step = b.step("run-zlib-relaxed-report", "Write zlib relaxed decode options JSON report");
     zlib_relaxed_report_step.dependOn(&run_zlib_relaxed_report.step);
 
