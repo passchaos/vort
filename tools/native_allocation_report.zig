@@ -78,6 +78,8 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measurePngAdam7SubByteImageDecode(allocator));
     try rows.append(allocator, try measurePngAdam7Rgba16ImageDecode(allocator));
     try rows.append(allocator, try measurePngAdam7CorruptReject(allocator));
+    try rows.append(allocator, try measurePngZlibWrapperReject(allocator));
+    try rows.append(allocator, try measurePngAdam7WrapperReject(allocator));
     try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
     try rows.append(allocator, try measureGzipDecoderScratch(allocator));
     try rows.append(allocator, try measureGzipDecoderConcatenatedChunks(allocator));
@@ -993,6 +995,57 @@ fn measurePngAdam7CorruptReject(backing: std.mem.Allocator) !CaseStats {
     const failing = std.testing.FailingAllocator.init(backing, .{});
     try std.testing.expectError(error.CorruptFrame, vort.decodePngAdam7ZlibImageFromChunks(&chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, output));
     return stats("png_adam7_corrupt_reject_scratch", encoded.len, 0, failing);
+}
+
+fn measurePngZlibWrapperReject(backing: std.mem.Allocator) !CaseStats {
+    const info = try vort.pngImageInfo(1, 1, 8, .grayscale);
+    const payload = [_]u8{ 0, 0x42 };
+    const encoded = try vort.encodeZlibBestAlloc(backing, &payload, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const corrupt = try backing.dupe(u8, encoded);
+    defer backing.free(corrupt);
+    corrupt[corrupt.len - 1] ^= 1;
+    const chunks = [_][]const u8{corrupt};
+    const compressed_scratch = try backing.alloc(u8, corrupt.len);
+    defer backing.free(compressed_scratch);
+    const zlib_scratch = try backing.alloc(u8, info.zlib_payload_len);
+    defer backing.free(zlib_scratch);
+    const filtered_row_scratch = try backing.alloc(u8, info.row_len);
+    defer backing.free(filtered_row_scratch);
+    const previous_row_scratch = try backing.alloc(u8, info.row_len);
+    defer backing.free(previous_row_scratch);
+    const output = try backing.alloc(u8, info.row_len);
+    defer backing.free(output);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    try std.testing.expectError(error.ChecksumMismatch, vort.decodePngZlibImageFromChunks(&chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, output));
+    return stats("png_zlib_wrapper_reject_scratch", corrupt.len, 0, failing);
+}
+
+fn measurePngAdam7WrapperReject(backing: std.mem.Allocator) !CaseStats {
+    const info = try vort.pngAdam7Info(1, 1, 8, .grayscale);
+    const payload = [_]u8{ 0, 0x42 };
+    const encoded = try vort.encodeZlibBestAlloc(backing, &payload, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const corrupt = try backing.dupe(u8, encoded);
+    defer backing.free(corrupt);
+    corrupt[0] = 0;
+    const chunks = [_][]const u8{corrupt};
+    const sizes = vort.pngAdam7DecodeBufferSizes(info);
+    const compressed_scratch = try backing.alloc(u8, corrupt.len);
+    defer backing.free(compressed_scratch);
+    const zlib_scratch = try backing.alloc(u8, sizes.zlib_scratch_len);
+    defer backing.free(zlib_scratch);
+    const filtered_row_scratch = try backing.alloc(u8, sizes.filtered_row_scratch_len);
+    defer backing.free(filtered_row_scratch);
+    const previous_row_scratch = try backing.alloc(u8, sizes.previous_row_scratch_len);
+    defer backing.free(previous_row_scratch);
+    const output = try backing.alloc(u8, sizes.image_output_len);
+    defer backing.free(output);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    try std.testing.expectError(error.BadZlibHeader, vort.decodePngAdam7ZlibImageFromChunks(&chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, output));
+    return stats("png_adam7_wrapper_reject_scratch", corrupt.len, 0, failing);
 }
 
 fn writePngPackedPixelForReport(row: []u8, pixel_index: usize, bits_per_pixel: usize, value: u8) void {

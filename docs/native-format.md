@@ -211,6 +211,9 @@ reconstruction, and Adam7 placement for PNG-like interlaced IDAT payloads,
 including packed sub-byte indexed/grayscale rows and 16-bit RGBA rows, when the
 caller has provided all required scratch buffers. The helper rejects corrupt filter bytes and
 decoded payload length mismatches before accepting an interlaced image.
+Both non-interlaced and Adam7 PNG-like helpers also propagate zlib wrapper
+failures such as bad headers, truncated frames, and Adler-32 mismatches through
+the same caller-owned error paths.
 `zig build run-png-scratch-report` records caller-owned scratch and output
 footprints for representative non-interlaced and Adam7 PNG-like zlib paths, which
 provides a baseline for future incremental inflate work to reduce peak memory.

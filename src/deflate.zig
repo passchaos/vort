@@ -5417,6 +5417,39 @@ test "png adam7 zlib image helper rejects corrupt logical payloads" {
     try std.testing.expectError(error.SizeMismatch, decodePngAdam7ZlibImageFromChunks(&trailing_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
 }
 
+test "png image helpers reject corrupt zlib wrappers" {
+    const info = try pngImageInfo(1, 1, 8, .grayscale);
+    const adam7 = try pngAdam7Info(1, 1, 8, .grayscale);
+    const payload = [_]u8{ 0, 0x42 };
+    const encoded = try encodeZlibBestAlloc(std.testing.allocator, &payload, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+
+    var compressed_scratch: [64]u8 = undefined;
+    var zlib_scratch: [8]u8 = undefined;
+    var filtered_row_scratch: [1]u8 = undefined;
+    var previous_row_scratch: [1]u8 = undefined;
+    var image: [1]u8 = undefined;
+
+    var bad_header = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_header);
+    bad_header[0] = 0;
+    const bad_header_chunks = [_][]const u8{bad_header};
+    try std.testing.expectError(error.BadZlibHeader, decodePngZlibImageFromChunks(&bad_header_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+    try std.testing.expectError(error.BadZlibHeader, decodePngAdam7ZlibImageFromChunks(&bad_header_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, adam7, &image));
+
+    var bad_adler = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_adler);
+    bad_adler[bad_adler.len - 1] ^= 1;
+    const bad_adler_chunks = [_][]const u8{bad_adler};
+    try std.testing.expectError(error.ChecksumMismatch, decodePngZlibImageFromChunks(&bad_adler_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+    try std.testing.expectError(error.ChecksumMismatch, decodePngAdam7ZlibImageFromChunks(&bad_adler_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, adam7, &image));
+
+    const truncated = encoded[0 .. encoded.len - 2];
+    const truncated_chunks = [_][]const u8{truncated};
+    try std.testing.expectError(error.TruncatedFrame, decodePngZlibImageFromChunks(&truncated_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+    try std.testing.expectError(error.TruncatedFrame, decodePngAdam7ZlibImageFromChunks(&truncated_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, adam7, &image));
+}
+
 test "zlib decoder reconstructs PNG scanlines from chunked IDAT scratch" {
     const bpp = 3;
     const row_len = 12;
