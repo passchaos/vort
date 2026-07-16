@@ -552,12 +552,8 @@ pub const fixed_distance_encoder = blk: {
 };
 
 fn reverseBits(code: u16, bits: u4) u16 {
-    var out: u16 = 0;
-    var i: u4 = 0;
-    while (i < bits) : (i += 1) {
-        out = (out << 1) | ((code >> @intCast(i)) & 1);
-    }
-    return out;
+    if (bits == 0) return 0;
+    return @bitReverse(code) >> @intCast(16 - @as(usize, bits));
 }
 
 test "fixed Huffman tables expose expected boundary code lengths" {
