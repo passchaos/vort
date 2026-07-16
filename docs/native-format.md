@@ -203,6 +203,9 @@ separate row loop.
 row bytes, exact filtered payload bytes, maximum row scratch, and final image
 output size, so interlaced PNG support can preflight memory before decoding pass
 payloads.
+`placePngAdam7Row` and `placePngAdam7Pass` scatter reconstructed pass rows into
+the final packed image buffer for both byte-aligned and sub-byte grayscale/indexed
+formats.
 `ZlibDecoder` also records wrapper/header, missing-dictionary, truncation,
 Adler-32 mismatch, and PNG row-boundary diagnostics through the shared
 `StreamingDiagnostics` surface.

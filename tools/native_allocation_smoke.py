@@ -29,6 +29,7 @@ ZERO_ALLOCATION_CASES = [
     "png_zlib_image_decode_scratch",
     "png_zlib_subbyte_image_decode_scratch",
     "png_adam7_metadata_scratch",
+    "png_adam7_placement_scratch",
     "zlib_decoder_dictionary_chunks_scratch",
     "gzip_decoder_scratch",
     "gzip_decoder_concatenated_chunks_scratch",

@@ -73,6 +73,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measurePngZlibImageDecode(allocator));
     try rows.append(allocator, try measurePngZlibSubByteImageDecode(allocator));
     try rows.append(allocator, try measurePngAdam7Metadata(allocator));
+    try rows.append(allocator, try measurePngAdam7Placement(allocator));
     try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
     try rows.append(allocator, try measureGzipDecoderScratch(allocator));
     try rows.append(allocator, try measureGzipDecoderConcatenatedChunks(allocator));
@@ -745,6 +746,43 @@ fn measurePngAdam7Metadata(backing: std.mem.Allocator) !CaseStats {
     try std.testing.expectEqual(@as(usize, 51), sizes.filtered_row_scratch_len);
     try std.testing.expectEqual(@as(usize, 459), sizes.image_output_len);
     return stats("png_adam7_metadata_scratch", info.image_output_len, info.zlib_payload_len, failing);
+}
+
+fn measurePngAdam7Placement(backing: std.mem.Allocator) !CaseStats {
+    const info = try vort.pngAdam7Info(5, 5, 2, .indexed);
+    const sizes = vort.pngAdam7DecodeBufferSizes(info);
+    const image = try backing.alloc(u8, sizes.image_output_len);
+    defer backing.free(image);
+    @memset(image, 0);
+    const pass_scratch = try backing.alloc(u8, sizes.filtered_row_scratch_len * @as(usize, 4));
+    defer backing.free(pass_scratch);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    for (info.passes) |pass| {
+        if (pass.isEmpty()) continue;
+        @memset(pass_scratch[0..pass.reconstructed_len], 0);
+        for (0..pass.height) |row_index| {
+            const row = pass_scratch[row_index * pass.row_len ..][0..pass.row_len];
+            for (0..pass.width) |pass_x| {
+                const dest_x = pass.x_start + pass_x * pass.x_step;
+                const dest_y = pass.y_start + row_index * pass.y_step;
+                const value: u8 = @intCast((dest_x + dest_y * 2) & 0x3);
+                writePngPackedPixelForReport(row, pass_x, info.image.bits_per_pixel, value);
+            }
+        }
+        try vort.placePngAdam7Pass(info, pass, pass_scratch[0..pass.reconstructed_len], image);
+    }
+    return stats("png_adam7_placement_scratch", info.zlib_payload_len, sizes.image_output_len, failing);
+}
+
+fn writePngPackedPixelForReport(row: []u8, pixel_index: usize, bits_per_pixel: usize, value: u8) void {
+    const bit_offset = pixel_index * bits_per_pixel;
+    const byte_index = bit_offset / 8;
+    const bit_in_byte = bit_offset % 8;
+    const shift: u3 = @intCast(8 - bits_per_pixel - bit_in_byte);
+    const mask: u8 = @as(u8, @intCast((@as(u16, 1) << @intCast(bits_per_pixel)) - 1));
+    const shifted_mask = mask << shift;
+    row[byte_index] = (row[byte_index] & ~shifted_mask) | ((value & mask) << shift);
 }
 
 fn measureZlibDecoderDictionaryChunks(backing: std.mem.Allocator) !CaseStats {

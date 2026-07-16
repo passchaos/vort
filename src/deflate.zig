@@ -2831,6 +2831,74 @@ pub fn pngAdam7DecodeBufferSizes(info: PngAdam7Info) PngZlibDecodeBufferSizes {
     };
 }
 
+/// Scatter one reconstructed Adam7 pass row into the final non-interlaced image.
+///
+/// `row` is the reconstructed payload for one row of `pass` (filter byte already
+/// removed and PNG filtering already reversed). `image` is the final packed image
+/// buffer described by `info.image`. Byte-aligned formats copy whole pixels;
+/// sub-byte grayscale/indexed formats copy individual packed pixels MSB-first.
+pub fn placePngAdam7Row(info: PngAdam7Info, pass: PngAdam7PassInfo, pass_row_index: usize, row: []const u8, image: []u8) Error!void {
+    if (pass.isEmpty()) return error.RangeOutOfBounds;
+    if (pass_row_index >= pass.height) return error.RangeOutOfBounds;
+    if (row.len < pass.row_len) return error.InputTooSmall;
+    if (image.len < info.image_output_len) return error.OutputTooSmall;
+
+    const dest_y = pass.y_start + pass_row_index * pass.y_step;
+    if (dest_y >= info.image.height) return error.RangeOutOfBounds;
+    const bits_per_pixel: usize = info.image.bits_per_pixel;
+    if (bits_per_pixel >= 8) {
+        if (bits_per_pixel % 8 != 0) return error.CorruptFrame;
+        const pixel_bytes = bits_per_pixel / 8;
+        for (0..pass.width) |pass_x| {
+            const dest_x = pass.x_start + pass_x * pass.x_step;
+            if (dest_x >= info.image.width) return error.RangeOutOfBounds;
+            const src = row[pass_x * pixel_bytes ..][0..pixel_bytes];
+            const dest_offset = dest_y * info.image.row_len + dest_x * pixel_bytes;
+            @memcpy(image[dest_offset..][0..pixel_bytes], src);
+        }
+        return;
+    }
+
+    if (bits_per_pixel != 1 and bits_per_pixel != 2 and bits_per_pixel != 4) return error.CorruptFrame;
+    for (0..pass.width) |pass_x| {
+        const dest_x = pass.x_start + pass_x * pass.x_step;
+        if (dest_x >= info.image.width) return error.RangeOutOfBounds;
+        const value = readPngPackedPixel(row, pass_x, bits_per_pixel);
+        writePngPackedPixel(image[dest_y * info.image.row_len ..][0..info.image.row_len], dest_x, bits_per_pixel, value);
+    }
+}
+
+pub fn placePngAdam7Pass(info: PngAdam7Info, pass: PngAdam7PassInfo, pass_rows: []const u8, image: []u8) Error!void {
+    if (pass.isEmpty()) {
+        if (pass_rows.len != 0) return error.SizeMismatch;
+        return;
+    }
+    if (pass_rows.len < pass.reconstructed_len) return error.InputTooSmall;
+    for (0..pass.height) |row_index| {
+        const row = pass_rows[row_index * pass.row_len ..][0..pass.row_len];
+        try placePngAdam7Row(info, pass, row_index, row, image);
+    }
+}
+
+fn readPngPackedPixel(row: []const u8, pixel_index: usize, bits_per_pixel: usize) u8 {
+    const bit_offset = pixel_index * bits_per_pixel;
+    const byte_index = bit_offset / 8;
+    const bit_in_byte = bit_offset % 8;
+    const shift: u3 = @intCast(8 - bits_per_pixel - bit_in_byte);
+    const mask: u8 = @as(u8, @intCast((@as(u16, 1) << @intCast(bits_per_pixel)) - 1));
+    return (row[byte_index] >> shift) & mask;
+}
+
+fn writePngPackedPixel(row: []u8, pixel_index: usize, bits_per_pixel: usize, value: u8) void {
+    const bit_offset = pixel_index * bits_per_pixel;
+    const byte_index = bit_offset / 8;
+    const bit_in_byte = bit_offset % 8;
+    const shift: u3 = @intCast(8 - bits_per_pixel - bit_in_byte);
+    const mask: u8 = @as(u8, @intCast((@as(u16, 1) << @intCast(bits_per_pixel)) - 1));
+    const shifted_mask = mask << shift;
+    row[byte_index] = (row[byte_index] & ~shifted_mask) | ((value & mask) << shift);
+}
+
 fn adam7PassDimension(size: usize, start: usize, step: usize) usize {
     if (size <= start) return 0;
     return ((size - 1 - start) / step) + 1;
@@ -4982,6 +5050,73 @@ test "png adam7 metadata plans passes and buffers" {
     for (tiny.passes[1..]) |pass| try std.testing.expect(pass.isEmpty());
 
     try std.testing.expectError(error.CorruptFrame, pngAdam7InfoFromColorType(1, 1, 8, 1));
+}
+
+test "png adam7 placement scatters byte-aligned passes" {
+    const info = try pngAdam7Info(5, 5, 8, .truecolor);
+    var image: [5 * 5 * 3]u8 = @splat(0);
+    var expected: [5 * 5 * 3]u8 = @splat(0);
+
+    for (info.passes) |pass| {
+        if (pass.isEmpty()) continue;
+        var pass_rows: [32]u8 = @splat(0);
+        var offset: usize = 0;
+        for (0..pass.height) |row_index| {
+            for (0..pass.width) |pass_x| {
+                const dest_x = pass.x_start + pass_x * pass.x_step;
+                const dest_y = pass.y_start + row_index * pass.y_step;
+                const base: u8 = @intCast(dest_y * 16 + dest_x);
+                pass_rows[offset + 0] = base;
+                pass_rows[offset + 1] = base +% 1;
+                pass_rows[offset + 2] = base +% 2;
+                const dest = (dest_y * info.image.width + dest_x) * 3;
+                expected[dest + 0] = pass_rows[offset + 0];
+                expected[dest + 1] = pass_rows[offset + 1];
+                expected[dest + 2] = pass_rows[offset + 2];
+                offset += 3;
+            }
+        }
+        try placePngAdam7Pass(info, pass, pass_rows[0..pass.reconstructed_len], &image);
+    }
+
+    try std.testing.expectEqualSlices(u8, &expected, &image);
+    try std.testing.expectError(error.OutputTooSmall, placePngAdam7Row(info, info.passes[0], 0, image[0..info.passes[0].row_len], image[0 .. image.len - 1]));
+    try std.testing.expectError(error.RangeOutOfBounds, placePngAdam7Row(info, info.passes[0], info.passes[0].height, image[0..info.passes[0].row_len], &image));
+    try std.testing.expectError(error.InputTooSmall, placePngAdam7Pass(info, info.passes[0], image[0 .. info.passes[0].reconstructed_len - 1], &image));
+}
+
+test "png adam7 placement scatters sub-byte packed pixels" {
+    const info = try pngAdam7Info(5, 5, 2, .indexed);
+    var image: [10]u8 = @splat(0);
+    var expected_pixels: [25]u8 = @splat(0);
+
+    for (info.passes) |pass| {
+        if (pass.isEmpty()) continue;
+        var pass_rows: [8]u8 = @splat(0);
+        for (0..pass.height) |row_index| {
+            @memset(pass_rows[row_index * pass.row_len ..][0..pass.row_len], 0);
+            for (0..pass.width) |pass_x| {
+                const dest_x = pass.x_start + pass_x * pass.x_step;
+                const dest_y = pass.y_start + row_index * pass.y_step;
+                const value: u8 = @intCast((dest_x + dest_y * 2) & 0x3);
+                expected_pixels[dest_y * info.image.width + dest_x] = value;
+                writePngPackedPixel(pass_rows[row_index * pass.row_len ..][0..pass.row_len], pass_x, info.image.bits_per_pixel, value);
+            }
+        }
+        try placePngAdam7Pass(info, pass, pass_rows[0..pass.reconstructed_len], &image);
+    }
+
+    var expected_image: [10]u8 = @splat(0);
+    for (0..info.image.height) |y| {
+        const row = expected_image[y * info.image.row_len ..][0..info.image.row_len];
+        for (0..info.image.width) |x| {
+            writePngPackedPixel(row, x, info.image.bits_per_pixel, expected_pixels[y * info.image.width + x]);
+        }
+    }
+    try std.testing.expectEqualSlices(u8, &expected_image, &image);
+
+    const tiny = try pngAdam7Info(1, 1, 1, .indexed);
+    try std.testing.expectError(error.RangeOutOfBounds, placePngAdam7Row(tiny, tiny.passes[1], 0, "", image[0..1]));
 }
 
 test "zlib decoder reconstructs PNG scanlines from chunked IDAT scratch" {
