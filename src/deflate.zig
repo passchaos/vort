@@ -2677,6 +2677,32 @@ pub const PngZlibDecodeBufferSizes = struct {
     image_output_len: usize,
 };
 
+pub const PngAdam7PassInfo = struct {
+    pass_index: u8,
+    x_start: usize,
+    y_start: usize,
+    x_step: usize,
+    y_step: usize,
+    width: usize,
+    height: usize,
+    row_len: usize,
+    bytes_per_pixel: usize,
+    zlib_payload_len: usize,
+    reconstructed_len: usize,
+
+    pub fn isEmpty(self: PngAdam7PassInfo) bool {
+        return self.width == 0 or self.height == 0;
+    }
+};
+
+pub const PngAdam7Info = struct {
+    image: PngImageInfo,
+    passes: [7]PngAdam7PassInfo,
+    zlib_payload_len: usize,
+    max_pass_row_len: usize,
+    image_output_len: usize,
+};
+
 pub fn parsePngColorType(color_type: u8) Error!PngColorType {
     return switch (color_type) {
         0 => .grayscale,
@@ -2717,9 +2743,7 @@ pub fn pngImageInfo(width: usize, height: usize, bit_depth: u8, color_type: PngC
     if (width == 0 or height == 0) return error.CorruptFrame;
     const samples_per_pixel = try pngSamplesPerPixelAndValidateDepth(color_type, bit_depth);
     const bits_per_pixel = @as(u16, samples_per_pixel) * @as(u16, bit_depth);
-    const total_row_bits = std.math.mul(usize, width, @as(usize, bits_per_pixel)) catch return error.IntegerOverflow;
-    const row_bits_with_rounding = std.math.add(usize, total_row_bits, 7) catch return error.IntegerOverflow;
-    const row_len = row_bits_with_rounding / 8;
+    const row_len = try pngPackedRowLen(width, bits_per_pixel);
     const bytes_per_pixel = @max(@as(usize, 1), (@as(usize, bits_per_pixel) + 7) / 8);
     return .{
         .width = width,
@@ -2738,6 +2762,12 @@ pub fn pngImageInfoFromColorType(width: usize, height: usize, bit_depth: u8, col
     return pngImageInfo(width, height, bit_depth, try parsePngColorType(color_type));
 }
 
+fn pngPackedRowLen(width: usize, bits_per_pixel: usize) Error!usize {
+    const total_row_bits = std.math.mul(usize, width, bits_per_pixel) catch return error.IntegerOverflow;
+    const row_bits_with_rounding = std.math.add(usize, total_row_bits, 7) catch return error.IntegerOverflow;
+    return row_bits_with_rounding / 8;
+}
+
 pub fn pngZlibDecodeBufferSizes(info: PngImageInfo) Error!PngZlibDecodeBufferSizes {
     return .{
         .zlib_scratch_len = info.zlib_payload_len,
@@ -2745,6 +2775,65 @@ pub fn pngZlibDecodeBufferSizes(info: PngImageInfo) Error!PngZlibDecodeBufferSiz
         .previous_row_scratch_len = info.row_len,
         .image_output_len = try pngImageOutputLen(info),
     };
+}
+
+const adam7_x_start = [_]usize{ 0, 4, 0, 2, 0, 1, 0 };
+const adam7_y_start = [_]usize{ 0, 0, 4, 0, 2, 0, 1 };
+const adam7_x_step = [_]usize{ 8, 8, 4, 4, 2, 2, 1 };
+const adam7_y_step = [_]usize{ 8, 8, 8, 4, 4, 2, 2 };
+
+pub fn pngAdam7Info(width: usize, height: usize, bit_depth: u8, color_type: PngColorType) Error!PngAdam7Info {
+    const image = try pngImageInfo(width, height, bit_depth, color_type);
+    var passes: [7]PngAdam7PassInfo = undefined;
+    var total_payload: usize = 0;
+    var max_pass_row_len: usize = 0;
+    for (0..7) |i| {
+        const pass_width = adam7PassDimension(width, adam7_x_start[i], adam7_x_step[i]);
+        const pass_height = adam7PassDimension(height, adam7_y_start[i], adam7_y_step[i]);
+        const row_len = if (pass_width == 0 or pass_height == 0) 0 else try pngPackedRowLen(pass_width, image.bits_per_pixel);
+        const pass_payload = if (pass_width == 0 or pass_height == 0) 0 else try pngScanlinePayloadLen(row_len, pass_height);
+        const reconstructed_len = std.math.mul(usize, row_len, pass_height) catch return error.IntegerOverflow;
+        total_payload = std.math.add(usize, total_payload, pass_payload) catch return error.IntegerOverflow;
+        max_pass_row_len = @max(max_pass_row_len, row_len);
+        passes[i] = .{
+            .pass_index = @intCast(i + 1),
+            .x_start = adam7_x_start[i],
+            .y_start = adam7_y_start[i],
+            .x_step = adam7_x_step[i],
+            .y_step = adam7_y_step[i],
+            .width = pass_width,
+            .height = pass_height,
+            .row_len = row_len,
+            .bytes_per_pixel = image.bytes_per_pixel,
+            .zlib_payload_len = pass_payload,
+            .reconstructed_len = reconstructed_len,
+        };
+    }
+    return .{
+        .image = image,
+        .passes = passes,
+        .zlib_payload_len = total_payload,
+        .max_pass_row_len = max_pass_row_len,
+        .image_output_len = try pngImageOutputLen(image),
+    };
+}
+
+pub fn pngAdam7InfoFromColorType(width: usize, height: usize, bit_depth: u8, color_type: u8) Error!PngAdam7Info {
+    return pngAdam7Info(width, height, bit_depth, try parsePngColorType(color_type));
+}
+
+pub fn pngAdam7DecodeBufferSizes(info: PngAdam7Info) PngZlibDecodeBufferSizes {
+    return .{
+        .zlib_scratch_len = info.zlib_payload_len,
+        .filtered_row_scratch_len = info.max_pass_row_len,
+        .previous_row_scratch_len = info.max_pass_row_len,
+        .image_output_len = info.image_output_len,
+    };
+}
+
+fn adam7PassDimension(size: usize, start: usize, step: usize) usize {
+    if (size <= start) return 0;
+    return ((size - 1 - start) / step) + 1;
 }
 
 fn parsePngFilterMethod(filter: u8) Error!PngFilterMethod {
@@ -4849,6 +4938,50 @@ test "png image info computes scanline metadata" {
     try std.testing.expectError(error.CorruptFrame, pngImageInfo(1, 1, 4, .truecolor));
     try std.testing.expectError(error.CorruptFrame, pngImageInfoFromColorType(1, 1, 8, 1));
     try std.testing.expectError(error.IntegerOverflow, pngImageInfo(std.math.maxInt(usize), 1, 16, .truecolor_alpha));
+}
+
+test "png adam7 metadata plans passes and buffers" {
+    const info = try pngAdam7Info(17, 9, 8, .truecolor);
+    try std.testing.expectEqual(@as(usize, 17), info.image.width);
+    try std.testing.expectEqual(@as(usize, 9), info.image.height);
+    try std.testing.expectEqual(@as(usize, 459), info.image_output_len);
+    try std.testing.expectEqual(@as(usize, 51), info.max_pass_row_len);
+    try std.testing.expectEqual(@as(usize, 478), info.zlib_payload_len);
+
+    const expected = [_]struct { w: usize, h: usize, row: usize, payload: usize, out: usize }{
+        .{ .w = 3, .h = 2, .row = 9, .payload = 20, .out = 18 },
+        .{ .w = 2, .h = 2, .row = 6, .payload = 14, .out = 12 },
+        .{ .w = 5, .h = 1, .row = 15, .payload = 16, .out = 15 },
+        .{ .w = 4, .h = 3, .row = 12, .payload = 39, .out = 36 },
+        .{ .w = 9, .h = 2, .row = 27, .payload = 56, .out = 54 },
+        .{ .w = 8, .h = 5, .row = 24, .payload = 125, .out = 120 },
+        .{ .w = 17, .h = 4, .row = 51, .payload = 208, .out = 204 },
+    };
+    for (expected, 0..) |case, i| {
+        const pass = info.passes[i];
+        try std.testing.expectEqual(@as(u8, @intCast(i + 1)), pass.pass_index);
+        try std.testing.expectEqual(case.w, pass.width);
+        try std.testing.expectEqual(case.h, pass.height);
+        try std.testing.expectEqual(case.row, pass.row_len);
+        try std.testing.expectEqual(case.payload, pass.zlib_payload_len);
+        try std.testing.expectEqual(case.out, pass.reconstructed_len);
+        try std.testing.expect(!pass.isEmpty());
+    }
+    const sizes = pngAdam7DecodeBufferSizes(info);
+    try std.testing.expectEqual(info.zlib_payload_len, sizes.zlib_scratch_len);
+    try std.testing.expectEqual(info.max_pass_row_len, sizes.filtered_row_scratch_len);
+    try std.testing.expectEqual(info.max_pass_row_len, sizes.previous_row_scratch_len);
+    try std.testing.expectEqual(info.image_output_len, sizes.image_output_len);
+
+    const tiny = try pngAdam7InfoFromColorType(1, 1, 1, 3);
+    try std.testing.expectEqual(@as(usize, 2), tiny.zlib_payload_len);
+    try std.testing.expectEqual(@as(usize, 1), tiny.max_pass_row_len);
+    try std.testing.expectEqual(@as(usize, 1), tiny.image_output_len);
+    try std.testing.expectEqual(@as(usize, 1), tiny.passes[0].width);
+    try std.testing.expectEqual(@as(usize, 1), tiny.passes[0].height);
+    for (tiny.passes[1..]) |pass| try std.testing.expect(pass.isEmpty());
+
+    try std.testing.expectError(error.CorruptFrame, pngAdam7InfoFromColorType(1, 1, 8, 1));
 }
 
 test "zlib decoder reconstructs PNG scanlines from chunked IDAT scratch" {

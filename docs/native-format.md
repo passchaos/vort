@@ -199,6 +199,10 @@ callers that want one API to produce reconstructed rows from IDAT chunks.
 `decodePngZlibImageFromChunks` drains the same pipeline into a caller-owned full
 image buffer when the caller wants a complete reconstructed image without a
 separate row loop.
+`pngAdam7Info` plans Adam7 interlace passes, including per-pass dimensions,
+row bytes, exact filtered payload bytes, maximum row scratch, and final image
+output size, so interlaced PNG support can preflight memory before decoding pass
+payloads.
 `ZlibDecoder` also records wrapper/header, missing-dictionary, truncation,
 Adler-32 mismatch, and PNG row-boundary diagnostics through the shared
 `StreamingDiagnostics` surface.

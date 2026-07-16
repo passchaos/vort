@@ -72,6 +72,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measurePngZlibScanlinePipeline(allocator));
     try rows.append(allocator, try measurePngZlibImageDecode(allocator));
     try rows.append(allocator, try measurePngZlibSubByteImageDecode(allocator));
+    try rows.append(allocator, try measurePngAdam7Metadata(allocator));
     try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
     try rows.append(allocator, try measureGzipDecoderScratch(allocator));
     try rows.append(allocator, try measureGzipDecoderConcatenatedChunks(allocator));
@@ -734,6 +735,16 @@ fn measurePngZlibSubByteImageDecode(backing: std.mem.Allocator) !CaseStats {
     const result = try vort.decodePngZlibImageFromChunks(&chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, output);
     try std.testing.expectEqualSlices(u8, &expected_image, output);
     return stats("png_zlib_subbyte_image_decode_scratch", encoded.len, result.output_written, failing);
+}
+
+fn measurePngAdam7Metadata(backing: std.mem.Allocator) !CaseStats {
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    const info = try vort.pngAdam7Info(17, 9, 8, .truecolor);
+    const sizes = vort.pngAdam7DecodeBufferSizes(info);
+    try std.testing.expectEqual(@as(usize, 478), info.zlib_payload_len);
+    try std.testing.expectEqual(@as(usize, 51), sizes.filtered_row_scratch_len);
+    try std.testing.expectEqual(@as(usize, 459), sizes.image_output_len);
+    return stats("png_adam7_metadata_scratch", info.image_output_len, info.zlib_payload_len, failing);
 }
 
 fn measureZlibDecoderDictionaryChunks(backing: std.mem.Allocator) !CaseStats {
