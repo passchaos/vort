@@ -644,6 +644,9 @@ architecture blindly.
 - [x] Allocating inflate paths use a smaller capacity hint for tiny compressed
   frames, reducing over-reservation and shrink work for small API/CLI payloads
   while keeping the larger capped expansion hint for real compressed data.
+- [x] Small raw allocating decode first tries the caller-buffer decoder against
+  stack scratch and then copies into an exact owned slice, reducing ArrayList
+  growth/shrink overhead for tiny dynamic/fixed raw DEFLATE members.
 - [x] Compression-level report validating parser/cost-model settings and round trips.
 - [x] Compression-level report exposes incompressible stored fast-path decisions.
 - [x] Compression-level report accepts ad-hoc file corpora.

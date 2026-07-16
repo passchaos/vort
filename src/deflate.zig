@@ -1396,6 +1396,9 @@ pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8
 fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: ?usize) !OwnedDecodeResult {
     if (input.len == 0) return error.TruncatedFrame;
     if (try decodeRawStoredOnlyAllocMaybe(allocator, input, max_output_len)) |stored| return stored;
+    if (dictionary.len == 0 and max_output_len == null) {
+        if (try decodeRawAutoSmallIntoAlloc(allocator, input)) |small| return small;
+    }
 
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -1598,6 +1601,24 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
         }
         if (final) return .{ .input_read = reader.byteOffset() - raw_base_offset, .output_written = out.items.len - start_len };
     }
+}
+
+fn decodeRawAutoSmallIntoAlloc(allocator: std.mem.Allocator, input: []const u8) !?OwnedDecodeResult {
+    if (input.len > 64) return null;
+
+    // Small raw DEFLATE members are common in wrappers, metadata, tests, and
+    // CLI/API calls. Decoding them through the caller-buffer state machine first
+    // avoids the ArrayList growth/shrink path used by the general allocating
+    // decoder while preserving exact owned-slice semantics for callers.
+    var scratch: [512]u8 = undefined;
+    const decoded = decodeRawAuto(input, &scratch) catch |err| switch (err) {
+        error.OutputTooSmall => return null,
+        else => return err,
+    };
+    const owned = allocator.alloc(u8, decoded.output_written) catch return error.OutOfMemory;
+    errdefer allocator.free(owned);
+    @memcpy(owned, scratch[0..decoded.output_written]);
+    return .{ .bytes = owned, .input_read = decoded.input_read };
 }
 
 pub fn decodeRawAutoAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -7397,6 +7418,34 @@ test "raw zlib and gzip decoders handle multi-block streams" {
     try std.testing.expectEqual(plain.len, try decodeGzip(gzip_frame, &gzip_out));
     try std.testing.expectEqualSlices(u8, plain, &gzip_out);
     try std.testing.expectError(error.OutputTooSmall, decodeGzip(gzip_frame, gzip_out[0 .. plain.len - 1]));
+}
+
+test "small raw allocating decode uses exact owned output" {
+    const raw = [_]u8{
+        0x3d, 0xc6, 0x39, 0x11, 0x00, 0x00, 0x0c, 0x02, 0x30, 0x2b, 0xb5, 0x52,
+        0x1e, 0xff, 0x96, 0x38, 0x16, 0x96, 0x5c, 0x1e, 0x94, 0xcb, 0x6d, 0x01,
+    };
+    const plain = "ABCDEABCD ABCDEABCD";
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, &raw);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqual(plain.len, decoded.len);
+    try std.testing.expectEqualSlices(u8, plain, decoded);
+
+    var trailing = [_]u8{0} ** (raw.len + 1);
+    @memcpy(trailing[0..raw.len], &raw);
+    try std.testing.expectError(error.TrailingData, decodeRawAutoAlloc(std.testing.allocator, &trailing));
+}
+
+test "small raw allocating decode falls back when scratch is too small" {
+    var input: [1024]u8 = undefined;
+    @memset(&input, 'a');
+    const encoded = try encodeRawFixedAlloc(std.testing.allocator, &input);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len <= 64);
+
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &input, decoded);
 }
 
 test "zlib and gzip wrappers reject truncated non-final raw deflate streams" {
