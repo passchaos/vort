@@ -206,6 +206,9 @@ payloads.
 `placePngAdam7Row` and `placePngAdam7Pass` scatter reconstructed pass rows into
 the final packed image buffer for both byte-aligned and sub-byte grayscale/indexed
 formats.
+`decodePngAdam7ZlibImageFromChunks` combines zlib decoding, pass-row
+reconstruction, and Adam7 placement for PNG-like interlaced IDAT payloads when
+the caller has provided all required scratch buffers.
 `ZlibDecoder` also records wrapper/header, missing-dictionary, truncation,
 Adler-32 mismatch, and PNG row-boundary diagnostics through the shared
 `StreamingDiagnostics` surface.

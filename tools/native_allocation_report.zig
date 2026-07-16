@@ -74,6 +74,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measurePngZlibSubByteImageDecode(allocator));
     try rows.append(allocator, try measurePngAdam7Metadata(allocator));
     try rows.append(allocator, try measurePngAdam7Placement(allocator));
+    try rows.append(allocator, try measurePngAdam7ImageDecode(allocator));
     try rows.append(allocator, try measureZlibDecoderDictionaryChunks(allocator));
     try rows.append(allocator, try measureGzipDecoderScratch(allocator));
     try rows.append(allocator, try measureGzipDecoderConcatenatedChunks(allocator));
@@ -773,6 +774,70 @@ fn measurePngAdam7Placement(backing: std.mem.Allocator) !CaseStats {
         try vort.placePngAdam7Pass(info, pass, pass_scratch[0..pass.reconstructed_len], image);
     }
     return stats("png_adam7_placement_scratch", info.zlib_payload_len, sizes.image_output_len, failing);
+}
+
+fn measurePngAdam7ImageDecode(backing: std.mem.Allocator) !CaseStats {
+    const info = try vort.pngAdam7Info(5, 5, 8, .truecolor);
+    const sizes = vort.pngAdam7DecodeBufferSizes(info);
+    var expected_image: [5 * 5 * 3]u8 = undefined;
+    for (0..info.image.height) |y| {
+        for (0..info.image.width) |x| {
+            const offset = (y * info.image.width + x) * 3;
+            const base: u8 = @intCast(y * 32 + x * 3);
+            expected_image[offset + 0] = base;
+            expected_image[offset + 1] = base +% 1;
+            expected_image[offset + 2] = base +% 2;
+        }
+    }
+
+    var filtered_payload: [128]u8 = undefined;
+    var payload_offset: usize = 0;
+    var pass_row: [64]u8 = undefined;
+    var filtered_row: [64]u8 = undefined;
+    var previous_row: [64]u8 = undefined;
+    for (info.passes) |pass| {
+        if (pass.isEmpty()) continue;
+        var has_previous = false;
+        for (0..pass.height) |row_index| {
+            for (0..pass.width) |pass_x| {
+                const dest_x = pass.x_start + pass_x * pass.x_step;
+                const dest_y = pass.y_start + row_index * pass.y_step;
+                const src = (dest_y * info.image.width + dest_x) * 3;
+                @memcpy(pass_row[pass_x * 3 ..][0..3], expected_image[src..][0..3]);
+            }
+            const filter: u8 = @intCast((@as(usize, pass.pass_index) + row_index - 1) % 5);
+            const previous = if (has_previous) previous_row[0..pass.row_len] else null;
+            filterPngScanlineForReport(filter, pass_row[0..pass.row_len], previous, pass.bytes_per_pixel, filtered_row[0..pass.row_len]);
+            filtered_payload[payload_offset] = filter;
+            @memcpy(filtered_payload[payload_offset + 1 ..][0..pass.row_len], filtered_row[0..pass.row_len]);
+            payload_offset += pass.row_len + 1;
+            @memcpy(previous_row[0..pass.row_len], pass_row[0..pass.row_len]);
+            has_previous = true;
+        }
+    }
+
+    const encoded = try vort.encodeZlibBestAlloc(backing, filtered_payload[0..payload_offset], vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..5],
+        encoded[5 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+    };
+    const compressed_scratch = try backing.alloc(u8, encoded.len);
+    defer backing.free(compressed_scratch);
+    const zlib_scratch = try backing.alloc(u8, sizes.zlib_scratch_len);
+    defer backing.free(zlib_scratch);
+    const filtered_row_scratch = try backing.alloc(u8, sizes.filtered_row_scratch_len);
+    defer backing.free(filtered_row_scratch);
+    const previous_row_scratch = try backing.alloc(u8, sizes.previous_row_scratch_len);
+    defer backing.free(previous_row_scratch);
+    const output = try backing.alloc(u8, sizes.image_output_len);
+    defer backing.free(output);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.decodePngAdam7ZlibImageFromChunks(&chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, output);
+    try std.testing.expectEqualSlices(u8, &expected_image, output);
+    return stats("png_adam7_image_decode_scratch", encoded.len, result.output_written, failing);
 }
 
 fn writePngPackedPixelForReport(row: []u8, pixel_index: usize, bits_per_pixel: usize, value: u8) void {
