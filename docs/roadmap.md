@@ -669,6 +669,9 @@ architecture blindly.
 - [x] Lazy hash parser uses a stack-resident tiny-input table for source/text chunks below one deflate window.
 - [x] Huffman code generation, simple length building, and canonical-code validation.
 - [x] Decompression hot-path smoke benchmarks for raw/zlib/gzip fixed and dynamic samples.
+- [x] Deflate decode hot-path benchmark reports allocator-returning,
+  exact-size allocation, and caller-buffer rows for each raw/zlib/gzip sample,
+  separating allocation overhead from inflate-core throughput.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
