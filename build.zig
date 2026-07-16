@@ -730,6 +730,11 @@ pub fn build(b: *std.Build) void {
     const native_allocation_smoke_step = b.step("run-native-allocation-smoke", "Validate native zero-allocation decode paths");
     native_allocation_smoke_step.dependOn(&native_allocation_smoke.step);
 
+    const native_allocation_negative_smoke = b.addSystemCommand(&.{ "python3", "tools/native_allocation_negative_smoke.py" });
+    native_allocation_negative_smoke.step.dependOn(native_allocation_dashboard_step);
+    const native_allocation_negative_smoke_step = b.step("run-native-allocation-negative-smoke", "Validate native allocation smoke rejects regressions");
+    native_allocation_negative_smoke_step.dependOn(&native_allocation_negative_smoke.step);
+
     const sidecar_verify_report_exe = b.addExecutable(.{
         .name = "vort-sidecar-verify-report",
         .root_module = b.createModule(.{
@@ -1021,6 +1026,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(native_allocation_report_step);
     ci_smoke_step.dependOn(native_allocation_dashboard_step);
     ci_smoke_step.dependOn(native_allocation_smoke_step);
+    ci_smoke_step.dependOn(native_allocation_negative_smoke_step);
     ci_smoke_step.dependOn(sidecar_corrupt_smoke_step);
     ci_smoke_step.dependOn(sidecar_corrupt_dashboard_step);
     ci_smoke_step.dependOn(validation_json_smoke_step);
