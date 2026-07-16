@@ -115,12 +115,17 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
     }
     return struct {
         table: HuffmanTable(max_symbols),
-        lookup: [@as(usize, 1) << lookup_bits]FixedLookupEntry = @splat(.{ .symbol = 0, .bits = 0 }),
+        lookup: [@as(usize, 1) << lookup_bits]FixedLookupEntry = undefined,
 
         const Self = @This();
 
         pub fn init(table: HuffmanTable(max_symbols)) Self {
             var decoder = Self{ .table = table };
+            var covered: usize = 0;
+            for (table.entries[0..table.len]) |entry| {
+                if (entry.bits <= lookup_bits) covered += @as(usize, 1) << @intCast(lookup_bits - entry.bits);
+            }
+            if (covered != decoder.lookup.len) @memset(&decoder.lookup, .{ .symbol = 0, .bits = 0 });
             for (table.entries[0..table.len]) |entry| {
                 if (entry.bits > lookup_bits) continue;
                 const fill = @as(usize, 1) << @intCast(lookup_bits - entry.bits);
