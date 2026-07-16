@@ -56,6 +56,7 @@ architecture blindly.
 - [x] Store-frame incremental decoder snapshots retain the latest header/payload error name, phase, and recoverability hint.
 - [x] Store-frame bounded and incremental decoders expose a shared StreamingDiagnostics view.
 - [x] Store-frame streaming encoder exposes snapshot diagnostics and the shared StreamingDiagnostics view.
+- [x] Native non-dictionary AnyDecoder drains store/deflate/RLE frames through reusable caller-owned streaming state and scratch.
 - [x] Concatenated store-frame iterator and decode helper.
 - [x] Concatenated native decode supports non-dictionary compressed frame modes with exact-size and output-limited allocator variants.
 - [x] Concatenated native decode supports caller-supplied dictionaries for dictionary-patch/deflate members.

@@ -41,6 +41,7 @@ pub const StoreFrameInspection = store.FrameInspection;
 pub const StoreEncoder = store.Encoder;
 pub const StoreDecoder = store.Decoder;
 pub const StoreIncrementalDecoder = store.IncrementalDecoder;
+pub const StoreAnyDecoder = store.AnyDecoder;
 pub const storeInspectHeader = store.inspectHeader;
 pub const storeInspectFrame = store.inspectFrame;
 pub const storeInspectFrameExact = store.inspectFrameExact;

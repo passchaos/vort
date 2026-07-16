@@ -997,6 +997,99 @@ pub const IncrementalDecoder = struct {
     }
 };
 
+/// Bounded-output decoder for any non-dictionary native frame. Store frames can
+/// borrow the frame payload directly; compressed frames decode once into
+/// caller-owned scratch and then drain that scratch across `step` calls.
+pub const AnyDecoder = struct {
+    decoded: []const u8 = &.{},
+    frame_len: usize = 0,
+    checksum_value: u32 = 0,
+    offset: usize = 0,
+    verified: bool = false,
+    done: bool = false,
+    last_error_name: []const u8 = "",
+
+    pub fn init(frame: []const u8, scratch: []u8) Error!AnyDecoder {
+        var self = AnyDecoder{};
+        try self.reset(frame, scratch);
+        return self;
+    }
+
+    pub fn reset(self: *AnyDecoder, frame: []const u8, scratch: []u8) Error!void {
+        const info = try parseHeader(frame);
+        if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) return error.InvalidDictionaryTraining;
+        const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
+        const total_len = try encodedSize(payload_len);
+        if (frame.len < total_len) return error.TruncatedFrame;
+        const output_len = try decodeAnyOutputLen(info);
+        if (info.flags == flags_none) {
+            if (payload_len != output_len) return error.CorruptFrame;
+            self.* = .{
+                .decoded = frame[header_len..total_len],
+                .frame_len = total_len,
+                .checksum_value = info.checksum,
+            };
+            return;
+        }
+        if (scratch.len < output_len) return error.OutputTooSmall;
+        const target = scratch[0..output_len];
+        const written = try decodeAnyInto(frame, target);
+        if (written != output_len) return error.SizeMismatch;
+        self.* = .{
+            .decoded = target,
+            .frame_len = total_len,
+            .checksum_value = info.checksum,
+            .verified = true,
+        };
+    }
+
+    pub fn snapshot(self: *const AnyDecoder) Decoder.Snapshot {
+        return .{
+            .payload_len = self.decoded.len,
+            .output_written = self.offset,
+            .payload_remaining = self.decoded.len - self.offset,
+            .verified = self.verified,
+            .done = self.done,
+            .last_error_name = self.last_error_name,
+        };
+    }
+
+    pub fn diagnostics(self: *const AnyDecoder) StreamingDiagnostics {
+        const snap = self.snapshot();
+        return .{
+            .phase_name = if (snap.done) "done" else "payload",
+            .frame_input_read = if (snap.done) self.frame_len else null,
+            .output_written = snap.output_written,
+            .expected_output_len = snap.payload_len,
+            .payload_remaining = snap.payload_remaining,
+            .last_error_name = snap.last_error_name,
+            .last_error_phase_name = if (snap.last_error_name.len == 0) "" else "payload",
+            .recoverability_hint_name = if (snap.last_error_name.len == 0) "none" else "payload_corrupt",
+        };
+    }
+
+    pub fn step(self: *AnyDecoder, output: []u8) Error!StepResult {
+        if (self.done) return .{ .status = .done };
+        if (!self.verified) {
+            if (checksum.crc32(self.decoded) != self.checksum_value) {
+                self.last_error_name = "ChecksumMismatch";
+                return error.ChecksumMismatch;
+            }
+            self.verified = true;
+        }
+        if (output.len == 0) return .{ .status = .need_output };
+        const remaining = self.decoded[self.offset..];
+        const n = @min(output.len, remaining.len);
+        @memcpy(output[0..n], remaining[0..n]);
+        self.offset += n;
+        if (self.offset == self.decoded.len) self.done = true;
+        return .{
+            .progress = .{ .input_read = if (self.done) self.frame_len else 0, .output_written = n },
+            .status = if (self.done) .done else .need_output,
+        };
+    }
+};
+
 pub const FrameSpan = struct {
     offset: usize,
     frame: []const u8,
@@ -3918,6 +4011,62 @@ test "bounded decoder snapshot reports checksum mismatch" {
     try std.testing.expectEqualStrings("ChecksumMismatch", diagnostics.last_error_name);
     try std.testing.expectEqualStrings("payload", diagnostics.last_error_phase_name);
     try std.testing.expectEqualStrings("payload_corrupt", diagnostics.recoverability_hint_name);
+}
+
+test "any decoder drains compressed frames from caller scratch" {
+    const deflate_input = "hello hello hello hello";
+    const deflate_frame = try encodeDeflateAlloc(std.testing.allocator, deflate_input);
+    defer std.testing.allocator.free(deflate_frame);
+    var scratch: [deflate_input.len]u8 = undefined;
+    var decoder = try AnyDecoder.init(deflate_frame, scratch[0..]);
+    try std.testing.expect(decoder.snapshot().verified);
+    try std.testing.expectEqual(deflate_input.len, decoder.snapshot().payload_len);
+    var out: [deflate_input.len]u8 = undefined;
+    var first: [5]u8 = undefined;
+    var step_result = try decoder.step(&first);
+    @memcpy(out[0..first.len], &first);
+    try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
+    try std.testing.expectEqual(first.len, decoder.snapshot().output_written);
+    try std.testing.expectEqualStrings("payload", decoder.diagnostics().phase_name);
+    step_result = try decoder.step(out[first.len..]);
+    try std.testing.expectEqual(StepResult.Status.done, step_result.status);
+    try std.testing.expectEqual(deflate_frame.len, step_result.progress.input_read);
+    try std.testing.expectEqualSlices(u8, deflate_input, &out);
+    try std.testing.expectEqualStrings("done", decoder.diagnostics().phase_name);
+
+    const rle_input = "aaaaabbbbbbbbbbbbbcccccccccccccccc";
+    const rle_frame = try encodeRleAlloc(std.testing.allocator, rle_input);
+    defer std.testing.allocator.free(rle_frame);
+    var rle_scratch: [rle_input.len]u8 = undefined;
+    decoder.reset(rle_frame, rle_scratch[0..]) catch |err| return err;
+    try std.testing.expect(decoder.snapshot().verified);
+    var rle_out: [rle_input.len]u8 = undefined;
+    step_result = try decoder.step(&rle_out);
+    try std.testing.expectEqual(StepResult.Status.done, step_result.status);
+    try std.testing.expectEqualSlices(u8, rle_input, &rle_out);
+
+    try std.testing.expectError(error.OutputTooSmall, AnyDecoder.init(deflate_frame, scratch[0 .. scratch.len - 1]));
+}
+
+test "any decoder borrows store frame payload and reports checksum errors" {
+    const input = "borrowed store payload";
+    const frame = try encodeAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(frame);
+    var decoder = try AnyDecoder.init(frame, &.{});
+    try std.testing.expect(!decoder.snapshot().verified);
+    var out: [input.len]u8 = undefined;
+    const result = try decoder.step(&out);
+    try std.testing.expectEqual(StepResult.Status.done, result.status);
+    try std.testing.expectEqual(frame.len, result.progress.input_read);
+    try std.testing.expectEqualSlices(u8, input, &out);
+
+    const corrupt = try std.testing.allocator.dupe(u8, frame);
+    defer std.testing.allocator.free(corrupt);
+    corrupt[corrupt.len - 1] ^= 0x11;
+    var corrupt_decoder = try AnyDecoder.init(corrupt, &.{});
+    try std.testing.expectError(error.ChecksumMismatch, corrupt_decoder.step(&out));
+    try std.testing.expectEqualStrings("ChecksumMismatch", corrupt_decoder.snapshot().last_error_name);
+    try std.testing.expectEqualStrings("payload_corrupt", corrupt_decoder.diagnostics().recoverability_hint_name);
 }
 
 test "incremental decoder accepts single-byte input and tiny output" {

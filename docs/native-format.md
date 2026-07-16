@@ -157,17 +157,19 @@ payload and patch scratch explicitly.
 
 ## Store-frame streaming state reuse
 
-`Encoder`, `Decoder`, and `IncrementalDecoder` support caller-owned state reuse
-via `reset`. This lets streaming callers process multiple store frames without
-reallocating or reinitializing state objects, while retaining explicit progress
+`Encoder`, `Decoder`, `AnyDecoder`, and `IncrementalDecoder` support
+caller-owned state reuse via `reset`. This lets streaming callers process
+multiple native frames without reallocating or reinitializing state objects, while retaining explicit progress
 accounting and checksum verification at frame boundaries. Both decoders expose a
 common `StreamingDiagnostics` view via `diagnostics`; `Encoder.snapshot`,
-`Decoder.snapshot`, and `IncrementalDecoder.snapshot` retain type-specific fields
-for callers that need more detail. Diagnostics include the current phase,
+`Decoder.snapshot`, `AnyDecoder.snapshot`, and `IncrementalDecoder.snapshot`
+retain type-specific fields for callers that need more detail. Diagnostics include the current phase,
 cumulative frame input bytes when available, emitted output bytes, expected
 payload/frame length, remaining bytes, and the most recent error name/phase plus
 recoverability hint so callers can attach byte-accurate diagnostics to stalled or
-corrupt streaming sessions.
+corrupt streaming sessions. `AnyDecoder` borrows store-frame payloads directly
+and uses caller-owned scratch for compressed non-dictionary frames before draining
+bounded output chunks.
 
 ## Range decode summary APIs
 
