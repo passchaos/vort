@@ -208,8 +208,8 @@ the final packed image buffer for both byte-aligned and sub-byte grayscale/index
 formats.
 `decodePngAdam7ZlibImageFromChunks` combines zlib decoding, pass-row
 reconstruction, and Adam7 placement for PNG-like interlaced IDAT payloads,
-including packed sub-byte indexed/grayscale rows, when the caller has provided
-all required scratch buffers. The helper rejects corrupt filter bytes and
+including packed sub-byte indexed/grayscale rows and 16-bit RGBA rows, when the
+caller has provided all required scratch buffers. The helper rejects corrupt filter bytes and
 decoded payload length mismatches before accepting an interlaced image.
 `ZlibDecoder` also records wrapper/header, missing-dictionary, truncation,
 Adler-32 mismatch, and PNG row-boundary diagnostics through the shared
