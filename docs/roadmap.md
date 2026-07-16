@@ -50,6 +50,7 @@ architecture blindly.
 - [x] Allocator-returning convenience APIs.
 - [x] Bounded-output streaming encoder/decoder smoke coverage.
 - [x] Fully incremental input/output store-frame decoder.
+- [x] Store-frame streaming encoder and incremental decoder can reset for caller-owned state reuse.
 - [x] Concatenated store-frame iterator and decode helper.
 - [x] Concatenated native decode supports non-dictionary compressed frame modes with exact-size and output-limited allocator variants.
 - [x] Concatenated native decode supports caller-supplied dictionaries for dictionary-patch/deflate members.

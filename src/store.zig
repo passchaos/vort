@@ -701,6 +701,14 @@ pub const Encoder = struct {
 
     pub fn init(input: []const u8) Encoder {
         var self = Encoder{ .input = input };
+        self.reset(input);
+        return self;
+    }
+
+    pub fn reset(self: *Encoder, input: []const u8) void {
+        self.input = input;
+        self.phase = .header;
+        self.offset = 0;
         writeHeader(&self.header, .{
             .version = current_version,
             .flags = flags_none,
@@ -708,7 +716,6 @@ pub const Encoder = struct {
             .stored_size = @intCast(input.len),
             .checksum = checksum.crc32(input),
         });
-        return self;
     }
 
     pub fn step(self: *Encoder, output: []u8) StepResult {
@@ -769,6 +776,14 @@ pub const IncrementalDecoder = struct {
 
     pub fn init() IncrementalDecoder {
         return .{ .crc = checksum.Crc32.init() };
+    }
+
+    pub fn reset(self: *IncrementalDecoder) void {
+        self.phase = .header;
+        self.header_received = 0;
+        self.info = undefined;
+        self.payload_remaining = 0;
+        self.crc = checksum.Crc32.init();
     }
 
     pub fn step(self: *IncrementalDecoder, input: []const u8, output: []u8) Error!StepResult {
@@ -3677,6 +3692,50 @@ test "incremental decoder accepts single-byte input and tiny output" {
 
     try std.testing.expectEqual(encoded_len, input_offset);
     try std.testing.expectEqualSlices(u8, input, decoded[0..decoded_len]);
+}
+
+test "streaming encoder and incremental decoder reset for reuse" {
+    const first = "first reusable streaming payload";
+    const second = "second payload after reset";
+    var encoder = Encoder.init(first);
+    var first_encoded: [128]u8 = undefined;
+    var first_len: usize = 0;
+    while (true) {
+        var scratch: [9]u8 = undefined;
+        const step_result = encoder.step(&scratch);
+        @memcpy(first_encoded[first_len..][0..step_result.progress.output_written], scratch[0..step_result.progress.output_written]);
+        first_len += step_result.progress.output_written;
+        if (step_result.status == .done) break;
+        try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
+    }
+
+    encoder.reset(second);
+    var second_encoded: [128]u8 = undefined;
+    var second_len: usize = 0;
+    while (true) {
+        var scratch: [4]u8 = undefined;
+        const step_result = encoder.step(&scratch);
+        @memcpy(second_encoded[second_len..][0..step_result.progress.output_written], scratch[0..step_result.progress.output_written]);
+        second_len += step_result.progress.output_written;
+        if (step_result.status == .done) break;
+        try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
+    }
+
+    var decoder = IncrementalDecoder.init();
+    var out: [@max(first.len, second.len)]u8 = undefined;
+    const first_result = try decoder.step(first_encoded[0..first_len], out[0..first.len]);
+    try std.testing.expectEqual(StepResult.Status.done, first_result.status);
+    try std.testing.expectEqual(first_len, first_result.progress.input_read);
+    try std.testing.expectEqual(first.len, first_result.progress.output_written);
+    try std.testing.expectEqualSlices(u8, first, out[0..first.len]);
+    try std.testing.expectEqual(StepResult.Status.done, (try decoder.step("", out[0..0])).status);
+
+    decoder.reset();
+    const second_result = try decoder.step(second_encoded[0..second_len], out[0..second.len]);
+    try std.testing.expectEqual(StepResult.Status.done, second_result.status);
+    try std.testing.expectEqual(second_len, second_result.progress.input_read);
+    try std.testing.expectEqual(second.len, second_result.progress.output_written);
+    try std.testing.expectEqualSlices(u8, second, out[0..second.len]);
 }
 
 test "incremental decoder reports checksum mismatch after corrupt payload" {
