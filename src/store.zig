@@ -579,6 +579,36 @@ pub fn decodeDictionaryPatchIntoWithPatchScratch(allocator: std.mem.Allocator, d
     return decodeDictionaryPatchIntoWithOptionalPatchScratch(allocator, dict, input, output, patch_scratch);
 }
 
+fn decodeDictionaryPatchIntoScratchOnly(dict: []const u8, input: []const u8, output: []u8, patch_scratch: []u8) Error!usize {
+    const info = try parseHeader(input);
+    const output_len = std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow;
+    if (output.len < output_len) return error.OutputTooSmall;
+    const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
+    const total_len = try encodedSize(payload_len);
+    if (input.len < total_len) return error.TruncatedFrame;
+    const payload = input[header_len..total_len];
+    switch (info.flags) {
+        flags_dictionary_patch => {
+            const written = try dictionary.decodePatchInto(dict, payload, output[0..output_len]);
+            if (written != output_len) return error.SizeMismatch;
+        },
+        flags_dictionary_deflate => {
+            const patch_limit = try dictionary.maxPatchSizeForDecodedLen(output_len);
+            if (patch_scratch.len < patch_limit) return error.OutputTooSmall;
+            const decoded = deflate.decodeRawAuto(payload, patch_scratch[0..patch_limit]) catch |err| switch (err) {
+                error.OutputTooSmall => return error.OutputLimitExceeded,
+                else => return err,
+            };
+            if (decoded.input_read != payload.len) return error.TrailingData;
+            const written = try dictionary.decodePatchInto(dict, patch_scratch[0..decoded.output_written], output[0..output_len]);
+            if (written != output_len) return error.SizeMismatch;
+        },
+        else => return error.CorruptFrame,
+    }
+    if (checksum.crc32(output[0..output_len]) != info.checksum) return error.ChecksumMismatch;
+    return output_len;
+}
+
 fn decodeDictionaryPatchIntoWithOptionalPatchScratch(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, output: []u8, patch_scratch: ?[]u8) !usize {
     const info = try parseHeader(input);
     const output_len = std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow;
@@ -1009,19 +1039,40 @@ pub const AnyDecoder = struct {
     done: bool = false,
     last_error_name: []const u8 = "",
 
+    pub const Buffers = struct {
+        payload_scratch: []u8,
+        patch_scratch: []u8 = &.{},
+    };
+
     pub fn init(frame: []const u8, scratch: []u8) Error!AnyDecoder {
         var self = AnyDecoder{};
         try self.reset(frame, scratch);
         return self;
     }
 
+    pub fn initWithDictionary(frame: []const u8, dictionary_bytes: []const u8, buffers: Buffers) Error!AnyDecoder {
+        var self = AnyDecoder{};
+        try self.resetWithDictionary(frame, dictionary_bytes, buffers);
+        return self;
+    }
+
     pub fn reset(self: *AnyDecoder, frame: []const u8, scratch: []u8) Error!void {
+        return self.resetWithOptionalDictionary(frame, null, .{ .payload_scratch = scratch });
+    }
+
+    pub fn resetWithDictionary(self: *AnyDecoder, frame: []const u8, dictionary_bytes: []const u8, buffers: Buffers) Error!void {
+        return self.resetWithOptionalDictionary(frame, dictionary_bytes, buffers);
+    }
+
+    fn resetWithOptionalDictionary(self: *AnyDecoder, frame: []const u8, dictionary_bytes: ?[]const u8, buffers: Buffers) Error!void {
         const info = try parseHeader(frame);
-        if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) return error.InvalidDictionaryTraining;
         const payload_len = std.math.cast(usize, info.stored_size) orelse return error.IntegerOverflow;
         const total_len = try encodedSize(payload_len);
         if (frame.len < total_len) return error.TruncatedFrame;
-        const output_len = try decodeAnyOutputLen(info);
+        const output_len = if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate)
+            std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow
+        else
+            try decodeAnyOutputLen(info);
         if (info.flags == flags_none) {
             if (payload_len != output_len) return error.CorruptFrame;
             self.* = .{
@@ -1031,9 +1082,12 @@ pub const AnyDecoder = struct {
             };
             return;
         }
-        if (scratch.len < output_len) return error.OutputTooSmall;
-        const target = scratch[0..output_len];
-        const written = try decodeAnyInto(frame, target);
+        if (buffers.payload_scratch.len < output_len) return error.OutputTooSmall;
+        const target = buffers.payload_scratch[0..output_len];
+        const written = if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) blk: {
+            const dict = dictionary_bytes orelse return error.InvalidDictionaryTraining;
+            break :blk try decodeDictionaryPatchIntoScratchOnly(dict, frame, target, buffers.patch_scratch);
+        } else try decodeAnyInto(frame, target);
         if (written != output_len) return error.SizeMismatch;
         self.* = .{
             .decoded = target,
@@ -4067,6 +4121,45 @@ test "any decoder borrows store frame payload and reports checksum errors" {
     try std.testing.expectError(error.ChecksumMismatch, corrupt_decoder.step(&out));
     try std.testing.expectEqualStrings("ChecksumMismatch", corrupt_decoder.snapshot().last_error_name);
     try std.testing.expectEqualStrings("payload_corrupt", corrupt_decoder.diagnostics().recoverability_hint_name);
+}
+
+test "any decoder drains dictionary frames from caller scratch" {
+    const dict = "alpha beta gamma dictionary deflate phrase";
+    const input = (dict ++ " -- payload ") ** 2;
+
+    const patch_frame = try encodeDictionaryPatchAlloc(std.testing.allocator, dict, input, 8);
+    defer std.testing.allocator.free(patch_frame);
+    var payload_scratch: [input.len]u8 = undefined;
+    var decoder = try AnyDecoder.initWithDictionary(patch_frame, dict, .{ .payload_scratch = payload_scratch[0..] });
+    try std.testing.expect(decoder.snapshot().verified);
+    var out: [input.len]u8 = undefined;
+    var first: [17]u8 = undefined;
+    var step_result = try decoder.step(&first);
+    @memcpy(out[0..first.len], &first);
+    try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
+    step_result = try decoder.step(out[first.len..]);
+    try std.testing.expectEqual(StepResult.Status.done, step_result.status);
+    try std.testing.expectEqualSlices(u8, input, &out);
+
+    const deflate_frame = try encodeDictionaryDeflateAlloc(std.testing.allocator, dict, input, 8);
+    defer std.testing.allocator.free(deflate_frame);
+    var deflate_payload_scratch: [input.len]u8 = undefined;
+    var patch_scratch: [try dictionary.maxPatchSizeForDecodedLen(input.len)]u8 = undefined;
+    try decoder.resetWithDictionary(deflate_frame, dict, .{
+        .payload_scratch = deflate_payload_scratch[0..],
+        .patch_scratch = patch_scratch[0..],
+    });
+    try std.testing.expect(decoder.snapshot().verified);
+    var deflate_out: [input.len]u8 = undefined;
+    step_result = try decoder.step(&deflate_out);
+    try std.testing.expectEqual(StepResult.Status.done, step_result.status);
+    try std.testing.expectEqualSlices(u8, input, &deflate_out);
+
+    try std.testing.expectError(error.InvalidDictionaryTraining, AnyDecoder.init(deflate_frame, deflate_payload_scratch[0..]));
+    try std.testing.expectError(error.OutputTooSmall, AnyDecoder.initWithDictionary(deflate_frame, dict, .{
+        .payload_scratch = deflate_payload_scratch[0..],
+        .patch_scratch = patch_scratch[0 .. patch_scratch.len - 1],
+    }));
 }
 
 test "incremental decoder accepts single-byte input and tiny output" {

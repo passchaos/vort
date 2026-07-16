@@ -168,8 +168,9 @@ cumulative frame input bytes when available, emitted output bytes, expected
 payload/frame length, remaining bytes, and the most recent error name/phase plus
 recoverability hint so callers can attach byte-accurate diagnostics to stalled or
 corrupt streaming sessions. `AnyDecoder` borrows store-frame payloads directly
-and uses caller-owned scratch for compressed non-dictionary frames before draining
-bounded output chunks.
+and uses caller-owned payload scratch for compressed native frames before draining
+bounded output chunks; dictionary-patch/deflate members additionally accept
+caller-owned patch scratch through `initWithDictionary`/`resetWithDictionary`.
 
 ## Range decode summary APIs
 

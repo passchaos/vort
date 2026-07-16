@@ -62,6 +62,8 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureConcatInto(allocator, deflate_rle_stream));
     try rows.append(allocator, try measureConcatAutoInto(allocator, dict_stream));
     try rows.append(allocator, try measureLimitedReject(allocator, deflate_rle_stream));
+    try rows.append(allocator, try measureAnyDecoderCompressed(allocator));
+    try rows.append(allocator, try measureAnyDecoderDictionaryDeflate(allocator));
     try rows.append(allocator, try measureRangeAlloc(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeInto(allocator, indexed_deflate_stream));
     try rows.append(allocator, try measureRangeIntoWithIndexBuffer(allocator, indexed_deflate_stream));
@@ -315,6 +317,39 @@ fn measureLimitedReject(backing: std.mem.Allocator, stream: []const u8) !CaseSta
     const output_len = std.math.cast(usize, summary.total_uncompressed) orelse return error.IntegerOverflow;
     try std.testing.expectError(error.OutputLimitExceeded, vort.storeDecodeConcatenatedAllocLimited(failing.allocator(), stream, output_len - 1));
     return stats("concat_limited_reject", stream.len, 0, failing);
+}
+
+fn measureAnyDecoderCompressed(backing: std.mem.Allocator) !CaseStats {
+    const input = "hello hello hello hello";
+    const frame = try vort.storeEncodeDeflateAlloc(backing, input);
+    defer backing.free(frame);
+    const scratch = try backing.alloc(u8, input.len);
+    defer backing.free(scratch);
+    var out: [input.len]u8 = undefined;
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    var decoder = try vort.StoreAnyDecoder.init(frame, scratch);
+    const result = try decoder.step(&out);
+    try std.testing.expectEqual(out.len, result.progress.output_written);
+    return stats("any_decoder_compressed_scratch", frame.len, result.progress.output_written, failing);
+}
+
+fn measureAnyDecoderDictionaryDeflate(backing: std.mem.Allocator) !CaseStats {
+    const frame = try vort.storeEncodeDictionaryDeflateAlloc(backing, dictionary_deflate_dict, dictionary_deflate_input, 8);
+    defer backing.free(frame);
+    const payload_scratch = try backing.alloc(u8, dictionary_deflate_input.len);
+    defer backing.free(payload_scratch);
+    const patch_scratch = try backing.alloc(u8, try vort.maxDictionaryPatchSizeForDecodedLen(dictionary_deflate_input.len));
+    defer backing.free(patch_scratch);
+    const out = try backing.alloc(u8, dictionary_deflate_input.len);
+    defer backing.free(out);
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    var decoder = try vort.StoreAnyDecoder.initWithDictionary(frame, dictionary_deflate_dict, .{
+        .payload_scratch = payload_scratch,
+        .patch_scratch = patch_scratch,
+    });
+    const result = try decoder.step(out);
+    try std.testing.expectEqual(out.len, result.progress.output_written);
+    return stats("any_decoder_dictionary_deflate_scratch", frame.len, result.progress.output_written, failing);
 }
 
 fn measureRangeAlloc(backing: std.mem.Allocator, stream: []const u8) !CaseStats {

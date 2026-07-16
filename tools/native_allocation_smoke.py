@@ -18,6 +18,8 @@ ZERO_ALLOCATION_CASES = [
     "concat_into",
     "concat_auto_into_embedded_dict",
     "concat_limited_reject",
+    "any_decoder_compressed_scratch",
+    "any_decoder_dictionary_deflate_scratch",
     "indexed_range_into_index_buffer",
     "indexed_partial_range_into_scratch",
     "sidecar_partial_range_into_scratch",

@@ -1780,8 +1780,8 @@ zig build run-native-allocation-report-dashboard
 
 This report records allocator activity for representative native decode paths so
 caller-owned APIs and allocation preflight optimizations have a retained
-regression baseline. It includes deflate, LDM, and dictionary-deflate range plus
-validation rows that prove caller-owned index, payload, and patch scratch buffers
+regression baseline. It includes AnyDecoder, deflate, LDM, and dictionary-deflate
+range plus validation rows that prove caller-owned index, payload, and patch scratch buffers
 sized through the public range and validation preflight helpers keep full-frame,
 embedded/sidecar partial, auto, and self-contained range decode plus embedded
 and sidecar deflate/LDM validation/report-producing validation paths allocation-free.
@@ -1846,9 +1846,9 @@ zig build run-native-allocation-smoke
 ```
 
 This smoke report gates the allocation report by requiring selected
-caller-owned/native decode paths to remain zero-allocation, including embedded
-and sidecar partial deflate/LDM range decode, embedded/sidecar deflate/LDM
-validation, and dictionary-deflate range/validation with caller-owned
+caller-owned/native decode paths to remain zero-allocation, including AnyDecoder,
+embedded and sidecar partial deflate/LDM range decode, embedded/sidecar
+deflate/LDM validation, and dictionary-deflate range/validation with caller-owned
 payload/patch scratch.
 
 Top-level fields:
