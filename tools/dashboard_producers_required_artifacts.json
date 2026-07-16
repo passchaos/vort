@@ -286,6 +286,27 @@
       "producer_step": "zig build run-validation-json-dashboard",
       "required_smoke_gate": true,
       "smoke_gate": "zig build run-validation-json-dashboard"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-native-allocation-report.json",
+      "producer_step": "zig build run-native-allocation-report-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-allocation-report-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-native-allocation-report.md",
+      "producer_step": "zig build run-native-allocation-report-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-allocation-report-dashboard"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-native-allocation-smoke.json",
+      "producer_step": "zig build run-native-allocation-smoke",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-allocation-smoke"
     }
   ],
   "schema": "vort.dashboard_producers_required_artifacts",
