@@ -571,6 +571,14 @@ fn decodeDictionaryPatchAllocKnownLen(allocator: std.mem.Allocator, dict: []cons
 }
 
 pub fn decodeDictionaryPatchInto(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, output: []u8) !usize {
+    return decodeDictionaryPatchIntoWithOptionalPatchScratch(allocator, dict, input, output, null);
+}
+
+pub fn decodeDictionaryPatchIntoWithPatchScratch(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, output: []u8, patch_scratch: []u8) !usize {
+    return decodeDictionaryPatchIntoWithOptionalPatchScratch(allocator, dict, input, output, patch_scratch);
+}
+
+fn decodeDictionaryPatchIntoWithOptionalPatchScratch(allocator: std.mem.Allocator, dict: []const u8, input: []const u8, output: []u8, patch_scratch: ?[]u8) !usize {
     const info = try parseHeader(input);
     const output_len = std.math.cast(usize, info.uncompressed_size) orelse return error.IntegerOverflow;
     if (output.len < output_len) return error.OutputTooSmall;
@@ -586,14 +594,26 @@ pub fn decodeDictionaryPatchInto(allocator: std.mem.Allocator, dict: []const u8,
         flags_dictionary_deflate => {
             // A deflate-wrapped dictionary frame still has to inflate the patch
             // payload first because the patch header is inside the compressed
-            // stream. The final patch materialization nevertheless writes into
-            // the caller-owned frame output buffer instead of allocating the
-            // decoded user payload.
+            // stream. When callers provide patch_scratch, bound the inflate to
+            // the maximum valid patch encoding for the advertised decoded size;
+            // this preserves the allocation-returning OutputLimitExceeded guard
+            // while avoiding an intermediate heap allocation.
             const patch_limit = try dictionary.maxPatchSizeForDecodedLen(output_len);
-            const patch = try deflate.decodeRawAutoAllocLimited(allocator, payload, patch_limit);
-            defer allocator.free(patch);
-            const written = try dictionary.decodePatchInto(dict, patch, output[0..output_len]);
-            if (written != output_len) return error.SizeMismatch;
+            if (patch_scratch) |buffer| {
+                if (buffer.len < patch_limit) return error.OutputTooSmall;
+                const decoded = deflate.decodeRawAuto(payload, buffer[0..patch_limit]) catch |err| switch (err) {
+                    error.OutputTooSmall => return error.OutputLimitExceeded,
+                    else => return err,
+                };
+                if (decoded.input_read != payload.len) return error.TrailingData;
+                const written = try dictionary.decodePatchInto(dict, buffer[0..decoded.output_written], output[0..output_len]);
+                if (written != output_len) return error.SizeMismatch;
+            } else {
+                const patch = try deflate.decodeRawAutoAllocLimited(allocator, payload, patch_limit);
+                defer allocator.free(patch);
+                const written = try dictionary.decodePatchInto(dict, patch, output[0..output_len]);
+                if (written != output_len) return error.SizeMismatch;
+            }
         },
         else => return error.CorruptFrame,
     }
@@ -2385,7 +2405,16 @@ pub const SidecarValidationOptions = struct {
 pub const SidecarValidationBuffers = struct {
     index_buffer: []FrameIndexEntry,
     payload_scratch: []u8,
+    /// Scratch used only when full validation decodes dictionary-deflate
+    /// frames. These frames first inflate a dictionary patch before applying it
+    /// to payload_scratch; callers that need validation to stay allocation-free
+    /// must size this to maxDictionaryPatchSizeForDecodedLen(max frame output).
+    patch_scratch: []u8 = &.{},
 };
+
+fn validationPatchScratch(buffers: SidecarValidationBuffers) ?[]u8 {
+    return if (buffers.patch_scratch.len == 0) null else buffers.patch_scratch;
+}
 
 pub const ValidationStage = enum {
     index_decode,
@@ -2447,12 +2476,12 @@ pub fn validateSidecarIndexWithOptionsAlloc(allocator: std.mem.Allocator, input:
 pub fn validateSidecarIndexWithOptionsAndBuffersAlloc(allocator: std.mem.Allocator, input: []const u8, sidecar_index: []const u8, options: SidecarValidationOptions, buffers: SidecarValidationBuffers) !void {
     const count = try decodeFrameIndex(sidecar_index, buffers.index_buffer);
     const index = buffers.index_buffer[0..count];
-    if (options.mode == .metadata) return validateFrameIndexEntriesInternalWithScratch(allocator, options.dictionary, input, index, options, buffers.payload_scratch);
-    if (options.dictionary) |dict| return validateFrameIndexEntriesInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch);
+    if (options.mode == .metadata) return validateFrameIndexEntriesInternalWithScratch(allocator, options.dictionary, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
+    if (options.dictionary) |dict| return validateFrameIndexEntriesInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
     if (parseEmbeddedDictionary(input)) |dict| {
-        return validateFrameIndexEntriesInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch);
+        return validateFrameIndexEntriesInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
     } else |err| switch (err) {
-        error.InvalidMagic => return validateFrameIndexEntriesInternalWithScratch(allocator, null, input, index, options, buffers.payload_scratch),
+        error.InvalidMagic => return validateFrameIndexEntriesInternalWithScratch(allocator, null, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers)),
         else => return err,
     }
 }
@@ -2473,12 +2502,12 @@ pub fn validateSidecarIndexReportWithOptionsAndBuffersAlloc(allocator: std.mem.A
         return validationFailure(options.mode, .index_decode, err, null, null, null);
     };
     const index = buffers.index_buffer[0..count];
-    if (options.mode == .metadata) return validateFrameIndexEntriesReportInternalWithScratch(allocator, options.dictionary, input, index, options, buffers.payload_scratch);
-    if (options.dictionary) |dict| return validateFrameIndexEntriesReportInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch);
+    if (options.mode == .metadata) return validateFrameIndexEntriesReportInternalWithScratch(allocator, options.dictionary, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
+    if (options.dictionary) |dict| return validateFrameIndexEntriesReportInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
     if (parseEmbeddedDictionary(input)) |dict| {
-        return validateFrameIndexEntriesReportInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch);
+        return validateFrameIndexEntriesReportInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
     } else |err| switch (err) {
-        error.InvalidMagic => return validateFrameIndexEntriesReportInternalWithScratch(allocator, null, input, index, options, buffers.payload_scratch),
+        error.InvalidMagic => return validateFrameIndexEntriesReportInternalWithScratch(allocator, null, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers)),
         else => return validationFailure(options.mode, .dictionary_parse, err, null, null, null),
     }
 }
@@ -2507,12 +2536,12 @@ pub fn validateEmbeddedIndexWithOptionsAlloc(allocator: std.mem.Allocator, input
 pub fn validateEmbeddedIndexWithOptionsAndBuffersAlloc(allocator: std.mem.Allocator, input: []const u8, options: SidecarValidationOptions, buffers: SidecarValidationBuffers) !void {
     const decoded_index = try decodeEmbeddedIndex(input, buffers.index_buffer);
     const index = buffers.index_buffer[0..decoded_index.entries_written];
-    if (options.mode == .metadata) return validateFrameIndexEntriesInternalWithScratch(allocator, options.dictionary, input, index, options, buffers.payload_scratch);
-    if (options.dictionary) |dict| return validateFrameIndexEntriesInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch);
+    if (options.mode == .metadata) return validateFrameIndexEntriesInternalWithScratch(allocator, options.dictionary, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
+    if (options.dictionary) |dict| return validateFrameIndexEntriesInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
     if (parseEmbeddedDictionary(input)) |dict| {
-        return validateFrameIndexEntriesInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch);
+        return validateFrameIndexEntriesInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
     } else |err| switch (err) {
-        error.InvalidMagic => return validateFrameIndexEntriesInternalWithScratch(allocator, null, input, index, options, buffers.payload_scratch),
+        error.InvalidMagic => return validateFrameIndexEntriesInternalWithScratch(allocator, null, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers)),
         else => return err,
     }
 }
@@ -2537,12 +2566,12 @@ pub fn validateEmbeddedIndexReportWithOptionsAndBuffersAlloc(allocator: std.mem.
         return validationFailure(options.mode, .index_decode, err, null, null, null);
     };
     const index = buffers.index_buffer[0..decoded_index.entries_written];
-    if (options.mode == .metadata) return validateFrameIndexEntriesReportInternalWithScratch(allocator, options.dictionary, input, index, options, buffers.payload_scratch);
-    if (options.dictionary) |dict| return validateFrameIndexEntriesReportInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch);
+    if (options.mode == .metadata) return validateFrameIndexEntriesReportInternalWithScratch(allocator, options.dictionary, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
+    if (options.dictionary) |dict| return validateFrameIndexEntriesReportInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
     if (parseEmbeddedDictionary(input)) |dict| {
-        return validateFrameIndexEntriesReportInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch);
+        return validateFrameIndexEntriesReportInternalWithScratch(allocator, dict, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers));
     } else |err| switch (err) {
-        error.InvalidMagic => return validateFrameIndexEntriesReportInternalWithScratch(allocator, null, input, index, options, buffers.payload_scratch),
+        error.InvalidMagic => return validateFrameIndexEntriesReportInternalWithScratch(allocator, null, input, index, options, buffers.payload_scratch, validationPatchScratch(buffers)),
         else => return validationFailure(options.mode, .dictionary_parse, err, null, null, null),
     }
 }
@@ -2554,7 +2583,7 @@ fn validateSidecarIndexInternalAlloc(allocator: std.mem.Allocator, dict: ?[]cons
 }
 
 fn validateFrameIndexEntriesInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, options: SidecarValidationOptions) !void {
-    return validateFrameIndexEntriesInternalWithScratch(allocator, dict, input, index, options, null);
+    return validateFrameIndexEntriesInternalWithScratch(allocator, dict, input, index, options, null, null);
 }
 
 fn validateFrameIndexEntriesInternalWithScratch(
@@ -2564,6 +2593,7 @@ fn validateFrameIndexEntriesInternalWithScratch(
     index: []const FrameIndexEntry,
     options: SidecarValidationOptions,
     payload_scratch: ?[]u8,
+    patch_scratch: ?[]u8,
 ) !void {
     try validateFrameIndex(index);
     const summary = try summarizeFrameIndex(index);
@@ -2598,7 +2628,7 @@ fn validateFrameIndexEntriesInternalWithScratch(
         };
         const written = if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) blk: {
             const dictionary_bytes = dict orelse return error.InvalidDictionaryTraining;
-            break :blk try decodeDictionaryPatchInto(allocator, dictionary_bytes, frame, target);
+            break :blk try decodeDictionaryPatchIntoWithOptionalPatchScratch(allocator, dictionary_bytes, frame, target, patch_scratch);
         } else try decodeAnyInto(frame, target);
         if (written != target.len) return error.SizeMismatch;
     }
@@ -2622,7 +2652,7 @@ fn validateSidecarIndexReportInternalAlloc(allocator: std.mem.Allocator, dict: ?
 }
 
 fn validateFrameIndexEntriesReportInternalAlloc(allocator: std.mem.Allocator, dict: ?[]const u8, input: []const u8, index: []const FrameIndexEntry, options: SidecarValidationOptions) ValidationReport {
-    return validateFrameIndexEntriesReportInternalWithScratch(allocator, dict, input, index, options, null);
+    return validateFrameIndexEntriesReportInternalWithScratch(allocator, dict, input, index, options, null, null);
 }
 
 fn validateFrameIndexEntriesReportInternalWithScratch(
@@ -2632,6 +2662,7 @@ fn validateFrameIndexEntriesReportInternalWithScratch(
     index: []const FrameIndexEntry,
     options: SidecarValidationOptions,
     payload_scratch: ?[]u8,
+    patch_scratch: ?[]u8,
 ) ValidationReport {
     validateFrameIndex(index) catch |err| return validationFailure(options.mode, .index_structure, err, null, null, null);
     const summary = summarizeFrameIndex(index) catch |err| return validationFailure(options.mode, .index_structure, err, null, null, null);
@@ -2660,7 +2691,7 @@ fn validateFrameIndexEntriesReportInternalWithScratch(
         };
         const written = if (info.flags == flags_dictionary_patch or info.flags == flags_dictionary_deflate) blk: {
             const dictionary_bytes = dict orelse return validationFailure(options.mode, .payload_decode, error.InvalidDictionaryTraining, i, entry, info.flags);
-            break :blk decodeDictionaryPatchInto(allocator, dictionary_bytes, frame, target) catch |err| return validationFailure(options.mode, .payload_decode, err, i, entry, info.flags);
+            break :blk decodeDictionaryPatchIntoWithOptionalPatchScratch(allocator, dictionary_bytes, frame, target, patch_scratch) catch |err| return validationFailure(options.mode, .payload_decode, err, i, entry, info.flags);
         } else decodeAnyInto(frame, target) catch |err| return validationFailure(options.mode, .payload_decode, err, i, entry, info.flags);
         if (written != target.len) return validationFailure(options.mode, .payload_decode, error.SizeMismatch, i, entry, info.flags);
     }
@@ -4251,6 +4282,52 @@ test "sidecar index validator supports caller-supplied dictionaries" {
     try std.testing.expectError(error.InvalidDictionaryTraining, validateSidecarIndexAlloc(std.testing.allocator, frame, sidecar));
 }
 
+test "dictionary deflate validation reuses caller patch scratch" {
+    const dict = "dictionary deflate validation phrase";
+    const input = (dict ++ " -- payload ") ** 2;
+    const frame = try encodeDictionaryDeflateAlloc(std.testing.allocator, dict, input, 8);
+    defer std.testing.allocator.free(frame);
+    const index = try buildFrameIndexAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(index);
+    const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, index);
+    defer std.testing.allocator.free(sidecar);
+    const index_frame = try encodeSkippableAlloc(std.testing.allocator, sidecar);
+    defer std.testing.allocator.free(index_frame);
+
+    var stream = std.ArrayList(u8).empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, frame);
+    try stream.appendSlice(std.testing.allocator, index_frame);
+
+    var index_buffer: [1]FrameIndexEntry = undefined;
+    var payload_scratch: [input.len]u8 = undefined;
+    var patch_scratch: [try dictionary.maxPatchSizeForDecodedLen(input.len)]u8 = undefined;
+    const buffers: SidecarValidationBuffers = .{
+        .index_buffer = index_buffer[0..],
+        .payload_scratch = payload_scratch[0..],
+        .patch_scratch = patch_scratch[0..],
+    };
+
+    try validateSidecarIndexWithOptionsAndBuffersAlloc(std.testing.failing_allocator, frame, sidecar, .{ .mode = .full, .dictionary = dict }, buffers);
+    const sidecar_report = validateSidecarIndexReportWithOptionsAndBuffersAlloc(std.testing.failing_allocator, frame, sidecar, .{ .mode = .full, .dictionary = dict }, buffers);
+    try std.testing.expect(sidecar_report.ok);
+
+    try validateEmbeddedIndexWithOptionsAndBuffersAlloc(std.testing.failing_allocator, stream.items, .{ .mode = .full, .dictionary = dict }, buffers);
+    const embedded_report = validateEmbeddedIndexReportWithOptionsAndBuffersAlloc(std.testing.failing_allocator, stream.items, .{ .mode = .full, .dictionary = dict }, buffers);
+    try std.testing.expect(embedded_report.ok);
+
+    var short_patch_scratch: [patch_scratch.len - 1]u8 = undefined;
+    const short_buffers: SidecarValidationBuffers = .{
+        .index_buffer = index_buffer[0..],
+        .payload_scratch = payload_scratch[0..],
+        .patch_scratch = short_patch_scratch[0..],
+    };
+    try std.testing.expectError(error.OutputTooSmall, validateSidecarIndexWithOptionsAndBuffersAlloc(std.testing.failing_allocator, frame, sidecar, .{ .mode = .full, .dictionary = dict }, short_buffers));
+    const short_report = validateSidecarIndexReportWithOptionsAndBuffersAlloc(std.testing.failing_allocator, frame, sidecar, .{ .mode = .full, .dictionary = dict }, short_buffers);
+    try std.testing.expect(!short_report.ok);
+    try std.testing.expectEqualStrings("OutputTooSmall", short_report.error_name);
+}
+
 test "sidecar index auto range decode uses embedded dictionary when present" {
     const phrase = "self-contained dictionary phrase for native streams";
     const input = (phrase ++ "!") ** 3;
@@ -4915,6 +4992,15 @@ test "native dictionary deflate frame decodes into caller buffer" {
     try std.testing.expectEqualSlices(u8, input, exact);
 
     try std.testing.expectError(error.OutputLimitExceeded, decodeDictionaryPatchAllocLimited(std.testing.allocator, dict, frame, input.len - 1));
+
+    var scratch_out: [input.len]u8 = undefined;
+    var patch_scratch: [try dictionary.maxPatchSizeForDecodedLen(input.len)]u8 = undefined;
+    const scratch_written = try decodeDictionaryPatchIntoWithPatchScratch(std.testing.failing_allocator, dict, frame, &scratch_out, patch_scratch[0..]);
+    try std.testing.expectEqual(scratch_out.len, scratch_written);
+    try std.testing.expectEqualSlices(u8, input, &scratch_out);
+
+    var short_patch_scratch: [patch_scratch.len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodeDictionaryPatchIntoWithPatchScratch(std.testing.failing_allocator, dict, frame, &scratch_out, short_patch_scratch[0..]));
 }
 
 test "native dictionary deflate patch inflate is bounded by decoded size" {
@@ -4941,6 +5027,8 @@ test "native dictionary deflate patch inflate is bounded by decoded size" {
 
     var out: [0]u8 = .{};
     try std.testing.expectError(error.OutputLimitExceeded, decodeDictionaryPatchInto(std.testing.allocator, "", frame, &out));
+    var patch_scratch: [try dictionary.maxPatchSizeForDecodedLen(0)]u8 = undefined;
+    try std.testing.expectError(error.OutputLimitExceeded, decodeDictionaryPatchIntoWithPatchScratch(std.testing.failing_allocator, "", frame, &out, patch_scratch[0..]));
 }
 
 test "full dictionary deflate frame range decodes into caller buffer" {

@@ -11,6 +11,9 @@ const CaseStats = struct {
     freed_bytes: usize,
 };
 
+const dictionary_deflate_dict = "dictionary deflate validation phrase";
+const dictionary_deflate_input = (dictionary_deflate_dict ++ " -- payload ") ** 2;
+
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
@@ -40,6 +43,8 @@ pub fn main(init: std.process.Init) !void {
     defer allocator.free(dict_stream);
     const dict_indexed_stream = try buildDictionaryPatchIndexedStream(allocator);
     defer allocator.free(dict_indexed_stream);
+    const dict_deflate_indexed_stream = try buildDictionaryDeflateIndexedStream(allocator);
+    defer allocator.free(dict_deflate_indexed_stream);
     const self_contained_dict_stream = try vort.storeEncodeSelfContainedDictionaryStreamAlloc(
         allocator,
         ("self-contained dictionary phrase for native streams" ++ "!") ** 3,
@@ -64,6 +69,8 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureEmbeddedValidation(allocator, self_contained_dict_stream));
     try rows.append(allocator, try measureEmbeddedValidationWithBuffers(allocator, indexed_store_stream));
     try rows.append(allocator, try measureEmbeddedValidationReportWithBuffers(allocator, indexed_store_stream));
+    try rows.append(allocator, try measureDictionaryDeflateValidationWithBuffers(allocator, dict_deflate_indexed_stream));
+    try rows.append(allocator, try measureDictionaryDeflateValidationReportWithBuffers(allocator, dict_deflate_indexed_stream));
 
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
@@ -190,6 +197,22 @@ fn buildDictionaryPatchIndexedStream(allocator: std.mem.Allocator) ![]u8 {
     const dict = "alpha beta gamma";
     const input = "zz alpha beta yy gamma";
     const frame = try vort.storeEncodeDictionaryPatchAlloc(allocator, dict, input, 5);
+    defer allocator.free(frame);
+    const index = try vort.storeBuildFrameIndexAlloc(allocator, frame);
+    defer allocator.free(index);
+    const index_bytes = try vort.storeEncodeFrameIndexAlloc(allocator, index);
+    defer allocator.free(index_bytes);
+    const index_frame = try vort.storeEncodeSkippableAlloc(allocator, index_bytes);
+    defer allocator.free(index_frame);
+    var stream = std.ArrayList(u8).empty;
+    errdefer stream.deinit(allocator);
+    try stream.appendSlice(allocator, frame);
+    try stream.appendSlice(allocator, index_frame);
+    return stream.toOwnedSlice(allocator);
+}
+
+fn buildDictionaryDeflateIndexedStream(allocator: std.mem.Allocator) ![]u8 {
+    const frame = try vort.storeEncodeDictionaryDeflateAlloc(allocator, dictionary_deflate_dict, dictionary_deflate_input, 8);
     defer allocator.free(frame);
     const index = try vort.storeBuildFrameIndexAlloc(allocator, frame);
     defer allocator.free(index);
@@ -366,6 +389,41 @@ fn measureEmbeddedValidationReportWithBuffers(backing: std.mem.Allocator, stream
     });
     try std.testing.expect(report.ok);
     return stats("embedded_validation_report_with_buffers", stream.len, 0, failing);
+}
+
+fn measureDictionaryDeflateValidationWithBuffers(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const view = try vort.storeViewEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, view.entry_count);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, dictionary_deflate_input.len);
+    defer backing.free(payload_scratch);
+    const patch_scratch = try backing.alloc(u8, try vort.maxDictionaryPatchSizeForDecodedLen(dictionary_deflate_input.len));
+    defer backing.free(patch_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    try vort.storeValidateEmbeddedIndexWithOptionsAndBuffersAlloc(failing.allocator(), stream, .{ .mode = .full, .dictionary = dictionary_deflate_dict }, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+        .patch_scratch = patch_scratch,
+    });
+    return stats("dictionary_deflate_validation_with_buffers", stream.len, 0, failing);
+}
+
+fn measureDictionaryDeflateValidationReportWithBuffers(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
+    const view = try vort.storeViewEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, view.entry_count);
+    defer backing.free(index_buffer);
+    const payload_scratch = try backing.alloc(u8, dictionary_deflate_input.len);
+    defer backing.free(payload_scratch);
+    const patch_scratch = try backing.alloc(u8, try vort.maxDictionaryPatchSizeForDecodedLen(dictionary_deflate_input.len));
+    defer backing.free(patch_scratch);
+    var failing = std.testing.FailingAllocator.init(backing, .{});
+    const report = vort.storeValidateEmbeddedIndexReportWithOptionsAndBuffersAlloc(failing.allocator(), stream, .{ .mode = .full, .dictionary = dictionary_deflate_dict }, .{
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+        .patch_scratch = patch_scratch,
+    });
+    try std.testing.expect(report.ok);
+    return stats("dictionary_deflate_validation_report_with_buffers", stream.len, 0, failing);
 }
 
 fn stats(name: []const u8, input_len: usize, output_len: usize, failing: std.testing.FailingAllocator) CaseStats {

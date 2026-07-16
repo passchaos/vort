@@ -61,6 +61,7 @@ pub const storeDecodeDictionaryPatchAlloc = store.decodeDictionaryPatchAlloc;
 pub const storeDecodeDictionaryPatchAllocExactSize = store.decodeDictionaryPatchAllocExactSize;
 pub const storeDecodeDictionaryPatchAllocLimited = store.decodeDictionaryPatchAllocLimited;
 pub const storeDecodeDictionaryPatchInto = store.decodeDictionaryPatchInto;
+pub const storeDecodeDictionaryPatchIntoWithPatchScratch = store.decodeDictionaryPatchIntoWithPatchScratch;
 pub const storeDecodeAlloc = store.decodeAlloc;
 pub const storeDecodeConcatenatedAlloc = store.decodeConcatenatedAlloc;
 pub const storeDecodeConcatenatedAllocExactSize = store.decodeConcatenatedAllocExactSize;

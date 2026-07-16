@@ -67,6 +67,8 @@ architecture blindly.
 - [x] Native allocation smoke/report artifacts are validated by the shared JSON schema manifest.
 - [x] Native allocation report/smoke artifacts are indexed in the dashboard producer manifests.
 - [x] Native allocation negative smoke artifact is indexed in the dashboard producer manifests.
+- [x] Dictionary-deflate validation can reuse caller-owned patch scratch for zero-allocation full validation and reports.
+- [x] Native allocation report/smoke gates dictionary-deflate validation buffer paths at zero allocations.
 - [x] Embedded dictionary inspection validates dictionary metadata without allocating dictionary bytes.
 - [x] Embedded dictionary inspection options enforce expected dictionary ID and content length.
 - [x] Auto dictionary range/validation/concatenated decode paths borrow embedded dictionary bytes instead of copying them.
