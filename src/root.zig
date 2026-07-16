@@ -311,6 +311,7 @@ pub const decodeZlibStored = deflate.decodeZlibStored;
 pub const decodeZlibStoredWithDictionary = deflate.decodeZlibStoredWithDictionary;
 pub const ZlibDecoder = deflate.ZlibDecoder;
 pub const PngFilterMethod = deflate.PngFilterMethod;
+pub const PngZlibScanlineDecoder = deflate.PngZlibScanlineDecoder;
 pub const reconstructPngScanline = deflate.reconstructPngScanline;
 pub const encodeZlibStoredAlloc = deflate.encodeZlibStoredAlloc;
 pub const encodeZlibStoredWithDictionaryAlloc = deflate.encodeZlibStoredWithDictionaryAlloc;
