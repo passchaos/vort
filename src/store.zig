@@ -983,6 +983,35 @@ pub fn decodeFrameIndexAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return entries;
 }
 
+const SerializedFrameIndexSizing = struct {
+    entry_count: usize,
+    max_uncompressed_len: usize,
+};
+
+fn serializedFrameIndexSizing(input: []const u8) Error!SerializedFrameIndexSizing {
+    const count = try frameIndexEntryCount(input);
+    var max_uncompressed_len: usize = 0;
+    var offset: usize = serialized_index_header_len;
+    for (0..count) |_| {
+        // Keep this sizing scan as strict as decodeFrameIndex for fields that
+        // can be checked without caller-owned entry storage. The full structural
+        // ordering checks still happen when callers decode/validate the index.
+        const frame_offset = std.mem.readInt(u64, input[offset..][0..8], .little);
+        const frame_len = std.mem.readInt(u64, input[offset + 8 ..][0..8], .little);
+        _ = std.math.cast(usize, frame_offset) orelse return error.IntegerOverflow;
+        _ = std.math.cast(usize, frame_len) orelse return error.IntegerOverflow;
+        const uncompressed_len = std.mem.readInt(u64, input[offset + 24 ..][0..8], .little);
+        const len = std.math.cast(usize, uncompressed_len) orelse return error.IntegerOverflow;
+        max_uncompressed_len = @max(max_uncompressed_len, len);
+        if (std.mem.readInt(u32, input[offset + 36 ..][0..4], .little) != 0) return error.CorruptFrame;
+        offset += serialized_index_entry_len;
+    }
+    return .{
+        .entry_count = count,
+        .max_uncompressed_len = max_uncompressed_len,
+    };
+}
+
 pub fn validateFrameIndex(index: []const FrameIndexEntry) Error!void {
     var expected_uncompressed: u64 = 0;
     var previous_frame_end: usize = 0;
@@ -1087,6 +1116,12 @@ pub const DictionaryRangeDecodeBuffers = struct {
     patch_scratch: []u8 = &.{},
 };
 
+pub const DictionaryRangeBufferSizes = struct {
+    index_entries: usize,
+    payload_scratch_len: usize,
+    patch_scratch_len: usize,
+};
+
 const RangeDecodeScratch = struct {
     payload_scratch: ?[]u8 = null,
     patch_scratch: ?[]u8 = null,
@@ -1097,6 +1132,29 @@ fn dictionaryRangeScratch(buffers: DictionaryRangeDecodeBuffers) RangeDecodeScra
         .payload_scratch = if (buffers.payload_scratch.len == 0) null else buffers.payload_scratch,
         .patch_scratch = if (buffers.patch_scratch.len == 0) null else buffers.patch_scratch,
     };
+}
+
+pub fn dictionaryRangeBufferSizesForIndex(index: []const FrameIndexEntry) Error!DictionaryRangeBufferSizes {
+    const payload_scratch_len = try maxIndexedFramePayloadLen(index);
+    return .{
+        .index_entries = index.len,
+        .payload_scratch_len = payload_scratch_len,
+        .patch_scratch_len = try dictionary.maxPatchSizeForDecodedLen(payload_scratch_len),
+    };
+}
+
+pub fn dictionaryRangeBufferSizesForSidecarIndex(sidecar_index: []const u8) Error!DictionaryRangeBufferSizes {
+    const sizing = try serializedFrameIndexSizing(sidecar_index);
+    return .{
+        .index_entries = sizing.entry_count,
+        .payload_scratch_len = sizing.max_uncompressed_len,
+        .patch_scratch_len = try dictionary.maxPatchSizeForDecodedLen(sizing.max_uncompressed_len),
+    };
+}
+
+pub fn dictionaryRangeBufferSizesForEmbeddedIndex(input: []const u8) Error!DictionaryRangeBufferSizes {
+    const view = try viewEmbeddedIndex(input);
+    return dictionaryRangeBufferSizesForSidecarIndex(view.payload);
 }
 
 pub const RangeBatchDecodeResult = struct {
@@ -4377,6 +4435,7 @@ test "dictionary deflate validation reuses caller patch scratch" {
     defer std.testing.allocator.free(index);
     const sidecar = try encodeFrameIndexAlloc(std.testing.allocator, index);
     defer std.testing.allocator.free(sidecar);
+    const index_sizes = try dictionaryRangeBufferSizesForSidecarIndex(sidecar);
     const index_frame = try encodeSkippableAlloc(std.testing.allocator, sidecar);
     defer std.testing.allocator.free(index_frame);
 
@@ -4385,13 +4444,16 @@ test "dictionary deflate validation reuses caller patch scratch" {
     try stream.appendSlice(std.testing.allocator, frame);
     try stream.appendSlice(std.testing.allocator, index_frame);
 
-    var index_buffer: [1]FrameIndexEntry = undefined;
-    var payload_scratch: [input.len]u8 = undefined;
-    var patch_scratch: [try dictionary.maxPatchSizeForDecodedLen(input.len)]u8 = undefined;
+    const index_buffer = try std.testing.allocator.alloc(FrameIndexEntry, index_sizes.index_entries);
+    defer std.testing.allocator.free(index_buffer);
+    const payload_scratch = try std.testing.allocator.alloc(u8, index_sizes.payload_scratch_len);
+    defer std.testing.allocator.free(payload_scratch);
+    const patch_scratch = try std.testing.allocator.alloc(u8, index_sizes.patch_scratch_len);
+    defer std.testing.allocator.free(patch_scratch);
     const buffers: SidecarValidationBuffers = .{
-        .index_buffer = index_buffer[0..],
-        .payload_scratch = payload_scratch[0..],
-        .patch_scratch = patch_scratch[0..],
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+        .patch_scratch = patch_scratch,
     };
 
     try validateSidecarIndexWithOptionsAndBuffersAlloc(std.testing.failing_allocator, frame, sidecar, .{ .mode = .full, .dictionary = dict }, buffers);
@@ -4402,11 +4464,12 @@ test "dictionary deflate validation reuses caller patch scratch" {
     const embedded_report = validateEmbeddedIndexReportWithOptionsAndBuffersAlloc(std.testing.failing_allocator, stream.items, .{ .mode = .full, .dictionary = dict }, buffers);
     try std.testing.expect(embedded_report.ok);
 
-    var short_patch_scratch: [patch_scratch.len - 1]u8 = undefined;
+    const short_patch_scratch = try std.testing.allocator.alloc(u8, patch_scratch.len - 1);
+    defer std.testing.allocator.free(short_patch_scratch);
     const short_buffers: SidecarValidationBuffers = .{
-        .index_buffer = index_buffer[0..],
-        .payload_scratch = payload_scratch[0..],
-        .patch_scratch = short_patch_scratch[0..],
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+        .patch_scratch = short_patch_scratch,
     };
     try std.testing.expectError(error.OutputTooSmall, validateSidecarIndexWithOptionsAndBuffersAlloc(std.testing.failing_allocator, frame, sidecar, .{ .mode = .full, .dictionary = dict }, short_buffers));
     const short_report = validateSidecarIndexReportWithOptionsAndBuffersAlloc(std.testing.failing_allocator, frame, sidecar, .{ .mode = .full, .dictionary = dict }, short_buffers);
@@ -5165,6 +5228,15 @@ test "dictionary deflate indexed stream supports batch range summaries" {
     try stream.appendSlice(std.testing.allocator, frame);
     try stream.appendSlice(std.testing.allocator, index_frame);
 
+    const index_sizes = try dictionaryRangeBufferSizesForIndex(index);
+    try std.testing.expectEqual(@as(usize, 1), index_sizes.index_entries);
+    try std.testing.expectEqual(input.len, index_sizes.payload_scratch_len);
+    try std.testing.expectEqual(try dictionary.maxPatchSizeForDecodedLen(input.len), index_sizes.patch_scratch_len);
+    const sidecar_sizes = try dictionaryRangeBufferSizesForSidecarIndex(index_bytes);
+    try std.testing.expectEqual(index_sizes, sidecar_sizes);
+    const embedded_sizes = try dictionaryRangeBufferSizesForEmbeddedIndex(stream.items);
+    try std.testing.expectEqual(index_sizes, embedded_sizes);
+
     const batch = try decodeIndexedRangesWithDictionarySummaryAlloc(std.testing.allocator, dict, stream.items, &.{
         .{ .offset = 0, .length = 16 },
         .{ .offset = 9, .length = 32 },
@@ -5188,16 +5260,18 @@ test "dictionary deflate indexed stream supports batch range summaries" {
     try std.testing.expectEqual(checksum.crc32(&second), results[1].crc32);
 
     var full: [input.len]u8 = undefined;
-    var index_buffer: [1]FrameIndexEntry = undefined;
-    var patch_scratch: [try dictionary.maxPatchSizeForDecodedLen(input.len)]u8 = undefined;
-    const embedded_result = try decodeIndexedRangeWithDictionaryIntoWithBuffers(std.testing.failing_allocator, dict, stream.items, 0, full.len, full[0..], .{ .index_buffer = index_buffer[0..], .patch_scratch = patch_scratch[0..] });
+    const index_buffer = try std.testing.allocator.alloc(FrameIndexEntry, index_sizes.index_entries);
+    defer std.testing.allocator.free(index_buffer);
+    const patch_scratch = try std.testing.allocator.alloc(u8, index_sizes.patch_scratch_len);
+    defer std.testing.allocator.free(patch_scratch);
+    const embedded_result = try decodeIndexedRangeWithDictionaryIntoWithBuffers(std.testing.failing_allocator, dict, stream.items, 0, full.len, full[0..], .{ .index_buffer = index_buffer, .patch_scratch = patch_scratch });
     try std.testing.expectEqual(full.len, embedded_result.output_written);
     try std.testing.expectEqualSlices(u8, input, &full);
     try std.testing.expectEqual(checksum.crc32(input), embedded_result.crc32);
 
     var sidecar_full: [input.len]u8 = undefined;
     var sidecar_index_buffer: [1]FrameIndexEntry = undefined;
-    const sidecar_result = try decodeSidecarIndexedRangeWithDictionaryIntoWithBuffers(std.testing.failing_allocator, dict, frame, index_bytes, 0, sidecar_full.len, sidecar_full[0..], .{ .index_buffer = sidecar_index_buffer[0..], .patch_scratch = patch_scratch[0..] });
+    const sidecar_result = try decodeSidecarIndexedRangeWithDictionaryIntoWithBuffers(std.testing.failing_allocator, dict, frame, index_bytes, 0, sidecar_full.len, sidecar_full[0..], .{ .index_buffer = sidecar_index_buffer[0..], .patch_scratch = patch_scratch });
     try std.testing.expectEqual(sidecar_full.len, sidecar_result.output_written);
     try std.testing.expectEqualSlices(u8, input, &sidecar_full);
     try std.testing.expectEqual(checksum.crc32(input), sidecar_result.crc32);
@@ -5207,16 +5281,17 @@ test "dictionary deflate indexed stream supports batch range summaries" {
     @memset(full[0..], '!');
     try decodeRangesWithDictionaryIntoWithPatchScratch(std.testing.failing_allocator, dict, stream.items, index_buffer[0..direct_index.entries_written], &.{
         .{ .offset = 0, .length = full.len, .output = full[0..] },
-    }, full_results[0..], patch_scratch[0..]);
+    }, full_results[0..], patch_scratch);
     try std.testing.expectEqualSlices(u8, input, &full);
     try std.testing.expectEqual(checksum.crc32(input), full_results[0].crc32);
 
     var partial: [32]u8 = undefined;
-    var payload_scratch: [input.len]u8 = undefined;
+    const payload_scratch = try std.testing.allocator.alloc(u8, index_sizes.payload_scratch_len);
+    defer std.testing.allocator.free(payload_scratch);
     const partial_result = try decodeIndexedRangeWithDictionaryIntoWithBuffers(std.testing.failing_allocator, dict, stream.items, 9, partial.len, partial[0..], .{
-        .index_buffer = index_buffer[0..],
-        .payload_scratch = payload_scratch[0..],
-        .patch_scratch = patch_scratch[0..],
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+        .patch_scratch = patch_scratch,
     });
     try std.testing.expectEqual(partial.len, partial_result.output_written);
     try std.testing.expectEqualSlices(u8, input[9..41], &partial);
@@ -5228,9 +5303,9 @@ test "dictionary deflate indexed stream supports batch range summaries" {
         .{ .offset = 0, .length = first.len, .output = first[0..] },
         .{ .offset = 9, .length = second.len, .output = second[0..] },
     }, results[0..], .{
-        .index_buffer = index_buffer[0..],
-        .payload_scratch = payload_scratch[0..],
-        .patch_scratch = patch_scratch[0..],
+        .index_buffer = index_buffer,
+        .payload_scratch = payload_scratch,
+        .patch_scratch = patch_scratch,
     });
     try std.testing.expectEqualSlices(u8, input[0..16], &first);
     try std.testing.expectEqual(checksum.crc32(&first), results[0].crc32);
@@ -5240,18 +5315,19 @@ test "dictionary deflate indexed stream supports batch range summaries" {
     var sidecar_partial: [32]u8 = undefined;
     const sidecar_partial_result = try decodeSidecarIndexedRangeWithDictionaryIntoWithBuffers(std.testing.failing_allocator, dict, frame, index_bytes, 9, sidecar_partial.len, sidecar_partial[0..], .{
         .index_buffer = sidecar_index_buffer[0..],
-        .payload_scratch = payload_scratch[0..],
-        .patch_scratch = patch_scratch[0..],
+        .payload_scratch = payload_scratch,
+        .patch_scratch = patch_scratch,
     });
     try std.testing.expectEqual(sidecar_partial.len, sidecar_partial_result.output_written);
     try std.testing.expectEqualSlices(u8, input[9..41], &sidecar_partial);
     try std.testing.expectEqual(checksum.crc32(input[9..41]), sidecar_partial_result.crc32);
 
-    var short_payload_scratch: [payload_scratch.len - 1]u8 = undefined;
+    const short_payload_scratch = try std.testing.allocator.alloc(u8, payload_scratch.len - 1);
+    defer std.testing.allocator.free(short_payload_scratch);
     try std.testing.expectError(error.OutputTooSmall, decodeIndexedRangeWithDictionaryIntoWithBuffers(std.testing.failing_allocator, dict, stream.items, 9, partial.len, partial[0..], .{
-        .index_buffer = index_buffer[0..],
-        .payload_scratch = short_payload_scratch[0..],
-        .patch_scratch = patch_scratch[0..],
+        .index_buffer = index_buffer,
+        .payload_scratch = short_payload_scratch,
+        .patch_scratch = patch_scratch,
     }));
 
     try std.testing.expectError(error.InvalidDictionaryTraining, decodeIndexedRangesWithSummaryAlloc(std.testing.allocator, stream.items, &.{

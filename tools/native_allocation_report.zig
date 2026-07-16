@@ -363,10 +363,10 @@ fn measureDictionaryRangeIntoWithIndexBuffer(backing: std.mem.Allocator, stream:
 fn measureDictionaryDeflateRangeIntoWithPatchScratch(backing: std.mem.Allocator, stream: []const u8) !CaseStats {
     const out = try backing.alloc(u8, dictionary_deflate_input.len);
     defer backing.free(out);
-    const view = try vort.storeViewEmbeddedIndex(stream);
-    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, view.entry_count);
+    const sizes = try vort.storeDictionaryRangeBufferSizesForEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
     defer backing.free(index_buffer);
-    const patch_scratch = try backing.alloc(u8, try vort.maxDictionaryPatchSizeForDecodedLen(dictionary_deflate_input.len));
+    const patch_scratch = try backing.alloc(u8, sizes.patch_scratch_len);
     defer backing.free(patch_scratch);
     var failing = std.testing.FailingAllocator.init(backing, .{});
     const result = try vort.storeDecodeIndexedRangeWithDictionaryIntoWithBuffers(failing.allocator(), dictionary_deflate_dict, stream, 0, out.len, out, .{ .index_buffer = index_buffer, .patch_scratch = patch_scratch });
@@ -378,12 +378,12 @@ fn measureDictionaryDeflatePartialRangeIntoWithScratch(backing: std.mem.Allocato
     const range_len = 32;
     const out = try backing.alloc(u8, range_len);
     defer backing.free(out);
-    const view = try vort.storeViewEmbeddedIndex(stream);
-    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, view.entry_count);
+    const sizes = try vort.storeDictionaryRangeBufferSizesForEmbeddedIndex(stream);
+    const index_buffer = try backing.alloc(vort.store.FrameIndexEntry, sizes.index_entries);
     defer backing.free(index_buffer);
-    const payload_scratch = try backing.alloc(u8, dictionary_deflate_input.len);
+    const payload_scratch = try backing.alloc(u8, sizes.payload_scratch_len);
     defer backing.free(payload_scratch);
-    const patch_scratch = try backing.alloc(u8, try vort.maxDictionaryPatchSizeForDecodedLen(dictionary_deflate_input.len));
+    const patch_scratch = try backing.alloc(u8, sizes.patch_scratch_len);
     defer backing.free(patch_scratch);
     var failing = std.testing.FailingAllocator.init(backing, .{});
     const result = try vort.storeDecodeIndexedRangeWithDictionaryIntoWithBuffers(failing.allocator(), dictionary_deflate_dict, stream, range_offset, out.len, out, .{

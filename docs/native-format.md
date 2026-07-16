@@ -261,9 +261,10 @@ inflating the compressed patch payload. Dictionary range reads
 can provide `DictionaryRangeDecodeBuffers` through the indexed or sidecar
 `WithBuffers` APIs so index parsing, full-frame dictionary-deflate patch
 inflation, and partial decoded-frame materialization reuse caller-owned storage.
-`payload_scratch` should hold the largest decoded frame a caller wants to serve
-without allocating a cache entry, while `patch_scratch` should hold the matching
-maximum dictionary patch size. When payload scratch is supplied to batch reads,
+`dictionaryRangeBufferSizesForIndex`, `dictionaryRangeBufferSizesForSidecarIndex`,
+and `dictionaryRangeBufferSizesForEmbeddedIndex` preflight the required entry
+count, largest decoded-frame `payload_scratch`, and matching maximum
+`patch_scratch` length. When payload scratch is supplied to batch reads,
 the implementation favors deterministic zero-allocation re-decode over the lazy
 heap-backed decoded-frame cache; callers that omit payload scratch keep the cache
 behavior so nearby subranges share one verified decoded copy within a batch.
