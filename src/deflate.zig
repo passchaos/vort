@@ -1349,25 +1349,17 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
     const parsed = try huffman.parseDynamicLengths(&reader);
     const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
     const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-    const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
-    const dist_decoder = makeDynamicDistanceDecoder(dist_table);
-
-    while (true) {
-        const symbol = try lit_decoder.decodeValue(&reader);
-        if (symbol < 256) {
-            try out.append(allocator, @intCast(symbol));
-        } else if (symbol == 256) {
-            if (!parsed.header.final) return error.TruncatedFrame;
-            return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
-        } else if (symbol <= 285) {
-            const length = try decodeLength(symbol, &reader);
-            const distance_symbol = try dist_decoder.decodeValue(&reader);
-            const distance = try decodeDistance(distance_symbol, &reader);
-            try appendMatch(allocator, &out, length, distance);
-        } else {
-            return error.InvalidHuffmanCode;
-        }
+    if (dynamicLiteralLookupBits(parsed) == 9) {
+        const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
+        const dist_decoder = makeDynamicDistanceDecoder(dist_table);
+        try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
+    } else {
+        const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+        const dist_decoder = makeDynamicDistanceDecoder(dist_table);
+        try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
     }
+    if (!parsed.header.final) return error.TruncatedFrame;
+    return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
 }
 
 pub fn decodeRawDynamicAllocStrict(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -1378,6 +1370,12 @@ pub fn decodeRawDynamicAllocStrict(allocator: std.mem.Allocator, input: []const 
 }
 
 const DynamicDistanceDecoder = huffman.FastDecoder(30, 8);
+
+fn dynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
+    var max_bits: u4 = 0;
+    for (parsed.literal_lengths[0..parsed.header.hlit]) |bits| max_bits = @max(max_bits, bits);
+    return if (max_bits <= 4) 9 else 10;
+}
 
 fn makeDynamicDistanceDecoder(table: huffman.HuffmanTable(30)) DynamicDistanceDecoder {
     // Dynamic distance alphabets have at most 30 symbols. A 10-bit lookup table
@@ -1415,9 +1413,14 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
-                try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
+                if (dynamicLiteralLookupBits(parsed) == 9) {
+                    const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
+                    try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
+                } else {
+                    const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+                    try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
+                }
             },
             else => return error.InvalidDeflateBlockType,
         }
@@ -1593,9 +1596,14 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
-                try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
+                if (dynamicLiteralLookupBits(parsed) == 9) {
+                    const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
+                    try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
+                } else {
+                    const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+                    try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
+                }
             },
             else => return error.InvalidDeflateBlockType,
         }
@@ -1689,9 +1697,14 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
-                try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
+                if (dynamicLiteralLookupBits(parsed) == 9) {
+                    const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
+                    try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
+                } else {
+                    const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+                    try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
+                }
             },
             else => return error.InvalidDeflateBlockType,
         }

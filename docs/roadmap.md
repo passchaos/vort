@@ -699,6 +699,9 @@ architecture blindly.
 - [x] FastDecoder construction skips zeroing the lookup table when short codes
   fully cover it, cutting setup work for complete dynamic literal/distance
   alphabets while preserving fallback entries for incomplete tables.
+- [x] Dynamic literal/length decode selects a 9-bit lookup for very short-code
+  blocks and a 10-bit lookup otherwise, preserving tiny-block setup wins without
+  regressing larger corpus decode throughput.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
