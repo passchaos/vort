@@ -26,7 +26,7 @@ STANDARD_CORPUS_CANDIDATES = [
     CORPORA_DIR / "enwik8",
 ]
 SMOKE_LIMIT = 128 * 1024
-HEADER = "corpus,input_bytes,vort_zlib_fastest_bytes,vort_ms,vort_decode_ms,vort_zlib_default_bytes,vort_default_ms,vort_default_decode_ms,gzip_bytes,gzip_ms,gzip_decode_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_ng_decode_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zlib_rs_decode_ms,zstd_bytes,zstd_ms,zstd_decode_ms"
+HEADER = "corpus,input_bytes,vort_zlib_fastest_bytes,vort_ms,vort_decode_ms,vort_zlib_default_bytes,vort_default_ms,vort_default_decode_ms,vort_zlib_best_bytes,vort_best_ms,vort_best_decode_ms,gzip_bytes,gzip_ms,gzip_decode_ms,zlib_ng_gzip_bytes,zlib_ng_ms,zlib_ng_decode_ms,zlib_rs_zlib_bytes,zlib_rs_ms,zlib_rs_decode_ms,zstd_bytes,zstd_ms,zstd_decode_ms"
 COLUMNS = HEADER.split(",")
 
 
@@ -44,6 +44,7 @@ def run_case(label: str, data: bytes, root: pathlib.Path, index: int) -> str:
 
     vort_fastest_path = case_dir / "sample.vort.fastest.zlib"
     vort_default_path = case_dir / "sample.vort.default.zlib"
+    vort_best_path = case_dir / "sample.vort.best.zlib"
 
     def vort_run(level: str, output_path: pathlib.Path):
         if not CLI:
@@ -89,12 +90,14 @@ def run_case(label: str, data: bytes, root: pathlib.Path, index: int) -> str:
 
     vort_data, vort_s = time_call(lambda: vort_run("fastest", vort_fastest_path))
     vort_default_data, vort_default_s = time_call(lambda: vort_run("default", vort_default_path))
+    vort_best_data, vort_best_s = time_call(lambda: vort_run("best", vort_best_path))
     gzip_data, gzip_s = time_call(gzip_run)
     zlib_ng_data, zlib_ng_s = time_call(zlib_ng_run)
     zlib_rs_data, zlib_rs_s = time_call(zlib_rs_run)
     zstd_data, zstd_s = time_call(zstd_run)
     vort_decoded, vort_decode_s = time_call(lambda: vort_decode_run(vort_fastest_path))
     vort_default_decoded, vort_default_decode_s = time_call(lambda: vort_decode_run(vort_default_path))
+    vort_best_decoded, vort_best_decode_s = time_call(lambda: vort_decode_run(vort_best_path))
 
     def gzip_decode_run():
         if not gzip_data or not GZIP:
@@ -120,10 +123,14 @@ def run_case(label: str, data: bytes, root: pathlib.Path, index: int) -> str:
         assert zlib.decompress(vort_data) == data
     if vort_default_data:
         assert zlib.decompress(vort_default_data) == data
+    if vort_best_data:
+        assert zlib.decompress(vort_best_data) == data
     if vort_decoded:
         assert vort_decoded == data
     if vort_default_decoded:
         assert vort_default_decoded == data
+    if vort_best_decoded:
+        assert vort_best_decoded == data
     if gzip_data:
         assert gzip_decoded == data
     if zlib_ng_data:
@@ -132,7 +139,7 @@ def run_case(label: str, data: bytes, root: pathlib.Path, index: int) -> str:
         assert zlib_rs_decoded == data
     if zstd_data:
         assert zstd_decoded == data
-    return f"{label},{len(data)},{len(vort_data)},{vort_s*1000:.3f},{vort_decode_s*1000:.3f},{len(vort_default_data)},{vort_default_s*1000:.3f},{vort_default_decode_s*1000:.3f},{len(gzip_data)},{gzip_s*1000:.3f},{gzip_decode_s*1000:.3f},{len(zlib_ng_data)},{zlib_ng_s*1000:.3f},{zlib_ng_decode_s*1000:.3f},{len(zlib_rs_data)},{zlib_rs_s*1000:.3f},{zlib_rs_decode_s*1000:.3f},{len(zstd_data)},{zstd_s*1000:.3f},{zstd_decode_s*1000:.3f}"
+    return f"{label},{len(data)},{len(vort_data)},{vort_s*1000:.3f},{vort_decode_s*1000:.3f},{len(vort_default_data)},{vort_default_s*1000:.3f},{vort_default_decode_s*1000:.3f},{len(vort_best_data)},{vort_best_s*1000:.3f},{vort_best_decode_s*1000:.3f},{len(gzip_data)},{gzip_s*1000:.3f},{gzip_decode_s*1000:.3f},{len(zlib_ng_data)},{zlib_ng_s*1000:.3f},{zlib_ng_decode_s*1000:.3f},{len(zlib_rs_data)},{zlib_rs_s*1000:.3f},{zlib_rs_decode_s*1000:.3f},{len(zstd_data)},{zstd_s*1000:.3f},{zstd_decode_s*1000:.3f}"
 
 
 def load_cases(full: bool, suite: bool) -> list[tuple[str, bytes]]:
@@ -217,6 +224,7 @@ def summarize_codecs(records: list[dict[str, str]]) -> list[dict[str, object]]:
     codecs = [
         ("vort-fastest", "vort_zlib_fastest_bytes", "vort_ms", "vort_decode_ms"),
         ("vort-default", "vort_zlib_default_bytes", "vort_default_ms", "vort_default_decode_ms"),
+        ("vort-best", "vort_zlib_best_bytes", "vort_best_ms", "vort_best_decode_ms"),
         ("gzip", "gzip_bytes", "gzip_ms", "gzip_decode_ms"),
         ("zlib-ng", "zlib_ng_gzip_bytes", "zlib_ng_ms", "zlib_ng_decode_ms"),
         ("zlib-rs", "zlib_rs_zlib_bytes", "zlib_rs_ms", "zlib_rs_decode_ms"),
@@ -341,12 +349,12 @@ def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool,
         "",
         "## Rows",
         "",
-        "| corpus | input | Vort fastest bytes | Vort fastest ms | Vort fastest dec ms | Vort default bytes | Vort default ms | Vort default dec ms | gzip bytes | gzip ms | zlib-ng bytes | zlib-rs bytes | zstd bytes |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| corpus | input | Vort fastest bytes | Vort fastest ms | Vort fastest dec ms | Vort default bytes | Vort default ms | Vort default dec ms | Vort best bytes | Vort best ms | Vort best dec ms | gzip bytes | gzip ms | zlib-ng bytes | zlib-rs bytes | zstd bytes |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ])
     for rec in records:
         lines.append(
-            "| {corpus} | {input_bytes} | {vort_zlib_fastest_bytes} | {vort_ms} | {vort_decode_ms} | {vort_zlib_default_bytes} | {vort_default_ms} | {vort_default_decode_ms} | {gzip_bytes} | {gzip_ms} | {zlib_ng_gzip_bytes} | {zlib_rs_zlib_bytes} | {zstd_bytes} |".format(**rec)
+            "| {corpus} | {input_bytes} | {vort_zlib_fastest_bytes} | {vort_ms} | {vort_decode_ms} | {vort_zlib_default_bytes} | {vort_default_ms} | {vort_default_decode_ms} | {vort_zlib_best_bytes} | {vort_best_ms} | {vort_best_decode_ms} | {gzip_bytes} | {gzip_ms} | {zlib_ng_gzip_bytes} | {zlib_rs_zlib_bytes} | {zstd_bytes} |".format(**rec)
         )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
