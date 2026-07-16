@@ -3581,22 +3581,52 @@ pub const Decoder = struct {
     offset: usize = 0,
     verified: bool = false,
     done: bool = false,
+    last_error_name: []const u8 = "",
+
+    pub const Snapshot = struct {
+        payload_len: usize,
+        output_written: usize,
+        payload_remaining: usize,
+        verified: bool,
+        done: bool,
+        last_error_name: []const u8,
+    };
 
     pub fn init(frame: []const u8) Error!Decoder {
+        var self = Decoder{};
+        try self.reset(frame);
+        return self;
+    }
+
+    pub fn reset(self: *Decoder, frame: []const u8) Error!void {
         const info = try parseHeader(frame);
         const payload_len = try payloadLenFromInfo(info);
         const total_len = try encodedSize(payload_len);
         if (frame.len < total_len) return error.TruncatedFrame;
-        return .{
+        self.* = .{
             .payload = frame[header_len..total_len],
             .checksum_value = info.checksum,
+        };
+    }
+
+    pub fn snapshot(self: *const Decoder) Snapshot {
+        return .{
+            .payload_len = self.payload.len,
+            .output_written = self.offset,
+            .payload_remaining = self.payload.len - self.offset,
+            .verified = self.verified,
+            .done = self.done,
+            .last_error_name = self.last_error_name,
         };
     }
 
     pub fn step(self: *Decoder, output: []u8) Error!StepResult {
         if (self.done) return .{ .status = .done };
         if (!self.verified) {
-            if (checksum.crc32(self.payload) != self.checksum_value) return error.ChecksumMismatch;
+            if (checksum.crc32(self.payload) != self.checksum_value) {
+                self.last_error_name = "ChecksumMismatch";
+                return error.ChecksumMismatch;
+            }
             self.verified = true;
         }
         if (output.len == 0) return .{ .status = .need_output };
@@ -3736,6 +3766,52 @@ test "streaming encoder and decoder handle tiny output buffers" {
         try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
     }
     try std.testing.expectEqualSlices(u8, input, decoded[0..decoded_len]);
+}
+
+test "bounded decoder reset and snapshot expose output progress" {
+    const first = "bounded decoder first payload";
+    const second = "second bounded payload";
+    var first_encoded: [128]u8 = undefined;
+    const first_len = try encode(first, &first_encoded);
+    var second_encoded: [128]u8 = undefined;
+    const second_len = try encode(second, &second_encoded);
+
+    var decoder = try Decoder.init(first_encoded[0..first_len]);
+    try std.testing.expectEqual(first.len, decoder.snapshot().payload_len);
+    try std.testing.expect(!decoder.snapshot().verified);
+    var out: [@max(first.len, second.len)]u8 = undefined;
+    var step_result = try decoder.step(out[0..5]);
+    try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
+    try std.testing.expect(decoder.snapshot().verified);
+    try std.testing.expectEqual(@as(usize, 5), decoder.snapshot().output_written);
+    try std.testing.expectEqual(first.len - 5, decoder.snapshot().payload_remaining);
+    step_result = try decoder.step(out[5..first.len]);
+    try std.testing.expectEqual(StepResult.Status.done, step_result.status);
+    try std.testing.expect(decoder.snapshot().done);
+    try std.testing.expectEqualSlices(u8, first, out[0..first.len]);
+
+    try decoder.reset(second_encoded[0..second_len]);
+    try std.testing.expectEqual(second.len, decoder.snapshot().payload_len);
+    try std.testing.expect(!decoder.snapshot().verified);
+    try std.testing.expect(!decoder.snapshot().done);
+    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().output_written);
+    step_result = try decoder.step(out[0..second.len]);
+    try std.testing.expectEqual(StepResult.Status.done, step_result.status);
+    try std.testing.expectEqualSlices(u8, second, out[0..second.len]);
+}
+
+test "bounded decoder snapshot reports checksum mismatch" {
+    var encoded: [128]u8 = undefined;
+    const encoded_len = try encode("bounded corrupt", &encoded);
+    encoded[encoded_len - 1] ^= 0xaa;
+
+    var decoder = try Decoder.init(encoded[0..encoded_len]);
+    var out: [32]u8 = undefined;
+    try std.testing.expectError(error.ChecksumMismatch, decoder.step(&out));
+    const snap = decoder.snapshot();
+    try std.testing.expectEqualStrings("ChecksumMismatch", snap.last_error_name);
+    try std.testing.expect(!snap.verified);
+    try std.testing.expectEqual(@as(usize, 0), snap.output_written);
 }
 
 test "incremental decoder accepts single-byte input and tiny output" {
