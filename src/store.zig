@@ -696,9 +696,17 @@ pub const Encoder = struct {
     input: []const u8,
     phase: Phase = .header,
     offset: usize = 0,
+    output_written: usize = 0,
     header: [header_len]u8 = undefined,
 
-    const Phase = enum { header, payload, done };
+    pub const Phase = enum { header, payload, done };
+
+    pub const Snapshot = struct {
+        phase: Phase,
+        output_written: usize,
+        expected_output_len: usize,
+        frame_remaining: usize,
+    };
 
     pub fn init(input: []const u8) Encoder {
         var self = Encoder{ .input = input };
@@ -710,6 +718,7 @@ pub const Encoder = struct {
         self.input = input;
         self.phase = .header;
         self.offset = 0;
+        self.output_written = 0;
         writeHeader(&self.header, .{
             .version = current_version,
             .flags = flags_none,
@@ -717,6 +726,34 @@ pub const Encoder = struct {
             .stored_size = @intCast(input.len),
             .checksum = checksum.crc32(input),
         });
+    }
+
+    pub fn snapshot(self: *const Encoder) Snapshot {
+        const expected = header_len + self.input.len;
+        return .{
+            .phase = self.phase,
+            .output_written = self.output_written,
+            .expected_output_len = expected,
+            .frame_remaining = expected - self.output_written,
+        };
+    }
+
+    fn phaseName(phase: Phase) []const u8 {
+        return switch (phase) {
+            .header => "header",
+            .payload => "payload",
+            .done => "done",
+        };
+    }
+
+    pub fn diagnostics(self: *const Encoder) StreamingDiagnostics {
+        const snap = self.snapshot();
+        return .{
+            .phase_name = phaseName(snap.phase),
+            .output_written = snap.output_written,
+            .expected_output_len = snap.expected_output_len,
+            .payload_remaining = snap.frame_remaining,
+        };
     }
 
     pub fn step(self: *Encoder, output: []u8) StepResult {
@@ -732,6 +769,7 @@ pub const Encoder = struct {
                     @memcpy(output[written..][0..n], remaining[0..n]);
                     written += n;
                     self.offset += n;
+                    self.output_written += n;
                     if (self.offset == self.header.len) {
                         self.phase = .payload;
                         self.offset = 0;
@@ -743,6 +781,7 @@ pub const Encoder = struct {
                     @memcpy(output[written..][0..n], remaining[0..n]);
                     written += n;
                     self.offset += n;
+                    self.output_written += n;
                     if (self.offset == self.input.len) {
                         self.phase = .done;
                         self.offset = 0;
@@ -3792,14 +3831,21 @@ test "streaming encoder and decoder handle tiny output buffers" {
     var encoder = Encoder.init(input);
     var encoded: [256]u8 = undefined;
     var encoded_len: usize = 0;
+    try std.testing.expectEqual(Encoder.Phase.header, encoder.snapshot().phase);
+    try std.testing.expectEqual(header_len + input.len, encoder.snapshot().expected_output_len);
+    try std.testing.expectEqualStrings("header", encoder.diagnostics().phase_name);
     while (true) {
         var scratch: [5]u8 = undefined;
         const step_result = encoder.step(&scratch);
         @memcpy(encoded[encoded_len..][0..step_result.progress.output_written], scratch[0..step_result.progress.output_written]);
         encoded_len += step_result.progress.output_written;
+        try std.testing.expectEqual(encoded_len, encoder.snapshot().output_written);
+        try std.testing.expectEqual(header_len + input.len - encoded_len, encoder.snapshot().frame_remaining);
         if (step_result.status == .done) break;
         try std.testing.expectEqual(StepResult.Status.need_output, step_result.status);
     }
+    try std.testing.expectEqual(Encoder.Phase.done, encoder.snapshot().phase);
+    try std.testing.expectEqualStrings("done", encoder.diagnostics().phase_name);
 
     var decoder = try Decoder.init(encoded[0..encoded_len]);
     var decoded: [input.len]u8 = undefined;
@@ -3917,6 +3963,8 @@ test "streaming encoder and incremental decoder reset for reuse" {
     }
 
     encoder.reset(second);
+    try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().output_written);
+    try std.testing.expectEqual(header_len + second.len, encoder.snapshot().frame_remaining);
     var second_encoded: [128]u8 = undefined;
     var second_len: usize = 0;
     while (true) {

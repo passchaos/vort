@@ -161,12 +161,13 @@ payload and patch scratch explicitly.
 via `reset`. This lets streaming callers process multiple store frames without
 reallocating or reinitializing state objects, while retaining explicit progress
 accounting and checksum verification at frame boundaries. Both decoders expose a
-common `StreamingDiagnostics` view via `diagnostics`; `Decoder.snapshot` and
-`IncrementalDecoder.snapshot` retain type-specific fields for callers that need
-more detail. Diagnostics include the current phase, cumulative frame input bytes,
-emitted output bytes, expected payload length, remaining payload bytes, and the
-most recent error name/phase plus recoverability hint so callers can attach
-byte-accurate diagnostics to stalled or corrupt streaming sessions.
+common `StreamingDiagnostics` view via `diagnostics`; `Encoder.snapshot`,
+`Decoder.snapshot`, and `IncrementalDecoder.snapshot` retain type-specific fields
+for callers that need more detail. Diagnostics include the current phase,
+cumulative frame input bytes when available, emitted output bytes, expected
+payload/frame length, remaining bytes, and the most recent error name/phase plus
+recoverability hint so callers can attach byte-accurate diagnostics to stalled or
+corrupt streaming sessions.
 
 ## Range decode summary APIs
 
