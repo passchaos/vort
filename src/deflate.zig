@@ -2985,6 +2985,95 @@ fn readChunkedBigU32(chunks: []const []const u8, offset: usize) Error!u32 {
     return value;
 }
 
+const ChunkCursor = struct {
+    chunks: []const []const u8,
+    total_len: usize,
+    absolute: usize,
+    chunk_index: usize = 0,
+    chunk_start: usize = 0,
+
+    fn init(chunks: []const []const u8, total_len: usize, offset: usize) Error!ChunkCursor {
+        if (offset > total_len) return error.TruncatedFrame;
+        var cursor = ChunkCursor{ .chunks = chunks, .total_len = total_len, .absolute = offset };
+        cursor.sync();
+        return cursor;
+    }
+
+    fn sync(self: *ChunkCursor) void {
+        if (self.absolute >= self.total_len) {
+            self.chunk_index = self.chunks.len;
+            self.chunk_start = self.total_len;
+            return;
+        }
+        if (self.chunk_index >= self.chunks.len or self.absolute < self.chunk_start) {
+            self.chunk_index = 0;
+            self.chunk_start = 0;
+        }
+        while (self.chunk_index < self.chunks.len) {
+            const end = self.chunk_start + self.chunks[self.chunk_index].len;
+            if (self.absolute < end) return;
+            self.chunk_start = end;
+            self.chunk_index += 1;
+        }
+    }
+
+    fn readByte(self: *ChunkCursor) Error!u8 {
+        if (self.absolute >= self.total_len) return error.TruncatedFrame;
+        self.sync();
+        if (self.chunk_index >= self.chunks.len) return error.TruncatedFrame;
+        const chunk = self.chunks[self.chunk_index];
+        const local = self.absolute - self.chunk_start;
+        const byte = chunk[local];
+        self.absolute += 1;
+        return byte;
+    }
+
+    fn readLittleU16(self: *ChunkCursor) Error!u16 {
+        const lo = try self.readByte();
+        const hi = try self.readByte();
+        return @as(u16, lo) | (@as(u16, hi) << 8);
+    }
+
+    fn readBigU32(self: *ChunkCursor) Error!u32 {
+        var value: u32 = 0;
+        for (0..4) |_| value = (value << 8) | try self.readByte();
+        return value;
+    }
+
+    fn copyTo(self: *ChunkCursor, output: []u8) Error!void {
+        var absolute = self.absolute;
+        var chunk_index = self.chunk_index;
+        var chunk_start = self.chunk_start;
+        if (chunk_index >= self.chunks.len or absolute < chunk_start) {
+            chunk_index = 0;
+            chunk_start = 0;
+        }
+
+        var out_offset: usize = 0;
+        while (out_offset < output.len) {
+            if (absolute >= self.total_len) return error.TruncatedFrame;
+            while (chunk_index < self.chunks.len) {
+                const end = chunk_start + self.chunks[chunk_index].len;
+                if (absolute < end) break;
+                chunk_start = end;
+                chunk_index += 1;
+            }
+            if (chunk_index >= self.chunks.len) return error.TruncatedFrame;
+            const chunk = self.chunks[chunk_index];
+            const local = absolute - chunk_start;
+            const n = @min(output.len - out_offset, chunk.len - local);
+            @memcpy(output[out_offset..][0..n], chunk[local..][0..n]);
+            out_offset += n;
+            absolute += n;
+        }
+
+        self.absolute = absolute;
+        self.chunk_index = chunk_index;
+        self.chunk_start = chunk_start;
+        self.sync();
+    }
+};
+
 fn parseZlibHeaderFromChunks(chunks: []const []const u8, dictionary: ?[]const u8) Error!ZlibHeader {
     const cmf = chunkByteAt(chunks, 0) orelse return error.TruncatedFrame;
     const flg = chunkByteAt(chunks, 1) orelse return error.TruncatedFrame;
@@ -3013,13 +3102,41 @@ fn validateZlibFooterChunksWithOptions(chunks: []const []const u8, footer_offset
 
 fn decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks: []const []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
     const header = try parseZlibHeaderFromChunks(chunks, dictionary);
-    const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+    if (try decodeZlibStoredChunksIntoMaybe(chunks, header.data_offset, output, options)) |stored_written| return stored_written;
 
+    const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
     var reader = try bitstream.ChunkedBitReader.initAt(chunks, header.data_offset);
     const raw = try decodeRawAutoWithDictionaryFromReader(&reader, header.data_offset, raw_dictionary, output);
     const footer_offset = header.data_offset + raw.input_read;
     try validateZlibFooterChunksWithOptions(chunks, footer_offset, checksum.adler32(output[0..raw.output_written]), options);
     return raw.output_written;
+}
+
+fn decodeZlibStoredChunksIntoMaybe(chunks: []const []const u8, raw_offset: usize, output: []u8, options: ZlibDecodeOptions) Error!?usize {
+    var cursor = try ChunkCursor.init(chunks, try chunksTotalLen(chunks), raw_offset);
+    var out_offset: usize = 0;
+
+    while (true) {
+        const header = try cursor.readByte();
+        const final = (header & 0x01) != 0;
+        const block_type = (header >> 1) & 0x03;
+        if (block_type != 0) return null;
+
+        const len = try cursor.readLittleU16();
+        const nlen = try cursor.readLittleU16();
+        if (nlen != ~len) return error.StoredLengthMismatch;
+        const chunk_len: usize = len;
+        if (output.len - out_offset < chunk_len) return error.OutputTooSmall;
+        try cursor.copyTo(output[out_offset..][0..chunk_len]);
+        out_offset += chunk_len;
+
+        if (final) {
+            const expected = try cursor.readBigU32();
+            if (!options.ignore_adler and checksum.adler32(output[0..out_offset]) != expected) return error.ChecksumMismatch;
+            if (!options.allow_trailing_data and cursor.absolute != cursor.total_len) return error.TrailingData;
+            return out_offset;
+        }
+    }
 }
 
 fn chunksTotalLen(chunks: []const []const u8) Error!usize {
@@ -6743,6 +6860,10 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     defer stored_failing.allocator().free(stored_direct);
     try std.testing.expectEqualSlices(u8, input, stored_direct);
     try std.testing.expectEqual(@as(usize, 1), stored_failing.allocations);
+
+    @memset(&output, 0);
+    try std.testing.expectEqual(input.len, try decodeZlibChunksInto(&stored_chunks, &output));
+    try std.testing.expectEqualSlices(u8, input, &output);
 
     var relaxed_frame = try std.testing.allocator.alloc(u8, encoded.len + 1);
     defer std.testing.allocator.free(relaxed_frame);
