@@ -226,11 +226,15 @@ reconstruction, and Adam7 placement for PNG-like interlaced IDAT payloads,
 including packed sub-byte indexed/grayscale rows and 16-bit RGBA rows, when the
 caller has provided all required scratch buffers. The helper rejects corrupt filter bytes and
 decoded payload length mismatches before accepting an interlaced image.
+`PngAdam7StreamingZlibRowDecoder` and
+`PngAdam7StreamingZlibChunkedRowDecoder` expose the same reconstructed Adam7
+pass rows incrementally, backed by a 32 KiB DEFLATE history window plus
+current/previous pass-row scratch. The full-image helpers
 `decodePngAdam7StreamingZlibImage` and
-`decodePngAdam7StreamingZlibImageFromChunksDirect` keep the same Adam7 placement
-semantics while replacing the full decoded zlib-payload scratch with the 32 KiB
-DEFLATE history window plus pass-row scratch for contiguous and multi-IDAT
-fixed/dynamic streams.
+`decodePngAdam7StreamingZlibImageFromChunksDirect` are built on that row decoder,
+so callers that need high-level PNG transforms can consume pass rows directly
+without allocating either the full decoded zlib payload or the final raw-sample
+image as an intermediate.
 Both non-interlaced and Adam7 PNG-like helpers also propagate zlib wrapper
 failures such as bad headers, truncated frames, and Adler-32 mismatches through
 the same caller-owned error paths.

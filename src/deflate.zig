@@ -5395,6 +5395,24 @@ pub const PngAdam7ImageDecodeResult = struct {
     zlib_input_read: usize,
 };
 
+pub const PngAdam7Row = struct {
+    pass: PngAdam7PassInfo,
+    pass_row_index: usize,
+    row: []const u8,
+};
+
+pub const PngAdam7RowsDecodeResult = struct {
+    passes: usize,
+    rows: usize,
+    row_bytes: usize,
+    zlib_input_read: usize,
+};
+
+pub const PngAdam7RowCallback = struct {
+    context: *anyopaque,
+    on_row: *const fn (*anyopaque, PngAdam7Row) Error!void,
+};
+
 pub fn decodePngStoredZlibImage(
     input: []const u8,
     filtered_row_scratch: []u8,
@@ -5707,8 +5725,47 @@ pub fn decodePngAdam7StreamingZlibImageWithOptions(
     output: []u8,
 ) Error!PngAdam7ImageDecodeResult {
     try validatePngAdam7StreamingDecodeBuffers(info, history_scratch, filtered_row_scratch, previous_row_scratch, output);
-    var zlib = try PngStreamingZlibScanlineDecoder.initRawWithOptions(input, history_scratch, options);
-    return drainPngAdam7StreamingZlibImage(&zlib, filtered_row_scratch, previous_row_scratch, info, output[0..info.image_output_len]);
+    @memset(output[0..info.image_output_len], 0);
+    var decoder = try PngAdam7StreamingZlibRowDecoder.initWithOptions(input, history_scratch, filtered_row_scratch, previous_row_scratch, info, options);
+    while (try decoder.step()) |row| try placePngAdam7Row(info, row.pass, row.pass_row_index, row.row, output);
+    const snap = decoder.snapshot();
+    return .{
+        .passes = pngAdam7ActivePassCount(info),
+        .rows = snap.rows_done,
+        .output_written = info.image_output_len,
+        .zlib_input_read = snap.zlib_input_read,
+    };
+}
+
+pub fn streamPngAdam7ZlibRows(
+    input: []const u8,
+    history_scratch: []u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngAdam7Info,
+    callback: PngAdam7RowCallback,
+) Error!PngAdam7RowsDecodeResult {
+    return streamPngAdam7ZlibRowsWithOptions(input, history_scratch, filtered_row_scratch, previous_row_scratch, info, .{}, callback);
+}
+
+pub fn streamPngAdam7ZlibRowsWithOptions(
+    input: []const u8,
+    history_scratch: []u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngAdam7Info,
+    options: ZlibDecodeOptions,
+    callback: PngAdam7RowCallback,
+) Error!PngAdam7RowsDecodeResult {
+    var decoder = try PngAdam7StreamingZlibRowDecoder.initWithOptions(input, history_scratch, filtered_row_scratch, previous_row_scratch, info, options);
+    while (try decoder.step()) |row| try callback.on_row(callback.context, row);
+    const snap = decoder.snapshot();
+    return .{
+        .passes = pngAdam7ActivePassCount(info),
+        .rows = snap.rows_done,
+        .row_bytes = snap.row_bytes,
+        .zlib_input_read = snap.zlib_input_read,
+    };
 }
 
 pub fn decodePngAdam7StreamingZlibImageFromChunksDirect(
@@ -5732,8 +5789,214 @@ pub fn decodePngAdam7StreamingZlibImageFromChunksWithOptionsDirect(
     output: []u8,
 ) Error!PngAdam7ImageDecodeResult {
     try validatePngAdam7StreamingDecodeBuffers(info, history_scratch, filtered_row_scratch, previous_row_scratch, output);
-    var zlib = try PngStreamingZlibChunkedScanlineDecoder.initRawWithOptions(chunks, history_scratch, options);
-    return drainPngAdam7StreamingZlibImage(&zlib, filtered_row_scratch, previous_row_scratch, info, output[0..info.image_output_len]);
+    @memset(output[0..info.image_output_len], 0);
+    var decoder = try PngAdam7StreamingZlibChunkedRowDecoder.initWithOptionsDirect(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, options);
+    while (try decoder.step()) |row| try placePngAdam7Row(info, row.pass, row.pass_row_index, row.row, output);
+    const snap = decoder.snapshot();
+    return .{
+        .passes = pngAdam7ActivePassCount(info),
+        .rows = snap.rows_done,
+        .output_written = info.image_output_len,
+        .zlib_input_read = snap.zlib_input_read,
+    };
+}
+
+pub fn streamPngAdam7ZlibRowsFromChunksDirect(
+    chunks: []const []const u8,
+    history_scratch: []u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngAdam7Info,
+    callback: PngAdam7RowCallback,
+) Error!PngAdam7RowsDecodeResult {
+    return streamPngAdam7ZlibRowsFromChunksWithOptionsDirect(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, .{}, callback);
+}
+
+pub fn streamPngAdam7ZlibRowsFromChunksWithOptionsDirect(
+    chunks: []const []const u8,
+    history_scratch: []u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngAdam7Info,
+    options: ZlibDecodeOptions,
+    callback: PngAdam7RowCallback,
+) Error!PngAdam7RowsDecodeResult {
+    var decoder = try PngAdam7StreamingZlibChunkedRowDecoder.initWithOptionsDirect(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, options);
+    while (try decoder.step()) |row| try callback.on_row(callback.context, row);
+    const snap = decoder.snapshot();
+    return .{
+        .passes = pngAdam7ActivePassCount(info),
+        .rows = snap.rows_done,
+        .row_bytes = snap.row_bytes,
+        .zlib_input_read = snap.zlib_input_read,
+    };
+}
+
+const PngAdam7StreamingRowState = struct {
+    info: PngAdam7Info,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    pass_index: usize = 0,
+    pass_row_index: usize = 0,
+    has_previous: bool = false,
+    rows_done: usize = 0,
+    row_bytes: usize = 0,
+    finished: bool = false,
+};
+
+pub const PngAdam7StreamingRowsSnapshot = struct {
+    pass_index: usize,
+    pass_row_index: usize,
+    rows_done: usize,
+    row_bytes: usize,
+    done: bool,
+    zlib_input_read: usize,
+};
+
+pub const PngAdam7StreamingZlibRowDecoder = struct {
+    zlib: PngStreamingZlibScanlineDecoder = .{},
+    state: PngAdam7StreamingRowState = undefined,
+
+    pub fn init(
+        input: []const u8,
+        history_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngAdam7Info,
+    ) Error!PngAdam7StreamingZlibRowDecoder {
+        return initWithOptions(input, history_scratch, filtered_row_scratch, previous_row_scratch, info, .{});
+    }
+
+    pub fn initWithOptions(
+        input: []const u8,
+        history_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngAdam7Info,
+        options: ZlibDecodeOptions,
+    ) Error!PngAdam7StreamingZlibRowDecoder {
+        try validatePngAdam7StreamingRowBuffers(info, history_scratch, filtered_row_scratch, previous_row_scratch);
+        return .{
+            .zlib = try PngStreamingZlibScanlineDecoder.initRawWithOptions(input, history_scratch, options),
+            .state = initPngAdam7StreamingRowState(info, filtered_row_scratch, previous_row_scratch),
+        };
+    }
+
+    pub fn step(self: *PngAdam7StreamingZlibRowDecoder) Error!?PngAdam7Row {
+        return stepPngAdam7StreamingZlibRow(&self.zlib, &self.state);
+    }
+
+    pub fn snapshot(self: *const PngAdam7StreamingZlibRowDecoder) PngAdam7StreamingRowsSnapshot {
+        return pngAdam7StreamingRowsSnapshot(self.state, self.zlib.snapshot().input_read);
+    }
+};
+
+pub const PngAdam7StreamingZlibChunkedRowDecoder = struct {
+    zlib: PngStreamingZlibChunkedScanlineDecoder = .{},
+    state: PngAdam7StreamingRowState = undefined,
+
+    pub fn initDirect(
+        chunks: []const []const u8,
+        history_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngAdam7Info,
+    ) Error!PngAdam7StreamingZlibChunkedRowDecoder {
+        return initWithOptionsDirect(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, .{});
+    }
+
+    pub fn initWithOptionsDirect(
+        chunks: []const []const u8,
+        history_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngAdam7Info,
+        options: ZlibDecodeOptions,
+    ) Error!PngAdam7StreamingZlibChunkedRowDecoder {
+        try validatePngAdam7StreamingRowBuffers(info, history_scratch, filtered_row_scratch, previous_row_scratch);
+        return .{
+            .zlib = try PngStreamingZlibChunkedScanlineDecoder.initRawWithOptions(chunks, history_scratch, options),
+            .state = initPngAdam7StreamingRowState(info, filtered_row_scratch, previous_row_scratch),
+        };
+    }
+
+    pub fn step(self: *PngAdam7StreamingZlibChunkedRowDecoder) Error!?PngAdam7Row {
+        return stepPngAdam7StreamingZlibRow(&self.zlib, &self.state);
+    }
+
+    pub fn snapshot(self: *const PngAdam7StreamingZlibChunkedRowDecoder) PngAdam7StreamingRowsSnapshot {
+        return pngAdam7StreamingRowsSnapshot(self.state, self.zlib.snapshot().input_read);
+    }
+};
+
+fn initPngAdam7StreamingRowState(info: PngAdam7Info, filtered_row_scratch: []u8, previous_row_scratch: []u8) PngAdam7StreamingRowState {
+    return .{
+        .info = info,
+        .filtered_row_scratch = filtered_row_scratch[0..info.max_pass_row_len],
+        .previous_row_scratch = previous_row_scratch[0..info.max_pass_row_len],
+    };
+}
+
+fn pngAdam7StreamingRowsSnapshot(state: PngAdam7StreamingRowState, zlib_input_read: usize) PngAdam7StreamingRowsSnapshot {
+    return .{
+        .pass_index = state.pass_index,
+        .pass_row_index = state.pass_row_index,
+        .rows_done = state.rows_done,
+        .row_bytes = state.row_bytes,
+        .done = state.finished,
+        .zlib_input_read = zlib_input_read,
+    };
+}
+
+fn stepPngAdam7StreamingZlibRow(zlib: anytype, state: *PngAdam7StreamingRowState) Error!?PngAdam7Row {
+    if (state.finished) return null;
+
+    while (state.pass_index < state.info.passes.len) {
+        const pass = state.info.passes[state.pass_index];
+        if (pass.isEmpty()) {
+            state.pass_index += 1;
+            state.pass_row_index = 0;
+            state.has_previous = false;
+            continue;
+        }
+        if (state.pass_row_index >= pass.height) {
+            state.pass_index += 1;
+            state.pass_row_index = 0;
+            state.has_previous = false;
+            continue;
+        }
+
+        const row = state.filtered_row_scratch[0..pass.row_len];
+        const filter = (try zlib.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
+        if (filter > 4) return error.CorruptFrame;
+        try zlib.readInflatedBytes(row);
+        const previous = if (state.has_previous) state.previous_row_scratch[0..pass.row_len] else null;
+        _ = try reconstructPngScanline(filter, row, previous, pass.bytes_per_pixel, row);
+        @memcpy(state.previous_row_scratch[0..pass.row_len], row);
+
+        const pass_row_index = state.pass_row_index;
+        state.pass_row_index += 1;
+        state.has_previous = true;
+        state.rows_done += 1;
+        state.row_bytes = std.math.add(usize, state.row_bytes, row.len) catch return error.IntegerOverflow;
+        return .{
+            .pass = pass,
+            .pass_row_index = pass_row_index,
+            .row = row,
+        };
+    }
+
+    try zlib.finishRawPayload();
+    state.finished = true;
+    return null;
+}
+
+fn pngAdam7ActivePassCount(info: PngAdam7Info) usize {
+    var count: usize = 0;
+    for (info.passes) |pass| {
+        if (!pass.isEmpty()) count += 1;
+    }
+    return count;
 }
 
 fn validatePngAdam7DecodeBuffers(info: PngAdam7Info, filtered_row_scratch: []u8, previous_row_scratch: []u8, output: []u8) Error!void {
@@ -5741,9 +6004,14 @@ fn validatePngAdam7DecodeBuffers(info: PngAdam7Info, filtered_row_scratch: []u8,
     if (output.len < info.image_output_len) return error.OutputTooSmall;
 }
 
-fn validatePngAdam7StreamingDecodeBuffers(info: PngAdam7Info, history_scratch: []u8, filtered_row_scratch: []u8, previous_row_scratch: []u8, output: []u8) Error!void {
-    try validatePngAdam7DecodeBuffers(info, filtered_row_scratch, previous_row_scratch, output);
+fn validatePngAdam7StreamingRowBuffers(info: PngAdam7Info, history_scratch: []u8, filtered_row_scratch: []u8, previous_row_scratch: []u8) Error!void {
+    if (filtered_row_scratch.len < info.max_pass_row_len or previous_row_scratch.len < info.max_pass_row_len) return error.OutputTooSmall;
     if (history_scratch.len < PngStreamingZlibScanlineDecoder.history_scratch_len) return error.OutputTooSmall;
+}
+
+fn validatePngAdam7StreamingDecodeBuffers(info: PngAdam7Info, history_scratch: []u8, filtered_row_scratch: []u8, previous_row_scratch: []u8, output: []u8) Error!void {
+    try validatePngAdam7StreamingRowBuffers(info, history_scratch, filtered_row_scratch, previous_row_scratch);
+    if (output.len < info.image_output_len) return error.OutputTooSmall;
 }
 
 fn drainPngAdam7ZlibImage(
@@ -5785,42 +6053,6 @@ fn drainPngAdam7ZlibImage(
         .rows = row_count,
         .output_written = info.image_output_len,
         .zlib_input_read = zlib_input_read,
-    };
-}
-
-fn drainPngAdam7StreamingZlibImage(
-    zlib: anytype,
-    filtered_row_scratch: []u8,
-    previous_row_scratch: []u8,
-    info: PngAdam7Info,
-    output: []u8,
-) Error!PngAdam7ImageDecodeResult {
-    @memset(output[0..info.image_output_len], 0);
-    var pass_count: usize = 0;
-    var row_count: usize = 0;
-    for (info.passes) |pass| {
-        if (pass.isEmpty()) continue;
-        pass_count += 1;
-        var has_previous = false;
-        for (0..pass.height) |row_index| {
-            const row = filtered_row_scratch[0..pass.row_len];
-            const filter = (try zlib.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
-            if (filter > 4) return error.CorruptFrame;
-            try zlib.readInflatedBytes(row);
-            const previous = if (has_previous) previous_row_scratch[0..pass.row_len] else null;
-            _ = try reconstructPngScanline(filter, row, previous, pass.bytes_per_pixel, row);
-            try placePngAdam7Row(info, pass, row_index, row, output);
-            @memcpy(previous_row_scratch[0..pass.row_len], row);
-            has_previous = true;
-            row_count += 1;
-        }
-    }
-    try zlib.finishRawPayload();
-    return .{
-        .passes = pass_count,
-        .rows = row_count,
-        .output_written = info.image_output_len,
-        .zlib_input_read = zlib.snapshot().input_read,
     };
 }
 
@@ -7687,6 +7919,25 @@ test "png adam7 placement scatters byte-aligned passes" {
     try std.testing.expectError(error.InputTooSmall, placePngAdam7Pass(info, info.passes[0], image[0 .. info.passes[0].reconstructed_len - 1], &image));
 }
 
+const PngAdam7StreamingRowCollector = struct {
+    info: PngAdam7Info,
+    image: []u8,
+    rows: usize = 0,
+    first_pass_index: u8 = 0,
+    first_row_len: usize = 0,
+    first_pass_row_index: usize = 0,
+};
+
+fn collectPngAdam7StreamingRow(context: *PngAdam7StreamingRowCollector, row: PngAdam7Row) Error!void {
+    if (context.rows == 0) {
+        context.first_pass_index = row.pass.pass_index;
+        context.first_row_len = row.row.len;
+        context.first_pass_row_index = row.pass_row_index;
+    }
+    try placePngAdam7Row(context.info, row.pass, row.pass_row_index, row.row, context.image);
+    context.rows += 1;
+}
+
 test "png adam7 placement scatters sub-byte packed pixels" {
     const info = try pngAdam7Info(5, 5, 2, .indexed);
     var image: [10]u8 = @splat(0);
@@ -7812,6 +8063,32 @@ test "png adam7 zlib image helper reconstructs interlaced RGB chunks" {
     try std.testing.expectEqual(streaming.rows, chunked_streaming.rows);
     try std.testing.expectEqual(streaming.output_written, chunked_streaming.output_written);
     try std.testing.expectEqual(encoded.len, chunked_streaming.zlib_input_read);
+    try std.testing.expectEqualSlices(u8, &expected_image, &image);
+
+    @memset(&image, 0);
+    var row_collector = PngAdam7StreamingRowCollector{ .info = info, .image = &image };
+    var row_decoder = try PngAdam7StreamingZlibRowDecoder.init(encoded, &history_scratch, &filtered_row_scratch, &previous_row_scratch, info);
+    while (try row_decoder.step()) |row| try collectPngAdam7StreamingRow(&row_collector, row);
+    const row_snapshot = row_decoder.snapshot();
+    try std.testing.expectEqual(@as(usize, 11), row_snapshot.rows_done);
+    try std.testing.expectEqual(info.zlib_payload_len - row_snapshot.rows_done, row_snapshot.row_bytes);
+    try std.testing.expectEqual(encoded.len, row_snapshot.zlib_input_read);
+    try std.testing.expect(row_snapshot.done);
+    try std.testing.expectEqual(row_snapshot.rows_done, row_collector.rows);
+    try std.testing.expectEqual(@as(u8, 1), row_collector.first_pass_index);
+    try std.testing.expectEqual(@as(usize, 0), row_collector.first_pass_row_index);
+    try std.testing.expectEqual(@as(usize, 3), row_collector.first_row_len);
+    try std.testing.expectEqualSlices(u8, &expected_image, &image);
+
+    @memset(&image, 0);
+    row_collector = .{ .info = info, .image = &image };
+    var chunked_row_decoder = try PngAdam7StreamingZlibChunkedRowDecoder.initDirect(&chunks, &chunked_history_scratch, &filtered_row_scratch, &previous_row_scratch, info);
+    while (try chunked_row_decoder.step()) |row| try collectPngAdam7StreamingRow(&row_collector, row);
+    const chunked_row_snapshot = chunked_row_decoder.snapshot();
+    try std.testing.expectEqual(row_snapshot.rows_done, chunked_row_snapshot.rows_done);
+    try std.testing.expectEqual(row_snapshot.row_bytes, chunked_row_snapshot.row_bytes);
+    try std.testing.expectEqual(encoded.len, chunked_row_snapshot.zlib_input_read);
+    try std.testing.expect(chunked_row_snapshot.done);
     try std.testing.expectEqualSlices(u8, &expected_image, &image);
 
     try std.testing.expectError(error.OutputTooSmall, decodePngAdam7ZlibImageFromChunks(&chunks, &compressed_scratch, &zlib_scratch, filtered_row_scratch[0 .. sizes.filtered_row_scratch_len - 1], &previous_row_scratch, info, &image));

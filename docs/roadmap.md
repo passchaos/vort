@@ -459,6 +459,9 @@ architecture blindly.
 - [x] Adam7 fixed/dynamic PNG helpers stream contiguous and chunked zlib payloads
   through the same 32 KiB history window, reconstructing and placing pass rows
   without full decoded-payload scratch.
+- [x] Adam7 streaming row decoders expose reconstructed pass rows directly for
+  high-level PNG transform consumers that do not want a full raw-sample image
+  intermediate.
 - [x] PngZlibScanlineDecoder and PNG-like image helpers expose direct chunk
   decode variants that avoid compressed join scratch while preserving caller-owned
   zlib row/output buffers.
