@@ -550,8 +550,8 @@ architecture blindly.
 - [x] Rust deflate benchmark summary reports Vort default and best-preset size ratios against Rust.
 - [x] Rust deflate benchmark summary flags benchmark-only rows with high size overhead.
 - [x] Rust deflate decode/encode benchmark scripts accept `--repeat N` and
-  report median elapsed rows, enabling less noisy optimization decisions without
-  slowing default Zig smoke steps.
+  report median elapsed rows, with discoverable `repeat3` Zig build steps for
+  less noisy optimization decisions without slowing default smoke steps.
 - [x] Lazy parser scan/hash heuristic uses a trigram sketch to avoid split-default source/text slow paths.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
 - [x] zlib/gzip dynamic-literal wrappers preserve the literal-only raw deflate stream.

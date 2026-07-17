@@ -484,6 +484,12 @@ pub fn build(b: *std.Build) void {
     const rust_deflate_bench_csv_step = b.step("run-rust-deflate-bench-csv", "Write Vort/fdeflate/miniz_oxide decode benchmark CSV to zig-out");
     rust_deflate_bench_csv_step.dependOn(&rust_deflate_bench_csv.step);
 
+    const rust_deflate_bench_csv_repeat3 = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_bench.py" });
+    rust_deflate_bench_csv_repeat3.addArtifactArg(zlib_decode_bench_exe);
+    rust_deflate_bench_csv_repeat3.addArgs(&.{ "--repeat", "3", "--csv", "zig-out/vort-rust-deflate-decode-bench-repeat3.csv" });
+    const rust_deflate_bench_csv_repeat3_step = b.step("run-rust-deflate-bench-csv-repeat3", "Write median-of-3 Vort/Rust decode benchmark CSV to zig-out");
+    rust_deflate_bench_csv_repeat3_step.dependOn(&rust_deflate_bench_csv_repeat3.step);
+
     const rust_deflate_encode_bench = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_encode_bench.py" });
     rust_deflate_encode_bench.addArtifactArg(zlib_encode_bench_exe);
     const rust_deflate_encode_bench_step = b.step("run-rust-deflate-encode-bench", "Run Vort/fdeflate/miniz_oxide encode throughput and size smoke benchmark");
@@ -494,6 +500,12 @@ pub fn build(b: *std.Build) void {
     rust_deflate_encode_bench_csv.addArgs(&.{ "--csv", "zig-out/vort-rust-deflate-encode-bench.csv" });
     const rust_deflate_encode_bench_csv_step = b.step("run-rust-deflate-encode-bench-csv", "Write Vort/fdeflate/miniz_oxide encode benchmark CSV to zig-out");
     rust_deflate_encode_bench_csv_step.dependOn(&rust_deflate_encode_bench_csv.step);
+
+    const rust_deflate_encode_bench_csv_repeat3 = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_encode_bench.py" });
+    rust_deflate_encode_bench_csv_repeat3.addArtifactArg(zlib_encode_bench_exe);
+    rust_deflate_encode_bench_csv_repeat3.addArgs(&.{ "--repeat", "3", "--csv", "zig-out/vort-rust-deflate-encode-bench-repeat3.csv" });
+    const rust_deflate_encode_bench_csv_repeat3_step = b.step("run-rust-deflate-encode-bench-csv-repeat3", "Write median-of-3 Vort/Rust encode benchmark CSV to zig-out");
+    rust_deflate_encode_bench_csv_repeat3_step.dependOn(&rust_deflate_encode_bench_csv_repeat3.step);
 
     const external_probe = b.addSystemCommand(&.{ "python3", "tools/external_probe.py" });
     const external_probe_step = b.step("run-external-probe", "Report available local compression competitors/tools");
@@ -683,6 +695,32 @@ pub fn build(b: *std.Build) void {
     rust_deflate_benchmark_summary.step.dependOn(deflate_decode_stage_report_csv_step);
     const rust_deflate_benchmark_summary_step = b.step("run-rust-deflate-benchmark-summary", "Write Vort/fdeflate/miniz_oxide benchmark Markdown summary to zig-out");
     rust_deflate_benchmark_summary_step.dependOn(&rust_deflate_benchmark_summary.step);
+
+    const rust_deflate_benchmark_summary_repeat3 = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_benchmark_summary.py" });
+    rust_deflate_benchmark_summary_repeat3.addArgs(&.{
+        "--decode-csv",
+        "zig-out/vort-rust-deflate-decode-bench-repeat3.csv",
+        "--encode-csv",
+        "zig-out/vort-rust-deflate-encode-bench-repeat3.csv",
+        "--dynamic-plan-csv",
+        "zig-out/vort-dynamic-plan-report.csv",
+        "--huffman-length-csv",
+        "zig-out/vort-huffman-length-report.csv",
+        "--dictionary-deflate-csv",
+        "zig-out/vort-dictionary-deflate-report.csv",
+        "--decode-stage-csv",
+        "zig-out/vort-deflate-decode-stage-report.csv",
+        "--output",
+        "zig-out/vort-rust-deflate-benchmark-summary-repeat3.md",
+    });
+    rust_deflate_benchmark_summary_repeat3.step.dependOn(rust_deflate_bench_csv_repeat3_step);
+    rust_deflate_benchmark_summary_repeat3.step.dependOn(rust_deflate_encode_bench_csv_repeat3_step);
+    rust_deflate_benchmark_summary_repeat3.step.dependOn(dynamic_plan_report_csv_step);
+    rust_deflate_benchmark_summary_repeat3.step.dependOn(huffman_length_report_dashboard_step);
+    rust_deflate_benchmark_summary_repeat3.step.dependOn(dictionary_deflate_report_csv_step);
+    rust_deflate_benchmark_summary_repeat3.step.dependOn(deflate_decode_stage_report_csv_step);
+    const rust_deflate_benchmark_summary_repeat3_step = b.step("run-rust-deflate-benchmark-summary-repeat3", "Write median-of-3 Vort/Rust benchmark Markdown summary to zig-out");
+    rust_deflate_benchmark_summary_repeat3_step.dependOn(&rust_deflate_benchmark_summary_repeat3.step);
 
     const split_policy_report_exe = b.addExecutable(.{
         .name = "vort-split-policy-report",

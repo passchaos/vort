@@ -61,6 +61,9 @@ zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --full
 zig build -Doptimize=ReleaseFast run-standard-multi-corpus-suite
 zig build -Doptimize=ReleaseFast run-standard-multi-corpus-dashboard -- --limit 3
 zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-suite
+zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv-repeat3
+zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3
+zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3
 zig build -Doptimize=ReleaseFast run-standard-multi-corpus-full-dashboard
 ```
 
