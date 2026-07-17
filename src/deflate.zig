@@ -4610,8 +4610,7 @@ pub const PngStoredZlibChunkedScanlineDecoder = struct {
         while (written < out.len) {
             if (self.block_remaining == 0) try self.nextBlock();
             const n = @min(out.len - written, self.block_remaining);
-            var i: usize = 0;
-            while (i < n) : (i += 1) out[written + i] = try self.cursor.readByte();
+            try self.cursor.copyTo(out[written..][0..n]);
             if (self.check_adler) self.adler.update(out[written..][0..n]);
             written += n;
             self.block_remaining -= n;
@@ -7223,9 +7222,12 @@ test "png stored zlib scanline decoder streams without zlib scratch" {
 
     const chunks = [_][]const u8{
         encoded[0..1],
+        encoded[1..1],
         encoded[1..5],
+        encoded[5..5],
         encoded[5 .. encoded.len - 4],
         encoded[encoded.len - 4 ..],
+        encoded[encoded.len..],
     };
     @memset(&image, 0);
     const chunked_result = try decodePngStoredZlibImageFromChunksDirect(&chunks, &filtered_row_scratch, &previous_row_scratch, info, &image);
