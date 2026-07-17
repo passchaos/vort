@@ -774,8 +774,9 @@ architecture blindly.
   calls while falling back to the streaming allocator path for larger expansion.
 - [x] zlib allocating decode can validate small/medium non-stored members
   directly into bounded stack scratch before copying the exact owned slice,
-  reusing the parsed zlib header and skipping redundant stored-only probing
-  while preserving the streaming fallback for larger expansion.
+  reusing the parsed zlib header, the buffered bit reader, and skipping
+  redundant stored-only probing while preserving the streaming fallback for
+  larger expansion.
 - [x] Stored-only caller-buffer decode and wrapper checksum validation now copy
   and hash in one pass instead of planning stored blocks first, reducing
   repeated scans for exact-size zlib/raw/gzip stored decode paths.
@@ -791,6 +792,9 @@ architecture blindly.
 - [x] Dynamic plan diagnostics report bit-boundary slack for default and best
   dynamic streams, making near-byte-size wins visible before changing encoder
   heuristics.
+- [x] Dynamic deflate header RLE treats literal and distance code lengths as
+  one RFC-1951 sequence, so zero runs crossing the HLIT/HDIST boundary can use a
+  single repeat opcode instead of restarting at the distance alphabet.
 - [x] Length/distance decode handles no-extra-bit symbols through direct
   hot-path formulas, avoiding table lookup and zero-bit reader calls for the
   most common short matches while preserving RFC table decoding for longer

@@ -990,9 +990,11 @@ const DynamicCodingPlan = struct {
 };
 
 fn buildCodeLengthOps(lit_lengths: []const u4, dist_lengths: []const u4) !CodeLengthOpBuffer {
+    var lengths: [286 + 30]u4 = undefined;
+    @memcpy(lengths[0..lit_lengths.len], lit_lengths);
+    @memcpy(lengths[lit_lengths.len..][0..dist_lengths.len], dist_lengths);
     var ops = CodeLengthOpBuffer{};
-    try appendCodeLengthOps(&ops, lit_lengths);
-    try appendCodeLengthOps(&ops, dist_lengths);
+    try appendCodeLengthOps(&ops, lengths[0 .. lit_lengths.len + dist_lengths.len]);
     return ops;
 }
 
@@ -4505,7 +4507,8 @@ fn decodeZlibWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, d
         return stored.result.output_written;
     }
 
-    const raw = try decodeRawAutoWithDictionary(input[header.data_offset..], raw_dictionary, output);
+    var reader = bitstream.BufferedBitReader.init(input[header.data_offset..]);
+    const raw = try decodeRawAutoWithDictionaryFromReader(&reader, 0, raw_dictionary, output);
     const footer_offset = header.data_offset + raw.input_read;
     try validateZlibFooterWithOptions(input, footer_offset, checksum.adler32(output[0..raw.output_written]), options);
     return raw.output_written;
@@ -4785,7 +4788,7 @@ fn decodeZlibAllocSmallIntoMaybe(
     // fast path a second time for non-stored frames.
     var scratch: [stack_inflate_alloc_scratch_len]u8 = undefined;
     const decode_buffer = if (max_output_len) |limit| scratch[0..@min(limit, scratch.len)] else scratch[0..];
-    var reader = bitstream.BitReader.init(input[header.data_offset..]);
+    var reader = bitstream.BufferedBitReader.init(input[header.data_offset..]);
     const raw = decodeRawAutoWithDictionaryFromReader(&reader, 0, raw_dictionary, decode_buffer) catch |err| switch (err) {
         error.OutputTooSmall => return null,
         else => return err,
@@ -5134,7 +5137,8 @@ pub fn decodeGzip(input: []const u8, output: []u8) Error!usize {
         return stored.result.output_written;
     }
 
-    const raw = try decodeRawAuto(input[data_offset..], output);
+    var reader = bitstream.BufferedBitReader.init(input[data_offset..]);
+    const raw = try decodeRawAutoWithDictionaryFromReader(&reader, 0, "", output);
     const footer_offset = data_offset + raw.input_read;
     const payload = output[0..raw.output_written];
     try validateGzipFooter(input, footer_offset, checksum.crc32Best(payload), raw.output_written);
@@ -8404,6 +8408,21 @@ test "dynamic code length RLE emits repeat symbols" {
     }
     try std.testing.expect(saw_zero_repeat);
     try std.testing.expect(saw_prev_repeat);
+}
+
+test "dynamic code length RLE preserves literal distance boundary runs" {
+    const lit_lengths = [_]u4{5} ++ [_]u4{0} ** 20;
+    const dist_lengths = [_]u4{0} ** 4;
+    const ops = try buildCodeLengthOps(&lit_lengths, &dist_lengths);
+
+    // HLIT and HDIST are serialized as one contiguous code-length sequence in
+    // RFC 1951. Keeping that boundary visible to the RLE planner lets a trailing
+    // literal zero run merge with leading distance zeros, avoiding a redundant
+    // repeat opcode in sparse dynamic blocks.
+    try std.testing.expectEqual(@as(usize, 2), ops.len);
+    try std.testing.expectEqual(@as(u8, 5), ops.items[0].symbol);
+    try std.testing.expectEqual(@as(u8, 18), ops.items[1].symbol);
+    try std.testing.expectEqual(@as(u8, 24 - 11), ops.items[1].extra_value);
 }
 
 test "best encoder selects a valid smallest raw block" {

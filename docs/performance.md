@@ -97,7 +97,11 @@ ReleaseFast direct API probe, `.best` zlib bytes moved to `mozilla=22476`,
 `osdb=51036`, and `x-ray=93063` on the 128 KiB weak-corpus samples (previous
 focused baseline: `22710`, `51441`, `93184`). Decode hot-path changes should
 continue to be checked with `run-rust-deflate-benchmark-summary-repeat3` because
-ratio-only improvements must not hide decompression regressions.
+ratio-only improvements must not hide decompression regressions. Dynamic-header
+size changes should also be checked with `run-dynamic-plan-builtins-report-csv`;
+Vort now RLEs the literal and distance code-length arrays as one contiguous
+RFC-1951 sequence, so sparse dynamic blocks can save header bits when zero runs
+cross the HLIT/HDIST boundary.
 
 Dynamic Huffman decode work is tracked separately from wrapper overhead. The
 Huffman table now stores bit-length bucket offsets/counts for active canonical
