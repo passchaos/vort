@@ -1856,7 +1856,8 @@ zig build run-native-allocation-smoke
 This smoke report gates the allocation report by requiring selected
 caller-owned/native decode paths to remain zero-allocation, including AnyDecoder,
 ZlibDecoder chunk/dictionary/varied-PNG scanline decode and PNG filter reconstruction,
-the PNG zlib scanline row pipeline, full-image PNG zlib decode including sub-byte rows,
+the PNG zlib scanline row pipeline, fixed/dynamic contiguous streaming PNG row
+and full-image decode, full-image PNG zlib decode including sub-byte rows,
 PNG Adam7 metadata/placement and interlaced full-image decode/corrupt rejects including zlib wrapper failures and packed sub-byte/16-bit RGBA rows, GzipDecoder single-member and concatenated
 chunk scratch decode, embedded and sidecar partial deflate/LDM range decode, embedded/sidecar
 deflate/LDM validation, and dictionary-deflate range/validation with caller-owned
@@ -1977,8 +1978,10 @@ representative PNG-like zlib decode paths. It includes non-interlaced and Adam7
 cases across RGB8, packed indexed rows, and RGBA16 so future incremental inflate
 work can prove peak `zlib_scratch_bytes` reductions against a stable baseline.
 The status columns make the milestone split explicit: stored-deflate scanline
-streaming is already usable, while fixed/dynamic Huffman IDAT scanline streaming
-remains the next memory-reduction target.
+streaming is already usable, non-interlaced contiguous fixed/dynamic Huffman
+IDAT scanline streaming is available through the 32 KiB history-window decoder,
+and chunked/Adam7 fixed/dynamic streaming remains the next memory-reduction
+target.
 
 Top-level fields:
 
@@ -1999,17 +2002,20 @@ Each `cases` item includes:
 | `bit_depth` | integer | PNG bit depth. |
 | `color_type` | string | PNG color type name. |
 | `stored_streaming_status` | string | Current stored-deflate PNG scanline streaming status; `achieved` for these baseline rows. |
-| `fixed_dynamic_streaming_status` | string | Current fixed/dynamic Huffman PNG scanline streaming status; `future_target` until incremental inflate rows are implemented. |
+| `fixed_dynamic_streaming_status` | string | Current fixed/dynamic Huffman PNG scanline streaming status; `contiguous_achieved` for non-interlaced contiguous zlib rows and `future_target` for rows still needing chunked/Adam7 streaming. |
 | `zlib_scratch_bytes` | integer | Exact decoded IDAT/zlib payload scratch. |
 | `filtered_row_scratch_bytes` | integer | One filtered row scratch. |
 | `previous_row_scratch_bytes` | integer | Previous reconstructed row scratch. |
+| `fixed_dynamic_history_scratch_bytes` | integer | Caller-owned DEFLATE history window used by fixed/dynamic streaming scanline decode, currently 32768 bytes. |
 | `image_output_bytes` | integer | Final reconstructed image output bytes. |
 | `working_scratch_bytes` | integer | Sum of zlib, filtered-row, and previous-row scratch. |
 | `streaming_working_scratch_bytes` | integer | Target working scratch after future incremental inflate removes full zlib payload scratch. |
+| `fixed_dynamic_streaming_working_scratch_bytes` | integer | Fixed/dynamic streaming working scratch: history window plus filtered and previous row scratch. |
 | `streaming_scratch_savings_bytes` | integer | Working-scratch bytes saved by that target; currently equal to `zlib_scratch_bytes`. |
 | `streaming_scratch_ratio_x10000` | integer | Target working scratch divided by current working scratch, scaled by 10000. |
 | `total_caller_owned_bytes` | integer | Working scratch plus output bytes. |
 | `streaming_total_caller_owned_bytes` | integer | Streaming target working scratch plus output bytes. |
+| `fixed_dynamic_streaming_total_caller_owned_bytes` | integer | Fixed/dynamic streaming working scratch plus output bytes. |
 
 Example:
 
@@ -2020,24 +2026,27 @@ Example:
   "case_count": 1,
   "cases": [
     {
-      "case": "png_rgb8_adam7",
-      "interlace": "adam7",
+      "case": "png_rgb8_noninterlaced",
+      "interlace": "none",
       "width": 5,
       "height": 5,
       "bit_depth": 8,
       "color_type": "truecolor",
       "stored_streaming_status": "achieved",
-      "fixed_dynamic_streaming_status": "future_target",
-      "zlib_scratch_bytes": 86,
+      "fixed_dynamic_streaming_status": "contiguous_achieved",
+      "zlib_scratch_bytes": 80,
       "filtered_row_scratch_bytes": 15,
       "previous_row_scratch_bytes": 15,
+      "fixed_dynamic_history_scratch_bytes": 32768,
       "image_output_bytes": 75,
-      "working_scratch_bytes": 116,
+      "working_scratch_bytes": 110,
       "streaming_working_scratch_bytes": 30,
-      "streaming_scratch_savings_bytes": 86,
-      "streaming_scratch_ratio_x10000": 2586,
-      "total_caller_owned_bytes": 191,
-      "streaming_total_caller_owned_bytes": 105
+      "fixed_dynamic_streaming_working_scratch_bytes": 32798,
+      "streaming_scratch_savings_bytes": 80,
+      "streaming_scratch_ratio_x10000": 2727,
+      "total_caller_owned_bytes": 185,
+      "streaming_total_caller_owned_bytes": 105,
+      "fixed_dynamic_streaming_total_caller_owned_bytes": 32873
     }
   ]
 }

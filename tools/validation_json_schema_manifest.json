@@ -1898,6 +1898,7 @@
       "item_collection": "cases",
       "item_enums": {
         "fixed_dynamic_streaming_status": [
+          "contiguous_achieved",
           "future_target"
         ],
         "stored_streaming_status": [
@@ -1909,7 +1910,10 @@
         "case": "str",
         "color_type": "str",
         "filtered_row_scratch_bytes": "int",
+        "fixed_dynamic_history_scratch_bytes": "int",
         "fixed_dynamic_streaming_status": "str",
+        "fixed_dynamic_streaming_total_caller_owned_bytes": "int",
+        "fixed_dynamic_streaming_working_scratch_bytes": "int",
         "height": "int",
         "image_output_bytes": "int",
         "interlace": "str",

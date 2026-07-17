@@ -226,10 +226,24 @@ def main() -> int:
         assert png_scratch["cases"]
         assert any(case["interlace"] == "adam7" for case in png_scratch["cases"])
         assert all(case["stored_streaming_status"] == "achieved" for case in png_scratch["cases"])
-        assert all(case["fixed_dynamic_streaming_status"] == "future_target" for case in png_scratch["cases"])
+        assert all(
+            case["fixed_dynamic_streaming_status"] == ("contiguous_achieved" if case["interlace"] == "none" else "future_target")
+            for case in png_scratch["cases"]
+        )
+        assert all(case["fixed_dynamic_history_scratch_bytes"] == 32768 for case in png_scratch["cases"])
+        assert all(
+            case["fixed_dynamic_streaming_working_scratch_bytes"]
+            == case["fixed_dynamic_history_scratch_bytes"] + case["filtered_row_scratch_bytes"] + case["previous_row_scratch_bytes"]
+            for case in png_scratch["cases"]
+        )
         assert all(case["streaming_working_scratch_bytes"] < case["working_scratch_bytes"] for case in png_scratch["cases"])
         assert all(case["streaming_scratch_savings_bytes"] == case["zlib_scratch_bytes"] for case in png_scratch["cases"])
         assert all(case["streaming_total_caller_owned_bytes"] < case["total_caller_owned_bytes"] for case in png_scratch["cases"])
+        assert all(
+            case["fixed_dynamic_streaming_total_caller_owned_bytes"]
+            == case["fixed_dynamic_streaming_working_scratch_bytes"] + case["image_output_bytes"]
+            for case in png_scratch["cases"]
+        )
         validate_value_against_manifest(png_scratch, schemas_def)
         run([
             "python3",
