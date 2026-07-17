@@ -780,9 +780,9 @@ architecture blindly.
 - [x] Stored-only caller-buffer decode and wrapper checksum validation now copy
   and hash in one pass instead of planning stored blocks first, reducing
   repeated scans for exact-size zlib/raw/gzip stored decode paths.
-- [x] Stored-only allocating wrapper decode can compute Adler-32/CRC-32 while
-  validating the stored-block plan, avoiding a separate checksum pass before
-  returning the owned output slice.
+- [x] Stored-only allocating wrapper decode validates block headers first and
+  then computes Adler-32/CRC-32 while copying validated payload bytes, avoiding
+  a second full payload read before returning the owned output slice.
 - [x] Default deflate LZ77 search budget increased modestly (`max_chain=160`,
   `nice_len=80`, `max_candidates=6`) to recover a smaller distance-heavy
   dynamic stream while keeping the production preset below best/optimal cost.

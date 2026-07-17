@@ -1838,14 +1838,6 @@ const StoredOnlyPlan = struct {
     output_len: usize,
 };
 
-fn StoredOnlyHashPlan(comptime Hash: type) type {
-    _ = Hash;
-    return struct {
-        plan: StoredOnlyPlan,
-        digest: u32,
-    };
-}
-
 const StoredOnlyHashResult = struct {
     result: OwnedDecodeResult,
     digest: u32,
@@ -1929,15 +1921,16 @@ fn decodeRawStoredOnlyIntoMaybeWithHash(comptime Hash: type, input: []const u8, 
 }
 
 fn decodeRawStoredOnlyAllocMaybeWithHash(comptime Hash: type, allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?StoredOnlyHashResult {
-    const planned = (try planRawStoredOnlyWithHash(Hash, input)) orelse return null;
-    try ensureOutputLimit(0, planned.plan.output_len, max_output_len);
-    const out = try allocator.alloc(u8, planned.plan.output_len);
+    const plan = (try planRawStoredOnly(input)) orelse return null;
+    try ensureOutputLimit(0, plan.output_len, max_output_len);
+    const out = try allocator.alloc(u8, plan.output_len);
     errdefer allocator.free(out);
 
-    copyRawStoredOnly(input[0..planned.plan.input_read], out);
+    var hash = Hash.init();
+    copyRawStoredOnlyWithHash(Hash, input[0..plan.input_read], out, &hash);
     return .{
-        .result = .{ .bytes = out, .input_read = planned.plan.input_read },
-        .digest = planned.digest,
+        .result = .{ .bytes = out, .input_read = plan.input_read },
+        .digest = hash.digest(),
     };
 }
 
@@ -1967,38 +1960,6 @@ fn planRawStoredOnly(input: []const u8) Error!?StoredOnlyPlan {
         output_len = std.math.add(usize, output_len, chunk_len) catch return error.IntegerOverflow;
         offset += chunk_len;
         if (final) return .{ .input_read = offset, .output_len = output_len };
-    }
-}
-
-fn planRawStoredOnlyWithHash(comptime Hash: type, input: []const u8) Error!?StoredOnlyHashPlan(Hash) {
-    if (input.len == 0) return error.TruncatedFrame;
-    var offset: usize = 0;
-    var output_len: usize = 0;
-    var hash = Hash.init();
-    while (true) {
-        if (input.len - offset < 1) return error.TruncatedFrame;
-        const header = input[offset];
-        const final = (header & 0x01) != 0;
-        const block_type = (header >> 1) & 0x03;
-        if (block_type != 0) return null;
-
-        // Stored-block payloads start on the next byte boundary. Bits 3..7 of
-        // the header byte are padding and intentionally ignored, matching zlib
-        // and the existing BitReader-based stored decoder.
-        offset += 1;
-        if (input.len - offset < 4) return error.TruncatedFrame;
-        const len = std.mem.readInt(u16, input[offset..][0..2], .little);
-        const nlen = std.mem.readInt(u16, input[offset + 2 ..][0..2], .little);
-        if (nlen != ~len) return error.StoredLengthMismatch;
-        offset += 4;
-
-        const chunk_len: usize = len;
-        if (input.len - offset < chunk_len) return error.TruncatedFrame;
-        const payload = input[offset..][0..chunk_len];
-        hash.update(payload);
-        output_len = std.math.add(usize, output_len, chunk_len) catch return error.IntegerOverflow;
-        offset += chunk_len;
-        if (final) return .{ .plan = .{ .input_read = offset, .output_len = output_len }, .digest = hash.digest() };
     }
 }
 
