@@ -2180,11 +2180,7 @@ fn copyMatch(history: []const u8, dest: []u8, length: usize, distance: usize) Er
         @memcpy(dest[0..length], history[start..][0..length]);
         return;
     }
-    var i: usize = 0;
-    while (i < length) : (i += 1) {
-        const absolute = history.len + i - distance;
-        dest[i] = if (absolute < history.len) history[absolute] else dest[absolute - history.len];
-    }
+    copyOverlappingMatch(history, dest[0..length], distance);
 }
 
 fn copyMatchWithDictionary(history: []const u8, dictionary: []const u8, dest: []u8, length: usize, distance: usize) Error!void {
@@ -2271,6 +2267,24 @@ fn copySmallDistanceMatch(dest: []u8, pattern: []const u8, distance: usize) void
             if (i < dest.len) dest[i] = c;
         },
         else => unreachable,
+    }
+}
+
+fn copyOverlappingMatch(history: []const u8, dest: []u8, distance: usize) void {
+    std.debug.assert(distance > 0 and distance < dest.len);
+    std.debug.assert(distance <= history.len);
+
+    // Seed exactly one distance-window from history, then repeatedly double the
+    // initialized prefix. This preserves DEFLATE's overlapping-copy semantics
+    // while avoiding a byte-at-a-time loop for medium/long matches with
+    // distances above the specialized small-distance cases.
+    const first = @min(distance, dest.len);
+    @memcpy(dest[0..first], history[history.len - distance ..][0..first]);
+    var copied = first;
+    while (copied < dest.len) {
+        const n = @min(copied, dest.len - copied);
+        @memcpy(dest[copied..][0..n], dest[0..n]);
+        copied += n;
     }
 }
 
@@ -7132,6 +7146,13 @@ test "raw fixed Huffman inflate decodes back references and rejects wrong block 
     var out: [8]u8 = undefined;
     try std.testing.expectError(error.InvalidDeflateBlockType, decodeRawFixed(&.{ 0x01, 0x00, 0x00, 0xff, 0xff }, &out));
     try std.testing.expectError(error.OutputTooSmall, decodeRawFixed(&.{ 0x4b, 0x04, 0x00 }, out[0..0]));
+}
+
+test "overlapping match copy doubles initialized output window" {
+    var history = [_]u8{ 'a', 'b', 'c', 'd', 'e' };
+    var output: [32]u8 = undefined;
+    try copyMatch(&history, &output, output.len, history.len);
+    try std.testing.expectEqualSlices(u8, ("abcde" ** 6) ++ "ab", &output);
 }
 
 test "fixed Huffman decoder rejects reserved distance symbols" {

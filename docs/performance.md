@@ -97,6 +97,10 @@ also has a value-only fallback path, avoiding Symbol materialization for dynamic
 literal/distance misses. ReleaseFast `run-deflate-decode-stage-report` remains
 the quick smoke for this path; repeat3 Rust summaries should still be used before
 accepting small throughput deltas because the decode microbenchmarks are noisy.
+Match replay is another decode hot path: overlapping matches above the
+specialized distance-1..4 cases now copy by seeding one distance window and
+doubling the initialized prefix. This improves long repeated/source-like matches
+without changing fixed, dynamic, zlib, or gzip wire compatibility.
 
 `ci-smoke` is a validation aggregate rather than a full benchmark suite; it
 includes bounded reports to catch regressions quickly, while full-corpus or

@@ -756,6 +756,9 @@ architecture blindly.
   path and expose value-only helpers for raw/zlib/gzip fixed blocks, cutting
   Symbol materialization and the legacy `skipBits` path; latest Rust deflate
   summary shows zlib caller-buffer decode geomean at 1.006 of the best Rust row.
+- [x] Overlapping match replay seeds one history window and then doubles the
+  initialized output prefix for medium/long matches, replacing the previous
+  byte-at-a-time loop while preserving DEFLATE overlap semantics.
 - [x] Complex dynamic literal alphabets can select a 12-bit fast lookup,
   improving repeat3 zlib decode geomean on text-heavy blocks while retaining
   9-bit lookup for tiny alphabets and 11-bit lookup for ordinary dynamic blocks.
