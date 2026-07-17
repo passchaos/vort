@@ -780,6 +780,13 @@ architecture blindly.
   hot-path formulas, avoiding table lookup and zero-bit reader calls for the
   most common short matches while preserving RFC table decoding for longer
   symbols.
+- [x] Contiguous raw/zlib/gzip inflate now uses a buffered bit reader for
+  caller-buffer and allocating auto-decode paths, reducing repeated input-window
+  reloads in Huffman and extra-bit hot loops while retaining the scalar reader
+  for chunked inputs and inspection helpers.
+- [x] No-dictionary caller-buffer inflate has specialized fixed/dynamic block
+  loops and direct output-offset match copy, avoiding per-match dictionary
+  boundary checks on the common PNG/source/text path.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

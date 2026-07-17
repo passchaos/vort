@@ -107,6 +107,119 @@ pub const BitReader = struct {
     }
 };
 
+pub const BufferedBitReader = struct {
+    input: []const u8,
+    /// Next byte not yet staged in `bit_buffer`.
+    byte_index: usize = 0,
+    /// Low `bit_count` bits are the unread bitstream, in DEFLATE LSB-first
+    /// order. Keeping this small reservoir avoids reloading the same two or
+    /// four input bytes for every Huffman lookup in contiguous raw/zlib/gzip
+    /// decode hot paths.
+    bit_buffer: u64 = 0,
+    bit_count: usize = 0,
+    consumed_bits: usize = 0,
+
+    pub fn init(input: []const u8) BufferedBitReader {
+        return .{ .input = input };
+    }
+
+    pub fn bitPosition(self: BufferedBitReader) usize {
+        return self.consumed_bits;
+    }
+
+    pub fn byteOffset(self: BufferedBitReader) usize {
+        return (self.consumed_bits + 7) / 8;
+    }
+
+    pub fn readBits(self: *BufferedBitReader, comptime T: type, count: u6) Error!T {
+        if (count > @bitSizeOf(T)) return error.CorruptFrame;
+        if (!self.hasBits(count)) return error.TruncatedFrame;
+        const result = self.peekBitsPadded(T, count);
+        self.advanceBitsAssumeAvailable(count);
+        return result;
+    }
+
+    pub fn peekBits(self: *BufferedBitReader, comptime T: type, count: u6) Error!T {
+        if (count > @bitSizeOf(T)) return error.CorruptFrame;
+        if (!self.hasBits(count)) return error.TruncatedFrame;
+        return self.peekBitsPadded(T, count);
+    }
+
+    pub fn skipBits(self: *BufferedBitReader, count: u6) Error!void {
+        if (!self.hasBits(count)) return error.TruncatedFrame;
+        self.advanceBitsAssumeAvailable(count);
+    }
+
+    pub fn hasBits(self: BufferedBitReader, count: u6) bool {
+        const remaining_staged = self.bit_count;
+        const remaining_input_bits = if (self.byte_index <= self.input.len)
+            (self.input.len - self.byte_index) * 8
+        else
+            0;
+        return @as(usize, count) <= remaining_staged + remaining_input_bits;
+    }
+
+    pub fn advanceBitsAssumeAvailable(self: *BufferedBitReader, count: u6) void {
+        self.fill(count);
+        std.debug.assert(self.bit_count >= count);
+        self.bit_buffer >>= @intCast(count);
+        self.bit_count -= count;
+        self.consumed_bits += count;
+    }
+
+    pub fn peekBitsPadded(self: *BufferedBitReader, comptime T: type, count: u6) T {
+        std.debug.assert(count <= @bitSizeOf(T));
+        if (count == 0) return 0;
+        self.fill(count);
+        const mask = (@as(u64, 1) << @intCast(count)) - 1;
+        return @intCast(self.bit_buffer & mask);
+    }
+
+    pub fn alignToByte(self: *BufferedBitReader) void {
+        const bit_index: u3 = @intCast(self.consumed_bits % 8);
+        if (bit_index != 0) {
+            const padding: usize = 8 - @as(usize, bit_index);
+            const staged_drop = @min(padding, self.bit_count);
+            self.bit_buffer >>= @intCast(staged_drop);
+            self.bit_count -= staged_drop;
+            // Match `BitReader.alignToByte`: alignment itself is permissive and
+            // later aligned reads report truncation. This matters for malformed
+            // stored-block tails, where no real padding byte may remain.
+            self.consumed_bits += padding;
+            if (staged_drop < padding) {
+                self.bit_buffer = 0;
+                self.bit_count = 0;
+            }
+        }
+    }
+
+    pub fn readAlignedBytes(self: *BufferedBitReader, output: []u8) Error!void {
+        if (self.consumed_bits % 8 != 0) return error.CorruptFrame;
+        const offset = self.byteOffset();
+        if (offset > self.input.len or self.input.len - offset < output.len) return error.TruncatedFrame;
+        @memcpy(output, self.input[offset..][0..output.len]);
+        self.consumed_bits += output.len * 8;
+        self.byte_index = offset + output.len;
+        self.bit_buffer = 0;
+        self.bit_count = 0;
+    }
+
+    pub fn readAlignedInt(self: *BufferedBitReader, comptime T: type, endian: std.builtin.Endian) Error!T {
+        var bytes: [@sizeOf(T)]u8 = undefined;
+        try self.readAlignedBytes(&bytes);
+        return std.mem.readInt(T, &bytes, endian);
+    }
+
+    fn fill(self: *BufferedBitReader, requested_bits: usize) void {
+        std.debug.assert(requested_bits <= 63);
+        while (self.bit_count < requested_bits and self.byte_index < self.input.len and self.bit_count <= 56) {
+            self.bit_buffer |= @as(u64, self.input[self.byte_index]) << @intCast(self.bit_count);
+            self.bit_count += 8;
+            self.byte_index += 1;
+        }
+    }
+};
+
 pub const ChunkedBitReader = struct {
     chunks: []const []const u8,
     byte_index: usize = 0,
@@ -223,6 +336,41 @@ fn chunksTotalLen(chunks: []const []const u8) Error!usize {
         total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
     }
     return total;
+}
+
+test "buffered bit reader matches scalar reader across mixed operations" {
+    const input = [_]u8{ 0b1010_1101, 0b0111_0010, 0b1100_0001, 0b0001_1110, 0b0101_1010, 0b1110_0110 };
+    var scalar = BitReader.init(&input);
+    var buffered = BufferedBitReader.init(&input);
+
+    inline for (.{ 3, 5, 9, 1 }) |count| {
+        try std.testing.expectEqual(try scalar.readBits(u16, count), try buffered.readBits(u16, count));
+        try std.testing.expectEqual(scalar.bitPosition(), buffered.bitPosition());
+        try std.testing.expectEqual(scalar.byteOffset(), buffered.byteOffset());
+    }
+
+    const scalar_peek = try scalar.peekBits(u8, 5);
+    const buffered_peek = try buffered.peekBits(u8, 5);
+    try std.testing.expectEqual(scalar_peek, buffered_peek);
+    try std.testing.expectEqual(scalar.bitPosition(), buffered.bitPosition());
+    try std.testing.expectEqual(scalar.byteOffset(), buffered.byteOffset());
+
+    scalar.alignToByte();
+    buffered.alignToByte();
+    try std.testing.expectEqual(scalar.bitPosition(), buffered.bitPosition());
+    try std.testing.expectEqual(scalar.byteOffset(), buffered.byteOffset());
+
+    var scalar_bytes: [2]u8 = undefined;
+    var buffered_bytes: [2]u8 = undefined;
+    try scalar.readAlignedBytes(&scalar_bytes);
+    try buffered.readAlignedBytes(&buffered_bytes);
+    try std.testing.expectEqualSlices(u8, &scalar_bytes, &buffered_bytes);
+    try std.testing.expectEqual(scalar.bitPosition(), buffered.bitPosition());
+    try std.testing.expectEqual(scalar.byteOffset(), buffered.byteOffset());
+
+    try std.testing.expectEqual(try scalar.readBits(u8, 4), try buffered.readBits(u8, 4));
+    try std.testing.expectEqual(scalar.bitPosition(), buffered.bitPosition());
+    try std.testing.expectEqual(scalar.byteOffset(), buffered.byteOffset());
 }
 
 pub const BitWriter = struct {

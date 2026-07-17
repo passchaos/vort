@@ -1278,7 +1278,7 @@ test "fast length and distance code selection matches RFC tables" {
 }
 
 pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {
-    var reader = bitstream.BitReader.init(input);
+    var reader = bitstream.BufferedBitReader.init(input);
     const final = try reader.readBits(u1, 1);
     const block_type = try reader.readBits(u2, 2);
     if (block_type != 0b01) return error.InvalidDeflateBlockType;
@@ -1310,7 +1310,7 @@ pub fn decodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) !Own
     errdefer out.deinit(allocator);
     try out.ensureTotalCapacity(allocator, @min(input.len * 4, 1 << 20));
 
-    var reader = bitstream.BitReader.init(input);
+    var reader = bitstream.BufferedBitReader.init(input);
     const final = try reader.readBits(u1, 1);
     const block_type = try reader.readBits(u2, 2);
     if (block_type != 0b01) return error.InvalidDeflateBlockType;
@@ -1345,7 +1345,7 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
     errdefer out.deinit(allocator);
     try reserveInflateOutputHint(allocator, &out, input.len, null);
 
-    var reader = bitstream.BitReader.init(input);
+    var reader = bitstream.BufferedBitReader.init(input);
     const parsed = try huffman.parseDynamicLengths(&reader);
     const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
     const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
@@ -1409,7 +1409,7 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
     errdefer out.deinit(allocator);
     try reserveInflateOutputHint(allocator, &out, input.len, max_output_len);
 
-    var reader = bitstream.BitReader.init(input);
+    var reader = bitstream.BufferedBitReader.init(input);
     while (true) {
         const final = (try reader.readBits(u1, 1)) != 0;
         const block_type = try reader.readBits(u2, 2);
@@ -1576,7 +1576,7 @@ fn decodeRawAutoAppendPartialWithDictionary(
 
     try reserveInflateAppendOutputHint(allocator, out, input.len, max_output_len);
 
-    var reader = bitstream.BitReader.init(input);
+    var reader = bitstream.BufferedBitReader.init(input);
     return decodeRawAutoAppendPartialWithDictionaryFromReader(allocator, &reader, 0, dictionary, out, max_output_len);
 }
 
@@ -1695,7 +1695,7 @@ pub fn decodeRawAutoWithDictionary(input: []const u8, dictionary: []const u8, ou
     if (input.len == 0) return error.TruncatedFrame;
     if (try decodeRawStoredOnlyIntoMaybe(input, output)) |stored| return stored;
 
-    var reader = bitstream.BitReader.init(input);
+    var reader = bitstream.BufferedBitReader.init(input);
     return decodeRawAutoWithDictionaryFromReader(&reader, 0, dictionary, output);
 }
 
@@ -2061,6 +2061,10 @@ fn decodeFixedBlockFromReaderFromBase(allocator: std.mem.Allocator, reader: anyt
 }
 
 fn decodeFixedBlockIntoReader(reader: anytype, output: []u8, out_offset: *usize, dictionary: []const u8) Error!void {
+    // Most caller-buffer decodes are ordinary raw/zlib/gzip streams without a
+    // preset dictionary. Keep that hot path monomorphic so every match can go
+    // straight through `copyMatch` instead of rechecking dictionary boundaries.
+    if (dictionary.len == 0) return decodeFixedBlockIntoReaderNoDict(reader, output, out_offset);
     while (true) {
         const symbol = try huffman.decodeFixedLiteralValueFast(reader);
         if (symbol < 256) {
@@ -2074,6 +2078,27 @@ fn decodeFixedBlockIntoReader(reader: anytype, output: []u8, out_offset: *usize,
             const distance_symbol = try huffman.decodeFixedDistanceValueFast(reader);
             const distance = try decodeDistance(distance_symbol, reader);
             try copyMatchWithDictionary(output[0..out_offset.*], dictionary, output[out_offset.*..], length, distance);
+            out_offset.* += length;
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
+}
+
+fn decodeFixedBlockIntoReaderNoDict(reader: anytype, output: []u8, out_offset: *usize) Error!void {
+    while (true) {
+        const symbol = try huffman.decodeFixedLiteralValueFast(reader);
+        if (symbol < 256) {
+            if (out_offset.* == output.len) return error.OutputTooSmall;
+            output[out_offset.*] = @intCast(symbol);
+            out_offset.* += 1;
+        } else if (symbol == 256) {
+            return;
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, reader);
+            const distance_symbol = try huffman.decodeFixedDistanceValueFast(reader);
+            const distance = try decodeDistance(distance_symbol, reader);
+            try copyMatchAt(output, out_offset.*, length, distance);
             out_offset.* += length;
         } else {
             return error.InvalidHuffmanCode;
@@ -2129,6 +2154,11 @@ fn decodeCompressedBlockIntoReader(
     lit_table: anytype,
     dist_table: anytype,
 ) Error!void {
+    // Dynamic blocks dominate real-world PNG/source/text payloads. Splitting
+    // the no-dictionary case avoids a per-match dictionary branch in the tight
+    // caller-buffer inflate loop while leaving preset-dictionary semantics in
+    // the generic path below.
+    if (dictionary.len == 0) return decodeCompressedBlockIntoReaderNoDict(reader, output, out_offset, lit_table, dist_table);
     while (true) {
         const symbol = try lit_table.decodeValue(reader);
         if (symbol < 256) {
@@ -2149,6 +2179,33 @@ fn decodeCompressedBlockIntoReader(
     }
 }
 
+fn decodeCompressedBlockIntoReaderNoDict(
+    reader: anytype,
+    output: []u8,
+    out_offset: *usize,
+    lit_table: anytype,
+    dist_table: anytype,
+) Error!void {
+    while (true) {
+        const symbol = try lit_table.decodeValue(reader);
+        if (symbol < 256) {
+            if (out_offset.* == output.len) return error.OutputTooSmall;
+            output[out_offset.*] = @intCast(symbol);
+            out_offset.* += 1;
+        } else if (symbol == 256) {
+            return;
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, reader);
+            const distance_symbol = try dist_table.decodeValue(reader);
+            const distance = try decodeDistance(distance_symbol, reader);
+            try copyMatchAt(output, out_offset.*, length, distance);
+            out_offset.* += length;
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
+}
+
 fn decodeLength(symbol: u16, reader: anytype) Error!usize {
     if (symbol < 257 or symbol > 285) return error.InvalidHuffmanCode;
     if (symbol <= 264) return symbol - 254;
@@ -2162,6 +2219,25 @@ fn decodeDistance(symbol: u16, reader: anytype) Error!usize {
     if (symbol < 4) return symbol + 1;
     const entry = distance_table[symbol];
     return entry.base + try reader.readBits(u16, entry.extra_bits);
+}
+
+fn copyMatchAt(output: []u8, out_offset: usize, length: usize, distance: usize) Error!void {
+    if (distance == 0 or distance > out_offset) return error.InvalidMatch;
+    if (out_offset > output.len or output.len - out_offset < length) return error.OutputTooSmall;
+    const dest = output[out_offset..][0..length];
+    if (distance == 1 and out_offset != 0) {
+        @memset(dest, output[out_offset - 1]);
+        return;
+    }
+    if (distance <= 4 and out_offset >= distance) {
+        copySmallDistanceMatch(dest, output[out_offset - distance ..], distance);
+        return;
+    }
+    if (distance >= length) {
+        @memcpy(dest, output[out_offset - distance ..][0..length]);
+        return;
+    }
+    copyOverlappingMatchAt(output, out_offset, length, distance);
 }
 
 fn copyMatch(history: []const u8, dest: []u8, length: usize, distance: usize) Error!void {
@@ -2284,6 +2360,21 @@ fn copyOverlappingMatch(history: []const u8, dest: []u8, distance: usize) void {
     while (copied < dest.len) {
         const n = @min(copied, dest.len - copied);
         @memcpy(dest[copied..][0..n], dest[0..n]);
+        copied += n;
+    }
+}
+
+fn copyOverlappingMatchAt(output: []u8, out_offset: usize, length: usize, distance: usize) void {
+    std.debug.assert(distance > 0 and distance < length);
+    std.debug.assert(distance <= out_offset);
+    std.debug.assert(output.len - out_offset >= length);
+
+    const first = @min(distance, length);
+    @memcpy(output[out_offset..][0..first], output[out_offset - distance ..][0..first]);
+    var copied = first;
+    while (copied < length) {
+        const n = @min(copied, length - copied);
+        @memcpy(output[out_offset + copied ..][0..n], output[out_offset..][0..n]);
         copied += n;
     }
 }
