@@ -698,6 +698,9 @@ architecture blindly.
   avoiding the internal Symbol construction used by full decode metadata calls.
 - [x] `HuffmanTable.decodeValue` provides the same value-only path for long-code
   fallback decoding, so FastDecoder fallback misses also avoid Symbol materialization.
+- [x] `HuffmanTable.decodeValue` now returns directly from its table scan rather
+  than routing through the full Symbol-returning helper, reducing long-code
+  fallback overhead.
 - [x] FastDecoder construction skips zeroing the lookup table when short codes
   fully cover it, cutting setup work for complete dynamic literal/distance
   alphabets while preserving fallback entries for incomplete tables.

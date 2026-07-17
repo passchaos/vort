@@ -96,7 +96,18 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
         }
 
         pub fn decodeValue(self: *const Self, reader: anytype) Error!u16 {
-            return (try self.decodeValueWithBits(reader)).value;
+            var code: u16 = 0;
+            var bits: u4 = 1;
+            while (bits <= max_code_bits) {
+                const bit = try reader.readBits(u16, 1);
+                code |= bit << @intCast(bits - 1);
+                for (self.entries[0..self.len]) |entry| {
+                    if (entry.bits == bits and entry.code == code) return entry.symbol;
+                }
+                if (bits == max_code_bits) break;
+                bits += 1;
+            }
+            return error.InvalidHuffmanCode;
         }
 
         fn decodeValueWithBits(self: *const Self, reader: anytype) Error!Symbol {
