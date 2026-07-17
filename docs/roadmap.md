@@ -796,6 +796,9 @@ architecture blindly.
 - [x] Direct chunked stored-block reads and zlib footer checks avoid repeated
   cursor resynchronization/offset rescans, improving tiny IDAT-style stored
   chunk decode evidence in the chunked zlib repeat3 report.
+- [x] Small highly fragmented zlib chunks can use a bounded stack-join fast
+  path to reuse the contiguous buffered inflater for dynamic/tiny IDAT streams
+  without requiring caller-provided compressed scratch.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

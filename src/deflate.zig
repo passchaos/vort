@@ -1620,6 +1620,8 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
 
 const stack_inflate_alloc_max_input_len = 8 * 1024;
 const stack_inflate_alloc_scratch_len = 64 * 1024;
+const stack_chunked_zlib_join_max_input_len = 64 * 1024;
+const stack_chunked_zlib_tiny_chunk_count = 512;
 
 fn decodeRawAutoSmallIntoAlloc(allocator: std.mem.Allocator, input: []const u8) !?OwnedDecodeResult {
     if (input.len > stack_inflate_alloc_max_input_len) return null;
@@ -3101,8 +3103,11 @@ fn validateZlibFooterChunksWithOptions(chunks: []const []const u8, footer_offset
 }
 
 fn decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks: []const []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
+    const total_len = try chunksTotalLen(chunks);
     const header = try parseZlibHeaderFromChunks(chunks, dictionary);
-    if (try decodeZlibStoredChunksIntoMaybe(chunks, header.data_offset, output, options)) |stored_written| return stored_written;
+
+    if (try decodeZlibChunksViaStackJoinMaybe(chunks, total_len, header, output, dictionary, options)) |written| return written;
+    if (try decodeZlibStoredChunksIntoMaybe(chunks, total_len, header.data_offset, output, options)) |stored_written| return stored_written;
 
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
     var reader = try bitstream.ChunkedBitReader.initAt(chunks, header.data_offset);
@@ -3112,8 +3117,24 @@ fn decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks: []const []cons
     return raw.output_written;
 }
 
-fn decodeZlibStoredChunksIntoMaybe(chunks: []const []const u8, raw_offset: usize, output: []u8, options: ZlibDecodeOptions) Error!?usize {
-    var cursor = try ChunkCursor.init(chunks, try chunksTotalLen(chunks), raw_offset);
+fn decodeZlibChunksViaStackJoinMaybe(chunks: []const []const u8, total_len: usize, header: ZlibHeader, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!?usize {
+    if (total_len > stack_chunked_zlib_join_max_input_len) return null;
+    const first_deflate_byte = chunkByteAt(chunks, header.data_offset) orelse return error.TruncatedFrame;
+    const block_type = (first_deflate_byte >> 1) & 0x03;
+    if (block_type == 0 and chunks.len <= stack_chunked_zlib_tiny_chunk_count) return null;
+
+    // Direct chunked decode exists to avoid caller-provided compressed scratch,
+    // but many real PNG/IDAT streams are split into tiny chunks. For small
+    // members, a bounded stack join lets us reuse the contiguous buffered
+    // inflater and is faster than rebuilding bit windows across thousands of
+    // one-byte chunks, while larger members still use the streaming chunked path.
+    var joined_buffer: [stack_chunked_zlib_join_max_input_len]u8 = undefined;
+    const joined = try joinChunks(chunks, joined_buffer[0..total_len]);
+    return try decodeZlibWithOptionalDictionaryAndOptions(joined, output, dictionary, options);
+}
+
+fn decodeZlibStoredChunksIntoMaybe(chunks: []const []const u8, total_len: usize, raw_offset: usize, output: []u8, options: ZlibDecodeOptions) Error!?usize {
+    var cursor = try ChunkCursor.init(chunks, total_len, raw_offset);
     var out_offset: usize = 0;
 
     while (true) {
