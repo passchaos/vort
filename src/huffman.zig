@@ -17,6 +17,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
     return struct {
         entries: [max_symbols]Entry = undefined,
         len: usize = 0,
+        max_bits: u4 = 0,
 
         const Self = @This();
         pub const Entry = struct {
@@ -51,10 +52,12 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             var counts: [max_code_bits + 1]u16 = @splat(0);
             var active_symbols: [max_symbols]u16 = undefined;
             var active_len: usize = 0;
+            var max_bits_seen: u4 = 0;
             for (lengths, 0..) |bits, symbol| {
                 if (bits > max_code_bits) return error.CorruptFrame;
                 if (bits != 0) {
                     counts[bits] += 1;
+                    max_bits_seen = @max(max_bits_seen, bits);
                     active_symbols[active_len] = @intCast(symbol);
                     active_len += 1;
                 }
@@ -74,7 +77,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 next_code[bits] = code;
             }
 
-            var table = Self{ .len = 0 };
+            var table = Self{ .len = 0, .max_bits = max_bits_seen };
             for (active_symbols[0..active_len]) |symbol| {
                 const bits = lengths[symbol];
                 const canonical = next_code[bits];
@@ -169,6 +172,14 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
         }
 
         pub fn decode(self: *const Self, reader: anytype) Error!Symbol {
+            return self.decodeSlowAware(reader);
+        }
+
+        pub fn decodeValue(self: *const Self, reader: anytype) Error!u16 {
+            return (try self.decodeSlowAware(reader)).value;
+        }
+
+        fn decodeSlowAware(self: *const Self, reader: anytype) Error!Symbol {
             const peek = reader.peekBitsPadded(u16, lookup_bits);
             const entry = self.lookup[peek];
             if (entry.bits != 0) {
@@ -176,18 +187,35 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
                 reader.advanceBitsAssumeAvailable(entry.bits);
                 return .{ .value = entry.symbol, .bits = entry.bits };
             }
-            return self.table.decode(reader);
-        }
 
-        pub fn decodeValue(self: *const Self, reader: anytype) Error!u16 {
-            const peek = reader.peekBitsPadded(u16, lookup_bits);
-            const entry = self.lookup[peek];
-            if (entry.bits != 0) {
-                if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
-                reader.advanceBitsAssumeAvailable(entry.bits);
-                return entry.symbol;
+            // A fast-table miss already proves that no code of `lookup_bits`
+            // or fewer matches this prefix. Continue from the first possible
+            // long width instead of restarting the generic table decoder at
+            // one bit and rescanning short entries. Dynamic DEFLATE streams
+            // commonly put cold literals/distances behind long Huffman codes,
+            // so avoiding the redundant 1..lookup_bits work is a measurable
+            // win on text-heavy blocks while keeping the compact reference
+            // table representation.
+            if (self.table.max_bits == 0) return error.InvalidHuffmanCode;
+            if (self.table.max_bits <= lookup_bits) {
+                if (!reader.hasBits(self.table.max_bits)) return error.TruncatedFrame;
+                return error.InvalidHuffmanCode;
             }
-            return try self.table.decodeValue(reader);
+
+            var bits: u4 = lookup_bits + 1;
+            while (bits <= self.table.max_bits) {
+                if (!reader.hasBits(bits)) return error.TruncatedFrame;
+                const code = reader.peekBitsPadded(u16, bits);
+                for (self.table.entries[0..self.table.len]) |long_entry| {
+                    if (long_entry.bits == bits and long_entry.code == code) {
+                        reader.advanceBitsAssumeAvailable(bits);
+                        return .{ .value = long_entry.symbol, .bits = bits };
+                    }
+                }
+                if (bits == self.table.max_bits) break;
+                bits += 1;
+            }
+            return error.InvalidHuffmanCode;
         }
     };
 }
@@ -642,6 +670,15 @@ test "fast Huffman decoder falls back for long codes" {
     try std.testing.expectEqual(@as(u16, 1), (try fast.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 0), (try fast.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 2), (try fast.decode(&reader)).value);
+}
+
+test "Huffman table records maximum active code length" {
+    const Table = HuffmanTable(4);
+    const table = try Table.init(&.{ 2, 1, 3, 3 });
+    try std.testing.expectEqual(@as(u4, 3), table.max_bits);
+
+    const empty = try Table.init(&.{ 0, 0, 0, 0 });
+    try std.testing.expectEqual(@as(u4, 0), empty.max_bits);
 }
 
 test "canonical Huffman decoder rejects oversubscribed trees" {

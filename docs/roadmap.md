@@ -723,6 +723,12 @@ architecture blindly.
 - [x] Bit readers' `readBits` hot path now uses `hasBits` plus unchecked advance
   directly, avoiding an extra `skipBits` call after the padded peek for dynamic
   header, extra-bit, and fallback Huffman reads.
+- [x] FastDecoder long-code misses resume decoding at the first width beyond
+  the lookup table and stop at the table's recorded maximum code length,
+  avoiding redundant short-code rescans on text-heavy dynamic Huffman blocks;
+  latest Rust deflate summary shows zlib caller-buffer decode geomean at 0.949
+  of the best Rust row and raw caller-buffer decode geomean at 1.411 of
+  miniz_oxide after this optimization.
 - [x] FastDecoder lookup hits trust `peekBitsPadded`'s width mask and avoid a
   redundant lookup-index mask in both full-symbol and value-only decode paths.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
