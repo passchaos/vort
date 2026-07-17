@@ -741,8 +741,8 @@ architecture blindly.
   calls while falling back to the streaming allocator path for larger expansion.
 - [x] zlib allocating decode can validate small/medium non-stored members
   directly into bounded stack scratch before copying the exact owned slice,
-  improving allocator-returning wrapper decode while preserving the streaming
-  fallback for larger expansion.
+  reusing the parsed zlib header and skipping redundant stored-only probing
+  while preserving the streaming fallback for larger expansion.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
