@@ -63,6 +63,11 @@ pub fn build(b: *std.Build) void {
     const bench_step = b.step("bench-checksum", "Run Adler-32/CRC-32 checksum throughput smoke benchmark");
     bench_step.dependOn(&run_bench.step);
 
+    const run_checksum_bench_csv = b.addRunArtifact(bench_exe);
+    run_checksum_bench_csv.addArgs(&.{ "--csv", "zig-out/vort-checksum-bench.csv" });
+    const checksum_bench_csv_step = b.step("bench-checksum-csv", "Write per-checksum throughput CSV to zig-out");
+    checksum_bench_csv_step.dependOn(&run_checksum_bench_csv.step);
+
     const deflate_bench_exe = b.addExecutable(.{
         .name = "vort-bench-deflate-decode",
         .root_module = b.createModule(.{

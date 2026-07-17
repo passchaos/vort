@@ -9,6 +9,18 @@ const Row = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
+    defer args.deinit();
+    _ = args.next();
+    var csv_path: ?[]const u8 = null;
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--csv")) {
+            csv_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
+        return error.InvalidBlockPlan;
+    }
+
     const len = 1 << 20;
     const iterations = 128;
     const input = try init.gpa.alloc(u8, len);
@@ -54,16 +66,28 @@ pub fn main(init: std.process.Init) !void {
     });
     try stdout.writeAll("algorithm,bytes,iterations,elapsed_s,throughput_mib_s,mix\n");
     for (rows) |row| {
-        try stdout.print("{s},{d},{d},{d:.6},{d:.2},{d}\n", .{
-            row.name,
-            len,
-            iterations,
-            row.elapsed_s,
-            row.throughput_mib_s,
-            row.digest_mix,
-        });
+        try writeCsvRow(stdout, row, len, iterations);
     }
     try stdout.flush();
+
+    if (csv_path) |path| {
+        var csv = std.Io.Writer.Allocating.init(init.gpa);
+        defer csv.deinit();
+        try csv.writer.writeAll("algorithm,bytes,iterations,elapsed_s,throughput_mib_s,mix\n");
+        for (rows) |row| try writeCsvRow(&csv.writer, row, len, iterations);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
+    }
+}
+
+fn writeCsvRow(writer: *std.Io.Writer, row: Row, len: usize, iterations: usize) !void {
+    try writer.print("{s},{d},{d},{d:.6},{d:.2},{d}\n", .{
+        row.name,
+        len,
+        iterations,
+        row.elapsed_s,
+        row.throughput_mib_s,
+        row.digest_mix,
+    });
 }
 
 fn measure(name: []const u8, input: []u8, iterations: usize, comptime hash: fn ([]const u8) u32, io: std.Io) Row {
