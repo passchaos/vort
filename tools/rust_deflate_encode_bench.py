@@ -18,6 +18,13 @@ if "--csv" in ARGS:
     index = ARGS.index("--csv")
     CSV_PATH = pathlib.Path(ARGS[index + 1])
     del ARGS[index : index + 2]
+REPEAT = 1
+if "--repeat" in ARGS:
+    index = ARGS.index("--repeat")
+    REPEAT = int(ARGS[index + 1])
+    if REPEAT <= 0:
+        raise SystemExit("--repeat must be positive")
+    del ARGS[index : index + 2]
 VORT_BENCH = pathlib.Path(ARGS[0]) if ARGS else None
 FDEFLATE = pathlib.Path.home() / "Work" / "fdeflate"
 MINIZ_OXIDE = pathlib.Path.home() / "Work" / "miniz_oxide" / "miniz_oxide"
@@ -155,6 +162,12 @@ def throughput_mib_s(size: int, iterations: int, elapsed_ns: int) -> float:
     return 0.0 if seconds == 0 else mib / seconds
 
 
+def median_fields(run_once):
+    results = [run_once() for _ in range(REPEAT)]
+    results.sort(key=lambda item: item["elapsed_ns"])
+    return results[len(results) // 2]
+
+
 def main() -> int:
     if shutil.which("cargo") is None:
         print("rust deflate encode benchmark: skipped cargo=missing")
@@ -197,7 +210,7 @@ def main() -> int:
                 ("vort-adaptive-default", "adaptive-default"),
             ]:
                 mode_iterations = iterations_for_vort_mode(len(payload), mode)
-                rows.append((engine, "zlib", mode_iterations, run_vort(plain, mode_iterations, mode)))
+                rows.append((engine, "zlib", mode_iterations, median_fields(lambda mode=mode, mode_iterations=mode_iterations: run_vort(plain, mode_iterations, mode))))
             for engine, mode in [
                 ("vort-raw-fastest", "raw-fastest"),
                 ("vort-raw-fast", "raw-fast"),
@@ -209,9 +222,9 @@ def main() -> int:
                 ("vort-raw-adaptive-default", "raw-adaptive-default"),
             ]:
                 mode_iterations = iterations_for_vort_mode(len(payload), mode.removeprefix("raw-"))
-                rows.append((engine, "raw", mode_iterations, run_vort(plain, mode_iterations, mode)))
-            rows.extend((engine, "zlib", iterations, run_rust(project, engine, "zlib", plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))
-            rows.extend((f"{engine}-raw", "raw", iterations, run_rust(project, engine, "raw", plain, iterations)) for engine in ("fdeflate", "miniz_oxide"))
+                rows.append((engine, "raw", mode_iterations, median_fields(lambda mode=mode, mode_iterations=mode_iterations: run_vort(plain, mode_iterations, mode))))
+            rows.extend((engine, "zlib", iterations, median_fields(lambda engine=engine: run_rust(project, engine, "zlib", plain, iterations))) for engine in ("fdeflate", "miniz_oxide"))
+            rows.extend((f"{engine}-raw", "raw", iterations, median_fields(lambda engine=engine: run_rust(project, engine, "raw", plain, iterations))) for engine in ("fdeflate", "miniz_oxide"))
             for engine, fmt, row_iterations, fields in rows:
                 frame_bytes = fields.get("frame_bytes", fields.get("zlib_bytes"))
                 output_rows.append(

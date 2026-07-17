@@ -21,6 +21,13 @@ if "--csv" in ARGS:
     index = ARGS.index("--csv")
     CSV_PATH = pathlib.Path(ARGS[index + 1])
     del ARGS[index : index + 2]
+REPEAT = 1
+if "--repeat" in ARGS:
+    index = ARGS.index("--repeat")
+    REPEAT = int(ARGS[index + 1])
+    if REPEAT <= 0:
+        raise SystemExit("--repeat must be positive")
+    del ARGS[index : index + 2]
 VORT_BENCH = pathlib.Path(ARGS[0]) if ARGS else None
 FDEFLATE = pathlib.Path.home() / "Work" / "fdeflate"
 MINIZ_OXIDE = pathlib.Path.home() / "Work" / "miniz_oxide" / "miniz_oxide"
@@ -133,6 +140,12 @@ def throughput_mib_s(size: int, iterations: int, elapsed_ns: int) -> float:
     return 0.0 if seconds == 0 else mib / seconds
 
 
+def median_result(run_once):
+    results = [run_once() for _ in range(REPEAT)]
+    results.sort(key=lambda item: item[0])
+    return results[len(results) // 2]
+
+
 def raw_from_zlib(frame: bytes) -> bytes:
     if len(frame) < 6:
         raise AssertionError(f"zlib frame too short: {len(frame)}")
@@ -178,18 +191,18 @@ def main() -> int:
             gzip_frame.write_bytes(zlib.compress(payload, level=0 if name == "stored-binary" else 6, wbits=31))
             iterations = iterations_for(len(payload))
             rows = [
-                ("vort", "zlib", zlib_frame, run_vort_bench(zlib_frame, iterations)),
-                ("vort-into", "zlib", zlib_frame, run_vort_bench(zlib_frame, iterations, "into")),
-                ("vort-exact", "zlib", zlib_frame, run_vort_bench(zlib_frame, iterations, "zlib-exact")),
-                ("vort-raw", "raw", raw_frame, run_vort_bench(raw_frame, iterations, "raw")),
-                ("vort-raw-into", "raw", raw_frame, run_vort_bench(raw_frame, iterations, "raw-into")),
-                ("vort-raw-exact", "raw", raw_frame, run_vort_bench(raw_frame, iterations, "raw-exact")),
-                ("vort-gzip", "gzip", gzip_frame, run_vort_bench(gzip_frame, iterations, "gzip")),
-                ("vort-gzip-exact", "gzip", gzip_frame, run_vort_bench(gzip_frame, iterations, "gzip-exact")),
-                ("vort-gzip-into", "gzip", gzip_frame, run_vort_bench(gzip_frame, iterations, "gzip-into")),
+                ("vort", "zlib", zlib_frame, median_result(lambda: run_vort_bench(zlib_frame, iterations))),
+                ("vort-into", "zlib", zlib_frame, median_result(lambda: run_vort_bench(zlib_frame, iterations, "into"))),
+                ("vort-exact", "zlib", zlib_frame, median_result(lambda: run_vort_bench(zlib_frame, iterations, "zlib-exact"))),
+                ("vort-raw", "raw", raw_frame, median_result(lambda: run_vort_bench(raw_frame, iterations, "raw"))),
+                ("vort-raw-into", "raw", raw_frame, median_result(lambda: run_vort_bench(raw_frame, iterations, "raw-into"))),
+                ("vort-raw-exact", "raw", raw_frame, median_result(lambda: run_vort_bench(raw_frame, iterations, "raw-exact"))),
+                ("vort-gzip", "gzip", gzip_frame, median_result(lambda: run_vort_bench(gzip_frame, iterations, "gzip"))),
+                ("vort-gzip-exact", "gzip", gzip_frame, median_result(lambda: run_vort_bench(gzip_frame, iterations, "gzip-exact"))),
+                ("vort-gzip-into", "gzip", gzip_frame, median_result(lambda: run_vort_bench(gzip_frame, iterations, "gzip-into"))),
             ]
-            rows.extend((engine, "zlib", zlib_frame, run_bench(project, engine, "zlib", zlib_frame, iterations)) for engine in ("fdeflate", "miniz_oxide"))
-            rows.append(("miniz_oxide-raw", "raw", raw_frame, run_bench(project, "miniz_oxide", "raw", raw_frame, iterations)))
+            rows.extend((engine, "zlib", zlib_frame, median_result(lambda engine=engine: run_bench(project, engine, "zlib", zlib_frame, iterations))) for engine in ("fdeflate", "miniz_oxide"))
+            rows.append(("miniz_oxide-raw", "raw", raw_frame, median_result(lambda: run_bench(project, "miniz_oxide", "raw", raw_frame, iterations))))
             for engine, fmt, frame, (elapsed_ns, mix) in rows:
                 output_rows.append(
                     f"{engine},{fmt},{name},{len(payload)},{frame.stat().st_size},{iterations},"
