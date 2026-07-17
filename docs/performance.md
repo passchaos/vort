@@ -103,6 +103,29 @@ Vort now RLEs the literal and distance code-length arrays as one contiguous
 RFC-1951 sequence, so sparse dynamic blocks can save header bits when zero runs
 cross the HLIT/HDIST boundary.
 
+### Current Rust deflate gap snapshot
+
+Latest local ReleaseFast `run-rust-deflate-benchmark-summary-repeat3` evidence
+shows Vort is close on deflate size but still behind the broader Rust compression
+ecosystem on several hot paths. Size ratios below 1.0 are smaller than the best
+Rust row, while throughput ratios above 1.0 are faster:
+
+| metric | geomean ratio | weakest case | next focus |
+| --- | ---: | --- | --- |
+| `zlib encode default size / best Rust` | `0.999` | `distance-heavy 1.027` | default match parsing / cost model |
+| `zlib encode best size / best Rust` | `0.989` | `dynamic-match 1.008` | dynamic header/token byte-boundary gap |
+| `raw encode default size / best Rust` | `0.999` | `distance-heavy 1.029` | default match parsing / cost model |
+| `raw encode best size / best Rust` | `0.989` | `dynamic-match 1.008` | dynamic header/token byte-boundary gap |
+| `zlib decode into / best Rust` | `1.046` | `roadmap 0.362` | text-heavy dynamic decode and wrappers |
+| `raw decode into / miniz_oxide` | `1.642` | `readme 0.434` | text-heavy dynamic decode |
+| `zlib decode alloc / best Rust` | `0.663` | `stored-binary 0.158` | allocation/exact-size wrapper path |
+| `raw decode alloc / miniz_oxide` | `0.905` | `stored-binary 0.282` | allocation/exact-size stored path |
+
+This is not a final ecosystem claim: Rust's compression stack still has broader
+zstd/brotli/lz4 coverage, mature fuzzing, platform dispatch, and production
+usage. Treat this table as the current deflate-focused gap ledger and update it
+after meaningful codec or benchmark changes.
+
 Dynamic Huffman decode work is tracked separately from wrapper overhead. The
 Huffman table now stores bit-length bucket offsets/counts for active canonical
 entries, so long-code fallback after a fast-table miss scans only candidates of
