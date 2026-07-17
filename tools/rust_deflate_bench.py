@@ -178,7 +178,7 @@ def main() -> int:
         ("readme", (ROOT / "README.md").read_bytes()),
         ("roadmap", (ROOT / "docs" / "roadmap.md").read_bytes()),
     ]
-    output_rows = ["engine,format,case,input_bytes,frame_bytes,iterations,elapsed_s,throughput_mib_s,mix"]
+    output_rows = ["engine,format,case,input_bytes,frame_bytes,iterations,repeat,elapsed_s,throughput_mib_s,mix"]
     with tempfile.TemporaryDirectory(prefix="vort-rust-deflate-bench-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         project = write_runner(tmp / "runner")
@@ -205,7 +205,7 @@ def main() -> int:
             rows.append(("miniz_oxide-raw", "raw", raw_frame, median_result(lambda: run_bench(project, "miniz_oxide", "raw", raw_frame, iterations))))
             for engine, fmt, frame, (elapsed_ns, mix) in rows:
                 output_rows.append(
-                    f"{engine},{fmt},{name},{len(payload)},{frame.stat().st_size},{iterations},"
+                    f"{engine},{fmt},{name},{len(payload)},{frame.stat().st_size},{iterations},{REPEAT},"
                     f"{elapsed_ns / 1_000_000_000:.6f},{throughput_mib_s(len(payload), iterations, elapsed_ns):.2f},{mix}"
                 )
     for row in output_rows:

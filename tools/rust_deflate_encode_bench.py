@@ -189,7 +189,7 @@ def main() -> int:
         ("readme", (ROOT / "README.md").read_bytes()),
         ("roadmap", (ROOT / "docs" / "roadmap.md").read_bytes()),
     ]
-    output_rows = ["engine,format,case,input_bytes,frame_bytes,ratio,iterations,elapsed_s,throughput_mib_s,mix"]
+    output_rows = ["engine,format,case,input_bytes,frame_bytes,ratio,iterations,repeat,elapsed_s,throughput_mib_s,mix"]
     with tempfile.TemporaryDirectory(prefix="vort-rust-deflate-encode-bench-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         project = write_runner(tmp / "runner")
@@ -229,7 +229,7 @@ def main() -> int:
                 frame_bytes = fields.get("frame_bytes", fields.get("zlib_bytes"))
                 output_rows.append(
                     f"{engine},{fmt},{name},{len(payload)},{frame_bytes},"
-                    f"{frame_bytes / max(len(payload), 1):.4f},{row_iterations},"
+                    f"{frame_bytes / max(len(payload), 1):.4f},{row_iterations},{REPEAT},"
                     f"{fields['elapsed_ns'] / 1_000_000_000:.6f},"
                     f"{throughput_mib_s(len(payload), row_iterations, fields['elapsed_ns']):.2f},{fields['mix']}"
                 )
