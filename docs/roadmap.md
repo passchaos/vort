@@ -788,6 +788,9 @@ architecture blindly.
 - [x] Dynamic plan diagnostics can run on the built-in Rust benchmark samples,
   making `distance-heavy` and `dynamic-match` header/token bit gaps visible
   without adding expensive header-search heuristics to production encoding.
+- [x] Dynamic plan diagnostics report bit-boundary slack for default and best
+  dynamic streams, making near-byte-size wins visible before changing encoder
+  heuristics.
 - [x] Length/distance decode handles no-extra-bit symbols through direct
   hot-path formulas, avoiding table lookup and zero-bit reader calls for the
   most common short matches while preserving RFC table decoding for longer

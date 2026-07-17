@@ -44,7 +44,7 @@ pub fn main(init: std.process.Init) !void {
     var output = std.Io.Writer.Allocating.init(init.gpa);
     defer output.deinit();
     const writer = &output.writer;
-    try writer.print("path,input_bytes,token_count,literal_tokens,match_tokens,matched_bytes,avg_match_len_x100,avg_match_distance,short_match_tokens,far_match_tokens,stored_bytes,fixed_bytes,dynamic_bytes,dynamic_header_bits,dynamic_literal_bits,dynamic_length_bits,dynamic_distance_bits,dynamic_length_extra_bits,dynamic_distance_extra_bits,dynamic_extra_bits,length_symbol_hist,distance_symbol_hist,length_extra_hist,distance_extra_hist,hlit,hdist,hclen,code_length_ops,stats_ns,dynamic_encode_ns,best_encode_ns,dynamic_zlib_bytes,best_zlib_bytes,best_preset_token_count,best_preset_literal_tokens,best_preset_match_tokens,best_preset_matched_bytes,best_preset_avg_match_len_x100,best_preset_avg_match_distance,best_preset_short_match_tokens,best_preset_far_match_tokens,best_preset_zlib_bytes,best_preset_header_bits,best_preset_literal_bits,best_preset_length_bits,best_preset_distance_bits,best_preset_length_extra_bits,best_preset_distance_extra_bits,best_preset_extra_bits,best_preset_length_symbol_hist,best_preset_distance_symbol_hist,best_preset_length_extra_hist,best_preset_distance_extra_hist,best_preset_default_size_ratio,best_preset_default_token_ratio,best_preset_default_avg_len_ratio,best_preset_default_avg_distance_ratio,best_preset_default_header_ratio,best_preset_default_literal_ratio,best_preset_default_match_symbol_ratio,best_preset_default_length_extra_ratio,best_preset_default_distance_extra_ratio,best_preset_default_extra_ratio,fixed_dynamic_size_ratio,best_dynamic_time_ratio,stats_dynamic_time_ratio\n", .{});
+    try writer.print("path,input_bytes,token_count,literal_tokens,match_tokens,matched_bytes,avg_match_len_x100,avg_match_distance,short_match_tokens,far_match_tokens,stored_bytes,fixed_bytes,dynamic_bytes,dynamic_header_bits,dynamic_literal_bits,dynamic_length_bits,dynamic_distance_bits,dynamic_length_extra_bits,dynamic_distance_extra_bits,dynamic_extra_bits,length_symbol_hist,distance_symbol_hist,length_extra_hist,distance_extra_hist,hlit,hdist,hclen,code_length_ops,stats_ns,dynamic_encode_ns,best_encode_ns,dynamic_zlib_bytes,best_zlib_bytes,best_preset_token_count,best_preset_literal_tokens,best_preset_match_tokens,best_preset_matched_bytes,best_preset_avg_match_len_x100,best_preset_avg_match_distance,best_preset_short_match_tokens,best_preset_far_match_tokens,best_preset_zlib_bytes,best_preset_header_bits,best_preset_literal_bits,best_preset_length_bits,best_preset_distance_bits,best_preset_length_extra_bits,best_preset_distance_extra_bits,best_preset_extra_bits,best_preset_length_symbol_hist,best_preset_distance_symbol_hist,best_preset_length_extra_hist,best_preset_distance_extra_hist,best_preset_default_size_ratio,best_preset_default_token_ratio,best_preset_default_avg_len_ratio,best_preset_default_avg_distance_ratio,best_preset_default_header_ratio,best_preset_default_literal_ratio,best_preset_default_match_symbol_ratio,best_preset_default_length_extra_ratio,best_preset_default_distance_extra_ratio,best_preset_default_extra_ratio,fixed_dynamic_size_ratio,best_dynamic_time_ratio,stats_dynamic_time_ratio,dynamic_bits_mod8,dynamic_bits_to_save_byte,best_preset_bits_mod8,best_preset_bits_to_save_byte\n", .{});
 
     if (use_builtins) {
         for (&builtins) |case| try reportPayload(init, writer, case.name, case.payload);
@@ -107,6 +107,10 @@ fn reportPayload(init: std.process.Init, stdout: *std.Io.Writer, path: []const u
     const best_preset_default_length_extra_ratio = ratio(best_preset_stats.dynamic_length_extra_bits, stats.dynamic_length_extra_bits);
     const best_preset_default_distance_extra_ratio = ratio(best_preset_stats.dynamic_distance_extra_bits, stats.dynamic_distance_extra_bits);
     const best_preset_default_extra_ratio = ratio(best_preset_stats.dynamic_extra_bits, stats.dynamic_extra_bits);
+    const dynamic_bits_mod8 = stats.dynamic_bits % 8;
+    const dynamic_bits_to_save_byte = bitsToSaveByte(stats.dynamic_bits);
+    const best_preset_bits_mod8 = best_preset_stats.dynamic_bits % 8;
+    const best_preset_bits_to_save_byte = bitsToSaveByte(best_preset_stats.dynamic_bits);
     const length_symbol_hist = try formatHistogram(init.gpa, &stats.length_symbol_hist);
     defer init.gpa.free(length_symbol_hist);
     const distance_symbol_hist = try formatHistogram(init.gpa, &stats.distance_symbol_hist);
@@ -179,7 +183,7 @@ fn reportPayload(init: std.process.Init, stdout: *std.Io.Writer, path: []const u
         best_preset_stats.dynamic_distance_extra_bits,
         best_preset_stats.dynamic_extra_bits,
     });
-    try stdout.print(",{s},{s},{s},{s},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4}\n", .{
+    try stdout.print(",{s},{s},{s},{s},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d},{d},{d},{d}\n", .{
         best_length_symbol_hist,
         best_distance_symbol_hist,
         best_length_hist,
@@ -197,7 +201,16 @@ fn reportPayload(init: std.process.Init, stdout: *std.Io.Writer, path: []const u
         fixed_dynamic_size_ratio,
         best_dynamic_time_ratio,
         stats_dynamic_time_ratio,
+        dynamic_bits_mod8,
+        dynamic_bits_to_save_byte,
+        best_preset_bits_mod8,
+        best_preset_bits_to_save_byte,
     });
+}
+
+fn bitsToSaveByte(bits: usize) usize {
+    const rem = bits % 8;
+    return if (rem == 0) 0 else rem;
 }
 
 fn formatHistogram(allocator: std.mem.Allocator, values: anytype) ![]u8 {
