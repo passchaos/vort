@@ -74,6 +74,10 @@ invoked directly; the CSV row records the repeat count and median elapsed time f
 engine/case/mode. The Zig build steps keep `--repeat 1` behavior for smoke speed,
 while investigation runs should use repeats such as `--repeat 3` before accepting
 small performance deltas.
+`run-deflate-decode-stage-report` also accepts forwarded `-- --repeat <n>` and
+keeps the median-ish sample by aggregate elapsed score across raw/zlib/gzip
+alloc, exact-size, and caller-buffer rows; `-- --iterations <n>` can keep these
+repeat probes short during local investigations.
 
 Current deflate tuning keeps speed and ratio goals separate by preset. The
 production `.default` path remains the speed/ratio compromise used by zlib-level

@@ -134,6 +134,7 @@ pub fn main(init: std.process.Init) !void {
     var markdown_path: ?[]const u8 = null;
     var json_path: ?[]const u8 = null;
     var iterations_override: ?usize = null;
+    var repeat: usize = 1;
     var file_cases: std.ArrayList(Case) = .empty;
     defer {
         for (file_cases.items) |case| init.gpa.free(case.payload);
@@ -157,6 +158,11 @@ pub fn main(init: std.process.Init) !void {
             if (iterations_override.? == 0) return error.InvalidBlockPlan;
             continue;
         }
+        if (std.mem.eql(u8, path, "--repeat")) {
+            repeat = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+            if (repeat == 0) return error.InvalidBlockPlan;
+            continue;
+        }
         const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         errdefer init.gpa.free(payload);
         try file_cases.append(init.gpa, .{ .name = path, .payload = payload });
@@ -165,7 +171,7 @@ pub fn main(init: std.process.Init) !void {
     const cases = if (file_cases.items.len == 0) builtins[0..] else file_cases.items;
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(init.gpa);
-    for (cases) |case| try rows.append(init.gpa, try measureCase(init, case, iterations_override));
+    for (cases) |case| try rows.append(init.gpa, try measureCaseRepeated(init, case, iterations_override, repeat));
     var error_rows: std.ArrayList(ErrorRow) = .empty;
     defer error_rows.deinit(init.gpa);
     for (&error_cases) |case| try error_rows.append(init.gpa, measureErrorCase(init.gpa, case));
@@ -218,6 +224,39 @@ fn assertErrorRowsMatched(error_rows: []const ErrorRow) !void {
     for (error_rows) |row| {
         if (!row.matched) return error.DecodeErrorSmokeMismatch;
     }
+}
+
+fn measureCaseRepeated(init: std.process.Init, case: Case, iterations_override: ?usize, repeat: usize) !Row {
+    if (repeat == 1) return measureCase(init, case, iterations_override);
+
+    const samples = try init.gpa.alloc(Row, repeat);
+    defer init.gpa.free(samples);
+    for (samples) |*sample| sample.* = try measureCase(init, case, iterations_override);
+    std.mem.sort(Row, samples, {}, rowMedianLessThan);
+    return samples[repeat / 2];
+}
+
+fn rowMedianLessThan(_: void, lhs: Row, rhs: Row) bool {
+    return rowElapsedScore(lhs) < rowElapsedScore(rhs);
+}
+
+fn rowElapsedScore(row: Row) f64 {
+    // Convert throughputs back to a relative elapsed-time score. Keeping all
+    // timing columns from one median-ish sample preserves ratios between raw,
+    // zlib, and gzip rows while making repeated investigation runs less noisy.
+    return inverseThroughput(row.raw_mib_s) +
+        inverseThroughput(row.raw_exact_mib_s) +
+        inverseThroughput(row.raw_into_mib_s) +
+        inverseThroughput(row.zlib_mib_s) +
+        inverseThroughput(row.zlib_exact_mib_s) +
+        inverseThroughput(row.zlib_into_mib_s) +
+        inverseThroughput(row.gzip_mib_s) +
+        inverseThroughput(row.gzip_exact_mib_s) +
+        inverseThroughput(row.gzip_into_mib_s);
+}
+
+fn inverseThroughput(value: f64) f64 {
+    return if (value == 0) std.math.inf(f64) else 1.0 / value;
 }
 
 fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) !Row {
