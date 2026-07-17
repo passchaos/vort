@@ -225,6 +225,9 @@ def main() -> int:
         assert png_scratch["case_count"] >= 1
         assert png_scratch["cases"]
         assert any(case["interlace"] == "adam7" for case in png_scratch["cases"])
+        assert all(case["streaming_working_scratch_bytes"] < case["working_scratch_bytes"] for case in png_scratch["cases"])
+        assert all(case["streaming_scratch_savings_bytes"] == case["zlib_scratch_bytes"] for case in png_scratch["cases"])
+        assert all(case["streaming_total_caller_owned_bytes"] < case["total_caller_owned_bytes"] for case in png_scratch["cases"])
         validate_value_against_manifest(png_scratch, schemas_def)
         run([
             "python3",

@@ -17,8 +17,26 @@ const Case = struct {
         return self.zlib_scratch_bytes + self.filtered_row_scratch_bytes + self.previous_row_scratch_bytes;
     }
 
+    fn streamingWorkingScratch(self: Case) usize {
+        return self.filtered_row_scratch_bytes + self.previous_row_scratch_bytes;
+    }
+
+    fn streamingScratchSavings(self: Case) usize {
+        return self.zlib_scratch_bytes;
+    }
+
+    fn streamingScratchRatioX10000(self: Case) usize {
+        const working = self.workingScratch();
+        if (working == 0) return 0;
+        return (self.streamingWorkingScratch() * 10000) / working;
+    }
+
     fn totalCallerOwned(self: Case) usize {
         return self.workingScratch() + self.image_output_bytes;
+    }
+
+    fn streamingTotalCallerOwned(self: Case) usize {
+        return self.streamingWorkingScratch() + self.image_output_bytes;
     }
 };
 
@@ -61,9 +79,9 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Case) !void {
-    try writer.print("case,interlace,width,height,bit_depth,color_type,zlib_scratch_bytes,filtered_row_scratch_bytes,previous_row_scratch_bytes,image_output_bytes,working_scratch_bytes,total_caller_owned_bytes\n", .{});
+    try writer.print("case,interlace,width,height,bit_depth,color_type,zlib_scratch_bytes,filtered_row_scratch_bytes,previous_row_scratch_bytes,image_output_bytes,working_scratch_bytes,streaming_working_scratch_bytes,streaming_scratch_savings_bytes,streaming_scratch_ratio_x10000,total_caller_owned_bytes,streaming_total_caller_owned_bytes\n", .{});
     for (rows) |row| {
-        try writer.print("{s},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d}\n", .{
+        try writer.print("{s},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
             row.name,
             row.interlace,
             row.width,
@@ -75,7 +93,11 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Case) !void {
             row.previous_row_scratch_bytes,
             row.image_output_bytes,
             row.workingScratch(),
+            row.streamingWorkingScratch(),
+            row.streamingScratchSavings(),
+            row.streamingScratchRatioX10000(),
             row.totalCallerOwned(),
+            row.streamingTotalCallerOwned(),
         });
     }
 }
@@ -96,14 +118,18 @@ fn writeJson(init: std.process.Init, path: []const u8, rows: []const Case) !void
         try w.print(", \"width\": {d}, \"height\": {d}, \"bit_depth\": {d}, \"color_type\": ", .{ row.width, row.height, row.bit_depth });
         try std.json.Stringify.value(row.color_type, .{}, w);
         try w.print(
-            ", \"zlib_scratch_bytes\": {d}, \"filtered_row_scratch_bytes\": {d}, \"previous_row_scratch_bytes\": {d}, \"image_output_bytes\": {d}, \"working_scratch_bytes\": {d}, \"total_caller_owned_bytes\": {d}}}{s}\n",
+            ", \"zlib_scratch_bytes\": {d}, \"filtered_row_scratch_bytes\": {d}, \"previous_row_scratch_bytes\": {d}, \"image_output_bytes\": {d}, \"working_scratch_bytes\": {d}, \"streaming_working_scratch_bytes\": {d}, \"streaming_scratch_savings_bytes\": {d}, \"streaming_scratch_ratio_x10000\": {d}, \"total_caller_owned_bytes\": {d}, \"streaming_total_caller_owned_bytes\": {d}}}{s}\n",
             .{
                 row.zlib_scratch_bytes,
                 row.filtered_row_scratch_bytes,
                 row.previous_row_scratch_bytes,
                 row.image_output_bytes,
                 row.workingScratch(),
+                row.streamingWorkingScratch(),
+                row.streamingScratchSavings(),
+                row.streamingScratchRatioX10000(),
                 row.totalCallerOwned(),
+                row.streamingTotalCallerOwned(),
                 if (i + 1 == rows.len) "" else ",",
             },
         );
@@ -119,12 +145,12 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const Case) !
     try w.print(
         \\# PNG scratch footprint report
         \\
-        \\| case | interlace | dimensions | bit depth | color type | zlib scratch | filtered row scratch | previous row scratch | image output | working scratch | total caller-owned |
-        \\| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+        \\| case | interlace | dimensions | bit depth | color type | zlib scratch | filtered row scratch | previous row scratch | image output | working scratch | streaming scratch target | scratch savings | target ratio x10000 | total caller-owned | streaming total target |
+        \\| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
         \\
     , .{});
     for (rows) |row| {
-        try w.print("| {s} | {s} | {d}x{d} | {d} | {s} | {d} | {d} | {d} | {d} | {d} | {d} |\n", .{
+        try w.print("| {s} | {s} | {d}x{d} | {d} | {s} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} |\n", .{
             row.name,
             row.interlace,
             row.width,
@@ -136,7 +162,11 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const Case) !
             row.previous_row_scratch_bytes,
             row.image_output_bytes,
             row.workingScratch(),
+            row.streamingWorkingScratch(),
+            row.streamingScratchSavings(),
+            row.streamingScratchRatioX10000(),
             row.totalCallerOwned(),
+            row.streamingTotalCallerOwned(),
         });
     }
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });

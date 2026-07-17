@@ -2000,7 +2000,11 @@ Each `cases` item includes:
 | `previous_row_scratch_bytes` | integer | Previous reconstructed row scratch. |
 | `image_output_bytes` | integer | Final reconstructed image output bytes. |
 | `working_scratch_bytes` | integer | Sum of zlib, filtered-row, and previous-row scratch. |
+| `streaming_working_scratch_bytes` | integer | Target working scratch after future incremental inflate removes full zlib payload scratch. |
+| `streaming_scratch_savings_bytes` | integer | Working-scratch bytes saved by that target; currently equal to `zlib_scratch_bytes`. |
+| `streaming_scratch_ratio_x10000` | integer | Target working scratch divided by current working scratch, scaled by 10000. |
 | `total_caller_owned_bytes` | integer | Working scratch plus output bytes. |
+| `streaming_total_caller_owned_bytes` | integer | Streaming target working scratch plus output bytes. |
 
 Example:
 
@@ -2022,7 +2026,11 @@ Example:
       "previous_row_scratch_bytes": 15,
       "image_output_bytes": 75,
       "working_scratch_bytes": 116,
-      "total_caller_owned_bytes": 191
+      "streaming_working_scratch_bytes": 30,
+      "streaming_scratch_savings_bytes": 86,
+      "streaming_scratch_ratio_x10000": 2586,
+      "total_caller_owned_bytes": 191,
+      "streaming_total_caller_owned_bytes": 105
     }
   ]
 }
