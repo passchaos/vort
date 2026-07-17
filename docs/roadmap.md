@@ -738,6 +738,9 @@ architecture blindly.
   path and expose value-only helpers for raw/zlib/gzip fixed blocks, cutting
   Symbol materialization and the legacy `skipBits` path; latest Rust deflate
   summary shows zlib caller-buffer decode geomean at 1.006 of the best Rust row.
+- [x] Complex dynamic literal alphabets can select a 12-bit fast lookup,
+  improving repeat3 zlib decode geomean on text-heavy blocks while retaining
+  9-bit lookup for tiny alphabets and 11-bit lookup for ordinary dynamic blocks.
 - [x] Raw allocating decode uses a bounded stack scratch caller-buffer fast
   path for compressed members up to 8 KiB that expand within 64 KiB, reducing
   ArrayList growth/shrink overhead for common small/medium exact-owned decode

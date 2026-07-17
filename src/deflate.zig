@@ -1349,8 +1349,13 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
     const parsed = try huffman.parseDynamicLengths(&reader);
     const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
     const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-    if (dynamicLiteralLookupBits(parsed) == 9) {
+    const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
+    if (lit_lookup_bits == 9) {
         const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
+        const dist_decoder = makeDynamicDistanceDecoder(dist_table);
+        try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
+    } else if (lit_lookup_bits == 12) {
+        const lit_decoder = huffman.FastDecoder(286, 12).init(lit_table);
         const dist_decoder = makeDynamicDistanceDecoder(dist_table);
         try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
     } else {
@@ -1372,7 +1377,11 @@ pub fn decodeRawDynamicAllocStrict(allocator: std.mem.Allocator, input: []const 
 const DynamicDistanceDecoder = huffman.FastDecoder(30, 8);
 
 fn dynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
-    return if (parsed.literal_max_bits <= 4) 9 else 11;
+    if (parsed.literal_max_bits <= 4) return 9;
+    // Text-heavy dynamic blocks often contain a near-full literal alphabet with
+    // long cold symbols. A 12-bit table can avoid fallback scans on those blocks,
+    // while smaller alphabets keep the cheaper 11-bit setup cost.
+    return if (parsed.header.hlit >= 280 and parsed.literal_max_bits >= 12) 12 else 11;
 }
 
 fn makeDynamicDistanceDecoder(table: huffman.HuffmanTable(30)) DynamicDistanceDecoder {
@@ -1412,8 +1421,12 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
-                if (dynamicLiteralLookupBits(parsed) == 9) {
+                const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
+                if (lit_lookup_bits == 9) {
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
+                    try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
+                } else if (lit_lookup_bits == 12) {
+                    const lit_decoder = huffman.FastDecoder(286, 12).init(lit_table);
                     try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
                 } else {
                     const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
@@ -1595,8 +1608,12 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
-                if (dynamicLiteralLookupBits(parsed) == 9) {
+                const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
+                if (lit_lookup_bits == 9) {
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
+                    try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
+                } else if (lit_lookup_bits == 12) {
+                    const lit_decoder = huffman.FastDecoder(286, 12).init(lit_table);
                     try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
                 } else {
                     const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
@@ -1703,8 +1720,12 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
-                if (dynamicLiteralLookupBits(parsed) == 9) {
+                const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
+                if (lit_lookup_bits == 9) {
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
+                    try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
+                } else if (lit_lookup_bits == 12) {
+                    const lit_decoder = huffman.FastDecoder(286, 12).init(lit_table);
                     try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
                 } else {
                     const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
@@ -7056,6 +7077,24 @@ test "gzip decoder diagnostics cover wrapper errors" {
     try std.testing.expectError(error.SizeMismatch, decoder.reset(bad_size, &scratch));
     try std.testing.expectEqualStrings("SizeMismatch", decoder.snapshot().last_error_name);
     try std.testing.expectEqual(GzipDecoder.RecoverabilityHint.payload_corrupt, decoder.snapshot().recoverability_hint);
+}
+
+test "dynamic literal lookup policy separates tiny and complex alphabets" {
+    const tiny = huffman.DynamicLengths{
+        .header = .{ .final = true, .hlit = 257, .hdist = 1, .hclen = 4, .code_length_lengths = @splat(0) },
+        .literal_max_bits = 4,
+    };
+    try std.testing.expectEqual(@as(u4, 9), dynamicLiteralLookupBits(tiny));
+
+    var ordinary = tiny;
+    ordinary.header.hlit = 279;
+    ordinary.literal_max_bits = 12;
+    try std.testing.expectEqual(@as(u4, 11), dynamicLiteralLookupBits(ordinary));
+
+    var complex = tiny;
+    complex.header.hlit = 280;
+    complex.literal_max_bits = 12;
+    try std.testing.expectEqual(@as(u4, 12), dynamicLiteralLookupBits(complex));
 }
 
 test "raw fixed Huffman literal/match inflate matches zlib fixed vectors" {
