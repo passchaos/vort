@@ -138,6 +138,37 @@ pub fn build(b: *std.Build) void {
     const deflate_decode_stage_report_dashboard_step = b.step("run-deflate-decode-stage-report-dashboard", "Write raw inflate vs zlib wrapper/checksum stage dashboard to zig-out");
     deflate_decode_stage_report_dashboard_step.dependOn(&run_deflate_decode_stage_report_dashboard.step);
 
+    const chunked_zlib_bench_report_exe = b.addExecutable(.{
+        .name = "vort-chunked-zlib-bench-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/chunked_zlib_bench_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_chunked_zlib_bench_report = b.addRunArtifact(chunked_zlib_bench_report_exe);
+    if (b.args) |args| run_chunked_zlib_bench_report.addArgs(args);
+    const chunked_zlib_bench_report_step = b.step("run-chunked-zlib-bench-report", "Report contiguous vs chunked zlib decode throughput");
+    chunked_zlib_bench_report_step.dependOn(&run_chunked_zlib_bench_report.step);
+
+    const run_chunked_zlib_bench_report_csv = b.addRunArtifact(chunked_zlib_bench_report_exe);
+    run_chunked_zlib_bench_report_csv.addArgs(&.{ "--csv", "zig-out/vort-chunked-zlib-bench-report.csv" });
+    const chunked_zlib_bench_report_csv_step = b.step("run-chunked-zlib-bench-report-csv", "Write contiguous vs chunked zlib decode throughput CSV to zig-out");
+    chunked_zlib_bench_report_csv_step.dependOn(&run_chunked_zlib_bench_report_csv.step);
+
+    const run_chunked_zlib_bench_report_csv_repeat3 = b.addRunArtifact(chunked_zlib_bench_report_exe);
+    run_chunked_zlib_bench_report_csv_repeat3.addArgs(&.{ "--repeat", "3", "--csv", "zig-out/vort-chunked-zlib-bench-report-repeat3.csv" });
+    const chunked_zlib_bench_report_csv_repeat3_step = b.step("run-chunked-zlib-bench-report-csv-repeat3", "Write median-of-3 contiguous vs chunked zlib decode throughput CSV to zig-out");
+    chunked_zlib_bench_report_csv_repeat3_step.dependOn(&run_chunked_zlib_bench_report_csv_repeat3.step);
+
+    const run_chunked_zlib_bench_report_dashboard = b.addRunArtifact(chunked_zlib_bench_report_exe);
+    run_chunked_zlib_bench_report_dashboard.addArgs(&.{ "--csv", "zig-out/vort-chunked-zlib-bench-report.csv", "--markdown", "zig-out/vort-chunked-zlib-bench-report.md" });
+    const chunked_zlib_bench_report_dashboard_step = b.step("run-chunked-zlib-bench-report-dashboard", "Write contiguous vs chunked zlib decode throughput dashboard artifacts");
+    chunked_zlib_bench_report_dashboard_step.dependOn(&run_chunked_zlib_bench_report_dashboard.step);
+
     const zlib_relaxed_report_exe = b.addExecutable(.{
         .name = "vort-zlib-relaxed-report",
         .root_module = b.createModule(.{

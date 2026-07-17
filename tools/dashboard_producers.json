@@ -4,6 +4,18 @@
     "exact": []
   },
   "artifact_metadata": {
+    "vort-chunked-zlib-bench-report-repeat3.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv-repeat3"
+    },
+    "vort-chunked-zlib-bench-report.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv"
+    },
+    "vort-chunked-zlib-bench-report.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-dashboard"
+    },
     "vort-dashboard-category-negative-smoke.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-dashboard-category-negative-smoke"
@@ -248,6 +260,9 @@
     }
   ],
   "exact": {
+    "vort-chunked-zlib-bench-report-repeat3.csv": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv-repeat3",
+    "vort-chunked-zlib-bench-report.csv": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv",
+    "vort-chunked-zlib-bench-report.md": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-dashboard",
     "vort-dashboard-category-negative-smoke.json": "zig build run-dashboard-category-negative-smoke",
     "vort-dashboard-config-index-negative-smoke.json": "zig build run-dashboard-config-index-negative-smoke",
     "vort-dashboard-config-index-smoke.json": "zig build run-dashboard-config-index-smoke",

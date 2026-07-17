@@ -790,6 +790,9 @@ architecture blindly.
 - [x] Chunked zlib/PNG IDAT bit reads keep a forward chunk cursor and copy
   aligned spans per chunk, avoiding repeated scans from the first IDAT chunk
   during Huffman peeks and stored-block reads.
+- [x] Chunked zlib benchmark report compares contiguous, join-then-decode, and
+  direct chunked decode on PNG-like payloads, including tiny/empty IDAT-style
+  chunks and a repeat3 build step for optimization evidence.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
