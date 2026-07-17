@@ -1285,7 +1285,7 @@ pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {
 
     var out_offset: usize = 0;
     while (true) {
-        const symbol = (try huffman.decodeFixedLiteralFast(&reader)).value;
+        const symbol = try huffman.decodeFixedLiteralValueFast(&reader);
         if (symbol < 256) {
             if (out_offset == output.len) return error.OutputTooSmall;
             output[out_offset] = @intCast(symbol);
@@ -1295,7 +1295,7 @@ pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {
             return .{ .input_read = reader.byteOffset(), .output_written = out_offset };
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, &reader);
-            const distance_symbol = (try huffman.decodeFixedDistanceFast(&reader)).value;
+            const distance_symbol = try huffman.decodeFixedDistanceValueFast(&reader);
             const distance = try decodeDistance(distance_symbol, &reader);
             try copyMatch(output[0..out_offset], output[out_offset..], length, distance);
             out_offset += length;
@@ -1316,7 +1316,7 @@ pub fn decodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) !Own
     if (block_type != 0b01) return error.InvalidDeflateBlockType;
 
     while (true) {
-        const symbol = (try huffman.decodeFixedLiteralFast(&reader)).value;
+        const symbol = try huffman.decodeFixedLiteralValueFast(&reader);
         if (symbol < 256) {
             try out.append(allocator, @intCast(symbol));
         } else if (symbol == 256) {
@@ -1324,7 +1324,7 @@ pub fn decodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) !Own
             return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, &reader);
-            const distance_symbol = (try huffman.decodeFixedDistanceFast(&reader)).value;
+            const distance_symbol = try huffman.decodeFixedDistanceValueFast(&reader);
             const distance = try decodeDistance(distance_symbol, &reader);
             try appendMatch(allocator, &out, length, distance);
         } else {
@@ -2023,7 +2023,7 @@ fn decodeFixedBlockFromReader(allocator: std.mem.Allocator, reader: anytype, out
 
 fn decodeFixedBlockFromReaderFromBase(allocator: std.mem.Allocator, reader: anytype, out: *std.ArrayList(u8), dictionary: []const u8, history_start: usize, max_output_len: ?usize) !void {
     while (true) {
-        const symbol = (try huffman.decodeFixedLiteralFast(reader)).value;
+        const symbol = try huffman.decodeFixedLiteralValueFast(reader);
         if (symbol < 256) {
             try ensureOutputLimit(out.items.len, 1, max_output_len);
             try out.append(allocator, @intCast(symbol));
@@ -2031,7 +2031,7 @@ fn decodeFixedBlockFromReaderFromBase(allocator: std.mem.Allocator, reader: anyt
             return;
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, reader);
-            const distance_symbol = (try huffman.decodeFixedDistanceFast(reader)).value;
+            const distance_symbol = try huffman.decodeFixedDistanceValueFast(reader);
             const distance = try decodeDistance(distance_symbol, reader);
             try appendMatchWithDictionaryFromBase(allocator, out, dictionary, history_start, length, distance, max_output_len);
         } else {
@@ -2042,7 +2042,7 @@ fn decodeFixedBlockFromReaderFromBase(allocator: std.mem.Allocator, reader: anyt
 
 fn decodeFixedBlockIntoReader(reader: anytype, output: []u8, out_offset: *usize, dictionary: []const u8) Error!void {
     while (true) {
-        const symbol = (try huffman.decodeFixedLiteralFast(reader)).value;
+        const symbol = try huffman.decodeFixedLiteralValueFast(reader);
         if (symbol < 256) {
             if (out_offset.* == output.len) return error.OutputTooSmall;
             output[out_offset.*] = @intCast(symbol);
@@ -2051,7 +2051,7 @@ fn decodeFixedBlockIntoReader(reader: anytype, output: []u8, out_offset: *usize,
             return;
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, reader);
-            const distance_symbol = (try huffman.decodeFixedDistanceFast(reader)).value;
+            const distance_symbol = try huffman.decodeFixedDistanceValueFast(reader);
             const distance = try decodeDistance(distance_symbol, reader);
             try copyMatchWithDictionary(output[0..out_offset.*], dictionary, output[out_offset.*..], length, distance);
             out_offset.* += length;

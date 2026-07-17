@@ -731,6 +731,10 @@ architecture blindly.
   miniz_oxide after this optimization.
 - [x] FastDecoder lookup hits trust `peekBitsPadded`'s width mask and avoid a
   redundant lookup-index mask in both full-symbol and value-only decode paths.
+- [x] Fixed-Huffman lookup decoders now share the same unchecked-advance hot
+  path and expose value-only helpers for raw/zlib/gzip fixed blocks, cutting
+  Symbol materialization and the legacy `skipBits` path; latest Rust deflate
+  summary shows zlib caller-buffer decode geomean at 1.006 of the best Rust row.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

@@ -565,10 +565,20 @@ pub const fixed_literal_lookup = blk: {
 
 pub fn decodeFixedLiteralFast(reader: anytype) Error!Symbol {
     const peek = reader.peekBitsPadded(u16, 9);
-    const entry = fixed_literal_lookup[peek & 0x1ff];
+    const entry = fixed_literal_lookup[peek];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
-    try reader.skipBits(entry.bits);
+    if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+    reader.advanceBitsAssumeAvailable(entry.bits);
     return .{ .value = entry.symbol, .bits = entry.bits };
+}
+
+pub fn decodeFixedLiteralValueFast(reader: anytype) Error!u16 {
+    const peek = reader.peekBitsPadded(u16, 9);
+    const entry = fixed_literal_lookup[peek];
+    if (entry.bits == 0) return error.InvalidHuffmanCode;
+    if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+    reader.advanceBitsAssumeAvailable(entry.bits);
+    return entry.symbol;
 }
 
 pub const fixed_distance_lookup = blk: {
@@ -584,10 +594,20 @@ pub const fixed_distance_lookup = blk: {
 
 pub fn decodeFixedDistanceFast(reader: anytype) Error!Symbol {
     const peek = reader.peekBitsPadded(u16, 5);
-    const entry = fixed_distance_lookup[peek & 0x1f];
+    const entry = fixed_distance_lookup[peek];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
-    try reader.skipBits(entry.bits);
+    if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+    reader.advanceBitsAssumeAvailable(entry.bits);
     return .{ .value = entry.symbol, .bits = entry.bits };
+}
+
+pub fn decodeFixedDistanceValueFast(reader: anytype) Error!u16 {
+    const peek = reader.peekBitsPadded(u16, 5);
+    const entry = fixed_distance_lookup[peek];
+    if (entry.bits == 0) return error.InvalidHuffmanCode;
+    if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+    reader.advanceBitsAssumeAvailable(entry.bits);
+    return entry.symbol;
 }
 
 pub const FixedLiteralTable = HuffmanTable(fixed_literal_count);
@@ -937,6 +957,11 @@ test "fixed literal fast lookup matches table decoder" {
     for (0..6) |_| {
         try std.testing.expectEqual((try table.decode(&slow)).value, (try decodeFixedLiteralFast(&fast)).value);
     }
+
+    var value_reader = bitstream.BitReader.init(&bytes);
+    _ = try value_reader.readBits(u1, 1);
+    _ = try value_reader.readBits(u2, 2);
+    try std.testing.expectEqual(@as(u16, 'h'), try decodeFixedLiteralValueFast(&value_reader));
 }
 
 test "fixed distance fast lookup decodes all symbols" {
@@ -945,5 +970,7 @@ test "fixed distance fast lookup decodes all symbols" {
         var bytes = [_]u8{@intCast(code)};
         var reader = bitstream.BitReader.init(&bytes);
         try std.testing.expectEqual(@as(u16, @intCast(symbol)), (try decodeFixedDistanceFast(&reader)).value);
+        var value_reader = bitstream.BitReader.init(&bytes);
+        try std.testing.expectEqual(@as(u16, @intCast(symbol)), try decodeFixedDistanceValueFast(&value_reader));
     }
 }
