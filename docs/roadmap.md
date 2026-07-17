@@ -711,7 +711,7 @@ architecture blindly.
   of running the replicated-entry fill loop once, shaving setup work for dense
   dynamic lookup tables.
 - [x] Dynamic literal/length decode selects a 9-bit lookup for very short-code
-  blocks and a 10-bit lookup otherwise, preserving tiny-block setup wins without
+  blocks and an 11-bit lookup otherwise, preserving tiny-block setup wins without
   regressing larger corpus decode throughput.
 - [x] Dynamic length parsing records the literal alphabet's maximum code length
   so adaptive literal lookup selection avoids a second per-block scan.

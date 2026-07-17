@@ -1354,7 +1354,7 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
         const dist_decoder = makeDynamicDistanceDecoder(dist_table);
         try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
     } else {
-        const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+        const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
         const dist_decoder = makeDynamicDistanceDecoder(dist_table);
         try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
     }
@@ -1372,7 +1372,7 @@ pub fn decodeRawDynamicAllocStrict(allocator: std.mem.Allocator, input: []const 
 const DynamicDistanceDecoder = huffman.FastDecoder(30, 8);
 
 fn dynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
-    return if (parsed.literal_max_bits <= 4) 9 else 10;
+    return if (parsed.literal_max_bits <= 4) 9 else 11;
 }
 
 fn makeDynamicDistanceDecoder(table: huffman.HuffmanTable(30)) DynamicDistanceDecoder {
@@ -1416,7 +1416,7 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                     try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
                 } else {
-                    const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+                    const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
                     try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
                 }
             },
@@ -1599,7 +1599,7 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                     try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
                 } else {
-                    const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+                    const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
                     try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
                 }
             },
@@ -1700,7 +1700,7 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                     try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
                 } else {
-                    const lit_decoder = huffman.FastDecoder(286, 10).init(lit_table);
+                    const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
                     try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
                 }
             },
