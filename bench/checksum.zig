@@ -66,10 +66,17 @@ pub fn main(init: std.process.Init) !void {
     try stdout.flush();
 }
 
-fn measure(name: []const u8, input: []const u8, iterations: usize, comptime hash: fn ([]const u8) u32, io: std.Io) Row {
+fn measure(name: []const u8, input: []u8, iterations: usize, comptime hash: fn ([]const u8) u32, io: std.Io) Row {
     var mix: u64 = 0;
     const start = std.Io.Clock.awake.now(io);
-    for (0..iterations) |_| mix +%= hash(input);
+    for (0..iterations) |iteration| {
+        const index = (iteration * 4099) & (input.len - 1);
+        input[index] +%= @truncate(iteration + 1);
+        const digest = hash(input);
+        std.mem.doNotOptimizeAway(digest);
+        mix +%= digest;
+        input[index] -%= @truncate(iteration + 1);
+    }
     const elapsed_ns_signed = start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
     const elapsed_ns: f64 = @floatFromInt(elapsed_ns_signed);
     const elapsed_s = elapsed_ns / @as(f64, std.time.ns_per_s);
