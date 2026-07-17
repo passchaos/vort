@@ -706,6 +706,11 @@ pub fn build(b: *std.Build) void {
     const dynamic_plan_report_csv_step = b.step("run-dynamic-plan-report-csv", "Write dynamic Huffman/LZ77 plan stats CSV to zig-out");
     dynamic_plan_report_csv_step.dependOn(&run_dynamic_plan_report_csv.step);
 
+    const run_dynamic_plan_report_builtins_csv = b.addRunArtifact(dynamic_plan_report_exe);
+    run_dynamic_plan_report_builtins_csv.addArgs(&.{ "--builtins", "--csv", "zig-out/vort-dynamic-plan-builtins-report.csv" });
+    const dynamic_plan_report_builtins_csv_step = b.step("run-dynamic-plan-builtins-report-csv", "Write dynamic Huffman/LZ77 plan stats for built-in Rust benchmark samples to zig-out");
+    dynamic_plan_report_builtins_csv_step.dependOn(&run_dynamic_plan_report_builtins_csv.step);
+
     const rust_deflate_benchmark_summary = b.addSystemCommand(&.{ "python3", "tools/rust_deflate_benchmark_summary.py" });
     rust_deflate_benchmark_summary.addArgs(&.{
         "--decode-csv",

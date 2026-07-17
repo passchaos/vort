@@ -1,17 +1,41 @@
 const std = @import("std");
 const vort = @import("vort");
 
+const BuiltinCase = struct { name: []const u8, payload: []const u8 };
+
+const binary_payload = blk: {
+    @setEvalBranchQuota(200000);
+    var data: [64 * 1024]u8 = undefined;
+    for (&data, 0..) |*byte, i| byte.* = @intCast((i * 131 + (i >> 3) * 17 + 29) & 0xff);
+    break :blk data;
+};
+
+const builtins = [_]BuiltinCase{
+    .{ .name = "tiny", .payload = "hello rust deflate baselines" },
+    .{ .name = "repetitive", .payload = "abcabcabcabc" ** 512 },
+    .{ .name = "overlap-rle", .payload = "a" ** (32 * 1024) },
+    .{ .name = "distance-heavy", .payload = ("0123456789abcdef" ** 1024) ++ "----" ++ ("0123456789abcdef" ** 1024) },
+    .{ .name = "dynamic-match", .payload = "literal-heavy dynamic huffman decode stage\n" ** 512 },
+    .{ .name = "text", .payload = "the quick brown fox jumps over the lazy dog\n" ** 1024 },
+    .{ .name = "binary", .payload = &binary_payload },
+};
+
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
     _ = args.next();
 
     var csv_path: ?[]const u8 = null;
+    var use_builtins = false;
     var paths: std.ArrayList([]const u8) = .empty;
     defer paths.deinit(init.gpa);
     while (args.next()) |path| {
         if (std.mem.eql(u8, path, "--csv")) {
             csv_path = args.next() orelse return error.MissingCorpusPath;
+            continue;
+        }
+        if (std.mem.eql(u8, path, "--builtins")) {
+            use_builtins = true;
             continue;
         }
         try paths.append(init.gpa, path);
@@ -22,7 +46,9 @@ pub fn main(init: std.process.Init) !void {
     const writer = &output.writer;
     try writer.print("path,input_bytes,token_count,literal_tokens,match_tokens,matched_bytes,avg_match_len_x100,avg_match_distance,short_match_tokens,far_match_tokens,stored_bytes,fixed_bytes,dynamic_bytes,dynamic_header_bits,dynamic_literal_bits,dynamic_length_bits,dynamic_distance_bits,dynamic_length_extra_bits,dynamic_distance_extra_bits,dynamic_extra_bits,length_symbol_hist,distance_symbol_hist,length_extra_hist,distance_extra_hist,hlit,hdist,hclen,code_length_ops,stats_ns,dynamic_encode_ns,best_encode_ns,dynamic_zlib_bytes,best_zlib_bytes,best_preset_token_count,best_preset_literal_tokens,best_preset_match_tokens,best_preset_matched_bytes,best_preset_avg_match_len_x100,best_preset_avg_match_distance,best_preset_short_match_tokens,best_preset_far_match_tokens,best_preset_zlib_bytes,best_preset_header_bits,best_preset_literal_bits,best_preset_length_bits,best_preset_distance_bits,best_preset_length_extra_bits,best_preset_distance_extra_bits,best_preset_extra_bits,best_preset_length_symbol_hist,best_preset_distance_symbol_hist,best_preset_length_extra_hist,best_preset_distance_extra_hist,best_preset_default_size_ratio,best_preset_default_token_ratio,best_preset_default_avg_len_ratio,best_preset_default_avg_distance_ratio,best_preset_default_header_ratio,best_preset_default_literal_ratio,best_preset_default_match_symbol_ratio,best_preset_default_length_extra_ratio,best_preset_default_distance_extra_ratio,best_preset_default_extra_ratio,fixed_dynamic_size_ratio,best_dynamic_time_ratio,stats_dynamic_time_ratio\n", .{});
 
-    if (paths.items.len == 0) {
+    if (use_builtins) {
+        for (&builtins) |case| try reportPayload(init, writer, case.name, case.payload);
+    } else if (paths.items.len == 0) {
         try reportPath(init, writer, "README.md");
         try reportPath(init, writer, "docs/roadmap.md");
     } else {
@@ -44,7 +70,10 @@ pub fn main(init: std.process.Init) !void {
 fn reportPath(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8) !void {
     const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
     defer init.gpa.free(data);
+    try reportPayload(init, stdout, path, data);
+}
 
+fn reportPayload(init: std.process.Init, stdout: *std.Io.Writer, path: []const u8, data: []const u8) !void {
     const options = vort.optionsForCompressionLevel(.default);
     const stats_start = std.Io.Clock.awake.now(init.io);
     const stats = try vort.dynamicDeflatePlanStatsAlloc(init.gpa, data, options);

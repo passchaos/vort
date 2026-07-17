@@ -149,6 +149,13 @@
     },
     {
       "expected_format": "csv",
+      "name": "vort-dynamic-plan-builtins-report.csv",
+      "producer_step": "zig build run-dynamic-plan-builtins-report-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-dynamic-plan-builtins-report-csv"
+    },
+    {
+      "expected_format": "csv",
       "name": "vort-dynamic-plan-report.csv",
       "producer_step": "zig build run-dynamic-plan-report-csv",
       "required_smoke_gate": false,
