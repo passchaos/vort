@@ -13,6 +13,20 @@ const Case = struct {
     previous_row_scratch_bytes: usize,
     image_output_bytes: usize,
 
+    fn storedStreamingStatus(_: Case) []const u8 {
+        // Stored-deflate PNG scanline streaming is implemented today. Keep this
+        // as an explicit report column so dashboards can distinguish completed
+        // stored-IDAT work from the still larger fixed/dynamic deflate target.
+        return "achieved";
+    }
+
+    fn fixedDynamicStreamingStatus(_: Case) []const u8 {
+        // Fixed and dynamic Huffman PNG IDAT streams still need a resumable
+        // inflate row producer; the byte totals below describe that target
+        // memory profile rather than current general-deflate behavior.
+        return "future_target";
+    }
+
     fn workingScratch(self: Case) usize {
         return self.zlib_scratch_bytes + self.filtered_row_scratch_bytes + self.previous_row_scratch_bytes;
     }
@@ -79,15 +93,17 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Case) !void {
-    try writer.print("case,interlace,width,height,bit_depth,color_type,zlib_scratch_bytes,filtered_row_scratch_bytes,previous_row_scratch_bytes,image_output_bytes,working_scratch_bytes,streaming_working_scratch_bytes,streaming_scratch_savings_bytes,streaming_scratch_ratio_x10000,total_caller_owned_bytes,streaming_total_caller_owned_bytes\n", .{});
+    try writer.print("case,interlace,width,height,bit_depth,color_type,stored_streaming_status,fixed_dynamic_streaming_status,zlib_scratch_bytes,filtered_row_scratch_bytes,previous_row_scratch_bytes,image_output_bytes,working_scratch_bytes,streaming_working_scratch_bytes,streaming_scratch_savings_bytes,streaming_scratch_ratio_x10000,total_caller_owned_bytes,streaming_total_caller_owned_bytes\n", .{});
     for (rows) |row| {
-        try writer.print("{s},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
+        try writer.print("{s},{s},{d},{d},{d},{s},{s},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
             row.name,
             row.interlace,
             row.width,
             row.height,
             row.bit_depth,
             row.color_type,
+            row.storedStreamingStatus(),
+            row.fixedDynamicStreamingStatus(),
             row.zlib_scratch_bytes,
             row.filtered_row_scratch_bytes,
             row.previous_row_scratch_bytes,
@@ -117,6 +133,10 @@ fn writeJson(init: std.process.Init, path: []const u8, rows: []const Case) !void
         try std.json.Stringify.value(row.interlace, .{}, w);
         try w.print(", \"width\": {d}, \"height\": {d}, \"bit_depth\": {d}, \"color_type\": ", .{ row.width, row.height, row.bit_depth });
         try std.json.Stringify.value(row.color_type, .{}, w);
+        try w.print(", \"stored_streaming_status\": ", .{});
+        try std.json.Stringify.value(row.storedStreamingStatus(), .{}, w);
+        try w.print(", \"fixed_dynamic_streaming_status\": ", .{});
+        try std.json.Stringify.value(row.fixedDynamicStreamingStatus(), .{}, w);
         try w.print(
             ", \"zlib_scratch_bytes\": {d}, \"filtered_row_scratch_bytes\": {d}, \"previous_row_scratch_bytes\": {d}, \"image_output_bytes\": {d}, \"working_scratch_bytes\": {d}, \"streaming_working_scratch_bytes\": {d}, \"streaming_scratch_savings_bytes\": {d}, \"streaming_scratch_ratio_x10000\": {d}, \"total_caller_owned_bytes\": {d}, \"streaming_total_caller_owned_bytes\": {d}}}{s}\n",
             .{
@@ -145,18 +165,20 @@ fn writeMarkdown(init: std.process.Init, path: []const u8, rows: []const Case) !
     try w.print(
         \\# PNG scratch footprint report
         \\
-        \\| case | interlace | dimensions | bit depth | color type | zlib scratch | filtered row scratch | previous row scratch | image output | working scratch | streaming scratch target | scratch savings | target ratio x10000 | total caller-owned | streaming total target |
-        \\| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+        \\| case | interlace | dimensions | bit depth | color type | stored streaming | fixed/dynamic streaming | zlib scratch | filtered row scratch | previous row scratch | image output | working scratch | streaming scratch target | scratch savings | target ratio x10000 | total caller-owned | streaming total target |
+        \\| --- | --- | ---: | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
         \\
     , .{});
     for (rows) |row| {
-        try w.print("| {s} | {s} | {d}x{d} | {d} | {s} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} |\n", .{
+        try w.print("| {s} | {s} | {d}x{d} | {d} | {s} | {s} | {s} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} |\n", .{
             row.name,
             row.interlace,
             row.width,
             row.height,
             row.bit_depth,
             row.color_type,
+            row.storedStreamingStatus(),
+            row.fixedDynamicStreamingStatus(),
             row.zlib_scratch_bytes,
             row.filtered_row_scratch_bytes,
             row.previous_row_scratch_bytes,

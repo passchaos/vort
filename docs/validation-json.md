@@ -1976,6 +1976,9 @@ This report records caller-owned scratch and output footprint baselines for
 representative PNG-like zlib decode paths. It includes non-interlaced and Adam7
 cases across RGB8, packed indexed rows, and RGBA16 so future incremental inflate
 work can prove peak `zlib_scratch_bytes` reductions against a stable baseline.
+The status columns make the milestone split explicit: stored-deflate scanline
+streaming is already usable, while fixed/dynamic Huffman IDAT scanline streaming
+remains the next memory-reduction target.
 
 Top-level fields:
 
@@ -1995,6 +1998,8 @@ Each `cases` item includes:
 | `width` / `height` | integer | PNG-like dimensions. |
 | `bit_depth` | integer | PNG bit depth. |
 | `color_type` | string | PNG color type name. |
+| `stored_streaming_status` | string | Current stored-deflate PNG scanline streaming status; `achieved` for these baseline rows. |
+| `fixed_dynamic_streaming_status` | string | Current fixed/dynamic Huffman PNG scanline streaming status; `future_target` until incremental inflate rows are implemented. |
 | `zlib_scratch_bytes` | integer | Exact decoded IDAT/zlib payload scratch. |
 | `filtered_row_scratch_bytes` | integer | One filtered row scratch. |
 | `previous_row_scratch_bytes` | integer | Previous reconstructed row scratch. |
@@ -2021,6 +2026,8 @@ Example:
       "height": 5,
       "bit_depth": 8,
       "color_type": "truecolor",
+      "stored_streaming_status": "achieved",
+      "fixed_dynamic_streaming_status": "future_target",
       "zlib_scratch_bytes": 86,
       "filtered_row_scratch_bytes": 15,
       "previous_row_scratch_bytes": 15,

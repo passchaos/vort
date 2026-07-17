@@ -1896,15 +1896,25 @@
         "schema_version": "int"
       },
       "item_collection": "cases",
+      "item_enums": {
+        "fixed_dynamic_streaming_status": [
+          "future_target"
+        ],
+        "stored_streaming_status": [
+          "achieved"
+        ]
+      },
       "item_fields": {
         "bit_depth": "int",
         "case": "str",
         "color_type": "str",
         "filtered_row_scratch_bytes": "int",
+        "fixed_dynamic_streaming_status": "str",
         "height": "int",
         "image_output_bytes": "int",
         "interlace": "str",
         "previous_row_scratch_bytes": "int",
+        "stored_streaming_status": "str",
         "streaming_scratch_ratio_x10000": "int",
         "streaming_scratch_savings_bytes": "int",
         "streaming_total_caller_owned_bytes": "int",
