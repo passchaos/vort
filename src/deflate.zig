@@ -4405,7 +4405,7 @@ fn decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.All
         return stored.result.bytes;
     }
 
-    if (try decodeZlibAllocSmallIntoMaybe(allocator, input, dictionary, options, max_output_len)) |decoded| return decoded;
+    if (try decodeZlibAllocSmallIntoMaybe(allocator, input, header, raw_dictionary, options, max_output_len)) |decoded| return decoded;
 
     const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[header.data_offset..], raw_dictionary, max_output_len);
     errdefer raw.deinit(allocator);
@@ -4414,25 +4414,34 @@ fn decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.All
     return raw.bytes;
 }
 
-fn decodeZlibAllocSmallIntoMaybe(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, max_output_len: ?usize) !?[]u8 {
+fn decodeZlibAllocSmallIntoMaybe(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    header: ZlibHeader,
+    raw_dictionary: []const u8,
+    options: ZlibDecodeOptions,
+    max_output_len: ?usize,
+) !?[]u8 {
     if (input.len > stack_inflate_alloc_max_input_len) return null;
 
     // zlib does not carry the uncompressed byte length, so the general
     // allocator-returning path must discover it before returning an exact owned
     // slice. For common small/medium members, decode and validate directly into
     // bounded stack scratch, then copy exactly once into the caller-owned result.
-    // This avoids constructing an intermediate raw owned slice and then scanning
-    // that slice again for Adler-32 in the wrapper.
+    // This reuses the caller's already-parsed zlib header, avoids constructing
+    // an intermediate raw owned slice, and avoids probing the stored-only raw
+    // fast path a second time for non-stored frames.
     var scratch: [stack_inflate_alloc_scratch_len]u8 = undefined;
     const decode_buffer = if (max_output_len) |limit| scratch[0..@min(limit, scratch.len)] else scratch[0..];
-    const written = (if (dictionary) |dict|
-        decodeZlibWithDictionaryAndOptions(input, decode_buffer, dict, options)
-    else
-        decodeZlibWithOptions(input, decode_buffer, options)) catch |err| switch (err) {
+    var reader = bitstream.BitReader.init(input[header.data_offset..]);
+    const raw = decodeRawAutoWithDictionaryFromReader(&reader, 0, raw_dictionary, decode_buffer) catch |err| switch (err) {
         error.OutputTooSmall => return null,
         else => return err,
     };
-    try ensureOutputLimit(0, written, max_output_len);
+    const written = raw.output_written;
+    const footer_offset = header.data_offset + raw.input_read;
+    try validateZlibFooterWithOptions(input, footer_offset, checksum.adler32(scratch[0..written]), options);
+
     const owned = try allocator.alloc(u8, written);
     errdefer allocator.free(owned);
     @memcpy(owned, scratch[0..written]);
