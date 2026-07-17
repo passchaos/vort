@@ -364,6 +364,7 @@ def main() -> int:
     full = "--full" in sys.argv[1:]
     suite = "--suite" in sys.argv[1:]
     standard_suite = "--standard-suite" in sys.argv[1:]
+    progress = "--progress" in sys.argv[1:]
     markdown_path = None
     case_limit: int | None = None
     corpus_paths: list[pathlib.Path] = []
@@ -400,7 +401,10 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         root = pathlib.Path(td)
         print(HEADER)
+        total = len(cases)
         for index, (label, data) in enumerate(cases):
+            if progress:
+                print(f"standard corpus progress {index + 1}/{total}: {label} bytes={len(data)}", file=sys.stderr, flush=True)
             row = run_case(label, data, root, index)
             rows.append(row)
             print(row)

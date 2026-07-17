@@ -773,6 +773,9 @@ architecture blindly.
   by side, so speed-oriented, production-default, and strongest-ratio presets
   are compared against gzip, zlib-ng, zlib-rs, and zstd without relying on a
   single proxy row.
+- [x] Standard corpus benchmark accepts `--progress`, printing per-case stderr
+  progress so long Silesia/standard-corpus dashboard runs are observable instead
+  of appearing hung.
 - [x] External file/directory throughput dashboard input mode.
 - [x] External tar-archive throughput dashboard input mode.
 - [x] Full-size Silesia Markdown dashboard export.
