@@ -100,6 +100,13 @@
     },
     {
       "category": "benchmark",
+      "name": "vort-checksum-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
       "name": "vort-chunked-zlib-bench-report.csv",
       "require_present": false,
       "require_producer_step": false,

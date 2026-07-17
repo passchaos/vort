@@ -65,6 +65,13 @@
     },
     {
       "expected_format": "csv",
+      "name": "vort-checksum-bench.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast bench-checksum-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast bench-checksum-csv"
+    },
+    {
+      "expected_format": "csv",
       "name": "vort-chunked-zlib-bench-report.csv",
       "producer_step": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv",
       "required_smoke_gate": false,

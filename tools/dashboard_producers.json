@@ -4,6 +4,10 @@
     "exact": []
   },
   "artifact_metadata": {
+    "vort-checksum-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast bench-checksum-csv"
+    },
     "vort-chunked-zlib-bench-report-repeat3.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv-repeat3"
@@ -264,6 +268,7 @@
     }
   ],
   "exact": {
+    "vort-checksum-bench.csv": "zig build -Doptimize=ReleaseFast bench-checksum-csv",
     "vort-chunked-zlib-bench-report-repeat3.csv": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv-repeat3",
     "vort-chunked-zlib-bench-report.csv": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv",
     "vort-chunked-zlib-bench-report.md": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-dashboard",
