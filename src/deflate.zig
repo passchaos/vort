@@ -4611,6 +4611,339 @@ pub const PngStreamingZlibScanlineDecoder = struct {
     }
 };
 
+pub const PngStreamingZlibChunkedScanlineDecoder = struct {
+    chunks: []const []const u8 = &.{},
+    total_len: usize = 0,
+    options: ZlibDecodeOptions = .{},
+    reader: bitstream.ChunkedBitReader = undefined,
+    raw_base_offset: usize = 0,
+    block_kind: BlockKind = .need_header,
+    final_block: bool = false,
+    stored_remaining: usize = 0,
+    pending_match_remaining: usize = 0,
+    pending_match_distance: usize = 0,
+    dynamic_lit: PngStreamingDynamicLiteralDecoder = undefined,
+    dynamic_dist: DynamicDistanceDecoder = undefined,
+    history: []u8 = &.{},
+    history_pos: usize = 0,
+    history_len: usize = 0,
+    adler: checksum.Adler32 = .{},
+    adler_pending: usize = 0,
+    filtered_row_scratch: []u8 = &.{},
+    previous_row_scratch: []u8 = &.{},
+    row_len: usize = 0,
+    row_count: usize = 0,
+    row_index: usize = 0,
+    bytes_per_pixel: usize = 0,
+    has_previous: bool = false,
+    finished: bool = false,
+    finished_input_read: usize = 0,
+    last_error_name: []const u8 = "",
+    last_recoverability_hint: ZlibDecoder.RecoverabilityHint = .none,
+
+    const BlockKind = enum { need_header, stored, fixed, dynamic, done };
+
+    pub const Snapshot = struct {
+        row_len: usize,
+        row_count: usize,
+        rows_done: usize,
+        rows_remaining: usize,
+        bytes_per_pixel: usize,
+        done: bool,
+        input_read: usize,
+        history_len: usize,
+        last_error_name: []const u8,
+        recoverability_hint: ZlibDecoder.RecoverabilityHint,
+    };
+
+    pub const Step = PngZlibScanlineDecoder.Step;
+    pub const history_scratch_len = lz77.default_window_len;
+
+    pub fn initWithInfo(
+        chunks: []const []const u8,
+        history_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+    ) Error!PngStreamingZlibChunkedScanlineDecoder {
+        return initWithInfoAndOptions(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, .{});
+    }
+
+    pub fn initWithInfoAndOptions(
+        chunks: []const []const u8,
+        history_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+        options: ZlibDecodeOptions,
+    ) Error!PngStreamingZlibChunkedScanlineDecoder {
+        var self = PngStreamingZlibChunkedScanlineDecoder{};
+        try self.resetWithInfoAndOptions(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, options);
+        return self;
+    }
+
+    pub fn resetWithInfo(
+        self: *PngStreamingZlibChunkedScanlineDecoder,
+        chunks: []const []const u8,
+        history_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+    ) Error!void {
+        return self.resetWithInfoAndOptions(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, .{});
+    }
+
+    pub fn resetWithInfoAndOptions(
+        self: *PngStreamingZlibChunkedScanlineDecoder,
+        chunks: []const []const u8,
+        history_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+        options: ZlibDecodeOptions,
+    ) Error!void {
+        _ = try PngZlibScanlineDecoder.validateConfig(info.row_len, info.height, info.bytes_per_pixel, filtered_row_scratch, previous_row_scratch);
+        if (history_scratch.len < history_scratch_len) return error.OutputTooSmall;
+        const total_len = try chunksTotalLen(chunks);
+        const header = try parseZlibHeaderFromChunks(chunks, null);
+        self.* = .{
+            .chunks = chunks,
+            .total_len = total_len,
+            .options = options,
+            .reader = try bitstream.ChunkedBitReader.initAt(chunks, header.data_offset),
+            .raw_base_offset = 0,
+            .history = history_scratch[0..history_scratch_len],
+            .filtered_row_scratch = filtered_row_scratch[0..info.row_len],
+            .previous_row_scratch = previous_row_scratch[0..info.row_len],
+            .row_len = info.row_len,
+            .row_count = info.height,
+            .bytes_per_pixel = info.bytes_per_pixel,
+        };
+    }
+
+    pub fn snapshot(self: *const PngStreamingZlibChunkedScanlineDecoder) Snapshot {
+        const input_read = if (self.finished)
+            self.finished_input_read
+        else
+            self.raw_base_offset + self.reader.byteOffset();
+        return .{
+            .row_len = self.row_len,
+            .row_count = self.row_count,
+            .rows_done = self.row_index,
+            .rows_remaining = self.row_count - self.row_index,
+            .bytes_per_pixel = self.bytes_per_pixel,
+            .done = self.finished,
+            .input_read = input_read,
+            .history_len = self.history_len,
+            .last_error_name = self.last_error_name,
+            .recoverability_hint = self.last_recoverability_hint,
+        };
+    }
+
+    pub fn diagnostics(self: *const PngStreamingZlibChunkedScanlineDecoder) core.StreamingDiagnostics {
+        const snap = self.snapshot();
+        return .{
+            .phase_name = if (snap.done) "done" else "payload",
+            .frame_input_read = if (snap.done) snap.input_read else null,
+            .output_written = snap.rows_done *| snap.row_len,
+            .expected_output_len = snap.row_count *| snap.row_len,
+            .payload_remaining = snap.rows_remaining *| (snap.row_len +| 1),
+            .last_error_name = snap.last_error_name,
+            .last_error_phase_name = if (snap.last_error_name.len == 0) "" else "payload",
+            .recoverability_hint_name = ZlibDecoder.hintName(snap.recoverability_hint),
+        };
+    }
+
+    pub fn step(self: *PngStreamingZlibChunkedScanlineDecoder, output: []u8) Error!Step {
+        return self.stepInternal(output) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+    }
+
+    fn stepInternal(self: *PngStreamingZlibChunkedScanlineDecoder, output: []u8) Error!Step {
+        if (self.row_index == self.row_count) {
+            try self.finish();
+            return .{ .row_index = self.row_index, .rows_done = self.row_index, .status = .done };
+        }
+        if (output.len < self.row_len) return error.OutputTooSmall;
+
+        const filter = (try self.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
+        if (filter > 4) return error.CorruptFrame;
+        try self.readInflatedBytes(self.filtered_row_scratch);
+        const previous = if (self.has_previous) self.previous_row_scratch else null;
+        const row_output = output[0..self.row_len];
+        _ = try reconstructPngScanline(filter, self.filtered_row_scratch, previous, self.bytes_per_pixel, row_output);
+        @memcpy(self.previous_row_scratch, row_output);
+        self.has_previous = true;
+
+        const row_index = self.row_index;
+        self.row_index += 1;
+        const done = self.row_index == self.row_count;
+        if (done) try self.finish();
+        return .{
+            .filter = filter,
+            .row_index = row_index,
+            .row_bytes = self.row_len,
+            .rows_done = self.row_index,
+            .progress = .{
+                .input_read = if (done) self.finished_input_read else 0,
+                .output_written = self.row_len,
+            },
+            .status = if (done) .done else .need_output,
+        };
+    }
+
+    fn readInflatedBytes(self: *PngStreamingZlibChunkedScanlineDecoder, output: []u8) Error!void {
+        for (output) |*byte| {
+            byte.* = (try self.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
+        }
+    }
+
+    fn readInflatedByteOrEnd(self: *PngStreamingZlibChunkedScanlineDecoder) Error!?u8 {
+        while (true) {
+            if (self.pending_match_remaining != 0) {
+                const byte = try self.historyByte(self.pending_match_distance);
+                self.pending_match_remaining -= 1;
+                return self.emitByte(byte);
+            }
+
+            switch (self.block_kind) {
+                .need_header => {
+                    try self.startNextBlock();
+                },
+                .stored => {
+                    if (self.stored_remaining == 0) {
+                        self.finishCurrentBlock();
+                        continue;
+                    }
+                    var byte: [1]u8 = undefined;
+                    try self.reader.readAlignedBytes(&byte);
+                    self.stored_remaining -= 1;
+                    const emitted = self.emitByte(byte[0]);
+                    if (self.stored_remaining == 0) self.finishCurrentBlock();
+                    return emitted;
+                },
+                .fixed => {
+                    const symbol = try huffman.decodeFixedLiteralValueFast(&self.reader);
+                    if (symbol < 256) return self.emitByte(@intCast(symbol));
+                    if (symbol == 256) {
+                        self.finishCurrentBlock();
+                        continue;
+                    }
+                    if (symbol > 285) return error.InvalidHuffmanCode;
+                    const length = try decodeLength(symbol, &self.reader);
+                    const distance_symbol = try huffman.decodeFixedDistanceValueFast(&self.reader);
+                    const distance = try decodeDistance(distance_symbol, &self.reader);
+                    try self.startPendingMatch(length, distance);
+                },
+                .dynamic => {
+                    const symbol = try self.dynamic_lit.decodeValue(&self.reader);
+                    if (symbol < 256) return self.emitByte(@intCast(symbol));
+                    if (symbol == 256) {
+                        self.finishCurrentBlock();
+                        continue;
+                    }
+                    if (symbol > 285) return error.InvalidHuffmanCode;
+                    const length = try decodeLength(symbol, &self.reader);
+                    const distance_symbol = try self.dynamic_dist.decodeValue(&self.reader);
+                    const distance = try decodeDistance(distance_symbol, &self.reader);
+                    try self.startPendingMatch(length, distance);
+                },
+                .done => return null,
+            }
+        }
+    }
+
+    fn startNextBlock(self: *PngStreamingZlibChunkedScanlineDecoder) Error!void {
+        if (self.block_kind == .done) return;
+        const final = (try self.reader.readBits(u1, 1)) != 0;
+        const block_type = try self.reader.readBits(u2, 2);
+        self.final_block = final;
+        switch (block_type) {
+            0 => {
+                self.reader.alignToByte();
+                const len = try self.reader.readAlignedInt(u16, .little);
+                const nlen = try self.reader.readAlignedInt(u16, .little);
+                if (nlen != ~len) return error.StoredLengthMismatch;
+                self.stored_remaining = len;
+                self.block_kind = .stored;
+            },
+            1 => self.block_kind = .fixed,
+            2 => {
+                const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &self.reader);
+                const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+                const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+                self.dynamic_lit = PngStreamingDynamicLiteralDecoder.init(lit_table);
+                self.dynamic_dist = makeDynamicDistanceDecoder(dist_table);
+                self.block_kind = .dynamic;
+            },
+            else => return error.InvalidDeflateBlockType,
+        }
+    }
+
+    fn finishCurrentBlock(self: *PngStreamingZlibChunkedScanlineDecoder) void {
+        if (self.final_block) {
+            self.block_kind = .done;
+        } else {
+            self.block_kind = .need_header;
+        }
+        self.final_block = false;
+        self.stored_remaining = 0;
+    }
+
+    fn startPendingMatch(self: *PngStreamingZlibChunkedScanlineDecoder, length: usize, distance: usize) Error!void {
+        if (length == 0) return error.InvalidMatch;
+        if (distance == 0 or distance > self.history_len) return error.InvalidMatch;
+        self.pending_match_remaining = length;
+        self.pending_match_distance = distance;
+    }
+
+    fn historyByte(self: *const PngStreamingZlibChunkedScanlineDecoder, distance: usize) Error!u8 {
+        if (distance == 0 or distance > self.history_len) return error.InvalidMatch;
+        const index = (self.history_pos + self.history.len - distance) % self.history.len;
+        return self.history[index];
+    }
+
+    fn emitByte(self: *PngStreamingZlibChunkedScanlineDecoder, byte: u8) u8 {
+        self.adler.a += byte;
+        self.adler.b += self.adler.a;
+        self.adler_pending += 1;
+        if (self.adler_pending == checksum.adler32_nmax) self.reduceAdler();
+        self.history[self.history_pos] = byte;
+        self.history_pos = (self.history_pos + 1) % self.history.len;
+        self.history_len = @min(self.history_len + 1, self.history.len);
+        return byte;
+    }
+
+    fn reduceAdler(self: *PngStreamingZlibChunkedScanlineDecoder) void {
+        self.adler.a %= checksum.adler32_modulus;
+        self.adler.b %= checksum.adler32_modulus;
+        self.adler_pending = 0;
+    }
+
+    fn finish(self: *PngStreamingZlibChunkedScanlineDecoder) Error!void {
+        if (self.finished) return;
+        if (self.row_index != self.row_count) return error.SizeMismatch;
+        if (try self.readInflatedByteOrEnd()) |_| return error.SizeMismatch;
+        const footer_offset = self.reader.byteOffset();
+        self.reduceAdler();
+        try validateZlibFooterChunksWithOptions(self.chunks, footer_offset, self.adler.digest(), self.options);
+        self.finished_input_read = footer_offset + 4;
+        self.finished = true;
+    }
+
+    fn recordError(self: *PngStreamingZlibChunkedScanlineDecoder, err: Error) void {
+        self.last_error_name = @errorName(err);
+        self.last_recoverability_hint = switch (err) {
+            error.BadZlibHeader, error.InvalidDeflateBlockType, error.InvalidDynamicBlockHeader, error.InvalidHuffmanCode => .corrupt_header,
+            error.TruncatedFrame => .truncated_input,
+            error.NeedDictionary, error.InvalidDictionaryTraining => .retry_with_dictionary,
+            else => .payload_corrupt,
+        };
+    }
+};
+
 /// Streaming PNG scanline decoder for zlib streams whose deflate payload uses
 /// only stored blocks.
 ///
@@ -5072,6 +5405,32 @@ pub fn decodePngStreamingZlibImageWithOptions(
     return drainPngStreamingZlibImage(&decoder, output[0..output_len]);
 }
 
+pub fn decodePngStreamingZlibImageFromChunksDirect(
+    chunks: []const []const u8,
+    history_scratch: []u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngImageInfo,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    return decodePngStreamingZlibImageFromChunksWithOptionsDirect(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, .{}, output);
+}
+
+pub fn decodePngStreamingZlibImageFromChunksWithOptionsDirect(
+    chunks: []const []const u8,
+    history_scratch: []u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngImageInfo,
+    options: ZlibDecodeOptions,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    const output_len = try pngImageOutputLen(info);
+    if (output.len < output_len) return error.OutputTooSmall;
+    var decoder = try PngStreamingZlibChunkedScanlineDecoder.initWithInfoAndOptions(chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, options);
+    return drainPngStreamingZlibChunksImage(&decoder, output[0..output_len]);
+}
+
 pub fn decodePngZlibImage(
     input: []const u8,
     zlib_scratch: []u8,
@@ -5148,6 +5507,21 @@ fn drainPngZlibImage(decoder: *PngZlibScanlineDecoder, output: []u8) Error!PngIm
 }
 
 fn drainPngStreamingZlibImage(decoder: *PngStreamingZlibScanlineDecoder, output: []u8) Error!PngImageDecodeResult {
+    var offset: usize = 0;
+    for (0..decoder.row_count) |_| {
+        const row = output[offset..][0..decoder.row_len];
+        const step = try decoder.step(row);
+        offset += step.row_bytes;
+    }
+    if (!decoder.snapshot().done) return error.SizeMismatch;
+    return .{
+        .rows = decoder.row_count,
+        .output_written = offset,
+        .zlib_input_read = decoder.snapshot().input_read,
+    };
+}
+
+fn drainPngStreamingZlibChunksImage(decoder: *PngStreamingZlibChunkedScanlineDecoder, output: []u8) Error!PngImageDecodeResult {
     var offset: usize = 0;
     for (0..decoder.row_count) |_| {
         const row = output[offset..][0..decoder.row_len];
@@ -7691,7 +8065,15 @@ test "png streaming zlib scanline decoder reconstructs fixed and dynamic rows wi
 
     const cases = [_][]const u8{ fixed, dynamic };
     for (cases) |encoded| {
+        const chunks = [_][]const u8{
+            encoded[0..1],
+            encoded[1..2],
+            encoded[2 .. encoded.len - 5],
+            encoded[encoded.len - 5 .. encoded.len - 1],
+            encoded[encoded.len - 1 ..],
+        };
         var history_scratch: [PngStreamingZlibScanlineDecoder.history_scratch_len]u8 = undefined;
+        var chunked_history_scratch: [PngStreamingZlibChunkedScanlineDecoder.history_scratch_len]u8 = undefined;
         var filtered_row_scratch: [row_len]u8 = undefined;
         var previous_row_scratch: [row_len]u8 = undefined;
         var output: [row_len]u8 = undefined;
@@ -7716,11 +8098,39 @@ test "png streaming zlib scanline decoder reconstructs fixed and dynamic rows wi
         try std.testing.expectEqual(filtered_payload.len, decoder.snapshot().history_len);
         try std.testing.expectEqual(core.StepResult.Status.done, (try decoder.step(output[0..0])).status);
 
+        var chunked_filtered_row_scratch: [row_len]u8 = undefined;
+        var chunked_previous_row_scratch: [row_len]u8 = undefined;
+        var chunked_decoder = try PngStreamingZlibChunkedScanlineDecoder.initWithInfo(&chunks, &chunked_history_scratch, &chunked_filtered_row_scratch, &chunked_previous_row_scratch, info);
+        for (0..row_count) |row_index| {
+            const step = try chunked_decoder.step(&output);
+            try std.testing.expectEqual(@as(u8, @intCast(row_index)), step.filter.?);
+            try std.testing.expectEqual(row_index, step.row_index);
+            try std.testing.expectEqual(row_len, step.row_bytes);
+            try std.testing.expectEqualSlices(u8, &rows[row_index], &output);
+            if (row_index + 1 == row_count) {
+                try std.testing.expectEqual(core.StepResult.Status.done, step.status);
+                try std.testing.expectEqual(encoded.len, step.progress.input_read);
+            } else {
+                try std.testing.expectEqual(core.StepResult.Status.need_output, step.status);
+                try std.testing.expectEqual(@as(usize, 0), step.progress.input_read);
+            }
+        }
+        try std.testing.expect(chunked_decoder.snapshot().done);
+        try std.testing.expectEqual(encoded.len, chunked_decoder.snapshot().input_read);
+        try std.testing.expectEqual(filtered_payload.len, chunked_decoder.snapshot().history_len);
+        try std.testing.expectEqual(core.StepResult.Status.done, (try chunked_decoder.step(output[0..0])).status);
+
         var image: [expected_image.len]u8 = undefined;
         const result = try decodePngStreamingZlibImage(encoded, &history_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image);
         try std.testing.expectEqual(row_count, result.rows);
         try std.testing.expectEqual(expected_image.len, result.output_written);
         try std.testing.expectEqual(encoded.len, result.zlib_input_read);
+        try std.testing.expectEqualSlices(u8, &expected_image, &image);
+        @memset(&image, 0);
+        const chunked_result = try decodePngStreamingZlibImageFromChunksDirect(&chunks, &chunked_history_scratch, &chunked_filtered_row_scratch, &chunked_previous_row_scratch, info, &image);
+        try std.testing.expectEqual(result.rows, chunked_result.rows);
+        try std.testing.expectEqual(result.output_written, chunked_result.output_written);
+        try std.testing.expectEqual(encoded.len, chunked_result.zlib_input_read);
         try std.testing.expectEqualSlices(u8, &expected_image, &image);
 
         var zlib_scratch: [filtered_payload.len]u8 = undefined;
@@ -7743,19 +8153,32 @@ test "png streaming zlib scanline decoder reconstructs fixed and dynamic rows wi
     }
     for (match_cases) |encoded| {
         try std.testing.expect(encoded.len < match_payload.len);
+        const chunks = [_][]const u8{
+            encoded[0..3],
+            encoded[3 .. encoded.len - 4],
+            encoded[encoded.len - 4 ..],
+        };
         var history_scratch: [PngStreamingZlibScanlineDecoder.history_scratch_len]u8 = undefined;
+        var chunked_history_scratch: [PngStreamingZlibChunkedScanlineDecoder.history_scratch_len]u8 = undefined;
         var match_filtered_row_scratch: [match_row_len]u8 = undefined;
         var match_previous_row_scratch: [match_row_len]u8 = undefined;
         var match_image: [match_row_count * match_row_len]u8 = undefined;
         const result = try decodePngStreamingZlibImage(encoded, &history_scratch, &match_filtered_row_scratch, &match_previous_row_scratch, match_info, &match_image);
         try std.testing.expectEqual(match_image.len, result.output_written);
         try std.testing.expectEqualSlices(u8, &([_]u8{0} ** match_image.len), &match_image);
+        @memset(&match_image, 0xff);
+        const chunked_result = try decodePngStreamingZlibImageFromChunksDirect(&chunks, &chunked_history_scratch, &match_filtered_row_scratch, &match_previous_row_scratch, match_info, &match_image);
+        try std.testing.expectEqual(result.output_written, chunked_result.output_written);
+        try std.testing.expectEqualSlices(u8, &([_]u8{0} ** match_image.len), &match_image);
     }
 
     var short_history: [PngStreamingZlibScanlineDecoder.history_scratch_len - 1]u8 = undefined;
+    var short_chunked_history: [PngStreamingZlibChunkedScanlineDecoder.history_scratch_len - 1]u8 = undefined;
     var filtered_row_scratch: [row_len]u8 = undefined;
     var previous_row_scratch: [row_len]u8 = undefined;
     try std.testing.expectError(error.OutputTooSmall, PngStreamingZlibScanlineDecoder.initWithInfo(dynamic, &short_history, &filtered_row_scratch, &previous_row_scratch, info));
+    const dynamic_chunks = [_][]const u8{ dynamic[0..3], dynamic[3..] };
+    try std.testing.expectError(error.OutputTooSmall, PngStreamingZlibChunkedScanlineDecoder.initWithInfo(&dynamic_chunks, &short_chunked_history, &filtered_row_scratch, &previous_row_scratch, info));
 
     var small_step_history: [PngStreamingZlibScanlineDecoder.history_scratch_len]u8 = undefined;
     var small_step_decoder = try PngStreamingZlibScanlineDecoder.initWithInfo(dynamic, &small_step_history, &filtered_row_scratch, &previous_row_scratch, info);
@@ -7799,6 +8222,30 @@ test "png streaming zlib scanline decoder reports wrapper and logical errors" {
     defer std.testing.allocator.free(bad_header);
     bad_header[0] = 0;
     try std.testing.expectError(error.BadZlibHeader, PngStreamingZlibScanlineDecoder.initWithInfo(bad_header, &history_scratch, &filtered_row_scratch, &previous_row_scratch, info));
+    const bad_header_chunks = [_][]const u8{ bad_header[0..1], bad_header[1..] };
+    try std.testing.expectError(error.BadZlibHeader, PngStreamingZlibChunkedScanlineDecoder.initWithInfo(&bad_header_chunks, &history_scratch, &filtered_row_scratch, &previous_row_scratch, info));
+
+    const chunks = [_][]const u8{
+        encoded[0..1],
+        encoded[1..3],
+        encoded[3 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+    };
+    const bad_adler_chunks = [_][]const u8{ bad_adler[0..2], bad_adler[2..] };
+    try std.testing.expectError(error.ChecksumMismatch, decodePngStreamingZlibImageFromChunksDirect(&bad_adler_chunks, &history_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+    _ = try decodePngStreamingZlibImageFromChunksWithOptionsDirect(&bad_adler_chunks, &history_scratch, &filtered_row_scratch, &previous_row_scratch, info, .{ .ignore_adler = true }, &image);
+    const trailing_chunks = [_][]const u8{ trailing[0..2], trailing[2 .. trailing.len - 1], trailing[trailing.len - 1 ..] };
+    try std.testing.expectError(error.TrailingData, decodePngStreamingZlibImageFromChunksDirect(&trailing_chunks, &history_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+    _ = try decodePngStreamingZlibImageFromChunksWithOptionsDirect(&trailing_chunks, &history_scratch, &filtered_row_scratch, &previous_row_scratch, info, .{ .allow_trailing_data = true }, &image);
+    const truncated_chunks = [_][]const u8{encoded[0 .. encoded.len - 2]};
+    try std.testing.expectError(error.TruncatedFrame, decodePngStreamingZlibImageFromChunksDirect(&truncated_chunks, &history_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+    const bad_filter_chunks = [_][]const u8{ bad_filter[0 .. bad_filter.len / 2], bad_filter[bad_filter.len / 2 ..] };
+    try std.testing.expectError(error.CorruptFrame, decodePngStreamingZlibImageFromChunksDirect(&bad_filter_chunks, &history_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+
+    var chunked_decoder = try PngStreamingZlibChunkedScanlineDecoder.initWithInfo(&chunks, &history_scratch, &filtered_row_scratch, &previous_row_scratch, info);
+    var short_output: [0]u8 = .{};
+    try std.testing.expectError(error.OutputTooSmall, chunked_decoder.step(&short_output));
+    try std.testing.expectEqualStrings("OutputTooSmall", chunked_decoder.diagnostics().last_error_name);
 }
 
 test "png zlib image helper reconstructs full image from IDAT chunks" {

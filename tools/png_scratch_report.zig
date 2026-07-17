@@ -21,10 +21,11 @@ const Case = struct {
     }
 
     fn fixedDynamicStreamingStatus(self: Case) []const u8 {
-        // Non-interlaced contiguous fixed/dynamic zlib streams now have a
-        // resumable inflate row producer. Chunked IDAT and Adam7 still need the
-        // same streaming core before the whole PNG stack can mark this achieved.
-        if (std.mem.eql(u8, self.interlace, "none")) return "contiguous_achieved";
+        // Non-interlaced fixed/dynamic zlib streams now have resumable inflate
+        // row producers for both contiguous and chunked IDAT payloads. Adam7
+        // still needs the same streaming core before the whole PNG stack can
+        // mark fixed/dynamic streaming achieved.
+        if (std.mem.eql(u8, self.interlace, "none")) return "achieved";
         return "future_target";
     }
 

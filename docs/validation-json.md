@@ -1856,8 +1856,8 @@ zig build run-native-allocation-smoke
 This smoke report gates the allocation report by requiring selected
 caller-owned/native decode paths to remain zero-allocation, including AnyDecoder,
 ZlibDecoder chunk/dictionary/varied-PNG scanline decode and PNG filter reconstruction,
-the PNG zlib scanline row pipeline, fixed/dynamic contiguous streaming PNG row
-and full-image decode, full-image PNG zlib decode including sub-byte rows,
+the PNG zlib scanline row pipeline, fixed/dynamic contiguous/chunked streaming
+PNG row and full-image decode, full-image PNG zlib decode including sub-byte rows,
 PNG Adam7 metadata/placement and interlaced full-image decode/corrupt rejects including zlib wrapper failures and packed sub-byte/16-bit RGBA rows, GzipDecoder single-member and concatenated
 chunk scratch decode, embedded and sidecar partial deflate/LDM range decode, embedded/sidecar
 deflate/LDM validation, and dictionary-deflate range/validation with caller-owned
@@ -1978,9 +1978,9 @@ representative PNG-like zlib decode paths. It includes non-interlaced and Adam7
 cases across RGB8, packed indexed rows, and RGBA16 so future incremental inflate
 work can prove peak `zlib_scratch_bytes` reductions against a stable baseline.
 The status columns make the milestone split explicit: stored-deflate scanline
-streaming is already usable, non-interlaced contiguous fixed/dynamic Huffman
-IDAT scanline streaming is available through the 32 KiB history-window decoder,
-and chunked/Adam7 fixed/dynamic streaming remains the next memory-reduction
+streaming is already usable, non-interlaced contiguous and chunked fixed/dynamic
+Huffman IDAT scanline streaming is available through the 32 KiB history-window
+decoder, and Adam7 fixed/dynamic streaming remains the next memory-reduction
 target.
 
 Top-level fields:
@@ -2002,7 +2002,7 @@ Each `cases` item includes:
 | `bit_depth` | integer | PNG bit depth. |
 | `color_type` | string | PNG color type name. |
 | `stored_streaming_status` | string | Current stored-deflate PNG scanline streaming status; `achieved` for these baseline rows. |
-| `fixed_dynamic_streaming_status` | string | Current fixed/dynamic Huffman PNG scanline streaming status; `contiguous_achieved` for non-interlaced contiguous zlib rows and `future_target` for rows still needing chunked/Adam7 streaming. |
+| `fixed_dynamic_streaming_status` | string | Current fixed/dynamic Huffman PNG scanline streaming status; `achieved` for non-interlaced contiguous/chunked zlib rows and `future_target` for rows still needing Adam7 streaming. |
 | `zlib_scratch_bytes` | integer | Exact decoded IDAT/zlib payload scratch. |
 | `filtered_row_scratch_bytes` | integer | One filtered row scratch. |
 | `previous_row_scratch_bytes` | integer | Previous reconstructed row scratch. |
@@ -2033,7 +2033,7 @@ Example:
       "bit_depth": 8,
       "color_type": "truecolor",
       "stored_streaming_status": "achieved",
-      "fixed_dynamic_streaming_status": "contiguous_achieved",
+      "fixed_dynamic_streaming_status": "achieved",
       "zlib_scratch_bytes": 80,
       "filtered_row_scratch_bytes": 15,
       "previous_row_scratch_bytes": 15,

@@ -227,7 +227,7 @@ def main() -> int:
         assert any(case["interlace"] == "adam7" for case in png_scratch["cases"])
         assert all(case["stored_streaming_status"] == "achieved" for case in png_scratch["cases"])
         assert all(
-            case["fixed_dynamic_streaming_status"] == ("contiguous_achieved" if case["interlace"] == "none" else "future_target")
+            case["fixed_dynamic_streaming_status"] == ("achieved" if case["interlace"] == "none" else "future_target")
             for case in png_scratch["cases"]
         )
         assert all(case["fixed_dynamic_history_scratch_bytes"] == 32768 for case in png_scratch["cases"])

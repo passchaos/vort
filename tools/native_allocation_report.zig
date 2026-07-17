@@ -71,8 +71,10 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measureZlibDecoderPngReconstruct(allocator));
     try rows.append(allocator, try measurePngZlibScanlinePipeline(allocator));
     try rows.append(allocator, try measurePngStreamingZlibScanlinePipeline(allocator));
+    try rows.append(allocator, try measurePngStreamingZlibChunkedScanlinePipeline(allocator));
     try rows.append(allocator, try measurePngZlibImageDecode(allocator));
     try rows.append(allocator, try measurePngStreamingZlibImageDecode(allocator));
+    try rows.append(allocator, try measurePngStreamingZlibChunkedImageDecode(allocator));
     try rows.append(allocator, try measurePngZlibSubByteImageDecode(allocator));
     try rows.append(allocator, try measurePngAdam7Metadata(allocator));
     try rows.append(allocator, try measurePngAdam7Placement(allocator));
@@ -703,6 +705,54 @@ fn measurePngStreamingZlibScanlinePipeline(backing: std.mem.Allocator) !CaseStat
     return stats("png_streaming_zlib_scanline_pipeline_scratch", encoded.len, output_bytes, failing);
 }
 
+fn measurePngStreamingZlibChunkedScanlinePipeline(backing: std.mem.Allocator) !CaseStats {
+    const bpp = 3;
+    const row_len = 12;
+    const row_count = 5;
+    var rows: [row_count][row_len]u8 = undefined;
+    var filtered_payload: [row_count * (row_len + 1)]u8 = undefined;
+    var payload_offset: usize = 0;
+    var previous: ?[]const u8 = null;
+    for (0..row_count) |row_index| {
+        rows[row_index] = pngReconstructionRow(row_len, row_index);
+        const filter: u8 = @intCast(row_index);
+        filtered_payload[payload_offset] = filter;
+        filterPngScanlineForReport(filter, &rows[row_index], previous, bpp, filtered_payload[payload_offset + 1 ..][0..row_len]);
+        previous = &rows[row_index];
+        payload_offset += row_len + 1;
+    }
+
+    const encoded = try vort.encodeZlibDynamicWithOptionsAlloc(backing, &filtered_payload, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..1],
+        encoded[1..5],
+        encoded[5 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+    };
+    const info = try vort.pngImageInfo(row_len / bpp, row_count, 8, .truecolor);
+    const history_scratch = try backing.alloc(u8, vort.PngStreamingZlibChunkedScanlineDecoder.history_scratch_len);
+    defer backing.free(history_scratch);
+    const filtered_row_scratch = try backing.alloc(u8, row_len);
+    defer backing.free(filtered_row_scratch);
+    const previous_row_scratch = try backing.alloc(u8, row_len);
+    defer backing.free(previous_row_scratch);
+    const output = try backing.alloc(u8, row_len);
+    defer backing.free(output);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    var decoder = try vort.PngStreamingZlibChunkedScanlineDecoder.initWithInfo(&chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info);
+    var output_bytes: usize = 0;
+    for (0..row_count) |row_index| {
+        const result = try decoder.step(output);
+        try std.testing.expectEqual(@as(u8, @intCast(row_index)), result.filter.?);
+        try std.testing.expectEqualSlices(u8, &rows[row_index], output);
+        output_bytes += result.progress.output_written;
+    }
+    try std.testing.expect(decoder.snapshot().done);
+    return stats("png_streaming_zlib_chunked_scanline_pipeline_scratch", encoded.len, output_bytes, failing);
+}
+
 fn measurePngZlibImageDecode(backing: std.mem.Allocator) !CaseStats {
     const bpp = 3;
     const row_len = 12;
@@ -790,6 +840,52 @@ fn measurePngStreamingZlibImageDecode(backing: std.mem.Allocator) !CaseStats {
     try std.testing.expectEqual(expected_image.len, result.output_written);
     try std.testing.expectEqualSlices(u8, &expected_image, output);
     return stats("png_streaming_zlib_image_decode_scratch", encoded.len, result.output_written, failing);
+}
+
+fn measurePngStreamingZlibChunkedImageDecode(backing: std.mem.Allocator) !CaseStats {
+    const bpp = 3;
+    const row_len = 12;
+    const row_count = 5;
+    var rows: [row_count][row_len]u8 = undefined;
+    var filtered_payload: [row_count * (row_len + 1)]u8 = undefined;
+    var expected_image: [row_count * row_len]u8 = undefined;
+    var payload_offset: usize = 0;
+    var image_offset: usize = 0;
+    var previous: ?[]const u8 = null;
+    for (0..row_count) |row_index| {
+        rows[row_index] = pngReconstructionRow(row_len, row_index);
+        @memcpy(expected_image[image_offset..][0..row_len], &rows[row_index]);
+        image_offset += row_len;
+        const filter: u8 = @intCast(row_index);
+        filtered_payload[payload_offset] = filter;
+        filterPngScanlineForReport(filter, &rows[row_index], previous, bpp, filtered_payload[payload_offset + 1 ..][0..row_len]);
+        previous = &rows[row_index];
+        payload_offset += row_len + 1;
+    }
+
+    const encoded = try vort.encodeZlibDynamicWithOptionsAlloc(backing, &filtered_payload, vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..2],
+        encoded[2 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+    };
+    const info = try vort.pngImageInfo(row_len / bpp, row_count, 8, .truecolor);
+    const history_scratch = try backing.alloc(u8, vort.PngStreamingZlibChunkedScanlineDecoder.history_scratch_len);
+    defer backing.free(history_scratch);
+    const filtered_row_scratch = try backing.alloc(u8, row_len);
+    defer backing.free(filtered_row_scratch);
+    const previous_row_scratch = try backing.alloc(u8, row_len);
+    defer backing.free(previous_row_scratch);
+    const output = try backing.alloc(u8, expected_image.len);
+    defer backing.free(output);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.decodePngStreamingZlibImageFromChunksDirect(&chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, output);
+    try std.testing.expectEqual(row_count, result.rows);
+    try std.testing.expectEqual(expected_image.len, result.output_written);
+    try std.testing.expectEqualSlices(u8, &expected_image, output);
+    return stats("png_streaming_zlib_chunked_image_decode_scratch", encoded.len, result.output_written, failing);
 }
 
 fn measurePngZlibSubByteImageDecode(backing: std.mem.Allocator) !CaseStats {

@@ -1898,6 +1898,7 @@
       "item_collection": "cases",
       "item_enums": {
         "fixed_dynamic_streaming_status": [
+          "achieved",
           "contiguous_achieved",
           "future_target"
         ],

@@ -452,10 +452,10 @@ architecture blindly.
 - [x] PngStoredZlibScanlineDecoder reconstructs stored-deflate PNG scanlines,
   including chunked IDAT-style zlib streams, directly from the zlib frame
   without full decoded-payload scratch.
-- [x] PngStreamingZlibScanlineDecoder reconstructs non-interlaced contiguous
-  zlib PNG scanlines for fixed/dynamic Huffman IDAT streams without full
-  decoded-payload scratch, using caller-owned 32 KiB DEFLATE history plus row
-  scratch.
+- [x] PngStreamingZlibScanlineDecoder and PngStreamingZlibChunkedScanlineDecoder
+  reconstruct non-interlaced contiguous/chunked zlib PNG scanlines for
+  fixed/dynamic Huffman IDAT streams without full decoded-payload scratch, using
+  caller-owned 32 KiB DEFLATE history plus row scratch.
 - [x] PngZlibScanlineDecoder and PNG-like image helpers expose direct chunk
   decode variants that avoid compressed join scratch while preserving caller-owned
   zlib row/output buffers.

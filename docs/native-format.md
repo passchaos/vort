@@ -202,11 +202,13 @@ For zlib streams whose deflate payload consists only of stored blocks,
 provide the same scanline reconstruction shape without the full decoded
 zlib-payload scratch, reading stored payload bytes directly while updating
 Adler-32.
-For contiguous zlib streams that use fixed or dynamic Huffman blocks,
-`PngStreamingZlibScanlineDecoder` and `decodePngStreamingZlibImage` now produce
-the same non-interlaced scanlines without the full decoded zlib-payload scratch.
-They keep a caller-owned 32 KiB DEFLATE history window plus current/previous PNG
-row buffers, so common one-piece IDAT consumers can trade predictable bounded
+For zlib streams that use fixed or dynamic Huffman blocks,
+`PngStreamingZlibScanlineDecoder`, `PngStreamingZlibChunkedScanlineDecoder`,
+`decodePngStreamingZlibImage`, and
+`decodePngStreamingZlibImageFromChunksDirect` now produce the same
+non-interlaced scanlines without the full decoded zlib-payload scratch. They
+keep a caller-owned 32 KiB DEFLATE history window plus current/previous PNG row
+buffers, so contiguous and multi-IDAT consumers can trade predictable bounded
 history memory for lower peak image-sized scratch while preserving Adler-32 and
 trailing-data validation.
 `decodePngZlibImageFromChunks` drains the same pipeline into a caller-owned full
