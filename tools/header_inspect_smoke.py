@@ -499,7 +499,10 @@ def main(argv: list[str]) -> int:
     assert raw_dynamic_json["dynamic_code_length_repeat_zero_long"] >= 1
     assert len(raw_dynamic_json["dynamic_code_length_lengths"]) == 19
     assert raw_dynamic_json["dynamic_literal_nonzero"] >= 1
-    assert raw_dynamic_json["dynamic_distance_nonzero"] >= 1
+    # Literal-only dynamic blocks may omit all distance codes; distance max bits
+    # and non-zero counts can therefore be zero even though HDIST itself is at
+    # least one per RFC 1951's encoded field range.
+    assert raw_dynamic_json["dynamic_distance_nonzero"] >= 0
     assert raw_dynamic_json["dynamic_has_eob"] is True
     assert raw_dynamic_json["dynamic_lengths_bit_offset"] == raw_dynamic_json["header_bits_consumed"]
     assert raw_dynamic_json["dynamic_lengths_byte_offset"] == raw_dynamic_json["header_bytes_consumed"]
@@ -507,7 +510,7 @@ def main(argv: list[str]) -> int:
     assert raw_dynamic_json["dynamic_literal_zero"] == raw_dynamic_json["dynamic_hlit"] - raw_dynamic_json["dynamic_literal_nonzero"]
     assert raw_dynamic_json["dynamic_distance_zero"] == raw_dynamic_json["dynamic_hdist"] - raw_dynamic_json["dynamic_distance_nonzero"]
     assert raw_dynamic_json["dynamic_literal_max_bits"] >= 1
-    assert raw_dynamic_json["dynamic_distance_max_bits"] >= 1
+    assert raw_dynamic_json["dynamic_distance_max_bits"] >= 0
     assert len(raw_dynamic_json["dynamic_literal_length_histogram"]) == 16
     assert len(raw_dynamic_json["dynamic_distance_length_histogram"]) == 16
     assert sum(raw_dynamic_json["dynamic_literal_length_histogram"]) == raw_dynamic_json["dynamic_hlit"]

@@ -236,6 +236,7 @@ pub const DynamicLengths = struct {
     literal_lengths: [286]u4 = @splat(0),
     distance_lengths: [30]u4 = @splat(0),
     literal_max_bits: u4 = 0,
+    distance_max_bits: u4 = 0,
     code_length_symbol_histogram: [19]u16 = @splat(0),
 };
 
@@ -339,6 +340,7 @@ fn setDynamicLength(parsed: *DynamicLengths, header: DynamicHeader, pos: usize, 
         parsed.literal_max_bits = @max(parsed.literal_max_bits, value);
     } else {
         parsed.distance_lengths[pos - header.hlit] = value;
+        parsed.distance_max_bits = @max(parsed.distance_max_bits, value);
     }
 }
 
@@ -356,6 +358,7 @@ fn setDynamicLengthRun(parsed: *DynamicLengths, header: DynamicHeader, pos: usiz
         const dist_start = if (pos > header.hlit) pos - header.hlit else 0;
         const dist_end = pos + count - header.hlit;
         @memset(parsed.distance_lengths[dist_start..dist_end], value);
+        parsed.distance_max_bits = @max(parsed.distance_max_bits, value);
     }
 }
 
@@ -743,6 +746,8 @@ test "dynamic length parser expands repeat symbols" {
     for (parsed.literal_lengths[1..256]) |bits| try std.testing.expectEqual(@as(u4, 0), bits);
     try std.testing.expectEqual(@as(u4, 1), parsed.literal_lengths[256]);
     try std.testing.expectEqual(@as(u4, 1), parsed.distance_lengths[0]);
+    try std.testing.expectEqual(@as(u4, 3), parsed.literal_max_bits);
+    try std.testing.expectEqual(@as(u4, 1), parsed.distance_max_bits);
 }
 
 test "dynamic length parser rejects invalid repeat symbols" {

@@ -1508,29 +1508,21 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         dynamic_code_length_repeat_zero_short = parsed.code_length_symbol_histogram[17];
         dynamic_code_length_repeat_zero_long = parsed.code_length_symbol_histogram[18];
         var lit_nonzero: u16 = 0;
-        var lit_max_bits: u8 = 0;
         for (parsed.literal_lengths[0..hlit]) |length| {
             dynamic_literal_length_histogram[length] += 1;
-            if (length != 0) {
-                lit_nonzero += 1;
-                lit_max_bits = @max(lit_max_bits, @as(u8, length));
-            }
+            if (length != 0) lit_nonzero += 1;
         }
         var dist_nonzero: u16 = 0;
-        var dist_max_bits: u8 = 0;
         for (parsed.distance_lengths[0..hdist]) |length| {
             dynamic_distance_length_histogram[length] += 1;
-            if (length != 0) {
-                dist_nonzero += 1;
-                dist_max_bits = @max(dist_max_bits, @as(u8, length));
-            }
+            if (length != 0) dist_nonzero += 1;
         }
         dynamic_literal_nonzero = lit_nonzero;
         dynamic_literal_zero = hlit - lit_nonzero;
-        dynamic_literal_max_bits = lit_max_bits;
+        dynamic_literal_max_bits = parsed.literal_max_bits;
         dynamic_distance_nonzero = dist_nonzero;
         dynamic_distance_zero = hdist - dist_nonzero;
-        dynamic_distance_max_bits = dist_max_bits;
+        dynamic_distance_max_bits = parsed.distance_max_bits;
         dynamic_has_eob = parsed.literal_lengths[256] != 0;
         dynamic_lengths_bit_offset = reader.bitPosition();
         dynamic_lengths_byte_offset = reader.byteOffset();

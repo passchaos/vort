@@ -718,6 +718,9 @@ architecture blindly.
   regressing larger corpus decode throughput.
 - [x] Dynamic length parsing records the literal alphabet's maximum code length
   so adaptive literal lookup selection avoids a second per-block scan.
+- [x] Dynamic length parsing also records the distance alphabet's maximum code
+  length, and raw header inspection reuses the parsed literal/distance maxima
+  instead of rescanning for max-bit diagnostics.
 - [x] Dynamic code-length decoding uses the value-only Huffman fast path,
   avoiding Symbol construction while parsing literal/distance code lengths.
 - [x] Huffman fast lookup hits advance bit readers through an availability
