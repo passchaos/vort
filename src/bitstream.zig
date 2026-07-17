@@ -343,21 +343,36 @@ pub const ChunkedBitReader = struct {
         // staged bytes.
         self.bit_buffer = 0;
         self.bit_count = 0;
-        self.staged_byte_index = self.byte_index;
-        self.syncCursor();
-        self.syncStagedCursor();
+
+        var byte_index = self.byte_index;
+        var chunk_index = self.chunk_index;
+        var chunk_start = self.chunk_start;
+        if (chunk_index >= self.chunks.len or byte_index < chunk_start) {
+            chunk_index = 0;
+            chunk_start = 0;
+        }
 
         var out_offset: usize = 0;
         while (out_offset < output.len) {
-            if (self.chunk_index >= self.chunks.len) return error.TruncatedFrame;
-            const chunk = self.chunks[self.chunk_index];
-            const local = self.byte_index - self.chunk_start;
+            while (chunk_index < self.chunks.len) {
+                const end = chunk_start + self.chunks[chunk_index].len;
+                if (byte_index < end) break;
+                chunk_start = end;
+                chunk_index += 1;
+            }
+            if (chunk_index >= self.chunks.len) return error.TruncatedFrame;
+            const chunk = self.chunks[chunk_index];
+            const local = byte_index - chunk_start;
             const n = @min(output.len - out_offset, chunk.len - local);
             @memcpy(output[out_offset..][0..n], chunk[local..][0..n]);
             out_offset += n;
-            self.byte_index += n;
-            self.syncCursor();
+            byte_index += n;
         }
+
+        self.byte_index = byte_index;
+        self.chunk_index = chunk_index;
+        self.chunk_start = chunk_start;
+        self.syncCursor();
         self.staged_byte_index = self.byte_index;
         self.syncStagedCursor();
     }

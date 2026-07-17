@@ -2964,11 +2964,23 @@ fn chunkByteAt(chunks: []const []const u8, offset: usize) ?u8 {
 }
 
 fn readChunkedBigU32(chunks: []const []const u8, offset: usize) Error!u32 {
+    var chunk_index: usize = 0;
+    var local = offset;
+    while (chunk_index < chunks.len and local >= chunks[chunk_index].len) {
+        local -= chunks[chunk_index].len;
+        chunk_index += 1;
+    }
+
     var value: u32 = 0;
-    for (0..4) |i| {
-        const byte_offset = std.math.add(usize, offset, i) catch return error.IntegerOverflow;
-        const byte = chunkByteAt(chunks, byte_offset) orelse return error.TruncatedFrame;
-        value = (value << 8) | byte;
+    var read: usize = 0;
+    while (read < 4) : (read += 1) {
+        while (chunk_index < chunks.len and local >= chunks[chunk_index].len) {
+            local -= chunks[chunk_index].len;
+            chunk_index += 1;
+        }
+        if (chunk_index >= chunks.len) return error.TruncatedFrame;
+        value = (value << 8) | chunks[chunk_index][local];
+        local += 1;
     }
     return value;
 }
