@@ -120,6 +120,27 @@
       "require_smoke_gate": false
     },
     {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-benchmark-summary-repeat3.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-decode-bench-repeat3.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-encode-bench-repeat3.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "corpus and ratio",
       "name": "vort-dictionary-corpus-dashboard.md",
       "require_present": false,

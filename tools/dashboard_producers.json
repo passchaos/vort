@@ -215,6 +215,18 @@
     "vort-zlib-relaxed-report.md": {
       "expected_format": "md",
       "smoke_gate": "zig build run-zlib-relaxed-report-gate"
+    },
+    "vort-rust-deflate-benchmark-summary-repeat3.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3"
+    },
+    "vort-rust-deflate-decode-bench-repeat3.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv-repeat3"
+    },
+    "vort-rust-deflate-encode-bench-repeat3.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3"
     }
   },
   "contains": [
@@ -284,7 +296,10 @@
     "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
     "vort-zlib-relaxed-report-gate.json": "zig build run-zlib-relaxed-report-gate",
     "vort-zlib-relaxed-report.json": "zig build run-zlib-relaxed-report",
-    "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report"
+    "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report",
+    "vort-rust-deflate-benchmark-summary-repeat3.md": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3",
+    "vort-rust-deflate-decode-bench-repeat3.csv": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv-repeat3",
+    "vort-rust-deflate-encode-bench-repeat3.csv": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3"
   },
   "required_smoke_gates": [
     "vort-dashboard-category-negative-smoke.json",

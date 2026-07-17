@@ -295,6 +295,27 @@
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv"
     },
     {
+      "expected_format": "md",
+      "name": "vort-rust-deflate-benchmark-summary-repeat3.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-rust-deflate-decode-bench-repeat3.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv-repeat3",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv-repeat3"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-rust-deflate-encode-bench-repeat3.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3"
+    },
+    {
       "expected_format": "json",
       "name": "vort-sidecar-corrupt-smoke.json",
       "producer_step": "zig build run-sidecar-corrupt-dashboard",
