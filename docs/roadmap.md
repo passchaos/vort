@@ -735,6 +735,10 @@ architecture blindly.
   path and expose value-only helpers for raw/zlib/gzip fixed blocks, cutting
   Symbol materialization and the legacy `skipBits` path; latest Rust deflate
   summary shows zlib caller-buffer decode geomean at 1.006 of the best Rust row.
+- [x] Raw allocating decode uses a bounded stack scratch caller-buffer fast
+  path for compressed members up to 8 KiB that expand within 64 KiB, reducing
+  ArrayList growth/shrink overhead for common small/medium exact-owned decode
+  calls while falling back to the streaming allocator path for larger expansion.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

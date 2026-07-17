@@ -1609,14 +1609,21 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
     }
 }
 
-fn decodeRawAutoSmallIntoAlloc(allocator: std.mem.Allocator, input: []const u8) !?OwnedDecodeResult {
-    if (input.len > 64) return null;
+const stack_inflate_alloc_max_input_len = 8 * 1024;
+const stack_inflate_alloc_scratch_len = 64 * 1024;
 
-    // Small raw DEFLATE members are common in wrappers, metadata, tests, and
-    // CLI/API calls. Decoding them through the caller-buffer state machine first
-    // avoids the ArrayList growth/shrink path used by the general allocating
-    // decoder while preserving exact owned-slice semantics for callers.
-    var scratch: [512]u8 = undefined;
+fn decodeRawAutoSmallIntoAlloc(allocator: std.mem.Allocator, input: []const u8) !?OwnedDecodeResult {
+    if (input.len > stack_inflate_alloc_max_input_len) return null;
+
+    // Small and medium compressed members dominate wrapper metadata, test
+    // loops, and common text/source payloads. Decoding them through the
+    // caller-buffer state machine first avoids the ArrayList grow/shrink path
+    // used by the general allocating decoder while preserving exact owned-slice
+    // semantics for callers. The scratch limit is deliberately bounded: if a
+    // compact stream expands beyond this stack buffer, we fall back to the
+    // streaming ArrayList path so hostile or unusually large expansions do not
+    // keep growing hidden stack usage.
+    var scratch: [stack_inflate_alloc_scratch_len]u8 = undefined;
     const decoded = decodeRawAuto(input, &scratch) catch |err| switch (err) {
         error.OutputTooSmall => return null,
         else => return err,
@@ -7447,12 +7454,24 @@ test "small raw allocating decode uses exact owned output" {
     try std.testing.expectError(error.TrailingData, decodeRawAutoAlloc(std.testing.allocator, &trailing));
 }
 
+test "small raw allocating decode uses stack fast path for source-sized frames" {
+    var input: [4096]u8 = undefined;
+    for (&input, 0..) |*byte, i| byte.* = @intCast(i % 251);
+    const encoded = try encodeRawStoredAlloc(std.testing.allocator, &input);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len <= stack_inflate_alloc_max_input_len);
+
+    const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &input, decoded);
+}
+
 test "small raw allocating decode falls back when scratch is too small" {
-    var input: [1024]u8 = undefined;
+    var input: [stack_inflate_alloc_scratch_len + 1]u8 = undefined;
     @memset(&input, 'a');
     const encoded = try encodeRawFixedAlloc(std.testing.allocator, &input);
     defer std.testing.allocator.free(encoded);
-    try std.testing.expect(encoded.len <= 64);
+    try std.testing.expect(encoded.len <= stack_inflate_alloc_max_input_len);
 
     const decoded = try decodeRawAutoAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
