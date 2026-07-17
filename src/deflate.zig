@@ -4405,11 +4405,38 @@ fn decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.All
         return stored.result.bytes;
     }
 
+    if (try decodeZlibAllocSmallIntoMaybe(allocator, input, dictionary, options, max_output_len)) |decoded| return decoded;
+
     const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[header.data_offset..], raw_dictionary, max_output_len);
     errdefer raw.deinit(allocator);
     const footer_offset = header.data_offset + raw.input_read;
     try validateZlibFooterWithOptions(input, footer_offset, checksum.adler32(raw.bytes), options);
     return raw.bytes;
+}
+
+fn decodeZlibAllocSmallIntoMaybe(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, max_output_len: ?usize) !?[]u8 {
+    if (input.len > stack_inflate_alloc_max_input_len) return null;
+
+    // zlib does not carry the uncompressed byte length, so the general
+    // allocator-returning path must discover it before returning an exact owned
+    // slice. For common small/medium members, decode and validate directly into
+    // bounded stack scratch, then copy exactly once into the caller-owned result.
+    // This avoids constructing an intermediate raw owned slice and then scanning
+    // that slice again for Adler-32 in the wrapper.
+    var scratch: [stack_inflate_alloc_scratch_len]u8 = undefined;
+    const decode_buffer = if (max_output_len) |limit| scratch[0..@min(limit, scratch.len)] else scratch[0..];
+    const written = (if (dictionary) |dict|
+        decodeZlibWithDictionaryAndOptions(input, decode_buffer, dict, options)
+    else
+        decodeZlibWithOptions(input, decode_buffer, options)) catch |err| switch (err) {
+        error.OutputTooSmall => return null,
+        else => return err,
+    };
+    try ensureOutputLimit(0, written, max_output_len);
+    const owned = try allocator.alloc(u8, written);
+    errdefer allocator.free(owned);
+    @memcpy(owned, scratch[0..written]);
+    return owned;
 }
 
 fn decodeZlibAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, expected_output_len: usize) ![]u8 {

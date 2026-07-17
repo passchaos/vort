@@ -739,6 +739,10 @@ architecture blindly.
   path for compressed members up to 8 KiB that expand within 64 KiB, reducing
   ArrayList growth/shrink overhead for common small/medium exact-owned decode
   calls while falling back to the streaming allocator path for larger expansion.
+- [x] zlib allocating decode can validate small/medium non-stored members
+  directly into bounded stack scratch before copying the exact owned slice,
+  improving allocator-returning wrapper decode while preserving the streaming
+  fallback for larger expansion.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.
