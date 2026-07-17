@@ -222,6 +222,9 @@ pub const BufferedBitReader = struct {
 
 pub const ChunkedBitReader = struct {
     chunks: []const []const u8,
+    /// Consumed byte offset plus the current bit offset within that byte. These
+    /// retain the original public accounting semantics; staged bytes below are
+    /// an implementation detail of the Huffman hot path.
     byte_index: usize = 0,
     bit_index: u3 = 0,
     total_len: usize = 0,
@@ -233,6 +236,16 @@ pub const ChunkedBitReader = struct {
     /// the public reader API.
     chunk_index: usize = 0,
     chunk_start: usize = 0,
+    /// Next absolute byte not yet staged in `bit_buffer`.
+    staged_byte_index: usize = 0,
+    /// Low `bit_count` bits are unread bits starting at byte_index/bit_index.
+    /// Direct PNG/IDAT chunked decode often has one-byte chunks; caching this
+    /// reservoir avoids reconstructing the same little-endian Huffman window
+    /// for every literal/length lookup.
+    bit_buffer: u64 = 0,
+    bit_count: usize = 0,
+    staged_chunk_index: usize = 0,
+    staged_chunk_start: usize = 0,
 
     pub fn init(chunks: []const []const u8) Error!ChunkedBitReader {
         return initAt(chunks, 0);
@@ -244,9 +257,11 @@ pub const ChunkedBitReader = struct {
         var reader = ChunkedBitReader{
             .chunks = chunks,
             .byte_index = byte_offset,
+            .staged_byte_index = byte_offset,
             .total_len = total,
         };
         reader.syncCursor();
+        reader.syncStagedCursor();
         return reader;
     }
 
@@ -286,6 +301,11 @@ pub const ChunkedBitReader = struct {
     }
 
     pub fn advanceBitsAssumeAvailable(self: *ChunkedBitReader, count: u6) void {
+        self.fill(count);
+        std.debug.assert(self.bit_count >= count);
+        self.bit_buffer >>= @intCast(count);
+        self.bit_count -= count;
+
         const old_byte_index = self.byte_index;
         const new_bit_index = @as(usize, self.bit_index) + count;
         self.byte_index += new_bit_index / 8;
@@ -293,46 +313,21 @@ pub const ChunkedBitReader = struct {
         if (self.byte_index != old_byte_index) self.syncCursor();
     }
 
-    pub fn peekBitsPadded(self: ChunkedBitReader, comptime T: type, count: u6) T {
+    pub fn peekBitsPadded(self: *ChunkedBitReader, comptime T: type, count: u6) T {
         std.debug.assert(count <= @bitSizeOf(T));
         if (count == 0 or self.byte_index >= self.total_len) return 0;
+        self.fill(count);
 
-        const requested_bits = @as(usize, self.bit_index) + @as(usize, count);
-        const requested_bytes = (requested_bits + 7) / 8;
-        var window: u128 = 0;
-        var bytes_written: usize = 0;
-        var absolute = self.byte_index;
-        var chunk_index = self.chunk_index;
-        var chunk_start = self.chunk_start;
-        if (chunk_index >= self.chunks.len or absolute < chunk_start) {
-            chunk_index = 0;
-            chunk_start = 0;
-        }
-        while (bytes_written < requested_bytes and absolute < self.total_len) {
-            while (chunk_index < self.chunks.len) {
-                const end = chunk_start + self.chunks[chunk_index].len;
-                if (absolute < end) break;
-                chunk_start = end;
-                chunk_index += 1;
-            }
-            if (chunk_index >= self.chunks.len) break;
-            const chunk = self.chunks[chunk_index];
-            const local = absolute - chunk_start;
-            const n = @min(requested_bytes - bytes_written, chunk.len - local);
-            var i: usize = 0;
-            while (i < n) : (i += 1) {
-                window |= @as(u128, chunk[local + i]) << @intCast((bytes_written + i) * 8);
-            }
-            absolute += n;
-            bytes_written += n;
-        }
-        const shifted = window >> self.bit_index;
-        const mask = (@as(u128, 1) << @intCast(count)) - 1;
-        return @intCast(shifted & mask);
+        const mask = (@as(u64, 1) << @intCast(count)) - 1;
+        return @intCast(self.bit_buffer & mask);
     }
 
     pub fn alignToByte(self: *ChunkedBitReader) void {
         if (self.bit_index != 0) {
+            const padding: usize = 8 - @as(usize, self.bit_index);
+            const staged_drop = @min(padding, self.bit_count);
+            self.bit_buffer >>= @intCast(staged_drop);
+            self.bit_count -= staged_drop;
             self.bit_index = 0;
             self.byte_index += 1;
             self.syncCursor();
@@ -342,7 +337,16 @@ pub const ChunkedBitReader = struct {
     pub fn readAlignedBytes(self: *ChunkedBitReader, output: []u8) Error!void {
         if (self.bit_index != 0) return error.CorruptFrame;
         if (self.byte_index > self.total_len or self.total_len - self.byte_index < output.len) return error.TruncatedFrame;
+        // Aligned stored-block reads can ignore staged Huffman bytes and copy
+        // directly from the original chunks. Clear the reservoir so subsequent
+        // bit reads resume after the copied span instead of replaying stale
+        // staged bytes.
+        self.bit_buffer = 0;
+        self.bit_count = 0;
+        self.staged_byte_index = self.byte_index;
         self.syncCursor();
+        self.syncStagedCursor();
+
         var out_offset: usize = 0;
         while (out_offset < output.len) {
             if (self.chunk_index >= self.chunks.len) return error.TruncatedFrame;
@@ -354,6 +358,8 @@ pub const ChunkedBitReader = struct {
             self.byte_index += n;
             self.syncCursor();
         }
+        self.staged_byte_index = self.byte_index;
+        self.syncStagedCursor();
     }
 
     pub fn readAlignedInt(self: *ChunkedBitReader, comptime T: type, endian: std.builtin.Endian) Error!T {
@@ -395,6 +401,43 @@ pub const ChunkedBitReader = struct {
             if (self.byte_index < end) return;
             self.chunk_start = end;
             self.chunk_index += 1;
+        }
+    }
+
+    fn fill(self: *ChunkedBitReader, requested_bits: usize) void {
+        std.debug.assert(requested_bits <= 63);
+        while (self.bit_count < requested_bits and self.staged_byte_index < self.total_len and self.bit_count <= 56) {
+            self.syncStagedCursor();
+            if (self.staged_chunk_index >= self.chunks.len) break;
+            const chunk = self.chunks[self.staged_chunk_index];
+            const local = self.staged_byte_index - self.staged_chunk_start;
+            if (local >= chunk.len) break;
+            const byte = chunk[local];
+            self.bit_buffer |= @as(u64, byte) << @intCast(self.bit_count);
+            self.bit_count += 8;
+            self.staged_byte_index += 1;
+        }
+    }
+
+    fn syncStagedCursor(self: *ChunkedBitReader) void {
+        if (self.staged_byte_index >= self.total_len) {
+            self.staged_chunk_index = self.chunks.len;
+            self.staged_chunk_start = self.total_len;
+            return;
+        }
+        if (self.staged_chunk_index >= self.chunks.len or self.staged_byte_index < self.staged_chunk_start) {
+            self.staged_chunk_index = self.chunk_index;
+            self.staged_chunk_start = self.chunk_start;
+            if (self.staged_chunk_index >= self.chunks.len or self.staged_byte_index < self.staged_chunk_start) {
+                self.staged_chunk_index = 0;
+                self.staged_chunk_start = 0;
+            }
+        }
+        while (self.staged_chunk_index < self.chunks.len) {
+            const end = self.staged_chunk_start + self.chunks[self.staged_chunk_index].len;
+            if (self.staged_byte_index < end) return;
+            self.staged_chunk_start = end;
+            self.staged_chunk_index += 1;
         }
     }
 };
