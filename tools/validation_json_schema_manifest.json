@@ -1088,6 +1088,7 @@
         "raw_exact_mib_s": "float",
         "raw_into_mib_s": "float",
         "raw_mib_s": "float",
+        "repeat": "int",
         "zlib_alloc_exact_time_ratio": "float",
         "zlib_alloc_into_time_ratio": "float",
         "zlib_bytes": "int",

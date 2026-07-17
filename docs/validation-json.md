@@ -1169,6 +1169,7 @@ Example:
       "gzip_bytes": 48,
       "raw_bytes": 30,
       "iterations": 10000,
+      "repeat": 1,
       "raw_mib_s": 1.0,
       "raw_exact_mib_s": 1.0,
       "raw_into_mib_s": 1.0,

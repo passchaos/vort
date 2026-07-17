@@ -447,6 +447,7 @@ def write_decode_stage_report(path: Path, *, ok: bool = True) -> None:
                 "gzip_bytes": 23,
                 "raw_bytes": 5,
                 "iterations": 1,
+                "repeat": 1,
                 "raw_mib_s": 1.0,
                 "raw_exact_mib_s": 1.0,
                 "raw_into_mib_s": 1.0,
