@@ -1857,7 +1857,7 @@ This smoke report gates the allocation report by requiring selected
 caller-owned/native decode paths to remain zero-allocation, including AnyDecoder,
 ZlibDecoder chunk/dictionary/varied-PNG scanline decode and PNG filter reconstruction,
 the PNG zlib scanline row pipeline, fixed/dynamic contiguous/chunked streaming
-PNG row and full-image decode, full-image PNG zlib decode including sub-byte rows,
+PNG row and full-image decode, streaming Adam7 decode including sub-byte/RGBA16 rows, full-image PNG zlib decode including sub-byte rows,
 PNG Adam7 metadata/placement and interlaced full-image decode/corrupt rejects including zlib wrapper failures and packed sub-byte/16-bit RGBA rows, GzipDecoder single-member and concatenated
 chunk scratch decode, embedded and sidecar partial deflate/LDM range decode, embedded/sidecar
 deflate/LDM validation, and dictionary-deflate range/validation with caller-owned
@@ -1978,10 +1978,9 @@ representative PNG-like zlib decode paths. It includes non-interlaced and Adam7
 cases across RGB8, packed indexed rows, and RGBA16 so future incremental inflate
 work can prove peak `zlib_scratch_bytes` reductions against a stable baseline.
 The status columns make the milestone split explicit: stored-deflate scanline
-streaming is already usable, non-interlaced contiguous and chunked fixed/dynamic
-Huffman IDAT scanline streaming is available through the 32 KiB history-window
-decoder, and Adam7 fixed/dynamic streaming remains the next memory-reduction
-target.
+streaming is already usable, and fixed/dynamic Huffman IDAT scanline streaming
+is available for non-interlaced and Adam7 payloads, including chunked IDAT,
+through the 32 KiB history-window decoder.
 
 Top-level fields:
 
@@ -2002,19 +2001,19 @@ Each `cases` item includes:
 | `bit_depth` | integer | PNG bit depth. |
 | `color_type` | string | PNG color type name. |
 | `stored_streaming_status` | string | Current stored-deflate PNG scanline streaming status; `achieved` for these baseline rows. |
-| `fixed_dynamic_streaming_status` | string | Current fixed/dynamic Huffman PNG scanline streaming status; `achieved` for non-interlaced contiguous/chunked zlib rows and `future_target` for rows still needing Adam7 streaming. |
+| `fixed_dynamic_streaming_status` | string | Current fixed/dynamic Huffman PNG scanline streaming status; `achieved` for non-interlaced and Adam7 contiguous/chunked zlib rows. |
 | `zlib_scratch_bytes` | integer | Exact decoded IDAT/zlib payload scratch. |
 | `filtered_row_scratch_bytes` | integer | One filtered row scratch. |
 | `previous_row_scratch_bytes` | integer | Previous reconstructed row scratch. |
 | `fixed_dynamic_history_scratch_bytes` | integer | Caller-owned DEFLATE history window used by fixed/dynamic streaming scanline decode, currently 32768 bytes. |
 | `image_output_bytes` | integer | Final reconstructed image output bytes. |
 | `working_scratch_bytes` | integer | Sum of zlib, filtered-row, and previous-row scratch. |
-| `streaming_working_scratch_bytes` | integer | Target working scratch after future incremental inflate removes full zlib payload scratch. |
+| `streaming_working_scratch_bytes` | integer | Row-only working scratch after stored/streaming decode removes full zlib payload scratch. |
 | `fixed_dynamic_streaming_working_scratch_bytes` | integer | Fixed/dynamic streaming working scratch: history window plus filtered and previous row scratch. |
 | `streaming_scratch_savings_bytes` | integer | Working-scratch bytes saved by that target; currently equal to `zlib_scratch_bytes`. |
 | `streaming_scratch_ratio_x10000` | integer | Target working scratch divided by current working scratch, scaled by 10000. |
 | `total_caller_owned_bytes` | integer | Working scratch plus output bytes. |
-| `streaming_total_caller_owned_bytes` | integer | Streaming target working scratch plus output bytes. |
+| `streaming_total_caller_owned_bytes` | integer | Row-only streaming working scratch plus output bytes. |
 | `fixed_dynamic_streaming_total_caller_owned_bytes` | integer | Fixed/dynamic streaming working scratch plus output bytes. |
 
 Example:

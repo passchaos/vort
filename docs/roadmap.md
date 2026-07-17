@@ -456,6 +456,9 @@ architecture blindly.
   reconstruct non-interlaced contiguous/chunked zlib PNG scanlines for
   fixed/dynamic Huffman IDAT streams without full decoded-payload scratch, using
   caller-owned 32 KiB DEFLATE history plus row scratch.
+- [x] Adam7 fixed/dynamic PNG helpers stream contiguous and chunked zlib payloads
+  through the same 32 KiB history window, reconstructing and placing pass rows
+  without full decoded-payload scratch.
 - [x] PngZlibScanlineDecoder and PNG-like image helpers expose direct chunk
   decode variants that avoid compressed join scratch while preserving caller-owned
   zlib row/output buffers.

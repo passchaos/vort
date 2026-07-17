@@ -79,8 +79,11 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(allocator, try measurePngAdam7Metadata(allocator));
     try rows.append(allocator, try measurePngAdam7Placement(allocator));
     try rows.append(allocator, try measurePngAdam7ImageDecode(allocator));
+    try rows.append(allocator, try measurePngAdam7StreamingImageDecode(allocator));
     try rows.append(allocator, try measurePngAdam7SubByteImageDecode(allocator));
+    try rows.append(allocator, try measurePngAdam7StreamingSubByteImageDecode(allocator));
     try rows.append(allocator, try measurePngAdam7Rgba16ImageDecode(allocator));
+    try rows.append(allocator, try measurePngAdam7StreamingRgba16ImageDecode(allocator));
     try rows.append(allocator, try measurePngAdam7CorruptReject(allocator));
     try rows.append(allocator, try measurePngZlibWrapperReject(allocator));
     try rows.append(allocator, try measurePngAdam7WrapperReject(allocator));
@@ -1026,6 +1029,68 @@ fn measurePngAdam7ImageDecode(backing: std.mem.Allocator) !CaseStats {
     return stats("png_adam7_image_decode_scratch", encoded.len, result.output_written, failing);
 }
 
+fn measurePngAdam7StreamingImageDecode(backing: std.mem.Allocator) !CaseStats {
+    const info = try vort.pngAdam7Info(5, 5, 8, .truecolor);
+    const sizes = vort.pngAdam7DecodeBufferSizes(info);
+    var expected_image: [5 * 5 * 3]u8 = undefined;
+    for (0..info.image.height) |y| {
+        for (0..info.image.width) |x| {
+            const offset = (y * info.image.width + x) * 3;
+            const base: u8 = @intCast(y * 32 + x * 3);
+            expected_image[offset + 0] = base;
+            expected_image[offset + 1] = base +% 1;
+            expected_image[offset + 2] = base +% 2;
+        }
+    }
+
+    var filtered_payload: [128]u8 = undefined;
+    var payload_offset: usize = 0;
+    var pass_row: [64]u8 = undefined;
+    var filtered_row: [64]u8 = undefined;
+    var previous_row: [64]u8 = undefined;
+    for (info.passes) |pass| {
+        if (pass.isEmpty()) continue;
+        var has_previous = false;
+        for (0..pass.height) |row_index| {
+            for (0..pass.width) |pass_x| {
+                const dest_x = pass.x_start + pass_x * pass.x_step;
+                const dest_y = pass.y_start + row_index * pass.y_step;
+                const src = (dest_y * info.image.width + dest_x) * 3;
+                @memcpy(pass_row[pass_x * 3 ..][0..3], expected_image[src..][0..3]);
+            }
+            const filter: u8 = @intCast((@as(usize, pass.pass_index) + row_index - 1) % 5);
+            const previous = if (has_previous) previous_row[0..pass.row_len] else null;
+            filterPngScanlineForReport(filter, pass_row[0..pass.row_len], previous, pass.bytes_per_pixel, filtered_row[0..pass.row_len]);
+            filtered_payload[payload_offset] = filter;
+            @memcpy(filtered_payload[payload_offset + 1 ..][0..pass.row_len], filtered_row[0..pass.row_len]);
+            payload_offset += pass.row_len + 1;
+            @memcpy(previous_row[0..pass.row_len], pass_row[0..pass.row_len]);
+            has_previous = true;
+        }
+    }
+
+    const encoded = try vort.encodeZlibBestAlloc(backing, filtered_payload[0..payload_offset], vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..5],
+        encoded[5 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+    };
+    const history_scratch = try backing.alloc(u8, vort.PngStreamingZlibChunkedScanlineDecoder.history_scratch_len);
+    defer backing.free(history_scratch);
+    const filtered_row_scratch = try backing.alloc(u8, sizes.filtered_row_scratch_len);
+    defer backing.free(filtered_row_scratch);
+    const previous_row_scratch = try backing.alloc(u8, sizes.previous_row_scratch_len);
+    defer backing.free(previous_row_scratch);
+    const output = try backing.alloc(u8, sizes.image_output_len);
+    defer backing.free(output);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.decodePngAdam7StreamingZlibImageFromChunksDirect(&chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, output);
+    try std.testing.expectEqualSlices(u8, &expected_image, output);
+    return stats("png_adam7_streaming_image_decode_scratch", encoded.len, result.output_written, failing);
+}
+
 fn measurePngAdam7SubByteImageDecode(backing: std.mem.Allocator) !CaseStats {
     const info = try vort.pngAdam7Info(5, 5, 2, .indexed);
     const sizes = vort.pngAdam7DecodeBufferSizes(info);
@@ -1091,6 +1156,63 @@ fn measurePngAdam7SubByteImageDecode(backing: std.mem.Allocator) !CaseStats {
     return stats("png_adam7_subbyte_image_decode_scratch", encoded.len, result.output_written, failing);
 }
 
+fn measurePngAdam7StreamingSubByteImageDecode(backing: std.mem.Allocator) !CaseStats {
+    const info = try vort.pngAdam7Info(5, 5, 2, .indexed);
+    const sizes = vort.pngAdam7DecodeBufferSizes(info);
+    var expected_pixels: [25]u8 = @splat(0);
+    for (0..info.image.height) |y| {
+        for (0..info.image.width) |x| expected_pixels[y * info.image.width + x] = @intCast((x + y * 2) & 0x3);
+    }
+    var expected_image: [10]u8 = @splat(0);
+    for (0..info.image.height) |y| {
+        const row = expected_image[y * info.image.row_len ..][0..info.image.row_len];
+        for (0..info.image.width) |x| writePngPackedPixelForReport(row, x, info.image.bits_per_pixel, expected_pixels[y * info.image.width + x]);
+    }
+
+    var filtered_payload: [64]u8 = undefined;
+    var payload_offset: usize = 0;
+    var pass_row: [8]u8 = undefined;
+    var filtered_row: [8]u8 = undefined;
+    var previous_row: [8]u8 = undefined;
+    for (info.passes) |pass| {
+        if (pass.isEmpty()) continue;
+        var has_previous = false;
+        for (0..pass.height) |row_index| {
+            @memset(pass_row[0..pass.row_len], 0);
+            for (0..pass.width) |pass_x| {
+                const dest_x = pass.x_start + pass_x * pass.x_step;
+                const dest_y = pass.y_start + row_index * pass.y_step;
+                writePngPackedPixelForReport(pass_row[0..pass.row_len], pass_x, info.image.bits_per_pixel, expected_pixels[dest_y * info.image.width + dest_x]);
+            }
+            const filter: u8 = @intCast((@as(usize, pass.pass_index) + row_index - 1) % 5);
+            const previous = if (has_previous) previous_row[0..pass.row_len] else null;
+            filterPngScanlineForReport(filter, pass_row[0..pass.row_len], previous, pass.bytes_per_pixel, filtered_row[0..pass.row_len]);
+            filtered_payload[payload_offset] = filter;
+            @memcpy(filtered_payload[payload_offset + 1 ..][0..pass.row_len], filtered_row[0..pass.row_len]);
+            payload_offset += pass.row_len + 1;
+            @memcpy(previous_row[0..pass.row_len], pass_row[0..pass.row_len]);
+            has_previous = true;
+        }
+    }
+
+    const encoded = try vort.encodeZlibBestAlloc(backing, filtered_payload[0..payload_offset], vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const chunks = [_][]const u8{ encoded[0..4], encoded[4 .. encoded.len - 2], encoded[encoded.len - 2 ..] };
+    const history_scratch = try backing.alloc(u8, vort.PngStreamingZlibChunkedScanlineDecoder.history_scratch_len);
+    defer backing.free(history_scratch);
+    const filtered_row_scratch = try backing.alloc(u8, sizes.filtered_row_scratch_len);
+    defer backing.free(filtered_row_scratch);
+    const previous_row_scratch = try backing.alloc(u8, sizes.previous_row_scratch_len);
+    defer backing.free(previous_row_scratch);
+    const output = try backing.alloc(u8, sizes.image_output_len);
+    defer backing.free(output);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.decodePngAdam7StreamingZlibImageFromChunksDirect(&chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, output);
+    try std.testing.expectEqualSlices(u8, &expected_image, output);
+    return stats("png_adam7_streaming_subbyte_image_decode_scratch", encoded.len, result.output_written, failing);
+}
+
 fn measurePngAdam7Rgba16ImageDecode(backing: std.mem.Allocator) !CaseStats {
     const info = try vort.pngAdam7Info(5, 5, 16, .truecolor_alpha);
     const sizes = vort.pngAdam7DecodeBufferSizes(info);
@@ -1154,6 +1276,65 @@ fn measurePngAdam7Rgba16ImageDecode(backing: std.mem.Allocator) !CaseStats {
     const result = try vort.decodePngAdam7ZlibImageFromChunks(&chunks, compressed_scratch, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, output);
     try std.testing.expectEqualSlices(u8, &expected_image, output);
     return stats("png_adam7_rgba16_image_decode_scratch", encoded.len, result.output_written, failing);
+}
+
+fn measurePngAdam7StreamingRgba16ImageDecode(backing: std.mem.Allocator) !CaseStats {
+    const info = try vort.pngAdam7Info(5, 5, 16, .truecolor_alpha);
+    const sizes = vort.pngAdam7DecodeBufferSizes(info);
+    var expected_image: [5 * 5 * 8]u8 = undefined;
+    for (0..info.image.height) |y| {
+        for (0..info.image.width) |x| {
+            const offset = (y * info.image.width + x) * 8;
+            const base: u16 = @intCast(y * 257 + x * 17);
+            std.mem.writeInt(u16, expected_image[offset + 0 ..][0..2], base +% 0x0101, .big);
+            std.mem.writeInt(u16, expected_image[offset + 2 ..][0..2], base +% 0x0202, .big);
+            std.mem.writeInt(u16, expected_image[offset + 4 ..][0..2], base +% 0x0303, .big);
+            std.mem.writeInt(u16, expected_image[offset + 6 ..][0..2], 0xffff -% base, .big);
+        }
+    }
+
+    var filtered_payload: [256]u8 = undefined;
+    var payload_offset: usize = 0;
+    var pass_row: [128]u8 = undefined;
+    var filtered_row: [128]u8 = undefined;
+    var previous_row: [128]u8 = undefined;
+    for (info.passes) |pass| {
+        if (pass.isEmpty()) continue;
+        var has_previous = false;
+        for (0..pass.height) |row_index| {
+            for (0..pass.width) |pass_x| {
+                const dest_x = pass.x_start + pass_x * pass.x_step;
+                const dest_y = pass.y_start + row_index * pass.y_step;
+                const src = (dest_y * info.image.width + dest_x) * 8;
+                @memcpy(pass_row[pass_x * 8 ..][0..8], expected_image[src..][0..8]);
+            }
+            const filter: u8 = @intCast((@as(usize, pass.pass_index) + row_index - 1) % 5);
+            const previous = if (has_previous) previous_row[0..pass.row_len] else null;
+            filterPngScanlineForReport(filter, pass_row[0..pass.row_len], previous, pass.bytes_per_pixel, filtered_row[0..pass.row_len]);
+            filtered_payload[payload_offset] = filter;
+            @memcpy(filtered_payload[payload_offset + 1 ..][0..pass.row_len], filtered_row[0..pass.row_len]);
+            payload_offset += pass.row_len + 1;
+            @memcpy(previous_row[0..pass.row_len], pass_row[0..pass.row_len]);
+            has_previous = true;
+        }
+    }
+
+    const encoded = try vort.encodeZlibBestAlloc(backing, filtered_payload[0..payload_offset], vort.deflate.optionsForLevel(.default));
+    defer backing.free(encoded);
+    const chunks = [_][]const u8{ encoded[0..6], encoded[6 .. encoded.len - 5], encoded[encoded.len - 5 ..] };
+    const history_scratch = try backing.alloc(u8, vort.PngStreamingZlibChunkedScanlineDecoder.history_scratch_len);
+    defer backing.free(history_scratch);
+    const filtered_row_scratch = try backing.alloc(u8, sizes.filtered_row_scratch_len);
+    defer backing.free(filtered_row_scratch);
+    const previous_row_scratch = try backing.alloc(u8, sizes.previous_row_scratch_len);
+    defer backing.free(previous_row_scratch);
+    const output = try backing.alloc(u8, sizes.image_output_len);
+    defer backing.free(output);
+
+    const failing = std.testing.FailingAllocator.init(backing, .{});
+    const result = try vort.decodePngAdam7StreamingZlibImageFromChunksDirect(&chunks, history_scratch, filtered_row_scratch, previous_row_scratch, info, output);
+    try std.testing.expectEqualSlices(u8, &expected_image, output);
+    return stats("png_adam7_streaming_rgba16_image_decode_scratch", encoded.len, result.output_written, failing);
 }
 
 fn measurePngAdam7CorruptReject(backing: std.mem.Allocator) !CaseStats {
