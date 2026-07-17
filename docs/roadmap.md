@@ -555,6 +555,9 @@ architecture blindly.
 - [x] Deflate decode stage report accepts `--repeat N` and selects a median-ish
   raw/zlib/gzip stage row by aggregate elapsed score for less noisy local
   wrapper/decode hotspot investigations.
+- [x] Deflate decode stage report has a repeat3 CSV build step wired into the
+  Rust repeat3 benchmark summary so decode-stage evidence and Rust comparison
+  evidence use matching repeat semantics.
 - [x] Lazy parser scan/hash heuristic uses a trigram sketch to avoid split-default source/text slow paths.
 - [x] Minimal literal-only dynamic Huffman encoder for raw/zlib/gzip, verified by Python zlib.
 - [x] zlib/gzip dynamic-literal wrappers preserve the literal-only raw deflate stream.

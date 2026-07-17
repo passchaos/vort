@@ -71,6 +71,13 @@
       "smoke_gate": "zig build run-deflate-decode-stage-report-csv"
     },
     {
+      "expected_format": "csv",
+      "name": "vort-deflate-decode-stage-report-repeat3.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv-repeat3",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv-repeat3"
+    },
+    {
       "expected_format": "json",
       "name": "vort-deflate-decode-stage-report.json",
       "producer_step": "zig build run-deflate-decode-stage-report-dashboard",

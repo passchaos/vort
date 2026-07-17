@@ -128,6 +128,11 @@ pub fn build(b: *std.Build) void {
     const deflate_decode_stage_report_csv_step = b.step("run-deflate-decode-stage-report-csv", "Write raw inflate vs zlib wrapper/checksum stage CSV to zig-out");
     deflate_decode_stage_report_csv_step.dependOn(&run_deflate_decode_stage_report_csv.step);
 
+    const run_deflate_decode_stage_report_csv_repeat3 = b.addRunArtifact(deflate_decode_stage_report_exe);
+    run_deflate_decode_stage_report_csv_repeat3.addArgs(&.{ "--repeat", "3", "--csv", "zig-out/vort-deflate-decode-stage-report-repeat3.csv" });
+    const deflate_decode_stage_report_csv_repeat3_step = b.step("run-deflate-decode-stage-report-csv-repeat3", "Write median-of-3 raw inflate vs zlib wrapper/checksum stage CSV to zig-out");
+    deflate_decode_stage_report_csv_repeat3_step.dependOn(&run_deflate_decode_stage_report_csv_repeat3.step);
+
     const run_deflate_decode_stage_report_dashboard = b.addRunArtifact(deflate_decode_stage_report_exe);
     run_deflate_decode_stage_report_dashboard.addArgs(&.{ "--csv", "zig-out/vort-deflate-decode-stage-report.csv", "--markdown", "zig-out/vort-deflate-decode-stage-report.md", "--json", "zig-out/vort-deflate-decode-stage-report.json" });
     const deflate_decode_stage_report_dashboard_step = b.step("run-deflate-decode-stage-report-dashboard", "Write raw inflate vs zlib wrapper/checksum stage dashboard to zig-out");
@@ -709,7 +714,7 @@ pub fn build(b: *std.Build) void {
         "--dictionary-deflate-csv",
         "zig-out/vort-dictionary-deflate-report.csv",
         "--decode-stage-csv",
-        "zig-out/vort-deflate-decode-stage-report.csv",
+        "zig-out/vort-deflate-decode-stage-report-repeat3.csv",
         "--output",
         "zig-out/vort-rust-deflate-benchmark-summary-repeat3.md",
     });
@@ -718,7 +723,7 @@ pub fn build(b: *std.Build) void {
     rust_deflate_benchmark_summary_repeat3.step.dependOn(dynamic_plan_report_csv_step);
     rust_deflate_benchmark_summary_repeat3.step.dependOn(huffman_length_report_dashboard_step);
     rust_deflate_benchmark_summary_repeat3.step.dependOn(dictionary_deflate_report_csv_step);
-    rust_deflate_benchmark_summary_repeat3.step.dependOn(deflate_decode_stage_report_csv_step);
+    rust_deflate_benchmark_summary_repeat3.step.dependOn(deflate_decode_stage_report_csv_repeat3_step);
     const rust_deflate_benchmark_summary_repeat3_step = b.step("run-rust-deflate-benchmark-summary-repeat3", "Write median-of-3 Vort/Rust benchmark Markdown summary to zig-out");
     rust_deflate_benchmark_summary_repeat3_step.dependOn(&rust_deflate_benchmark_summary_repeat3.step);
 

@@ -40,6 +40,10 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-dashboard-strict-dashboard"
     },
+    "vort-deflate-decode-stage-report-repeat3.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv-repeat3"
+    },
     "vort-deflate-decode-stage-report.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build run-deflate-decode-stage-report-csv"
@@ -160,13 +164,25 @@
       "expected_format": "json",
       "smoke_gate": "zig build run-python-zlib-diff-dashboard"
     },
+    "vort-rust-deflate-benchmark-summary-repeat3.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3"
+    },
     "vort-rust-deflate-benchmark-summary.md": {
       "expected_format": "md",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary"
     },
+    "vort-rust-deflate-decode-bench-repeat3.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv-repeat3"
+    },
     "vort-rust-deflate-decode-bench.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv"
+    },
+    "vort-rust-deflate-encode-bench-repeat3.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3"
     },
     "vort-rust-deflate-encode-bench.csv": {
       "expected_format": "csv",
@@ -215,18 +231,6 @@
     "vort-zlib-relaxed-report.md": {
       "expected_format": "md",
       "smoke_gate": "zig build run-zlib-relaxed-report-gate"
-    },
-    "vort-rust-deflate-benchmark-summary-repeat3.md": {
-      "expected_format": "md",
-      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3"
-    },
-    "vort-rust-deflate-decode-bench-repeat3.csv": {
-      "expected_format": "csv",
-      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv-repeat3"
-    },
-    "vort-rust-deflate-encode-bench-repeat3.csv": {
-      "expected_format": "csv",
-      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3"
     }
   },
   "contains": [
@@ -253,6 +257,7 @@
     "vort-dashboard-producers-required-smoke.json": "zig build run-dashboard-producers-required-smoke",
     "vort-dashboard-strict-smoke.json": "zig build run-dashboard-strict-dashboard",
     "vort-dashboard-strict-smoke.md": "zig build run-dashboard-strict-dashboard",
+    "vort-deflate-decode-stage-report-repeat3.csv": "zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv-repeat3",
     "vort-deflate-decode-stage-report.csv": "zig build run-deflate-decode-stage-report-csv",
     "vort-deflate-decode-stage-report.json": "zig build run-deflate-decode-stage-report-dashboard",
     "vort-deflate-decode-stage-report.md": "zig build run-deflate-decode-stage-report-dashboard",
@@ -283,8 +288,11 @@
     "vort-png-scratch-report.json": "zig build run-png-scratch-report-dashboard",
     "vort-png-scratch-report.md": "zig build run-png-scratch-report-dashboard",
     "vort-python-zlib-diff-smoke.json": "zig build run-python-zlib-diff-dashboard",
+    "vort-rust-deflate-benchmark-summary-repeat3.md": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3",
     "vort-rust-deflate-benchmark-summary.md": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary",
+    "vort-rust-deflate-decode-bench-repeat3.csv": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv-repeat3",
     "vort-rust-deflate-decode-bench.csv": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv",
+    "vort-rust-deflate-encode-bench-repeat3.csv": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3",
     "vort-rust-deflate-encode-bench.csv": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv",
     "vort-sidecar-corrupt-smoke.json": "zig build run-sidecar-corrupt-dashboard",
     "vort-sidecar-corrupt-smoke.md": "zig build run-sidecar-corrupt-dashboard",
@@ -296,10 +304,7 @@
     "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
     "vort-zlib-relaxed-report-gate.json": "zig build run-zlib-relaxed-report-gate",
     "vort-zlib-relaxed-report.json": "zig build run-zlib-relaxed-report",
-    "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report",
-    "vort-rust-deflate-benchmark-summary-repeat3.md": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3",
-    "vort-rust-deflate-decode-bench-repeat3.csv": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv-repeat3",
-    "vort-rust-deflate-encode-bench-repeat3.csv": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3"
+    "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report"
   },
   "required_smoke_gates": [
     "vort-dashboard-category-negative-smoke.json",

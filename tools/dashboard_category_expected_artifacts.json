@@ -198,6 +198,13 @@
     },
     {
       "category": "validation",
+      "name": "vort-deflate-decode-stage-report-repeat3.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
       "name": "vort-deflate-decode-stage-report.json",
       "require_present": true,
       "require_producer_step": true,

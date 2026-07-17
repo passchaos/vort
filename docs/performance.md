@@ -12,6 +12,7 @@ zig build bench-checksum -Doptimize=ReleaseFast
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-dashboard
+zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv-repeat3
 zig build run-deflate-wrapper-fuzz-corpus-dashboard
 zig build run-fuzz-corpus-coverage-smoke
 zig build bench-corpus-decode -Doptimize=ReleaseFast
@@ -76,8 +77,10 @@ while investigation runs should use repeats such as `--repeat 3` before acceptin
 small performance deltas.
 `run-deflate-decode-stage-report` also accepts forwarded `-- --repeat <n>` and
 keeps the median-ish sample by aggregate elapsed score across raw/zlib/gzip
-alloc, exact-size, and caller-buffer rows; `-- --iterations <n>` can keep these
-repeat probes short during local investigations.
+alloc, exact-size, and caller-buffer rows; `run-deflate-decode-stage-report-csv-repeat3`
+writes `zig-out/vort-deflate-decode-stage-report-repeat3.csv` for the repeat3
+summary path, and `-- --iterations <n>` can keep ad-hoc repeat probes short during
+local investigations.
 
 Current deflate tuning keeps speed and ratio goals separate by preset. The
 production `.default` path remains the speed/ratio compromise used by zlib-level
