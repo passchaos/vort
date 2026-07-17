@@ -693,6 +693,9 @@ architecture blindly.
 - [x] Huffman table initialization records active symbols during length
   validation and builds canonical entries from that compact list, avoiding a
   second full-length scan for sparse dynamic alphabets.
+- [x] Huffman table initialization groups canonical decode entries by bit
+  length, so dynamic/fallback decoders scan only entries that can match the
+  current code width instead of rescanning the full active alphabet.
 - [x] Huffman table initialization uses the target's bit-reverse primitive for
   canonical code reversal, removing the per-symbol bit loop in dynamic table
   construction.

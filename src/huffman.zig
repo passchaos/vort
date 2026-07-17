@@ -18,6 +18,13 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
         entries: [max_symbols]Entry = undefined,
         len: usize = 0,
         max_bits: u4 = 0,
+        /// Entries are grouped by code width so long-code fallback can scan
+        /// only the symbols that could match the current bit count. Dynamic
+        /// DEFLATE text/source blocks often miss the fast lookup on cold
+        /// literals; avoiding a full active-symbol scan on each miss keeps the
+        /// compact table representation without paying O(symbols * bit_width).
+        first_by_bits: [max_code_bits + 1]u16 = @splat(0),
+        count_by_bits: [max_code_bits + 1]u16 = @splat(0),
 
         const Self = @This();
         pub const Entry = struct {
@@ -77,18 +84,32 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 next_code[bits] = code;
             }
 
-            var table = Self{ .len = 0, .max_bits = max_bits_seen };
+            // Build a stable bit-length index before materializing entries.
+            // Canonical code assignment still follows increasing symbol order
+            // through `active_symbols`; only the physical entry storage is
+            // bucketed by bit width for faster decode fallback scans.
+            var table = Self{ .len = active_len, .max_bits = max_bits_seen };
+            var offset: u16 = 0;
+            for (1..max_code_bits + 1) |bits| {
+                table.first_by_bits[bits] = offset;
+                table.count_by_bits[bits] = counts[bits];
+                offset += counts[bits];
+            }
+            std.debug.assert(offset == active_len);
+
+            var write_offsets = table.first_by_bits;
             for (active_symbols[0..active_len]) |symbol| {
                 const bits = lengths[symbol];
                 const canonical = next_code[bits];
                 next_code[bits] += 1;
+                const entry_index = write_offsets[bits];
+                write_offsets[bits] += 1;
                 const entry = Entry{
                     .symbol = @intCast(symbol),
                     .code = reverseBits(canonical, bits),
                     .bits = bits,
                 };
-                table.entries[table.len] = entry;
-                table.len += 1;
+                table.entries[entry_index] = entry;
             }
             return table;
         }
@@ -104,7 +125,9 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             while (bits <= max_code_bits) {
                 const bit = try reader.readBits(u16, 1);
                 code |= bit << @intCast(bits - 1);
-                for (self.entries[0..self.len]) |entry| {
+                const first = self.first_by_bits[bits];
+                const end = first + self.count_by_bits[bits];
+                for (self.entries[first..end]) |entry| {
                     if (entry.bits == bits and entry.code == code) return entry.symbol;
                 }
                 if (bits == max_code_bits) break;
@@ -119,7 +142,9 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             while (bits <= max_code_bits) {
                 const bit = try reader.readBits(u16, 1);
                 code |= bit << @intCast(bits - 1);
-                for (self.entries[0..self.len]) |entry| {
+                const first = self.first_by_bits[bits];
+                const end = first + self.count_by_bits[bits];
+                for (self.entries[first..end]) |entry| {
                     if (entry.bits == bits and entry.code == code) {
                         return .{ .value = entry.symbol, .bits = bits };
                     }
@@ -206,7 +231,9 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             while (bits <= self.table.max_bits) {
                 if (!reader.hasBits(bits)) return error.TruncatedFrame;
                 const code = reader.peekBitsPadded(u16, bits);
-                for (self.table.entries[0..self.table.len]) |long_entry| {
+                const first = self.table.first_by_bits[bits];
+                const end = first + self.table.count_by_bits[bits];
+                for (self.table.entries[first..end]) |long_entry| {
                     if (long_entry.bits == bits and long_entry.code == code) {
                         reader.advanceBitsAssumeAvailable(bits);
                         return .{ .value = long_entry.symbol, .bits = bits };

@@ -89,6 +89,13 @@ focused baseline: `22710`, `51441`, `93184`). Decode hot-path changes should
 continue to be checked with `run-rust-deflate-benchmark-summary-repeat3` because
 ratio-only improvements must not hide decompression regressions.
 
+Dynamic Huffman decode work is tracked separately from wrapper overhead. The
+Huffman table now stores bit-length bucket offsets/counts for active canonical
+entries, so long-code fallback after a fast-table miss scans only candidates of
+the current bit width. ReleaseFast `run-deflate-decode-stage-report` remains the
+quick smoke for this path; repeat3 Rust summaries should still be used before
+accepting small throughput deltas because the decode microbenchmarks are noisy.
+
 `ci-smoke` is a validation aggregate rather than a full benchmark suite; it
 includes bounded reports to catch regressions quickly, while full-corpus or
 long-running throughput evidence should still be run as dedicated commands.
