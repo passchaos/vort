@@ -776,6 +776,9 @@ architecture blindly.
   directly into bounded stack scratch before copying the exact owned slice,
   reusing the parsed zlib header and skipping redundant stored-only probing
   while preserving the streaming fallback for larger expansion.
+- [x] Default deflate LZ77 search budget increased modestly (`max_chain=160`,
+  `nice_len=80`, `max_candidates=6`) to recover a smaller distance-heavy
+  dynamic stream while keeping the production preset below best/optimal cost.
 - [x] Length/distance decode handles no-extra-bit symbols through direct
   hot-path formulas, avoiding table lookup and zero-bit reader calls for the
   most common short matches while preserving RFC table decoding for longer
