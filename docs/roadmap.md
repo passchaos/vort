@@ -787,6 +787,9 @@ architecture blindly.
 - [x] No-dictionary caller-buffer inflate has specialized fixed/dynamic block
   loops and direct output-offset match copy, avoiding per-match dictionary
   boundary checks on the common PNG/source/text path.
+- [x] Chunked zlib/PNG IDAT bit reads keep a forward chunk cursor and copy
+  aligned spans per chunk, avoiding repeated scans from the first IDAT chunk
+  during Huffman peeks and stored-block reads.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

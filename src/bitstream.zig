@@ -225,6 +225,14 @@ pub const ChunkedBitReader = struct {
     byte_index: usize = 0,
     bit_index: u3 = 0,
     total_len: usize = 0,
+    /// Cached chunk containing `byte_index` (or the next non-empty chunk).
+    /// Chunked zlib/PNG IDAT decode calls `peekBitsPadded` for every Huffman
+    /// symbol; starting every byte lookup from chunk zero makes many tiny IDAT
+    /// chunks accidentally quadratic. The cursor keeps reads proportional to
+    /// local progress while preserving the absolute byte offsets reported by
+    /// the public reader API.
+    chunk_index: usize = 0,
+    chunk_start: usize = 0,
 
     pub fn init(chunks: []const []const u8) Error!ChunkedBitReader {
         return initAt(chunks, 0);
@@ -233,11 +241,13 @@ pub const ChunkedBitReader = struct {
     pub fn initAt(chunks: []const []const u8, byte_offset: usize) Error!ChunkedBitReader {
         const total = try chunksTotalLen(chunks);
         if (byte_offset > total) return error.TruncatedFrame;
-        return .{
+        var reader = ChunkedBitReader{
             .chunks = chunks,
             .byte_index = byte_offset,
             .total_len = total,
         };
+        reader.syncCursor();
+        return reader;
     }
 
     pub fn bitPosition(self: ChunkedBitReader) usize {
@@ -276,9 +286,11 @@ pub const ChunkedBitReader = struct {
     }
 
     pub fn advanceBitsAssumeAvailable(self: *ChunkedBitReader, count: u6) void {
+        const old_byte_index = self.byte_index;
         const new_bit_index = @as(usize, self.bit_index) + count;
         self.byte_index += new_bit_index / 8;
         self.bit_index = @intCast(new_bit_index % 8);
+        if (self.byte_index != old_byte_index) self.syncCursor();
     }
 
     pub fn peekBitsPadded(self: ChunkedBitReader, comptime T: type, count: u6) T {
@@ -288,10 +300,31 @@ pub const ChunkedBitReader = struct {
         const requested_bits = @as(usize, self.bit_index) + @as(usize, count);
         const requested_bytes = (requested_bits + 7) / 8;
         var window: u128 = 0;
-        var i: usize = 0;
-        while (i < requested_bytes) : (i += 1) {
-            const byte = self.byteAt(self.byte_index + i) orelse break;
-            window |= @as(u128, byte) << @intCast(i * 8);
+        var bytes_written: usize = 0;
+        var absolute = self.byte_index;
+        var chunk_index = self.chunk_index;
+        var chunk_start = self.chunk_start;
+        if (chunk_index >= self.chunks.len or absolute < chunk_start) {
+            chunk_index = 0;
+            chunk_start = 0;
+        }
+        while (bytes_written < requested_bytes and absolute < self.total_len) {
+            while (chunk_index < self.chunks.len) {
+                const end = chunk_start + self.chunks[chunk_index].len;
+                if (absolute < end) break;
+                chunk_start = end;
+                chunk_index += 1;
+            }
+            if (chunk_index >= self.chunks.len) break;
+            const chunk = self.chunks[chunk_index];
+            const local = absolute - chunk_start;
+            const n = @min(requested_bytes - bytes_written, chunk.len - local);
+            var i: usize = 0;
+            while (i < n) : (i += 1) {
+                window |= @as(u128, chunk[local + i]) << @intCast((bytes_written + i) * 8);
+            }
+            absolute += n;
+            bytes_written += n;
         }
         const shifted = window >> self.bit_index;
         const mask = (@as(u128, 1) << @intCast(count)) - 1;
@@ -302,16 +335,25 @@ pub const ChunkedBitReader = struct {
         if (self.bit_index != 0) {
             self.bit_index = 0;
             self.byte_index += 1;
+            self.syncCursor();
         }
     }
 
     pub fn readAlignedBytes(self: *ChunkedBitReader, output: []u8) Error!void {
         if (self.bit_index != 0) return error.CorruptFrame;
         if (self.byte_index > self.total_len or self.total_len - self.byte_index < output.len) return error.TruncatedFrame;
-        for (output, 0..) |*byte, i| {
-            byte.* = self.byteAt(self.byte_index + i) orelse return error.TruncatedFrame;
+        self.syncCursor();
+        var out_offset: usize = 0;
+        while (out_offset < output.len) {
+            if (self.chunk_index >= self.chunks.len) return error.TruncatedFrame;
+            const chunk = self.chunks[self.chunk_index];
+            const local = self.byte_index - self.chunk_start;
+            const n = @min(output.len - out_offset, chunk.len - local);
+            @memcpy(output[out_offset..][0..n], chunk[local..][0..n]);
+            out_offset += n;
+            self.byte_index += n;
+            self.syncCursor();
         }
-        self.byte_index += output.len;
     }
 
     pub fn readAlignedInt(self: *ChunkedBitReader, comptime T: type, endian: std.builtin.Endian) Error!T {
@@ -321,12 +363,39 @@ pub const ChunkedBitReader = struct {
     }
 
     fn byteAt(self: ChunkedBitReader, absolute_offset: usize) ?u8 {
-        var remaining = absolute_offset;
-        for (self.chunks) |chunk| {
-            if (remaining < chunk.len) return chunk[remaining];
-            remaining -= chunk.len;
+        if (absolute_offset >= self.total_len) return null;
+        var chunk_index = self.chunk_index;
+        var chunk_start = self.chunk_start;
+        if (chunk_index >= self.chunks.len or absolute_offset < chunk_start) {
+            chunk_index = 0;
+            chunk_start = 0;
+        }
+        while (chunk_index < self.chunks.len) {
+            const chunk = self.chunks[chunk_index];
+            const end = chunk_start + chunk.len;
+            if (absolute_offset < end) return chunk[absolute_offset - chunk_start];
+            chunk_start = end;
+            chunk_index += 1;
         }
         return null;
+    }
+
+    fn syncCursor(self: *ChunkedBitReader) void {
+        if (self.byte_index >= self.total_len) {
+            self.chunk_index = self.chunks.len;
+            self.chunk_start = self.total_len;
+            return;
+        }
+        if (self.chunk_index >= self.chunks.len or self.byte_index < self.chunk_start) {
+            self.chunk_index = 0;
+            self.chunk_start = 0;
+        }
+        while (self.chunk_index < self.chunks.len) {
+            const end = self.chunk_start + self.chunks[self.chunk_index].len;
+            if (self.byte_index < end) return;
+            self.chunk_start = end;
+            self.chunk_index += 1;
+        }
     }
 };
 
@@ -448,6 +517,27 @@ test "BitReader peekBitsPadded uses zero padding past input" {
     try std.testing.expectEqual(@as(u8, 0), reader.peekBitsPadded(u8, 8));
     try std.testing.expectError(error.TruncatedFrame, reader.readBits(u8, 5));
     try std.testing.expectEqual(@as(u4, 0), try reader.readBits(u4, 4));
+}
+
+test "ChunkedBitReader skips empty chunks and keeps a forward cursor" {
+    const bytes = [_]u8{ 0b1010_1101, 0b0000_0011, 0x34, 0x12, 0xaa };
+    const chunks = [_][]const u8{
+        bytes[0..1],
+        bytes[1..1],
+        bytes[1..3],
+        bytes[3..4],
+        bytes[4..],
+    };
+    var reader = try ChunkedBitReader.init(&chunks);
+    try std.testing.expectEqual(@as(u3, 0b101), try reader.readBits(u3, 3));
+    try std.testing.expectEqual(@as(u5, 0b10101), try reader.readBits(u5, 5));
+    try std.testing.expectEqual(@as(u2, 0b11), try reader.readBits(u2, 2));
+    reader.alignToByte();
+    try std.testing.expectEqual(@as(u16, 0x1234), try reader.readAlignedInt(u16, .little));
+    var tail: [1]u8 = undefined;
+    try reader.readAlignedBytes(&tail);
+    try std.testing.expectEqualSlices(u8, &.{0xaa}, &tail);
+    try std.testing.expectError(error.TruncatedFrame, reader.readBits(u1, 1));
 }
 
 test "ChunkedBitReader matches contiguous bit and aligned-byte reads" {
