@@ -449,8 +449,9 @@ architecture blindly.
 - [x] ZlibDecoder drains PNG-style scanlines one row at a time, returning filter bytes separately from caller-owned row payload buffers.
 - [x] PNG scanline reconstruction supports filter methods 0-4 with caller-owned previous/current row buffers.
 - [x] PngZlibScanlineDecoder packages chunked zlib IDAT decode and PNG row reconstruction into a caller-owned row pipeline.
-- [x] PngStoredZlibScanlineDecoder reconstructs stored-deflate PNG scanlines
-  directly from the zlib frame without full decoded-payload scratch.
+- [x] PngStoredZlibScanlineDecoder reconstructs stored-deflate PNG scanlines,
+  including chunked IDAT-style zlib streams, directly from the zlib frame
+  without full decoded-payload scratch.
 - [x] PngZlibScanlineDecoder and PNG-like image helpers expose direct chunk
   decode variants that avoid compressed join scratch while preserving caller-owned
   zlib row/output buffers.

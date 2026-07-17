@@ -197,9 +197,11 @@ scratch and output sizes needed by the row and full-image helpers.
 scratch, previous-row scratch, and row metadata into a reusable row pipeline for
 callers that want one API to produce reconstructed rows from IDAT chunks.
 For zlib streams whose deflate payload consists only of stored blocks,
-`PngStoredZlibScanlineDecoder` and `decodePngStoredZlibImage` provide the same
-scanline reconstruction shape without the full decoded zlib-payload scratch,
-reading stored payload bytes directly while updating Adler-32.
+`PngStoredZlibScanlineDecoder`, `PngStoredZlibChunkedScanlineDecoder`,
+`decodePngStoredZlibImage`, and `decodePngStoredZlibImageFromChunksDirect`
+provide the same scanline reconstruction shape without the full decoded
+zlib-payload scratch, reading stored payload bytes directly while updating
+Adler-32.
 `decodePngZlibImageFromChunks` drains the same pipeline into a caller-owned full
 image buffer when the caller wants a complete reconstructed image without a
 separate row loop.
