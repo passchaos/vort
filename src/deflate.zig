@@ -247,7 +247,7 @@ pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
         .fastest => .{ .parser = .hash, .lz77_options = .{ .window_len = 16 * 1024, .max_chain = 6, .nice_len = 16, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4, .max_match = 96, .min_savings_bits = 6 }, .block_selection = .stored_fixed_dynamic, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
         .fast => .{ .parser = .hash, .lz77_options = .{ .window_len = 16 * 1024, .max_chain = 32, .nice_len = 16, .max_candidates = 2, .lazy_min_gain = 3, .min_match = 4, .max_match = 128, .min_savings_bits = 4 }, .block_selection = .stored_fixed, .split_options = .{ .min_block_len = 16 * 1024, .max_block_len = max_stored_block_len, .sample_len = 2048, .search_step = 16 * 1024 } },
         .default => .{ .parser = .lazy, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 128, .nice_len = 64, .max_candidates = 4, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 1 }, .split_options = .{ .min_block_len = 8 * 1024, .max_block_len = max_stored_block_len, .sample_len = 4096, .search_step = 8 * 1024 } },
-        .best => .{ .parser = .optimal, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 512, .nice_len = 128, .max_candidates = lz77.max_optimal_candidates, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 4 * 1024, .max_block_len = max_stored_block_len, .sample_len = 8192, .search_step = 4 * 1024 } },
+        .best => .{ .parser = .optimal, .lz77_options = .{ .window_len = lz77.default_window_len, .max_chain = 512, .nice_len = 128, .max_candidates = lz77.default_best_optimal_candidates, .lazy_min_gain = 1, .min_match = 3, .max_match = lz77.max_match_len, .min_savings_bits = 0 }, .split_options = .{ .min_block_len = 4 * 1024, .max_block_len = max_stored_block_len, .sample_len = 8192, .search_step = 4 * 1024 } },
     };
 }
 
@@ -2151,17 +2151,17 @@ fn decodeCompressedBlockIntoReader(
 
 fn decodeLength(symbol: u16, reader: anytype) Error!usize {
     if (symbol < 257 or symbol > 285) return error.InvalidHuffmanCode;
-    const index = symbol - 257;
-    const entry = length_table[index];
-    const extra = if (entry.extra_bits == 0) 0 else try reader.readBits(u16, entry.extra_bits);
-    return entry.base + extra;
+    if (symbol <= 264) return symbol - 254;
+    if (symbol == 285) return 258;
+    const entry = length_table[symbol - 257];
+    return entry.base + try reader.readBits(u16, entry.extra_bits);
 }
 
 fn decodeDistance(symbol: u16, reader: anytype) Error!usize {
     if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
+    if (symbol < 4) return symbol + 1;
     const entry = distance_table[symbol];
-    const extra = if (entry.extra_bits == 0) 0 else try reader.readBits(u16, entry.extra_bits);
-    return entry.base + extra;
+    return entry.base + try reader.readBits(u16, entry.extra_bits);
 }
 
 fn copyMatch(history: []const u8, dest: []u8, length: usize, distance: usize) Error!void {
@@ -8379,7 +8379,7 @@ test "best level uses production optimal parser with full strategy wrappers" {
     const input = "abcabcabcabc lorem lorem lorem " ** 8 ++ "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const best = optionsForLevel(.best);
     try std.testing.expectEqual(ParserMode.optimal, best.parser);
-    try std.testing.expectEqual(lz77.max_optimal_candidates, best.lz77_options.max_candidates);
+    try std.testing.expectEqual(lz77.default_best_optimal_candidates, best.lz77_options.max_candidates);
     try std.testing.expect(best.lz77_options.max_chain >= 512);
 
     const optimal_plan = try planTokensAlloc(std.testing.allocator, input, best);

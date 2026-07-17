@@ -658,6 +658,10 @@ architecture blindly.
 - [x] Compression-level report can write a Markdown dashboard for human review.
 - [x] Compression-level Markdown dashboard summarizes best raw/adaptive rows per case.
 - [x] Level-specific optimal parser match-candidate limits.
+- [x] Ratio-oriented `.best` preset uses a measured 256-candidate optimal
+  parser budget with a larger custom cap for experiments, improving weak
+  source/binary corpus sizes without applying the full deep-search cost to
+  production best-level callers.
 - [x] Level-specific lazy parser gain thresholds.
 - [x] Default lazy parser accepts one-byte lazy gains to improve binary/source default-size competitiveness against Rust fdeflate/miniz_oxide baselines.
 - [x] Level-specific minimum match length parser setting.
@@ -665,6 +669,9 @@ architecture blindly.
 - [x] Level-specific maximum match length parser setting.
 - [x] Level-specific match window parser setting.
 - [x] Production optimal parser with full level/strategy configs.
+- [x] Optimal parser stops hash-chain candidate scanning once a candidate
+  already reaches the maximum match length for that position, preserving ratio
+  while avoiding pointless deeper walks on long exact repeats.
 - [x] zlib-style numeric compression-level helpers for raw/zlib/gzip encoders,
   including stored level 0 and 1..9 option mapping for callers such as PNG
   encoders that expose numeric DEFLATE levels.
@@ -752,6 +759,10 @@ architecture blindly.
   directly into bounded stack scratch before copying the exact owned slice,
   reusing the parsed zlib header and skipping redundant stored-only probing
   while preserving the streaming fallback for larger expansion.
+- [x] Length/distance decode handles no-extra-bit symbols through direct
+  hot-path formulas, avoiding table lookup and zero-bit reader calls for the
+  most common short matches while preserving RFC table decoding for longer
+  symbols.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

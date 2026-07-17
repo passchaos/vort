@@ -75,6 +75,20 @@ engine/case/mode. The Zig build steps keep `--repeat 1` behavior for smoke speed
 while investigation runs should use repeats such as `--repeat 3` before accepting
 small performance deltas.
 
+Current deflate tuning keeps speed and ratio goals separate by preset. The
+production `.default` path remains the speed/ratio compromise used by zlib-level
+6 style callers, while `.best` now spends a measured 256-candidate optimal
+parser budget (custom options may request up to the 512-candidate hard cap).
+Focused weak-corpus probes on bounded Silesia `mozilla`, `osdb`, and `x-ray`
+showed that raising the old 16-candidate cap improves best-size output on all
+three samples; 512 candidates gave a little more ratio on `mozilla` but with a
+larger encode-time cliff, so 256 is the current production compromise. In the
+ReleaseFast direct API probe, `.best` zlib bytes moved to `mozilla=22476`,
+`osdb=51036`, and `x-ray=93063` on the 128 KiB weak-corpus samples (previous
+focused baseline: `22710`, `51441`, `93184`). Decode hot-path changes should
+continue to be checked with `run-rust-deflate-benchmark-summary-repeat3` because
+ratio-only improvements must not hide decompression regressions.
+
 `ci-smoke` is a validation aggregate rather than a full benchmark suite; it
 includes bounded reports to catch regressions quickly, while full-corpus or
 long-running throughput evidence should still be run as dedicated commands.

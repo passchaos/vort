@@ -47,7 +47,19 @@ pub const GreedyPlan = struct {
     }
 };
 
-pub const max_optimal_candidates = 16;
+/// Production `.best` preset candidate budget for the ratio-oriented optimal
+/// parser. The hard cap below is intentionally higher for experiments/custom
+/// options, but the default stays at a measured middle ground: it recovers much
+/// of the source/binary ratio left by the old 16-candidate search without
+/// taking the larger encode-time cliff seen at the maximum cap.
+pub const default_best_optimal_candidates = 256;
+
+/// Hard upper bound for match candidates considered by the optimal parser.
+/// Fast/default presets do not use this path, and `max_chain` still bounds
+/// actual work; keeping the cap above the production preset lets advanced
+/// callers spend more search budget on corpora where late same-hash candidates
+/// yield a shorter dynamic Huffman stream.
+pub const max_optimal_candidates = 512;
 
 fn initTokenList(allocator: std.mem.Allocator, input_len: usize) !std.ArrayList(Token) {
     // Every input byte can become at most one token. A small eager reserve
@@ -422,6 +434,7 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
                     }
                 }
                 candidates_seen += 1;
+                if (length == max_len) break;
                 if (length >= options.nice_len and candidates_seen >= candidate_limit) break;
                 if (candidates_seen >= candidate_limit) break;
             }
@@ -994,6 +1007,23 @@ test "optimal parser token count is bounded by candidate limit" {
     const many = try optimalPlanAlloc(std.testing.allocator, input, .{ .max_chain = 64, .nice_len = 258, .max_candidates = 4 });
     defer many.deinit(std.testing.allocator);
     try std.testing.expect(many.stats.matches >= one.stats.matches);
+}
+
+test "best optimal parser budget leaves room for custom deep searches" {
+    try std.testing.expect(default_best_optimal_candidates > 16);
+    try std.testing.expect(default_best_optimal_candidates <= max_optimal_candidates);
+
+    const input = "abcd" ** 4096;
+    const shallow = try optimalPlanAlloc(std.testing.allocator, input, .{ .max_chain = 512, .nice_len = 128, .max_candidates = default_best_optimal_candidates });
+    defer shallow.deinit(std.testing.allocator);
+    const deep = try optimalPlanAlloc(std.testing.allocator, input, .{ .max_chain = 512, .nice_len = 128, .max_candidates = max_optimal_candidates });
+    defer deep.deinit(std.testing.allocator);
+
+    // The custom deep cap may find different equivalent parses, but it must
+    // remain bounded and valid relative to the production `.best` preset.
+    try expectPlanStatsConsistent(shallow, input.len);
+    try expectPlanStatsConsistent(deep, input.len);
+    try std.testing.expect(deep.stats.tokenCount() <= shallow.stats.tokenCount() + 2);
 }
 
 test "fixed bit cost accounts for literals matches and end marker" {
