@@ -4267,6 +4267,220 @@ pub const PngZlibScanlineDecoder = struct {
     }
 };
 
+/// Streaming PNG scanline decoder for zlib streams whose deflate payload uses
+/// only stored blocks.
+///
+/// Unlike `PngZlibScanlineDecoder`, this type does not need a full decoded
+/// zlib-payload scratch buffer. It reads stored-block payload bytes directly
+/// from the compressed zlib frame, updates Adler-32 as bytes are consumed, and
+/// reconstructs one PNG row at a time into caller-owned output. Fixed/dynamic
+/// DEFLATE still require `PngZlibScanlineDecoder` until the incremental inflate
+/// core can produce row bytes without materializing the whole payload.
+pub const PngStoredZlibScanlineDecoder = struct {
+    input: []const u8 = &.{},
+    options: ZlibDecodeOptions = .{},
+    pos: usize = 2,
+    block_remaining: usize = 0,
+    block_final: bool = false,
+    final_seen: bool = false,
+    finished: bool = false,
+    check_adler: bool = true,
+    adler: checksum.Adler32 = .{},
+    filtered_row_scratch: []u8 = &.{},
+    previous_row_scratch: []u8 = &.{},
+    row_len: usize = 0,
+    row_count: usize = 0,
+    row_index: usize = 0,
+    bytes_per_pixel: usize = 0,
+    has_previous: bool = false,
+
+    pub const Snapshot = struct {
+        row_len: usize,
+        row_count: usize,
+        rows_done: usize,
+        rows_remaining: usize,
+        bytes_per_pixel: usize,
+        done: bool,
+        input_read: usize,
+        block_remaining: usize,
+        final_seen: bool,
+        finished: bool,
+    };
+
+    pub const Step = PngZlibScanlineDecoder.Step;
+
+    pub fn init(
+        input: []const u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        row_len: usize,
+        row_count: usize,
+        bytes_per_pixel: usize,
+    ) Error!PngStoredZlibScanlineDecoder {
+        return initWithOptions(input, filtered_row_scratch, previous_row_scratch, row_len, row_count, bytes_per_pixel, .{});
+    }
+
+    pub fn initWithInfo(
+        input: []const u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+    ) Error!PngStoredZlibScanlineDecoder {
+        return init(input, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel);
+    }
+
+    pub fn initWithOptions(
+        input: []const u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        row_len: usize,
+        row_count: usize,
+        bytes_per_pixel: usize,
+        options: ZlibDecodeOptions,
+    ) Error!PngStoredZlibScanlineDecoder {
+        var self = PngStoredZlibScanlineDecoder{};
+        try self.resetWithOptions(input, filtered_row_scratch, previous_row_scratch, row_len, row_count, bytes_per_pixel, options);
+        return self;
+    }
+
+    pub fn initWithInfoAndOptions(
+        input: []const u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+        options: ZlibDecodeOptions,
+    ) Error!PngStoredZlibScanlineDecoder {
+        return initWithOptions(input, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel, options);
+    }
+
+    pub fn resetWithOptions(
+        self: *PngStoredZlibScanlineDecoder,
+        input: []const u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        row_len: usize,
+        row_count: usize,
+        bytes_per_pixel: usize,
+        options: ZlibDecodeOptions,
+    ) Error!void {
+        _ = try PngZlibScanlineDecoder.validateConfig(row_len, row_count, bytes_per_pixel, filtered_row_scratch, previous_row_scratch);
+        const header = try parseZlibHeader(input, null);
+        self.* = .{
+            .input = input,
+            .options = options,
+            .pos = header.data_offset,
+            .check_adler = !options.ignore_adler,
+            .filtered_row_scratch = filtered_row_scratch[0..row_len],
+            .previous_row_scratch = previous_row_scratch[0..row_len],
+            .row_len = row_len,
+            .row_count = row_count,
+            .bytes_per_pixel = bytes_per_pixel,
+        };
+    }
+
+    pub fn snapshot(self: *const PngStoredZlibScanlineDecoder) Snapshot {
+        return .{
+            .row_len = self.row_len,
+            .row_count = self.row_count,
+            .rows_done = self.row_index,
+            .rows_remaining = self.row_count - self.row_index,
+            .bytes_per_pixel = self.bytes_per_pixel,
+            .done = self.finished,
+            .input_read = self.pos,
+            .block_remaining = self.block_remaining,
+            .final_seen = self.final_seen,
+            .finished = self.finished,
+        };
+    }
+
+    pub fn step(self: *PngStoredZlibScanlineDecoder, output: []u8) Error!Step {
+        if (self.row_index == self.row_count) {
+            try self.finish();
+            return .{
+                .row_index = self.row_index,
+                .rows_done = self.row_index,
+                .status = .done,
+            };
+        }
+        if (output.len < self.row_len) return error.OutputTooSmall;
+
+        const before = self.pos;
+        const filter = try self.readByte();
+        try self.readBytes(self.filtered_row_scratch);
+        const previous = if (self.has_previous) self.previous_row_scratch else null;
+        const row_output = output[0..self.row_len];
+        _ = try reconstructPngScanline(filter, self.filtered_row_scratch, previous, self.bytes_per_pixel, row_output);
+        @memcpy(self.previous_row_scratch, row_output);
+        self.has_previous = true;
+
+        const row_index = self.row_index;
+        self.row_index += 1;
+        const done = self.row_index == self.row_count;
+        if (done) try self.finish();
+
+        return .{
+            .filter = filter,
+            .row_index = row_index,
+            .row_bytes = self.row_len,
+            .rows_done = self.row_index,
+            .progress = .{ .input_read = self.pos - before, .output_written = self.row_len },
+            .status = if (done) .done else .need_output,
+        };
+    }
+
+    fn readByte(self: *PngStoredZlibScanlineDecoder) Error!u8 {
+        var byte: [1]u8 = undefined;
+        try self.readBytes(&byte);
+        return byte[0];
+    }
+
+    fn readBytes(self: *PngStoredZlibScanlineDecoder, out: []u8) Error!void {
+        var written: usize = 0;
+        while (written < out.len) {
+            if (self.block_remaining == 0) {
+                try self.nextBlock();
+            }
+            const n = @min(out.len - written, self.block_remaining);
+            if (self.input.len - self.pos < n) return error.TruncatedFrame;
+            const part = self.input[self.pos..][0..n];
+            @memcpy(out[written..][0..n], part);
+            if (self.check_adler) self.adler.update(part);
+            self.pos += n;
+            written += n;
+            self.block_remaining -= n;
+            if (self.block_remaining == 0 and self.block_final) {
+                self.final_seen = true;
+            }
+        }
+    }
+
+    fn nextBlock(self: *PngStoredZlibScanlineDecoder) Error!void {
+        if (self.final_seen) return error.SizeMismatch;
+        if (self.pos >= self.input.len) return error.TruncatedFrame;
+        const header = self.input[self.pos];
+        self.pos += 1;
+        if (((header >> 1) & 0x03) != 0) return error.InvalidDeflateBlockType;
+        self.block_final = (header & 0x01) != 0;
+        if (self.input.len - self.pos < 4) return error.TruncatedFrame;
+        const len = std.mem.readInt(u16, self.input[self.pos..][0..2], .little);
+        const nlen = std.mem.readInt(u16, self.input[self.pos + 2 ..][0..2], .little);
+        if (nlen != ~len) return error.StoredLengthMismatch;
+        self.pos += 4;
+        self.block_remaining = len;
+        if (self.block_remaining == 0 and self.block_final) self.final_seen = true;
+    }
+
+    fn finish(self: *PngStoredZlibScanlineDecoder) Error!void {
+        if (self.finished) return;
+        if (self.row_index != self.row_count) return error.SizeMismatch;
+        if (!self.final_seen or self.block_remaining != 0) return error.SizeMismatch;
+        try validateZlibFooterWithOptions(self.input, self.pos, self.adler.digest(), self.options);
+        self.pos += 4;
+        if (!self.options.allow_trailing_data and self.pos != self.input.len) return error.TrailingData;
+        self.finished = true;
+    }
+};
+
 pub const PngImageDecodeResult = struct {
     rows: usize,
     output_written: usize,
@@ -4279,6 +4493,30 @@ pub const PngAdam7ImageDecodeResult = struct {
     output_written: usize,
     zlib_input_read: usize,
 };
+
+pub fn decodePngStoredZlibImage(
+    input: []const u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngImageInfo,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    return decodePngStoredZlibImageWithOptions(input, filtered_row_scratch, previous_row_scratch, info, .{}, output);
+}
+
+pub fn decodePngStoredZlibImageWithOptions(
+    input: []const u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngImageInfo,
+    options: ZlibDecodeOptions,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    const output_len = try pngImageOutputLen(info);
+    if (output.len < output_len) return error.OutputTooSmall;
+    var decoder = try PngStoredZlibScanlineDecoder.initWithInfoAndOptions(input, filtered_row_scratch, previous_row_scratch, info, options);
+    return drainPngStoredZlibImage(&decoder, output[0..output_len]);
+}
 
 pub fn decodePngZlibImage(
     input: []const u8,
@@ -4348,6 +4586,23 @@ fn drainPngZlibImage(decoder: *PngZlibScanlineDecoder, output: []u8) Error!PngIm
         decoder.zlib.recordError(error.SizeMismatch);
         return error.SizeMismatch;
     }
+    return .{
+        .rows = decoder.row_count,
+        .output_written = offset,
+        .zlib_input_read = zlib_input_read,
+    };
+}
+
+fn drainPngStoredZlibImage(decoder: *PngStoredZlibScanlineDecoder, output: []u8) Error!PngImageDecodeResult {
+    var offset: usize = 0;
+    var zlib_input_read: usize = 0;
+    for (0..decoder.row_count) |_| {
+        const row = output[offset..][0..decoder.row_len];
+        const step = try decoder.step(row);
+        offset += step.row_bytes;
+        zlib_input_read += step.progress.input_read;
+    }
+    if (!decoder.snapshot().done) return error.SizeMismatch;
     return .{
         .rows = decoder.row_count,
         .output_written = offset,
@@ -6728,6 +6983,67 @@ test "png zlib scanline decoder reconstructs rows from chunked IDAT scratch" {
     var step_decoder = try PngZlibScanlineDecoder.initFromChunksWithInfo(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info);
     try std.testing.expectError(error.OutputTooSmall, step_decoder.step(output[0 .. row_len - 1]));
     try std.testing.expectEqualStrings("OutputTooSmall", step_decoder.diagnostics().last_error_name);
+}
+
+test "png stored zlib scanline decoder streams without zlib scratch" {
+    const bpp = 3;
+    const row_len = 12;
+    const row_count = 5;
+    var rows: [row_count][row_len]u8 = undefined;
+    var expected_image: [row_count * row_len]u8 = undefined;
+    var filtered_payload: [row_count * (row_len + 1)]u8 = undefined;
+
+    var payload_offset: usize = 0;
+    var image_offset: usize = 0;
+    var previous: ?[]const u8 = null;
+    for (0..row_count) |row_index| {
+        rows[row_index] = pngReconstructionRow(row_len, row_index);
+        @memcpy(expected_image[image_offset..][0..row_len], &rows[row_index]);
+        image_offset += row_len;
+        const filter: u8 = @intCast(row_index);
+        filtered_payload[payload_offset] = filter;
+        filterPngScanlineForTest(filter, &rows[row_index], previous, bpp, filtered_payload[payload_offset + 1 ..][0..row_len]);
+        previous = &rows[row_index];
+        payload_offset += row_len + 1;
+    }
+
+    const encoded = try encodeZlibStoredSplitAlloc(std.testing.allocator, &filtered_payload, 7);
+    defer std.testing.allocator.free(encoded);
+    var filtered_row_scratch: [row_len]u8 = undefined;
+    var previous_row_scratch: [row_len]u8 = undefined;
+    const info = try pngImageInfo(row_len / bpp, row_count, 8, .truecolor);
+
+    var image: [expected_image.len]u8 = undefined;
+    const result = try decodePngStoredZlibImage(encoded, &filtered_row_scratch, &previous_row_scratch, info, &image);
+    try std.testing.expectEqual(row_count, result.rows);
+    try std.testing.expectEqual(expected_image.len, result.output_written);
+    try std.testing.expectEqualSlices(u8, &expected_image, &image);
+
+    var decoder = try PngStoredZlibScanlineDecoder.initWithInfo(encoded, &filtered_row_scratch, &previous_row_scratch, info);
+    var row: [row_len]u8 = undefined;
+    for (0..row_count) |row_index| {
+        const step = try decoder.step(&row);
+        try std.testing.expectEqual(@as(u8, @intCast(row_index)), step.filter.?);
+        try std.testing.expectEqual(row_index, step.row_index);
+        try std.testing.expectEqual(row_len, step.row_bytes);
+        try std.testing.expectEqualSlices(u8, &rows[row_index], &row);
+    }
+    try std.testing.expect(decoder.snapshot().done);
+    try std.testing.expectEqual(core.StepResult.Status.done, (try decoder.step(row[0..0])).status);
+
+    try std.testing.expectError(error.OutputTooSmall, PngStoredZlibScanlineDecoder.initWithInfo(encoded, filtered_row_scratch[0 .. row_len - 1], &previous_row_scratch, info));
+    var too_tall_image: [(row_count + 1) * row_len]u8 = undefined;
+    try std.testing.expectError(error.SizeMismatch, decodePngStoredZlibImage(encoded, &filtered_row_scratch, &previous_row_scratch, try pngImageInfo(row_len / bpp, row_count + 1, 8, .truecolor), &too_tall_image));
+
+    var bad_adler = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_adler);
+    bad_adler[bad_adler.len - 1] ^= 1;
+    try std.testing.expectError(error.ChecksumMismatch, decodePngStoredZlibImage(bad_adler, &filtered_row_scratch, &previous_row_scratch, info, &image));
+    _ = try decodePngStoredZlibImageWithOptions(bad_adler, &filtered_row_scratch, &previous_row_scratch, info, .{ .ignore_adler = true }, &image);
+
+    const dynamic = try encodeZlibBestAlloc(std.testing.allocator, &filtered_payload, optionsForLevel(.default));
+    defer std.testing.allocator.free(dynamic);
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodePngStoredZlibImage(dynamic, &filtered_row_scratch, &previous_row_scratch, info, &image));
 }
 
 test "png zlib image helper reconstructs full image from IDAT chunks" {
