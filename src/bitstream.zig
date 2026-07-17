@@ -22,8 +22,9 @@ pub const BitReader = struct {
 
     pub fn readBits(self: *BitReader, comptime T: type, count: u6) Error!T {
         if (count > @bitSizeOf(T)) return error.CorruptFrame;
+        if (!self.hasBits(count)) return error.TruncatedFrame;
         const result = self.peekBitsPadded(T, count);
-        try self.skipBits(count);
+        self.advanceBitsAssumeAvailable(count);
         return result;
     }
 
@@ -136,8 +137,9 @@ pub const ChunkedBitReader = struct {
 
     pub fn readBits(self: *ChunkedBitReader, comptime T: type, count: u6) Error!T {
         if (count > @bitSizeOf(T)) return error.CorruptFrame;
+        if (!self.hasBits(count)) return error.TruncatedFrame;
         const result = self.peekBitsPadded(T, count);
-        try self.skipBits(count);
+        self.advanceBitsAssumeAvailable(count);
         return result;
     }
 

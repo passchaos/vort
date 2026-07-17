@@ -720,6 +720,9 @@ architecture blindly.
 - [x] Huffman fast lookup hits advance bit readers through an availability
   check plus unchecked offset update, avoiding the full `skipBits` path in
   dynamic literal/distance hot loops for contiguous and chunked readers.
+- [x] Bit readers' `readBits` hot path now uses `hasBits` plus unchecked advance
+  directly, avoiding an extra `skipBits` call after the padded peek for dynamic
+  header, extra-bit, and fallback Huffman reads.
 - [x] FastDecoder lookup hits trust `peekBitsPadded`'s width mask and avoid a
   redundant lookup-index mask in both full-symbol and value-only decode paths.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
