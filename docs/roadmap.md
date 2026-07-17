@@ -776,6 +776,9 @@ architecture blindly.
   directly into bounded stack scratch before copying the exact owned slice,
   reusing the parsed zlib header and skipping redundant stored-only probing
   while preserving the streaming fallback for larger expansion.
+- [x] Stored-only caller-buffer decode and wrapper checksum validation now copy
+  and hash in one pass instead of planning stored blocks first, reducing
+  repeated scans for exact-size zlib/raw/gzip stored decode paths.
 - [x] Default deflate LZ77 search budget increased modestly (`max_chain=160`,
   `nice_len=80`, `max_candidates=6`) to recover a smaller distance-heavy
   dynamic stream while keeping the production preset below best/optimal cost.

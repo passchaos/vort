@@ -1855,22 +1855,67 @@ fn decodeRawStoredOnlyAllocMaybe(allocator: std.mem.Allocator, input: []const u8
 }
 
 fn decodeRawStoredOnlyIntoMaybe(input: []const u8, output: []u8) Error!?DecodeResult {
-    const plan = (try planRawStoredOnly(input)) orelse return null;
-    if (output.len < plan.output_len) return error.OutputTooSmall;
-    copyRawStoredOnly(input[0..plan.input_read], output[0..plan.output_len]);
-    return .{ .input_read = plan.input_read, .output_written = plan.output_len };
+    if (input.len == 0) return error.TruncatedFrame;
+    var in_offset: usize = 0;
+    var out_offset: usize = 0;
+    while (true) {
+        if (input.len - in_offset < 1) return error.TruncatedFrame;
+        const header = input[in_offset];
+        const final = (header & 0x01) != 0;
+        const block_type = (header >> 1) & 0x03;
+        if (block_type != 0) return null;
+        in_offset += 1;
+
+        if (input.len - in_offset < 4) return error.TruncatedFrame;
+        const len = std.mem.readInt(u16, input[in_offset..][0..2], .little);
+        const nlen = std.mem.readInt(u16, input[in_offset + 2 ..][0..2], .little);
+        if (nlen != ~len) return error.StoredLengthMismatch;
+        in_offset += 4;
+
+        const chunk_len: usize = len;
+        if (input.len - in_offset < chunk_len) return error.TruncatedFrame;
+        if (output.len - out_offset < chunk_len) return error.OutputTooSmall;
+        @memcpy(output[out_offset..][0..chunk_len], input[in_offset..][0..chunk_len]);
+        out_offset += chunk_len;
+        in_offset += chunk_len;
+        if (final) return .{ .input_read = in_offset, .output_written = out_offset };
+    }
 }
 
 fn decodeRawStoredOnlyIntoMaybeWithHash(comptime Hash: type, input: []const u8, output: []u8) Error!?struct { result: DecodeResult, digest: u32 } {
-    const plan = (try planRawStoredOnly(input)) orelse return null;
-    if (output.len < plan.output_len) return error.OutputTooSmall;
-
+    if (input.len == 0) return error.TruncatedFrame;
+    var in_offset: usize = 0;
+    var out_offset: usize = 0;
     var hash = Hash.init();
-    copyRawStoredOnlyWithHash(Hash, input[0..plan.input_read], output[0..plan.output_len], &hash);
-    return .{
-        .result = .{ .input_read = plan.input_read, .output_written = plan.output_len },
-        .digest = hash.digest(),
-    };
+    while (true) {
+        if (input.len - in_offset < 1) return error.TruncatedFrame;
+        const header = input[in_offset];
+        const final = (header & 0x01) != 0;
+        const block_type = (header >> 1) & 0x03;
+        if (block_type != 0) return null;
+        in_offset += 1;
+
+        if (input.len - in_offset < 4) return error.TruncatedFrame;
+        const len = std.mem.readInt(u16, input[in_offset..][0..2], .little);
+        const nlen = std.mem.readInt(u16, input[in_offset + 2 ..][0..2], .little);
+        if (nlen != ~len) return error.StoredLengthMismatch;
+        in_offset += 4;
+
+        const chunk_len: usize = len;
+        if (input.len - in_offset < chunk_len) return error.TruncatedFrame;
+        if (output.len - out_offset < chunk_len) return error.OutputTooSmall;
+        const source = input[in_offset..][0..chunk_len];
+        @memcpy(output[out_offset..][0..chunk_len], source);
+        hash.update(source);
+        out_offset += chunk_len;
+        in_offset += chunk_len;
+        if (final) {
+            return .{
+                .result = .{ .input_read = in_offset, .output_written = out_offset },
+                .digest = hash.digest(),
+            };
+        }
+    }
 }
 
 fn decodeRawStoredOnlyAllocMaybeWithHash(comptime Hash: type, allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?StoredOnlyHashResult {
