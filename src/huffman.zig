@@ -128,7 +128,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 const first = self.first_by_bits[bits];
                 const end = first + self.count_by_bits[bits];
                 for (self.entries[first..end]) |entry| {
-                    if (entry.bits == bits and entry.code == code) return entry.symbol;
+                    if (entry.code == code) return entry.symbol;
                 }
                 if (bits == max_code_bits) break;
                 bits += 1;
@@ -145,7 +145,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 const first = self.first_by_bits[bits];
                 const end = first + self.count_by_bits[bits];
                 for (self.entries[first..end]) |entry| {
-                    if (entry.bits == bits and entry.code == code) {
+                    if (entry.code == code) {
                         return .{ .value = entry.symbol, .bits = bits };
                     }
                 }
@@ -201,7 +201,36 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
         }
 
         pub fn decodeValue(self: *const Self, reader: anytype) Error!u16 {
-            return (try self.decodeSlowAware(reader)).value;
+            const peek = reader.peekBitsPadded(u16, lookup_bits);
+            const entry = self.lookup[peek];
+            if (entry.bits != 0) {
+                if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+                reader.advanceBitsAssumeAvailable(entry.bits);
+                return entry.symbol;
+            }
+
+            if (self.table.max_bits == 0) return error.InvalidHuffmanCode;
+            if (self.table.max_bits <= lookup_bits) {
+                if (!reader.hasBits(self.table.max_bits)) return error.TruncatedFrame;
+                return error.InvalidHuffmanCode;
+            }
+
+            var bits: u4 = lookup_bits + 1;
+            while (bits <= self.table.max_bits) {
+                if (!reader.hasBits(bits)) return error.TruncatedFrame;
+                const code = reader.peekBitsPadded(u16, bits);
+                const first = self.table.first_by_bits[bits];
+                const end = first + self.table.count_by_bits[bits];
+                for (self.table.entries[first..end]) |long_entry| {
+                    if (long_entry.code == code) {
+                        reader.advanceBitsAssumeAvailable(bits);
+                        return long_entry.symbol;
+                    }
+                }
+                if (bits == self.table.max_bits) break;
+                bits += 1;
+            }
+            return error.InvalidHuffmanCode;
         }
 
         fn decodeSlowAware(self: *const Self, reader: anytype) Error!Symbol {
@@ -234,7 +263,7 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
                 const first = self.table.first_by_bits[bits];
                 const end = first + self.table.count_by_bits[bits];
                 for (self.table.entries[first..end]) |long_entry| {
-                    if (long_entry.bits == bits and long_entry.code == code) {
+                    if (long_entry.code == code) {
                         reader.advanceBitsAssumeAvailable(bits);
                         return .{ .value = long_entry.symbol, .bits = bits };
                     }
