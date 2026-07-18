@@ -4437,7 +4437,55 @@ pub const PngZlibScanlineDecoder = struct {
     }
 };
 
-const PngStreamingDynamicLiteralDecoder = huffman.FastDecoder(286, 11);
+const PngStreamingDynamicLiteralDecoder = union(enum) {
+    fast9: huffman.FastDecoder(286, 9),
+    fast11: huffman.FastDecoder(286, 11),
+
+    inline fn initWithBits(lookup_bits: u4, table: huffman.HuffmanTable(286)) PngStreamingDynamicLiteralDecoder {
+        return switch (lookup_bits) {
+            9 => .{ .fast9 = huffman.FastDecoder(286, 9).init(table) },
+            else => .{ .fast11 = huffman.FastDecoder(286, 11).init(table) },
+        };
+    }
+
+    inline fn decodeValue9(self: *const PngStreamingDynamicLiteralDecoder, reader: anytype) Error!u16 {
+        return self.fast9.decodeValue(reader);
+    }
+
+    inline fn decodeValue11(self: *const PngStreamingDynamicLiteralDecoder, reader: anytype) Error!u16 {
+        return self.fast11.decodeValue(reader);
+    }
+};
+
+fn pngStreamingDynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
+    // The row-streaming PNG decoder stores the active literal decoder inside
+    // reusable caller-owned state. Mirroring the general inflate policy's
+    // 12-bit table would double that state (4096 lookup entries instead of
+    // 2048) for every streaming PNG decoder even though common PNG IDAT blocks
+    // are dominated by short literal alphabets or long match replay. Keep the
+    // measured <=9 fast-table setup win, but cap complex PNG blocks at the
+    // existing 11-bit table until a corpus proves the larger resident state is
+    // worth it for image workloads.
+    return if (parsed.literal_max_bits <= 9) 9 else 11;
+}
+
+inline fn readPngStreamingDynamicInflatedByte(self: anytype, comptime lit_lookup_bits: u4) Error!?u8 {
+    const symbol = switch (lit_lookup_bits) {
+        9 => try self.dynamic_lit.decodeValue9(&self.reader),
+        else => try self.dynamic_lit.decodeValue11(&self.reader),
+    };
+    if (symbol < 256) return self.emitByte(@intCast(symbol));
+    if (symbol == 256) {
+        self.finishCurrentBlock();
+        return null;
+    }
+    if (symbol > 285) return error.InvalidHuffmanCode;
+    const length = try decodeLength(symbol, &self.reader);
+    const distance_symbol = try self.dynamic_dist.decodeValue(&self.reader);
+    const distance = try decodeDistance(distance_symbol, &self.reader);
+    try self.startPendingMatch(length, distance);
+    return null;
+}
 
 fn readPngStreamingInflatedBytes(self: anytype, output: []u8) Error!void {
     var out_i: usize = 0;
@@ -4554,7 +4602,7 @@ pub const PngStreamingZlibScanlineDecoder = struct {
     last_error_name: []const u8 = "",
     last_recoverability_hint: ZlibDecoder.RecoverabilityHint = .none,
 
-    const BlockKind = enum { need_header, stored, fixed, dynamic, done };
+    const BlockKind = enum { need_header, stored, fixed, dynamic9, dynamic11, done };
 
     pub const Snapshot = struct {
         row_len: usize,
@@ -4773,19 +4821,8 @@ pub const PngStreamingZlibScanlineDecoder = struct {
                     const distance = try decodeDistance(distance_symbol, &self.reader);
                     try self.startPendingMatch(length, distance);
                 },
-                .dynamic => {
-                    const symbol = try self.dynamic_lit.decodeValue(&self.reader);
-                    if (symbol < 256) return self.emitByte(@intCast(symbol));
-                    if (symbol == 256) {
-                        self.finishCurrentBlock();
-                        continue;
-                    }
-                    if (symbol > 285) return error.InvalidHuffmanCode;
-                    const length = try decodeLength(symbol, &self.reader);
-                    const distance_symbol = try self.dynamic_dist.decodeValue(&self.reader);
-                    const distance = try decodeDistance(distance_symbol, &self.reader);
-                    try self.startPendingMatch(length, distance);
-                },
+                .dynamic9 => if (try readPngStreamingDynamicInflatedByte(self, 9)) |byte| return byte,
+                .dynamic11 => if (try readPngStreamingDynamicInflatedByte(self, 11)) |byte| return byte,
                 .done => return null,
             }
         }
@@ -4810,9 +4847,13 @@ pub const PngStreamingZlibScanlineDecoder = struct {
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &self.reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                self.dynamic_lit = PngStreamingDynamicLiteralDecoder.init(lit_table);
+                const lit_lookup_bits = pngStreamingDynamicLiteralLookupBits(parsed);
+                self.dynamic_lit = PngStreamingDynamicLiteralDecoder.initWithBits(lit_lookup_bits, lit_table);
                 self.dynamic_dist = makeDynamicDistanceDecoder(dist_table);
-                self.block_kind = .dynamic;
+                self.block_kind = switch (lit_lookup_bits) {
+                    9 => .dynamic9,
+                    else => .dynamic11,
+                };
             },
             else => return error.InvalidDeflateBlockType,
         }
@@ -4938,7 +4979,7 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
     last_error_name: []const u8 = "",
     last_recoverability_hint: ZlibDecoder.RecoverabilityHint = .none,
 
-    const BlockKind = enum { need_header, stored, fixed, dynamic, done };
+    const BlockKind = enum { need_header, stored, fixed, dynamic9, dynamic11, done };
 
     pub const Snapshot = struct {
         row_len: usize,
@@ -5161,19 +5202,8 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
                     const distance = try decodeDistance(distance_symbol, &self.reader);
                     try self.startPendingMatch(length, distance);
                 },
-                .dynamic => {
-                    const symbol = try self.dynamic_lit.decodeValue(&self.reader);
-                    if (symbol < 256) return self.emitByte(@intCast(symbol));
-                    if (symbol == 256) {
-                        self.finishCurrentBlock();
-                        continue;
-                    }
-                    if (symbol > 285) return error.InvalidHuffmanCode;
-                    const length = try decodeLength(symbol, &self.reader);
-                    const distance_symbol = try self.dynamic_dist.decodeValue(&self.reader);
-                    const distance = try decodeDistance(distance_symbol, &self.reader);
-                    try self.startPendingMatch(length, distance);
-                },
+                .dynamic9 => if (try readPngStreamingDynamicInflatedByte(self, 9)) |byte| return byte,
+                .dynamic11 => if (try readPngStreamingDynamicInflatedByte(self, 11)) |byte| return byte,
                 .done => return null,
             }
         }
@@ -5198,9 +5228,13 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &self.reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                self.dynamic_lit = PngStreamingDynamicLiteralDecoder.init(lit_table);
+                const lit_lookup_bits = pngStreamingDynamicLiteralLookupBits(parsed);
+                self.dynamic_lit = PngStreamingDynamicLiteralDecoder.initWithBits(lit_lookup_bits, lit_table);
                 self.dynamic_dist = makeDynamicDistanceDecoder(dist_table);
-                self.block_kind = .dynamic;
+                self.block_kind = switch (lit_lookup_bits) {
+                    9 => .dynamic9,
+                    else => .dynamic11,
+                };
             },
             else => return error.InvalidDeflateBlockType,
         }
@@ -9722,6 +9756,11 @@ test "dynamic literal lookup policy separates tiny and complex alphabets" {
     complex.header.hlit = 280;
     complex.literal_max_bits = 12;
     try std.testing.expectEqual(@as(u4, 12), dynamicLiteralLookupBits(complex));
+
+    try std.testing.expectEqual(@as(u4, 9), pngStreamingDynamicLiteralLookupBits(tiny));
+    try std.testing.expectEqual(@as(u4, 9), pngStreamingDynamicLiteralLookupBits(medium));
+    try std.testing.expectEqual(@as(u4, 11), pngStreamingDynamicLiteralLookupBits(ten_bit));
+    try std.testing.expectEqual(@as(u4, 11), pngStreamingDynamicLiteralLookupBits(complex));
 }
 
 test "dynamic decode profile counts literals and matches" {

@@ -871,6 +871,11 @@ architecture blindly.
 - [x] PNG streaming zlib scanline decoders batch pending DEFLATE matches directly
   into row buffers and use the vectorized Adler helper for longer batches,
   avoiding the old per-byte match emission path on repetitive IDAT payloads.
+- [x] PNG streaming zlib dynamic literal decode selects a 9-bit FastDecoder for
+  <=9-bit literal alphabets while capping complex PNG streaming blocks at the
+  previous 11-bit resident state; a longer ReleaseFast PNG row-streaming A/B
+  kept a small geomean throughput win and rejected the larger 12-bit streaming
+  decoder variant as mixed/noisy for image workloads.
 - [x] PNG streaming zlib scanline benchmark report covers contiguous/chunked RLE,
   small-distance, repeated-row dynamic, and fixed payloads with a repeat3 CSV
   gate for future row-streaming hot-path changes.
