@@ -842,6 +842,9 @@ architecture blindly.
 - [x] Dynamic deflate decode profile reports literal/distance fast-table lookup
   coverage and table size, making sparse lookup-table setup costs visible beside
   fast-hit/miss ratios before changing Huffman initialization policy.
+- [x] Dynamic deflate decode profile classifies match replay bytes into RLE,
+  small-distance, non-overlapping memcpy, and overlapping copy categories, so
+  match-copy work can target the corpus shape actually dominating a weak case.
 - [x] FastDecoder sparse-table initialization experiments were measured and
   rejected when repeat3 decode-stage probes were mixed/negative, preserving the
   existing table setup while retaining coverage counters for a narrower future

@@ -125,6 +125,14 @@ pub const DynamicDecodeProfile = struct {
     literal_lookup_size: usize = 0,
     distance_lookup_covered: usize = 0,
     distance_lookup_size: usize = 0,
+    match_rle_count: usize = 0,
+    match_rle_bytes: usize = 0,
+    match_small_distance_count: usize = 0,
+    match_small_distance_bytes: usize = 0,
+    match_non_overlapping_count: usize = 0,
+    match_non_overlapping_bytes: usize = 0,
+    match_overlapping_count: usize = 0,
+    match_overlapping_bytes: usize = 0,
     mix: u64 = 0,
 };
 
@@ -1468,15 +1476,33 @@ fn profileCompressedBlock(
             const distance_symbol = try dist_decoder.decodeValue(reader);
             if (dist_hit) profile.distance_fast_hits += 1 else profile.distance_fast_misses += 1;
             profile.distance_symbol_histogram[distance_symbol] += 1;
-            _ = try profileDecodeDistance(distance_symbol, reader, &profile);
+            const distance = try profileDecodeDistance(distance_symbol, reader, &profile);
             profile.distance_symbols += 1;
-            profile.match_bytes += length;
-            profile.output_bytes += length;
+            try profileRecordMatch(length, distance, &profile);
             profile.mix +%= length;
         } else {
             return error.InvalidHuffmanCode;
         }
     }
+}
+
+fn profileRecordMatch(length: usize, distance: usize, profile: *DynamicDecodeProfile) Error!void {
+    if (length == 0 or distance == 0 or distance > profile.output_bytes) return error.InvalidMatch;
+    if (distance == 1) {
+        profile.match_rle_count += 1;
+        profile.match_rle_bytes += length;
+    } else if (distance <= 4) {
+        profile.match_small_distance_count += 1;
+        profile.match_small_distance_bytes += length;
+    } else if (distance >= length) {
+        profile.match_non_overlapping_count += 1;
+        profile.match_non_overlapping_bytes += length;
+    } else {
+        profile.match_overlapping_count += 1;
+        profile.match_overlapping_bytes += length;
+    }
+    profile.match_bytes += length;
+    profile.output_bytes += length;
 }
 
 fn profileDecodeLength(symbol: u16, reader: *bitstream.BufferedBitReader, profile: *DynamicDecodeProfile) Error!usize {
@@ -9666,6 +9692,13 @@ test "dynamic decode profile counts literals and matches" {
     try std.testing.expectEqual(profile.distance_symbols, distance_hist_total);
     try std.testing.expect(profile.length_extra_bits + profile.distance_extra_bits >= profile.length_extra_reads + profile.distance_extra_reads);
     try std.testing.expect(profile.literal_lookup_bits == 9 or profile.literal_lookup_bits == 11 or profile.literal_lookup_bits == 12);
+    try std.testing.expect(profile.literal_lookup_covered <= profile.literal_lookup_size);
+    try std.testing.expect(profile.distance_lookup_covered <= profile.distance_lookup_size);
+
+    const match_class_count = profile.match_rle_count + profile.match_small_distance_count + profile.match_non_overlapping_count + profile.match_overlapping_count;
+    const match_class_bytes = profile.match_rle_bytes + profile.match_small_distance_bytes + profile.match_non_overlapping_bytes + profile.match_overlapping_bytes;
+    try std.testing.expectEqual(profile.distance_symbols, match_class_count);
+    try std.testing.expectEqual(profile.match_bytes, match_class_bytes);
 }
 
 test "raw fixed Huffman literal/match inflate matches zlib fixed vectors" {

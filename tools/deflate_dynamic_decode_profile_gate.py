@@ -49,6 +49,18 @@ EXPECTED_COLUMNS = {
     "distance_lookup_size",
     "literal_lookup_coverage_ratio",
     "distance_lookup_coverage_ratio",
+    "match_rle_count",
+    "match_rle_bytes",
+    "match_small_distance_count",
+    "match_small_distance_bytes",
+    "match_non_overlapping_count",
+    "match_non_overlapping_bytes",
+    "match_overlapping_count",
+    "match_overlapping_bytes",
+    "match_rle_byte_ratio",
+    "match_small_distance_byte_ratio",
+    "match_non_overlapping_byte_ratio",
+    "match_overlapping_byte_ratio",
     "literal_fast_miss_ratio",
     "distance_fast_miss_ratio",
     "extra_bits_per_match",
@@ -155,6 +167,31 @@ def validate_row(row: dict[str, str]) -> None:
         raise AssertionError(f"literal lookup coverage ratio out of range row={row}")
     if not (0.0 < distance_coverage_ratio <= 1.0):
         raise AssertionError(f"distance lookup coverage ratio out of range row={row}")
+    match_class_count = (
+        parse_int(row, "match_rle_count")
+        + parse_int(row, "match_small_distance_count")
+        + parse_int(row, "match_non_overlapping_count")
+        + parse_int(row, "match_overlapping_count")
+    )
+    match_class_bytes = (
+        parse_int(row, "match_rle_bytes")
+        + parse_int(row, "match_small_distance_bytes")
+        + parse_int(row, "match_non_overlapping_bytes")
+        + parse_int(row, "match_overlapping_bytes")
+    )
+    if match_class_count != parse_int(row, "distance_symbols"):
+        raise AssertionError(f"match class count sum mismatch row={row}")
+    if match_class_bytes != parse_int(row, "match_bytes"):
+        raise AssertionError(f"match class byte sum mismatch row={row}")
+    for key in (
+        "match_rle_byte_ratio",
+        "match_small_distance_byte_ratio",
+        "match_non_overlapping_byte_ratio",
+        "match_overlapping_byte_ratio",
+    ):
+        value = parse_float(row, key)
+        if not (0.0 <= value <= 1.0):
+            raise AssertionError(f"{key} out of range row={row}")
     parse_top(row["top_length_symbols"], "top_length_symbols")
     parse_top(row["top_distance_symbols"], "top_distance_symbols")
     parse_top(row["top_length_extra_symbols"], "top_length_extra_symbols")
