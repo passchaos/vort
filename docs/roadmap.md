@@ -849,6 +849,9 @@ architecture blindly.
   measured and rejected when README/roadmap/dynamic-match repeat3 probes were
   mixed or regressed, keeping the existing copy order until a stronger corpus-
   specific variant appears.
+- [x] Focused DEFLATE match-copy microbenchmark/gate compares current,
+  non-overlap-first, and small-unrolled kernels across RLE, small-distance,
+  non-overlapping, and overlapping cases before production copy-path changes.
 - [x] FastDecoder sparse-table initialization experiments were measured and
   rejected when repeat3 decode-stage probes were mixed/negative, preserving the
   existing table setup while retaining coverage counters for a narrower future

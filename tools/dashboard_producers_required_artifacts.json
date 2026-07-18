@@ -127,6 +127,13 @@
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-deflate-dynamic-decode-profile-csv"
     },
     {
+      "expected_format": "csv",
+      "name": "vort-deflate-match-copy-bench.csv",
+      "producer_step": "zig build run-deflate-match-copy-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-deflate-match-copy-bench-gate"
+    },
+    {
       "expected_format": "json",
       "name": "vort-deflate-wrapper-fuzz-corpus.json",
       "producer_step": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",

@@ -174,6 +174,29 @@ pub fn build(b: *std.Build) void {
     const deflate_dynamic_decode_profile_gate_step = b.step("run-deflate-dynamic-decode-profile-gate", "Validate dynamic deflate decode profile CSV");
     deflate_dynamic_decode_profile_gate_step.dependOn(&deflate_dynamic_decode_profile_gate.step);
 
+    const deflate_match_copy_bench_exe = b.addExecutable(.{
+        .name = "vort-deflate-match-copy-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate_match_copy_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_deflate_match_copy_bench_csv = b.addRunArtifact(deflate_match_copy_bench_exe);
+    run_deflate_match_copy_bench_csv.addArgs(&.{ "--csv", "zig-out/vort-deflate-match-copy-bench.csv" });
+    const deflate_match_copy_bench_csv_step = b.step("run-deflate-match-copy-bench-csv", "Write focused DEFLATE match-copy microbenchmark CSV");
+    deflate_match_copy_bench_csv_step.dependOn(&run_deflate_match_copy_bench_csv.step);
+
+    const deflate_match_copy_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/deflate_match_copy_bench_gate.py",
+        "--csv",
+        "zig-out/vort-deflate-match-copy-bench.csv",
+    });
+    deflate_match_copy_bench_gate.step.dependOn(deflate_match_copy_bench_csv_step);
+    const deflate_match_copy_bench_gate_step = b.step("run-deflate-match-copy-bench-gate", "Validate DEFLATE match-copy microbenchmark CSV");
+    deflate_match_copy_bench_gate_step.dependOn(&deflate_match_copy_bench_gate.step);
+
     const chunked_zlib_bench_report_exe = b.addExecutable(.{
         .name = "vort-chunked-zlib-bench-report",
         .root_module = b.createModule(.{
@@ -1041,6 +1064,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(header_inspect_dashboard_step);
     dashboard_index.step.dependOn(dashboard_strict_dashboard_step);
     dashboard_index.step.dependOn(deflate_decode_stage_report_dashboard_step);
+    dashboard_index.step.dependOn(deflate_match_copy_bench_gate_step);
     dashboard_index.step.dependOn(level_report_dashboard_step);
     dashboard_index.step.dependOn(huffman_length_report_dashboard_step);
     dashboard_index.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
@@ -1160,6 +1184,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zlib_relaxed_report_exe.step);
     check_step.dependOn(&deflate_decode_stage_report_exe.step);
     check_step.dependOn(&deflate_dynamic_decode_profile_exe.step);
+    check_step.dependOn(&deflate_match_copy_bench_exe.step);
     check_step.dependOn(&png_streaming_zlib_bench_report_exe.step);
     check_step.dependOn(&zlib_encode_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
@@ -1217,6 +1242,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(deflate_decode_stage_report_step);
     ci_smoke_step.dependOn(deflate_decode_stage_report_dashboard_step);
     ci_smoke_step.dependOn(deflate_dynamic_decode_profile_gate_step);
+    ci_smoke_step.dependOn(deflate_match_copy_bench_gate_step);
     ci_smoke_step.dependOn(png_streaming_zlib_bench_report_csv_repeat3_step);
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_step);

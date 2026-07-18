@@ -135,6 +135,13 @@
     },
     {
       "category": "benchmark",
+      "name": "vort-deflate-match-copy-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
       "name": "vort-png-streaming-zlib-bench-report-repeat3.csv",
       "require_present": false,
       "require_producer_step": false,
