@@ -839,6 +839,13 @@ architecture blindly.
 - [x] Small highly fragmented zlib chunks can use a bounded stack-join fast
   path to reuse the contiguous buffered inflater for dynamic/tiny IDAT streams
   without requiring caller-provided compressed scratch.
+- [x] Dynamic deflate decode profile reports literal/distance fast-table lookup
+  coverage and table size, making sparse lookup-table setup costs visible beside
+  fast-hit/miss ratios before changing Huffman initialization policy.
+- [x] FastDecoder sparse-table initialization experiments were measured and
+  rejected when repeat3 decode-stage probes were mixed/negative, preserving the
+  existing table setup while retaining coverage counters for a narrower future
+  optimization.
 - [x] PNG streaming zlib scanline decoders batch pending DEFLATE matches directly
   into row buffers and use the vectorized Adler helper for longer batches,
   avoiding the old per-byte match emission path on repetitive IDAT payloads.

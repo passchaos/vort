@@ -121,6 +121,10 @@ pub const DynamicDecodeProfile = struct {
     distance_fast_hits: usize = 0,
     distance_fast_misses: usize = 0,
     literal_lookup_bits: u4 = 0,
+    literal_lookup_covered: usize = 0,
+    literal_lookup_size: usize = 0,
+    distance_lookup_covered: usize = 0,
+    distance_lookup_size: usize = 0,
     mix: u64 = 0,
 };
 
@@ -1439,7 +1443,13 @@ fn profileCompressedBlock(
 ) Error!DynamicDecodeProfile {
     const lit_decoder = huffman.FastDecoder(286, lit_lookup_bits).init(lit_table);
     const dist_decoder = makeDynamicDistanceDecoder(dist_table);
-    var profile = DynamicDecodeProfile{ .literal_lookup_bits = lit_lookup_bits };
+    var profile = DynamicDecodeProfile{
+        .literal_lookup_bits = lit_lookup_bits,
+        .literal_lookup_covered = lit_decoder.lookupCoverage(),
+        .literal_lookup_size = lit_decoder.lookup.len,
+        .distance_lookup_covered = dist_decoder.lookupCoverage(),
+        .distance_lookup_size = dist_decoder.lookup.len,
+    };
     while (true) {
         const lit_hit = huffmanFastWouldHit(286, lit_lookup_bits, &lit_decoder, reader);
         const symbol = try lit_decoder.decodeValue(reader);

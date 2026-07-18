@@ -43,6 +43,12 @@ EXPECTED_COLUMNS = {
     "literal_fast_misses",
     "distance_fast_hits",
     "distance_fast_misses",
+    "literal_lookup_covered",
+    "literal_lookup_size",
+    "distance_lookup_covered",
+    "distance_lookup_size",
+    "literal_lookup_coverage_ratio",
+    "distance_lookup_coverage_ratio",
     "literal_fast_miss_ratio",
     "distance_fast_miss_ratio",
     "extra_bits_per_match",
@@ -105,6 +111,10 @@ def validate_row(row: dict[str, str]) -> None:
         "distance_symbols",
         "literal_fast_hits",
         "distance_fast_hits",
+        "literal_lookup_covered",
+        "literal_lookup_size",
+        "distance_lookup_covered",
+        "distance_lookup_size",
         "mix",
     ):
         if parse_int(row, key) <= 0:
@@ -127,6 +137,24 @@ def validate_row(row: dict[str, str]) -> None:
         raise AssertionError(f"length width bit sum mismatch row={row}")
     if sum(distance_width_bits) != parse_int(row, "distance_extra_bits"):
         raise AssertionError(f"distance width bit sum mismatch row={row}")
+    literal_lookup_covered = parse_int(row, "literal_lookup_covered")
+    literal_lookup_size = parse_int(row, "literal_lookup_size")
+    distance_lookup_covered = parse_int(row, "distance_lookup_covered")
+    distance_lookup_size = parse_int(row, "distance_lookup_size")
+    if literal_lookup_covered > literal_lookup_size:
+        raise AssertionError(f"literal lookup coverage exceeds size row={row}")
+    if distance_lookup_covered > distance_lookup_size:
+        raise AssertionError(f"distance lookup coverage exceeds size row={row}")
+    if literal_lookup_size != (1 << parse_int(row, "literal_lookup_bits")):
+        raise AssertionError(f"literal lookup size mismatch row={row}")
+    if distance_lookup_size != 256:
+        raise AssertionError(f"distance lookup size mismatch row={row}")
+    literal_coverage_ratio = parse_float(row, "literal_lookup_coverage_ratio")
+    distance_coverage_ratio = parse_float(row, "distance_lookup_coverage_ratio")
+    if not (0.0 < literal_coverage_ratio <= 1.0):
+        raise AssertionError(f"literal lookup coverage ratio out of range row={row}")
+    if not (0.0 < distance_coverage_ratio <= 1.0):
+        raise AssertionError(f"distance lookup coverage ratio out of range row={row}")
     parse_top(row["top_length_symbols"], "top_length_symbols")
     parse_top(row["top_distance_symbols"], "top_distance_symbols")
     parse_top(row["top_length_extra_symbols"], "top_length_extra_symbols")

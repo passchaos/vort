@@ -196,6 +196,15 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             return covered;
         }
 
+        pub fn lookupCoverage(self: *const Self) usize {
+            var covered: usize = 0;
+            var bits: u4 = 1;
+            while (bits <= @min(self.table.max_bits, lookup_bits)) : (bits += 1) {
+                covered += @as(usize, self.table.count_by_bits[bits]) << @intCast(lookup_bits - bits);
+            }
+            return covered;
+        }
+
         pub fn decode(self: *const Self, reader: anytype) Error!Symbol {
             return self.decodeSlowAware(reader);
         }
@@ -749,6 +758,19 @@ test "fast Huffman decoder falls back for long codes" {
     try std.testing.expectEqual(@as(u16, 1), (try fast.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 0), (try fast.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 2), (try fast.decode(&reader)).value);
+}
+
+test "fast Huffman decoder reports lookup coverage" {
+    const FullTable = HuffmanTable(2);
+    const full_table = try FullTable.init(&.{ 1, 1 });
+    const full = FastDecoder(2, 2).init(full_table);
+    try std.testing.expectEqual(full.lookup.len, full.lookupCoverage());
+
+    const SparseTable = HuffmanTable(4);
+    const sparse_table = try SparseTable.init(&.{ 2, 1, 3, 0 });
+    const sparse = FastDecoder(4, 2).init(sparse_table);
+    try std.testing.expectEqual(@as(usize, 3), sparse.lookupCoverage());
+    try std.testing.expect(sparse.lookupCoverage() < sparse.lookup.len);
 }
 
 test "Huffman table records maximum active code length" {
