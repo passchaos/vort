@@ -441,7 +441,12 @@ pub const ChunkedBitReader = struct {
     fn fill(self: *ChunkedBitReader, requested_bits: usize) void {
         std.debug.assert(requested_bits <= 63);
         while (self.bit_count < requested_bits and self.staged_byte_index < self.total_len and self.bit_count <= 56) {
-            self.syncStagedCursor();
+            if (self.staged_chunk_index >= self.chunks.len or
+                self.staged_byte_index < self.staged_chunk_start or
+                self.staged_byte_index >= self.staged_chunk_start + self.chunks[self.staged_chunk_index].len)
+            {
+                self.syncStagedCursor();
+            }
             if (self.staged_chunk_index >= self.chunks.len) break;
             const chunk = self.chunks[self.staged_chunk_index];
             const local = self.staged_byte_index - self.staged_chunk_start;
