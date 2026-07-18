@@ -16,6 +16,10 @@ const Row = struct {
     length_symbols: usize,
     match_bytes: usize,
     distance_symbols: usize,
+    length_extra_reads: usize,
+    distance_extra_reads: usize,
+    length_extra_bits: usize,
+    distance_extra_bits: usize,
     literal_fast_hits: usize,
     literal_fast_misses: usize,
     distance_fast_hits: usize,
@@ -117,6 +121,10 @@ fn measurePayload(init: std.process.Init, name: []const u8, payload: []const u8)
         .length_symbols = profile.length_symbols,
         .match_bytes = profile.match_bytes,
         .distance_symbols = profile.distance_symbols,
+        .length_extra_reads = profile.length_extra_reads,
+        .distance_extra_reads = profile.distance_extra_reads,
+        .length_extra_bits = profile.length_extra_bits,
+        .distance_extra_bits = profile.distance_extra_bits,
         .literal_fast_hits = profile.literal_fast_hits,
         .literal_fast_misses = profile.literal_fast_misses,
         .distance_fast_hits = profile.distance_fast_hits,
@@ -131,9 +139,9 @@ fn rawSliceFromZlib(frame: []const u8) []const u8 {
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_fast_miss_ratio,distance_fast_miss_ratio,mix\n");
+    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
     for (rows) |row| {
-        try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{d}\n", .{
+        try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{d:.6},{d}\n", .{
             row.case,
             row.input_bytes,
             row.raw_bytes,
@@ -148,12 +156,17 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
             row.length_symbols,
             row.match_bytes,
             row.distance_symbols,
+            row.length_extra_reads,
+            row.distance_extra_reads,
+            row.length_extra_bits,
+            row.distance_extra_bits,
             row.literal_fast_hits,
             row.literal_fast_misses,
             row.distance_fast_hits,
             row.distance_fast_misses,
             ratio(row.literal_fast_misses, row.literal_fast_hits + row.literal_fast_misses),
             ratio(row.distance_fast_misses, row.distance_fast_hits + row.distance_fast_misses),
+            ratio(row.length_extra_bits + row.distance_extra_bits, row.length_symbols),
             row.mix,
         });
     }
