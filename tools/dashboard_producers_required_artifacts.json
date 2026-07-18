@@ -482,6 +482,13 @@
       "producer_step": "zig build run-chunk-cursor-bench-gate",
       "required_smoke_gate": true,
       "smoke_gate": "zig build run-chunk-cursor-bench-gate"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-deflate-chunked-huffman-bench.csv",
+      "producer_step": "zig build run-deflate-chunked-huffman-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-deflate-chunked-huffman-bench-gate"
     }
   ],
   "schema": "vort.dashboard_producers_required_artifacts",

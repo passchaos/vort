@@ -363,6 +363,13 @@
       "require_present": false,
       "require_producer_step": false,
       "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-deflate-chunked-huffman-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
     }
   ],
   "schema": "vort.dashboard_category_expected_artifacts",

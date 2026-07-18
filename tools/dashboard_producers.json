@@ -279,6 +279,10 @@
     "vort-chunk-cursor-bench.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build run-chunk-cursor-bench-gate"
+    },
+    "vort-deflate-chunked-huffman-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-deflate-chunked-huffman-bench-gate"
     }
   },
   "contains": [
@@ -364,7 +368,8 @@
     "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report",
     "vort-deflate-huffman-lookup-bench.csv": "zig build run-deflate-huffman-lookup-bench-gate",
     "vort-deflate-huffman-build-bench.csv": "zig build run-deflate-huffman-build-bench-gate",
-    "vort-chunk-cursor-bench.csv": "zig build run-chunk-cursor-bench-gate"
+    "vort-chunk-cursor-bench.csv": "zig build run-chunk-cursor-bench-gate",
+    "vort-deflate-chunked-huffman-bench.csv": "zig build run-deflate-chunked-huffman-bench-gate"
   },
   "required_smoke_gates": [
     "vort-dashboard-category-negative-smoke.json",
@@ -405,7 +410,8 @@
     "vort-deflate-huffman-lookup-bench.csv",
     "vort-png-streaming-zlib-bench-report-repeat3.csv",
     "vort-chunked-zlib-bench-report-repeat3.csv",
-    "vort-chunk-cursor-bench.csv"
+    "vort-chunk-cursor-bench.csv",
+    "vort-deflate-chunked-huffman-bench.csv"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1
