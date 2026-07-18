@@ -148,7 +148,9 @@ symbol. A broader 12-bit dynamic literal table threshold (`HLIT >= 260`,
 `max_bits >= 11`) was tested against the repeat3 Rust decode benchmark and
 reverted because it did not improve the readme/roadmap weak cases and slowed some
 dynamic-match rows; keep the current denser-table threshold until a targeted
-payload-level benchmark shows a clear win. ReleaseFast `run-deflate-decode-stage-report` remains
+payload-level benchmark shows a clear win. An allocating-inflate literal append
+experiment that replaced `ArrayList.append` with an ensure-then-assume-capacity
+helper was also tested with ReleaseFast `run-deflate-decode-stage-report -- --repeat 5 --iterations 200 README.md docs/roadmap.md` and reverted: README raw/zlib/gzip caller-buffer rows moved from about `520.13` / `523.63` / `453.92` MiB/s before to `494.57` / `506.00` / `427.39` MiB/s after, while roadmap rows were essentially noise (`378.52` / `372.07` / `329.48` before versus `374.84` / `369.81` / `327.73` after). Avoid repeating that micro-optimization unless allocator or ArrayList semantics change. ReleaseFast `run-deflate-decode-stage-report` remains
 the quick smoke for this path; repeat3 Rust summaries should still be used before
 accepting small throughput deltas because the decode microbenchmarks are noisy.
 Match replay is another decode hot path: overlapping matches above the
