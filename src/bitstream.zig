@@ -47,6 +47,10 @@ pub const BitReader = struct {
         return @as(usize, count) <= remaining_bits;
     }
 
+    pub fn hasStagedBits(self: BitReader, count: u6) bool {
+        return self.hasBits(count);
+    }
+
     pub fn advanceBitsAssumeAvailable(self: *BitReader, count: u6) void {
         self.advanceBitsStagedAssumeAvailable(count);
     }
@@ -161,6 +165,10 @@ pub const BufferedBitReader = struct {
         else
             0;
         return @as(usize, count) <= remaining_staged + remaining_input_bits;
+    }
+
+    pub fn hasStagedBits(self: BufferedBitReader, count: u6) bool {
+        return @as(usize, count) <= self.bit_count;
     }
 
     pub fn advanceBitsAssumeAvailable(self: *BufferedBitReader, count: u6) void {
@@ -310,6 +318,10 @@ pub const ChunkedBitReader = struct {
         if (self.byte_index > self.total_len) return false;
         const remaining_bits = (self.total_len - self.byte_index) * 8 - @as(usize, self.bit_index);
         return @as(usize, count) <= remaining_bits;
+    }
+
+    pub fn hasStagedBits(self: ChunkedBitReader, count: u6) bool {
+        return @as(usize, count) <= self.bit_count;
     }
 
     pub fn advanceBitsAssumeAvailable(self: *ChunkedBitReader, count: u6) void {

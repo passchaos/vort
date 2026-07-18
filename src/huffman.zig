@@ -13,6 +13,22 @@ pub const Symbol = struct {
     bits: u4,
 };
 
+inline fn hasDecodedBits(reader: anytype, count: u4) bool {
+    const Reader = switch (@typeInfo(@TypeOf(reader))) {
+        .pointer => |ptr| ptr.child,
+        else => @TypeOf(reader),
+    };
+    // Fast Huffman decode always calls `peekBitsPadded` before this check. The
+    // buffered/chunked readers use that peek to stage exactly the bytes they
+    // could actually read, so testing the staged reservoir avoids a second
+    // total-remaining-bits calculation in the hot path while still rejecting
+    // padded lookup hits that do not have enough real input bits.
+    if (comptime @hasDecl(Reader, "hasStagedBits")) {
+        return reader.hasStagedBits(count);
+    }
+    return reader.hasBits(count);
+}
+
 pub fn HuffmanTable(comptime max_symbols: usize) type {
     return struct {
         entries: [max_symbols]Entry = undefined,
@@ -218,21 +234,21 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             const peek = reader.peekBitsPadded(u16, lookup_bits);
             const entry = self.lookup[peek];
             if (entry.bits != 0) {
-                if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+                if (!hasDecodedBits(reader, entry.bits)) return error.TruncatedFrame;
                 reader.advanceBitsStagedAssumeAvailable(entry.bits);
                 return entry.symbol;
             }
 
             if (self.table.max_bits == 0) return error.InvalidHuffmanCode;
             if (self.table.max_bits <= lookup_bits) {
-                if (!reader.hasBits(self.table.max_bits)) return error.TruncatedFrame;
+                if (!hasDecodedBits(reader, self.table.max_bits)) return error.TruncatedFrame;
                 return error.InvalidHuffmanCode;
             }
 
             var bits: u4 = lookup_bits + 1;
             while (bits <= self.table.max_bits) {
-                if (!reader.hasBits(bits)) return error.TruncatedFrame;
                 const code = reader.peekBitsPadded(u16, bits);
+                if (!hasDecodedBits(reader, bits)) return error.TruncatedFrame;
                 const first = self.table.first_by_bits[bits];
                 const end = first + self.table.count_by_bits[bits];
                 for (self.table.entries[first..end]) |long_entry| {
@@ -251,7 +267,7 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             const peek = reader.peekBitsPadded(u16, lookup_bits);
             const entry = self.lookup[peek];
             if (entry.bits != 0) {
-                if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+                if (!hasDecodedBits(reader, entry.bits)) return error.TruncatedFrame;
                 reader.advanceBitsStagedAssumeAvailable(entry.bits);
                 return .{ .value = entry.symbol, .bits = entry.bits };
             }
@@ -266,14 +282,14 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             // table representation.
             if (self.table.max_bits == 0) return error.InvalidHuffmanCode;
             if (self.table.max_bits <= lookup_bits) {
-                if (!reader.hasBits(self.table.max_bits)) return error.TruncatedFrame;
+                if (!hasDecodedBits(reader, self.table.max_bits)) return error.TruncatedFrame;
                 return error.InvalidHuffmanCode;
             }
 
             var bits: u4 = lookup_bits + 1;
             while (bits <= self.table.max_bits) {
-                if (!reader.hasBits(bits)) return error.TruncatedFrame;
                 const code = reader.peekBitsPadded(u16, bits);
+                if (!hasDecodedBits(reader, bits)) return error.TruncatedFrame;
                 const first = self.table.first_by_bits[bits];
                 const end = first + self.table.count_by_bits[bits];
                 for (self.table.entries[first..end]) |long_entry| {
@@ -763,6 +779,26 @@ test "fast Huffman decoder falls back for long codes" {
     try std.testing.expectEqual(@as(u16, 1), (try fast.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 0), (try fast.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 2), (try fast.decode(&reader)).value);
+}
+
+test "fast Huffman decoder checks staged bits after padded lookup" {
+    const Table = HuffmanTable(2);
+    const short_table = try Table.init(&.{ 7, 0 });
+    const short = FastDecoder(2, 9).init(short_table);
+
+    var buffered_short = bitstream.BufferedBitReader.init(&.{0});
+    try std.testing.expectEqual(@as(u16, 0), try short.decodeValue(&buffered_short));
+    const short_chunks = [_][]const u8{&.{0}};
+    var chunked_short = try bitstream.ChunkedBitReader.init(&short_chunks);
+    try std.testing.expectEqual(@as(u16, 0), try short.decodeValue(&chunked_short));
+
+    const long_table = try Table.init(&.{ 9, 0 });
+    const long = FastDecoder(2, 9).init(long_table);
+    var buffered_long = bitstream.BufferedBitReader.init(&.{0});
+    try std.testing.expectError(error.TruncatedFrame, long.decodeValue(&buffered_long));
+    const long_chunks = [_][]const u8{ &.{}, &.{0} };
+    var chunked_long = try bitstream.ChunkedBitReader.init(&long_chunks);
+    try std.testing.expectError(error.TruncatedFrame, long.decodeValue(&chunked_long));
 }
 
 test "fast Huffman decoder reports lookup coverage" {
