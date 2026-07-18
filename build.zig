@@ -164,6 +164,16 @@ pub fn build(b: *std.Build) void {
     const deflate_dynamic_decode_profile_csv_step = b.step("run-deflate-dynamic-decode-profile-csv", "Write dynamic deflate Huffman decode profile CSV to zig-out");
     deflate_dynamic_decode_profile_csv_step.dependOn(&run_deflate_dynamic_decode_profile_csv.step);
 
+    const deflate_dynamic_decode_profile_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/deflate_dynamic_decode_profile_gate.py",
+        "--csv",
+        "zig-out/vort-deflate-dynamic-decode-profile.csv",
+    });
+    deflate_dynamic_decode_profile_gate.step.dependOn(deflate_dynamic_decode_profile_csv_step);
+    const deflate_dynamic_decode_profile_gate_step = b.step("run-deflate-dynamic-decode-profile-gate", "Validate dynamic deflate decode profile CSV");
+    deflate_dynamic_decode_profile_gate_step.dependOn(&deflate_dynamic_decode_profile_gate.step);
+
     const chunked_zlib_bench_report_exe = b.addExecutable(.{
         .name = "vort-chunked-zlib-bench-report",
         .root_module = b.createModule(.{
