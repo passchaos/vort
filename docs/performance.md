@@ -136,7 +136,9 @@ the quick smoke for this path; repeat3 Rust summaries should still be used befor
 accepting small throughput deltas because the decode microbenchmarks are noisy.
 Match replay is another decode hot path: overlapping matches above the
 specialized distance-1..4 cases now copy by seeding one distance window and
-doubling the initialized prefix. This improves long repeated/source-like matches
+doubling the initialized prefix. Allocating inflate paths reuse the same doubling
+copy after reserving the match span, so long no-dictionary matches avoid
+byte-at-a-time ArrayList appends. This improves repeated/source-like matches
 without changing fixed, dynamic, zlib, or gzip wire compatibility.
 
 `ci-smoke` is a validation aggregate rather than a full benchmark suite; it

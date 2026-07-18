@@ -2456,6 +2456,15 @@ fn appendMatchWithDictionaryFromBase(allocator: std.mem.Allocator, out: *std.Arr
         out.appendSliceAssumeCapacity(out.items[start..][0..length]);
         return;
     }
+    if (dictionary.len == 0) {
+        const out_offset = out.items.len;
+        out.items.len += length;
+        // Allocating decoders have already reserved the final match span, so the
+        // no-dictionary overlapping case can share the caller-buffer doubling
+        // copy. This avoids appending one byte at a time on long LZ77 matches.
+        copyOverlappingMatchAt(out.items, out_offset, length, distance);
+        return;
+    }
     var i: usize = 0;
     while (i < length) : (i += 1) {
         const absolute = dictionary.len + (out.items.len - history_start) - distance;
@@ -2468,58 +2477,9 @@ fn appendMatchWithDictionaryFromBase(allocator: std.mem.Allocator, out: *std.Arr
 }
 
 fn appendSmallDistanceMatchAssumeCapacity(out: *std.ArrayList(u8), length: usize, distance: usize) void {
-    const start = out.items.len - distance;
-    switch (distance) {
-        2 => {
-            const a = out.items[start];
-            const b = out.items[start + 1];
-            var i: usize = 0;
-            while (i + 2 <= length) : (i += 2) {
-                out.appendAssumeCapacity(a);
-                out.appendAssumeCapacity(b);
-            }
-            if (i < length) out.appendAssumeCapacity(a);
-        },
-        3 => {
-            const a = out.items[start];
-            const b = out.items[start + 1];
-            const c = out.items[start + 2];
-            var i: usize = 0;
-            while (i + 3 <= length) : (i += 3) {
-                out.appendAssumeCapacity(a);
-                out.appendAssumeCapacity(b);
-                out.appendAssumeCapacity(c);
-            }
-            if (i < length) {
-                out.appendAssumeCapacity(a);
-                i += 1;
-            }
-            if (i < length) out.appendAssumeCapacity(b);
-        },
-        4 => {
-            const a = out.items[start];
-            const b = out.items[start + 1];
-            const c = out.items[start + 2];
-            const d = out.items[start + 3];
-            var i: usize = 0;
-            while (i + 4 <= length) : (i += 4) {
-                out.appendAssumeCapacity(a);
-                out.appendAssumeCapacity(b);
-                out.appendAssumeCapacity(c);
-                out.appendAssumeCapacity(d);
-            }
-            if (i < length) {
-                out.appendAssumeCapacity(a);
-                i += 1;
-            }
-            if (i < length) {
-                out.appendAssumeCapacity(b);
-                i += 1;
-            }
-            if (i < length) out.appendAssumeCapacity(c);
-        },
-        else => unreachable,
-    }
+    const out_offset = out.items.len;
+    out.items.len += length;
+    copySmallDistanceMatch(out.items[out_offset..][0..length], out.items[out_offset - distance ..], distance);
 }
 
 fn ensureOutputLimit(current_len: usize, additional_len: usize, max_output_len: ?usize) Error!void {
@@ -9437,6 +9397,29 @@ test "overlapping match copy doubles initialized output window" {
     var output: [32]u8 = undefined;
     try copyMatch(&history, &output, output.len, history.len);
     try std.testing.expectEqualSlices(u8, ("abcde" ** 6) ++ "ab", &output);
+}
+
+test "allocating fixed inflate reuses doubled copy for overlapping append matches" {
+    const tokens = [_]lz77.Token{
+        .{ .literal = 'a' },
+        .{ .literal = 'b' },
+        .{ .literal = 'c' },
+        .{ .literal = 'd' },
+        .{ .literal = 'e' },
+        .{ .match = .{ .length = 32, .distance = 5 } },
+    };
+    const encoded = try encodeRawFixedTokensAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(encoded);
+
+    const expected = ("abcde" ** 7) ++ "ab";
+    const allocated = try decodeRawFixedAllocStrict(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(allocated);
+    try std.testing.expectEqualSlices(u8, expected, allocated);
+
+    var output: [expected.len]u8 = undefined;
+    const decoded = try decodeRawFixed(encoded, &output);
+    try std.testing.expectEqual(expected.len, decoded.output_written);
+    try std.testing.expectEqualSlices(u8, expected, &output);
 }
 
 test "fixed Huffman decoder rejects reserved distance symbols" {
