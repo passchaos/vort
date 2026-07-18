@@ -854,6 +854,9 @@ architecture blindly.
 - [x] ChunkedBitReader fill batching for extra-bit reads was measured and
   rejected when the focused gate showed most chunked widths regressing, preserving
   the existing per-byte staged cursor fill.
+- [x] Distance-code formula decode was measured and rejected when README
+  repeat3 raw/zlib/gzip rows regressed despite synthetic text/binary gains,
+  preserving the table-based distance decoder.
 - [x] Non-overlap match-copy small-length and branch-order experiments were
   measured and rejected when README/roadmap/dynamic-match repeat3 probes were
   mixed or regressed, keeping the existing copy order until a stronger corpus-
