@@ -3179,6 +3179,26 @@ fn readChunkedBigU32(chunks: []const []const u8, offset: usize) Error!u32 {
     return value;
 }
 
+fn readChunkedTailBigU32(chunks: []const []const u8, total_len: usize) Error!u32 {
+    if (total_len < 4) return error.TruncatedFrame;
+    var chunk_index = chunks.len;
+    var bytes: [4]u8 = undefined;
+    var out_i: usize = 4;
+
+    while (out_i != 0) {
+        if (chunk_index == 0) return error.TruncatedFrame;
+        chunk_index -= 1;
+        const chunk = chunks[chunk_index];
+        var local_end = chunk.len;
+        while (local_end != 0 and out_i != 0) {
+            local_end -= 1;
+            out_i -= 1;
+            bytes[out_i] = chunk[local_end];
+        }
+    }
+    return std.mem.readInt(u32, &bytes, .big);
+}
+
 const ChunkCursor = struct {
     chunks: []const []const u8,
     total_len: usize,
@@ -3287,9 +3307,15 @@ fn parseZlibHeaderFromChunks(chunks: []const []const u8, dictionary: ?[]const u8
 }
 
 fn validateZlibFooterChunksWithOptions(chunks: []const []const u8, footer_offset: usize, actual: u32, options: ZlibDecodeOptions) Error!void {
-    const total_len = try chunksTotalLen(chunks);
+    return validateZlibFooterChunksWithKnownTotal(chunks, try chunksTotalLen(chunks), footer_offset, actual, options);
+}
+
+fn validateZlibFooterChunksWithKnownTotal(chunks: []const []const u8, total_len: usize, footer_offset: usize, actual: u32, options: ZlibDecodeOptions) Error!void {
     if (footer_offset > total_len or total_len - footer_offset < 4) return error.TruncatedFrame;
-    const expected = try readChunkedBigU32(chunks, footer_offset);
+    const expected = if (footer_offset + 4 == total_len)
+        try readChunkedTailBigU32(chunks, total_len)
+    else
+        try readChunkedBigU32(chunks, footer_offset);
     if (!options.ignore_adler and actual != expected) return error.ChecksumMismatch;
     if (!options.allow_trailing_data and footer_offset + 4 != total_len) return error.TrailingData;
 }
@@ -3305,7 +3331,7 @@ fn decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks: []const []cons
     var reader = try bitstream.ChunkedBitReader.initAtKnownTotal(chunks, header.data_offset, total_len);
     const raw = try decodeRawAutoWithDictionaryFromReader(&reader, header.data_offset, raw_dictionary, output);
     const footer_offset = header.data_offset + raw.input_read;
-    try validateZlibFooterChunksWithOptions(chunks, footer_offset, checksum.adler32(output[0..raw.output_written]), options);
+    try validateZlibFooterChunksWithKnownTotal(chunks, total_len, footer_offset, checksum.adler32(output[0..raw.output_written]), options);
     return raw.output_written;
 }
 
@@ -6598,7 +6624,7 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.m
     var reader = try bitstream.ChunkedBitReader.initAtKnownTotal(chunks, header.data_offset, compressed_len);
     const raw = try decodeRawAutoAppendPartialWithDictionaryFromReader(allocator, &reader, header.data_offset, raw_dictionary, &out, max_output_len);
     const footer_offset = header.data_offset + raw.input_read;
-    try validateZlibFooterChunksWithOptions(chunks, footer_offset, checksum.adler32(out.items), options);
+    try validateZlibFooterChunksWithKnownTotal(chunks, compressed_len, footer_offset, checksum.adler32(out.items), options);
     return out.toOwnedSlice(allocator);
 }
 
@@ -9232,6 +9258,14 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
         encoded[2 .. encoded.len - 4],
         encoded[encoded.len - 4 ..],
     };
+    const footer_split_chunks = [_][]const u8{
+        encoded[0..2],
+        encoded[2 .. encoded.len - 4],
+        encoded[encoded.len - 4 .. encoded.len - 2],
+        encoded[encoded.len - 2 .. encoded.len - 2],
+        encoded[encoded.len - 2 .. encoded.len - 1],
+        encoded[encoded.len - 1 ..],
+    };
     const empty_chunks = [_][]const u8{
         encoded[0..0],
         encoded[0..1],
@@ -9251,6 +9285,9 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     try std.testing.expectEqual(input.len, try decodeZlibChunksInto(&chunks, &output));
     try std.testing.expectEqualSlices(u8, input, &output);
     @memset(&output, 0);
+    try std.testing.expectEqual(input.len, try decodeZlibChunksInto(&footer_split_chunks, &output));
+    try std.testing.expectEqualSlices(u8, input, &output);
+    @memset(&output, 0);
     try std.testing.expectEqual(input.len, try decodeZlibChunks(&empty_chunks, &compressed_scratch, &output));
     try std.testing.expectEqualSlices(u8, input, &output);
     @memset(&output, 0);
@@ -9262,6 +9299,9 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     const alloc = try decodeZlibChunksAlloc(std.testing.allocator, &chunks);
     defer std.testing.allocator.free(alloc);
     try std.testing.expectEqualSlices(u8, input, alloc);
+    const footer_split_alloc = try decodeZlibChunksAlloc(std.testing.allocator, &footer_split_chunks);
+    defer std.testing.allocator.free(footer_split_alloc);
+    try std.testing.expectEqualSlices(u8, input, footer_split_alloc);
 
     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 2 });
     const direct_alloc = try decodeZlibChunksAlloc(failing.allocator(), &chunks);
