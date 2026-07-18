@@ -134,7 +134,11 @@ the current bit width and skips per-entry bit-width checks. `FastDecoder.decodeV
 also has a value-only fallback path, avoiding Symbol materialization for dynamic
 literal/distance misses, and fast decode now advances through a staged-bit helper
 after peeking so buffered/chunked readers do not re-enter fill logic for every
-symbol. ReleaseFast `run-deflate-decode-stage-report` remains
+symbol. A broader 12-bit dynamic literal table threshold (`HLIT >= 260`,
+`max_bits >= 11`) was tested against the repeat3 Rust decode benchmark and
+reverted because it did not improve the readme/roadmap weak cases and slowed some
+dynamic-match rows; keep the current denser-table threshold until a targeted
+payload-level benchmark shows a clear win. ReleaseFast `run-deflate-decode-stage-report` remains
 the quick smoke for this path; repeat3 Rust summaries should still be used before
 accepting small throughput deltas because the decode microbenchmarks are noisy.
 Match replay is another decode hot path: overlapping matches above the
