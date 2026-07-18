@@ -1068,8 +1068,24 @@
         "unmatched_error_rows": "int"
       },
       "item_collection": "items",
+      "item_enums": {
+        "raw_block_type": [
+          "stored",
+          "fixed",
+          "dynamic"
+        ]
+      },
       "item_fields": {
         "case": "str",
+        "dynamic_distance_max_bits": "int",
+        "dynamic_distance_nonzero": "int",
+        "dynamic_distance_zero": "int",
+        "dynamic_hclen": "int",
+        "dynamic_hdist": "int",
+        "dynamic_hlit": "int",
+        "dynamic_literal_max_bits": "int",
+        "dynamic_literal_nonzero": "int",
+        "dynamic_literal_zero": "int",
         "gzip_alloc_exact_time_ratio": "float",
         "gzip_alloc_into_time_ratio": "float",
         "gzip_bytes": "int",
@@ -1084,8 +1100,11 @@
         "mix": "int",
         "raw_alloc_exact_time_ratio": "float",
         "raw_alloc_into_time_ratio": "float",
+        "raw_block_type": "str",
         "raw_bytes": "int",
         "raw_exact_mib_s": "float",
+        "raw_header_bits": "int",
+        "raw_header_bytes": "int",
         "raw_into_mib_s": "float",
         "raw_mib_s": "float",
         "repeat": "int",
