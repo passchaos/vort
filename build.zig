@@ -205,6 +205,27 @@ pub fn build(b: *std.Build) void {
     const chunked_zlib_bench_report_dashboard_step = b.step("run-chunked-zlib-bench-report-dashboard", "Write contiguous vs chunked zlib decode throughput dashboard artifacts");
     chunked_zlib_bench_report_dashboard_step.dependOn(&run_chunked_zlib_bench_report_dashboard.step);
 
+    const png_streaming_zlib_bench_report_exe = b.addExecutable(.{
+        .name = "vort-png-streaming-zlib-bench-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/png_streaming_zlib_bench_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_png_streaming_zlib_bench_report = b.addRunArtifact(png_streaming_zlib_bench_report_exe);
+    if (b.args) |args| run_png_streaming_zlib_bench_report.addArgs(args);
+    const png_streaming_zlib_bench_report_step = b.step("run-png-streaming-zlib-bench-report", "Report PNG streaming zlib scanline throughput");
+    png_streaming_zlib_bench_report_step.dependOn(&run_png_streaming_zlib_bench_report.step);
+
+    const run_png_streaming_zlib_bench_report_csv_repeat3 = b.addRunArtifact(png_streaming_zlib_bench_report_exe);
+    run_png_streaming_zlib_bench_report_csv_repeat3.addArgs(&.{ "--repeat", "3", "--csv", "zig-out/vort-png-streaming-zlib-bench-report-repeat3.csv" });
+    const png_streaming_zlib_bench_report_csv_repeat3_step = b.step("run-png-streaming-zlib-bench-report-csv-repeat3", "Write repeat3 PNG streaming zlib scanline throughput CSV");
+    png_streaming_zlib_bench_report_csv_repeat3_step.dependOn(&run_png_streaming_zlib_bench_report_csv_repeat3.step);
+
     const zlib_relaxed_report_exe = b.addExecutable(.{
         .name = "vort-zlib-relaxed-report",
         .root_module = b.createModule(.{
@@ -1139,6 +1160,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zlib_relaxed_report_exe.step);
     check_step.dependOn(&deflate_decode_stage_report_exe.step);
     check_step.dependOn(&deflate_dynamic_decode_profile_exe.step);
+    check_step.dependOn(&png_streaming_zlib_bench_report_exe.step);
     check_step.dependOn(&zlib_encode_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
@@ -1195,6 +1217,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(deflate_decode_stage_report_step);
     ci_smoke_step.dependOn(deflate_decode_stage_report_dashboard_step);
     ci_smoke_step.dependOn(deflate_dynamic_decode_profile_gate_step);
+    ci_smoke_step.dependOn(png_streaming_zlib_bench_report_csv_repeat3_step);
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_dashboard_step);

@@ -120,6 +120,13 @@
       "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard"
     },
     {
+      "expected_format": "csv",
+      "name": "vort-deflate-dynamic-decode-profile.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-deflate-dynamic-decode-profile-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-deflate-dynamic-decode-profile-csv"
+    },
+    {
       "expected_format": "json",
       "name": "vort-deflate-wrapper-fuzz-corpus.json",
       "producer_step": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
@@ -307,6 +314,13 @@
       "producer_step": "zig build run-png-scratch-report-dashboard",
       "required_smoke_gate": true,
       "smoke_gate": "zig build run-png-scratch-report-dashboard"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-png-streaming-zlib-bench-report-repeat3.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-png-streaming-zlib-bench-report-csv-repeat3",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-png-streaming-zlib-bench-report-csv-repeat3"
     },
     {
       "expected_format": "json",

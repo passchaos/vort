@@ -839,6 +839,12 @@ architecture blindly.
 - [x] Small highly fragmented zlib chunks can use a bounded stack-join fast
   path to reuse the contiguous buffered inflater for dynamic/tiny IDAT streams
   without requiring caller-provided compressed scratch.
+- [x] PNG streaming zlib scanline decoders batch pending DEFLATE matches directly
+  into row buffers and use the vectorized Adler helper for longer batches,
+  avoiding the old per-byte match emission path on repetitive IDAT payloads.
+- [x] PNG streaming zlib scanline benchmark report covers contiguous/chunked RLE,
+  small-distance, repeated-row dynamic, and fixed payloads with a repeat3 CSV
+  gate for future row-streaming hot-path changes.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.
 - [x] zlib/gzip fixed-Huffman encoder wrappers.

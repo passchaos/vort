@@ -72,6 +72,10 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard"
     },
+    "vort-deflate-dynamic-decode-profile.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-deflate-dynamic-decode-profile-csv"
+    },
     "vort-deflate-wrapper-fuzz-corpus.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
@@ -180,6 +184,10 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-png-scratch-report-dashboard"
     },
+    "vort-png-streaming-zlib-bench-report-repeat3.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-png-streaming-zlib-bench-report-csv-repeat3"
+    },
     "vort-python-zlib-diff-smoke.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-python-zlib-diff-dashboard"
@@ -285,6 +293,7 @@
     "vort-deflate-decode-stage-report.csv": "zig build run-deflate-decode-stage-report-csv",
     "vort-deflate-decode-stage-report.json": "zig build run-deflate-decode-stage-report-dashboard",
     "vort-deflate-decode-stage-report.md": "zig build run-deflate-decode-stage-report-dashboard",
+    "vort-deflate-dynamic-decode-profile.csv": "zig build -Doptimize=ReleaseFast run-deflate-dynamic-decode-profile-csv",
     "vort-deflate-wrapper-fuzz-corpus.json": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
     "vort-deflate-wrapper-fuzz-corpus.md": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
     "vort-dictionary-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard",
@@ -312,6 +321,7 @@
     "vort-native-thread-pool-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard",
     "vort-png-scratch-report.json": "zig build run-png-scratch-report-dashboard",
     "vort-png-scratch-report.md": "zig build run-png-scratch-report-dashboard",
+    "vort-png-streaming-zlib-bench-report-repeat3.csv": "zig build -Doptimize=ReleaseFast run-png-streaming-zlib-bench-report-csv-repeat3",
     "vort-python-zlib-diff-smoke.json": "zig build run-python-zlib-diff-dashboard",
     "vort-rust-deflate-benchmark-summary-repeat3.md": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3",
     "vort-rust-deflate-benchmark-summary.md": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary",

@@ -29,6 +29,13 @@
       "require_smoke_gate": true
     },
     {
+      "category": "other",
+      "name": "vort-deflate-dynamic-decode-profile.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "validation",
       "name": "vort-header-inspect-smoke.json",
       "require_present": true,
@@ -122,6 +129,13 @@
     {
       "category": "benchmark",
       "name": "vort-chunked-zlib-bench-report.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-png-streaming-zlib-bench-report-repeat3.csv",
       "require_present": false,
       "require_producer_step": false,
       "require_smoke_gate": false

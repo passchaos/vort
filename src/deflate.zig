@@ -4363,6 +4363,80 @@ pub const PngZlibScanlineDecoder = struct {
 
 const PngStreamingDynamicLiteralDecoder = huffman.FastDecoder(286, 11);
 
+fn readPngStreamingInflatedBytes(self: anytype, output: []u8) Error!void {
+    var out_i: usize = 0;
+    while (out_i < output.len) {
+        if (self.pending_match_remaining != 0) {
+            const copied = try copyPngStreamingPendingMatch(self, output[out_i..]);
+            out_i += copied;
+            continue;
+        }
+        output[out_i] = (try self.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
+        out_i += 1;
+    }
+}
+
+fn copyPngStreamingPendingMatch(self: anytype, output: []u8) Error!usize {
+    if (output.len == 0 or self.pending_match_remaining == 0) return 0;
+    const count = @min(output.len, self.pending_match_remaining);
+    const dest = output[0..count];
+    const distance = self.pending_match_distance;
+    if (distance == 0 or distance > self.history_len) return error.InvalidMatch;
+
+    // PNG row streaming normally asks for a whole filtered scanline after the
+    // filter byte. Emitting match bytes one at a time makes repetitive rows pay
+    // the full per-byte Adler/history/read-state overhead. Batch the already
+    // pending DEFLATE match into the caller's row buffer while updating the same
+    // rolling history and deferred Adler state that `emitByte` maintains.
+    if (distance == 1) {
+        const byte = try self.historyByte(1);
+        @memset(dest, byte);
+        self.recordInflatedBytes(dest);
+    } else if (distance <= 4) {
+        var pattern: [4]u8 = undefined;
+        var i: usize = 0;
+        while (i < distance) : (i += 1) pattern[i] = try self.historyByte(@intCast(distance - i));
+        copySmallDistanceMatch(dest, pattern[0..distance], distance);
+        self.recordInflatedBytes(dest);
+    } else if (distance >= dest.len) {
+        try copyPngStreamingHistoryBytes(self, distance, dest);
+        self.recordInflatedBytes(dest);
+    } else {
+        var i: usize = 0;
+        while (i < dest.len) : (i += 1) {
+            dest[i] = try self.historyByte(distance);
+            self.history[self.history_pos] = dest[i];
+            self.history_pos = (self.history_pos + 1) % self.history.len;
+            self.history_len = @min(self.history_len + 1, self.history.len);
+        }
+        self.updateAdlerForInflatedBytes(dest);
+    }
+    self.pending_match_remaining -= count;
+    return count;
+}
+
+fn copyPngStreamingHistoryBytes(self: anytype, distance: usize, dest: []u8) Error!void {
+    if (distance == 0 or distance > self.history_len) return error.InvalidMatch;
+    var src = (self.history_pos + self.history.len - distance) % self.history.len;
+    var dest_i: usize = 0;
+    while (dest_i < dest.len) {
+        const n = @min(dest.len - dest_i, self.history.len - src);
+        @memcpy(dest[dest_i..][0..n], self.history[src..][0..n]);
+        dest_i += n;
+        src = 0;
+    }
+}
+
+fn updatePngStreamingAdlerBytes(self: anytype, bytes: []const u8) void {
+    if (bytes.len >= 64) {
+        if (self.adler_pending != 0) self.reduceAdler();
+        self.adler.update(bytes);
+        self.adler_pending = 0;
+        return;
+    }
+    for (bytes) |byte| self.updateAdlerByte(byte);
+}
+
 /// Incremental zlib/DEFLATE PNG row decoder for contiguous IDAT payloads.
 ///
 /// `PngZlibScanlineDecoder` exposes a row API but first materializes the entire
@@ -4583,9 +4657,7 @@ pub const PngStreamingZlibScanlineDecoder = struct {
     }
 
     fn readInflatedBytes(self: *PngStreamingZlibScanlineDecoder, output: []u8) Error!void {
-        for (output) |*byte| {
-            byte.* = (try self.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
-        }
+        return readPngStreamingInflatedBytes(self, output);
     }
 
     fn readInflatedByteOrEnd(self: *PngStreamingZlibScanlineDecoder) Error!?u8 {
@@ -4694,14 +4766,38 @@ pub const PngStreamingZlibScanlineDecoder = struct {
     }
 
     fn emitByte(self: *PngStreamingZlibScanlineDecoder, byte: u8) u8 {
-        self.adler.a += byte;
-        self.adler.b += self.adler.a;
-        self.adler_pending += 1;
-        if (self.adler_pending == checksum.adler32_nmax) self.reduceAdler();
+        self.updateAdlerByte(byte);
         self.history[self.history_pos] = byte;
         self.history_pos = (self.history_pos + 1) % self.history.len;
         self.history_len = @min(self.history_len + 1, self.history.len);
         return byte;
+    }
+
+    fn recordInflatedBytes(self: *PngStreamingZlibScanlineDecoder, bytes: []const u8) void {
+        self.updateAdlerForInflatedBytes(bytes);
+        self.recordHistoryBytes(bytes);
+    }
+
+    fn updateAdlerForInflatedBytes(self: *PngStreamingZlibScanlineDecoder, bytes: []const u8) void {
+        updatePngStreamingAdlerBytes(self, bytes);
+    }
+
+    fn updateAdlerByte(self: *PngStreamingZlibScanlineDecoder, byte: u8) void {
+        self.adler.a += byte;
+        self.adler.b += self.adler.a;
+        self.adler_pending += 1;
+        if (self.adler_pending == checksum.adler32_nmax) self.reduceAdler();
+    }
+
+    fn recordHistoryBytes(self: *PngStreamingZlibScanlineDecoder, bytes: []const u8) void {
+        var index: usize = 0;
+        while (index < bytes.len) {
+            const first = @min(bytes.len - index, self.history.len - self.history_pos);
+            @memcpy(self.history[self.history_pos..][0..first], bytes[index..][0..first]);
+            self.history_pos = (self.history_pos + first) % self.history.len;
+            self.history_len = @min(self.history_len + first, self.history.len);
+            index += first;
+        }
     }
 
     fn reduceAdler(self: *PngStreamingZlibScanlineDecoder) void {
@@ -4949,9 +5045,7 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
     }
 
     fn readInflatedBytes(self: *PngStreamingZlibChunkedScanlineDecoder, output: []u8) Error!void {
-        for (output) |*byte| {
-            byte.* = (try self.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
-        }
+        return readPngStreamingInflatedBytes(self, output);
     }
 
     fn readInflatedByteOrEnd(self: *PngStreamingZlibChunkedScanlineDecoder) Error!?u8 {
@@ -5060,14 +5154,38 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
     }
 
     fn emitByte(self: *PngStreamingZlibChunkedScanlineDecoder, byte: u8) u8 {
-        self.adler.a += byte;
-        self.adler.b += self.adler.a;
-        self.adler_pending += 1;
-        if (self.adler_pending == checksum.adler32_nmax) self.reduceAdler();
+        self.updateAdlerByte(byte);
         self.history[self.history_pos] = byte;
         self.history_pos = (self.history_pos + 1) % self.history.len;
         self.history_len = @min(self.history_len + 1, self.history.len);
         return byte;
+    }
+
+    fn recordInflatedBytes(self: *PngStreamingZlibChunkedScanlineDecoder, bytes: []const u8) void {
+        self.updateAdlerForInflatedBytes(bytes);
+        self.recordHistoryBytes(bytes);
+    }
+
+    fn updateAdlerForInflatedBytes(self: *PngStreamingZlibChunkedScanlineDecoder, bytes: []const u8) void {
+        updatePngStreamingAdlerBytes(self, bytes);
+    }
+
+    fn updateAdlerByte(self: *PngStreamingZlibChunkedScanlineDecoder, byte: u8) void {
+        self.adler.a += byte;
+        self.adler.b += self.adler.a;
+        self.adler_pending += 1;
+        if (self.adler_pending == checksum.adler32_nmax) self.reduceAdler();
+    }
+
+    fn recordHistoryBytes(self: *PngStreamingZlibChunkedScanlineDecoder, bytes: []const u8) void {
+        var index: usize = 0;
+        while (index < bytes.len) {
+            const first = @min(bytes.len - index, self.history.len - self.history_pos);
+            @memcpy(self.history[self.history_pos..][0..first], bytes[index..][0..first]);
+            self.history_pos = (self.history_pos + first) % self.history.len;
+            self.history_len = @min(self.history_len + first, self.history.len);
+            index += first;
+        }
     }
 
     fn reduceAdler(self: *PngStreamingZlibChunkedScanlineDecoder) void {
@@ -8751,6 +8869,45 @@ test "png streaming zlib scanline decoder reconstructs fixed and dynamic rows wi
     var short_output: [row_len - 1]u8 = undefined;
     try std.testing.expectError(error.OutputTooSmall, small_step_decoder.step(&short_output));
     try std.testing.expectEqualStrings("OutputTooSmall", small_step_decoder.diagnostics().last_error_name);
+}
+
+test "png streaming zlib decoder batches pending matches into row buffers" {
+    const Case = struct {
+        name: []const u8,
+        history: []const u8,
+        distance: usize,
+        pending: usize,
+        output_len: usize,
+        expected: []const u8,
+    };
+    const cases = [_]Case{
+        .{ .name = "rle", .history = "Z", .distance = 1, .pending = 10, .output_len = 6, .expected = "ZZZZZZ" },
+        .{ .name = "small-distance", .history = "AB", .distance = 2, .pending = 7, .output_len = 7, .expected = "ABABABA" },
+        .{ .name = "history-copy", .history = "abcdef", .distance = 5, .pending = 3, .output_len = 3, .expected = "bcd" },
+        .{ .name = "overlap", .history = "abcde", .distance = 5, .pending = 8, .output_len = 8, .expected = "abcdeabc" },
+    };
+
+    for (cases) |case| {
+        var history_scratch: [32]u8 = @splat(0);
+        @memcpy(history_scratch[0..case.history.len], case.history);
+        var decoder = PngStreamingZlibScanlineDecoder{
+            .history = &history_scratch,
+            .history_pos = case.history.len,
+            .history_len = case.history.len,
+            .pending_match_remaining = case.pending,
+            .pending_match_distance = case.distance,
+        };
+        var output: [16]u8 = @splat(0);
+        try decoder.readInflatedBytes(output[0..case.output_len]);
+        try std.testing.expectEqualSlices(u8, case.expected, output[0..case.output_len]);
+        try std.testing.expectEqual(case.pending - case.output_len, decoder.pending_match_remaining);
+
+        var expected_adler = checksum.Adler32.init();
+        expected_adler.update(case.expected);
+        try std.testing.expectEqual(expected_adler.digest(), decoder.adler.digest());
+        try std.testing.expect(decoder.history_len >= case.history.len);
+        try std.testing.expect(decoder.history_pos < decoder.history.len);
+    }
 }
 
 test "png streaming zlib scanline decoder reports wrapper and logical errors" {
