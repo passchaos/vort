@@ -131,7 +131,9 @@ Huffman table now stores bit-length bucket offsets/counts for active canonical
 entries, so long-code fallback after a fast-table miss scans only candidates of
 the current bit width and skips per-entry bit-width checks. `FastDecoder.decodeValue`
 also has a value-only fallback path, avoiding Symbol materialization for dynamic
-literal/distance misses. ReleaseFast `run-deflate-decode-stage-report` remains
+literal/distance misses, and fast decode now advances through a staged-bit helper
+after peeking so buffered/chunked readers do not re-enter fill logic for every
+symbol. ReleaseFast `run-deflate-decode-stage-report` remains
 the quick smoke for this path; repeat3 Rust summaries should still be used before
 accepting small throughput deltas because the decode microbenchmarks are noisy.
 Match replay is another decode hot path: overlapping matches above the

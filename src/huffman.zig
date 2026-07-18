@@ -205,7 +205,7 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             const entry = self.lookup[peek];
             if (entry.bits != 0) {
                 if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
-                reader.advanceBitsAssumeAvailable(entry.bits);
+                reader.advanceBitsStagedAssumeAvailable(entry.bits);
                 return entry.symbol;
             }
 
@@ -223,7 +223,7 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
                 const end = first + self.table.count_by_bits[bits];
                 for (self.table.entries[first..end]) |long_entry| {
                     if (long_entry.code == code) {
-                        reader.advanceBitsAssumeAvailable(bits);
+                        reader.advanceBitsStagedAssumeAvailable(bits);
                         return long_entry.symbol;
                     }
                 }
@@ -238,7 +238,7 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             const entry = self.lookup[peek];
             if (entry.bits != 0) {
                 if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
-                reader.advanceBitsAssumeAvailable(entry.bits);
+                reader.advanceBitsStagedAssumeAvailable(entry.bits);
                 return .{ .value = entry.symbol, .bits = entry.bits };
             }
 
@@ -264,7 +264,7 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
                 const end = first + self.table.count_by_bits[bits];
                 for (self.table.entries[first..end]) |long_entry| {
                     if (long_entry.code == code) {
-                        reader.advanceBitsAssumeAvailable(bits);
+                        reader.advanceBitsStagedAssumeAvailable(bits);
                         return .{ .value = long_entry.symbol, .bits = bits };
                     }
                 }
@@ -627,7 +627,7 @@ pub fn decodeFixedLiteralFast(reader: anytype) Error!Symbol {
     const entry = fixed_literal_lookup[peek];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
     if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
-    reader.advanceBitsAssumeAvailable(entry.bits);
+    reader.advanceBitsStagedAssumeAvailable(entry.bits);
     return .{ .value = entry.symbol, .bits = entry.bits };
 }
 
@@ -636,7 +636,7 @@ pub fn decodeFixedLiteralValueFast(reader: anytype) Error!u16 {
     const entry = fixed_literal_lookup[peek];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
     if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
-    reader.advanceBitsAssumeAvailable(entry.bits);
+    reader.advanceBitsStagedAssumeAvailable(entry.bits);
     return entry.symbol;
 }
 
@@ -656,7 +656,7 @@ pub fn decodeFixedDistanceFast(reader: anytype) Error!Symbol {
     const entry = fixed_distance_lookup[peek];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
     if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
-    reader.advanceBitsAssumeAvailable(entry.bits);
+    reader.advanceBitsStagedAssumeAvailable(entry.bits);
     return .{ .value = entry.symbol, .bits = entry.bits };
 }
 
@@ -665,7 +665,7 @@ pub fn decodeFixedDistanceValueFast(reader: anytype) Error!u16 {
     const entry = fixed_distance_lookup[peek];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
     if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
-    reader.advanceBitsAssumeAvailable(entry.bits);
+    reader.advanceBitsStagedAssumeAvailable(entry.bits);
     return entry.symbol;
 }
 

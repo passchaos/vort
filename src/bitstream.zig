@@ -48,6 +48,10 @@ pub const BitReader = struct {
     }
 
     pub fn advanceBitsAssumeAvailable(self: *BitReader, count: u6) void {
+        self.advanceBitsStagedAssumeAvailable(count);
+    }
+
+    pub fn advanceBitsStagedAssumeAvailable(self: *BitReader, count: u6) void {
         const new_bit_index = @as(usize, self.bit_index) + count;
         self.byte_index += new_bit_index / 8;
         self.bit_index = @intCast(new_bit_index % 8);
@@ -161,6 +165,14 @@ pub const BufferedBitReader = struct {
 
     pub fn advanceBitsAssumeAvailable(self: *BufferedBitReader, count: u6) void {
         self.fill(count);
+        self.advanceBitsStagedAssumeAvailable(count);
+    }
+
+    /// Advance after a preceding peek/read path has already staged enough bits.
+    /// Huffman fast decode calls `peekBitsPadded` immediately before consuming a
+    /// symbol; using this helper avoids a second no-op fill in the hottest
+    /// literal/distance path while preserving the checked public advance above.
+    pub fn advanceBitsStagedAssumeAvailable(self: *BufferedBitReader, count: u6) void {
         std.debug.assert(self.bit_count >= count);
         self.bit_buffer >>= @intCast(count);
         self.bit_count -= count;
@@ -302,6 +314,13 @@ pub const ChunkedBitReader = struct {
 
     pub fn advanceBitsAssumeAvailable(self: *ChunkedBitReader, count: u6) void {
         self.fill(count);
+        self.advanceBitsStagedAssumeAvailable(count);
+    }
+
+    /// Advance after `peekBitsPadded` has staged enough bits. This mirrors the
+    /// buffered reader helper and avoids re-entering chunk cursor fill logic for
+    /// every Huffman symbol decoded from PNG-style split zlib chunks.
+    pub fn advanceBitsStagedAssumeAvailable(self: *ChunkedBitReader, count: u6) void {
         std.debug.assert(self.bit_count >= count);
         self.bit_buffer >>= @intCast(count);
         self.bit_count -= count;

@@ -148,6 +148,8 @@ architecture blindly.
 - [x] Allocating deflate inflate paths reuse the caller-buffer overlapping-match
   doubling copy for no-dictionary matches after reserving the output span, avoiding
   byte-at-a-time ArrayList appends on long repeated matches.
+- [x] Huffman fast decode uses staged-bit reader advances after lookup peeks, so
+  contiguous and chunked inflate hot paths avoid a redundant fill call per symbol.
 - [x] Dictionary patch decoder rejects non-progress literal operations.
 - [x] Native LDM frame decode-into replays literals and matches directly into caller buffers.
 - [x] Full-frame native LDM range-decode into path writes directly to caller buffers without temporary decoded-frame allocation.
