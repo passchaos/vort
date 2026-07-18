@@ -49,6 +49,12 @@ EXPECTED_CASES = {
         "chunk_bytes": 256,
         "include_empty_chunks": "false",
     },
+    "png-indexed-stored-1b-empty": {
+        "encoder": "stored",
+        "input_bytes": (96 + 1) * 64,
+        "chunk_bytes": 1,
+        "include_empty_chunks": "true",
+    },
     "png-indexed-stored-7b-empty": {
         "encoder": "stored",
         "input_bytes": (257 + 1) * 48,
