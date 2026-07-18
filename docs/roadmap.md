@@ -150,6 +150,9 @@ architecture blindly.
   byte-at-a-time ArrayList appends on long repeated matches.
 - [x] Huffman fast decode uses staged-bit reader advances after lookup peeks, so
   contiguous and chunked inflate hot paths avoid a redundant fill call per symbol.
+- [x] Chunked zlib direct decode uses tiered stack join buffers for small
+  non-stored compressed members, keeping tiny PNG IDAT joins off the 64 KiB stack
+  path while preserving the direct cursor path for large streams.
 - [x] Dictionary patch decoder rejects non-progress literal operations.
 - [x] Native LDM frame decode-into replays literals and matches directly into caller buffers.
 - [x] Full-frame native LDM range-decode into path writes directly to caller buffers without temporary decoded-frame allocation.
