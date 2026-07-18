@@ -116,10 +116,11 @@ Rust row, while throughput ratios above 1.0 are faster:
 | `zlib encode best size / best Rust` | `0.989` | `dynamic-match 1.008` | dynamic header/token byte-boundary gap |
 | `raw encode default size / best Rust` | `0.999` | `distance-heavy 1.029` | default match parsing / cost model |
 | `raw encode best size / best Rust` | `0.989` | `dynamic-match 1.008` | dynamic header/token byte-boundary gap |
-| `zlib decode into / best Rust` | `1.046` | `roadmap 0.362` | text-heavy dynamic decode and wrappers |
-| `raw decode into / miniz_oxide` | `1.642` | `readme 0.434` | text-heavy dynamic decode |
-| `zlib decode alloc / best Rust` | `0.663` | `stored-binary 0.158` | allocation/exact-size wrapper path |
-| `raw decode alloc / miniz_oxide` | `0.905` | `stored-binary 0.282` | allocation/exact-size stored path |
+| `zlib decode into / best Rust` | `1.128` | `readme 0.362` | readme/roadmap text-heavy dynamic decode |
+| `raw decode into / miniz_oxide` | `1.676` | `readme 0.431` | readme/roadmap text-heavy dynamic decode |
+| `zlib decode alloc / best Rust` | `0.682` | `stored-binary 0.272` | stored/binary allocation and wrapper path |
+| `raw decode alloc / miniz_oxide` | `0.897` | `binary 0.267` | binary allocation/exact-size path |
+
 
 This is not a final ecosystem claim: Rust's compression stack still has broader
 zstd/brotli/lz4 coverage, mature fuzzing, platform dispatch, and production
