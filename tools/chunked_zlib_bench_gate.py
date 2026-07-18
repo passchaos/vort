@@ -24,6 +24,7 @@ EXPECTED_COLUMNS = {
     "contiguous_mib_s",
     "chunk_join_mib_s",
     "chunk_direct_mib_s",
+    "direct_strategy",
     "direct_over_contiguous",
     "direct_over_join",
     "join_over_contiguous",
@@ -36,36 +37,42 @@ EXPECTED_CASES = {
         "input_bytes": (96 * 3 + 1) * 64,
         "chunk_bytes": 64,
         "include_empty_chunks": "false",
+        "direct_strategy": "stack-join",
     },
     "png-rgb8-dynamic-1b-empty": {
         "encoder": "best",
         "input_bytes": (48 * 3 + 1) * 48,
         "chunk_bytes": 1,
         "include_empty_chunks": "true",
+        "direct_strategy": "stack-join",
     },
     "png-rgba8-stored-256b": {
         "encoder": "stored",
         "input_bytes": (128 * 4 + 1) * 96,
         "chunk_bytes": 256,
         "include_empty_chunks": "false",
+        "direct_strategy": "stored-direct",
     },
     "png-indexed-stored-1b-empty": {
         "encoder": "stored",
         "input_bytes": (96 + 1) * 64,
         "chunk_bytes": 1,
         "include_empty_chunks": "true",
+        "direct_strategy": "stack-join",
     },
     "png-indexed-stored-7b-empty": {
         "encoder": "stored",
         "input_bytes": (257 + 1) * 48,
         "chunk_bytes": 7,
         "include_empty_chunks": "true",
+        "direct_strategy": "stack-join",
     },
     "png-literal-16b": {
         "encoder": "dynamic_literal",
         "input_bytes": (80 * 3 + 1) * 80,
         "chunk_bytes": 16,
         "include_empty_chunks": "false",
+        "direct_strategy": "stack-join",
     },
 }
 
@@ -129,6 +136,9 @@ def main() -> int:
                 return 1
         if row.get("include_empty_chunks") != expected["include_empty_chunks"]:
             print(f"chunked_zlib_bench_gate=bad_empty_flag case={case} row={row}", file=sys.stderr)
+            return 1
+        if row.get("direct_strategy") != expected["direct_strategy"]:
+            print(f"chunked_zlib_bench_gate=bad_direct_strategy case={case} row={row}", file=sys.stderr)
             return 1
 
         if not all(positive_int(row, key) for key in ("zlib_bytes", "chunk_count", "iterations", "repeat", "mix")):

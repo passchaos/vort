@@ -26,6 +26,7 @@ const Row = struct {
     contiguous_mib_s: f64,
     chunk_join_mib_s: f64,
     chunk_direct_mib_s: f64,
+    direct_strategy: []const u8,
     direct_over_contiguous: f64,
     direct_over_join: f64,
     join_over_contiguous: f64,
@@ -131,6 +132,7 @@ fn measureSpec(init: std.process.Init, spec: CaseSpec, iterations_override: ?usi
     const contiguous = try benchContiguous(init, frame, payload, out, iterations);
     const chunk_join = try benchChunkJoin(init, chunks, compressed_scratch, payload, out, iterations);
     const chunk_direct = try benchChunkDirect(init, chunks, payload, out, iterations);
+    const direct_strategy = try classifyDirectStrategy(chunks, frame.len);
     const mix = contiguous.mix +% chunk_join.mix +% chunk_direct.mix;
 
     const contiguous_mib_s = throughput(payload.len, iterations, contiguous.elapsed_ns);
@@ -149,6 +151,7 @@ fn measureSpec(init: std.process.Init, spec: CaseSpec, iterations_override: ?usi
         .contiguous_mib_s = contiguous_mib_s,
         .chunk_join_mib_s = chunk_join_mib_s,
         .chunk_direct_mib_s = chunk_direct_mib_s,
+        .direct_strategy = direct_strategy,
         .direct_over_contiguous = ratio(chunk_direct_mib_s, contiguous_mib_s),
         .direct_over_join = ratio(chunk_direct_mib_s, chunk_join_mib_s),
         .join_over_contiguous = ratio(chunk_join_mib_s, contiguous_mib_s),
@@ -207,6 +210,24 @@ fn verifyChunkJoin(chunks: []const []const u8, compressed_scratch: []u8, payload
 fn verifyChunkDirect(chunks: []const []const u8, payload: []const u8, out: []u8) !void {
     const written = try vort.decodeZlibChunksInto(chunks, out);
     if (written != payload.len or !std.mem.eql(u8, out[0..written], payload)) return error.DecodeLengthMismatch;
+}
+
+fn classifyDirectStrategy(chunks: []const []const u8, total_len: usize) ![]const u8 {
+    if (total_len < 3) return error.DecodeLengthMismatch;
+    const first_deflate = try chunkByteAt(chunks, 2);
+    const block_type = (first_deflate >> 1) & 0x03;
+    if (block_type == 0 and chunks.len <= 512) return "stored-direct";
+    if (total_len <= 64 * 1024) return "stack-join";
+    return if (block_type == 0) "stored-direct" else "chunked-reader";
+}
+
+fn chunkByteAt(chunks: []const []const u8, index: usize) !u8 {
+    var remaining = index;
+    for (chunks) |chunk| {
+        if (remaining < chunk.len) return chunk[remaining];
+        remaining -= chunk.len;
+    }
+    return error.DecodeLengthMismatch;
 }
 
 fn makePngLikePayload(allocator: std.mem.Allocator, width: usize, height: usize, bytes_per_pixel: usize) ![]u8 {
@@ -282,9 +303,9 @@ fn encoderName(encoder: Encoder) []const u8 {
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,encoder,input_bytes,zlib_bytes,chunk_bytes,chunk_count,include_empty_chunks,iterations,repeat,contiguous_mib_s,chunk_join_mib_s,chunk_direct_mib_s,direct_over_contiguous,direct_over_join,join_over_contiguous,mix\n");
+    try writer.writeAll("case,encoder,input_bytes,zlib_bytes,chunk_bytes,chunk_count,include_empty_chunks,iterations,repeat,contiguous_mib_s,chunk_join_mib_s,chunk_direct_mib_s,direct_strategy,direct_over_contiguous,direct_over_join,join_over_contiguous,mix\n");
     for (rows) |row| {
-        try writer.print("{s},{s},{d},{d},{d},{d},{},{d},{d},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d}\n", .{
+        try writer.print("{s},{s},{d},{d},{d},{d},{},{d},{d},{d:.2},{d:.2},{d:.2},{s},{d:.4},{d:.4},{d:.4},{d}\n", .{
             row.name,
             row.encoder,
             row.input_bytes,
@@ -297,6 +318,7 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
             row.contiguous_mib_s,
             row.chunk_join_mib_s,
             row.chunk_direct_mib_s,
+            row.direct_strategy,
             row.direct_over_contiguous,
             row.direct_over_join,
             row.join_over_contiguous,
@@ -311,12 +333,12 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
         \\
         \\PNG IDAT commonly arrives as multiple zlib byte chunks. These rows compare contiguous zlib decode, legacy join-then-decode chunks, and direct chunked decode into caller output scratch. Throughput ratios above 1.0 are better.
         \\
-        \\| case | encoder | input bytes | zlib bytes | chunk bytes | chunks | empty chunks | iterations | repeat | contiguous MiB/s | join MiB/s | direct MiB/s | direct/contiguous | direct/join | join/contiguous |
-        \\| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+        \\| case | encoder | input bytes | zlib bytes | chunk bytes | chunks | empty chunks | iterations | repeat | contiguous MiB/s | join MiB/s | direct MiB/s | direct strategy | direct/contiguous | direct/join | join/contiguous |
+        \\| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |
         \\
     );
     for (rows) |row| {
-        try writer.print("| {s} | {s} | {d} | {d} | {d} | {d} | {} | {d} | {d} | {d:.2} | {d:.2} | {d:.2} | {d:.3} | {d:.3} | {d:.3} |\n", .{
+        try writer.print("| {s} | {s} | {d} | {d} | {d} | {d} | {} | {d} | {d} | {d:.2} | {d:.2} | {d:.2} | {s} | {d:.3} | {d:.3} | {d:.3} |\n", .{
             row.name,
             row.encoder,
             row.input_bytes,
@@ -329,6 +351,7 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row) !void {
             row.contiguous_mib_s,
             row.chunk_join_mib_s,
             row.chunk_direct_mib_s,
+            row.direct_strategy,
             row.direct_over_contiguous,
             row.direct_over_join,
             row.join_over_contiguous,
