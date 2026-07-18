@@ -275,6 +275,29 @@ pub fn build(b: *std.Build) void {
     const deflate_extra_bits_bench_gate_step = b.step("run-deflate-extra-bits-bench-gate", "Validate DEFLATE extra-bit reader benchmark CSV");
     deflate_extra_bits_bench_gate_step.dependOn(&deflate_extra_bits_bench_gate.step);
 
+    const chunk_cursor_bench_exe = b.addExecutable(.{
+        .name = "vort-chunk-cursor-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/chunk_cursor_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_chunk_cursor_bench_csv = b.addRunArtifact(chunk_cursor_bench_exe);
+    run_chunk_cursor_bench_csv.addArgs(&.{ "--csv", "zig-out/vort-chunk-cursor-bench.csv" });
+    const chunk_cursor_bench_csv_step = b.step("run-chunk-cursor-bench-csv", "Write focused chunk cursor microbenchmark CSV");
+    chunk_cursor_bench_csv_step.dependOn(&run_chunk_cursor_bench_csv.step);
+
+    const chunk_cursor_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/chunk_cursor_bench_gate.py",
+        "--csv",
+        "zig-out/vort-chunk-cursor-bench.csv",
+    });
+    chunk_cursor_bench_gate.step.dependOn(chunk_cursor_bench_csv_step);
+    const chunk_cursor_bench_gate_step = b.step("run-chunk-cursor-bench-gate", "Validate chunk cursor microbenchmark CSV");
+    chunk_cursor_bench_gate_step.dependOn(&chunk_cursor_bench_gate.step);
+
     const chunked_zlib_bench_report_exe = b.addExecutable(.{
         .name = "vort-chunked-zlib-bench-report",
         .root_module = b.createModule(.{
@@ -1166,6 +1189,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(deflate_huffman_build_bench_gate_step);
     dashboard_index.step.dependOn(deflate_huffman_lookup_bench_gate_step);
     dashboard_index.step.dependOn(deflate_match_copy_bench_gate_step);
+    dashboard_index.step.dependOn(chunk_cursor_bench_gate_step);
     dashboard_index.step.dependOn(chunked_zlib_bench_report_gate_step);
     dashboard_index.step.dependOn(png_streaming_zlib_bench_report_gate_step);
     dashboard_index.step.dependOn(level_report_dashboard_step);
@@ -1291,6 +1315,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_huffman_lookup_bench_exe.step);
     check_step.dependOn(&deflate_match_copy_bench_exe.step);
     check_step.dependOn(&deflate_extra_bits_bench_exe.step);
+    check_step.dependOn(&chunk_cursor_bench_exe.step);
     check_step.dependOn(&png_streaming_zlib_bench_report_exe.step);
     check_step.dependOn(&zlib_encode_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
@@ -1352,6 +1377,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(deflate_huffman_lookup_bench_gate_step);
     ci_smoke_step.dependOn(deflate_match_copy_bench_gate_step);
     ci_smoke_step.dependOn(deflate_extra_bits_bench_gate_step);
+    ci_smoke_step.dependOn(chunk_cursor_bench_gate_step);
     ci_smoke_step.dependOn(chunked_zlib_bench_report_gate_step);
     ci_smoke_step.dependOn(png_streaming_zlib_bench_report_gate_step);
     ci_smoke_step.dependOn(dictionary_report_step);

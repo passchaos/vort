@@ -475,6 +475,13 @@
       "producer_step": "zig build run-zlib-relaxed-report",
       "required_smoke_gate": true,
       "smoke_gate": "zig build run-zlib-relaxed-report-gate"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-chunk-cursor-bench.csv",
+      "producer_step": "zig build run-chunk-cursor-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-chunk-cursor-bench-gate"
     }
   ],
   "schema": "vort.dashboard_producers_required_artifacts",

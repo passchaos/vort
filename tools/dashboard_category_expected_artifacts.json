@@ -356,6 +356,13 @@
       "require_present": true,
       "require_producer_step": true,
       "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-chunk-cursor-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
     }
   ],
   "schema": "vort.dashboard_category_expected_artifacts",
