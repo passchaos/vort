@@ -16,6 +16,8 @@ const Row = struct {
     length_symbols: usize,
     match_bytes: usize,
     distance_symbols: usize,
+    length_symbol_histogram: [vort.DynamicDecodeProfile.length_symbol_count]usize,
+    distance_symbol_histogram: [vort.DynamicDecodeProfile.distance_symbol_count]usize,
     length_extra_reads: usize,
     distance_extra_reads: usize,
     length_extra_bits: usize,
@@ -121,6 +123,8 @@ fn measurePayload(init: std.process.Init, name: []const u8, payload: []const u8)
         .length_symbols = profile.length_symbols,
         .match_bytes = profile.match_bytes,
         .distance_symbols = profile.distance_symbols,
+        .length_symbol_histogram = profile.length_symbol_histogram,
+        .distance_symbol_histogram = profile.distance_symbol_histogram,
         .length_extra_reads = profile.length_extra_reads,
         .distance_extra_reads = profile.distance_extra_reads,
         .length_extra_bits = profile.length_extra_bits,
@@ -139,9 +143,9 @@ fn rawSliceFromZlib(frame: []const u8) []const u8 {
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
+    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_symbol_histogram,distance_symbol_histogram,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
     for (rows) |row| {
-        try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{d:.6},{d}\n", .{
+        try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},", .{
             row.case,
             row.input_bytes,
             row.raw_bytes,
@@ -156,6 +160,11 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
             row.length_symbols,
             row.match_bytes,
             row.distance_symbols,
+        });
+        try writeHistogram(writer, &row.length_symbol_histogram);
+        try writer.writeByte(',');
+        try writeHistogram(writer, &row.distance_symbol_histogram);
+        try writer.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{d:.6},{d}\n", .{
             row.length_extra_reads,
             row.distance_extra_reads,
             row.length_extra_bits,
@@ -169,6 +178,13 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
             ratio(row.length_extra_bits + row.distance_extra_bits, row.length_symbols),
             row.mix,
         });
+    }
+}
+
+fn writeHistogram(writer: *std.Io.Writer, histogram: []const usize) !void {
+    for (histogram, 0..) |count, i| {
+        if (i != 0) try writer.writeByte(';');
+        try writer.print("{d}", .{count});
     }
 }
 

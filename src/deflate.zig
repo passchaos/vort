@@ -102,11 +102,16 @@ pub const RawDeflateHeaderInfo = struct {
 };
 
 pub const DynamicDecodeProfile = struct {
+    pub const length_symbol_count = length_table.len;
+    pub const distance_symbol_count = distance_table.len;
+
     output_bytes: usize = 0,
     literal_symbols: usize = 0,
     length_symbols: usize = 0,
     match_bytes: usize = 0,
     distance_symbols: usize = 0,
+    length_symbol_histogram: [length_symbol_count]usize = @splat(0),
+    distance_symbol_histogram: [distance_symbol_count]usize = @splat(0),
     length_extra_reads: usize = 0,
     distance_extra_reads: usize = 0,
     length_extra_bits: usize = 0,
@@ -1447,10 +1452,12 @@ fn profileCompressedBlock(
             return profile;
         } else if (symbol <= 285) {
             profile.length_symbols += 1;
+            profile.length_symbol_histogram[symbol - 257] += 1;
             const length = try profileDecodeLength(symbol, reader, &profile);
             const dist_hit = huffmanFastWouldHit(30, 8, &dist_decoder, reader);
             const distance_symbol = try dist_decoder.decodeValue(reader);
             if (dist_hit) profile.distance_fast_hits += 1 else profile.distance_fast_misses += 1;
+            profile.distance_symbol_histogram[distance_symbol] += 1;
             _ = try profileDecodeDistance(distance_symbol, reader, &profile);
             profile.distance_symbols += 1;
             profile.match_bytes += length;
@@ -9484,6 +9491,12 @@ test "dynamic decode profile counts literals and matches" {
     try std.testing.expect(profile.literal_symbols > 0);
     try std.testing.expect(profile.literal_fast_hits + profile.literal_fast_misses >= profile.literal_symbols + profile.length_symbols);
     try std.testing.expectEqual(profile.length_symbols, profile.distance_symbols);
+    var length_hist_total: usize = 0;
+    for (profile.length_symbol_histogram) |count| length_hist_total += count;
+    try std.testing.expectEqual(profile.length_symbols, length_hist_total);
+    var distance_hist_total: usize = 0;
+    for (profile.distance_symbol_histogram) |count| distance_hist_total += count;
+    try std.testing.expectEqual(profile.distance_symbols, distance_hist_total);
     try std.testing.expect(profile.length_extra_bits + profile.distance_extra_bits >= profile.length_extra_reads + profile.distance_extra_reads);
     try std.testing.expect(profile.literal_lookup_bits == 9 or profile.literal_lookup_bits == 11 or profile.literal_lookup_bits == 12);
 }
