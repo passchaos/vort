@@ -143,7 +143,7 @@ fn rawSliceFromZlib(frame: []const u8) []const u8 {
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_symbol_histogram,distance_symbol_histogram,top_length_symbols,top_distance_symbols,top_length_extra_symbols,top_distance_extra_symbols,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
+    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_symbol_histogram,distance_symbol_histogram,top_length_symbols,top_distance_symbols,top_length_extra_symbols,top_distance_extra_symbols,length_extra_width_reads,distance_extra_width_reads,length_extra_width_bits,distance_extra_width_bits,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
     for (rows) |row| {
         try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},", .{
             row.case,
@@ -172,6 +172,14 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
         try writeTopExtraSymbols(writer, &row.length_symbol_histogram, &length_extra_bits_by_symbol, 257);
         try writer.writeByte(',');
         try writeTopExtraSymbols(writer, &row.distance_symbol_histogram, &distance_extra_bits_by_symbol, 0);
+        try writer.writeByte(',');
+        try writeExtraWidthHistogram(writer, &row.length_symbol_histogram, &length_extra_bits_by_symbol, false);
+        try writer.writeByte(',');
+        try writeExtraWidthHistogram(writer, &row.distance_symbol_histogram, &distance_extra_bits_by_symbol, false);
+        try writer.writeByte(',');
+        try writeExtraWidthHistogram(writer, &row.length_symbol_histogram, &length_extra_bits_by_symbol, true);
+        try writer.writeByte(',');
+        try writeExtraWidthHistogram(writer, &row.distance_symbol_histogram, &distance_extra_bits_by_symbol, true);
         try writer.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{d:.6},{d}\n", .{
             row.length_extra_reads,
             row.distance_extra_reads,
@@ -257,6 +265,18 @@ fn writeTopExtraSymbols(writer: *std.Io.Writer, histogram: []const usize, extra_
     for (top, 0..) |entry, i| {
         if (i != 0) try writer.writeByte(';');
         try writer.print("{d}:{d}", .{ entry.symbol, entry.count });
+    }
+}
+
+fn writeExtraWidthHistogram(writer: *std.Io.Writer, histogram: []const usize, extra_bits: []const usize, comptime weighted_bits: bool) !void {
+    var by_width: [14]usize = @splat(0);
+    for (histogram, 0..) |count, i| {
+        const width = extra_bits[i];
+        by_width[width] += if (weighted_bits) count * width else count;
+    }
+    for (by_width, 0..) |value, i| {
+        if (i != 0) try writer.writeByte(';');
+        try writer.print("{d}", .{value});
     }
 }
 
