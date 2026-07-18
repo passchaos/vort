@@ -80,9 +80,9 @@
     {
       "expected_format": "csv",
       "name": "vort-chunked-zlib-bench-report-repeat3.csv",
-      "producer_step": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv-repeat3",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv-repeat3"
+      "producer_step": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-gate"
     },
     {
       "expected_format": "md",

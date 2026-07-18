@@ -301,6 +301,16 @@ pub fn build(b: *std.Build) void {
     const chunked_zlib_bench_report_csv_repeat3_step = b.step("run-chunked-zlib-bench-report-csv-repeat3", "Write median-of-3 contiguous vs chunked zlib decode throughput CSV to zig-out");
     chunked_zlib_bench_report_csv_repeat3_step.dependOn(&run_chunked_zlib_bench_report_csv_repeat3.step);
 
+    const chunked_zlib_bench_report_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/chunked_zlib_bench_gate.py",
+        "--csv",
+        "zig-out/vort-chunked-zlib-bench-report-repeat3.csv",
+    });
+    chunked_zlib_bench_report_gate.step.dependOn(chunked_zlib_bench_report_csv_repeat3_step);
+    const chunked_zlib_bench_report_gate_step = b.step("run-chunked-zlib-bench-report-gate", "Validate repeat3 contiguous vs chunked zlib decode throughput CSV");
+    chunked_zlib_bench_report_gate_step.dependOn(&chunked_zlib_bench_report_gate.step);
+
     const run_chunked_zlib_bench_report_dashboard = b.addRunArtifact(chunked_zlib_bench_report_exe);
     run_chunked_zlib_bench_report_dashboard.addArgs(&.{ "--csv", "zig-out/vort-chunked-zlib-bench-report.csv", "--markdown", "zig-out/vort-chunked-zlib-bench-report.md" });
     const chunked_zlib_bench_report_dashboard_step = b.step("run-chunked-zlib-bench-report-dashboard", "Write contiguous vs chunked zlib decode throughput dashboard artifacts");
@@ -1156,6 +1166,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(deflate_huffman_build_bench_gate_step);
     dashboard_index.step.dependOn(deflate_huffman_lookup_bench_gate_step);
     dashboard_index.step.dependOn(deflate_match_copy_bench_gate_step);
+    dashboard_index.step.dependOn(chunked_zlib_bench_report_gate_step);
     dashboard_index.step.dependOn(png_streaming_zlib_bench_report_gate_step);
     dashboard_index.step.dependOn(level_report_dashboard_step);
     dashboard_index.step.dependOn(huffman_length_report_dashboard_step);
@@ -1341,6 +1352,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(deflate_huffman_lookup_bench_gate_step);
     ci_smoke_step.dependOn(deflate_match_copy_bench_gate_step);
     ci_smoke_step.dependOn(deflate_extra_bits_bench_gate_step);
+    ci_smoke_step.dependOn(chunked_zlib_bench_report_gate_step);
     ci_smoke_step.dependOn(png_streaming_zlib_bench_report_gate_step);
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_step);
