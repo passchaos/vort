@@ -135,6 +135,13 @@
     },
     {
       "expected_format": "csv",
+      "name": "vort-deflate-huffman-build-bench.csv",
+      "producer_step": "zig build run-deflate-huffman-build-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-deflate-huffman-build-bench-gate"
+    },
+    {
+      "expected_format": "csv",
       "name": "vort-deflate-huffman-lookup-bench.csv",
       "producer_step": "zig build run-deflate-huffman-lookup-bench-gate",
       "required_smoke_gate": true,

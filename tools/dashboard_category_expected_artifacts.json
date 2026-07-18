@@ -142,6 +142,13 @@
     },
     {
       "category": "benchmark",
+      "name": "vort-deflate-huffman-build-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
       "name": "vort-deflate-huffman-lookup-bench.csv",
       "require_present": false,
       "require_producer_step": false,
