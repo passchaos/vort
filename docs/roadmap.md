@@ -881,7 +881,7 @@ architecture blindly.
   benchmarks showed mixed results and sub-1.0 geomean throughput, especially on
   chunked small-distance/RLE rows.
 - [x] PNG streaming zlib scanline benchmark report covers contiguous/chunked RLE,
-  small-distance, repeated-row dynamic, and fixed payloads with a repeat3 CSV
+  small-distance, repeated-row dynamic, and fixed payloads with a schema/value
   gate for future row-streaming hot-path changes.
 - [x] Larger decompression hot-path benchmarks across built-in text/structured/binary corpora.
 - [x] Fixed-Huffman raw deflate encoder backed by greedy LZ77 tokens.

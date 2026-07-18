@@ -194,7 +194,7 @@
     },
     "vort-png-streaming-zlib-bench-report-repeat3.csv": {
       "expected_format": "csv",
-      "smoke_gate": "zig build -Doptimize=ReleaseFast run-png-streaming-zlib-bench-report-csv-repeat3"
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-png-streaming-zlib-bench-report-gate"
     },
     "vort-python-zlib-diff-smoke.json": {
       "expected_format": "json",
@@ -339,7 +339,7 @@
     "vort-native-thread-pool-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard",
     "vort-png-scratch-report.json": "zig build run-png-scratch-report-dashboard",
     "vort-png-scratch-report.md": "zig build run-png-scratch-report-dashboard",
-    "vort-png-streaming-zlib-bench-report-repeat3.csv": "zig build -Doptimize=ReleaseFast run-png-streaming-zlib-bench-report-csv-repeat3",
+    "vort-png-streaming-zlib-bench-report-repeat3.csv": "zig build -Doptimize=ReleaseFast run-png-streaming-zlib-bench-report-gate",
     "vort-python-zlib-diff-smoke.json": "zig build run-python-zlib-diff-dashboard",
     "vort-rust-deflate-benchmark-summary-repeat3.md": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3",
     "vort-rust-deflate-benchmark-summary.md": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary",
@@ -397,7 +397,8 @@
     "vort-deflate-match-copy-bench.csv",
     "vort-deflate-extra-bits-bench.csv",
     "vort-deflate-huffman-build-bench.csv",
-    "vort-deflate-huffman-lookup-bench.csv"
+    "vort-deflate-huffman-lookup-bench.csv",
+    "vort-png-streaming-zlib-bench-report-repeat3.csv"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1

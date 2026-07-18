@@ -327,6 +327,16 @@ pub fn build(b: *std.Build) void {
     const png_streaming_zlib_bench_report_csv_repeat3_step = b.step("run-png-streaming-zlib-bench-report-csv-repeat3", "Write repeat3 PNG streaming zlib scanline throughput CSV");
     png_streaming_zlib_bench_report_csv_repeat3_step.dependOn(&run_png_streaming_zlib_bench_report_csv_repeat3.step);
 
+    const png_streaming_zlib_bench_report_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/png_streaming_zlib_bench_gate.py",
+        "--csv",
+        "zig-out/vort-png-streaming-zlib-bench-report-repeat3.csv",
+    });
+    png_streaming_zlib_bench_report_gate.step.dependOn(png_streaming_zlib_bench_report_csv_repeat3_step);
+    const png_streaming_zlib_bench_report_gate_step = b.step("run-png-streaming-zlib-bench-report-gate", "Validate repeat3 PNG streaming zlib scanline throughput CSV");
+    png_streaming_zlib_bench_report_gate_step.dependOn(&png_streaming_zlib_bench_report_gate.step);
+
     const zlib_relaxed_report_exe = b.addExecutable(.{
         .name = "vort-zlib-relaxed-report",
         .root_module = b.createModule(.{
@@ -1146,6 +1156,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(deflate_huffman_build_bench_gate_step);
     dashboard_index.step.dependOn(deflate_huffman_lookup_bench_gate_step);
     dashboard_index.step.dependOn(deflate_match_copy_bench_gate_step);
+    dashboard_index.step.dependOn(png_streaming_zlib_bench_report_gate_step);
     dashboard_index.step.dependOn(level_report_dashboard_step);
     dashboard_index.step.dependOn(huffman_length_report_dashboard_step);
     dashboard_index.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
@@ -1330,7 +1341,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(deflate_huffman_lookup_bench_gate_step);
     ci_smoke_step.dependOn(deflate_match_copy_bench_gate_step);
     ci_smoke_step.dependOn(deflate_extra_bits_bench_gate_step);
-    ci_smoke_step.dependOn(png_streaming_zlib_bench_report_csv_repeat3_step);
+    ci_smoke_step.dependOn(png_streaming_zlib_bench_report_gate_step);
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_dashboard_step);
