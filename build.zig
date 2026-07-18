@@ -134,7 +134,7 @@ pub fn build(b: *std.Build) void {
     deflate_decode_stage_report_csv_step.dependOn(&run_deflate_decode_stage_report_csv.step);
 
     const run_deflate_decode_stage_report_csv_repeat3 = b.addRunArtifact(deflate_decode_stage_report_exe);
-    run_deflate_decode_stage_report_csv_repeat3.addArgs(&.{ "--repeat", "3", "--csv", "zig-out/vort-deflate-decode-stage-report-repeat3.csv" });
+    run_deflate_decode_stage_report_csv_repeat3.addArgs(&.{ "--repeat", "3", "--builtins-plus-files", "README.md", "docs/roadmap.md", "--csv", "zig-out/vort-deflate-decode-stage-report-repeat3.csv" });
     const deflate_decode_stage_report_csv_repeat3_step = b.step("run-deflate-decode-stage-report-csv-repeat3", "Write median-of-3 raw inflate vs zlib wrapper/checksum stage CSV to zig-out");
     deflate_decode_stage_report_csv_repeat3_step.dependOn(&run_deflate_decode_stage_report_csv_repeat3.step);
 

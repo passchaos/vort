@@ -136,6 +136,7 @@ pub fn main(init: std.process.Init) !void {
     var json_path: ?[]const u8 = null;
     var iterations_override: ?usize = null;
     var repeat: usize = 1;
+    var include_builtins_with_files = false;
     var file_cases: std.ArrayList(Case) = .empty;
     defer {
         for (file_cases.items) |case| init.gpa.free(case.payload);
@@ -164,15 +165,21 @@ pub fn main(init: std.process.Init) !void {
             if (repeat == 0) return error.InvalidBlockPlan;
             continue;
         }
+        if (std.mem.eql(u8, path, "--builtins-plus-files")) {
+            include_builtins_with_files = true;
+            continue;
+        }
         const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         errdefer init.gpa.free(payload);
         try file_cases.append(init.gpa, .{ .name = path, .payload = payload });
     }
 
-    const cases = if (file_cases.items.len == 0) builtins[0..] else file_cases.items;
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(init.gpa);
-    for (cases) |case| try rows.append(init.gpa, try measureCaseRepeated(init, case, iterations_override, repeat));
+    if (file_cases.items.len == 0 or include_builtins_with_files) {
+        for (builtins) |case| try rows.append(init.gpa, try measureCaseRepeated(init, case, iterations_override, repeat));
+    }
+    for (file_cases.items) |case| try rows.append(init.gpa, try measureCaseRepeated(init, case, iterations_override, repeat));
     var error_rows: std.ArrayList(ErrorRow) = .empty;
     defer error_rows.deinit(init.gpa);
     for (&error_cases) |case| try error_rows.append(init.gpa, measureErrorCase(init.gpa, case));
