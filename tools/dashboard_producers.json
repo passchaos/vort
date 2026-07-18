@@ -267,6 +267,10 @@
     "vort-zlib-relaxed-report.md": {
       "expected_format": "md",
       "smoke_gate": "zig build run-zlib-relaxed-report-gate"
+    },
+    "vort-deflate-huffman-lookup-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-deflate-huffman-lookup-bench-gate"
     }
   },
   "contains": [
@@ -349,7 +353,8 @@
     "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
     "vort-zlib-relaxed-report-gate.json": "zig build run-zlib-relaxed-report-gate",
     "vort-zlib-relaxed-report.json": "zig build run-zlib-relaxed-report",
-    "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report"
+    "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report",
+    "vort-deflate-huffman-lookup-bench.csv": "zig build run-deflate-huffman-lookup-bench-gate"
   },
   "required_smoke_gates": [
     "vort-dashboard-category-negative-smoke.json",
@@ -385,7 +390,8 @@
     "vort-zlib-relaxed-report.json",
     "vort-zlib-relaxed-report.md",
     "vort-deflate-match-copy-bench.csv",
-    "vort-deflate-extra-bits-bench.csv"
+    "vort-deflate-extra-bits-bench.csv",
+    "vort-deflate-huffman-lookup-bench.csv"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1
