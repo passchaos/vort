@@ -1426,7 +1426,7 @@ pub fn decodeRawDynamicAllocStrict(allocator: std.mem.Allocator, input: []const 
 const DynamicDistanceDecoder = huffman.FastDecoder(30, 8);
 
 fn dynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
-    if (parsed.literal_max_bits <= 4) return 9;
+    if (parsed.literal_max_bits <= 9) return 9;
     // Text-heavy dynamic blocks often contain a near-full literal alphabet with
     // long cold symbols. A 12-bit table can avoid fallback scans on those blocks,
     // while smaller alphabets keep the cheaper 11-bit setup cost.
@@ -9703,6 +9703,16 @@ test "dynamic literal lookup policy separates tiny and complex alphabets" {
         .literal_max_bits = 4,
     };
     try std.testing.expectEqual(@as(u4, 9), dynamicLiteralLookupBits(tiny));
+
+    var medium = tiny;
+    medium.header.hlit = 279;
+    medium.literal_max_bits = 9;
+    try std.testing.expectEqual(@as(u4, 9), dynamicLiteralLookupBits(medium));
+
+    var ten_bit = tiny;
+    ten_bit.header.hlit = 279;
+    ten_bit.literal_max_bits = 10;
+    try std.testing.expectEqual(@as(u4, 11), dynamicLiteralLookupBits(ten_bit));
 
     var ordinary = tiny;
     ordinary.header.hlit = 279;
