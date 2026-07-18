@@ -3302,7 +3302,7 @@ fn decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks: []const []cons
     if (try decodeZlibStoredChunksIntoMaybe(chunks, total_len, header.data_offset, output, options)) |stored_written| return stored_written;
 
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
-    var reader = try bitstream.ChunkedBitReader.initAt(chunks, header.data_offset);
+    var reader = try bitstream.ChunkedBitReader.initAtKnownTotal(chunks, header.data_offset, total_len);
     const raw = try decodeRawAutoWithDictionaryFromReader(&reader, header.data_offset, raw_dictionary, output);
     const footer_offset = header.data_offset + raw.input_read;
     try validateZlibFooterChunksWithOptions(chunks, footer_offset, checksum.adler32(output[0..raw.output_written]), options);
@@ -5059,7 +5059,7 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
             .chunks = chunks,
             .total_len = total_len,
             .options = options,
-            .reader = try bitstream.ChunkedBitReader.initAt(chunks, header.data_offset),
+            .reader = try bitstream.ChunkedBitReader.initAtKnownTotal(chunks, header.data_offset, total_len),
             .raw_base_offset = 0,
             .history = history_scratch[0..history_scratch_len],
             .filtered_row_scratch = filtered_row_scratch[0..info.row_len],
@@ -5083,7 +5083,7 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
             .chunks = chunks,
             .total_len = total_len,
             .options = options,
-            .reader = try bitstream.ChunkedBitReader.initAt(chunks, header.data_offset),
+            .reader = try bitstream.ChunkedBitReader.initAtKnownTotal(chunks, header.data_offset, total_len),
             .raw_base_offset = 0,
             .history = history_scratch[0..history_scratch_len],
         };
@@ -6595,7 +6595,7 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.m
     errdefer out.deinit(allocator);
     try reserveInflateAppendOutputHint(allocator, &out, compressed_len, max_output_len);
 
-    var reader = try bitstream.ChunkedBitReader.initAt(chunks, header.data_offset);
+    var reader = try bitstream.ChunkedBitReader.initAtKnownTotal(chunks, header.data_offset, compressed_len);
     const raw = try decodeRawAutoAppendPartialWithDictionaryFromReader(allocator, &reader, header.data_offset, raw_dictionary, &out, max_output_len);
     const footer_offset = header.data_offset + raw.input_read;
     try validateZlibFooterChunksWithOptions(chunks, footer_offset, checksum.adler32(out.items), options);

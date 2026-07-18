@@ -272,13 +272,16 @@ pub const ChunkedBitReader = struct {
     }
 
     pub fn initAt(chunks: []const []const u8, byte_offset: usize) Error!ChunkedBitReader {
-        const total = try chunksTotalLen(chunks);
-        if (byte_offset > total) return error.TruncatedFrame;
+        return initAtKnownTotal(chunks, byte_offset, try chunksTotalLen(chunks));
+    }
+
+    pub fn initAtKnownTotal(chunks: []const []const u8, byte_offset: usize, total_len: usize) Error!ChunkedBitReader {
+        if (byte_offset > total_len) return error.TruncatedFrame;
         var reader = ChunkedBitReader{
             .chunks = chunks,
             .byte_index = byte_offset,
             .staged_byte_index = byte_offset,
-            .total_len = total,
+            .total_len = total_len,
         };
         reader.syncCursor();
         reader.syncStagedCursor();
@@ -657,6 +660,25 @@ test "ChunkedBitReader matches contiguous bit and aligned-byte reads" {
     var offset_reader = try ChunkedBitReader.initAt(&chunks, 2);
     try std.testing.expectEqual(@as(u16, 0x1234), try offset_reader.readAlignedInt(u16, .little));
     try std.testing.expectError(error.TruncatedFrame, ChunkedBitReader.initAt(&chunks, bytes.len + 1));
+}
+
+test "ChunkedBitReader known-total initializer matches initAt" {
+    const bytes = [_]u8{ 0b1010_1101, 0b0000_0011, 0x34, 0x12, 0xaa, 0xbb };
+    const chunks = [_][]const u8{
+        bytes[0..1],
+        bytes[1..1],
+        bytes[1..3],
+        bytes[3..],
+    };
+    var scanned = try ChunkedBitReader.initAt(&chunks, 1);
+    var known = try ChunkedBitReader.initAtKnownTotal(&chunks, 1, bytes.len);
+
+    inline for (.{ 2, 6, 5 }) |bits| {
+        try std.testing.expectEqual(try scanned.readBits(u16, bits), try known.readBits(u16, bits));
+        try std.testing.expectEqual(scanned.bitPosition(), known.bitPosition());
+        try std.testing.expectEqual(scanned.byteOffset(), known.byteOffset());
+    }
+    try std.testing.expectError(error.TruncatedFrame, ChunkedBitReader.initAtKnownTotal(&chunks, bytes.len + 1, bytes.len));
 }
 
 test "ChunkedBitReader hasBits and unchecked advance match skipBits" {
