@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 
 const Encoder = enum { best, stored, dynamic_literal };
+const PayloadPattern = enum { png_like, window_match };
 
 const CaseSpec = struct {
     name: []const u8,
@@ -9,6 +10,7 @@ const CaseSpec = struct {
     height: usize,
     bytes_per_pixel: usize,
     encoder: Encoder,
+    pattern: PayloadPattern = .png_like,
     chunk_bytes: usize,
     include_empty_chunks: bool = false,
 };
@@ -37,6 +39,7 @@ const specs = [_]CaseSpec{
     .{ .name = "png-rgb8-dynamic-64b", .width = 96, .height = 64, .bytes_per_pixel = 3, .encoder = .best, .chunk_bytes = 64 },
     .{ .name = "png-rgb8-dynamic-1b-empty", .width = 48, .height = 48, .bytes_per_pixel = 3, .encoder = .best, .chunk_bytes = 1, .include_empty_chunks = true },
     .{ .name = "png-rgb8-literal-large-4k", .width = 512, .height = 256, .bytes_per_pixel = 3, .encoder = .dynamic_literal, .chunk_bytes = 4096 },
+    .{ .name = "png-rgb8-match-large-4k", .width = 512, .height = 256, .bytes_per_pixel = 3, .encoder = .best, .pattern = .window_match, .chunk_bytes = 4096 },
     .{ .name = "png-rgba8-stored-256b", .width = 128, .height = 96, .bytes_per_pixel = 4, .encoder = .stored, .chunk_bytes = 256 },
     .{ .name = "png-indexed-stored-1b-empty", .width = 96, .height = 64, .bytes_per_pixel = 1, .encoder = .stored, .chunk_bytes = 1, .include_empty_chunks = true },
     .{ .name = "png-indexed-stored-7b-empty", .width = 257, .height = 48, .bytes_per_pixel = 1, .encoder = .stored, .chunk_bytes = 7, .include_empty_chunks = true },
@@ -113,7 +116,7 @@ fn measureSpecRepeated(init: std.process.Init, spec: CaseSpec, iterations_overri
 }
 
 fn measureSpec(init: std.process.Init, spec: CaseSpec, iterations_override: ?usize, repeat: usize) !Row {
-    const payload = try makePngLikePayload(init.gpa, spec.width, spec.height, spec.bytes_per_pixel);
+    const payload = try makePayload(init.gpa, spec);
     defer init.gpa.free(payload);
     const frame = try encodeFrame(init.gpa, payload, spec.encoder);
     defer init.gpa.free(frame);
@@ -229,6 +232,39 @@ fn chunkByteAt(chunks: []const []const u8, index: usize) !u8 {
         remaining -= chunk.len;
     }
     return error.DecodeLengthMismatch;
+}
+
+fn makePayload(allocator: std.mem.Allocator, spec: CaseSpec) ![]u8 {
+    return switch (spec.pattern) {
+        .png_like => makePngLikePayload(allocator, spec.width, spec.height, spec.bytes_per_pixel),
+        .window_match => makeWindowMatchPayload(allocator, spec.width, spec.height, spec.bytes_per_pixel),
+    };
+}
+
+fn makeWindowMatchPayload(allocator: std.mem.Allocator, width: usize, height: usize, bytes_per_pixel: usize) ![]u8 {
+    const row_len = std.math.mul(usize, width, bytes_per_pixel) catch return error.IntegerOverflow;
+    const stride = std.math.add(usize, row_len, 1) catch return error.IntegerOverflow;
+    const total = std.math.mul(usize, stride, height) catch return error.IntegerOverflow;
+    const out = try allocator.alloc(u8, total);
+    errdefer allocator.free(out);
+
+    // Keep this fixture larger than the bounded stack-join path while still
+    // giving the DEFLATE encoder real in-window matches. Each 64 KiB region
+    // starts with pseudo-random bytes that keep the compressed member above
+    // 64 KiB, then repeats the previous 16 KiB so the chunked-reader benchmark
+    // covers match copy, distance extra bits, and history reads rather than a
+    // pure literal stream.
+    for (out, 0..) |*byte, i| {
+        const group = i / (64 * 1024);
+        const local = i % (64 * 1024);
+        const source = if (local >= 48 * 1024) local - 16 * 1024 else local;
+        var x = @as(u64, source) +% (@as(u64, group) << 32) +% 0x9e37_79b9_7f4a_7c15;
+        x = (x ^ (x >> 30)) *% 0xbf58_476d_1ce4_e5b9;
+        x = (x ^ (x >> 27)) *% 0x94d0_49bb_1331_11eb;
+        x ^= x >> 31;
+        byte.* = @truncate(x >> 24);
+    }
+    return out;
 }
 
 fn makePngLikePayload(allocator: std.mem.Allocator, width: usize, height: usize, bytes_per_pixel: usize) ![]u8 {
