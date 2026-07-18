@@ -158,6 +158,7 @@ architecture blindly.
 - [x] Optimized chunk joining to skip empty zlib chunks, improving tiny/empty PNG-IDAT-style join evidence while keeping direct chunked decode behavior unchanged.
 - [x] Extended the chunked zlib benchmark/gate with a stored one-byte empty-chunk case so the worst fragmented stored IDAT shape remains visible before changing direct-vs-join policy.
 - [x] Tried advancing `ChunkCursor` past consumed/empty chunks inside read/copy hot paths, but rejected it because repeat5 chunked evidence was noise-level overall and regressed the stored one-byte empty case.
+- [x] Tried a known-total stack join helper to avoid recomputing chunked zlib total length, but rejected it because repeat5 join evidence regressed the stored one-byte empty chunk row.
 - [x] Dictionary patch decoder rejects non-progress literal operations.
 - [x] Native LDM frame decode-into replays literals and matches directly into caller buffers.
 - [x] Full-frame native LDM range-decode into path writes directly to caller buffers without temporary decoded-frame allocation.
