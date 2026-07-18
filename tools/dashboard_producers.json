@@ -76,6 +76,10 @@
       "expected_format": "csv",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-deflate-dynamic-decode-profile-csv"
     },
+    "vort-deflate-extra-bits-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-deflate-extra-bits-bench-gate"
+    },
     "vort-deflate-match-copy-bench.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build run-deflate-match-copy-bench-gate"
@@ -298,6 +302,7 @@
     "vort-deflate-decode-stage-report.json": "zig build run-deflate-decode-stage-report-dashboard",
     "vort-deflate-decode-stage-report.md": "zig build run-deflate-decode-stage-report-dashboard",
     "vort-deflate-dynamic-decode-profile.csv": "zig build -Doptimize=ReleaseFast run-deflate-dynamic-decode-profile-csv",
+    "vort-deflate-extra-bits-bench.csv": "zig build run-deflate-extra-bits-bench-gate",
     "vort-deflate-match-copy-bench.csv": "zig build run-deflate-match-copy-bench-gate",
     "vort-deflate-wrapper-fuzz-corpus.json": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
     "vort-deflate-wrapper-fuzz-corpus.md": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
@@ -379,7 +384,8 @@
     "vort-zlib-relaxed-report-gate.json",
     "vort-zlib-relaxed-report.json",
     "vort-zlib-relaxed-report.md",
-    "vort-deflate-match-copy-bench.csv"
+    "vort-deflate-match-copy-bench.csv",
+    "vort-deflate-extra-bits-bench.csv"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1
