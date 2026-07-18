@@ -143,7 +143,7 @@ fn rawSliceFromZlib(frame: []const u8) []const u8 {
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_symbol_histogram,distance_symbol_histogram,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
+    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_symbol_histogram,distance_symbol_histogram,top_length_symbols,top_distance_symbols,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
     for (rows) |row| {
         try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},", .{
             row.case,
@@ -164,6 +164,10 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
         try writeHistogram(writer, &row.length_symbol_histogram);
         try writer.writeByte(',');
         try writeHistogram(writer, &row.distance_symbol_histogram);
+        try writer.writeByte(',');
+        try writeTopSymbols(writer, &row.length_symbol_histogram, 257);
+        try writer.writeByte(',');
+        try writeTopSymbols(writer, &row.distance_symbol_histogram, 0);
         try writer.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{d:.6},{d}\n", .{
             row.length_extra_reads,
             row.distance_extra_reads,
@@ -185,6 +189,31 @@ fn writeHistogram(writer: *std.Io.Writer, histogram: []const usize) !void {
     for (histogram, 0..) |count, i| {
         if (i != 0) try writer.writeByte(';');
         try writer.print("{d}", .{count});
+    }
+}
+
+const TopSymbol = struct {
+    symbol: usize = 0,
+    count: usize = 0,
+};
+
+fn writeTopSymbols(writer: *std.Io.Writer, histogram: []const usize, symbol_base: usize) !void {
+    var top: [3]TopSymbol = @splat(.{});
+    for (histogram, 0..) |count, i| {
+        const symbol = symbol_base + i;
+        var pos: usize = 0;
+        while (pos < top.len) : (pos += 1) {
+            if (count > top[pos].count or (count == top[pos].count and count != 0 and symbol < top[pos].symbol)) {
+                var shift = top.len - 1;
+                while (shift > pos) : (shift -= 1) top[shift] = top[shift - 1];
+                top[pos] = .{ .symbol = symbol, .count = count };
+                break;
+            }
+        }
+    }
+    for (top, 0..) |entry, i| {
+        if (i != 0) try writer.writeByte(';');
+        try writer.print("{d}:{d}", .{ entry.symbol, entry.count });
     }
 }
 
