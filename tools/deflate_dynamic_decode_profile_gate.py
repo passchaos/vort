@@ -57,6 +57,8 @@ EXPECTED_COLUMNS = {
     "match_non_overlapping_bytes",
     "match_overlapping_count",
     "match_overlapping_bytes",
+    "dominant_match_class",
+    "dominant_match_byte_ratio",
     "match_rle_byte_ratio",
     "match_small_distance_byte_ratio",
     "match_non_overlapping_byte_ratio",
@@ -183,7 +185,23 @@ def validate_row(row: dict[str, str]) -> None:
         raise AssertionError(f"match class count sum mismatch row={row}")
     if match_class_bytes != parse_int(row, "match_bytes"):
         raise AssertionError(f"match class byte sum mismatch row={row}")
+    class_bytes = {
+        "rle": parse_int(row, "match_rle_bytes"),
+        "small_distance": parse_int(row, "match_small_distance_bytes"),
+        "non_overlapping": parse_int(row, "match_non_overlapping_bytes"),
+        "overlapping": parse_int(row, "match_overlapping_bytes"),
+    }
+    dominant_class = row.get("dominant_match_class", "")
+    if dominant_class not in class_bytes:
+        raise AssertionError(f"bad dominant_match_class row={row}")
+    if class_bytes[dominant_class] != max(class_bytes.values()):
+        raise AssertionError(f"dominant match class is not maximal row={row}")
+    dominant_ratio = parse_float(row, "dominant_match_byte_ratio")
+    expected_dominant_ratio = class_bytes[dominant_class] / parse_int(row, "match_bytes")
+    if abs(dominant_ratio - expected_dominant_ratio) > 0.000001:
+        raise AssertionError(f"dominant match ratio mismatch row={row}")
     for key in (
+        "dominant_match_byte_ratio",
         "match_rle_byte_ratio",
         "match_small_distance_byte_ratio",
         "match_non_overlapping_byte_ratio",

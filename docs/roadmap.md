@@ -845,6 +845,10 @@ architecture blindly.
 - [x] Dynamic deflate decode profile classifies match replay bytes into RLE,
   small-distance, non-overlapping memcpy, and overlapping copy categories, so
   match-copy work can target the corpus shape actually dominating a weak case.
+- [x] Non-overlap match-copy small-length and branch-order experiments were
+  measured and rejected when README/roadmap/dynamic-match repeat3 probes were
+  mixed or regressed, keeping the existing copy order until a stronger corpus-
+  specific variant appears.
 - [x] FastDecoder sparse-table initialization experiments were measured and
   rejected when repeat3 decode-stage probes were mixed/negative, preserving the
   existing table setup while retaining coverage counters for a narrower future

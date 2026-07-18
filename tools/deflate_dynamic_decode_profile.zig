@@ -167,7 +167,7 @@ fn rawSliceFromZlib(frame: []const u8) []const u8 {
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_symbol_histogram,distance_symbol_histogram,top_length_symbols,top_distance_symbols,top_length_extra_symbols,top_distance_extra_symbols,length_extra_width_reads,distance_extra_width_reads,length_extra_width_bits,distance_extra_width_bits,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_lookup_covered,literal_lookup_size,distance_lookup_covered,distance_lookup_size,literal_lookup_coverage_ratio,distance_lookup_coverage_ratio,match_rle_count,match_rle_bytes,match_small_distance_count,match_small_distance_bytes,match_non_overlapping_count,match_non_overlapping_bytes,match_overlapping_count,match_overlapping_bytes,match_rle_byte_ratio,match_small_distance_byte_ratio,match_non_overlapping_byte_ratio,match_overlapping_byte_ratio,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
+    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_symbol_histogram,distance_symbol_histogram,top_length_symbols,top_distance_symbols,top_length_extra_symbols,top_distance_extra_symbols,length_extra_width_reads,distance_extra_width_reads,length_extra_width_bits,distance_extra_width_bits,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_lookup_covered,literal_lookup_size,distance_lookup_covered,distance_lookup_size,literal_lookup_coverage_ratio,distance_lookup_coverage_ratio,dominant_match_class,dominant_match_byte_ratio,match_rle_count,match_rle_bytes,match_small_distance_count,match_small_distance_bytes,match_non_overlapping_count,match_non_overlapping_bytes,match_overlapping_count,match_overlapping_bytes,match_rle_byte_ratio,match_small_distance_byte_ratio,match_non_overlapping_byte_ratio,match_overlapping_byte_ratio,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
     for (rows) |row| {
         try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},", .{
             row.case,
@@ -204,7 +204,8 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
         try writeExtraWidthHistogram(writer, &row.length_symbol_histogram, &length_extra_bits_by_symbol, true);
         try writer.writeByte(',');
         try writeExtraWidthHistogram(writer, &row.distance_symbol_histogram, &distance_extra_bits_by_symbol, true);
-        try writer.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d}\n", .{
+        const dominant_match = dominantMatchClass(row);
+        try writer.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{s},{d:.6},{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d}\n", .{
             row.length_extra_reads,
             row.distance_extra_reads,
             row.length_extra_bits,
@@ -219,6 +220,8 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
             row.distance_lookup_size,
             ratio(row.literal_lookup_covered, row.literal_lookup_size),
             ratio(row.distance_lookup_covered, row.distance_lookup_size),
+            dominant_match.label,
+            ratio(dominant_match.bytes, row.match_bytes),
             row.match_rle_count,
             row.match_rle_bytes,
             row.match_small_distance_count,
@@ -237,6 +240,24 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
             row.mix,
         });
     }
+}
+
+const DominantMatchClass = struct {
+    label: []const u8,
+    bytes: usize,
+};
+
+fn dominantMatchClass(row: Row) DominantMatchClass {
+    var best = DominantMatchClass{ .label = "rle", .bytes = row.match_rle_bytes };
+    const candidates = [_]DominantMatchClass{
+        .{ .label = "small_distance", .bytes = row.match_small_distance_bytes },
+        .{ .label = "non_overlapping", .bytes = row.match_non_overlapping_bytes },
+        .{ .label = "overlapping", .bytes = row.match_overlapping_bytes },
+    };
+    for (candidates) |candidate| {
+        if (candidate.bytes > best.bytes) best = candidate;
+    }
+    return best;
 }
 
 fn writeHistogram(writer: *std.Io.Writer, histogram: []const usize) !void {
