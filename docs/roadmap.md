@@ -155,6 +155,7 @@ architecture blindly.
   path while preserving the direct cursor path for large streams.
 - [x] Chunked zlib benchmark repeat3 CSV now has a schema/value gate for the PNG-like contiguous/join/direct chunked decode cases.
 - [x] Tested routing every stored chunked zlib stream through the direct stored reader, but rejected it because the repeat5 chunked benchmark regressed tiny/empty stored chunks; the existing stack-join cutoff remains the safer policy.
+- [x] Optimized chunk joining to skip empty zlib chunks, improving tiny/empty PNG-IDAT-style join evidence while keeping direct chunked decode behavior unchanged.
 - [x] Dictionary patch decoder rejects non-progress literal operations.
 - [x] Native LDM frame decode-into replays literals and matches directly into caller buffers.
 - [x] Full-frame native LDM range-decode into path writes directly to caller buffers without temporary decoded-frame allocation.

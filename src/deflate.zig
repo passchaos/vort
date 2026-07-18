@@ -3104,6 +3104,7 @@ fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]cons
     if (compressed_scratch.len < total) return error.OutputTooSmall;
     var offset: usize = 0;
     for (chunks) |chunk| {
+        if (chunk.len == 0) continue;
         @memcpy(compressed_scratch[offset..][0..chunk.len], chunk);
         offset += chunk.len;
     }
@@ -9231,12 +9232,29 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
         encoded[2 .. encoded.len - 4],
         encoded[encoded.len - 4 ..],
     };
+    const empty_chunks = [_][]const u8{
+        encoded[0..0],
+        encoded[0..1],
+        encoded[1..1],
+        encoded[1..2],
+        encoded[2..2],
+        encoded[2 .. encoded.len - 4],
+        encoded[encoded.len - 4 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+        encoded[encoded.len..encoded.len],
+    };
     var compressed_scratch: [128]u8 = undefined;
     var output: [input.len]u8 = undefined;
     try std.testing.expectEqual(input.len, try decodeZlibChunks(&chunks, &compressed_scratch, &output));
     try std.testing.expectEqualSlices(u8, input, &output);
     @memset(&output, 0);
     try std.testing.expectEqual(input.len, try decodeZlibChunksInto(&chunks, &output));
+    try std.testing.expectEqualSlices(u8, input, &output);
+    @memset(&output, 0);
+    try std.testing.expectEqual(input.len, try decodeZlibChunks(&empty_chunks, &compressed_scratch, &output));
+    try std.testing.expectEqualSlices(u8, input, &output);
+    @memset(&output, 0);
+    try std.testing.expectEqual(input.len, try decodeZlibChunksInto(&empty_chunks, &output));
     try std.testing.expectEqualSlices(u8, input, &output);
     var short_output: [input.len - 1]u8 = undefined;
     try std.testing.expectError(error.OutputTooSmall, decodeZlibChunksInto(&chunks, &short_output));
