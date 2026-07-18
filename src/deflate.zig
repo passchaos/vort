@@ -104,6 +104,7 @@ pub const RawDeflateHeaderInfo = struct {
 pub const DynamicDecodeProfile = struct {
     pub const length_symbol_count = length_table.len;
     pub const distance_symbol_count = distance_table.len;
+    pub const match_class_count = 4;
 
     output_bytes: usize = 0,
     literal_symbols: usize = 0,
@@ -133,7 +134,18 @@ pub const DynamicDecodeProfile = struct {
     match_non_overlapping_bytes: usize = 0,
     match_overlapping_count: usize = 0,
     match_overlapping_bytes: usize = 0,
+    match_class_length_extra_reads: [match_class_count]usize = @splat(0),
+    match_class_length_extra_bits: [match_class_count]usize = @splat(0),
+    match_class_distance_extra_reads: [match_class_count]usize = @splat(0),
+    match_class_distance_extra_bits: [match_class_count]usize = @splat(0),
     mix: u64 = 0,
+};
+
+const ProfileMatchClass = enum(usize) {
+    rle = 0,
+    small_distance = 1,
+    non_overlapping = 2,
+    overlapping = 3,
 };
 
 pub const GzipHeaderOptions = struct {
@@ -1471,14 +1483,26 @@ fn profileCompressedBlock(
         } else if (symbol <= 285) {
             profile.length_symbols += 1;
             profile.length_symbol_histogram[symbol - 257] += 1;
+            const length_extra_reads_before = profile.length_extra_reads;
+            const length_extra_bits_before = profile.length_extra_bits;
             const length = try profileDecodeLength(symbol, reader, &profile);
             const dist_hit = huffmanFastWouldHit(30, 8, &dist_decoder, reader);
             const distance_symbol = try dist_decoder.decodeValue(reader);
             if (dist_hit) profile.distance_fast_hits += 1 else profile.distance_fast_misses += 1;
             profile.distance_symbol_histogram[distance_symbol] += 1;
+            const distance_extra_reads_before = profile.distance_extra_reads;
+            const distance_extra_bits_before = profile.distance_extra_bits;
             const distance = try profileDecodeDistance(distance_symbol, reader, &profile);
             profile.distance_symbols += 1;
-            try profileRecordMatch(length, distance, &profile);
+            try profileRecordMatch(
+                length,
+                distance,
+                profile.length_extra_reads - length_extra_reads_before,
+                profile.length_extra_bits - length_extra_bits_before,
+                profile.distance_extra_reads - distance_extra_reads_before,
+                profile.distance_extra_bits - distance_extra_bits_before,
+                &profile,
+            );
             profile.mix +%= length;
         } else {
             return error.InvalidHuffmanCode;
@@ -1486,21 +1510,38 @@ fn profileCompressedBlock(
     }
 }
 
-fn profileRecordMatch(length: usize, distance: usize, profile: *DynamicDecodeProfile) Error!void {
+fn profileRecordMatch(
+    length: usize,
+    distance: usize,
+    length_extra_reads: usize,
+    length_extra_bits: usize,
+    distance_extra_reads: usize,
+    distance_extra_bits: usize,
+    profile: *DynamicDecodeProfile,
+) Error!void {
     if (length == 0 or distance == 0 or distance > profile.output_bytes) return error.InvalidMatch;
-    if (distance == 1) {
+    const class: ProfileMatchClass = if (distance == 1) blk: {
         profile.match_rle_count += 1;
         profile.match_rle_bytes += length;
-    } else if (distance <= 4) {
+        break :blk .rle;
+    } else if (distance <= 4) blk: {
         profile.match_small_distance_count += 1;
         profile.match_small_distance_bytes += length;
-    } else if (distance >= length) {
+        break :blk .small_distance;
+    } else if (distance >= length) blk: {
         profile.match_non_overlapping_count += 1;
         profile.match_non_overlapping_bytes += length;
-    } else {
+        break :blk .non_overlapping;
+    } else blk: {
         profile.match_overlapping_count += 1;
         profile.match_overlapping_bytes += length;
-    }
+        break :blk .overlapping;
+    };
+    const class_index = @intFromEnum(class);
+    profile.match_class_length_extra_reads[class_index] += length_extra_reads;
+    profile.match_class_length_extra_bits[class_index] += length_extra_bits;
+    profile.match_class_distance_extra_reads[class_index] += distance_extra_reads;
+    profile.match_class_distance_extra_bits[class_index] += distance_extra_bits;
     profile.match_bytes += length;
     profile.output_bytes += length;
 }
@@ -9699,6 +9740,16 @@ test "dynamic decode profile counts literals and matches" {
     const match_class_bytes = profile.match_rle_bytes + profile.match_small_distance_bytes + profile.match_non_overlapping_bytes + profile.match_overlapping_bytes;
     try std.testing.expectEqual(profile.distance_symbols, match_class_count);
     try std.testing.expectEqual(profile.match_bytes, match_class_bytes);
+    try std.testing.expectEqual(profile.length_extra_reads, sumProfileCounters(&profile.match_class_length_extra_reads));
+    try std.testing.expectEqual(profile.length_extra_bits, sumProfileCounters(&profile.match_class_length_extra_bits));
+    try std.testing.expectEqual(profile.distance_extra_reads, sumProfileCounters(&profile.match_class_distance_extra_reads));
+    try std.testing.expectEqual(profile.distance_extra_bits, sumProfileCounters(&profile.match_class_distance_extra_bits));
+}
+
+fn sumProfileCounters(values: []const usize) usize {
+    var total: usize = 0;
+    for (values) |value| total += value;
+    return total;
 }
 
 test "raw fixed Huffman literal/match inflate matches zlib fixed vectors" {

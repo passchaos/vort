@@ -63,6 +63,10 @@ EXPECTED_COLUMNS = {
     "match_small_distance_byte_ratio",
     "match_non_overlapping_byte_ratio",
     "match_overlapping_byte_ratio",
+    "match_class_length_extra_reads",
+    "match_class_length_extra_bits",
+    "match_class_distance_extra_reads",
+    "match_class_distance_extra_bits",
     "literal_fast_miss_ratio",
     "distance_fast_miss_ratio",
     "extra_bits_per_match",
@@ -109,6 +113,10 @@ def parse_top(value: str, label: str) -> list[tuple[int, int]]:
     if any(count <= 0 for _, count in out):
         raise AssertionError(f"{label} should have positive top counts: {value!r}")
     return out
+
+
+def parse_class_hist(row: dict[str, str], key: str) -> list[int]:
+    return parse_hist(row[key], 4, key)
 
 
 def validate_row(row: dict[str, str]) -> None:
@@ -200,6 +208,14 @@ def validate_row(row: dict[str, str]) -> None:
     expected_dominant_ratio = class_bytes[dominant_class] / parse_int(row, "match_bytes")
     if abs(dominant_ratio - expected_dominant_ratio) > 0.000001:
         raise AssertionError(f"dominant match ratio mismatch row={row}")
+    if sum(parse_class_hist(row, "match_class_length_extra_reads")) != parse_int(row, "length_extra_reads"):
+        raise AssertionError(f"match class length extra read sum mismatch row={row}")
+    if sum(parse_class_hist(row, "match_class_length_extra_bits")) != parse_int(row, "length_extra_bits"):
+        raise AssertionError(f"match class length extra bit sum mismatch row={row}")
+    if sum(parse_class_hist(row, "match_class_distance_extra_reads")) != parse_int(row, "distance_extra_reads"):
+        raise AssertionError(f"match class distance extra read sum mismatch row={row}")
+    if sum(parse_class_hist(row, "match_class_distance_extra_bits")) != parse_int(row, "distance_extra_bits"):
+        raise AssertionError(f"match class distance extra bit sum mismatch row={row}")
     for key in (
         "dominant_match_byte_ratio",
         "match_rle_byte_ratio",
