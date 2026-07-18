@@ -101,6 +101,20 @@ pub const RawDeflateHeaderInfo = struct {
     dynamic_lengths_byte_offset: ?usize = null,
 };
 
+pub const DynamicDecodeProfile = struct {
+    output_bytes: usize = 0,
+    literal_symbols: usize = 0,
+    length_symbols: usize = 0,
+    match_bytes: usize = 0,
+    distance_symbols: usize = 0,
+    literal_fast_hits: usize = 0,
+    literal_fast_misses: usize = 0,
+    distance_fast_hits: usize = 0,
+    distance_fast_misses: usize = 0,
+    literal_lookup_bits: u4 = 0,
+    mix: u64 = 0,
+};
+
 pub const GzipHeaderOptions = struct {
     /// Set the advisory FTEXT flag. Decoders must not rely on this bit for
     /// correctness, but exposing it keeps Vort able to reproduce metadata-rich
@@ -1394,6 +1408,65 @@ fn makeDynamicDistanceDecoder(table: huffman.HuffmanTable(30)) DynamicDistanceDe
     // pressure, which shows up in the raw decode benchmark for many small
     // dynamic frames and wrapper benchmarks.
     return DynamicDistanceDecoder.init(table);
+}
+
+pub fn profileFirstDynamicDeflateBlock(input: []const u8) Error!DynamicDecodeProfile {
+    var reader = bitstream.BufferedBitReader.init(input);
+    const parsed = try huffman.parseDynamicLengths(&reader);
+    const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+    const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+    return switch (dynamicLiteralLookupBits(parsed)) {
+        9 => profileCompressedBlock(&reader, lit_table, dist_table, 9),
+        12 => profileCompressedBlock(&reader, lit_table, dist_table, 12),
+        else => profileCompressedBlock(&reader, lit_table, dist_table, 11),
+    };
+}
+
+fn profileCompressedBlock(
+    reader: *bitstream.BufferedBitReader,
+    lit_table: huffman.HuffmanTable(286),
+    dist_table: huffman.HuffmanTable(30),
+    comptime lit_lookup_bits: u4,
+) Error!DynamicDecodeProfile {
+    const lit_decoder = huffman.FastDecoder(286, lit_lookup_bits).init(lit_table);
+    const dist_decoder = makeDynamicDistanceDecoder(dist_table);
+    var profile = DynamicDecodeProfile{ .literal_lookup_bits = lit_lookup_bits };
+    while (true) {
+        const lit_hit = huffmanFastWouldHit(286, lit_lookup_bits, &lit_decoder, reader);
+        const symbol = try lit_decoder.decodeValue(reader);
+        if (lit_hit) profile.literal_fast_hits += 1 else profile.literal_fast_misses += 1;
+        if (symbol < 256) {
+            profile.literal_symbols += 1;
+            profile.output_bytes += 1;
+            profile.mix +%= symbol;
+        } else if (symbol == 256) {
+            return profile;
+        } else if (symbol <= 285) {
+            profile.length_symbols += 1;
+            const length = try decodeLength(symbol, reader);
+            const dist_hit = huffmanFastWouldHit(30, 8, &dist_decoder, reader);
+            const distance_symbol = try dist_decoder.decodeValue(reader);
+            if (dist_hit) profile.distance_fast_hits += 1 else profile.distance_fast_misses += 1;
+            _ = try decodeDistance(distance_symbol, reader);
+            profile.distance_symbols += 1;
+            profile.match_bytes += length;
+            profile.output_bytes += length;
+            profile.mix +%= length;
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
+}
+
+fn huffmanFastWouldHit(
+    comptime max_symbols: usize,
+    comptime lookup_bits: u4,
+    decoder: *const huffman.FastDecoder(max_symbols, lookup_bits),
+    reader: *bitstream.BufferedBitReader,
+) bool {
+    const peek = reader.peekBitsPadded(u16, lookup_bits);
+    const entry = decoder.lookup[peek];
+    return entry.bits != 0 and reader.hasBits(entry.bits);
 }
 
 pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {
@@ -9373,6 +9446,19 @@ test "dynamic literal lookup policy separates tiny and complex alphabets" {
     complex.header.hlit = 280;
     complex.literal_max_bits = 12;
     try std.testing.expectEqual(@as(u4, 12), dynamicLiteralLookupBits(complex));
+}
+
+test "dynamic decode profile counts literals and matches" {
+    const input = "literal-heavy dynamic huffman decode stage\n" ** 16;
+    const raw = try encodeRawDynamicWithOptionsAlloc(std.testing.allocator, input, optionsForLevel(.default));
+    defer std.testing.allocator.free(raw);
+
+    const profile = try profileFirstDynamicDeflateBlock(raw);
+    try std.testing.expectEqual(input.len, profile.output_bytes);
+    try std.testing.expect(profile.literal_symbols > 0);
+    try std.testing.expect(profile.literal_fast_hits + profile.literal_fast_misses >= profile.literal_symbols + profile.length_symbols);
+    try std.testing.expectEqual(profile.length_symbols, profile.distance_symbols);
+    try std.testing.expect(profile.literal_lookup_bits == 9 or profile.literal_lookup_bits == 11 or profile.literal_lookup_bits == 12);
 }
 
 test "raw fixed Huffman literal/match inflate matches zlib fixed vectors" {

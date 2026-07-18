@@ -143,6 +143,27 @@ pub fn build(b: *std.Build) void {
     const deflate_decode_stage_report_dashboard_step = b.step("run-deflate-decode-stage-report-dashboard", "Write raw inflate vs zlib wrapper/checksum stage dashboard to zig-out");
     deflate_decode_stage_report_dashboard_step.dependOn(&run_deflate_decode_stage_report_dashboard.step);
 
+    const deflate_dynamic_decode_profile_exe = b.addExecutable(.{
+        .name = "vort-deflate-dynamic-decode-profile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate_dynamic_decode_profile.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_deflate_dynamic_decode_profile = b.addRunArtifact(deflate_dynamic_decode_profile_exe);
+    if (b.args) |args| run_deflate_dynamic_decode_profile.addArgs(args);
+    const deflate_dynamic_decode_profile_step = b.step("run-deflate-dynamic-decode-profile", "Profile dynamic deflate Huffman decode hit/miss counters");
+    deflate_dynamic_decode_profile_step.dependOn(&run_deflate_dynamic_decode_profile.step);
+
+    const run_deflate_dynamic_decode_profile_csv = b.addRunArtifact(deflate_dynamic_decode_profile_exe);
+    run_deflate_dynamic_decode_profile_csv.addArgs(&.{ "--builtins-plus-files", "README.md", "docs/roadmap.md", "--csv", "zig-out/vort-deflate-dynamic-decode-profile.csv" });
+    const deflate_dynamic_decode_profile_csv_step = b.step("run-deflate-dynamic-decode-profile-csv", "Write dynamic deflate Huffman decode profile CSV to zig-out");
+    deflate_dynamic_decode_profile_csv_step.dependOn(&run_deflate_dynamic_decode_profile_csv.step);
+
     const chunked_zlib_bench_report_exe = b.addExecutable(.{
         .name = "vort-chunked-zlib-bench-report",
         .root_module = b.createModule(.{
@@ -1107,6 +1128,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zlib_decode_bench_exe.step);
     check_step.dependOn(&zlib_relaxed_report_exe.step);
     check_step.dependOn(&deflate_decode_stage_report_exe.step);
+    check_step.dependOn(&deflate_dynamic_decode_profile_exe.step);
     check_step.dependOn(&zlib_encode_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
