@@ -24,10 +24,12 @@ EXPECTED_COLUMNS = {
 }
 EXPECTED = {
     "fixed-literal": {"table", "fixed_fast", "fast9"},
+    "fixed-distance": {"table", "fixed_fast", "fast5", "fast8"},
     "dynamic-mixed": {"table", "fast9", "fast11", "fast12"},
     "dynamic-long-tail": {"table", "fast9", "fast11", "fast12"},
+    "dynamic-distance": {"table", "fast5", "fast8"},
 }
-LOOKUP_BITS = {"table": 0, "fixed_fast": 9, "fast9": 9, "fast11": 11, "fast12": 12}
+LOOKUP_BITS = {"table": 0, "fixed_fast": 9, "fast5": 5, "fast8": 8, "fast9": 9, "fast11": 11, "fast12": 12}
 
 
 def positive_int(row: dict[str, str], key: str) -> bool:
