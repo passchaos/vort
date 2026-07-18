@@ -851,6 +851,9 @@ architecture blindly.
 - [x] Focused DEFLATE extra-bit reader microbenchmark/gate covers 1/3/5/9/13-bit
   reads on contiguous buffered and chunked readers, so bitreader A/Bs can be
   measured before touching production inflate loops.
+- [x] ChunkedBitReader fill batching for extra-bit reads was measured and
+  rejected when the focused gate showed most chunked widths regressing, preserving
+  the existing per-byte staged cursor fill.
 - [x] Non-overlap match-copy small-length and branch-order experiments were
   measured and rejected when README/roadmap/dynamic-match repeat3 probes were
   mixed or regressed, keeping the existing copy order until a stronger corpus-
