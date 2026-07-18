@@ -1560,11 +1560,10 @@ fn profileDecodeLength(symbol: u16, reader: *bitstream.BufferedBitReader, profil
 
 fn profileDecodeDistance(symbol: u16, reader: *bitstream.BufferedBitReader, profile: *DynamicDecodeProfile) Error!usize {
     if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
+    if (symbol < 4) return symbol + 1;
     const entry = distance_table[symbol];
-    if (entry.extra_bits != 0) {
-        profile.distance_extra_reads += 1;
-        profile.distance_extra_bits += entry.extra_bits;
-    }
+    profile.distance_extra_reads += 1;
+    profile.distance_extra_bits += entry.extra_bits;
     return entry.base + try reader.readBits(u16, entry.extra_bits);
 }
 
