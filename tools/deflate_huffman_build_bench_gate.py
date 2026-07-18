@@ -15,8 +15,9 @@ EXPECTED = {
     "literal-mixed": {"table", "fast9", "fast11", "fast12"},
     "literal-long-tail": {"table", "fast9", "fast11", "fast12"},
     "distance-mixed": {"table", "fast5", "fast8"},
+    "code-length": {"table", "fast5", "fast7"},
 }
-LOOKUP_BITS = {"table": 0, "fast5": 5, "fast8": 8, "fast9": 9, "fast11": 11, "fast12": 12}
+LOOKUP_BITS = {"table": 0, "fast5": 5, "fast7": 7, "fast8": 8, "fast9": 9, "fast11": 11, "fast12": 12}
 
 
 def positive_int(row: dict[str, str], key: str) -> bool:

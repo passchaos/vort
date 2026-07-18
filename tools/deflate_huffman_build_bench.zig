@@ -8,6 +8,7 @@ const BuildKind = enum {
     table,
     fast5,
     fast8,
+    fast7,
     fast9,
     fast11,
     fast12,
@@ -17,6 +18,7 @@ const BuildKind = enum {
             .table => "table",
             .fast5 => "fast5",
             .fast8 => "fast8",
+            .fast7 => "fast7",
             .fast9 => "fast9",
             .fast11 => "fast11",
             .fast12 => "fast12",
@@ -27,6 +29,7 @@ const BuildKind = enum {
         return switch (self) {
             .table => 0,
             .fast5 => 5,
+            .fast7 => 7,
             .fast8 => 8,
             .fast9 => 9,
             .fast11 => 11,
@@ -39,12 +42,14 @@ const CaseKind = enum {
     literal_mixed,
     literal_long_tail,
     distance_mixed,
+    code_length,
 
     fn label(self: CaseKind) []const u8 {
         return switch (self) {
             .literal_mixed => "literal-mixed",
             .literal_long_tail => "literal-long-tail",
             .distance_mixed => "distance-mixed",
+            .code_length => "code-length",
         };
     }
 };
@@ -82,7 +87,7 @@ pub fn main(init: std.process.Init) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     try csv.writer.writeAll("case,build,lookup_bits,symbols,iterations,elapsed_ns,builds_per_s,checksum\n");
-    inline for (.{ CaseKind.literal_mixed, CaseKind.literal_long_tail, CaseKind.distance_mixed }) |case| {
+    inline for (.{ CaseKind.literal_mixed, CaseKind.literal_long_tail, CaseKind.distance_mixed, CaseKind.code_length }) |case| {
         try runCase(init, &csv.writer, case, iterations);
     }
 
@@ -99,6 +104,7 @@ fn runCase(init: std.process.Init, writer: *std.Io.Writer, comptime case: CaseKi
         .literal_mixed => fillLiteralMixed(&lengths),
         .literal_long_tail => fillLiteralLongTail(&lengths),
         .distance_mixed => fillDistanceMixed(&lengths),
+        .code_length => fillCodeLength(&lengths),
     }
     try writeRow(writer, try runBuild(init, case, .table, &lengths, iterations));
     switch (case) {
@@ -110,6 +116,10 @@ fn runCase(init: std.process.Init, writer: *std.Io.Writer, comptime case: CaseKi
         .distance_mixed => {
             try writeRow(writer, try runBuild(init, case, .fast5, &lengths, iterations));
             try writeRow(writer, try runBuild(init, case, .fast8, &lengths, iterations));
+        },
+        .code_length => {
+            try writeRow(writer, try runBuild(init, case, .fast5, &lengths, iterations));
+            try writeRow(writer, try runBuild(init, case, .fast7, &lengths, iterations));
         },
     }
 }
@@ -129,6 +139,10 @@ fn runBuild(init: std.process.Init, comptime case: CaseKind, kind: BuildKind, le
             },
             .fast8 => {
                 const decoder = huffman.FastDecoder(288, 8).init(table);
+                checksum +%= decoder.lookupCoverage();
+            },
+            .fast7 => {
+                const decoder = huffman.FastDecoder(288, 7).init(table);
                 checksum +%= decoder.lookupCoverage();
             },
             .fast9 => {
@@ -157,6 +171,16 @@ fn runBuild(init: std.process.Init, comptime case: CaseKind, kind: BuildKind, le
         .builds_per_s = perSecond(iterations, elapsed_ns),
         .checksum = checksum,
     };
+}
+
+fn fillCodeLength(lengths: *[288]u4) void {
+    @memset(lengths, 0);
+    lengths[0] = 3;
+    lengths[3] = 3;
+    lengths[8] = 3;
+    lengths[16] = 3;
+    lengths[17] = 3;
+    lengths[18] = 3;
 }
 
 fn fillLiteralMixed(lengths: *[288]u4) void {

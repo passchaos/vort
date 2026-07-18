@@ -11,6 +11,7 @@ const DecoderKind = enum {
     table,
     fast5,
     fast8,
+    fast7,
     fast9,
     fast11,
     fast12,
@@ -21,6 +22,7 @@ const DecoderKind = enum {
             .table => "table",
             .fast5 => "fast5",
             .fast8 => "fast8",
+            .fast7 => "fast7",
             .fast9 => "fast9",
             .fast11 => "fast11",
             .fast12 => "fast12",
@@ -32,6 +34,7 @@ const DecoderKind = enum {
 const CaseKind = enum {
     fixed_literal,
     fixed_distance,
+    code_length,
     dynamic_mixed,
     dynamic_long_tail,
     dynamic_distance,
@@ -40,6 +43,7 @@ const CaseKind = enum {
         return switch (self) {
             .fixed_literal => "fixed-literal",
             .fixed_distance => "fixed-distance",
+            .code_length => "code-length",
             .dynamic_mixed => "dynamic-mixed",
             .dynamic_long_tail => "dynamic-long-tail",
             .dynamic_distance => "dynamic-distance",
@@ -84,7 +88,7 @@ pub fn main(init: std.process.Init) !void {
     defer csv.deinit();
     try csv.writer.writeAll("case,decoder,lookup_bits,symbols_per_iter,iterations,input_bytes,elapsed_ns,symbols_per_s,mib_per_s,checksum\n");
 
-    inline for (.{ CaseKind.fixed_literal, CaseKind.fixed_distance, CaseKind.dynamic_mixed, CaseKind.dynamic_long_tail, CaseKind.dynamic_distance }) |case| {
+    inline for (.{ CaseKind.fixed_literal, CaseKind.fixed_distance, CaseKind.code_length, CaseKind.dynamic_mixed, CaseKind.dynamic_long_tail, CaseKind.dynamic_distance }) |case| {
         try runCaseSet(init, &csv.writer, case, iterations);
     }
 
@@ -107,6 +111,7 @@ fn runCaseSet(init: std.process.Init, writer: *std.Io.Writer, comptime case: Cas
             const fixed_lengths = huffman.fixedDistanceLengths();
             @memcpy(lengths[0..fixed_lengths.len], &fixed_lengths);
         },
+        .code_length => fillCodeLengthLengths(&lengths),
         .dynamic_mixed => fillDynamicMixedLengths(&lengths),
         .dynamic_long_tail => fillDynamicLongTailLengths(&lengths),
         .dynamic_distance => fillDynamicDistanceLengths(&lengths),
@@ -135,6 +140,13 @@ fn runCaseSet(init: std.process.Init, writer: *std.Io.Writer, comptime case: Cas
             const fast8 = huffman.FastDecoder(288, 8).init(table);
             try writeRow(writer, try runFastDecoder(init, case, .fast8, input, symbols, iterations, &fast8));
         },
+        .code_length => {
+            try writeRow(writer, try runDecoder(init, case, .table, input, symbols, iterations, table));
+            const fast5 = huffman.FastDecoder(288, 5).init(table);
+            const fast7 = huffman.FastDecoder(288, 7).init(table);
+            try writeRow(writer, try runFastDecoder(init, case, .fast5, input, symbols, iterations, &fast5));
+            try writeRow(writer, try runFastDecoder(init, case, .fast7, input, symbols, iterations, &fast7));
+        },
         .dynamic_mixed, .dynamic_long_tail => {
             try writeRow(writer, try runDecoder(init, case, .table, input, symbols, iterations, table));
             const fast9 = huffman.FastDecoder(288, 9).init(table);
@@ -152,6 +164,16 @@ fn runCaseSet(init: std.process.Init, writer: *std.Io.Writer, comptime case: Cas
             try writeRow(writer, try runFastDecoder(init, case, .fast8, input, symbols, iterations, &fast8));
         },
     }
+}
+
+fn fillCodeLengthLengths(lengths: *[288]u4) void {
+    @memset(lengths, 0);
+    lengths[0] = 3;
+    lengths[3] = 3;
+    lengths[8] = 3;
+    lengths[16] = 3;
+    lengths[17] = 3;
+    lengths[18] = 3;
 }
 
 fn fillDynamicMixedLengths(lengths: *[288]u4) void {
@@ -191,6 +213,7 @@ fn fillSymbols(comptime case: CaseKind, symbols: []u16, lengths: *const [288]u4)
         symbol.* = switch (case) {
             .fixed_literal => @intCast((i * 37 + (i >> 3)) % 288),
             .fixed_distance => @intCast((i * 13 + (i >> 5)) % 32),
+            .code_length => active[(i * 7 + (i >> 6)) % active_len],
             .dynamic_mixed => active[(i * 53 + (i >> 4)) % active_len],
             .dynamic_long_tail => active[(i * 97 + (i >> 2) + 17) % active_len],
             .dynamic_distance => active[(i * 19 + (i >> 3)) % active_len],
@@ -248,6 +271,7 @@ fn row(comptime case: CaseKind, kind: DecoderKind, input_len: usize, elapsed_ns:
         .table => 0,
         .fast5 => 5,
         .fast8 => 8,
+        .fast7 => 7,
         .fast9, .fixed_fast => 9,
         .fast11 => 11,
         .fast12 => 12,
