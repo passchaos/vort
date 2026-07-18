@@ -36,6 +36,7 @@ const Row = struct {
 const specs = [_]CaseSpec{
     .{ .name = "png-rgb8-dynamic-64b", .width = 96, .height = 64, .bytes_per_pixel = 3, .encoder = .best, .chunk_bytes = 64 },
     .{ .name = "png-rgb8-dynamic-1b-empty", .width = 48, .height = 48, .bytes_per_pixel = 3, .encoder = .best, .chunk_bytes = 1, .include_empty_chunks = true },
+    .{ .name = "png-rgb8-literal-large-4k", .width = 512, .height = 256, .bytes_per_pixel = 3, .encoder = .dynamic_literal, .chunk_bytes = 4096 },
     .{ .name = "png-rgba8-stored-256b", .width = 128, .height = 96, .bytes_per_pixel = 4, .encoder = .stored, .chunk_bytes = 256 },
     .{ .name = "png-indexed-stored-1b-empty", .width = 96, .height = 64, .bytes_per_pixel = 1, .encoder = .stored, .chunk_bytes = 1, .include_empty_chunks = true },
     .{ .name = "png-indexed-stored-7b-empty", .width = 257, .height = 48, .bytes_per_pixel = 1, .encoder = .stored, .chunk_bytes = 7, .include_empty_chunks = true },

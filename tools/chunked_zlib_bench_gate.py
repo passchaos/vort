@@ -46,6 +46,13 @@ EXPECTED_CASES = {
         "include_empty_chunks": "true",
         "direct_strategy": "stack-join",
     },
+    "png-rgb8-literal-large-4k": {
+        "encoder": "dynamic_literal",
+        "input_bytes": (512 * 3 + 1) * 256,
+        "chunk_bytes": 4096,
+        "include_empty_chunks": "false",
+        "direct_strategy": "chunked-reader",
+    },
     "png-rgba8-stored-256b": {
         "encoder": "stored",
         "input_bytes": (128 * 4 + 1) * 96,
