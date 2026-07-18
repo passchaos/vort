@@ -169,10 +169,15 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
 
         pub fn init(table: HuffmanTable(max_symbols)) Self {
             var decoder = Self{ .table = table };
-            const covered = decoder.fillLookup();
-            if (covered == decoder.lookup.len) return decoder;
-
-            @memset(&decoder.lookup, .{ .symbol = 0, .bits = 0 });
+            // Use the already-maintained length histogram to decide whether the
+            // fast lookup is fully covered. That preserves the no-memset path
+            // for fixed-style full tables while avoiding the old partial-table
+            // cost of filling lookup entries once, clearing, then filling the
+            // same entries again. Dynamic literal/distance tables are often
+            // partial, so this keeps setup cost proportional to one fill pass.
+            if (decoder.lookupCoverage() != decoder.lookup.len) {
+                @memset(&decoder.lookup, .{ .symbol = 0, .bits = 0 });
+            }
             _ = decoder.fillLookup();
             return decoder;
         }

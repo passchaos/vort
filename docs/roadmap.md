@@ -997,3 +997,5 @@ architecture blindly.
 - [x] Added a focused DEFLATE Huffman table-build benchmark/gate covering literal and distance alphabets so FastDecoder setup cost is visible before table-construction changes.
 - [x] Added a focused DEFLATE Huffman lookup benchmark/gate covering fixed literals/distances, dynamic mixed/long-tail literal alphabets, and dynamic distance alphabets across compact-table and FastDecoder lookup widths 5/8/9/11/12.
 - [x] Narrowed dynamic literal lookup selection so blocks with literal max bits <=9 use the cheaper 9-bit lookup table while max-bit-10 blocks keep the 11-bit table after a broader <=10 experiment regressed the binary repeat3 row.
+
+- [x] Optimized FastDecoder initialization to use lookupCoverage for full-table detection, preserving the no-memset path for fully-covered fixed-style tables while avoiding duplicate fillLookup work on partial dynamic tables.
