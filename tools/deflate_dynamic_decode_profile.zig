@@ -52,6 +52,27 @@ const binary_payload = blk: {
     break :blk data;
 };
 
+const window_match_payload = blk: {
+    @setEvalBranchQuota(700000);
+    const width = 512;
+    const height = 256;
+    const bytes_per_pixel = 3;
+    const row_len = width * bytes_per_pixel;
+    const stride = row_len + 1;
+    var data: [stride * height]u8 = undefined;
+    for (&data, 0..) |*byte, i| {
+        const group = i / (64 * 1024);
+        const local = i % (64 * 1024);
+        const source = local % (24 * 1024);
+        var x = @as(u64, source) +% (@as(u64, group) << 32) +% 0x9e37_79b9_7f4a_7c15;
+        x = (x ^ (x >> 30)) *% 0xbf58_476d_1ce4_e5b9;
+        x = (x ^ (x >> 27)) *% 0x94d0_49bb_1331_11eb;
+        x ^= x >> 31;
+        byte.* = @truncate(x >> 24);
+    }
+    break :blk data;
+};
+
 const BuiltinCase = struct {
     name: []const u8,
     payload: []const u8,
@@ -64,6 +85,7 @@ const builtins = [_]BuiltinCase{
     .{ .name = "text", .payload = "the quick brown fox jumps over the lazy dog\n" ** 1024 },
     .{ .name = "dynamic-match", .payload = "literal-heavy dynamic huffman decode stage\n" ** 512 },
     .{ .name = "binary", .payload = &binary_payload },
+    .{ .name = "chunked-window-match", .payload = &window_match_payload },
 };
 
 pub fn main(init: std.process.Init) !void {

@@ -73,7 +73,8 @@ EXPECTED_COLUMNS = {
     "mix",
 }
 
-REQUIRED_CASES = {"README.md", "docs/roadmap.md"}
+REQUIRED_CASES = {"README.md", "docs/roadmap.md", "chunked-window-match"}
+STRICT_TOP_CASES = {"README.md", "docs/roadmap.md"}
 
 
 def parse_int(row: dict[str, str], key: str) -> int:
@@ -119,7 +120,7 @@ def parse_class_hist(row: dict[str, str], key: str) -> list[int]:
     return parse_hist(row[key], 4, key)
 
 
-def validate_row(row: dict[str, str]) -> None:
+def validate_row(row: dict[str, str], strict_top_counts: bool = True) -> None:
     for key in (
         "input_bytes",
         "raw_bytes",
@@ -228,8 +229,9 @@ def validate_row(row: dict[str, str]) -> None:
             raise AssertionError(f"{key} out of range row={row}")
     parse_top(row["top_length_symbols"], "top_length_symbols")
     parse_top(row["top_distance_symbols"], "top_distance_symbols")
-    parse_top(row["top_length_extra_symbols"], "top_length_extra_symbols")
-    parse_top(row["top_distance_extra_symbols"], "top_distance_extra_symbols")
+    if strict_top_counts:
+        parse_top(row["top_length_extra_symbols"], "top_length_extra_symbols")
+        parse_top(row["top_distance_extra_symbols"], "top_distance_extra_symbols")
     if parse_float(row, "extra_bits_per_match") <= 0:
         raise AssertionError(f"extra_bits_per_match must be positive row={row}")
 
@@ -254,7 +256,16 @@ def main() -> int:
         return 1
     try:
         for case in REQUIRED_CASES:
-            validate_row(by_case[case])
+            validate_row(by_case[case], case in STRICT_TOP_CASES)
+        chunked = by_case["chunked-window-match"]
+        if parse_int(chunked, "input_bytes") != (512 * 3 + 1) * 256:
+            raise AssertionError(f"chunked-window-match input size mismatch row={chunked}")
+        if parse_int(chunked, "raw_bytes") <= 64 * 1024:
+            raise AssertionError(f"chunked-window-match should exceed stack-join raw threshold row={chunked}")
+        if parse_int(chunked, "match_bytes") <= parse_int(chunked, "literal_symbols"):
+            raise AssertionError(f"chunked-window-match should be match-heavy row={chunked}")
+        if chunked.get("dominant_match_class") != "non_overlapping":
+            raise AssertionError(f"chunked-window-match should be non-overlap dominated row={chunked}")
     except AssertionError as exc:
         print(f"deflate_dynamic_decode_profile_gate=failed reason={exc}", file=sys.stderr)
         return 1

@@ -250,14 +250,15 @@ fn makeWindowMatchPayload(allocator: std.mem.Allocator, width: usize, height: us
 
     // Keep this fixture larger than the bounded stack-join path while still
     // giving the DEFLATE encoder real in-window matches. Each 64 KiB region
-    // starts with pseudo-random bytes that keep the compressed member above
-    // 64 KiB, then repeats the previous 16 KiB so the chunked-reader benchmark
-    // covers match copy, distance extra bits, and history reads rather than a
-    // pure literal stream.
+    // starts with 24 KiB of pseudo-random seed bytes, then repeats that seed
+    // for the remaining 40 KiB. This keeps the compressed member above 64 KiB
+    // while making match bytes dominate, so the chunked-reader benchmark covers
+    // match copy, distance extra bits, and history reads rather than a pure
+    // literal stream.
     for (out, 0..) |*byte, i| {
         const group = i / (64 * 1024);
         const local = i % (64 * 1024);
-        const source = if (local >= 48 * 1024) local - 16 * 1024 else local;
+        const source = local % (24 * 1024);
         var x = @as(u64, source) +% (@as(u64, group) << 32) +% 0x9e37_79b9_7f4a_7c15;
         x = (x ^ (x >> 30)) *% 0xbf58_476d_1ce4_e5b9;
         x = (x ^ (x >> 27)) *% 0x94d0_49bb_1331_11eb;
