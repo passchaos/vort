@@ -3,12 +3,14 @@ const vort = @import("vort");
 
 const ReaderKind = enum {
     buffered,
+    chunked_4096,
     chunked_64,
     chunked_1,
 
     fn label(self: ReaderKind) []const u8 {
         return switch (self) {
             .buffered => "buffered",
+            .chunked_4096 => "chunked_4096",
             .chunked_64 => "chunked_64",
             .chunked_1 => "chunked_1",
         };
@@ -42,7 +44,7 @@ const cases = [_]CaseSpec{
     .{ .name = "extra-13", .bits = 13, .reads_per_iter = 48 * 1024 },
 };
 
-const readers = [_]ReaderKind{ .buffered, .chunked_64, .chunked_1 };
+const readers = [_]ReaderKind{ .buffered, .chunked_4096, .chunked_64, .chunked_1 };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -94,7 +96,12 @@ fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iter
     const chunks = if (reader_kind == .buffered)
         &[_][]const u8{}
     else
-        try makeChunks(init.gpa, input, if (reader_kind == .chunked_64) 64 else 1);
+        try makeChunks(init.gpa, input, switch (reader_kind) {
+            .chunked_4096 => 4096,
+            .chunked_64 => 64,
+            .chunked_1 => 1,
+            .buffered => unreachable,
+        });
     defer if (reader_kind != .buffered) init.gpa.free(chunks);
 
     const start = std.Io.Clock.awake.now(init.io);
@@ -103,7 +110,7 @@ fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iter
     while (iter < iterations) : (iter += 1) {
         checksum +%= switch (reader_kind) {
             .buffered => try runBuffered(input, case.bits, case.reads_per_iter),
-            .chunked_64, .chunked_1 => try runChunked(chunks, case.bits, case.reads_per_iter),
+            .chunked_4096, .chunked_64, .chunked_1 => try runChunked(chunks, case.bits, case.reads_per_iter),
         };
     }
     const elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();

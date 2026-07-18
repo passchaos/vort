@@ -23,7 +23,7 @@ EXPECTED_COLUMNS = {
     "checksum",
 }
 EXPECTED_CASES = {"extra-1", "extra-3", "extra-5", "extra-9", "extra-13"}
-EXPECTED_READERS = {"buffered", "chunked_64", "chunked_1"}
+EXPECTED_READERS = {"buffered", "chunked_4096", "chunked_64", "chunked_1"}
 EXPECTED_BITS = {"extra-1": 1, "extra-3": 3, "extra-5": 5, "extra-9": 9, "extra-13": 13}
 
 
