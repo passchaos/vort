@@ -137,7 +137,7 @@ zstd/brotli/lz4 coverage, mature fuzzing, platform dispatch, and production
 usage. Treat this table as the current deflate-focused gap ledger and update it
 after meaningful codec or benchmark changes.
 
-Dynamic Huffman decode work is tracked separately from wrapper overhead. The
+Dynamic Huffman decode work is tracked separately from wrapper overhead. `BufferedBitReader.readBits` and the chunked reader now consume via staged advance after `peekBitsPadded`, avoiding a second no-op fill on every length/distance extra-bit read; a targeted ReleaseFast `run-deflate-decode-stage-report -- --repeat 5 --iterations 200 README.md docs/roadmap.md` probe showed README caller-buffer rows around raw/zlib/gzip `583.47` / `591.37` / `452.22` MiB/s and roadmap `414.27` / `408.57` / `355.41` MiB/s after this change, though full repeat3 Rust summaries remain noisy and should still be used before claiming broad wins. The
 Huffman table now stores bit-length bucket offsets/counts for active canonical
 entries, so long-code fallback after a fast-table miss scans only candidates of
 the current bit width and skips per-entry bit-width checks. `FastDecoder.decodeValue`

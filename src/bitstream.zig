@@ -139,7 +139,7 @@ pub const BufferedBitReader = struct {
         if (count > @bitSizeOf(T)) return error.CorruptFrame;
         if (!self.hasBits(count)) return error.TruncatedFrame;
         const result = self.peekBitsPadded(T, count);
-        self.advanceBitsAssumeAvailable(count);
+        self.advanceBitsStagedAssumeAvailable(count);
         return result;
     }
 
@@ -289,7 +289,7 @@ pub const ChunkedBitReader = struct {
         if (count > @bitSizeOf(T)) return error.CorruptFrame;
         if (!self.hasBits(count)) return error.TruncatedFrame;
         const result = self.peekBitsPadded(T, count);
-        self.advanceBitsAssumeAvailable(count);
+        self.advanceBitsStagedAssumeAvailable(count);
         return result;
     }
 
