@@ -1194,6 +1194,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(compression_report_step);
     ci_smoke_step.dependOn(deflate_decode_stage_report_step);
     ci_smoke_step.dependOn(deflate_decode_stage_report_dashboard_step);
+    ci_smoke_step.dependOn(deflate_dynamic_decode_profile_gate_step);
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_dashboard_step);
