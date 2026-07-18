@@ -876,6 +876,10 @@ architecture blindly.
   previous 11-bit resident state; a longer ReleaseFast PNG row-streaming A/B
   kept a small geomean throughput win and rejected the larger 12-bit streaming
   decoder variant as mixed/noisy for image workloads.
+- [x] Tried direct-dispatching PNG streaming `readInflatedBytes` around
+  `readInflatedByteOrEnd`, but rejected it after ReleaseFast repeat5 row
+  benchmarks showed mixed results and sub-1.0 geomean throughput, especially on
+  chunked small-distance/RLE rows.
 - [x] PNG streaming zlib scanline benchmark report covers contiguous/chunked RLE,
   small-distance, repeated-row dynamic, and fixed payloads with a repeat3 CSV
   gate for future row-streaming hot-path changes.
