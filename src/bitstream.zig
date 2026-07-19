@@ -496,6 +496,190 @@ pub const ChunkedBitReader = struct {
     }
 };
 
+pub const ChunkedSpanBitReader = struct {
+    chunks: []const []const u8,
+    byte_index: usize = 0,
+    bit_index: u3 = 0,
+    total_len: usize = 0,
+    /// Next absolute byte not yet staged into `bit_buffer`.
+    source_absolute: usize = 0,
+    /// Cursor for `source_absolute`. Unlike `ChunkedBitReader`, the hot fill
+    /// path keeps a local index inside the current chunk so it does not have to
+    /// recover `absolute - chunk_start` for every staged byte.
+    source_chunk_index: usize = 0,
+    source_chunk_start: usize = 0,
+    source_local: usize = 0,
+    bit_buffer: u64 = 0,
+    bit_count: usize = 0,
+
+    pub fn init(chunks: []const []const u8) Error!ChunkedSpanBitReader {
+        return initAt(chunks, 0);
+    }
+
+    pub fn initAt(chunks: []const []const u8, byte_offset: usize) Error!ChunkedSpanBitReader {
+        return initAtKnownTotal(chunks, byte_offset, try chunksTotalLen(chunks));
+    }
+
+    pub fn initAtKnownTotal(chunks: []const []const u8, byte_offset: usize, total_len: usize) Error!ChunkedSpanBitReader {
+        if (byte_offset > total_len) return error.TruncatedFrame;
+        var reader = ChunkedSpanBitReader{
+            .chunks = chunks,
+            .byte_index = byte_offset,
+            .source_absolute = byte_offset,
+            .total_len = total_len,
+        };
+        reader.syncSourceCursor();
+        return reader;
+    }
+
+    pub fn bitPosition(self: ChunkedSpanBitReader) usize {
+        return self.byte_index * 8 + self.bit_index;
+    }
+
+    pub fn byteOffset(self: ChunkedSpanBitReader) usize {
+        return self.byte_index + @intFromBool(self.bit_index != 0);
+    }
+
+    pub fn readBits(self: *ChunkedSpanBitReader, comptime T: type, count: u6) Error!T {
+        if (count > @bitSizeOf(T)) return error.CorruptFrame;
+        if (!self.hasBits(count)) return error.TruncatedFrame;
+        const result = self.peekBitsPadded(T, count);
+        self.advanceBitsStagedAssumeAvailable(count);
+        return result;
+    }
+
+    pub fn peekBits(self: ChunkedSpanBitReader, comptime T: type, count: u6) Error!T {
+        var copy = self;
+        return copy.readBits(T, count);
+    }
+
+    pub fn skipBits(self: *ChunkedSpanBitReader, count: u6) Error!void {
+        if (!self.hasBits(count)) return error.TruncatedFrame;
+        self.advanceBitsAssumeAvailable(count);
+    }
+
+    pub fn hasBits(self: ChunkedSpanBitReader, count: u6) bool {
+        if (self.byte_index > self.total_len) return false;
+        const remaining_bits = (self.total_len - self.byte_index) * 8 - @as(usize, self.bit_index);
+        return @as(usize, count) <= remaining_bits;
+    }
+
+    pub fn hasStagedBits(self: ChunkedSpanBitReader, count: u6) bool {
+        return @as(usize, count) <= self.bit_count;
+    }
+
+    pub fn advanceBitsAssumeAvailable(self: *ChunkedSpanBitReader, count: u6) void {
+        self.fill(count);
+        self.advanceBitsStagedAssumeAvailable(count);
+    }
+
+    pub fn advanceBitsStagedAssumeAvailable(self: *ChunkedSpanBitReader, count: u6) void {
+        std.debug.assert(self.bit_count >= count);
+        self.bit_buffer >>= @intCast(count);
+        self.bit_count -= count;
+
+        const new_bit_index = @as(usize, self.bit_index) + count;
+        self.byte_index += new_bit_index / 8;
+        self.bit_index = @intCast(new_bit_index % 8);
+    }
+
+    pub fn peekBitsPadded(self: *ChunkedSpanBitReader, comptime T: type, count: u6) T {
+        std.debug.assert(count <= @bitSizeOf(T));
+        if (count == 0 or self.byte_index >= self.total_len) return 0;
+        self.fill(count);
+
+        const mask = (@as(u64, 1) << @intCast(count)) - 1;
+        return @intCast(self.bit_buffer & mask);
+    }
+
+    pub fn alignToByte(self: *ChunkedSpanBitReader) void {
+        if (self.bit_index != 0) {
+            const padding: usize = 8 - @as(usize, self.bit_index);
+            const staged_drop = @min(padding, self.bit_count);
+            self.bit_buffer >>= @intCast(staged_drop);
+            self.bit_count -= staged_drop;
+            self.bit_index = 0;
+            self.byte_index += 1;
+        }
+    }
+
+    pub fn readAlignedBytes(self: *ChunkedSpanBitReader, output: []u8) Error!void {
+        if (self.bit_index != 0) return error.CorruptFrame;
+        if (self.byte_index > self.total_len or self.total_len - self.byte_index < output.len) return error.TruncatedFrame;
+        self.bit_buffer = 0;
+        self.bit_count = 0;
+        self.source_absolute = self.byte_index;
+        self.syncSourceCursor();
+
+        var out_offset: usize = 0;
+        while (out_offset < output.len) {
+            self.skipEmptySourceChunks();
+            if (self.source_chunk_index >= self.chunks.len) return error.TruncatedFrame;
+            const chunk = self.chunks[self.source_chunk_index];
+            const n = @min(output.len - out_offset, chunk.len - self.source_local);
+            @memcpy(output[out_offset..][0..n], chunk[self.source_local..][0..n]);
+            out_offset += n;
+            self.source_absolute += n;
+            self.source_local += n;
+        }
+
+        self.byte_index = self.source_absolute;
+    }
+
+    pub fn readAlignedInt(self: *ChunkedSpanBitReader, comptime T: type, endian: std.builtin.Endian) Error!T {
+        var bytes: [@sizeOf(T)]u8 = undefined;
+        try self.readAlignedBytes(&bytes);
+        return std.mem.readInt(T, &bytes, endian);
+    }
+
+    fn fill(self: *ChunkedSpanBitReader, requested_bits: usize) void {
+        std.debug.assert(requested_bits <= 63);
+        while (self.bit_count < requested_bits and self.source_absolute < self.total_len and self.bit_count <= 56) {
+            self.skipEmptySourceChunks();
+            if (self.source_chunk_index >= self.chunks.len) break;
+            const chunk = self.chunks[self.source_chunk_index];
+            while (self.bit_count < requested_bits and self.source_absolute < self.total_len and self.bit_count <= 56 and self.source_local < chunk.len) {
+                self.bit_buffer |= @as(u64, chunk[self.source_local]) << @intCast(self.bit_count);
+                self.bit_count += 8;
+                self.source_absolute += 1;
+                self.source_local += 1;
+            }
+        }
+    }
+
+    fn syncSourceCursor(self: *ChunkedSpanBitReader) void {
+        if (self.source_absolute >= self.total_len) {
+            self.source_chunk_index = self.chunks.len;
+            self.source_chunk_start = self.total_len;
+            self.source_local = 0;
+            return;
+        }
+        if (self.source_chunk_index >= self.chunks.len or self.source_absolute < self.source_chunk_start) {
+            self.source_chunk_index = 0;
+            self.source_chunk_start = 0;
+        }
+        while (self.source_chunk_index < self.chunks.len) {
+            const chunk = self.chunks[self.source_chunk_index];
+            const end = self.source_chunk_start + chunk.len;
+            if (self.source_absolute < end) {
+                self.source_local = self.source_absolute - self.source_chunk_start;
+                return;
+            }
+            self.source_chunk_start = end;
+            self.source_chunk_index += 1;
+        }
+        self.source_local = 0;
+    }
+
+    fn skipEmptySourceChunks(self: *ChunkedSpanBitReader) void {
+        while (self.source_chunk_index < self.chunks.len and self.source_local >= self.chunks[self.source_chunk_index].len) {
+            self.source_chunk_start += self.chunks[self.source_chunk_index].len;
+            self.source_chunk_index += 1;
+            self.source_local = 0;
+        }
+    }
+};
+
 fn chunksTotalLen(chunks: []const []const u8) Error!usize {
     var total: usize = 0;
     for (chunks) |chunk| {
@@ -679,6 +863,38 @@ test "ChunkedBitReader known-total initializer matches initAt" {
         try std.testing.expectEqual(scanned.byteOffset(), known.byteOffset());
     }
     try std.testing.expectError(error.TruncatedFrame, ChunkedBitReader.initAtKnownTotal(&chunks, bytes.len + 1, bytes.len));
+}
+
+test "ChunkedSpanBitReader matches ChunkedBitReader across chunk boundaries" {
+    const bytes = [_]u8{ 0b1010_1101, 0b0000_0011, 0x34, 0x12, 0xaa, 0xbb };
+    const chunks = [_][]const u8{
+        bytes[0..1],
+        bytes[1..1],
+        bytes[1..3],
+        bytes[3..4],
+        bytes[4..],
+    };
+    var baseline = try ChunkedBitReader.init(&chunks);
+    var span = try ChunkedSpanBitReader.init(&chunks);
+
+    inline for (.{ 3, 5, 2 }) |bits| {
+        try std.testing.expectEqual(try baseline.readBits(u16, bits), try span.readBits(u16, bits));
+        try std.testing.expectEqual(baseline.bitPosition(), span.bitPosition());
+        try std.testing.expectEqual(baseline.byteOffset(), span.byteOffset());
+    }
+
+    baseline.alignToByte();
+    span.alignToByte();
+    try std.testing.expectEqual(baseline.bitPosition(), span.bitPosition());
+    try std.testing.expectEqual(baseline.byteOffset(), span.byteOffset());
+    try std.testing.expectEqual(try baseline.readAlignedInt(u16, .little), try span.readAlignedInt(u16, .little));
+
+    var baseline_tail: [2]u8 = undefined;
+    var span_tail: [2]u8 = undefined;
+    try baseline.readAlignedBytes(&baseline_tail);
+    try span.readAlignedBytes(&span_tail);
+    try std.testing.expectEqualSlices(u8, &baseline_tail, &span_tail);
+    try std.testing.expectError(error.TruncatedFrame, span.readBits(u1, 1));
 }
 
 test "ChunkedBitReader hasBits and unchecked advance match skipBits" {
