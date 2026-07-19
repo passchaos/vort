@@ -222,7 +222,7 @@ fn classifyDirectStrategy(chunks: []const []const u8, total_len: usize) ![]const
     const block_type = (first_deflate >> 1) & 0x03;
     if (block_type == 0 and chunks.len <= 512) return "stored-direct";
     if (total_len <= 64 * 1024) return "stack-join";
-    return if (block_type == 0) "stored-direct" else "chunked-reader";
+    return if (block_type == 0) "stored-direct" else "span-reader";
 }
 
 fn chunkByteAt(chunks: []const []const u8, index: usize) !u8 {
