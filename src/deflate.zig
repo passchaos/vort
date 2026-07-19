@@ -2499,28 +2499,34 @@ fn copyMatchWithDictionary(history: []const u8, dictionary: []const u8, dest: []
 
     if (distance <= history.len) return copyMatch(history, dest, length, distance);
 
-    const base_len = dictionary.len + history.len;
-    if (distance >= length) {
-        const absolute = base_len - distance;
-        if (absolute < dictionary.len) {
-            const dict_len = @min(length, dictionary.len - absolute);
-            @memcpy(dest[0..dict_len], dictionary[absolute..][0..dict_len]);
-            if (dict_len < length) @memcpy(dest[dict_len..length], history[0..][0 .. length - dict_len]);
-        } else {
-            @memcpy(dest[0..length], history[absolute - dictionary.len ..][0..length]);
-        }
-        return;
-    }
+    copyDictionaryMatch(dictionary, history, dest[0..length], distance);
+}
 
-    var i: usize = 0;
-    while (i < length) : (i += 1) {
-        const absolute = base_len + i - distance;
-        dest[i] = if (absolute < dictionary.len)
-            dictionary[absolute]
-        else if (absolute < base_len)
-            history[absolute - dictionary.len]
-        else
-            dest[absolute - base_len];
+fn copyDictionaryMatch(dictionary: []const u8, history: []const u8, dest: []u8, distance: usize) void {
+    std.debug.assert(distance <= dictionary.len + history.len);
+    std.debug.assert(dest.len != 0);
+
+    // A dictionary-backed match reads from the virtual history
+    // `dictionary ++ history` until it reaches bytes emitted by this match. Seed
+    // as much of that virtual history as the match can observe directly (the
+    // full distance window for overlapping matches, or the whole destination for
+    // non-overlapping dictionary-only copies). Any remaining suffix can then be
+    // reproduced from the initialized destination prefix with doubling.
+    const base_len = dictionary.len + history.len;
+    const absolute = base_len - distance;
+    std.debug.assert(absolute < dictionary.len);
+    const seed_len = @min(distance, dest.len);
+    const dict_seed_len = @min(seed_len, dictionary.len - absolute);
+    @memcpy(dest[0..dict_seed_len], dictionary[absolute..][0..dict_seed_len]);
+    if (dict_seed_len < seed_len) {
+        const history_seed_len = seed_len - dict_seed_len;
+        @memcpy(dest[dict_seed_len..seed_len], history[0..history_seed_len]);
+    }
+    var copied = seed_len;
+    while (copied < dest.len) {
+        const n = @min(copied, dest.len - copied);
+        @memcpy(dest[copied..][0..n], dest[0..n]);
+        copied += n;
     }
 }
 
@@ -2669,15 +2675,9 @@ fn appendMatchWithDictionaryFromBase(allocator: std.mem.Allocator, out: *std.Arr
         copyOverlappingMatchAt(out.items, out_offset, length, distance);
         return;
     }
-    var i: usize = 0;
-    while (i < length) : (i += 1) {
-        const absolute = dictionary.len + (out.items.len - history_start) - distance;
-        const byte = if (absolute < dictionary.len)
-            dictionary[absolute]
-        else
-            out.items[history_start + absolute - dictionary.len];
-        out.appendAssumeCapacity(byte);
-    }
+    const out_offset = out.items.len;
+    out.items.len += length;
+    copyDictionaryMatch(dictionary, out.items[history_start..out_offset], out.items[out_offset..][0..length], distance);
 }
 
 fn appendSmallDistanceMatchAssumeCapacity(out: *std.ArrayList(u8), length: usize, distance: usize) void {
@@ -9956,6 +9956,20 @@ test "overlapping match copy doubles initialized output window" {
     var output: [32]u8 = undefined;
     try copyMatch(&history, &output, output.len, history.len);
     try std.testing.expectEqualSlices(u8, ("abcde" ** 6) ++ "ab", &output);
+}
+
+test "preset dictionary overlapping match copy doubles seeded dictionary window" {
+    const dictionary = "prefix:";
+    const expected = dictionary ** 5;
+
+    var caller_output: [expected.len]u8 = undefined;
+    try copyMatchWithDictionary("", dictionary, &caller_output, caller_output.len, dictionary.len);
+    try std.testing.expectEqualSlices(u8, expected, &caller_output);
+
+    var allocated_output: std.ArrayList(u8) = .empty;
+    defer allocated_output.deinit(std.testing.allocator);
+    try appendMatchWithDictionary(std.testing.allocator, &allocated_output, dictionary, expected.len, dictionary.len, null);
+    try std.testing.expectEqualSlices(u8, expected, allocated_output.items);
 }
 
 test "allocating fixed inflate reuses doubled copy for overlapping append matches" {

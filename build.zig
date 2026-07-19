@@ -847,6 +847,7 @@ pub fn build(b: *std.Build) void {
         "--csv",
         "zig-out/vort-dictionary-decode-bench.csv",
     });
+    if (optimize == .ReleaseFast) dictionary_decode_bench_gate.addArg("--enforce-throughput");
     dictionary_decode_bench_gate.step.dependOn(dictionary_decode_bench_csv_step);
     const dictionary_decode_bench_gate_step = b.step("run-dictionary-decode-bench-gate", "Validate preset-dictionary decode benchmark CSV");
     dictionary_decode_bench_gate_step.dependOn(&dictionary_decode_bench_gate.step);

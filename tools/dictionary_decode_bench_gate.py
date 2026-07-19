@@ -87,6 +87,11 @@ def positive_float(row: dict[str, str], key: str) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, default=Path("zig-out/vort-dictionary-decode-bench.csv"))
+    parser.add_argument(
+        "--enforce-throughput",
+        action="store_true",
+        help="enforce ReleaseFast MiB/s floors in addition to schema and round-trip shape checks",
+    )
     args = parser.parse_args()
     if not args.csv.exists():
         print(f"dictionary_decode_bench_gate=missing path={args.csv}", file=sys.stderr)
@@ -111,7 +116,7 @@ def main() -> int:
         if not positive_float(row, "decode_mib_s"):
             print(f"dictionary_decode_bench_gate=bad_throughput row={row}", file=sys.stderr)
             return 1
-        floor = MIN_DECODE_MIB_S.get(row["case"])
+        floor = MIN_DECODE_MIB_S.get(row["case"]) if args.enforce_throughput else None
         if floor is not None and float(row["decode_mib_s"]) < floor:
             print(f"dictionary_decode_bench_gate=throughput_regression floor={floor} row={row}", file=sys.stderr)
             return 1
