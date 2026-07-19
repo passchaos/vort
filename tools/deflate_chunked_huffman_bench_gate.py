@@ -35,12 +35,15 @@ EXPECTED_READERS = {
     "chunked_4096": 4096,
     "coalesced_4096": 4096,
     "joined_4096": 4096,
+    "windowed1024_4096": 4096,
     "chunked_64": 64,
     "coalesced_64": 64,
     "joined_64": 64,
+    "windowed1024_64": 64,
     "chunked_1": 1,
     "coalesced_1": 1,
     "joined_1": 1,
+    "windowed1024_1": 1,
 }
 SYMBOLS_PER_ITER = 128 * 1024
 

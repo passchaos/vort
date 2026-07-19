@@ -12,12 +12,15 @@ const ReaderKind = enum {
     chunked_4096,
     coalesced_4096,
     joined_4096,
+    windowed1024_4096,
     chunked_64,
     coalesced_64,
     joined_64,
+    windowed1024_64,
     chunked_1,
     coalesced_1,
     joined_1,
+    windowed1024_1,
 
     fn label(self: ReaderKind) []const u8 {
         return switch (self) {
@@ -25,12 +28,15 @@ const ReaderKind = enum {
             .chunked_4096 => "chunked_4096",
             .coalesced_4096 => "coalesced_4096",
             .joined_4096 => "joined_4096",
+            .windowed1024_4096 => "windowed1024_4096",
             .chunked_64 => "chunked_64",
             .coalesced_64 => "coalesced_64",
             .joined_64 => "joined_64",
+            .windowed1024_64 => "windowed1024_64",
             .chunked_1 => "chunked_1",
             .coalesced_1 => "coalesced_1",
             .joined_1 => "joined_1",
+            .windowed1024_1 => "windowed1024_1",
         };
     }
 
@@ -44,6 +50,13 @@ const ReaderKind = enum {
     fn isJoined(self: ReaderKind) bool {
         return switch (self) {
             .joined_4096, .joined_64, .joined_1 => true,
+            else => false,
+        };
+    }
+
+    fn isWindowed(self: ReaderKind) bool {
+        return switch (self) {
+            .windowed1024_4096, .windowed1024_64, .windowed1024_1 => true,
             else => false,
         };
     }
@@ -87,7 +100,7 @@ const Row = struct {
     checksum: u64,
 };
 
-const readers = [_]ReaderKind{ .buffered, .chunked_4096, .coalesced_4096, .joined_4096, .chunked_64, .coalesced_64, .joined_64, .chunked_1, .coalesced_1, .joined_1 };
+const readers = [_]ReaderKind{ .buffered, .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096, .chunked_64, .coalesced_64, .joined_64, .windowed1024_64, .chunked_1, .coalesced_1, .joined_1, .windowed1024_1 };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -188,6 +201,14 @@ fn runFixedLiteral(init: std.process.Init, reader_kind: ReaderKind, input: []con
                     checksum = checksum *% 131 +% got;
                 }
             },
+            .windowed1024_4096, .windowed1024_64, .windowed1024_1 => {
+                var reader = try WindowedBitReader(1024).init(chunks, input.len);
+                for (expected) |want| {
+                    const got = try huffman.decodeFixedLiteralValueFast(&reader);
+                    if (got != want) return error.DecodeLengthMismatch;
+                    checksum = checksum *% 131 +% got;
+                }
+            },
             else => {
                 var reader = try bitstream.ChunkedBitReader.init(chunks);
                 for (expected) |want| {
@@ -231,6 +252,14 @@ fn runFast(init: std.process.Init, comptime case: CaseKind, reader_kind: ReaderK
                     checksum = checksum *% 131 +% got;
                 }
             },
+            .windowed1024_4096, .windowed1024_64, .windowed1024_1 => {
+                var reader = try WindowedBitReader(1024).init(chunks, input.len);
+                for (expected) |want| {
+                    const got = try decoder.decodeValue(&reader);
+                    if (got != want) return error.DecodeLengthMismatch;
+                    checksum = checksum *% 131 +% got;
+                }
+            },
             else => {
                 var reader = try bitstream.ChunkedBitReader.init(chunks);
                 for (expected) |want| {
@@ -249,9 +278,9 @@ fn runFast(init: std.process.Init, comptime case: CaseKind, reader_kind: ReaderK
 fn chunksForReader(allocator: std.mem.Allocator, reader: ReaderKind, input: []const u8) ![]const []const u8 {
     return switch (reader) {
         .buffered => &.{},
-        .chunked_4096, .coalesced_4096, .joined_4096 => makeChunks(allocator, input, 4096),
-        .chunked_64, .coalesced_64, .joined_64 => makeChunks(allocator, input, 64),
-        .chunked_1, .coalesced_1, .joined_1 => makeChunks(allocator, input, 1),
+        .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096 => makeChunks(allocator, input, 4096),
+        .chunked_64, .coalesced_64, .joined_64, .windowed1024_64 => makeChunks(allocator, input, 64),
+        .chunked_1, .coalesced_1, .joined_1, .windowed1024_1 => makeChunks(allocator, input, 1),
     };
 }
 
@@ -309,6 +338,99 @@ fn makeChunks(allocator: std.mem.Allocator, input: []const u8, chunk_len: usize)
     return chunks.toOwnedSlice(allocator);
 }
 
+fn WindowedBitReader(comptime window_size: usize) type {
+    return struct {
+        chunks: []const []const u8,
+        total_len: usize,
+        source_absolute: usize = 0,
+        chunk_index: usize = 0,
+        chunk_start: usize = 0,
+        window: [window_size]u8 = undefined,
+        window_pos: usize = 0,
+        window_len: usize = 0,
+        bit_buffer: u64 = 0,
+        bit_count: usize = 0,
+        consumed_bits: usize = 0,
+
+        const Self = @This();
+
+        fn init(chunks: []const []const u8, total_len: usize) !Self {
+            var self = Self{ .chunks = chunks, .total_len = total_len };
+            self.syncCursor();
+            return self;
+        }
+
+        pub fn hasBits(self: Self, count: u6) bool {
+            const remaining_window = self.window_len - self.window_pos;
+            const remaining_source = if (self.source_absolute <= self.total_len) self.total_len - self.source_absolute else 0;
+            return @as(usize, count) <= self.bit_count + (remaining_window + remaining_source) * 8;
+        }
+
+        pub fn hasStagedBits(self: Self, count: u6) bool {
+            return @as(usize, count) <= self.bit_count;
+        }
+
+        pub fn peekBitsPadded(self: *Self, comptime T: type, count: u6) T {
+            std.debug.assert(count <= @bitSizeOf(T));
+            if (count == 0) return 0;
+            self.fill(count);
+            const mask = (@as(u64, 1) << @intCast(count)) - 1;
+            return @intCast(self.bit_buffer & mask);
+        }
+
+        pub fn advanceBitsStagedAssumeAvailable(self: *Self, count: u6) void {
+            std.debug.assert(self.bit_count >= count);
+            self.bit_buffer >>= @intCast(count);
+            self.bit_count -= count;
+            self.consumed_bits += count;
+        }
+
+        fn fill(self: *Self, requested_bits: usize) void {
+            while (self.bit_count < requested_bits and self.bit_count <= 56) {
+                if (self.window_pos == self.window_len) self.refillWindow();
+                if (self.window_pos == self.window_len) break;
+                self.bit_buffer |= @as(u64, self.window[self.window_pos]) << @intCast(self.bit_count);
+                self.bit_count += 8;
+                self.window_pos += 1;
+            }
+        }
+
+        fn refillWindow(self: *Self) void {
+            self.window_pos = 0;
+            self.window_len = 0;
+            while (self.window_len < self.window.len and self.source_absolute < self.total_len) {
+                self.syncCursor();
+                if (self.chunk_index >= self.chunks.len) break;
+                const chunk = self.chunks[self.chunk_index];
+                const local = self.source_absolute - self.chunk_start;
+                if (local >= chunk.len) {
+                    self.chunk_start += chunk.len;
+                    self.chunk_index += 1;
+                    continue;
+                }
+                const n = @min(self.window.len - self.window_len, chunk.len - local);
+                @memcpy(self.window[self.window_len..][0..n], chunk[local..][0..n]);
+                self.window_len += n;
+                self.source_absolute += n;
+            }
+        }
+
+        fn syncCursor(self: *Self) void {
+            if (self.source_absolute >= self.total_len) {
+                self.chunk_index = self.chunks.len;
+                self.chunk_start = self.total_len;
+                return;
+            }
+            while (self.chunk_index < self.chunks.len) {
+                const end = self.chunk_start + self.chunks[self.chunk_index].len;
+                if (self.source_absolute < end) return;
+                self.chunk_start = end;
+                self.chunk_index += 1;
+            }
+        }
+    };
+}
+
 fn coalesceChunks(allocator: std.mem.Allocator, chunks: []const []const u8, expected_len: usize) ![]u8 {
     const out = try allocator.alloc(u8, expected_len);
     errdefer allocator.free(out);
@@ -347,9 +469,9 @@ fn row(comptime case: CaseKind, reader: ReaderKind, decoder: []const u8, lookup_
 fn chunkBytes(reader: ReaderKind) usize {
     return switch (reader) {
         .buffered => 0,
-        .chunked_4096, .coalesced_4096, .joined_4096 => 4096,
-        .chunked_64, .coalesced_64, .joined_64 => 64,
-        .chunked_1, .coalesced_1, .joined_1 => 1,
+        .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096 => 4096,
+        .chunked_64, .coalesced_64, .joined_64, .windowed1024_64 => 64,
+        .chunked_1, .coalesced_1, .joined_1, .windowed1024_1 => 1,
     };
 }
 
