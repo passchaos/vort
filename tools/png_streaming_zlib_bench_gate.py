@@ -134,6 +134,10 @@ MIN_THROUGHPUT_MIB_S = {
         "contiguous_mib_s": 1000.0,
         "chunked_mib_s": 1000.0,
     },
+    "png-stream-average-filter-dynamic": {
+        "contiguous_mib_s": 250.0,
+        "chunked_mib_s": 250.0,
+    },
 }
 
 

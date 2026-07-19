@@ -3768,6 +3768,10 @@ pub fn reconstructPngScanline(filter: u8, filtered: []const u8, previous: ?[]con
         }
         return filtered.len;
     }
+    if (method == .average) {
+        reconstructPngAverageScanline(filtered, previous, bytes_per_pixel, reconstructed);
+        return filtered.len;
+    }
 
     for (filtered, 0..) |raw, i| {
         const left: u8 = if (i >= bytes_per_pixel) reconstructed[i - bytes_per_pixel] else 0;
@@ -3797,6 +3801,22 @@ fn reconstructPngUpScanline(filtered: []const u8, previous: []const u8, output: 
         output[i..][0..lanes].* = filtered_vec +% previous_vec;
     }
     while (i < filtered.len) : (i += 1) output[i] = filtered[i] +% previous[i];
+}
+
+fn reconstructPngAverageScanline(filtered: []const u8, previous: ?[]const u8, bytes_per_pixel: usize, output: []u8) void {
+    if (previous) |prev| {
+        const prefix = @min(bytes_per_pixel, filtered.len);
+        var i: usize = 0;
+        while (i < prefix) : (i += 1) output[i] = filtered[i] +% @as(u8, @intCast(@as(u16, prev[i]) >> 1));
+        while (i < filtered.len) : (i += 1) {
+            output[i] = filtered[i] +% @as(u8, @intCast((@as(u16, output[i - bytes_per_pixel]) + @as(u16, prev[i])) >> 1));
+        }
+    } else {
+        const prefix = @min(bytes_per_pixel, filtered.len);
+        copyPossiblyAliasedBytes(output[0..prefix], filtered[0..prefix]);
+        var i: usize = prefix;
+        while (i < filtered.len) : (i += 1) output[i] = filtered[i] +% (output[i - bytes_per_pixel] >> 1);
+    }
 }
 
 fn copyPossiblyAliasedBytes(output: []u8, input: []const u8) void {
