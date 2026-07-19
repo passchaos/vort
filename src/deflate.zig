@@ -7526,11 +7526,36 @@ pub fn decodeGzipStoredAllocLimited(allocator: std.mem.Allocator, input: []const
 
 fn decodeGzipStoredAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
     const data_offset = try parseGzipHeader(input);
+    if (try decodeGzipStoredAllocFooterSizeMaybe(allocator, input, data_offset, max_output_len)) |decoded| return decoded;
     const stored = (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice32, allocator, input[data_offset..], max_output_len)) orelse return error.InvalidDeflateBlockType;
     errdefer stored.deinit(allocator);
     const footer_offset = data_offset + stored.result.input_read;
     try validateGzipFooter(input, footer_offset, stored.digest, stored.result.bytes.len);
     return stored.result.bytes;
+}
+
+fn decodeGzipStoredAllocFooterSizeMaybe(allocator: std.mem.Allocator, input: []const u8, data_offset: usize, max_output_len: ?usize) !?[]u8 {
+    if (input.len < data_offset + 8) return null;
+    const expected_size: usize = std.mem.readInt(u32, input[input.len - 4 ..][0..4], .little);
+    // The gzip trailer carries ISIZE modulo 2^32. For ordinary stored members
+    // below that limit, it gives us the exact allocation size and lets the
+    // stored decoder copy while computing CRC-32 in one pass. If the trailer
+    // looks impossible for this byte stream, fall back to the planner path so
+    // malformed/trailing inputs do not use an attacker-controlled large tail
+    // value as an allocation hint.
+    if (expected_size > input.len) return null;
+    try ensureOutputLimit(0, expected_size, max_output_len);
+
+    const out = try allocator.alloc(u8, expected_size);
+    errdefer allocator.free(out);
+    const stored = decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[data_offset..], out) catch |err| switch (err) {
+        error.OutputTooSmall => return null,
+        else => return err,
+    };
+    const decoded = stored orelse return null;
+    const footer_offset = data_offset + decoded.result.input_read;
+    try validateGzipFooter(input, footer_offset, decoded.digest, decoded.result.output_written);
+    return out;
 }
 
 pub fn decodeGzipConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -10074,6 +10099,12 @@ test "gzip stored wrapper validates crc size header and trailing data" {
     const decoded = try decodeGzipStoredAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "payload", decoded);
+
+    var exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
+    const exact_stored = try decodeGzipStoredAlloc(exact_failing.allocator(), encoded);
+    defer exact_failing.allocator().free(exact_stored);
+    try std.testing.expectEqualSlices(u8, "payload", exact_stored);
+    try std.testing.expectEqual(@as(usize, 1), exact_failing.allocations);
 
     var bad_header = try encodeGzipStoredAlloc(std.testing.allocator, "payload");
     defer std.testing.allocator.free(bad_header);
