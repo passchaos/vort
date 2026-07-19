@@ -51,6 +51,7 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    mix +%= try runGzipConcatenatedStoredBench(init, stdout, iterations);
     mix +%= try runDynamicStageBench(init.io, stdout, iterations);
     try stdout.print("deflate decode mix={d}\n", .{mix});
     try stdout.flush();
@@ -89,6 +90,66 @@ fn decodeAndChecksum(allocator: std.mem.Allocator, case: Case, mode: DecodeMode)
             break :blk vort.crc32(scratch[0..case.plain_len]);
         },
     };
+}
+
+fn runGzipConcatenatedStoredBench(init: std.process.Init, stdout: *std.Io.Writer, base_iterations: usize) !u64 {
+    var first_payload: [4096]u8 = undefined;
+    var second_payload: [4096]u8 = undefined;
+    for (&first_payload, 0..) |*byte, i| {
+        byte.* = @truncate((i * 251 + 19) & 0xff);
+    }
+    for (&second_payload, 0..) |*byte, i| {
+        byte.* = "concatenated stored gzip member "[i % "concatenated stored gzip member ".len];
+    }
+
+    const first_frame = try vort.encodeGzipStoredAlloc(init.gpa, &first_payload);
+    defer init.gpa.free(first_frame);
+    const second_frame = try vort.encodeGzipStoredAlloc(init.gpa, &second_payload);
+    defer init.gpa.free(second_frame);
+
+    var frame = std.ArrayList(u8).empty;
+    defer frame.deinit(init.gpa);
+    try frame.appendSlice(init.gpa, first_frame);
+    try frame.appendSlice(init.gpa, second_frame);
+
+    const plain_len = first_payload.len + second_payload.len;
+    const iterations = @max(@as(usize, 4096), base_iterations / 16);
+    var mix: u64 = 0;
+    {
+        const start = std.Io.Clock.awake.now(init.io);
+        for (0..iterations) |_| {
+            const decoded = try vort.decodeGzipConcatenatedAlloc(init.gpa, frame.items);
+            {
+                defer init.gpa.free(decoded);
+                if (decoded.len != plain_len) return error.DecodeLengthMismatch;
+                mix +%= sparseChecksum(decoded);
+            }
+        }
+        try printDecodeThroughput(stdout, start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), "gzip-concat-stored-alloc", plain_len, frame.items.len, iterations);
+    }
+    {
+        const start = std.Io.Clock.awake.now(init.io);
+        for (0..iterations) |_| {
+            const decoded = try vort.decodeGzipConcatenatedAllocExactSize(init.gpa, frame.items, plain_len);
+            {
+                defer init.gpa.free(decoded);
+                mix +%= sparseChecksum(decoded);
+            }
+        }
+        try printDecodeThroughput(stdout, start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), "gzip-concat-stored-exact", plain_len, frame.items.len, iterations);
+    }
+    {
+        const scratch = try init.gpa.alloc(u8, plain_len);
+        defer init.gpa.free(scratch);
+        const start = std.Io.Clock.awake.now(init.io);
+        for (0..iterations) |_| {
+            const written = try vort.decodeGzipConcatenated(frame.items, scratch);
+            if (written != plain_len) return error.DecodeLengthMismatch;
+            mix +%= sparseChecksum(scratch);
+        }
+        try printDecodeThroughput(stdout, start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), "gzip-concat-stored-into", plain_len, frame.items.len, iterations);
+    }
+    return mix;
 }
 
 fn runDynamicStageBench(io: std.Io, stdout: *std.Io.Writer, iterations: usize) !u64 {
@@ -176,6 +237,20 @@ fn runDynamicStageBench(io: std.Io, stdout: *std.Io.Writer, iterations: usize) !
     return mix;
 }
 
+fn printDecodeThroughput(stdout: *std.Io.Writer, elapsed_ns_signed: i128, name: []const u8, plain_len: usize, compressed_len: usize, iterations: usize) !void {
+    const elapsed_ns: f64 = @floatFromInt(elapsed_ns_signed);
+    const elapsed_s = elapsed_ns / @as(f64, std.time.ns_per_s);
+    const total_mib = (@as(f64, @floatFromInt(plain_len)) * @as(f64, @floatFromInt(iterations))) / (1024.0 * 1024.0);
+    try stdout.print("deflate decode {s}: plain_bytes={d} compressed_bytes={d} iterations={d} elapsed_s={d:.6} throughput_mib_s={d:.2}\n", .{
+        name,
+        plain_len,
+        compressed_len,
+        iterations,
+        elapsed_s,
+        total_mib / elapsed_s,
+    });
+}
+
 fn printStage(stdout: *std.Io.Writer, elapsed_ns_signed: i128, name: []const u8, iterations: usize, bytes: usize) !void {
     const elapsed_ns: f64 = @floatFromInt(elapsed_ns_signed);
     const elapsed_s = elapsed_ns / @as(f64, std.time.ns_per_s);
@@ -186,6 +261,16 @@ fn printStage(stdout: *std.Io.Writer, elapsed_ns_signed: i128, name: []const u8,
         elapsed_s,
         elapsed_ns / @as(f64, @floatFromInt(iterations)),
     });
+}
+
+fn sparseChecksum(bytes: []const u8) u64 {
+    var mix: u64 = bytes.len;
+    const stride = @max(@as(usize, 1), bytes.len / 16);
+    var index: usize = 0;
+    while (index < bytes.len) : (index += stride) {
+        mix = mix *% 131 +% bytes[index];
+    }
+    return mix;
 }
 
 fn decodeDynamicPayloadForBench(reader: *bitstream.BitReader, output: []u8, out_offset: *usize, lit_decoder: anytype, dist_decoder: anytype) !void {

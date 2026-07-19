@@ -2209,6 +2209,32 @@ fn appendRawStoredOnlyPlanned(allocator: std.mem.Allocator, input: []const u8, o
     }
 }
 
+fn appendRawStoredOnlyPlannedWithHash(comptime Hash: type, allocator: std.mem.Allocator, input: []const u8, out: *std.ArrayList(u8), plan: StoredOnlyPlan, max_output_len: ?usize) !u32 {
+    try ensureOutputLimit(out.items.len, plan.output_len, max_output_len);
+    try out.ensureUnusedCapacity(allocator, plan.output_len);
+
+    var hash = Hash.init();
+    var in_offset: usize = 0;
+    while (true) {
+        const final = (input[in_offset] & 0x01) != 0;
+        in_offset += 1;
+        const len = std.mem.readInt(u16, input[in_offset..][0..2], .little);
+        const chunk_len: usize = len;
+        in_offset += 4;
+        const chunk = input[in_offset..][0..chunk_len];
+        // Concatenated gzip members validate each member independently. Hashing
+        // while appending keeps stored-only members to one payload pass instead
+        // of appending first and re-reading the same bytes for the trailer CRC.
+        out.appendSliceAssumeCapacity(chunk);
+        hash.update(chunk);
+        in_offset += chunk_len;
+        if (final) {
+            std.debug.assert(in_offset == plan.input_read);
+            return hash.digest();
+        }
+    }
+}
+
 pub fn decodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const result = try decodeRawStoredAllocPartial(allocator, input);
     errdefer result.deinit(allocator);
@@ -7506,10 +7532,20 @@ pub fn decodeGzipConcatenated(input: []const u8, output: []u8) Error!usize {
     var out_offset: usize = 0;
     while (offset < input.len) {
         const data_offset = try parseGzipHeader(input[offset..]);
+        const raw_offset = offset + data_offset;
+
+        if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[raw_offset..], output[out_offset..])) |stored| {
+            const footer_offset = raw_offset + stored.result.input_read;
+            try validateGzipFooterPartial(input, footer_offset, stored.digest, stored.result.output_written);
+            out_offset += stored.result.output_written;
+            offset = footer_offset + 8;
+            continue;
+        }
+
         const before_member = out_offset;
-        const raw = try decodeRawAuto(input[offset + data_offset ..], output[out_offset..]);
+        const raw = try decodeRawAuto(input[raw_offset..], output[out_offset..]);
         out_offset += raw.output_written;
-        const footer_offset = offset + data_offset + raw.input_read;
+        const footer_offset = raw_offset + raw.input_read;
         const member_payload = output[before_member..out_offset];
         try validateGzipFooterPartial(input, footer_offset, checksum.crc32Best(member_payload), member_payload.len);
         offset = footer_offset + 8;
@@ -7525,9 +7561,19 @@ fn decodeGzipConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
     var offset: usize = 0;
     while (offset < input.len) {
         const data_offset = try parseGzipHeader(input[offset..]);
+        const raw_offset = offset + data_offset;
+        const raw_input = input[raw_offset..];
+        if (try planRawStoredOnly(raw_input)) |plan| {
+            const digest = try appendRawStoredOnlyPlannedWithHash(checksum.Crc32Slice32, allocator, raw_input[0..plan.input_read], &out, plan, max_output_len);
+            const footer_offset = raw_offset + plan.input_read;
+            try validateGzipFooterPartial(input, footer_offset, digest, plan.output_len);
+            offset = footer_offset + 8;
+            continue;
+        }
+
         const before_member = out.items.len;
-        const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, input[offset + data_offset ..], "", &out, max_output_len);
-        const footer_offset = offset + data_offset + raw.input_read;
+        const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, raw_input, "", &out, max_output_len);
+        const footer_offset = raw_offset + raw.input_read;
         const member_payload = out.items[before_member..];
         try validateGzipFooterPartial(input, footer_offset, checksum.crc32Best(member_payload), member_payload.len);
         offset = footer_offset + 8;
@@ -11598,6 +11644,37 @@ test "gzip concatenated members decode in sequence" {
     try std.testing.expectEqualSlices(u8, "helloworld", exact);
     try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, 9));
     try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, 11));
+}
+
+test "gzip concatenated stored members decode and validate per-member trailers" {
+    const first = try encodeGzipStoredAlloc(std.testing.allocator, "stored ");
+    defer std.testing.allocator.free(first);
+    const second = try encodeGzipStoredAlloc(std.testing.allocator, "member");
+    defer std.testing.allocator.free(second);
+
+    var cat: std.ArrayList(u8) = .empty;
+    defer cat.deinit(std.testing.allocator);
+    try cat.appendSlice(std.testing.allocator, first);
+    try cat.appendSlice(std.testing.allocator, second);
+
+    const decoded = try decodeGzipConcatenatedAlloc(std.testing.allocator, cat.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "stored member", decoded);
+
+    var into: ["stored member".len]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, into.len), try decodeGzipConcatenated(cat.items, &into));
+    try std.testing.expectEqualSlices(u8, "stored member", &into);
+
+    const exact = try decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, into.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, &into, exact);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeGzipConcatenatedAllocLimited(std.testing.allocator, cat.items, into.len - 1));
+
+    var bad_second_crc = try std.testing.allocator.dupe(u8, cat.items);
+    defer std.testing.allocator.free(bad_second_crc);
+    bad_second_crc[bad_second_crc.len - 8] ^= 1;
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzipConcatenatedAlloc(std.testing.allocator, bad_second_crc));
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzipConcatenated(bad_second_crc, &into));
 }
 
 test "gzip concatenated decoders preserve later members after an empty member" {
