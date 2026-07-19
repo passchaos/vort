@@ -14,16 +14,19 @@ const ReaderKind = enum {
     joined_4096,
     windowed1024_4096,
     windowed4096_4096,
+    span_4096,
     chunked_64,
     coalesced_64,
     joined_64,
     windowed1024_64,
     windowed4096_64,
+    span_64,
     chunked_1,
     coalesced_1,
     joined_1,
     windowed1024_1,
     windowed4096_1,
+    span_1,
 
     fn label(self: ReaderKind) []const u8 {
         return switch (self) {
@@ -33,16 +36,19 @@ const ReaderKind = enum {
             .joined_4096 => "joined_4096",
             .windowed1024_4096 => "windowed1024_4096",
             .windowed4096_4096 => "windowed4096_4096",
+            .span_4096 => "span_4096",
             .chunked_64 => "chunked_64",
             .coalesced_64 => "coalesced_64",
             .joined_64 => "joined_64",
             .windowed1024_64 => "windowed1024_64",
             .windowed4096_64 => "windowed4096_64",
+            .span_64 => "span_64",
             .chunked_1 => "chunked_1",
             .coalesced_1 => "coalesced_1",
             .joined_1 => "joined_1",
             .windowed1024_1 => "windowed1024_1",
             .windowed4096_1 => "windowed4096_1",
+            .span_1 => "span_1",
         };
     }
 
@@ -106,7 +112,7 @@ const Row = struct {
     checksum: u64,
 };
 
-const readers = [_]ReaderKind{ .buffered, .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096, .windowed4096_4096, .chunked_64, .coalesced_64, .joined_64, .windowed1024_64, .windowed4096_64, .chunked_1, .coalesced_1, .joined_1, .windowed1024_1, .windowed4096_1 };
+const readers = [_]ReaderKind{ .buffered, .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096, .windowed4096_4096, .span_4096, .chunked_64, .coalesced_64, .joined_64, .windowed1024_64, .windowed4096_64, .span_64, .chunked_1, .coalesced_1, .joined_1, .windowed1024_1, .windowed4096_1, .span_1 };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -223,6 +229,14 @@ fn runFixedLiteral(init: std.process.Init, reader_kind: ReaderKind, input: []con
                     checksum = checksum *% 131 +% got;
                 }
             },
+            .span_4096, .span_64, .span_1 => {
+                var reader = SpanBitReader.init(chunks, input.len);
+                for (expected) |want| {
+                    const got = try huffman.decodeFixedLiteralValueFast(&reader);
+                    if (got != want) return error.DecodeLengthMismatch;
+                    checksum = checksum *% 131 +% got;
+                }
+            },
             else => {
                 var reader = try bitstream.ChunkedBitReader.init(chunks);
                 for (expected) |want| {
@@ -282,6 +296,14 @@ fn runFast(init: std.process.Init, comptime case: CaseKind, reader_kind: ReaderK
                     checksum = checksum *% 131 +% got;
                 }
             },
+            .span_4096, .span_64, .span_1 => {
+                var reader = SpanBitReader.init(chunks, input.len);
+                for (expected) |want| {
+                    const got = try decoder.decodeValue(&reader);
+                    if (got != want) return error.DecodeLengthMismatch;
+                    checksum = checksum *% 131 +% got;
+                }
+            },
             else => {
                 var reader = try bitstream.ChunkedBitReader.init(chunks);
                 for (expected) |want| {
@@ -300,9 +322,9 @@ fn runFast(init: std.process.Init, comptime case: CaseKind, reader_kind: ReaderK
 fn chunksForReader(allocator: std.mem.Allocator, reader: ReaderKind, input: []const u8) ![]const []const u8 {
     return switch (reader) {
         .buffered => &.{},
-        .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096, .windowed4096_4096 => makeChunks(allocator, input, 4096),
-        .chunked_64, .coalesced_64, .joined_64, .windowed1024_64, .windowed4096_64 => makeChunks(allocator, input, 64),
-        .chunked_1, .coalesced_1, .joined_1, .windowed1024_1, .windowed4096_1 => makeChunks(allocator, input, 1),
+        .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096, .windowed4096_4096, .span_4096 => makeChunks(allocator, input, 4096),
+        .chunked_64, .coalesced_64, .joined_64, .windowed1024_64, .windowed4096_64, .span_64 => makeChunks(allocator, input, 64),
+        .chunked_1, .coalesced_1, .joined_1, .windowed1024_1, .windowed4096_1, .span_1 => makeChunks(allocator, input, 1),
     };
 }
 
@@ -359,6 +381,72 @@ fn makeChunks(allocator: std.mem.Allocator, input: []const u8, chunk_len: usize)
     }
     return chunks.toOwnedSlice(allocator);
 }
+
+const SpanBitReader = struct {
+    chunks: []const []const u8,
+    total_len: usize,
+    chunk_index: usize = 0,
+    local: usize = 0,
+    source_absolute: usize = 0,
+    bit_buffer: u64 = 0,
+    bit_count: usize = 0,
+    consumed_bits: usize = 0,
+
+    fn init(chunks: []const []const u8, total_len: usize) SpanBitReader {
+        var self = SpanBitReader{ .chunks = chunks, .total_len = total_len };
+        self.skipEmptyChunks();
+        return self;
+    }
+
+    pub fn hasBits(self: SpanBitReader, count: u6) bool {
+        const remaining_source = if (self.source_absolute <= self.total_len) self.total_len - self.source_absolute else 0;
+        return @as(usize, count) <= self.bit_count + remaining_source * 8;
+    }
+
+    pub fn hasStagedBits(self: SpanBitReader, count: u6) bool {
+        return @as(usize, count) <= self.bit_count;
+    }
+
+    pub fn peekBitsPadded(self: *SpanBitReader, comptime T: type, count: u6) T {
+        std.debug.assert(count <= @bitSizeOf(T));
+        if (count == 0) return 0;
+        self.fill(count);
+        const mask = (@as(u64, 1) << @intCast(count)) - 1;
+        return @intCast(self.bit_buffer & mask);
+    }
+
+    pub fn advanceBitsStagedAssumeAvailable(self: *SpanBitReader, count: u6) void {
+        std.debug.assert(self.bit_count >= count);
+        self.bit_buffer >>= @intCast(count);
+        self.bit_count -= count;
+        self.consumed_bits += count;
+    }
+
+    fn fill(self: *SpanBitReader, requested_bits: usize) void {
+        while (self.bit_count < requested_bits and self.bit_count <= 56 and self.source_absolute < self.total_len) {
+            self.skipEmptyChunks();
+            if (self.chunk_index >= self.chunks.len) break;
+            const chunk = self.chunks[self.chunk_index];
+            while (self.bit_count < requested_bits and self.bit_count <= 56 and self.local < chunk.len) {
+                self.bit_buffer |= @as(u64, chunk[self.local]) << @intCast(self.bit_count);
+                self.bit_count += 8;
+                self.local += 1;
+                self.source_absolute += 1;
+            }
+            if (self.local == chunk.len) {
+                self.chunk_index += 1;
+                self.local = 0;
+            }
+        }
+    }
+
+    fn skipEmptyChunks(self: *SpanBitReader) void {
+        while (self.chunk_index < self.chunks.len and self.local >= self.chunks[self.chunk_index].len) {
+            self.chunk_index += 1;
+            self.local = 0;
+        }
+    }
+};
 
 fn WindowedBitReader(comptime window_size: usize) type {
     return struct {
@@ -491,9 +579,9 @@ fn row(comptime case: CaseKind, reader: ReaderKind, decoder: []const u8, lookup_
 fn chunkBytes(reader: ReaderKind) usize {
     return switch (reader) {
         .buffered => 0,
-        .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096, .windowed4096_4096 => 4096,
-        .chunked_64, .coalesced_64, .joined_64, .windowed1024_64, .windowed4096_64 => 64,
-        .chunked_1, .coalesced_1, .joined_1, .windowed1024_1, .windowed4096_1 => 1,
+        .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096, .windowed4096_4096, .span_4096 => 4096,
+        .chunked_64, .coalesced_64, .joined_64, .windowed1024_64, .windowed4096_64, .span_64 => 64,
+        .chunked_1, .coalesced_1, .joined_1, .windowed1024_1, .windowed4096_1, .span_1 => 1,
     };
 }
 
