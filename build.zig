@@ -419,6 +419,7 @@ pub fn build(b: *std.Build) void {
         "--csv",
         "zig-out/vort-png-scanline-bench.csv",
     });
+    if (optimize == .ReleaseFast) png_scanline_bench_gate.addArg("--enforce-throughput");
     png_scanline_bench_gate.step.dependOn(png_scanline_bench_csv_step);
     const png_scanline_bench_gate_step = b.step("run-png-scanline-bench-gate", "Validate focused PNG scanline reconstruction benchmark CSV");
     png_scanline_bench_gate_step.dependOn(&png_scanline_bench_gate.step);

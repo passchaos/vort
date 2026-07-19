@@ -22,6 +22,20 @@ EXPECTED_COLUMNS = {
 }
 EXPECTED_STAGES = {"none", "sub", "up", "average", "paeth"}
 EXPECTED_BPP = {"1", "2", "3", "4", "6", "8"}
+MIN_RELEASEFAST_MIB_S = {
+    ("up", "1"): 10_000.0,
+    ("up", "2"): 10_000.0,
+    ("up", "3"): 10_000.0,
+    ("up", "4"): 10_000.0,
+    ("up", "6"): 10_000.0,
+    ("up", "8"): 10_000.0,
+    ("average", "1"): 300.0,
+    ("average", "2"): 600.0,
+    ("average", "3"): 900.0,
+    ("average", "4"): 1_000.0,
+    ("average", "6"): 1_200.0,
+    ("average", "8"): 1_500.0,
+}
 
 
 def positive_int(row: dict[str, str], key: str) -> bool:
@@ -41,6 +55,11 @@ def positive_float(row: dict[str, str], key: str) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, default=Path("zig-out/vort-png-scanline-bench.csv"))
+    parser.add_argument(
+        "--enforce-throughput",
+        action="store_true",
+        help="enforce ReleaseFast throughput floors for optimized Up/Average rows",
+    )
     args = parser.parse_args()
 
     if not args.csv.exists():
@@ -82,6 +101,10 @@ def main() -> int:
             return 1
         if not positive_float(row, "output_mib_per_s"):
             print(f"png_scanline_bench_gate=bad_throughput row={row}", file=sys.stderr)
+            return 1
+        floor = MIN_RELEASEFAST_MIB_S.get(key) if args.enforce_throughput else None
+        if floor is not None and float(row["output_mib_per_s"]) < floor:
+            print(f"png_scanline_bench_gate=throughput_regression key={key} floor={floor} row={row}", file=sys.stderr)
             return 1
 
     print(f"png_scanline_bench_gate=ok stages={len(stages)} bpp={len(bpps)} rows={len(rows)}")
