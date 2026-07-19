@@ -204,6 +204,10 @@
       "expected_format": "md",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard"
     },
+    "vort-png-scanline-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-png-scanline-bench-gate"
+    },
     "vort-png-scratch-report.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-png-scratch-report-dashboard"
@@ -354,6 +358,7 @@
     "vort-native-fuzz-corpus.md": "zig build run-native-fuzz-corpus-dashboard",
     "vort-native-parallel-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard",
     "vort-native-thread-pool-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard",
+    "vort-png-scanline-bench.csv": "zig build run-png-scanline-bench-gate",
     "vort-png-scratch-report.json": "zig build run-png-scratch-report-dashboard",
     "vort-png-scratch-report.md": "zig build run-png-scratch-report-dashboard",
     "vort-png-streaming-zlib-bench-report-repeat3.csv": "zig build -Doptimize=ReleaseFast run-png-streaming-zlib-bench-report-gate",
@@ -377,7 +382,8 @@
     "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report"
   },
   "required_smoke_gates": [
-    "vort-dictionary-decode-bench.csv",
+    "vort-chunk-cursor-bench.csv",
+    "vort-chunked-zlib-bench-report-repeat3.csv",
     "vort-dashboard-category-negative-smoke.json",
     "vort-dashboard-config-index-negative-smoke.json",
     "vort-dashboard-config-index-smoke.json",
@@ -385,9 +391,15 @@
     "vort-dashboard-producers-required-smoke.json",
     "vort-dashboard-strict-smoke.json",
     "vort-dashboard-strict-smoke.md",
+    "vort-deflate-chunked-huffman-bench.csv",
     "vort-deflate-decode-stage-report.json",
+    "vort-deflate-extra-bits-bench.csv",
+    "vort-deflate-huffman-build-bench.csv",
+    "vort-deflate-huffman-lookup-bench.csv",
+    "vort-deflate-match-copy-bench.csv",
     "vort-deflate-wrapper-fuzz-corpus.json",
     "vort-deflate-wrapper-fuzz-corpus.md",
+    "vort-dictionary-decode-bench.csv",
     "vort-fuzz-corpus-coverage-smoke.json",
     "vort-header-inspect-smoke.json",
     "vort-header-inspect-smoke.md",
@@ -400,8 +412,10 @@
     "vort-native-fuzz-corpus-coverage-smoke.json",
     "vort-native-fuzz-corpus.json",
     "vort-native-fuzz-corpus.md",
+    "vort-png-scanline-bench.csv",
     "vort-png-scratch-report.json",
     "vort-png-scratch-report.md",
+    "vort-png-streaming-zlib-bench-report-repeat3.csv",
     "vort-python-zlib-diff-smoke.json",
     "vort-sidecar-corrupt-smoke.json",
     "vort-sidecar-corrupt-smoke.md",
@@ -409,15 +423,7 @@
     "vort-validation-json-smoke.json",
     "vort-zlib-relaxed-report-gate.json",
     "vort-zlib-relaxed-report.json",
-    "vort-zlib-relaxed-report.md",
-    "vort-deflate-match-copy-bench.csv",
-    "vort-deflate-extra-bits-bench.csv",
-    "vort-deflate-huffman-build-bench.csv",
-    "vort-deflate-huffman-lookup-bench.csv",
-    "vort-png-streaming-zlib-bench-report-repeat3.csv",
-    "vort-chunked-zlib-bench-report-repeat3.csv",
-    "vort-chunk-cursor-bench.csv",
-    "vort-deflate-chunked-huffman-bench.csv"
+    "vort-zlib-relaxed-report.md"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1

@@ -397,6 +397,32 @@ pub fn build(b: *std.Build) void {
     const png_streaming_zlib_bench_report_gate_step = b.step("run-png-streaming-zlib-bench-report-gate", "Validate repeat3 PNG streaming zlib scanline throughput CSV");
     png_streaming_zlib_bench_report_gate_step.dependOn(&png_streaming_zlib_bench_report_gate.step);
 
+    const png_scanline_bench_exe = b.addExecutable(.{
+        .name = "vort-png-scanline-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/png_scanline_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_png_scanline_bench_csv = b.addRunArtifact(png_scanline_bench_exe);
+    run_png_scanline_bench_csv.addArgs(&.{ "--csv", "zig-out/vort-png-scanline-bench.csv" });
+    const png_scanline_bench_csv_step = b.step("run-png-scanline-bench-csv", "Write focused PNG scanline reconstruction benchmark CSV");
+    png_scanline_bench_csv_step.dependOn(&run_png_scanline_bench_csv.step);
+
+    const png_scanline_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/png_scanline_bench_gate.py",
+        "--csv",
+        "zig-out/vort-png-scanline-bench.csv",
+    });
+    png_scanline_bench_gate.step.dependOn(png_scanline_bench_csv_step);
+    const png_scanline_bench_gate_step = b.step("run-png-scanline-bench-gate", "Validate focused PNG scanline reconstruction benchmark CSV");
+    png_scanline_bench_gate_step.dependOn(&png_scanline_bench_gate.step);
+
     const zlib_relaxed_report_exe = b.addExecutable(.{
         .name = "vort-zlib-relaxed-report",
         .root_module = b.createModule(.{
@@ -1248,6 +1274,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(chunk_cursor_bench_gate_step);
     dashboard_index.step.dependOn(chunked_zlib_bench_report_gate_step);
     dashboard_index.step.dependOn(png_streaming_zlib_bench_report_gate_step);
+    dashboard_index.step.dependOn(png_scanline_bench_gate_step);
     dashboard_index.step.dependOn(level_report_dashboard_step);
     dashboard_index.step.dependOn(huffman_length_report_dashboard_step);
     dashboard_index.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
@@ -1375,6 +1402,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_extra_bits_bench_exe.step);
     check_step.dependOn(&chunk_cursor_bench_exe.step);
     check_step.dependOn(&png_streaming_zlib_bench_report_exe.step);
+    check_step.dependOn(&png_scanline_bench_exe.step);
     check_step.dependOn(&zlib_encode_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
@@ -1440,6 +1468,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(chunk_cursor_bench_gate_step);
     ci_smoke_step.dependOn(chunked_zlib_bench_report_gate_step);
     ci_smoke_step.dependOn(png_streaming_zlib_bench_report_gate_step);
+    ci_smoke_step.dependOn(png_scanline_bench_gate_step);
     ci_smoke_step.dependOn(dictionary_report_step);
     ci_smoke_step.dependOn(dictionary_decode_bench_gate_step);
     ci_smoke_step.dependOn(dictionary_deflate_report_step);

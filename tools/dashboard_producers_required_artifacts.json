@@ -1,6 +1,41 @@
 {
   "required_artifacts": [
     {
+      "expected_format": "csv",
+      "name": "vort-checksum-bench.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast bench-checksum-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast bench-checksum-csv"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-chunk-cursor-bench.csv",
+      "producer_step": "zig build run-chunk-cursor-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-chunk-cursor-bench-gate"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-chunked-zlib-bench-report-repeat3.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-gate"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-chunked-zlib-bench-report.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-chunked-zlib-bench-report.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-dashboard",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-dashboard"
+    },
+    {
       "expected_format": "json",
       "name": "vort-dashboard-category-negative-smoke.json",
       "producer_step": "zig build run-dashboard-category-negative-smoke",
@@ -65,38 +100,10 @@
     },
     {
       "expected_format": "csv",
-      "name": "vort-checksum-bench.csv",
-      "producer_step": "zig build -Doptimize=ReleaseFast bench-checksum-csv",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build -Doptimize=ReleaseFast bench-checksum-csv"
-    },
-    {
-      "expected_format": "csv",
-      "name": "vort-chunked-zlib-bench-report.csv",
-      "producer_step": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv"
-    },
-    {
-      "expected_format": "csv",
-      "name": "vort-chunked-zlib-bench-report-repeat3.csv",
-      "producer_step": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-gate",
+      "name": "vort-deflate-chunked-huffman-bench.csv",
+      "producer_step": "zig build run-deflate-chunked-huffman-bench-gate",
       "required_smoke_gate": true,
-      "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-gate"
-    },
-    {
-      "expected_format": "md",
-      "name": "vort-chunked-zlib-bench-report.md",
-      "producer_step": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-dashboard",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-dashboard"
-    },
-    {
-      "expected_format": "csv",
-      "name": "vort-deflate-decode-stage-report.csv",
-      "producer_step": "zig build run-deflate-decode-stage-report-csv",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build run-deflate-decode-stage-report-csv"
+      "smoke_gate": "zig build run-deflate-chunked-huffman-bench-gate"
     },
     {
       "expected_format": "csv",
@@ -104,6 +111,13 @@
       "producer_step": "zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv-repeat3",
       "required_smoke_gate": false,
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv-repeat3"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-deflate-decode-stage-report.csv",
+      "producer_step": "zig build run-deflate-decode-stage-report-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-deflate-decode-stage-report-csv"
     },
     {
       "expected_format": "json",
@@ -337,6 +351,13 @@
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard"
     },
     {
+      "expected_format": "csv",
+      "name": "vort-png-scanline-bench.csv",
+      "producer_step": "zig build run-png-scanline-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-png-scanline-bench-gate"
+    },
+    {
       "expected_format": "json",
       "name": "vort-png-scratch-report.json",
       "producer_step": "zig build run-png-scratch-report-dashboard",
@@ -366,31 +387,17 @@
     },
     {
       "expected_format": "md",
-      "name": "vort-rust-deflate-benchmark-summary.md",
-      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary"
-    },
-    {
-      "expected_format": "csv",
-      "name": "vort-rust-deflate-decode-bench.csv",
-      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv"
-    },
-    {
-      "expected_format": "csv",
-      "name": "vort-rust-deflate-encode-bench.csv",
-      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv"
-    },
-    {
-      "expected_format": "md",
       "name": "vort-rust-deflate-benchmark-summary-repeat3.md",
       "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3",
       "required_smoke_gate": false,
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary-repeat3"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-rust-deflate-benchmark-summary.md",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-benchmark-summary"
     },
     {
       "expected_format": "csv",
@@ -401,10 +408,24 @@
     },
     {
       "expected_format": "csv",
+      "name": "vort-rust-deflate-decode-bench.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-bench-csv"
+    },
+    {
+      "expected_format": "csv",
       "name": "vort-rust-deflate-encode-bench-repeat3.csv",
       "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3",
       "required_smoke_gate": false,
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv-repeat3"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-rust-deflate-encode-bench.csv",
+      "producer_step": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-rust-deflate-encode-bench-csv"
     },
     {
       "expected_format": "json",
@@ -482,20 +503,6 @@
       "producer_step": "zig build run-zlib-relaxed-report",
       "required_smoke_gate": true,
       "smoke_gate": "zig build run-zlib-relaxed-report-gate"
-    },
-    {
-      "expected_format": "csv",
-      "name": "vort-chunk-cursor-bench.csv",
-      "producer_step": "zig build run-chunk-cursor-bench-gate",
-      "required_smoke_gate": true,
-      "smoke_gate": "zig build run-chunk-cursor-bench-gate"
-    },
-    {
-      "expected_format": "csv",
-      "name": "vort-deflate-chunked-huffman-bench.csv",
-      "producer_step": "zig build run-deflate-chunked-huffman-bench-gate",
-      "required_smoke_gate": true,
-      "smoke_gate": "zig build run-deflate-chunked-huffman-bench-gate"
     }
   ],
   "schema": "vort.dashboard_producers_required_artifacts",
