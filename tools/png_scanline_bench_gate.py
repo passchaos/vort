@@ -35,6 +35,7 @@ MIN_RELEASEFAST_MIB_S = {
     ("average", "4"): 1_000.0,
     ("average", "6"): 1_200.0,
     ("average", "8"): 1_500.0,
+    ("paeth", "1"): 225.0,
 }
 
 
@@ -58,7 +59,7 @@ def main() -> int:
     parser.add_argument(
         "--enforce-throughput",
         action="store_true",
-        help="enforce ReleaseFast throughput floors for optimized Up/Average rows",
+        help="enforce ReleaseFast throughput floors for optimized Up/Average/Paeth rows",
     )
     args = parser.parse_args()
 

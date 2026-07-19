@@ -3772,6 +3772,14 @@ pub fn reconstructPngScanline(filter: u8, filtered: []const u8, previous: ?[]con
         reconstructPngAverageScanline(filtered, previous, bytes_per_pixel, reconstructed);
         return filtered.len;
     }
+    if (method == .paeth and bytes_per_pixel == 1) {
+        // bpp=1 covers indexed/low-bit grayscale scanline payloads after PNG's
+        // "bytes per pixel is at least one" filter rule. Splitting it from the
+        // generic loop avoids the per-byte stride branches while keeping the
+        // same in-place behavior used by Adam7 pass reconstruction.
+        reconstructPngPaethBpp1Scanline(filtered, previous, reconstructed);
+        return filtered.len;
+    }
 
     for (filtered, 0..) |raw, i| {
         const left: u8 = if (i >= bytes_per_pixel) reconstructed[i - bytes_per_pixel] else 0;
@@ -3817,6 +3825,26 @@ fn reconstructPngAverageScanline(filtered: []const u8, previous: ?[]const u8, by
         var i: usize = prefix;
         while (i < filtered.len) : (i += 1) output[i] = filtered[i] +% (output[i - bytes_per_pixel] >> 1);
     }
+}
+
+fn reconstructPngPaethBpp1Scanline(filtered: []const u8, previous: ?[]const u8, output: []u8) void {
+    if (previous) |prev| {
+        if (filtered.len == 0) return;
+        output[0] = filtered[0] +% prev[0];
+        var i: usize = 1;
+        while (i < filtered.len) : (i += 1) {
+            output[i] = filtered[i] +% pngPaethPredictor(output[i - 1], prev[i], prev[i - 1]);
+        }
+    } else {
+        reconstructPngSubBpp1Scanline(filtered, output);
+    }
+}
+
+fn reconstructPngSubBpp1Scanline(filtered: []const u8, output: []u8) void {
+    if (filtered.len == 0) return;
+    copyPossiblyAliasedBytes(output[0..1], filtered[0..1]);
+    var i: usize = 1;
+    while (i < filtered.len) : (i += 1) output[i] = filtered[i] +% output[i - 1];
 }
 
 fn copyPossiblyAliasedBytes(output: []u8, input: []const u8) void {
@@ -8263,6 +8291,26 @@ test "png scanline reconstruction filters round trip" {
     try std.testing.expectError(error.CorruptFrame, reconstructPngScanline(5, filtered_payload[1..][0..row_len], null, bpp, &reconstructed[0]));
     try std.testing.expectError(error.CorruptFrame, reconstructPngScanline(0, filtered_payload[1..][0..row_len], null, 0, &reconstructed[0]));
     try std.testing.expectError(error.SizeMismatch, reconstructPngScanline(2, filtered_payload[1..][0..row_len], short_output[0..], bpp, &reconstructed[0]));
+}
+
+test "png scanline reconstruction Paeth bpp1 supports in-place rows" {
+    const row_len = 32;
+    const previous = pngReconstructionRow(row_len, 1);
+    var row = pngReconstructionRow(row_len, 2);
+    var filtered: [row_len]u8 = undefined;
+
+    filterPngScanlineForTest(4, &row, &previous, 1, &filtered);
+    var in_place = filtered;
+    try std.testing.expectEqual(row_len, try reconstructPngScanline(4, &in_place, &previous, 1, &in_place));
+    try std.testing.expectEqualSlices(u8, &row, &in_place);
+
+    // The first Paeth row has no `up` samples, so PNG reduces it to bpp=1 Sub
+    // reconstruction. Exercise that branch with aliased input/output as well.
+    row = pngReconstructionRow(row_len, 0);
+    filterPngScanlineForTest(4, &row, null, 1, &filtered);
+    in_place = filtered;
+    try std.testing.expectEqual(row_len, try reconstructPngScanline(4, &in_place, null, 1, &in_place));
+    try std.testing.expectEqualSlices(u8, &row, &in_place);
 }
 
 test "png image info computes scanline metadata" {
