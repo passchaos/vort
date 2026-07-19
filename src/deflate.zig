@@ -3780,6 +3780,13 @@ pub fn reconstructPngScanline(filter: u8, filtered: []const u8, previous: ?[]con
         reconstructPngPaethBpp1Scanline(filtered, previous, reconstructed);
         return filtered.len;
     }
+    if (method == .paeth) {
+        // Wider Paeth rows still have the same prefix/no-previous reductions as
+        // the PNG spec's generic predictor, but spelling them out here removes
+        // two hot-path stride checks per byte for common RGB/RGBA rows.
+        reconstructPngPaethScanline(filtered, previous, bytes_per_pixel, reconstructed);
+        return filtered.len;
+    }
 
     for (filtered, 0..) |raw, i| {
         const left: u8 = if (i >= bytes_per_pixel) reconstructed[i - bytes_per_pixel] else 0;
@@ -3838,6 +3845,26 @@ fn reconstructPngPaethBpp1Scanline(filtered: []const u8, previous: ?[]const u8, 
     } else {
         reconstructPngSubBpp1Scanline(filtered, output);
     }
+}
+
+fn reconstructPngPaethScanline(filtered: []const u8, previous: ?[]const u8, bytes_per_pixel: usize, output: []u8) void {
+    if (previous) |prev| {
+        const prefix = @min(bytes_per_pixel, filtered.len);
+        var i: usize = 0;
+        while (i < prefix) : (i += 1) output[i] = filtered[i] +% prev[i];
+        while (i < filtered.len) : (i += 1) {
+            output[i] = filtered[i] +% pngPaethPredictor(output[i - bytes_per_pixel], prev[i], prev[i - bytes_per_pixel]);
+        }
+    } else {
+        reconstructPngSubScanline(filtered, bytes_per_pixel, output);
+    }
+}
+
+fn reconstructPngSubScanline(filtered: []const u8, bytes_per_pixel: usize, output: []u8) void {
+    const prefix = @min(bytes_per_pixel, filtered.len);
+    copyPossiblyAliasedBytes(output[0..prefix], filtered[0..prefix]);
+    var i: usize = prefix;
+    while (i < filtered.len) : (i += 1) output[i] = filtered[i] +% output[i - bytes_per_pixel];
 }
 
 fn reconstructPngSubBpp1Scanline(filtered: []const u8, output: []u8) void {
@@ -8310,6 +8337,26 @@ test "png scanline reconstruction Paeth bpp1 supports in-place rows" {
     filterPngScanlineForTest(4, &row, null, 1, &filtered);
     in_place = filtered;
     try std.testing.expectEqual(row_len, try reconstructPngScanline(4, &in_place, null, 1, &in_place));
+    try std.testing.expectEqualSlices(u8, &row, &in_place);
+}
+
+test "png scanline reconstruction Paeth bpp4 supports in-place rows" {
+    const row_len = 32;
+    const bpp = 4;
+    const previous = pngReconstructionRow(row_len, 3);
+    var row = pngReconstructionRow(row_len, 4);
+    var filtered: [row_len]u8 = undefined;
+
+    filterPngScanlineForTest(4, &row, &previous, bpp, &filtered);
+    var in_place = filtered;
+    try std.testing.expectEqual(row_len, try reconstructPngScanline(4, &in_place, &previous, bpp, &in_place));
+    try std.testing.expectEqualSlices(u8, &row, &in_place);
+
+    // With no previous row, Paeth reduces to Sub using the same byte stride.
+    row = pngReconstructionRow(row_len, 0);
+    filterPngScanlineForTest(4, &row, null, bpp, &filtered);
+    in_place = filtered;
+    try std.testing.expectEqual(row_len, try reconstructPngScanline(4, &in_place, null, bpp, &in_place));
     try std.testing.expectEqualSlices(u8, &row, &in_place);
 }
 

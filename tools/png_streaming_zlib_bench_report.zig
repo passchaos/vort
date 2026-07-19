@@ -39,6 +39,7 @@ const specs = [_]CaseSpec{
     .{ .name = "png-stream-sub-filter-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .horizontal_delta, .chunk_bytes = 64 },
     .{ .name = "png-stream-average-filter-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .average_delta, .chunk_bytes = 64 },
     .{ .name = "png-stream-paeth-filter-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .paeth_delta, .chunk_bytes = 64 },
+    .{ .name = "png-stream-paeth-rgba8-dynamic", .width = 1024, .height = 64, .bytes_per_pixel = 4, .encoder = .dynamic, .pattern = .paeth_delta, .chunk_bytes = 64 },
     .{ .name = "png-stream-small-distance-dynamic", .width = 1024, .height = 64, .bytes_per_pixel = 4, .encoder = .dynamic, .pattern = .abcd, .chunk_bytes = 64 },
     .{ .name = "png-stream-row-repeat-dynamic", .width = 1024, .height = 96, .bytes_per_pixel = 3, .encoder = .dynamic, .pattern = .repeated_row, .chunk_bytes = 32 },
     .{ .name = "png-stream-row-repeat-fixed", .width = 1024, .height = 64, .bytes_per_pixel = 3, .encoder = .fixed, .pattern = .repeated_row, .chunk_bytes = 32 },

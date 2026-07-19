@@ -75,6 +75,15 @@ EXPECTED_CASES = {
         "image_bytes": 131072,
         "chunk_bytes": 64,
     },
+    "png-stream-paeth-rgba8-dynamic": {
+        "encoder": "dynamic",
+        "pattern": "paeth_delta",
+        "width": 1024,
+        "height": 64,
+        "row_bytes": 4096,
+        "image_bytes": 262144,
+        "chunk_bytes": 64,
+    },
     "png-stream-small-distance-dynamic": {
         "encoder": "dynamic",
         "pattern": "abcd",
@@ -137,6 +146,10 @@ MIN_THROUGHPUT_MIB_S = {
     "png-stream-average-filter-dynamic": {
         "contiguous_mib_s": 250.0,
         "chunked_mib_s": 250.0,
+    },
+    "png-stream-paeth-rgba8-dynamic": {
+        "contiguous_mib_s": 450.0,
+        "chunked_mib_s": 450.0,
     },
 }
 

@@ -1,7 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 
-const iterations: usize = 16;
+const iterations: usize = 64;
 const row_pixels: usize = 1024;
 const rows_per_case: usize = 128;
 const bpp_cases = [_]usize{ 1, 2, 3, 4, 6, 8 };
