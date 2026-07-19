@@ -2525,6 +2525,7 @@ fn copyMatchWithDictionary(history: []const u8, dictionary: []const u8, dest: []
 }
 
 fn copySmallDistanceMatch(dest: []u8, pattern: []const u8, distance: usize) void {
+    if (dest.len >= 16) return repeatSmallPatternByDoubling(dest, pattern[0..distance]);
     switch (distance) {
         1 => @memset(dest, pattern[0]),
         2 => {
@@ -2576,6 +2577,18 @@ fn copySmallDistanceMatch(dest: []u8, pattern: []const u8, distance: usize) void
             if (i < dest.len) dest[i] = c;
         },
         else => unreachable,
+    }
+}
+
+fn repeatSmallPatternByDoubling(dest: []u8, pattern: []const u8) void {
+    std.debug.assert(pattern.len > 0 and pattern.len <= 4);
+    const seed = @min(pattern.len, dest.len);
+    @memcpy(dest[0..seed], pattern[0..seed]);
+    var copied = seed;
+    while (copied < dest.len) {
+        const n = @min(copied, dest.len - copied);
+        @memcpy(dest[copied..][0..n], dest[0..n]);
+        copied += n;
     }
 }
 
