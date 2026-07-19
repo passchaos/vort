@@ -1057,3 +1057,5 @@ architecture blindly.
   decode and from about `153.63` / `152.97` MiB/s to about `1174.51` /
   `1177.64` MiB/s for chunked decode, while RLE/small-distance rows stayed in
   the same throughput class.
+
+- Added explicit ReleaseFast throughput floors to `run-png-streaming-zlib-bench-report-gate` for the repeated-row dynamic and fixed PNG streaming rows. The floor is deliberately conservative (`700` MiB/s for contiguous and chunked rows) but high enough to catch a regression back to the old byte-at-a-time overlapping-match path, which measured around `153` MiB/s before the row-buffer doubling optimization.

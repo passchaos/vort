@@ -67,6 +67,21 @@ EXPECTED_CASES = {
         "chunk_bytes": 32,
     },
 }
+MIN_THROUGHPUT_MIB_S = {
+    # These gates run in ReleaseFast via the build step. The row-repeat rows used
+    # to sit around 150 MiB/s before overlapping pending matches were copied by
+    # row-buffer doubling; keep a conservative floor well below the current
+    # ~1.17--1.22 GiB/s evidence but high enough to catch a byte-at-a-time
+    # replay regression.
+    "png-stream-row-repeat-dynamic": {
+        "contiguous_mib_s": 700.0,
+        "chunked_mib_s": 700.0,
+    },
+    "png-stream-row-repeat-fixed": {
+        "contiguous_mib_s": 700.0,
+        "chunked_mib_s": 700.0,
+    },
+}
 
 
 def positive_int(row: dict[str, str], key: str) -> bool:
@@ -141,6 +156,15 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+        floors = MIN_THROUGHPUT_MIB_S.get(case)
+        if floors is not None:
+            for key, floor in floors.items():
+                if float(row[key]) < floor:
+                    print(
+                        f"png_streaming_zlib_bench_gate=throughput_regression case={case} key={key} floor={floor} row={row}",
+                        file=sys.stderr,
+                    )
+                    return 1
 
     print(f"png_streaming_zlib_bench_gate=ok rows={len(rows)}")
     return 0
