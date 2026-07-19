@@ -2,7 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 
 const Encoder = enum { dynamic, fixed };
-const Pattern = enum { zero, abcd, repeated_row };
+const Pattern = enum { zero, abcd, vertical_delta, repeated_row };
 
 const CaseSpec = struct {
     name: []const u8,
@@ -35,6 +35,7 @@ const Row = struct {
 
 const specs = [_]CaseSpec{
     .{ .name = "png-stream-rle-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .zero, .chunk_bytes = 64 },
+    .{ .name = "png-stream-up-filter-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .vertical_delta, .chunk_bytes = 64 },
     .{ .name = "png-stream-small-distance-dynamic", .width = 1024, .height = 64, .bytes_per_pixel = 4, .encoder = .dynamic, .pattern = .abcd, .chunk_bytes = 64 },
     .{ .name = "png-stream-row-repeat-dynamic", .width = 1024, .height = 96, .bytes_per_pixel = 3, .encoder = .dynamic, .pattern = .repeated_row, .chunk_bytes = 32 },
     .{ .name = "png-stream-row-repeat-fixed", .width = 1024, .height = 64, .bytes_per_pixel = 3, .encoder = .fixed, .pattern = .repeated_row, .chunk_bytes = 32 },
@@ -107,7 +108,7 @@ fn measureSpec(init: std.process.Init, spec: CaseSpec, iterations_override: ?usi
     defer init.gpa.free(image);
     const filtered = try init.gpa.alloc(u8, filtered_len);
     defer init.gpa.free(filtered);
-    fillPngFilter0Payload(spec, image, filtered);
+    fillPngPayload(spec, image, filtered);
 
     const frame = try encodeFrame(init.gpa, filtered, spec.encoder);
     defer init.gpa.free(frame);
@@ -194,23 +195,27 @@ fn drainRows(decoder: anytype, expected: []const u8, out_row: []u8, row_len: usi
     return mix;
 }
 
-fn fillPngFilter0Payload(spec: CaseSpec, image: []u8, filtered: []u8) void {
+fn fillPngPayload(spec: CaseSpec, image: []u8, filtered: []u8) void {
     const row_len = spec.width * spec.bytes_per_pixel;
     var image_offset: usize = 0;
     var filtered_offset: usize = 0;
     for (0..spec.height) |y| {
-        filtered[filtered_offset] = 0;
+        const filter: u8 = if (spec.pattern == .vertical_delta and y != 0) 2 else 0;
+        filtered[filtered_offset] = filter;
         filtered_offset += 1;
         for (0..row_len) |x| {
-            const byte: u8 = switch (spec.pattern) {
+            const reconstructed: u8 = switch (spec.pattern) {
                 .zero => 0,
                 .abcd => "ABCD"[x % 4],
+                .vertical_delta => @intCast((x * 17 + y * 29 + spec.bytes_per_pixel * 13) & 0xff),
                 .repeated_row => @intCast((x * 31 + (x / @max(spec.bytes_per_pixel, 1)) * 7 + 13) & 0xff),
             };
-            image[image_offset + x] = byte;
-            filtered[filtered_offset + x] = byte;
+            image[image_offset + x] = reconstructed;
+            filtered[filtered_offset + x] = if (filter == 2)
+                reconstructed -% image[image_offset + x - row_len]
+            else
+                reconstructed;
         }
-        _ = y;
         image_offset += row_len;
         filtered_offset += row_len;
     }
@@ -277,6 +282,7 @@ fn patternName(pattern: Pattern) []const u8 {
     return switch (pattern) {
         .zero => "zero",
         .abcd => "abcd",
+        .vertical_delta => "vertical_delta",
         .repeated_row => "repeated_row",
     };
 }

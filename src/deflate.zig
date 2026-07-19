@@ -3756,6 +3756,19 @@ pub fn reconstructPngScanline(filter: u8, filtered: []const u8, previous: ?[]con
     }
 
     const reconstructed = output[0..filtered.len];
+    if (method == .none) {
+        copyPossiblyAliasedBytes(reconstructed, filtered);
+        return filtered.len;
+    }
+    if (method == .up) {
+        if (previous) |prev| {
+            reconstructPngUpScanline(filtered, prev, reconstructed);
+        } else {
+            copyPossiblyAliasedBytes(reconstructed, filtered);
+        }
+        return filtered.len;
+    }
+
     for (filtered, 0..) |raw, i| {
         const left: u8 = if (i >= bytes_per_pixel) reconstructed[i - bytes_per_pixel] else 0;
         const up: u8 = if (previous) |prev| prev[i] else 0;
@@ -3773,6 +3786,22 @@ pub fn reconstructPngScanline(filter: u8, filtered: []const u8, previous: ?[]con
         reconstructed[i] = raw +% prediction;
     }
     return filtered.len;
+}
+
+fn reconstructPngUpScanline(filtered: []const u8, previous: []const u8, output: []u8) void {
+    const lanes = 32;
+    var i: usize = 0;
+    while (i + lanes <= filtered.len) : (i += lanes) {
+        const filtered_vec: @Vector(lanes, u8) = filtered[i..][0..lanes].*;
+        const previous_vec: @Vector(lanes, u8) = previous[i..][0..lanes].*;
+        output[i..][0..lanes].* = filtered_vec +% previous_vec;
+    }
+    while (i < filtered.len) : (i += 1) output[i] = filtered[i] +% previous[i];
+}
+
+fn copyPossiblyAliasedBytes(output: []u8, input: []const u8) void {
+    if (input.ptr == output.ptr) return;
+    std.mem.copyForwards(u8, output, input);
 }
 
 /// Bounded-output zlib wrapper decoder.
