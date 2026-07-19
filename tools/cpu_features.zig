@@ -11,7 +11,7 @@ pub fn main(init: std.process.Init) !void {
         @tagName(builtin.cpu.arch),
         @tagName(builtin.os.tag),
         @tagName(vort.checksum.bestCrc32Dispatch()),
-        if (report.ieee_crc32_uses_hardware) "hardware" else "portable-ieee-slice16",
+        if (report.ieee_crc32_uses_hardware) "hardware" else "portable-ieee-slice32",
         @tagName(vort.checksum.bestCrc32CDispatch()),
         report.x86_sse42,
         report.x86_pclmul,

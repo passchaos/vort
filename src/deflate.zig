@@ -7243,7 +7243,7 @@ pub fn inspectGzipMemberAllocLimited(
 
 pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
     const data_offset = try parseGzipHeader(input);
-    const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice16, input[data_offset..], output)) orelse return error.InvalidDeflateBlockType;
+    const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[data_offset..], output)) orelse return error.InvalidDeflateBlockType;
     const footer_offset = data_offset + stored.result.input_read;
     try validateGzipFooter(input, footer_offset, stored.digest, stored.result.output_written);
     return stored.result.output_written;
@@ -7252,7 +7252,7 @@ pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
 pub fn decodeGzip(input: []const u8, output: []u8) Error!usize {
     const data_offset = try parseGzipHeader(input);
 
-    if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice16, input[data_offset..], output)) |stored| {
+    if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[data_offset..], output)) |stored| {
         const footer_offset = data_offset + stored.result.input_read;
         try validateGzipFooter(input, footer_offset, stored.digest, stored.result.output_written);
         return stored.result.output_written;
@@ -7473,7 +7473,7 @@ pub fn decodeGzipStoredAllocLimited(allocator: std.mem.Allocator, input: []const
 
 fn decodeGzipStoredAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
     const data_offset = try parseGzipHeader(input);
-    const stored = (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice16, allocator, input[data_offset..], max_output_len)) orelse return error.InvalidDeflateBlockType;
+    const stored = (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice32, allocator, input[data_offset..], max_output_len)) orelse return error.InvalidDeflateBlockType;
     errdefer stored.deinit(allocator);
     const footer_offset = data_offset + stored.result.input_read;
     try validateGzipFooter(input, footer_offset, stored.digest, stored.result.bytes.len);
@@ -7559,7 +7559,7 @@ fn decodeGzipAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u
 
     const data_offset = try parseGzipHeader(input);
 
-    if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice16, allocator, input[data_offset..], max_output_len)) |stored| {
+    if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice32, allocator, input[data_offset..], max_output_len)) |stored| {
         errdefer stored.deinit(allocator);
         const footer_offset = data_offset + stored.result.input_read;
         try validateGzipFooter(input, footer_offset, stored.digest, stored.result.bytes.len);

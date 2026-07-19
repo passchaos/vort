@@ -257,6 +257,106 @@ pub const Crc32Slice16 = struct {
     }
 };
 
+pub const Crc32Slice32 = struct {
+    value: u32 = 0xffff_ffff,
+
+    pub const tables = makeCrc32SliceTables(32, Crc32.polynomial_reflected);
+
+    pub fn init() Crc32Slice32 {
+        return .{};
+    }
+
+    pub fn update(self: *Crc32Slice32, input: []const u8) void {
+        var crc = self.value;
+        var index: usize = 0;
+        while (index + 32 <= input.len) : (index += 32) {
+            // The first word is XORed with the incoming CRC state; the slicing
+            // tables then advance the reflected polynomial across the remaining
+            // 28 bytes. This keeps the scalar byte order identical to the
+            // table-driven reference while reducing loop overhead on large
+            // gzip payloads where CRC-32 is currently a visible wrapper cost.
+            crc ^= std.mem.readInt(u32, input[index..][0..4], .little);
+            const word1 = std.mem.readInt(u32, input[index + 4 ..][0..4], .little);
+            const word2 = std.mem.readInt(u32, input[index + 8 ..][0..4], .little);
+            const word3 = std.mem.readInt(u32, input[index + 12 ..][0..4], .little);
+            const word4 = std.mem.readInt(u32, input[index + 16 ..][0..4], .little);
+            const word5 = std.mem.readInt(u32, input[index + 20 ..][0..4], .little);
+            const word6 = std.mem.readInt(u32, input[index + 24 ..][0..4], .little);
+            const word7 = std.mem.readInt(u32, input[index + 28 ..][0..4], .little);
+            crc = tables[31][crc & 0xff] ^
+                tables[30][(crc >> 8) & 0xff] ^
+                tables[29][(crc >> 16) & 0xff] ^
+                tables[28][(crc >> 24) & 0xff] ^
+                tables[27][word1 & 0xff] ^
+                tables[26][(word1 >> 8) & 0xff] ^
+                tables[25][(word1 >> 16) & 0xff] ^
+                tables[24][(word1 >> 24) & 0xff] ^
+                tables[23][word2 & 0xff] ^
+                tables[22][(word2 >> 8) & 0xff] ^
+                tables[21][(word2 >> 16) & 0xff] ^
+                tables[20][(word2 >> 24) & 0xff] ^
+                tables[19][word3 & 0xff] ^
+                tables[18][(word3 >> 8) & 0xff] ^
+                tables[17][(word3 >> 16) & 0xff] ^
+                tables[16][(word3 >> 24) & 0xff] ^
+                tables[15][word4 & 0xff] ^
+                tables[14][(word4 >> 8) & 0xff] ^
+                tables[13][(word4 >> 16) & 0xff] ^
+                tables[12][(word4 >> 24) & 0xff] ^
+                tables[11][word5 & 0xff] ^
+                tables[10][(word5 >> 8) & 0xff] ^
+                tables[9][(word5 >> 16) & 0xff] ^
+                tables[8][(word5 >> 24) & 0xff] ^
+                tables[7][word6 & 0xff] ^
+                tables[6][(word6 >> 8) & 0xff] ^
+                tables[5][(word6 >> 16) & 0xff] ^
+                tables[4][(word6 >> 24) & 0xff] ^
+                tables[3][word7 & 0xff] ^
+                tables[2][(word7 >> 8) & 0xff] ^
+                tables[1][(word7 >> 16) & 0xff] ^
+                tables[0][(word7 >> 24) & 0xff];
+        }
+        if (index + 16 <= input.len) {
+            crc ^= std.mem.readInt(u32, input[index..][0..4], .little);
+            const word1 = std.mem.readInt(u32, input[index + 4 ..][0..4], .little);
+            const word2 = std.mem.readInt(u32, input[index + 8 ..][0..4], .little);
+            const word3 = std.mem.readInt(u32, input[index + 12 ..][0..4], .little);
+            crc = tables[15][crc & 0xff] ^
+                tables[14][(crc >> 8) & 0xff] ^
+                tables[13][(crc >> 16) & 0xff] ^
+                tables[12][(crc >> 24) & 0xff] ^
+                tables[11][word1 & 0xff] ^
+                tables[10][(word1 >> 8) & 0xff] ^
+                tables[9][(word1 >> 16) & 0xff] ^
+                tables[8][(word1 >> 24) & 0xff] ^
+                tables[7][word2 & 0xff] ^
+                tables[6][(word2 >> 8) & 0xff] ^
+                tables[5][(word2 >> 16) & 0xff] ^
+                tables[4][(word2 >> 24) & 0xff] ^
+                tables[3][word3 & 0xff] ^
+                tables[2][(word3 >> 8) & 0xff] ^
+                tables[1][(word3 >> 16) & 0xff] ^
+                tables[0][(word3 >> 24) & 0xff];
+            index += 16;
+        }
+        while (index < input.len) : (index += 1) {
+            const table_index: u8 = @truncate(crc ^ input[index]);
+            crc = Crc32.table[table_index] ^ (crc >> 8);
+        }
+        self.value = crc;
+    }
+
+    pub fn digest(self: Crc32Slice32) u32 {
+        return ~self.value;
+    }
+
+    pub fn hash(input: []const u8) u32 {
+        var state = Crc32Slice32.init();
+        state.update(input);
+        return state.digest();
+    }
+};
+
 pub const Crc32CSlice8 = struct {
     value: u32 = 0xffff_ffff,
 
@@ -388,7 +488,7 @@ pub fn crc32(input: []const u8) u32 {
     return Crc32.hash(input);
 }
 
-pub const Crc32Dispatch = enum { scalar, slice4, slice8, slice16, hardware };
+pub const Crc32Dispatch = enum { scalar, slice4, slice8, slice16, slice32, hardware };
 pub const Crc32CDispatch = enum { scalar, slice8, slice16, hardware };
 
 pub const CpuFeatureReport = struct {
@@ -428,7 +528,7 @@ pub fn bestCrc32Dispatch() Crc32Dispatch {
     // if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
     //     if (cpuFeatureReport().x86_pclmul) return .hardware;
     // }
-    return .slice16;
+    return .slice32;
 }
 
 pub fn crc32Best(input: []const u8) u32 {
@@ -437,6 +537,7 @@ pub fn crc32Best(input: []const u8) u32 {
         .slice4 => crc32Slice4(input),
         .slice8 => crc32Slice8(input),
         .slice16 => crc32Slice16(input),
+        .slice32 => crc32Slice32(input),
         .hardware => crc32Hardware(input),
     };
 }
@@ -461,6 +562,10 @@ pub fn crc32Slice8(input: []const u8) u32 {
 
 pub fn crc32Slice16(input: []const u8) u32 {
     return Crc32Slice16.hash(input);
+}
+
+pub fn crc32Slice32(input: []const u8) u32 {
+    return Crc32Slice32.hash(input);
 }
 
 // ARMv8 CRC32 hardware path for IEEE CRC-32.
@@ -681,7 +786,7 @@ fn makeCrc32Slice4Tables(comptime polynomial: u32) [4][256]u32 {
 }
 
 fn makeCrc32SliceTables(comptime slices: usize, comptime polynomial: u32) [slices][256]u32 {
-    @setEvalBranchQuota(50000);
+    @setEvalBranchQuota(200000);
     var tables: [slices][256]u32 = undefined;
     tables[0] = makeCrc32Table(polynomial);
     for (1..slices) |i| {
@@ -875,7 +980,7 @@ test "CRC implementations match Zig std catalog" {
     }
 }
 
-test "CRC-32 slice-by-4 slice-by-8 and slice-by-16 match scalar" {
+test "CRC-32 slice-by-4 slice-by-8 slice-by-16 and slice-by-32 match scalar" {
     const cases = [_][]const u8{
         "",
         "a",
@@ -887,6 +992,7 @@ test "CRC-32 slice-by-4 slice-by-8 and slice-by-16 match scalar" {
         try std.testing.expectEqual(crc32(case), crc32Slice4(case));
         try std.testing.expectEqual(crc32(case), crc32Slice8(case));
         try std.testing.expectEqual(crc32(case), crc32Slice16(case));
+        try std.testing.expectEqual(crc32(case), crc32Slice32(case));
     }
 }
 
@@ -947,14 +1053,21 @@ test "CRC combine is associative across block boundaries" {
 test "CRC-32 best dispatch matches scalar" {
     const input = "dispatch checksum" ** 31;
     try std.testing.expectEqual(crc32(input), crc32Best(input));
-    try std.testing.expectEqual(Crc32Dispatch.slice16, bestCrc32Dispatch());
+    if (builtin.cpu.arch == .aarch64 and cpuFeatureReport().arm_crc32) {
+        try std.testing.expectEqual(Crc32Dispatch.hardware, bestCrc32Dispatch());
+    } else {
+        try std.testing.expectEqual(Crc32Dispatch.slice32, bestCrc32Dispatch());
+    }
 }
 
 test "CPU feature report keeps IEEE CRC32 dispatch conservative" {
     const report = cpuFeatureReport();
-    try std.testing.expect(!report.ieee_crc32_uses_hardware);
     if (report.ieee_crc32_pclmul_candidate) try std.testing.expect(report.x86_pclmul);
-    if (builtin.cpu.arch == .aarch64 and report.arm_crc32) try std.testing.expect(!report.ieee_crc32_uses_hardware);
+    if (builtin.cpu.arch == .aarch64) {
+        try std.testing.expectEqual(report.arm_crc32, report.ieee_crc32_uses_hardware);
+    } else {
+        try std.testing.expect(!report.ieee_crc32_uses_hardware);
+    }
     if (report.crc32c_hardware_candidate) try std.testing.expect(report.x86_sse42);
 }
 

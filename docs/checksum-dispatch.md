@@ -1,6 +1,6 @@
 # Checksum dispatch plan
 
-Vort dispatches IEEE CRC-32 to a portable slice-by-16 implementation by default.
+Vort dispatches IEEE CRC-32 to a portable slice-by-32 implementation by default.
 Architecture-specific paths are available for ARMv8 (CRC32 instructions) and x86
 (PCLMULQDQ folding), with the ARM path enabled for dispatch when the CPU feature
 is detected. The x86 PCLMUL path is implemented but not yet enabled for dispatch
@@ -9,8 +9,8 @@ pending differential validation.
 Current status:
 
 - Adler-32: scalar zlib-compatible path.
-- IEEE CRC-32: scalar, slice-by-4, slice-by-8, and slice-by-16 portable paths;
-  best dispatch selects slice-by-16 on x86, hardware on ARMv8 with CRC feature.
+- IEEE CRC-32: scalar, slice-by-4, slice-by-8, slice-by-16, and slice-by-32 portable paths;
+  best dispatch selects slice-by-32 on portable/x86 builds, hardware on ARMv8 with CRC feature.
 - ARMv8 CRC32 hardware path enabled for dispatch (IEEE CRC-32 natively).
 - x86 PCLMULQDQ folding path implemented, not yet validated for dispatch.
 - CRC-32C: scalar, portable slice-by-8 and slice-by-16 fallbacks, and x86
@@ -34,7 +34,7 @@ Required gates before enabling an architecture-specific IEEE path:
    over empty, tiny, aligned, unaligned, and multi-KiB buffers.
 3. `run-checksum-diff` and `run-checksum-zlib-diff` must both pass.
 4. `run-cpu-features` must report the selected IEEE path explicitly; portable
-   builds currently report `portable-ieee-slice16`.
+   builds currently report `portable-ieee-slice32`.
 
 ## Block checksum composition
 

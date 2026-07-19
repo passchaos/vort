@@ -36,6 +36,7 @@ pub fn main(init: std.process.Init) !void {
         measure("crc32-slice4", input, iterations, vort.crc32Slice4, init.io),
         measure("crc32-slice8", input, iterations, vort.crc32Slice8, init.io),
         measure("crc32-slice16", input, iterations, vort.crc32Slice16, init.io),
+        measure("crc32-slice32", input, iterations, vort.crc32Slice32, init.io),
         measure("crc32-best", input, iterations, vort.crc32Best, init.io),
         measure("crc32c-scalar", input, iterations, vort.crc32c, init.io),
         measure("crc32c-slice8", input, iterations, vort.crc32cSlice8, init.io),
