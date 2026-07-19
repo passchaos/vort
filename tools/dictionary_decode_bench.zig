@@ -224,6 +224,10 @@ fn measureRepeated(init: std.process.Init, case: Case, iterations: usize, repeat
 }
 
 fn measure(init: std.process.Init, case: Case, iterations: usize) !Result {
+    var empty_into_buffer: [0]u8 = .{};
+    const into_buffer = if (case.mode == .into) try init.gpa.alloc(u8, case.fixture.payload.len) else empty_into_buffer[0..];
+    defer if (case.mode == .into) init.gpa.free(into_buffer);
+
     const start = std.Io.Clock.awake.now(init.io);
     var checksum: u64 = 0;
     var i: usize = 0;
@@ -248,15 +252,13 @@ fn measure(init: std.process.Init, case: Case, iterations: usize) !Result {
                 checksum +%= sparseChecksum(decoded) +% i;
             },
             .into => {
-                const out = try init.gpa.alloc(u8, case.fixture.payload.len);
-                defer init.gpa.free(out);
                 const written = switch (case.format) {
-                    .raw => (try vort.decodeRawDeflateWithDictionary(case.compressed, case.fixture.dictionary, out)).output_written,
-                    .zlib => try vort.decodeZlibWithDictionary(case.compressed, out, case.fixture.dictionary),
+                    .raw => (try vort.decodeRawDeflateWithDictionary(case.compressed, case.fixture.dictionary, into_buffer)).output_written,
+                    .zlib => try vort.decodeZlibWithDictionary(case.compressed, into_buffer, case.fixture.dictionary),
                 };
                 if (written != case.fixture.payload.len) return error.RoundTripMismatch;
-                if (!std.mem.eql(u8, case.fixture.payload, out)) return error.RoundTripMismatch;
-                checksum +%= sparseChecksum(out) +% i;
+                if (!std.mem.eql(u8, case.fixture.payload, into_buffer)) return error.RoundTripMismatch;
+                checksum +%= sparseChecksum(into_buffer) +% i;
             },
         }
     }

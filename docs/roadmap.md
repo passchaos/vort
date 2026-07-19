@@ -1075,3 +1075,4 @@ architecture blindly.
   dictionary-backed history-only bulk match-copy path with automatic throughput
   and round-trip validation, and the CSV is registered in dashboard producer
   metadata.
+- Tightened the dictionary decode benchmark's caller-buffer rows so `into` modes reuse one caller-owned output buffer across iterations instead of allocating inside the timed loop. This makes the benchmark better reflect application-owned decode buffers and keeps allocator-returning, exact-size, and caller-buffer dictionary decode rows comparable under the same gate.
