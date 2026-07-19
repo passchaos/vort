@@ -6621,7 +6621,7 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.m
     errdefer out.deinit(allocator);
     try reserveInflateAppendOutputHint(allocator, &out, compressed_len, max_output_len);
 
-    var reader = try bitstream.ChunkedBitReader.initAtKnownTotal(chunks, header.data_offset, compressed_len);
+    var reader = try bitstream.ChunkedSpanBitReader.initAtKnownTotal(chunks, header.data_offset, compressed_len);
     const raw = try decodeRawAutoAppendPartialWithDictionaryFromReader(allocator, &reader, header.data_offset, raw_dictionary, &out, max_output_len);
     const footer_offset = header.data_offset + raw.input_read;
     try validateZlibFooterChunksWithKnownTotal(chunks, compressed_len, footer_offset, checksum.adler32(out.items), options);
