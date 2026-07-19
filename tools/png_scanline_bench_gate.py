@@ -23,6 +23,9 @@ EXPECTED_COLUMNS = {
 EXPECTED_STAGES = {"none", "sub", "up", "average", "paeth"}
 EXPECTED_BPP = {"1", "2", "3", "4", "6", "8"}
 MIN_RELEASEFAST_MIB_S = {
+    ("sub", "1"): 1_200.0,
+    ("sub", "4"): 1_200.0,
+    ("sub", "8"): 1_500.0,
     ("up", "1"): 10_000.0,
     ("up", "2"): 10_000.0,
     ("up", "3"): 10_000.0,
