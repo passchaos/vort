@@ -11,26 +11,39 @@ const ReaderKind = enum {
     buffered,
     chunked_4096,
     coalesced_4096,
+    joined_4096,
     chunked_64,
     coalesced_64,
+    joined_64,
     chunked_1,
     coalesced_1,
+    joined_1,
 
     fn label(self: ReaderKind) []const u8 {
         return switch (self) {
             .buffered => "buffered",
             .chunked_4096 => "chunked_4096",
             .coalesced_4096 => "coalesced_4096",
+            .joined_4096 => "joined_4096",
             .chunked_64 => "chunked_64",
             .coalesced_64 => "coalesced_64",
+            .joined_64 => "joined_64",
             .chunked_1 => "chunked_1",
             .coalesced_1 => "coalesced_1",
+            .joined_1 => "joined_1",
         };
     }
 
     fn isCoalesced(self: ReaderKind) bool {
         return switch (self) {
             .coalesced_4096, .coalesced_64, .coalesced_1 => true,
+            else => false,
+        };
+    }
+
+    fn isJoined(self: ReaderKind) bool {
+        return switch (self) {
+            .joined_4096, .joined_64, .joined_1 => true,
             else => false,
         };
     }
@@ -74,7 +87,7 @@ const Row = struct {
     checksum: u64,
 };
 
-const readers = [_]ReaderKind{ .buffered, .chunked_4096, .coalesced_4096, .chunked_64, .coalesced_64, .chunked_1, .coalesced_1 };
+const readers = [_]ReaderKind{ .buffered, .chunked_4096, .coalesced_4096, .joined_4096, .chunked_64, .coalesced_64, .joined_64, .chunked_1, .coalesced_1, .joined_1 };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -152,12 +165,23 @@ fn runFixedLiteral(init: std.process.Init, reader_kind: ReaderKind, input: []con
     defer if (reader_kind != .buffered) init.gpa.free(chunks);
     const coalesced = if (reader_kind.isCoalesced()) try coalesceChunks(init.gpa, chunks, input.len) else input;
     defer if (reader_kind.isCoalesced()) init.gpa.free(coalesced);
+    const joined_scratch = if (reader_kind.isJoined()) try init.gpa.alloc(u8, input.len) else null;
+    defer if (joined_scratch) |scratch| init.gpa.free(scratch);
     const start = std.Io.Clock.awake.now(init.io);
     var checksum: u64 = 0;
     for (0..iterations) |_| {
         switch (reader_kind) {
             .buffered, .coalesced_4096, .coalesced_64, .coalesced_1 => {
                 var reader = bitstream.BufferedBitReader.init(coalesced);
+                for (expected) |want| {
+                    const got = try huffman.decodeFixedLiteralValueFast(&reader);
+                    if (got != want) return error.DecodeLengthMismatch;
+                    checksum = checksum *% 131 +% got;
+                }
+            },
+            .joined_4096, .joined_64, .joined_1 => {
+                const joined = try joinChunksInto(chunks, joined_scratch.?);
+                var reader = bitstream.BufferedBitReader.init(joined);
                 for (expected) |want| {
                     const got = try huffman.decodeFixedLiteralValueFast(&reader);
                     if (got != want) return error.DecodeLengthMismatch;
@@ -184,12 +208,23 @@ fn runFast(init: std.process.Init, comptime case: CaseKind, reader_kind: ReaderK
     defer if (reader_kind != .buffered) init.gpa.free(chunks);
     const coalesced = if (reader_kind.isCoalesced()) try coalesceChunks(init.gpa, chunks, input.len) else input;
     defer if (reader_kind.isCoalesced()) init.gpa.free(coalesced);
+    const joined_scratch = if (reader_kind.isJoined()) try init.gpa.alloc(u8, input.len) else null;
+    defer if (joined_scratch) |scratch| init.gpa.free(scratch);
     const start = std.Io.Clock.awake.now(init.io);
     var checksum: u64 = 0;
     for (0..iterations) |_| {
         switch (reader_kind) {
             .buffered, .coalesced_4096, .coalesced_64, .coalesced_1 => {
                 var reader = bitstream.BufferedBitReader.init(coalesced);
+                for (expected) |want| {
+                    const got = try decoder.decodeValue(&reader);
+                    if (got != want) return error.DecodeLengthMismatch;
+                    checksum = checksum *% 131 +% got;
+                }
+            },
+            .joined_4096, .joined_64, .joined_1 => {
+                const joined = try joinChunksInto(chunks, joined_scratch.?);
+                var reader = bitstream.BufferedBitReader.init(joined);
                 for (expected) |want| {
                     const got = try decoder.decodeValue(&reader);
                     if (got != want) return error.DecodeLengthMismatch;
@@ -214,9 +249,9 @@ fn runFast(init: std.process.Init, comptime case: CaseKind, reader_kind: ReaderK
 fn chunksForReader(allocator: std.mem.Allocator, reader: ReaderKind, input: []const u8) ![]const []const u8 {
     return switch (reader) {
         .buffered => &.{},
-        .chunked_4096, .coalesced_4096 => makeChunks(allocator, input, 4096),
-        .chunked_64, .coalesced_64 => makeChunks(allocator, input, 64),
-        .chunked_1, .coalesced_1 => makeChunks(allocator, input, 1),
+        .chunked_4096, .coalesced_4096, .joined_4096 => makeChunks(allocator, input, 4096),
+        .chunked_64, .coalesced_64, .joined_64 => makeChunks(allocator, input, 64),
+        .chunked_1, .coalesced_1, .joined_1 => makeChunks(allocator, input, 1),
     };
 }
 
@@ -277,13 +312,17 @@ fn makeChunks(allocator: std.mem.Allocator, input: []const u8, chunk_len: usize)
 fn coalesceChunks(allocator: std.mem.Allocator, chunks: []const []const u8, expected_len: usize) ![]u8 {
     const out = try allocator.alloc(u8, expected_len);
     errdefer allocator.free(out);
+    return joinChunksInto(chunks, out);
+}
+
+fn joinChunksInto(chunks: []const []const u8, out: []u8) ![]u8 {
     var offset: usize = 0;
     for (chunks) |chunk| {
-        if (offset > expected_len or chunk.len > expected_len - offset) return error.DecodeLengthMismatch;
+        if (offset > out.len or chunk.len > out.len - offset) return error.DecodeLengthMismatch;
         @memcpy(out[offset..][0..chunk.len], chunk);
         offset += chunk.len;
     }
-    if (offset != expected_len) return error.DecodeLengthMismatch;
+    if (offset != out.len) return error.DecodeLengthMismatch;
     return out;
 }
 
@@ -308,9 +347,9 @@ fn row(comptime case: CaseKind, reader: ReaderKind, decoder: []const u8, lookup_
 fn chunkBytes(reader: ReaderKind) usize {
     return switch (reader) {
         .buffered => 0,
-        .chunked_4096, .coalesced_4096 => 4096,
-        .chunked_64, .coalesced_64 => 64,
-        .chunked_1, .coalesced_1 => 1,
+        .chunked_4096, .coalesced_4096, .joined_4096 => 4096,
+        .chunked_64, .coalesced_64, .joined_64 => 64,
+        .chunked_1, .coalesced_1, .joined_1 => 1,
     };
 }
 
