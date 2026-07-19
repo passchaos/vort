@@ -114,6 +114,11 @@ def positive_float(row: dict[str, str], key: str) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, default=Path("zig-out/vort-png-streaming-zlib-bench-report-repeat3.csv"))
+    parser.add_argument(
+        "--enforce-throughput",
+        action="store_true",
+        help="enforce ReleaseFast MiB/s floors in addition to schema and row-shape checks",
+    )
     args = parser.parse_args()
 
     if not args.csv.exists():
@@ -169,7 +174,7 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        floors = MIN_THROUGHPUT_MIB_S.get(case)
+        floors = MIN_THROUGHPUT_MIB_S.get(case) if args.enforce_throughput else None
         if floors is not None:
             for key, floor in floors.items():
                 if float(row[key]) < floor:

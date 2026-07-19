@@ -392,6 +392,7 @@ pub fn build(b: *std.Build) void {
         "--csv",
         "zig-out/vort-png-streaming-zlib-bench-report-repeat3.csv",
     });
+    if (optimize == .ReleaseFast) png_streaming_zlib_bench_report_gate.addArg("--enforce-throughput");
     png_streaming_zlib_bench_report_gate.step.dependOn(png_streaming_zlib_bench_report_csv_repeat3_step);
     const png_streaming_zlib_bench_report_gate_step = b.step("run-png-streaming-zlib-bench-report-gate", "Validate repeat3 PNG streaming zlib scanline throughput CSV");
     png_streaming_zlib_bench_report_gate_step.dependOn(&png_streaming_zlib_bench_report_gate.step);
