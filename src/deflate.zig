@@ -3334,7 +3334,10 @@ fn validateZlibFooterChunksWithKnownTotal(chunks: []const []const u8, total_len:
 }
 
 fn decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks: []const []const u8, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
-    const total_len = try chunksTotalLen(chunks);
+    return decodeZlibChunksWithOptionalDictionaryAndOptionsDirectKnownTotal(chunks, try chunksTotalLen(chunks), output, dictionary, options);
+}
+
+fn decodeZlibChunksWithOptionalDictionaryAndOptionsDirectKnownTotal(chunks: []const []const u8, total_len: usize, output: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions) Error!usize {
     const header = try parseZlibHeaderFromChunks(chunks, dictionary);
 
     if (try decodeZlibChunksViaStackJoinMaybe(chunks, total_len, header, output, dictionary, options)) |written| return written;
@@ -3947,13 +3950,14 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunksWithOptionsDirect(self: *ZlibDecoder, chunks: []const []const u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
-        const written = decodeZlibChunksIntoWithOptions(chunks, output_scratch, options) catch |err| {
+        const frame_len = try chunksTotalLen(chunks);
+        const written = decodeZlibChunksWithOptionalDictionaryAndOptionsDirectKnownTotal(chunks, frame_len, output_scratch, null, options) catch |err| {
             self.recordError(err);
             return err;
         };
         self.* = .{
             .decoded = output_scratch[0..written],
-            .frame_len = try chunksTotalLen(chunks),
+            .frame_len = frame_len,
         };
     }
 
@@ -3984,13 +3988,14 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunksWithDictionaryAndOptionsDirect(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
-        const written = decodeZlibChunksIntoWithDictionaryAndOptions(chunks, output_scratch, dictionary, options) catch |err| {
+        const frame_len = try chunksTotalLen(chunks);
+        const written = decodeZlibChunksWithOptionalDictionaryAndOptionsDirectKnownTotal(chunks, frame_len, output_scratch, dictionary, options) catch |err| {
             self.recordError(err);
             return err;
         };
         self.* = .{
             .decoded = output_scratch[0..written],
-            .frame_len = try chunksTotalLen(chunks),
+            .frame_len = frame_len,
         };
     }
 
