@@ -27,15 +27,23 @@ EXPECTED_COLUMNS = {
 }
 EXPECTED_ROWS = {
     ("history-replay-raw-dynamic-alloc", "raw", "dynamic", "alloc"),
-    ("history-replay-raw-dynamic-exact", "raw", "dynamic", "exact_alloc"),
+    ("history-replay-raw-dynamic-exact_alloc", "raw", "dynamic", "exact_alloc"),
     ("history-replay-raw-dynamic-into", "raw", "dynamic", "into"),
     ("history-replay-raw-best-alloc", "raw", "best", "alloc"),
     ("history-replay-zlib-fixed-alloc", "zlib", "fixed", "alloc"),
-    ("history-replay-zlib-fixed-exact", "zlib", "fixed", "exact_alloc"),
+    ("history-replay-zlib-fixed-exact_alloc", "zlib", "fixed", "exact_alloc"),
     ("history-replay-zlib-fixed-into", "zlib", "fixed", "into"),
     ("history-replay-zlib-dynamic-alloc", "zlib", "dynamic", "alloc"),
-    ("history-replay-zlib-dynamic-exact", "zlib", "dynamic", "exact_alloc"),
+    ("history-replay-zlib-dynamic-exact_alloc", "zlib", "dynamic", "exact_alloc"),
     ("history-replay-zlib-dynamic-into", "zlib", "dynamic", "into"),
+    ("json-prefix-raw-dynamic-alloc", "raw", "dynamic", "alloc"),
+    ("json-prefix-raw-dynamic-into", "raw", "dynamic", "into"),
+    ("json-prefix-zlib-dynamic-alloc", "zlib", "dynamic", "alloc"),
+    ("json-prefix-zlib-dynamic-into", "zlib", "dynamic", "into"),
+    ("log-prefix-raw-dynamic-alloc", "raw", "dynamic", "alloc"),
+    ("log-prefix-raw-dynamic-into", "raw", "dynamic", "into"),
+    ("log-prefix-zlib-dynamic-alloc", "zlib", "dynamic", "alloc"),
+    ("log-prefix-zlib-dynamic-into", "zlib", "dynamic", "into"),
 }
 
 
