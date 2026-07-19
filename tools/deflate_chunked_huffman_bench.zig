@@ -13,14 +13,17 @@ const ReaderKind = enum {
     coalesced_4096,
     joined_4096,
     windowed1024_4096,
+    windowed4096_4096,
     chunked_64,
     coalesced_64,
     joined_64,
     windowed1024_64,
+    windowed4096_64,
     chunked_1,
     coalesced_1,
     joined_1,
     windowed1024_1,
+    windowed4096_1,
 
     fn label(self: ReaderKind) []const u8 {
         return switch (self) {
@@ -29,14 +32,17 @@ const ReaderKind = enum {
             .coalesced_4096 => "coalesced_4096",
             .joined_4096 => "joined_4096",
             .windowed1024_4096 => "windowed1024_4096",
+            .windowed4096_4096 => "windowed4096_4096",
             .chunked_64 => "chunked_64",
             .coalesced_64 => "coalesced_64",
             .joined_64 => "joined_64",
             .windowed1024_64 => "windowed1024_64",
+            .windowed4096_64 => "windowed4096_64",
             .chunked_1 => "chunked_1",
             .coalesced_1 => "coalesced_1",
             .joined_1 => "joined_1",
             .windowed1024_1 => "windowed1024_1",
+            .windowed4096_1 => "windowed4096_1",
         };
     }
 
@@ -56,7 +62,7 @@ const ReaderKind = enum {
 
     fn isWindowed(self: ReaderKind) bool {
         return switch (self) {
-            .windowed1024_4096, .windowed1024_64, .windowed1024_1 => true,
+            .windowed1024_4096, .windowed1024_64, .windowed1024_1, .windowed4096_4096, .windowed4096_64, .windowed4096_1 => true,
             else => false,
         };
     }
@@ -100,7 +106,7 @@ const Row = struct {
     checksum: u64,
 };
 
-const readers = [_]ReaderKind{ .buffered, .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096, .chunked_64, .coalesced_64, .joined_64, .windowed1024_64, .chunked_1, .coalesced_1, .joined_1, .windowed1024_1 };
+const readers = [_]ReaderKind{ .buffered, .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096, .windowed4096_4096, .chunked_64, .coalesced_64, .joined_64, .windowed1024_64, .windowed4096_64, .chunked_1, .coalesced_1, .joined_1, .windowed1024_1, .windowed4096_1 };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -209,6 +215,14 @@ fn runFixedLiteral(init: std.process.Init, reader_kind: ReaderKind, input: []con
                     checksum = checksum *% 131 +% got;
                 }
             },
+            .windowed4096_4096, .windowed4096_64, .windowed4096_1 => {
+                var reader = try WindowedBitReader(4096).init(chunks, input.len);
+                for (expected) |want| {
+                    const got = try huffman.decodeFixedLiteralValueFast(&reader);
+                    if (got != want) return error.DecodeLengthMismatch;
+                    checksum = checksum *% 131 +% got;
+                }
+            },
             else => {
                 var reader = try bitstream.ChunkedBitReader.init(chunks);
                 for (expected) |want| {
@@ -260,6 +274,14 @@ fn runFast(init: std.process.Init, comptime case: CaseKind, reader_kind: ReaderK
                     checksum = checksum *% 131 +% got;
                 }
             },
+            .windowed4096_4096, .windowed4096_64, .windowed4096_1 => {
+                var reader = try WindowedBitReader(4096).init(chunks, input.len);
+                for (expected) |want| {
+                    const got = try decoder.decodeValue(&reader);
+                    if (got != want) return error.DecodeLengthMismatch;
+                    checksum = checksum *% 131 +% got;
+                }
+            },
             else => {
                 var reader = try bitstream.ChunkedBitReader.init(chunks);
                 for (expected) |want| {
@@ -278,9 +300,9 @@ fn runFast(init: std.process.Init, comptime case: CaseKind, reader_kind: ReaderK
 fn chunksForReader(allocator: std.mem.Allocator, reader: ReaderKind, input: []const u8) ![]const []const u8 {
     return switch (reader) {
         .buffered => &.{},
-        .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096 => makeChunks(allocator, input, 4096),
-        .chunked_64, .coalesced_64, .joined_64, .windowed1024_64 => makeChunks(allocator, input, 64),
-        .chunked_1, .coalesced_1, .joined_1, .windowed1024_1 => makeChunks(allocator, input, 1),
+        .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096, .windowed4096_4096 => makeChunks(allocator, input, 4096),
+        .chunked_64, .coalesced_64, .joined_64, .windowed1024_64, .windowed4096_64 => makeChunks(allocator, input, 64),
+        .chunked_1, .coalesced_1, .joined_1, .windowed1024_1, .windowed4096_1 => makeChunks(allocator, input, 1),
     };
 }
 
@@ -469,9 +491,9 @@ fn row(comptime case: CaseKind, reader: ReaderKind, decoder: []const u8, lookup_
 fn chunkBytes(reader: ReaderKind) usize {
     return switch (reader) {
         .buffered => 0,
-        .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096 => 4096,
-        .chunked_64, .coalesced_64, .joined_64, .windowed1024_64 => 64,
-        .chunked_1, .coalesced_1, .joined_1, .windowed1024_1 => 1,
+        .chunked_4096, .coalesced_4096, .joined_4096, .windowed1024_4096, .windowed4096_4096 => 4096,
+        .chunked_64, .coalesced_64, .joined_64, .windowed1024_64, .windowed4096_64 => 64,
+        .chunked_1, .coalesced_1, .joined_1, .windowed1024_1, .windowed4096_1 => 1,
     };
 }
 
