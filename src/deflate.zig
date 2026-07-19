@@ -2222,9 +2222,10 @@ fn appendRawStoredOnlyPlannedWithHash(comptime Hash: type, allocator: std.mem.Al
         const chunk_len: usize = len;
         in_offset += 4;
         const chunk = input[in_offset..][0..chunk_len];
-        // Concatenated gzip members validate each member independently. Hashing
-        // while appending keeps stored-only members to one payload pass instead
-        // of appending first and re-reading the same bytes for the trailer CRC.
+        // Concatenated zlib/gzip members validate each member independently.
+        // Hashing while appending keeps stored-only members to one payload pass
+        // instead of appending first and re-reading the same bytes for the
+        // trailer checksum.
         out.appendSliceAssumeCapacity(chunk);
         hash.update(chunk);
         in_offset += chunk_len;
@@ -6798,10 +6799,23 @@ fn decodeZlibConcatenatedWithOptionalDictionary(input: []const u8, output: []u8,
     while (offset < input.len) {
         const header = try parseZlibHeader(input[offset..], dictionary);
         const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+        const raw_offset = offset + header.data_offset;
+
+        const raw_input = input[raw_offset..];
+        if (raw_input.len != 0 and ((raw_input[0] >> 1) & 0x03) == 0) {
+            if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, raw_input, output[out_offset..])) |stored| {
+                const footer_offset = raw_offset + stored.result.input_read;
+                try validateZlibFooterPartial(input, footer_offset, stored.digest);
+                out_offset += stored.result.output_written;
+                offset = footer_offset + 4;
+                continue;
+            }
+        }
+
         const before_member = out_offset;
-        const raw = try decodeRawAutoWithDictionary(input[offset + header.data_offset ..], raw_dictionary, output[out_offset..]);
+        const raw = try decodeRawAutoWithDictionary(raw_input, raw_dictionary, output[out_offset..]);
         out_offset += raw.output_written;
-        const footer_offset = offset + header.data_offset + raw.input_read;
+        const footer_offset = raw_offset + raw.input_read;
         try validateZlibFooterPartial(input, footer_offset, checksum.adler32(output[before_member..out_offset]));
         offset = footer_offset + 4;
     }
@@ -6887,9 +6901,22 @@ fn decodeZlibConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
     while (offset < input.len) {
         const header = try parseZlibHeader(input[offset..], dictionary);
         const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+        const raw_offset = offset + header.data_offset;
+        const raw_input = input[raw_offset..];
+
+        if (raw_input.len != 0 and ((raw_input[0] >> 1) & 0x03) == 0) {
+            if (try planRawStoredOnly(raw_input)) |plan| {
+                const digest = try appendRawStoredOnlyPlannedWithHash(checksum.Adler32, allocator, raw_input[0..plan.input_read], &out, plan, max_output_len);
+                const footer_offset = raw_offset + plan.input_read;
+                try validateZlibFooterPartial(input, footer_offset, digest);
+                offset = footer_offset + 4;
+                continue;
+            }
+        }
+
         const before_member = out.items.len;
-        const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, input[offset + header.data_offset ..], raw_dictionary, &out, max_output_len);
-        const footer_offset = offset + header.data_offset + raw.input_read;
+        const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, raw_input, raw_dictionary, &out, max_output_len);
+        const footer_offset = raw_offset + raw.input_read;
         try validateZlibFooterPartial(input, footer_offset, checksum.adler32(out.items[before_member..]));
         offset = footer_offset + 4;
     }
@@ -9795,6 +9822,37 @@ test "zlib concatenated streams decode in sequence" {
     try std.testing.expectError(error.SizeMismatch, decodeZlibConcatenatedAllocExactSize(std.testing.allocator, cat.items, 12));
 }
 
+test "zlib concatenated stored streams decode and validate per-member trailers" {
+    const first = try encodeZlibStoredAlloc(std.testing.allocator, "stored ");
+    defer std.testing.allocator.free(first);
+    const second = try encodeZlibStoredAlloc(std.testing.allocator, "member");
+    defer std.testing.allocator.free(second);
+
+    var cat: std.ArrayList(u8) = .empty;
+    defer cat.deinit(std.testing.allocator);
+    try cat.appendSlice(std.testing.allocator, first);
+    try cat.appendSlice(std.testing.allocator, second);
+
+    const decoded = try decodeZlibConcatenatedAlloc(std.testing.allocator, cat.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "stored member", decoded);
+
+    var into: ["stored member".len]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, into.len), try decodeZlibConcatenated(cat.items, &into));
+    try std.testing.expectEqualSlices(u8, "stored member", &into);
+
+    const exact = try decodeZlibConcatenatedAllocExactSize(std.testing.allocator, cat.items, into.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, &into, exact);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeZlibConcatenatedAllocLimited(std.testing.allocator, cat.items, into.len - 1));
+
+    var bad_second_adler = try std.testing.allocator.dupe(u8, cat.items);
+    defer std.testing.allocator.free(bad_second_adler);
+    bad_second_adler[bad_second_adler.len - 1] ^= 1;
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenatedAlloc(std.testing.allocator, bad_second_adler));
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenated(bad_second_adler, &into));
+}
+
 test "zlib concatenated streams reject empty and corrupt later members" {
     var out: [1]u8 = undefined;
     try std.testing.expectError(error.TruncatedFrame, decodeZlibConcatenated("", &out));
@@ -9853,6 +9911,32 @@ test "zlib concatenated streams decode preset dictionary members" {
     defer std.testing.allocator.free(exact);
     try std.testing.expectEqualSlices(u8, &into, exact);
     try std.testing.expectError(error.SizeMismatch, decodeZlibConcatenatedAllocWithDictionaryExactSize(std.testing.allocator, cat.items, dictionary, into.len - 1));
+}
+
+test "zlib concatenated stored streams honor preset dictionary headers" {
+    const dictionary = "stored ";
+    const first_payload = "stored stored ";
+    const second_payload = "stored member";
+    const first = try encodeZlibStoredWithDictionaryAlloc(std.testing.allocator, first_payload, dictionary);
+    defer std.testing.allocator.free(first);
+    const second = try encodeZlibStoredWithDictionaryAlloc(std.testing.allocator, second_payload, dictionary);
+    defer std.testing.allocator.free(second);
+
+    var cat: std.ArrayList(u8) = .empty;
+    defer cat.deinit(std.testing.allocator);
+    try cat.appendSlice(std.testing.allocator, first);
+    try cat.appendSlice(std.testing.allocator, second);
+
+    try std.testing.expectError(error.NeedDictionary, decodeZlibConcatenatedAlloc(std.testing.allocator, cat.items));
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenatedAllocWithDictionary(std.testing.allocator, cat.items, "wrong dictionary"));
+
+    const decoded = try decodeZlibConcatenatedAllocWithDictionary(std.testing.allocator, cat.items, dictionary);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first_payload ++ second_payload, decoded);
+
+    var into: [first_payload.len + second_payload.len]u8 = undefined;
+    try std.testing.expectEqual(into.len, try decodeZlibConcatenatedWithDictionary(cat.items, &into, dictionary));
+    try std.testing.expectEqualSlices(u8, first_payload ++ second_payload, &into);
 }
 
 test "zlib stream inspector reports deflate length and adler diagnostics" {

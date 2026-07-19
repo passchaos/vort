@@ -51,6 +51,7 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    mix +%= try runZlibConcatenatedStoredBench(init, stdout, iterations);
     mix +%= try runGzipConcatenatedStoredBench(init, stdout, iterations);
     mix +%= try runDynamicStageBench(init.io, stdout, iterations);
     try stdout.print("deflate decode mix={d}\n", .{mix});
@@ -92,15 +93,65 @@ fn decodeAndChecksum(allocator: std.mem.Allocator, case: Case, mode: DecodeMode)
     };
 }
 
+fn runZlibConcatenatedStoredBench(init: std.process.Init, stdout: *std.Io.Writer, base_iterations: usize) !u64 {
+    var first_payload: [4096]u8 = undefined;
+    var second_payload: [4096]u8 = undefined;
+    fillConcatStoredPayloads(&first_payload, &second_payload, "concatenated stored zlib member ");
+
+    const first_frame = try vort.encodeZlibStoredAlloc(init.gpa, &first_payload);
+    defer init.gpa.free(first_frame);
+    const second_frame = try vort.encodeZlibStoredAlloc(init.gpa, &second_payload);
+    defer init.gpa.free(second_frame);
+
+    var frame = std.ArrayList(u8).empty;
+    defer frame.deinit(init.gpa);
+    try frame.appendSlice(init.gpa, first_frame);
+    try frame.appendSlice(init.gpa, second_frame);
+
+    const plain_len = first_payload.len + second_payload.len;
+    const iterations = @max(@as(usize, 4096), base_iterations / 16);
+    var mix: u64 = 0;
+    {
+        const start = std.Io.Clock.awake.now(init.io);
+        for (0..iterations) |_| {
+            const decoded = try vort.decodeZlibConcatenatedAlloc(init.gpa, frame.items);
+            {
+                defer init.gpa.free(decoded);
+                if (decoded.len != plain_len) return error.DecodeLengthMismatch;
+                mix +%= sparseChecksum(decoded);
+            }
+        }
+        try printDecodeThroughput(stdout, start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), "zlib-concat-stored-alloc", plain_len, frame.items.len, iterations);
+    }
+    {
+        const start = std.Io.Clock.awake.now(init.io);
+        for (0..iterations) |_| {
+            const decoded = try vort.decodeZlibConcatenatedAllocExactSize(init.gpa, frame.items, plain_len);
+            {
+                defer init.gpa.free(decoded);
+                mix +%= sparseChecksum(decoded);
+            }
+        }
+        try printDecodeThroughput(stdout, start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), "zlib-concat-stored-exact", plain_len, frame.items.len, iterations);
+    }
+    {
+        const scratch = try init.gpa.alloc(u8, plain_len);
+        defer init.gpa.free(scratch);
+        const start = std.Io.Clock.awake.now(init.io);
+        for (0..iterations) |_| {
+            const written = try vort.decodeZlibConcatenated(frame.items, scratch);
+            if (written != plain_len) return error.DecodeLengthMismatch;
+            mix +%= sparseChecksum(scratch);
+        }
+        try printDecodeThroughput(stdout, start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), "zlib-concat-stored-into", plain_len, frame.items.len, iterations);
+    }
+    return mix;
+}
+
 fn runGzipConcatenatedStoredBench(init: std.process.Init, stdout: *std.Io.Writer, base_iterations: usize) !u64 {
     var first_payload: [4096]u8 = undefined;
     var second_payload: [4096]u8 = undefined;
-    for (&first_payload, 0..) |*byte, i| {
-        byte.* = @truncate((i * 251 + 19) & 0xff);
-    }
-    for (&second_payload, 0..) |*byte, i| {
-        byte.* = "concatenated stored gzip member "[i % "concatenated stored gzip member ".len];
-    }
+    fillConcatStoredPayloads(&first_payload, &second_payload, "concatenated stored gzip member ");
 
     const first_frame = try vort.encodeGzipStoredAlloc(init.gpa, &first_payload);
     defer init.gpa.free(first_frame);
@@ -150,6 +201,15 @@ fn runGzipConcatenatedStoredBench(init: std.process.Init, stdout: *std.Io.Writer
         try printDecodeThroughput(stdout, start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), "gzip-concat-stored-into", plain_len, frame.items.len, iterations);
     }
     return mix;
+}
+
+fn fillConcatStoredPayloads(first: []u8, second: []u8, label: []const u8) void {
+    for (first, 0..) |*byte, i| {
+        byte.* = @truncate((i * 251 + 19) & 0xff);
+    }
+    for (second, 0..) |*byte, i| {
+        byte.* = label[i % label.len];
+    }
 }
 
 fn runDynamicStageBench(io: std.Io, stdout: *std.Io.Writer, iterations: usize) !u64 {
