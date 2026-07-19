@@ -4571,14 +4571,8 @@ fn copyPngStreamingPendingMatch(self: anytype, output: []u8) Error!usize {
         try copyPngStreamingHistoryBytes(self, distance, dest);
         self.recordInflatedBytes(dest);
     } else {
-        var i: usize = 0;
-        while (i < dest.len) : (i += 1) {
-            dest[i] = try self.historyByte(distance);
-            self.history[self.history_pos] = dest[i];
-            self.history_pos = (self.history_pos + 1) % self.history.len;
-            self.history_len = @min(self.history_len + 1, self.history.len);
-        }
-        self.updateAdlerForInflatedBytes(dest);
+        try copyPngStreamingOverlappingHistoryBytes(self, distance, dest);
+        self.recordInflatedBytes(dest);
     }
     self.pending_match_remaining -= count;
     return count;
@@ -4593,6 +4587,31 @@ fn copyPngStreamingHistoryBytes(self: anytype, distance: usize, dest: []u8) Erro
         @memcpy(dest[dest_i..][0..n], self.history[src..][0..n]);
         dest_i += n;
         src = 0;
+    }
+}
+
+fn copyPngStreamingOverlappingHistoryBytes(self: anytype, distance: usize, dest: []u8) Error!void {
+    if (distance == 0 or distance > self.history_len or distance >= dest.len) return error.InvalidMatch;
+
+    // The streaming PNG inflater keeps DEFLATE history in a ring buffer. For an
+    // overlapping match, seed exactly one distance-sized window from that ring in
+    // chronological order, then replay from the just-written destination prefix
+    // with the same doubling strategy used by caller-owned inflate. Updating the
+    // rolling history after the full row span is safe because the destination
+    // prefix already contains the bytes that byte-at-a-time DEFLATE replay would
+    // have observed.
+    var src = (self.history_pos + self.history.len - distance) % self.history.len;
+    var copied: usize = 0;
+    while (copied < distance) {
+        const n = @min(distance - copied, self.history.len - src);
+        @memcpy(dest[copied..][0..n], self.history[src..][0..n]);
+        copied += n;
+        src = 0;
+    }
+    while (copied < dest.len) {
+        const n = @min(copied, dest.len - copied);
+        @memcpy(dest[copied..][0..n], dest[0..n]);
+        copied += n;
     }
 }
 
@@ -9040,14 +9059,18 @@ test "png streaming zlib decoder batches pending matches into row buffers" {
         .{ .name = "small-distance", .history = "AB", .distance = 2, .pending = 7, .output_len = 7, .expected = "ABABABA" },
         .{ .name = "history-copy", .history = "abcdef", .distance = 5, .pending = 3, .output_len = 3, .expected = "bcd" },
         .{ .name = "overlap", .history = "abcde", .distance = 5, .pending = 8, .output_len = 8, .expected = "abcdeabc" },
+        .{ .name = "ring-wrap-overlap", .history = "abcde", .distance = 5, .pending = 11, .output_len = 11, .expected = "abcdeabcdea" },
     };
 
     for (cases) |case| {
         var history_scratch: [32]u8 = @splat(0);
-        @memcpy(history_scratch[0..case.history.len], case.history);
+        const history_pos = if (std.mem.eql(u8, case.name, "ring-wrap-overlap")) history_scratch.len - 2 else case.history.len;
+        for (case.history, 0..) |byte, i| {
+            history_scratch[(history_pos + history_scratch.len - case.history.len + i) % history_scratch.len] = byte;
+        }
         var decoder = PngStreamingZlibScanlineDecoder{
             .history = &history_scratch,
-            .history_pos = case.history.len,
+            .history_pos = history_pos,
             .history_len = case.history.len,
             .pending_match_remaining = case.pending,
             .pending_match_distance = case.distance,

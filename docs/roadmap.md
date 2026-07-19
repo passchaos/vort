@@ -1046,3 +1046,14 @@ architecture blindly.
 
 - [x] Tried switching the production dynamic distance FastDecoder from 8-bit to 5-bit lookup to reduce setup cost, but reverted it because `run-deflate-dynamic-decode-profile-gate` failed the distance lookup-size expectation and exposed much higher distance miss pressure on the roadmap row (coverage 31/32, miss ratio about 3.74%). Keep the 8-bit distance lookup policy until a strategy can preserve profile coverage and repeat3 decode results.
 - [x] Cleaned dynamic decode profiling for zero-extra distance symbols by matching the production distance fast path for symbols 0..3, removing a profile-only 0-bit read before future extra-bit evidence comparisons.
+- Optimized PNG streaming zlib pending matches for overlapping distances greater
+  than four bytes by seeding one distance window from the DEFLATE history ring and
+  then doubling within the caller row buffer, matching the caller-owned inflate
+  match-copy strategy instead of replaying byte-by-byte. Added ring-wrap unit
+  coverage for the pending-match row helper. ReleaseFast A/B on
+  `run-png-streaming-zlib-bench-report -- --repeat 3 --iterations 800` against
+  the pre-change path moved the row-repeat dynamic/fixed rows from about
+  `153.33` / `154.61` MiB/s to about `1208.80` / `1224.76` MiB/s for contiguous
+  decode and from about `153.63` / `152.97` MiB/s to about `1174.51` /
+  `1177.64` MiB/s for chunked decode, while RLE/small-distance rows stayed in
+  the same throughput class.
