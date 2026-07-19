@@ -38,6 +38,7 @@ const specs = [_]CaseSpec{
     .{ .name = "png-stream-small-distance-dynamic", .width = 1024, .height = 64, .bytes_per_pixel = 4, .encoder = .dynamic, .pattern = .abcd, .chunk_bytes = 64 },
     .{ .name = "png-stream-row-repeat-dynamic", .width = 1024, .height = 96, .bytes_per_pixel = 3, .encoder = .dynamic, .pattern = .repeated_row, .chunk_bytes = 32 },
     .{ .name = "png-stream-row-repeat-fixed", .width = 1024, .height = 64, .bytes_per_pixel = 3, .encoder = .fixed, .pattern = .repeated_row, .chunk_bytes = 32 },
+    .{ .name = "png-stream-wide-rle-dynamic", .width = 65536, .height = 16, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .zero, .chunk_bytes = 64 },
 };
 
 pub fn main(init: std.process.Init) !void {

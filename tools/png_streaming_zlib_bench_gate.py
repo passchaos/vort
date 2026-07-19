@@ -66,6 +66,15 @@ EXPECTED_CASES = {
         "image_bytes": 196608,
         "chunk_bytes": 32,
     },
+    "png-stream-wide-rle-dynamic": {
+        "encoder": "dynamic",
+        "pattern": "zero",
+        "width": 65536,
+        "height": 16,
+        "row_bytes": 65536,
+        "image_bytes": 1048576,
+        "chunk_bytes": 64,
+    },
 }
 MIN_THROUGHPUT_MIB_S = {
     # These gates run in ReleaseFast via the build step. The row-repeat rows used
@@ -78,6 +87,10 @@ MIN_THROUGHPUT_MIB_S = {
         "chunked_mib_s": 700.0,
     },
     "png-stream-row-repeat-fixed": {
+        "contiguous_mib_s": 700.0,
+        "chunked_mib_s": 700.0,
+    },
+    "png-stream-wide-rle-dynamic": {
         "contiguous_mib_s": 700.0,
         "chunked_mib_s": 700.0,
     },

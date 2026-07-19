@@ -4632,6 +4632,34 @@ fn updatePngStreamingAdlerBytes(self: anytype, bytes: []const u8) void {
     for (bytes) |byte| self.updateAdlerByte(byte);
 }
 
+fn recordPngStreamingHistoryBytes(self: anytype, bytes: []const u8) void {
+    if (bytes.len == 0) return;
+    std.debug.assert(self.history.len != 0);
+
+    const original_len = bytes.len;
+    var tail = bytes;
+    if (tail.len >= self.history.len) {
+        // Only the final 32 KiB DEFLATE history window can be referenced by a
+        // later match. Wide PNG scanlines and long RLE matches may hand us more
+        // than that at once; copying the prefix into the ring is pure churn
+        // because the suffix overwrites it before any later symbol can observe
+        // the intermediate state. Advance the cursor as if the skipped prefix
+        // had been written, then materialize just the retained tail window.
+        const skip = tail.len - self.history.len;
+        self.history_pos = (self.history_pos + skip % self.history.len) % self.history.len;
+        tail = tail[skip..];
+    }
+
+    var index: usize = 0;
+    while (index < tail.len) {
+        const first = @min(tail.len - index, self.history.len - self.history_pos);
+        @memcpy(self.history[self.history_pos..][0..first], tail[index..][0..first]);
+        self.history_pos = (self.history_pos + first) % self.history.len;
+        index += first;
+    }
+    self.history_len = @min(self.history_len + original_len, self.history.len);
+}
+
 /// Incremental zlib/DEFLATE PNG row decoder for contiguous IDAT payloads.
 ///
 /// `PngZlibScanlineDecoder` exposes a row API but first materializes the entire
@@ -4978,14 +5006,7 @@ pub const PngStreamingZlibScanlineDecoder = struct {
     }
 
     fn recordHistoryBytes(self: *PngStreamingZlibScanlineDecoder, bytes: []const u8) void {
-        var index: usize = 0;
-        while (index < bytes.len) {
-            const first = @min(bytes.len - index, self.history.len - self.history_pos);
-            @memcpy(self.history[self.history_pos..][0..first], bytes[index..][0..first]);
-            self.history_pos = (self.history_pos + first) % self.history.len;
-            self.history_len = @min(self.history_len + first, self.history.len);
-            index += first;
-        }
+        recordPngStreamingHistoryBytes(self, bytes);
     }
 
     fn reduceAdler(self: *PngStreamingZlibScanlineDecoder) void {
@@ -5359,14 +5380,7 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
     }
 
     fn recordHistoryBytes(self: *PngStreamingZlibChunkedScanlineDecoder, bytes: []const u8) void {
-        var index: usize = 0;
-        while (index < bytes.len) {
-            const first = @min(bytes.len - index, self.history.len - self.history_pos);
-            @memcpy(self.history[self.history_pos..][0..first], bytes[index..][0..first]);
-            self.history_pos = (self.history_pos + first) % self.history.len;
-            self.history_len = @min(self.history_len + first, self.history.len);
-            index += first;
-        }
+        recordPngStreamingHistoryBytes(self, bytes);
     }
 
     fn reduceAdler(self: *PngStreamingZlibChunkedScanlineDecoder) void {
@@ -9092,6 +9106,40 @@ test "png streaming zlib decoder batches pending matches into row buffers" {
         try std.testing.expectEqual(expected_adler.digest(), decoder.adler.digest());
         try std.testing.expect(decoder.history_len >= case.history.len);
         try std.testing.expect(decoder.history_pos < decoder.history.len);
+    }
+}
+
+test "png streaming history recording keeps only retained tail window" {
+    var history_scratch: [8]u8 = @splat(0);
+    var decoder = PngStreamingZlibScanlineDecoder{
+        .history = &history_scratch,
+        .history_pos = 3,
+        .history_len = 2,
+    };
+    decoder.recordHistoryBytes("0123456789abcdef");
+
+    try std.testing.expectEqual(@as(usize, history_scratch.len), decoder.history_len);
+    try std.testing.expectEqual(@as(usize, (3 + 16) % history_scratch.len), decoder.history_pos);
+    const tail = "89abcdef";
+    for (tail, 0..) |expected, i| {
+        const distance = tail.len - i;
+        try std.testing.expectEqual(expected, try decoder.historyByte(distance));
+    }
+
+    var chunked_history_scratch: [8]u8 = @splat(0);
+    var chunked = PngStreamingZlibChunkedScanlineDecoder{
+        .history = &chunked_history_scratch,
+        .history_pos = 5,
+        .history_len = 1,
+    };
+    chunked.recordHistoryBytes("abcdefghijkl");
+
+    try std.testing.expectEqual(@as(usize, chunked_history_scratch.len), chunked.history_len);
+    try std.testing.expectEqual(@as(usize, (5 + 12) % chunked_history_scratch.len), chunked.history_pos);
+    const chunked_tail = "efghijkl";
+    for (chunked_tail, 0..) |expected, i| {
+        const distance = chunked_tail.len - i;
+        try std.testing.expectEqual(expected, try chunked.historyByte(distance));
     }
 }
 
