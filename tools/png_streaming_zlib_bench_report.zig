@@ -2,7 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 
 const Encoder = enum { dynamic, fixed };
-const Pattern = enum { zero, abcd, vertical_delta, repeated_row };
+const Pattern = enum { zero, abcd, horizontal_delta, vertical_delta, repeated_row };
 
 const CaseSpec = struct {
     name: []const u8,
@@ -36,6 +36,7 @@ const Row = struct {
 const specs = [_]CaseSpec{
     .{ .name = "png-stream-rle-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .zero, .chunk_bytes = 64 },
     .{ .name = "png-stream-up-filter-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .vertical_delta, .chunk_bytes = 64 },
+    .{ .name = "png-stream-sub-filter-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .horizontal_delta, .chunk_bytes = 64 },
     .{ .name = "png-stream-small-distance-dynamic", .width = 1024, .height = 64, .bytes_per_pixel = 4, .encoder = .dynamic, .pattern = .abcd, .chunk_bytes = 64 },
     .{ .name = "png-stream-row-repeat-dynamic", .width = 1024, .height = 96, .bytes_per_pixel = 3, .encoder = .dynamic, .pattern = .repeated_row, .chunk_bytes = 32 },
     .{ .name = "png-stream-row-repeat-fixed", .width = 1024, .height = 64, .bytes_per_pixel = 3, .encoder = .fixed, .pattern = .repeated_row, .chunk_bytes = 32 },
@@ -200,21 +201,27 @@ fn fillPngPayload(spec: CaseSpec, image: []u8, filtered: []u8) void {
     var image_offset: usize = 0;
     var filtered_offset: usize = 0;
     for (0..spec.height) |y| {
-        const filter: u8 = if (spec.pattern == .vertical_delta and y != 0) 2 else 0;
+        const filter: u8 = switch (spec.pattern) {
+            .horizontal_delta => 1,
+            .vertical_delta => if (y != 0) 2 else 0,
+            else => 0,
+        };
         filtered[filtered_offset] = filter;
         filtered_offset += 1;
         for (0..row_len) |x| {
             const reconstructed: u8 = switch (spec.pattern) {
                 .zero => 0,
                 .abcd => "ABCD"[x % 4],
+                .horizontal_delta => @intCast((x * 19 + y * 23 + spec.bytes_per_pixel * 11) & 0xff),
                 .vertical_delta => @intCast((x * 17 + y * 29 + spec.bytes_per_pixel * 13) & 0xff),
                 .repeated_row => @intCast((x * 31 + (x / @max(spec.bytes_per_pixel, 1)) * 7 + 13) & 0xff),
             };
             image[image_offset + x] = reconstructed;
-            filtered[filtered_offset + x] = if (filter == 2)
-                reconstructed -% image[image_offset + x - row_len]
-            else
-                reconstructed;
+            filtered[filtered_offset + x] = switch (filter) {
+                1 => if (x >= spec.bytes_per_pixel) reconstructed -% image[image_offset + x - spec.bytes_per_pixel] else reconstructed,
+                2 => reconstructed -% image[image_offset + x - row_len],
+                else => reconstructed,
+            };
         }
         image_offset += row_len;
         filtered_offset += row_len;
@@ -282,6 +289,7 @@ fn patternName(pattern: Pattern) []const u8 {
     return switch (pattern) {
         .zero => "zero",
         .abcd => "abcd",
+        .horizontal_delta => "horizontal_delta",
         .vertical_delta => "vertical_delta",
         .repeated_row => "repeated_row",
     };
