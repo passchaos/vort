@@ -14,6 +14,7 @@ EXPECTED_COLUMNS = {
     "case",
     "format",
     "encoder",
+    "mode",
     "input_bytes",
     "dict_bytes",
     "compressed_bytes",
@@ -25,10 +26,16 @@ EXPECTED_COLUMNS = {
     "checksum",
 }
 EXPECTED_ROWS = {
-    ("history-replay-raw-dynamic", "raw", "dynamic"),
-    ("history-replay-raw-best", "raw", "best"),
-    ("history-replay-zlib-fixed", "zlib", "fixed"),
-    ("history-replay-zlib-dynamic", "zlib", "dynamic"),
+    ("history-replay-raw-dynamic-alloc", "raw", "dynamic", "alloc"),
+    ("history-replay-raw-dynamic-exact", "raw", "dynamic", "exact_alloc"),
+    ("history-replay-raw-dynamic-into", "raw", "dynamic", "into"),
+    ("history-replay-raw-best-alloc", "raw", "best", "alloc"),
+    ("history-replay-zlib-fixed-alloc", "zlib", "fixed", "alloc"),
+    ("history-replay-zlib-fixed-exact", "zlib", "fixed", "exact_alloc"),
+    ("history-replay-zlib-fixed-into", "zlib", "fixed", "into"),
+    ("history-replay-zlib-dynamic-alloc", "zlib", "dynamic", "alloc"),
+    ("history-replay-zlib-dynamic-exact", "zlib", "dynamic", "exact_alloc"),
+    ("history-replay-zlib-dynamic-into", "zlib", "dynamic", "into"),
 }
 
 
@@ -59,7 +66,7 @@ def main() -> int:
             print(f"dictionary_decode_bench_gate=bad_header fields={reader.fieldnames}", file=sys.stderr)
             return 1
         rows = list(reader)
-    seen = {(row.get("case", ""), row.get("format", ""), row.get("encoder", "")) for row in rows}
+    seen = {(row.get("case", ""), row.get("format", ""), row.get("encoder", ""), row.get("mode", "")) for row in rows}
     if seen != EXPECTED_ROWS or len(rows) != len(EXPECTED_ROWS):
         print(f"dictionary_decode_bench_gate=bad_rows seen={sorted(seen)}", file=sys.stderr)
         return 1
