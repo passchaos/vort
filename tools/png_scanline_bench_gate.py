@@ -41,6 +41,7 @@ MIN_RELEASEFAST_MIB_S = {
     ("paeth", "1"): 225.0,
     ("paeth", "4"): 350.0,
     ("paeth", "6"): 350.0,
+    ("paeth", "8"): 400.0,
 }
 
 
