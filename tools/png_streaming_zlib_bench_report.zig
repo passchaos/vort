@@ -2,7 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 
 const Encoder = enum { dynamic, fixed };
-const Pattern = enum { zero, abcd, horizontal_delta, vertical_delta, repeated_row };
+const Pattern = enum { zero, abcd, horizontal_delta, vertical_delta, average_delta, paeth_delta, repeated_row };
 
 const CaseSpec = struct {
     name: []const u8,
@@ -37,6 +37,8 @@ const specs = [_]CaseSpec{
     .{ .name = "png-stream-rle-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .zero, .chunk_bytes = 64 },
     .{ .name = "png-stream-up-filter-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .vertical_delta, .chunk_bytes = 64 },
     .{ .name = "png-stream-sub-filter-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .horizontal_delta, .chunk_bytes = 64 },
+    .{ .name = "png-stream-average-filter-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .average_delta, .chunk_bytes = 64 },
+    .{ .name = "png-stream-paeth-filter-dynamic", .width = 2048, .height = 64, .bytes_per_pixel = 1, .encoder = .dynamic, .pattern = .paeth_delta, .chunk_bytes = 64 },
     .{ .name = "png-stream-small-distance-dynamic", .width = 1024, .height = 64, .bytes_per_pixel = 4, .encoder = .dynamic, .pattern = .abcd, .chunk_bytes = 64 },
     .{ .name = "png-stream-row-repeat-dynamic", .width = 1024, .height = 96, .bytes_per_pixel = 3, .encoder = .dynamic, .pattern = .repeated_row, .chunk_bytes = 32 },
     .{ .name = "png-stream-row-repeat-fixed", .width = 1024, .height = 64, .bytes_per_pixel = 3, .encoder = .fixed, .pattern = .repeated_row, .chunk_bytes = 32 },
@@ -204,6 +206,8 @@ fn fillPngPayload(spec: CaseSpec, image: []u8, filtered: []u8) void {
         const filter: u8 = switch (spec.pattern) {
             .horizontal_delta => 1,
             .vertical_delta => if (y != 0) 2 else 0,
+            .average_delta => if (y != 0) 3 else 0,
+            .paeth_delta => if (y != 0) 4 else 0,
             else => 0,
         };
         filtered[filtered_offset] = filter;
@@ -214,18 +218,52 @@ fn fillPngPayload(spec: CaseSpec, image: []u8, filtered: []u8) void {
                 .abcd => "ABCD"[x % 4],
                 .horizontal_delta => @intCast((x * 19 + y * 23 + spec.bytes_per_pixel * 11) & 0xff),
                 .vertical_delta => @intCast((x * 17 + y * 29 + spec.bytes_per_pixel * 13) & 0xff),
+                .average_delta => @intCast((x * 37 + y * 41 + spec.bytes_per_pixel * 7) & 0xff),
+                .paeth_delta => @intCast((x * 43 + y * 47 + (x >> 3) + spec.bytes_per_pixel * 5) & 0xff),
                 .repeated_row => @intCast((x * 31 + (x / @max(spec.bytes_per_pixel, 1)) * 7 + 13) & 0xff),
             };
             image[image_offset + x] = reconstructed;
             filtered[filtered_offset + x] = switch (filter) {
                 1 => if (x >= spec.bytes_per_pixel) reconstructed -% image[image_offset + x - spec.bytes_per_pixel] else reconstructed,
                 2 => reconstructed -% image[image_offset + x - row_len],
+                3 => reconstructed -% averagePrediction(image, image_offset, row_len, spec.bytes_per_pixel, x),
+                4 => reconstructed -% paethPrediction(image, image_offset, row_len, spec.bytes_per_pixel, x),
                 else => reconstructed,
             };
         }
         image_offset += row_len;
         filtered_offset += row_len;
     }
+}
+
+fn averagePrediction(image: []const u8, image_offset: usize, row_len: usize, bpp: usize, x: usize) u8 {
+    const left: u8 = if (x >= bpp) image[image_offset + x - bpp] else 0;
+    const up: u8 = image[image_offset + x - row_len];
+    return @intCast((@as(u16, left) + @as(u16, up)) >> 1);
+}
+
+fn paethPrediction(image: []const u8, image_offset: usize, row_len: usize, bpp: usize, x: usize) u8 {
+    const left: u8 = if (x >= bpp) image[image_offset + x - bpp] else 0;
+    const up: u8 = image[image_offset + x - row_len];
+    const up_left: u8 = if (x >= bpp) image[image_offset + x - row_len - bpp] else 0;
+    return paethPredictor(left, up, up_left);
+}
+
+fn paethPredictor(left: u8, up: u8, up_left: u8) u8 {
+    const a: i32 = left;
+    const b: i32 = up;
+    const c: i32 = up_left;
+    const p = a + b - c;
+    const pa = absI32(p - a);
+    const pb = absI32(p - b);
+    const pc = absI32(p - c);
+    if (pa <= pb and pa <= pc) return left;
+    if (pb <= pc) return up;
+    return up_left;
+}
+
+fn absI32(value: i32) i32 {
+    return if (value < 0) -value else value;
 }
 
 fn encodeFrame(allocator: std.mem.Allocator, filtered: []const u8, encoder: Encoder) ![]u8 {
@@ -291,6 +329,8 @@ fn patternName(pattern: Pattern) []const u8 {
         .abcd => "abcd",
         .horizontal_delta => "horizontal_delta",
         .vertical_delta => "vertical_delta",
+        .average_delta => "average_delta",
+        .paeth_delta => "paeth_delta",
         .repeated_row => "repeated_row",
     };
 }
