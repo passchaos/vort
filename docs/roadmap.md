@@ -1059,3 +1059,11 @@ architecture blindly.
   the same throughput class.
 
 - Added explicit ReleaseFast throughput floors to `run-png-streaming-zlib-bench-report-gate` for the repeated-row dynamic and fixed PNG streaming rows. The floor is deliberately conservative (`700` MiB/s for contiguous and chunked rows) but high enough to catch a regression back to the old byte-at-a-time overlapping-match path, which measured around `153` MiB/s before the row-buffer doubling optimization.
+- Optimized dictionary-backed allocating raw/zlib inflate so matches whose
+  distance is fully inside the current output history use the same bulk
+  small-distance, memcpy, or overlapping doubling copy paths as no-dictionary
+  inflate. Only matches that still reach back into the preset dictionary keep the
+  byte-at-a-time dictionary fallback. Added fixed/dynamic token coverage where
+  the first match seeds from the preset dictionary and the next overlapping match
+  replays from decoded history, and verified the existing dictionary-deflate
+  report still round-trips built-in raw/zlib dictionary cases.

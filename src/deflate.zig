@@ -2644,20 +2644,27 @@ fn appendMatchWithDictionaryFromBase(allocator: std.mem.Allocator, out: *std.Arr
         out.appendNTimesAssumeCapacity(byte, length);
         return;
     }
-    if (dictionary.len == 0 and distance <= 4 and history_len >= distance) {
-        appendSmallDistanceMatchAssumeCapacity(out, length, distance);
-        return;
-    }
-    if (dictionary.len == 0 and distance >= length) {
-        const start = out.items.len - distance;
-        out.appendSliceAssumeCapacity(out.items[start..][0..length]);
-        return;
-    }
-    if (dictionary.len == 0) {
+    if (distance <= history_len) {
+        // Preset-dictionary streams only need byte-at-a-time fallback while a
+        // match reaches back into the dictionary prefix. Once the match distance
+        // is fully inside this member's decoded output, use the same bulk copy
+        // paths as no-dictionary inflate. This matters for dictionary-trained
+        // JSON/log payloads where the first back-reference may seed output from
+        // the preset dictionary and the following matches usually replay from
+        // freshly decoded history.
+        if (distance <= 4) {
+            appendSmallDistanceMatchAssumeCapacity(out, length, distance);
+            return;
+        }
+        if (distance >= length) {
+            const start = out.items.len - distance;
+            out.appendSliceAssumeCapacity(out.items[start..][0..length]);
+            return;
+        }
         const out_offset = out.items.len;
         out.items.len += length;
-        // Allocating decoders have already reserved the final match span, so the
-        // no-dictionary overlapping case can share the caller-buffer doubling
+        // Allocating decoders have already reserved the final match span, so
+        // history-only overlapping matches can share the caller-buffer doubling
         // copy. This avoids appending one byte at a time on long LZ77 matches.
         copyOverlappingMatchAt(out.items, out_offset, length, distance);
         return;
@@ -10654,6 +10661,38 @@ test "raw preset dictionary encoders can reference preset history" {
         try std.testing.expectEqualSlices(u8, input, decoded);
         // These inputs begin with the preset phrase, so the dictionary-aware
         // planners should produce a back-reference into the preset history.
+        try std.testing.expectError(error.InvalidMatch, decodeRawAutoAlloc(std.testing.allocator, raw));
+    }
+}
+
+test "allocating preset dictionary decode bulk-copies history-only matches" {
+    const dictionary = "prefix:";
+    const expected = "prefix:prefix:prefix:";
+    const tokens = [_]lz77.Token{
+        // Seed the output from the preset dictionary. This match still needs the
+        // generic dictionary-aware path because the history is empty.
+        .{ .match = .{ .length = 7, .distance = 7 } },
+        // The second match is fully inside the just-decoded output history even
+        // though a dictionary is still attached to the stream. It should use the
+        // same bulk overlapping-copy path as no-dictionary allocating inflate
+        // rather than byte-at-a-time dictionary fallback.
+        .{ .match = .{ .length = 14, .distance = 7 } },
+    };
+    const fixed = try encodeRawFixedTokensAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(fixed);
+    const dynamic = try encodeRawDynamicTokensAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(dynamic);
+
+    for ([_][]const u8{ fixed, dynamic }) |raw| {
+        const decoded = try decodeRawAutoAllocWithDictionary(std.testing.allocator, raw, dictionary);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, expected, decoded);
+
+        var exact: [expected.len]u8 = undefined;
+        const written = try decodeRawAutoWithDictionary(raw, dictionary, &exact);
+        try std.testing.expectEqual(@as(usize, expected.len), written.output_written);
+        try std.testing.expectEqualSlices(u8, expected, &exact);
+
         try std.testing.expectError(error.InvalidMatch, decodeRawAutoAlloc(std.testing.allocator, raw));
     }
 }
