@@ -10,15 +10,28 @@ const iterations_default: usize = 64;
 const ReaderKind = enum {
     buffered,
     chunked_4096,
+    coalesced_4096,
     chunked_64,
+    coalesced_64,
     chunked_1,
+    coalesced_1,
 
     fn label(self: ReaderKind) []const u8 {
         return switch (self) {
             .buffered => "buffered",
             .chunked_4096 => "chunked_4096",
+            .coalesced_4096 => "coalesced_4096",
             .chunked_64 => "chunked_64",
+            .coalesced_64 => "coalesced_64",
             .chunked_1 => "chunked_1",
+            .coalesced_1 => "coalesced_1",
+        };
+    }
+
+    fn isCoalesced(self: ReaderKind) bool {
+        return switch (self) {
+            .coalesced_4096, .coalesced_64, .coalesced_1 => true,
+            else => false,
         };
     }
 };
@@ -61,7 +74,7 @@ const Row = struct {
     checksum: u64,
 };
 
-const readers = [_]ReaderKind{ .buffered, .chunked_4096, .chunked_64, .chunked_1 };
+const readers = [_]ReaderKind{ .buffered, .chunked_4096, .coalesced_4096, .chunked_64, .coalesced_64, .chunked_1, .coalesced_1 };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -137,12 +150,14 @@ fn runCaseSet(init: std.process.Init, writer: *std.Io.Writer, comptime case: Cas
 fn runFixedLiteral(init: std.process.Init, reader_kind: ReaderKind, input: []const u8, expected: []const u16, iterations: usize) !Row {
     const chunks = try chunksForReader(init.gpa, reader_kind, input);
     defer if (reader_kind != .buffered) init.gpa.free(chunks);
+    const coalesced = if (reader_kind.isCoalesced()) try coalesceChunks(init.gpa, chunks, input.len) else input;
+    defer if (reader_kind.isCoalesced()) init.gpa.free(coalesced);
     const start = std.Io.Clock.awake.now(init.io);
     var checksum: u64 = 0;
     for (0..iterations) |_| {
         switch (reader_kind) {
-            .buffered => {
-                var reader = bitstream.BufferedBitReader.init(input);
+            .buffered, .coalesced_4096, .coalesced_64, .coalesced_1 => {
+                var reader = bitstream.BufferedBitReader.init(coalesced);
                 for (expected) |want| {
                     const got = try huffman.decodeFixedLiteralValueFast(&reader);
                     if (got != want) return error.DecodeLengthMismatch;
@@ -167,12 +182,14 @@ fn runFixedLiteral(init: std.process.Init, reader_kind: ReaderKind, input: []con
 fn runFast(init: std.process.Init, comptime case: CaseKind, reader_kind: ReaderKind, input: []const u8, expected: []const u16, iterations: usize, decoder: anytype, decoder_name: []const u8) !Row {
     const chunks = try chunksForReader(init.gpa, reader_kind, input);
     defer if (reader_kind != .buffered) init.gpa.free(chunks);
+    const coalesced = if (reader_kind.isCoalesced()) try coalesceChunks(init.gpa, chunks, input.len) else input;
+    defer if (reader_kind.isCoalesced()) init.gpa.free(coalesced);
     const start = std.Io.Clock.awake.now(init.io);
     var checksum: u64 = 0;
     for (0..iterations) |_| {
         switch (reader_kind) {
-            .buffered => {
-                var reader = bitstream.BufferedBitReader.init(input);
+            .buffered, .coalesced_4096, .coalesced_64, .coalesced_1 => {
+                var reader = bitstream.BufferedBitReader.init(coalesced);
                 for (expected) |want| {
                     const got = try decoder.decodeValue(&reader);
                     if (got != want) return error.DecodeLengthMismatch;
@@ -197,9 +214,9 @@ fn runFast(init: std.process.Init, comptime case: CaseKind, reader_kind: ReaderK
 fn chunksForReader(allocator: std.mem.Allocator, reader: ReaderKind, input: []const u8) ![]const []const u8 {
     return switch (reader) {
         .buffered => &.{},
-        .chunked_4096 => makeChunks(allocator, input, 4096),
-        .chunked_64 => makeChunks(allocator, input, 64),
-        .chunked_1 => makeChunks(allocator, input, 1),
+        .chunked_4096, .coalesced_4096 => makeChunks(allocator, input, 4096),
+        .chunked_64, .coalesced_64 => makeChunks(allocator, input, 64),
+        .chunked_1, .coalesced_1 => makeChunks(allocator, input, 1),
     };
 }
 
@@ -257,6 +274,19 @@ fn makeChunks(allocator: std.mem.Allocator, input: []const u8, chunk_len: usize)
     return chunks.toOwnedSlice(allocator);
 }
 
+fn coalesceChunks(allocator: std.mem.Allocator, chunks: []const []const u8, expected_len: usize) ![]u8 {
+    const out = try allocator.alloc(u8, expected_len);
+    errdefer allocator.free(out);
+    var offset: usize = 0;
+    for (chunks) |chunk| {
+        if (offset > expected_len or chunk.len > expected_len - offset) return error.DecodeLengthMismatch;
+        @memcpy(out[offset..][0..chunk.len], chunk);
+        offset += chunk.len;
+    }
+    if (offset != expected_len) return error.DecodeLengthMismatch;
+    return out;
+}
+
 fn row(comptime case: CaseKind, reader: ReaderKind, decoder: []const u8, lookup_bits: u8, chunk_count: usize, input_len: usize, elapsed_ns: i128, iterations: usize, checksum: u64) Row {
     return .{
         .case = case.label(),
@@ -278,9 +308,9 @@ fn row(comptime case: CaseKind, reader: ReaderKind, decoder: []const u8, lookup_
 fn chunkBytes(reader: ReaderKind) usize {
     return switch (reader) {
         .buffered => 0,
-        .chunked_4096 => 4096,
-        .chunked_64 => 64,
-        .chunked_1 => 1,
+        .chunked_4096, .coalesced_4096 => 4096,
+        .chunked_64, .coalesced_64 => 64,
+        .chunked_1, .coalesced_1 => 1,
     };
 }
 
