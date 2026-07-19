@@ -36,6 +36,8 @@ MIN_RELEASEFAST_MIB_S = {
     ("average", "6"): 1_200.0,
     ("average", "8"): 1_500.0,
     ("paeth", "1"): 225.0,
+    ("paeth", "4"): 350.0,
+    ("paeth", "6"): 350.0,
 }
 
 
