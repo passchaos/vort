@@ -177,6 +177,13 @@
     },
     {
       "expected_format": "csv",
+      "name": "vort-dictionary-decode-bench.csv",
+      "producer_step": "zig build run-dictionary-decode-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-dictionary-decode-bench-gate"
+    },
+    {
+      "expected_format": "csv",
       "name": "vort-dictionary-deflate-report.csv",
       "producer_step": "zig build run-dictionary-deflate-report-csv",
       "required_smoke_gate": false,

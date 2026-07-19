@@ -1067,3 +1067,9 @@ architecture blindly.
   the first match seeds from the preset dictionary and the next overlapping match
   replays from decoded history, and verified the existing dictionary-deflate
   report still round-trips built-in raw/zlib dictionary cases.
+- Added `run-dictionary-decode-bench-gate`, a ReleaseFast preset-dictionary decode
+  throughput CSV/gate for raw dynamic, raw best, zlib fixed, and zlib dynamic
+  streams over a history-replay fixture. The benchmark protects the new
+  dictionary-backed history-only bulk match-copy path with automatic throughput
+  and round-trip validation, and the CSV is registered in dashboard producer
+  metadata.

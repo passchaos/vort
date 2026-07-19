@@ -8,6 +8,10 @@
       "expected_format": "csv",
       "smoke_gate": "zig build -Doptimize=ReleaseFast bench-checksum-csv"
     },
+    "vort-chunk-cursor-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-chunk-cursor-bench-gate"
+    },
     "vort-chunked-zlib-bench-report-repeat3.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-gate"
@@ -56,6 +60,10 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-dashboard-strict-dashboard"
     },
+    "vort-deflate-chunked-huffman-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-deflate-chunked-huffman-bench-gate"
+    },
     "vort-deflate-decode-stage-report-repeat3.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv-repeat3"
@@ -80,6 +88,14 @@
       "expected_format": "csv",
       "smoke_gate": "zig build run-deflate-extra-bits-bench-gate"
     },
+    "vort-deflate-huffman-build-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-deflate-huffman-build-bench-gate"
+    },
+    "vort-deflate-huffman-lookup-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-deflate-huffman-lookup-bench-gate"
+    },
     "vort-deflate-match-copy-bench.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build run-deflate-match-copy-bench-gate"
@@ -95,6 +111,10 @@
     "vort-dictionary-corpus-dashboard.md": {
       "expected_format": "md",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard"
+    },
+    "vort-dictionary-decode-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-dictionary-decode-bench-gate"
     },
     "vort-dictionary-deflate-report.csv": {
       "expected_format": "csv",
@@ -267,22 +287,6 @@
     "vort-zlib-relaxed-report.md": {
       "expected_format": "md",
       "smoke_gate": "zig build run-zlib-relaxed-report-gate"
-    },
-    "vort-deflate-huffman-lookup-bench.csv": {
-      "expected_format": "csv",
-      "smoke_gate": "zig build run-deflate-huffman-lookup-bench-gate"
-    },
-    "vort-deflate-huffman-build-bench.csv": {
-      "expected_format": "csv",
-      "smoke_gate": "zig build run-deflate-huffman-build-bench-gate"
-    },
-    "vort-chunk-cursor-bench.csv": {
-      "expected_format": "csv",
-      "smoke_gate": "zig build run-chunk-cursor-bench-gate"
-    },
-    "vort-deflate-chunked-huffman-bench.csv": {
-      "expected_format": "csv",
-      "smoke_gate": "zig build run-deflate-chunked-huffman-bench-gate"
     }
   },
   "contains": [
@@ -301,6 +305,7 @@
   ],
   "exact": {
     "vort-checksum-bench.csv": "zig build -Doptimize=ReleaseFast bench-checksum-csv",
+    "vort-chunk-cursor-bench.csv": "zig build run-chunk-cursor-bench-gate",
     "vort-chunked-zlib-bench-report-repeat3.csv": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-gate",
     "vort-chunked-zlib-bench-report.csv": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv",
     "vort-chunked-zlib-bench-report.md": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-dashboard",
@@ -313,16 +318,20 @@
     "vort-dashboard-producers-required-smoke.json": "zig build run-dashboard-producers-required-smoke",
     "vort-dashboard-strict-smoke.json": "zig build run-dashboard-strict-dashboard",
     "vort-dashboard-strict-smoke.md": "zig build run-dashboard-strict-dashboard",
+    "vort-deflate-chunked-huffman-bench.csv": "zig build run-deflate-chunked-huffman-bench-gate",
     "vort-deflate-decode-stage-report-repeat3.csv": "zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv-repeat3",
     "vort-deflate-decode-stage-report.csv": "zig build run-deflate-decode-stage-report-csv",
     "vort-deflate-decode-stage-report.json": "zig build run-deflate-decode-stage-report-dashboard",
     "vort-deflate-decode-stage-report.md": "zig build run-deflate-decode-stage-report-dashboard",
     "vort-deflate-dynamic-decode-profile.csv": "zig build -Doptimize=ReleaseFast run-deflate-dynamic-decode-profile-csv",
     "vort-deflate-extra-bits-bench.csv": "zig build run-deflate-extra-bits-bench-gate",
+    "vort-deflate-huffman-build-bench.csv": "zig build run-deflate-huffman-build-bench-gate",
+    "vort-deflate-huffman-lookup-bench.csv": "zig build run-deflate-huffman-lookup-bench-gate",
     "vort-deflate-match-copy-bench.csv": "zig build run-deflate-match-copy-bench-gate",
     "vort-deflate-wrapper-fuzz-corpus.json": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
     "vort-deflate-wrapper-fuzz-corpus.md": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
     "vort-dictionary-corpus-dashboard.md": "zig build -Doptimize=ReleaseFast run-dictionary-corpus-dashboard",
+    "vort-dictionary-decode-bench.csv": "zig build run-dictionary-decode-bench-gate",
     "vort-dictionary-deflate-report.csv": "zig build run-dictionary-deflate-report-csv",
     "vort-dictionary-deflate-report.md": "zig build run-dictionary-deflate-report-dashboard",
     "vort-dynamic-plan-builtins-report.csv": "zig build run-dynamic-plan-builtins-report-csv",
@@ -365,13 +374,10 @@
     "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
     "vort-zlib-relaxed-report-gate.json": "zig build run-zlib-relaxed-report-gate",
     "vort-zlib-relaxed-report.json": "zig build run-zlib-relaxed-report",
-    "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report",
-    "vort-deflate-huffman-lookup-bench.csv": "zig build run-deflate-huffman-lookup-bench-gate",
-    "vort-deflate-huffman-build-bench.csv": "zig build run-deflate-huffman-build-bench-gate",
-    "vort-chunk-cursor-bench.csv": "zig build run-chunk-cursor-bench-gate",
-    "vort-deflate-chunked-huffman-bench.csv": "zig build run-deflate-chunked-huffman-bench-gate"
+    "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report"
   },
   "required_smoke_gates": [
+    "vort-dictionary-decode-bench.csv",
     "vort-dashboard-category-negative-smoke.json",
     "vort-dashboard-config-index-negative-smoke.json",
     "vort-dashboard-config-index-smoke.json",
