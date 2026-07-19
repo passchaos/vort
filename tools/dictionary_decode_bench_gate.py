@@ -45,6 +45,29 @@ EXPECTED_ROWS = {
     ("log-prefix-zlib-dynamic-alloc", "zlib", "dynamic", "alloc"),
     ("log-prefix-zlib-dynamic-into", "zlib", "dynamic", "into"),
 }
+MIN_DECODE_MIB_S = {
+    # ReleaseFast smoke floors. They are deliberately below current local rows
+    # but high enough to catch a regression back to dictionary byte-at-a-time
+    # replay for the history-heavy fixture or severe slowdowns on JSON/log rows.
+    "history-replay-raw-dynamic-alloc": 500.0,
+    "history-replay-raw-dynamic-exact_alloc": 500.0,
+    "history-replay-raw-dynamic-into": 500.0,
+    "history-replay-raw-best-alloc": 1500.0,
+    "history-replay-zlib-fixed-alloc": 1500.0,
+    "history-replay-zlib-fixed-exact_alloc": 1500.0,
+    "history-replay-zlib-fixed-into": 1500.0,
+    "history-replay-zlib-dynamic-alloc": 500.0,
+    "history-replay-zlib-dynamic-exact_alloc": 500.0,
+    "history-replay-zlib-dynamic-into": 500.0,
+    "json-prefix-raw-dynamic-alloc": 250.0,
+    "json-prefix-raw-dynamic-into": 250.0,
+    "json-prefix-zlib-dynamic-alloc": 250.0,
+    "json-prefix-zlib-dynamic-into": 250.0,
+    "log-prefix-raw-dynamic-alloc": 250.0,
+    "log-prefix-raw-dynamic-into": 250.0,
+    "log-prefix-zlib-dynamic-alloc": 250.0,
+    "log-prefix-zlib-dynamic-into": 250.0,
+}
 
 
 def positive_int(row: dict[str, str], key: str) -> bool:
@@ -87,6 +110,10 @@ def main() -> int:
             return 1
         if not positive_float(row, "decode_mib_s"):
             print(f"dictionary_decode_bench_gate=bad_throughput row={row}", file=sys.stderr)
+            return 1
+        floor = MIN_DECODE_MIB_S.get(row["case"])
+        if floor is not None and float(row["decode_mib_s"]) < floor:
+            print(f"dictionary_decode_bench_gate=throughput_regression floor={floor} row={row}", file=sys.stderr)
             return 1
     print(f"dictionary_decode_bench_gate=ok rows={len(rows)}")
     return 0
