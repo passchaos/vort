@@ -4,15 +4,21 @@ const vort = @import("vort");
 const ReaderKind = enum {
     buffered,
     chunked_4096,
+    span_4096,
     chunked_64,
+    span_64,
     chunked_1,
+    span_1,
 
     fn label(self: ReaderKind) []const u8 {
         return switch (self) {
             .buffered => "buffered",
             .chunked_4096 => "chunked_4096",
+            .span_4096 => "span_4096",
             .chunked_64 => "chunked_64",
+            .span_64 => "span_64",
             .chunked_1 => "chunked_1",
+            .span_1 => "span_1",
         };
     }
 };
@@ -44,7 +50,7 @@ const cases = [_]CaseSpec{
     .{ .name = "extra-13", .bits = 13, .reads_per_iter = 48 * 1024 },
 };
 
-const readers = [_]ReaderKind{ .buffered, .chunked_4096, .chunked_64, .chunked_1 };
+const readers = [_]ReaderKind{ .buffered, .chunked_4096, .span_4096, .chunked_64, .span_64, .chunked_1, .span_1 };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -97,9 +103,9 @@ fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iter
         &[_][]const u8{}
     else
         try makeChunks(init.gpa, input, switch (reader_kind) {
-            .chunked_4096 => 4096,
-            .chunked_64 => 64,
-            .chunked_1 => 1,
+            .chunked_4096, .span_4096 => 4096,
+            .chunked_64, .span_64 => 64,
+            .chunked_1, .span_1 => 1,
             .buffered => unreachable,
         });
     defer if (reader_kind != .buffered) init.gpa.free(chunks);
@@ -111,6 +117,7 @@ fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iter
         checksum +%= switch (reader_kind) {
             .buffered => try runBuffered(input, case.bits, case.reads_per_iter),
             .chunked_4096, .chunked_64, .chunked_1 => try runChunked(chunks, case.bits, case.reads_per_iter),
+            .span_4096, .span_64, .span_1 => try runSpan(chunks, case.bits, case.reads_per_iter),
         };
     }
     const elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
@@ -140,6 +147,14 @@ fn runBuffered(input: []const u8, bits: u6, reads: usize) !u64 {
 
 fn runChunked(chunks: []const []const u8, bits: u6, reads: usize) !u64 {
     var reader = try vort.bitstream.ChunkedBitReader.init(chunks);
+    var sum: u64 = 0;
+    var i: usize = 0;
+    while (i < reads) : (i += 1) sum +%= try reader.readBits(u16, bits);
+    return sum;
+}
+
+fn runSpan(chunks: []const []const u8, bits: u6, reads: usize) !u64 {
+    var reader = try vort.bitstream.ChunkedSpanBitReader.init(chunks);
     var sum: u64 = 0;
     var i: usize = 0;
     while (i < reads) : (i += 1) sum +%= try reader.readBits(u16, bits);
