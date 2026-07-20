@@ -2010,30 +2010,7 @@ fn writeStoredSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitWr
 }
 
 pub fn decodeRawStored(input: []const u8, output: []u8) Error!DecodeResult {
-    var reader = bitstream.BitReader.init(input);
-    var out_offset: usize = 0;
-
-    while (true) {
-        const header = try readBlockHeader(&reader);
-        if (header.block_type != 0) return error.InvalidDeflateBlockType;
-
-        reader.alignToByte();
-        const offset = reader.byte_index;
-        if (input.len - offset < 4) return error.TruncatedFrame;
-        const len = std.mem.readInt(u16, input[offset..][0..2], .little);
-        const nlen = std.mem.readInt(u16, input[offset + 2 ..][0..2], .little);
-        if (nlen != ~len) return error.StoredLengthMismatch;
-
-        const chunk_len: usize = len;
-        if (input.len - offset - 4 < chunk_len) return error.TruncatedFrame;
-        if (output.len - out_offset < chunk_len) return error.OutputTooSmall;
-        @memcpy(output[out_offset..][0..chunk_len], input[offset + 4 ..][0..chunk_len]);
-        out_offset += chunk_len;
-        reader.byte_index = offset + 4 + chunk_len;
-        reader.bit_index = 0;
-
-        if (header.final) return .{ .input_read = reader.byteOffset(), .output_written = out_offset };
-    }
+    return (try decodeRawStoredOnlyIntoMaybe(input, output)) orelse error.InvalidDeflateBlockType;
 }
 
 pub fn decodeRawStoredAllocPartial(allocator: std.mem.Allocator, input: []const u8) !OwnedDecodeResult {

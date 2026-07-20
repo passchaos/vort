@@ -1124,3 +1124,9 @@ architecture blindly.
   reader fill/check at every block boundary without touching Huffman, distance,
   or extra-bit decode policy. ReleaseFast repeat3 decode-stage, PNG streaming
   zlib, and chunked zlib gates passed after the change.
+
+- Routed public caller-buffer `decodeRawStored` through the same byte-level
+  stored-only decoder used by auto/stored wrapper fast paths, removing its
+  separate BitReader stored-block loop. Two ReleaseFast repeat3 decode-stage
+  smokes kept the `stored-binary` raw stored allocation row in the same throughput
+  class while preserving malformed stored-block coverage.
