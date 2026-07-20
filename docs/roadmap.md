@@ -517,6 +517,7 @@ architecture blindly.
 - [x] Zlib allocator-returning stored-block decode validates footer availability and trailing-data boundaries from the stored-block plan before allocating output, matching the gzip no-allocation strict-boundary behavior.
 - [x] Zlib/gzip exact-size allocator-returning decode validates wrapper headers before allocating the caller-declared output size, preserving malformed-header errors without heap work.
 - [x] Zlib/gzip concatenated exact-size allocator-returning decode validates the first wrapper header before allocating the caller-declared output size, matching single-member no-allocation malformed-header behavior.
+- [x] Zlib chunked exact-size allocator-returning decode validates the chunked wrapper header before allocating the caller-declared output size, preserving bad-header errors without heap work.
 - [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC validation.
 - [x] gzip encoders can emit configurable MTIME/XFL/OS plus FEXTRA/FNAME/FCOMMENT/FHCRC metadata while preserving deterministic defaults.
 - [x] Public gzip header metadata parser exposes MTIME/XFL/OS/FEXTRA/FNAME/FCOMMENT/FHCRC slices for library callers.

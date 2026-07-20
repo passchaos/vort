@@ -6993,6 +6993,7 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.m
 }
 
 fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
+    _ = try parseZlibHeaderFromChunks(chunks, dictionary);
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks, out, dictionary, options) catch |err| switch (err) {
@@ -10104,6 +10105,17 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     const exact = try decodeZlibChunksAllocExactSize(std.testing.allocator, &chunks, input.len);
     defer std.testing.allocator.free(exact);
     try std.testing.expectEqualSlices(u8, input, exact);
+
+    var bad_chunk_header = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_chunk_header);
+    bad_chunk_header[1] ^= 1;
+    const bad_header_chunks = [_][]const u8{
+        bad_chunk_header[0..1],
+        bad_chunk_header[1..],
+    };
+    var bad_header_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.BadZlibHeader, decodeZlibChunksAllocExactSize(bad_header_failing.allocator(), &bad_header_chunks, input.len));
+    try std.testing.expectEqual(@as(usize, 0), bad_header_failing.allocations);
 
     var exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
     const direct_exact = try decodeZlibChunksAllocExactSize(exact_failing.allocator(), &chunks, input.len);
