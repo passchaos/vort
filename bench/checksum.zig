@@ -43,6 +43,8 @@ pub fn main(init: std.process.Init) !void {
         measureCrc32Slice32Segmented("crc32-slice32-seg4096", input, iterations, 4096, init.io),
         measureCrc32Slice32SpanThreshold("crc32-slice32-span-threshold256", input, iterations, 256, init.io),
         measureCrc32Slice32SpanThreshold("crc32-slice32-span-threshold1024", input, iterations, 1024, init.io),
+        measureCrc32Slice32SpanThreshold("crc32-slice32-span-threshold2048", input, iterations, 2048, init.io),
+        measureCrc32Slice32SpanThreshold("crc32-slice32-span-threshold4096", input, iterations, 4096, init.io),
         measure("crc32-best", input, iterations, vort.crc32Best, init.io),
         measure("crc32c-scalar", input, iterations, vort.crc32c, init.io),
         measure("crc32c-slice8", input, iterations, vort.crc32cSlice8, init.io),

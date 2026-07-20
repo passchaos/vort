@@ -31,6 +31,8 @@ EXPECTED_ALGORITHMS = {
     "crc32-slice32-seg4096",
     "crc32-slice32-span-threshold256",
     "crc32-slice32-span-threshold1024",
+    "crc32-slice32-span-threshold2048",
+    "crc32-slice32-span-threshold4096",
     "crc32-best",
     "crc32c-scalar",
     "crc32c-slice8",
