@@ -3098,8 +3098,10 @@ fn validateZlibFooterPartial(input: []const u8, footer_offset: usize, actual: u3
 
 fn validateZlibFooterPartialWithOptions(input: []const u8, footer_offset: usize, actual: u32, options: ZlibDecodeOptions) Error!void {
     if (footer_offset > input.len or input.len - footer_offset < 4) return error.TruncatedFrame;
-    const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
-    if (!options.ignore_adler and actual != expected) return error.ChecksumMismatch;
+    if (!options.ignore_adler) {
+        const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
+        if (actual != expected) return error.ChecksumMismatch;
+    }
 }
 
 pub fn inspectZlibStreamAlloc(allocator: std.mem.Allocator, input: []const u8) !ZlibStreamInfo {
@@ -3400,11 +3402,13 @@ fn validateZlibFooterChunksWithOptions(chunks: []const []const u8, footer_offset
 
 fn validateZlibFooterChunksWithKnownTotal(chunks: []const []const u8, total_len: usize, footer_offset: usize, actual: u32, options: ZlibDecodeOptions) Error!void {
     if (footer_offset > total_len or total_len - footer_offset < 4) return error.TruncatedFrame;
-    const expected = if (footer_offset + 4 == total_len)
-        try readChunkedTailBigU32(chunks, total_len)
-    else
-        try readChunkedBigU32(chunks, footer_offset);
-    if (!options.ignore_adler and actual != expected) return error.ChecksumMismatch;
+    if (!options.ignore_adler) {
+        const expected = if (footer_offset + 4 == total_len)
+            try readChunkedTailBigU32(chunks, total_len)
+        else
+            try readChunkedBigU32(chunks, footer_offset);
+        if (actual != expected) return error.ChecksumMismatch;
+    }
     if (!options.allow_trailing_data and footer_offset + 4 != total_len) return error.TrailingData;
 }
 
@@ -6685,16 +6689,25 @@ fn decodeZlibWithOptionalDictionaryAndOptions(input: []const u8, output: []u8, d
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
 
-    if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) |stored| {
-        const footer_offset = header.data_offset + stored.result.input_read;
-        try validateZlibFooterWithOptions(input, footer_offset, stored.digest, options);
-        return stored.result.output_written;
+    if (options.ignore_adler) {
+        if (try decodeRawStoredOnlyIntoMaybe(input[header.data_offset..], output)) |stored| {
+            const footer_offset = header.data_offset + stored.input_read;
+            try validateZlibFooterWithOptions(input, footer_offset, 0, options);
+            return stored.output_written;
+        }
+    } else {
+        if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Adler32, input[header.data_offset..], output)) |stored| {
+            const footer_offset = header.data_offset + stored.result.input_read;
+            try validateZlibFooterWithOptions(input, footer_offset, stored.digest, options);
+            return stored.result.output_written;
+        }
     }
 
     var reader = bitstream.BufferedBitReader.init(input[header.data_offset..]);
     const raw = try decodeRawAutoWithDictionaryFromReader(&reader, 0, raw_dictionary, output);
     const footer_offset = header.data_offset + raw.input_read;
-    try validateZlibFooterWithOptions(input, footer_offset, checksum.adler32(output[0..raw.output_written]), options);
+    const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(output[0..raw.output_written]);
+    try validateZlibFooterWithOptions(input, footer_offset, actual_adler, options);
     return raw.output_written;
 }
 
