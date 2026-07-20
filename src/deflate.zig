@@ -13,12 +13,32 @@ const BlockHeader = struct {
     block_type: u2,
 };
 
+const StoredLengthPair = struct {
+    len: u16,
+    nlen: u16,
+};
+
 fn readBlockHeader(reader: anytype) Error!BlockHeader {
     const header = try reader.readBits(u3, 3);
     return .{
         .final = (header & 0x01) != 0,
         .block_type = @intCast(header >> 1),
     };
+}
+
+fn isStoredBlockHeaderByte(header: u8) bool {
+    return (header & 0x06) == 0;
+}
+
+fn readStoredLengthPairUnchecked(input: []const u8, offset: usize) Error!StoredLengthPair {
+    const pair = std.mem.readInt(u32, input[offset..][0..4], .little);
+    const len: u16 = @truncate(pair);
+    const nlen: u16 = @truncate(pair >> 16);
+    // LEN and NLEN are adjacent little-endian fields. Loading both at once
+    // keeps the stored-only wrapper hot path to one bounds-checked word load
+    // per block while preserving the RFC 1951 one's-complement validation.
+    if ((len ^ nlen) != std.math.maxInt(u16)) return error.StoredLengthMismatch;
+    return .{ .len = len, .nlen = nlen };
 }
 
 pub const DecodeResult = struct {
@@ -1693,12 +1713,10 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
         reader.alignToByte();
         const offset = reader.byteOffset();
         if (input.len - offset < 4) return error.TruncatedFrame;
-        const len = std.mem.readInt(u16, input[offset..][0..2], .little);
-        const nlen = std.mem.readInt(u16, input[offset + 2 ..][0..2], .little);
-        if (len != ~nlen) return error.StoredLengthMismatch;
+        const lengths = try readStoredLengthPairUnchecked(input, offset);
         try reader.skipBits(32);
-        stored_len = len;
-        stored_nlen = nlen;
+        stored_len = lengths.len;
+        stored_nlen = lengths.nlen;
         stored_payload_offset = offset + 4;
     } else if (block_type == .dynamic) {
         const hlit: u16 = @as(u16, try reader.readBits(u5, 5)) + 257;
@@ -2052,18 +2070,15 @@ fn decodeRawStoredOnlyIntoMaybe(input: []const u8, output: []u8) Error!?DecodeRe
     while (true) {
         if (input.len - in_offset < 1) return error.TruncatedFrame;
         const header = input[in_offset];
+        if (!isStoredBlockHeaderByte(header)) return null;
         const final = (header & 0x01) != 0;
-        const block_type = (header >> 1) & 0x03;
-        if (block_type != 0) return null;
         in_offset += 1;
 
         if (input.len - in_offset < 4) return error.TruncatedFrame;
-        const len = std.mem.readInt(u16, input[in_offset..][0..2], .little);
-        const nlen = std.mem.readInt(u16, input[in_offset + 2 ..][0..2], .little);
-        if (nlen != ~len) return error.StoredLengthMismatch;
+        const lengths = try readStoredLengthPairUnchecked(input, in_offset);
         in_offset += 4;
 
-        const chunk_len: usize = len;
+        const chunk_len: usize = lengths.len;
         if (input.len - in_offset < chunk_len) return error.TruncatedFrame;
         if (output.len - out_offset < chunk_len) return error.OutputTooSmall;
         @memcpy(output[out_offset..][0..chunk_len], input[in_offset..][0..chunk_len]);
@@ -2081,18 +2096,15 @@ fn decodeRawStoredOnlyIntoMaybeWithHash(comptime Hash: type, input: []const u8, 
     while (true) {
         if (input.len - in_offset < 1) return error.TruncatedFrame;
         const header = input[in_offset];
+        if (!isStoredBlockHeaderByte(header)) return null;
         const final = (header & 0x01) != 0;
-        const block_type = (header >> 1) & 0x03;
-        if (block_type != 0) return null;
         in_offset += 1;
 
         if (input.len - in_offset < 4) return error.TruncatedFrame;
-        const len = std.mem.readInt(u16, input[in_offset..][0..2], .little);
-        const nlen = std.mem.readInt(u16, input[in_offset + 2 ..][0..2], .little);
-        if (nlen != ~len) return error.StoredLengthMismatch;
+        const lengths = try readStoredLengthPairUnchecked(input, in_offset);
         in_offset += 4;
 
-        const chunk_len: usize = len;
+        const chunk_len: usize = lengths.len;
         if (input.len - in_offset < chunk_len) return error.TruncatedFrame;
         if (output.len - out_offset < chunk_len) return error.OutputTooSmall;
         const source = input[in_offset..][0..chunk_len];
@@ -2130,21 +2142,18 @@ fn planRawStoredOnly(input: []const u8) Error!?StoredOnlyPlan {
     while (true) {
         if (input.len - offset < 1) return error.TruncatedFrame;
         const header = input[offset];
+        if (!isStoredBlockHeaderByte(header)) return null;
         const final = (header & 0x01) != 0;
-        const block_type = (header >> 1) & 0x03;
-        if (block_type != 0) return null;
 
         // Stored-block payloads start on the next byte boundary. Bits 3..7 of
         // the header byte are padding and intentionally ignored, matching zlib
         // and the existing BitReader-based stored decoder.
         offset += 1;
         if (input.len - offset < 4) return error.TruncatedFrame;
-        const len = std.mem.readInt(u16, input[offset..][0..2], .little);
-        const nlen = std.mem.readInt(u16, input[offset + 2 ..][0..2], .little);
-        if (nlen != ~len) return error.StoredLengthMismatch;
+        const lengths = try readStoredLengthPairUnchecked(input, offset);
         offset += 4;
 
-        const chunk_len: usize = len;
+        const chunk_len: usize = lengths.len;
         if (input.len - offset < chunk_len) return error.TruncatedFrame;
         output_len = std.math.add(usize, output_len, chunk_len) catch return error.IntegerOverflow;
         offset += chunk_len;
@@ -3447,9 +3456,8 @@ fn decodeZlibStoredChunksIntoMaybe(chunks: []const []const u8, total_len: usize,
 
     while (true) {
         const header = try cursor.readByte();
+        if (!isStoredBlockHeaderByte(header)) return null;
         const final = (header & 0x01) != 0;
-        const block_type = (header >> 1) & 0x03;
-        if (block_type != 0) return null;
 
         const len = try cursor.readLittleU16();
         const nlen = try cursor.readLittleU16();
@@ -5797,14 +5805,12 @@ pub const PngStoredZlibScanlineDecoder = struct {
         if (self.pos >= self.input.len) return error.TruncatedFrame;
         const header = self.input[self.pos];
         self.pos += 1;
-        if (((header >> 1) & 0x03) != 0) return error.InvalidDeflateBlockType;
+        if (!isStoredBlockHeaderByte(header)) return error.InvalidDeflateBlockType;
         self.block_final = (header & 0x01) != 0;
         if (self.input.len - self.pos < 4) return error.TruncatedFrame;
-        const len = std.mem.readInt(u16, self.input[self.pos..][0..2], .little);
-        const nlen = std.mem.readInt(u16, self.input[self.pos + 2 ..][0..2], .little);
-        if (nlen != ~len) return error.StoredLengthMismatch;
+        const lengths = try readStoredLengthPairUnchecked(self.input, self.pos);
         self.pos += 4;
-        self.block_remaining = len;
+        self.block_remaining = lengths.len;
         if (self.block_remaining == 0 and self.block_final) self.final_seen = true;
     }
 
@@ -5959,11 +5965,11 @@ pub const PngStoredZlibChunkedScanlineDecoder = struct {
     fn nextBlock(self: *PngStoredZlibChunkedScanlineDecoder) Error!void {
         if (self.final_seen) return error.SizeMismatch;
         const header = try self.cursor.readByte();
-        if (((header >> 1) & 0x03) != 0) return error.InvalidDeflateBlockType;
+        if (!isStoredBlockHeaderByte(header)) return error.InvalidDeflateBlockType;
         self.block_final = (header & 0x01) != 0;
         const len = try self.cursor.readLittleU16();
         const nlen = try self.cursor.readLittleU16();
-        if (nlen != ~len) return error.StoredLengthMismatch;
+        if ((len ^ nlen) != std.math.maxInt(u16)) return error.StoredLengthMismatch;
         self.block_remaining = len;
         if (self.block_remaining == 0 and self.block_final) self.final_seen = true;
     }
@@ -6916,7 +6922,7 @@ fn decodeZlibConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
         const raw_offset = offset + header.data_offset;
         const raw_input = input[raw_offset..];
 
-        if (raw_input.len != 0 and ((raw_input[0] >> 1) & 0x03) == 0) {
+        if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
             if (try planRawStoredOnly(raw_input)) |plan| {
                 const digest = try appendRawStoredOnlyPlannedWithHash(checksum.Adler32, allocator, raw_input[0..plan.input_read], &out, plan, max_output_len);
                 const footer_offset = raw_offset + plan.input_read;

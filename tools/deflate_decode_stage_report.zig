@@ -283,7 +283,7 @@ fn rowElapsedScore(row: Row) f64 {
     // Convert throughputs back to a relative elapsed-time score. Keeping all
     // timing columns from one median-ish sample preserves ratios between raw,
     // zlib, and gzip rows while making repeated investigation runs less noisy.
-    return inverseThroughput(row.raw_mib_s) +
+    var score = inverseThroughput(row.raw_mib_s) +
         inverseThroughput(row.raw_exact_mib_s) +
         inverseThroughput(row.raw_into_mib_s) +
         inverseThroughput(row.zlib_mib_s) +
@@ -292,6 +292,20 @@ fn rowElapsedScore(row: Row) f64 {
         inverseThroughput(row.gzip_mib_s) +
         inverseThroughput(row.gzip_exact_mib_s) +
         inverseThroughput(row.gzip_into_mib_s);
+
+    // Stored-specific rows are optional for non-stored cases, but they are the
+    // main signal for stored-binary wrapper work. Include them in median
+    // selection only when populated so repeat runs do not pick a sample that is
+    // representative for generic inflate but an outlier for stored-only APIs.
+    if (row.raw_stored_mib_s != 0 or row.raw_stored_into_mib_s != 0 or row.zlib_stored_mib_s != 0 or row.zlib_stored_into_mib_s != 0 or row.gzip_stored_mib_s != 0 or row.gzip_stored_into_mib_s != 0) {
+        score += inverseThroughput(row.raw_stored_mib_s) +
+            inverseThroughput(row.raw_stored_into_mib_s) +
+            inverseThroughput(row.zlib_stored_mib_s) +
+            inverseThroughput(row.zlib_stored_into_mib_s) +
+            inverseThroughput(row.gzip_stored_mib_s) +
+            inverseThroughput(row.gzip_stored_into_mib_s);
+    }
+    return score;
 }
 
 fn inverseThroughput(value: f64) f64 {

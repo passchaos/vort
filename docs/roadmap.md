@@ -1142,3 +1142,13 @@ architecture blindly.
   `decodeZlibStored`/`decodeGzipStored` beside their allocator-returning stored
   helpers. This makes wrapper validation/checksum overhead visible separately
   from allocation for stored members.
+
+- Shared stored-block header decoding now uses a byte-level BTYPE predicate and
+  a single little-endian LEN/NLEN word load for contiguous stored-only paths
+  (raw stored decode, zlib/gzip stored wrappers, header inspection, and stored
+  PNG scanlines). The decode-stage repeat3 median selector now includes
+  stored-only timing columns when those rows are populated, keeping
+  `stored-binary` medians representative of the explicit stored APIs as well as
+  generic raw/zlib/gzip inflate. A same-machine ReleaseFast probe kept explicit
+  raw/zlib/gzip stored allocator rows near baseline with small positive movement
+  on the alloc rows, while preserving caller-buffer stored correctness.
