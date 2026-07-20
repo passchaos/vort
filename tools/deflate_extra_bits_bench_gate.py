@@ -38,6 +38,7 @@ EXPECTED_CASES = {
 }
 EXPECTED_READERS = {"buffered", "chunked_4096", "span_4096", "chunked_64", "span_64", "chunked_1", "span_1"}
 EXPECTED_DISTANCE_KERNELS = {"current", "fused18"}
+EXPECTED_EXTRA_KERNELS = {"current", "staged"}
 EXPECTED_BITS = {
     "extra-1": 1,
     "extra-3": 3,
@@ -80,7 +81,11 @@ def main() -> int:
             print(f"deflate_extra_bits_bench_gate=bad_header fields={reader.fieldnames}", file=sys.stderr)
             return 1
         rows = list(reader)
-    expected_rows = (5 + 4) * len(EXPECTED_READERS) + 2 * len(EXPECTED_READERS) * len(EXPECTED_DISTANCE_KERNELS)
+    expected_rows = (
+        (5 + 2) * len(EXPECTED_READERS)
+        + 2 * len(EXPECTED_READERS) * len(EXPECTED_EXTRA_KERNELS)
+        + 2 * len(EXPECTED_READERS) * len(EXPECTED_DISTANCE_KERNELS)
+    )
     if len(rows) != expected_rows:
         print(f"deflate_extra_bits_bench_gate=bad_row_count rows={len(rows)}", file=sys.stderr)
         return 1
@@ -101,7 +106,12 @@ def main() -> int:
         if case not in EXPECTED_BITS or int(row.get("bits", "-1")) != EXPECTED_BITS[case]:
             print(f"deflate_extra_bits_bench_gate=bad_bits row={row}", file=sys.stderr)
             return 1
-        expected_kernel = EXPECTED_DISTANCE_KERNELS if case.startswith("distance-") else {"single" if case.startswith("extra-") else "mixed-extra"}
+        if case.startswith("distance-"):
+            expected_kernel = EXPECTED_DISTANCE_KERNELS
+        elif case.endswith("-length"):
+            expected_kernel = EXPECTED_EXTRA_KERNELS
+        else:
+            expected_kernel = {"single" if case.startswith("extra-") else "mixed-extra"}
         if kernel not in expected_kernel:
             print(f"deflate_extra_bits_bench_gate=bad_kernel row={row}", file=sys.stderr)
             return 1

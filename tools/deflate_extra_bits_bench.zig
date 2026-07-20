@@ -35,6 +35,18 @@ const DistanceKernel = enum {
     }
 };
 
+const ExtraKernel = enum {
+    current,
+    staged,
+
+    fn label(self: ExtraKernel) []const u8 {
+        return switch (self) {
+            .current => "current",
+            .staged => "staged",
+        };
+    }
+};
+
 const CaseSpec = struct {
     name: []const u8,
     bits: u6,
@@ -135,8 +147,15 @@ pub fn main(init: std.process.Init) !void {
     for (mixed_cases) |case| {
         const iterations = iterations_override orelse iterationsForMixed(case);
         for (readers) |reader| {
-            const row = try runMixedCase(init, case, reader, iterations);
-            try writeRow(&csv.writer, row);
+            if (std.mem.endsWith(u8, case.name, "-length")) {
+                inline for (.{ ExtraKernel.current, ExtraKernel.staged }) |kernel| {
+                    const row = try runMixedCase(init, case, reader, kernel, iterations);
+                    try writeRow(&csv.writer, row);
+                }
+            } else {
+                const row = try runMixedCase(init, case, reader, null, iterations);
+                try writeRow(&csv.writer, row);
+            }
         }
     }
     for (distance_cases) |case| {
@@ -222,7 +241,7 @@ fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iter
     };
 }
 
-fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: ReaderKind, iterations: usize) !Row {
+fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: ReaderKind, comptime kernel: ?ExtraKernel, iterations: usize) !Row {
     const input_len = try bytesForPattern(case.pattern, case.reads_per_iter);
     const input = try init.gpa.alloc(u8, input_len);
     defer init.gpa.free(input);
@@ -244,9 +263,9 @@ fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: Reader
     var iter: usize = 0;
     while (iter < iterations) : (iter += 1) {
         checksum +%= switch (reader_kind) {
-            .buffered => try runMixedBuffered(input, case.pattern, case.reads_per_iter),
-            .chunked_4096, .chunked_64, .chunked_1 => try runMixedChunked(chunks, case.pattern, case.reads_per_iter),
-            .span_4096, .span_64, .span_1 => try runMixedSpan(chunks, case.pattern, case.reads_per_iter),
+            .buffered => try runMixedBuffered(input, case.pattern, case.reads_per_iter, kernel),
+            .chunked_4096, .chunked_64, .chunked_1 => try runMixedChunked(chunks, case.pattern, case.reads_per_iter, kernel),
+            .span_4096, .span_64, .span_1 => try runMixedSpan(chunks, case.pattern, case.reads_per_iter, kernel),
         };
     }
     const elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
@@ -255,7 +274,7 @@ fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: Reader
     return .{
         .case = case.name,
         .reader = reader_kind.label(),
-        .kernel = "mixed-extra",
+        .kernel = if (kernel) |k| k.label() else "mixed-extra",
         .bits = 0,
         .reads_per_iter = case.reads_per_iter,
         .iterations = iterations,
@@ -320,13 +339,13 @@ fn runBuffered(input: []const u8, bits: u6, reads: usize) !u64 {
     return sum;
 }
 
-fn runMixedBuffered(input: []const u8, pattern: []const u6, reads: usize) !u64 {
+fn runMixedBuffered(input: []const u8, pattern: []const u6, reads: usize, comptime kernel: ?ExtraKernel) !u64 {
     var reader = vort.bitstream.BufferedBitReader.init(input);
     var sum: u64 = 0;
     var i: usize = 0;
     while (i < reads) : (i += 1) {
         const bits = pattern[i % pattern.len];
-        if (bits != 0) sum +%= try reader.readBits(u16, bits);
+        if (bits != 0) sum +%= try readMixedExtraBits(&reader, bits, kernel);
     }
     return sum;
 }
@@ -339,13 +358,13 @@ fn runChunked(chunks: []const []const u8, bits: u6, reads: usize) !u64 {
     return sum;
 }
 
-fn runMixedChunked(chunks: []const []const u8, pattern: []const u6, reads: usize) !u64 {
+fn runMixedChunked(chunks: []const []const u8, pattern: []const u6, reads: usize, comptime kernel: ?ExtraKernel) !u64 {
     var reader = try vort.bitstream.ChunkedBitReader.init(chunks);
     var sum: u64 = 0;
     var i: usize = 0;
     while (i < reads) : (i += 1) {
         const bits = pattern[i % pattern.len];
-        if (bits != 0) sum +%= try reader.readBits(u16, bits);
+        if (bits != 0) sum +%= try readMixedExtraBits(&reader, bits, kernel);
     }
     return sum;
 }
@@ -358,15 +377,28 @@ fn runSpan(chunks: []const []const u8, bits: u6, reads: usize) !u64 {
     return sum;
 }
 
-fn runMixedSpan(chunks: []const []const u8, pattern: []const u6, reads: usize) !u64 {
+fn runMixedSpan(chunks: []const []const u8, pattern: []const u6, reads: usize, comptime kernel: ?ExtraKernel) !u64 {
     var reader = try vort.bitstream.ChunkedSpanBitReader.init(chunks);
     var sum: u64 = 0;
     var i: usize = 0;
     while (i < reads) : (i += 1) {
         const bits = pattern[i % pattern.len];
-        if (bits != 0) sum +%= try reader.readBits(u16, bits);
+        if (bits != 0) sum +%= try readMixedExtraBits(&reader, bits, kernel);
     }
     return sum;
+}
+
+fn readMixedExtraBits(reader: anytype, bits: u6, comptime kernel: ?ExtraKernel) !u64 {
+    const active_kernel = kernel orelse ExtraKernel.current;
+    return switch (active_kernel) {
+        .current => try reader.readBits(u16, bits),
+        .staged => blk: {
+            if (!reader.hasBits(bits)) return error.TruncatedFrame;
+            const value = reader.peekBitsPadded(u16, bits);
+            reader.advanceBitsStagedAssumeAvailable(bits);
+            break :blk value;
+        },
+    };
 }
 
 fn runDistanceBuffered(input: []const u8, reads: usize, kernel: DistanceKernel) !u64 {

@@ -1117,8 +1117,9 @@ architecture blindly.
 - Added README/roadmap mixed length-extra distributions to the same extra-bit
   benchmark/gate, derived from the dynamic profile length width histograms
   (`1026;216;191;125;20;2` and `7435;1982;709;291;31;0`). This keeps the
-  recently rejected length-extra staged-reader idea measurable as a first-class
-  benchmark row instead of relying on noisy end-to-end decode-stage probes.
+  recently rejected length-extra staged-reader idea measurable as first-class
+  `current`/`staged` benchmark rows instead of relying on noisy end-to-end
+  decode-stage probes.
 
 - Extended `run-deflate-extra-bits-bench-gate` again with README/roadmap distance-symbol-plus-extra distributions, so it now measures a closer proxy for production distance decode rather than only raw extra-bit reads. The first local ReleaseFast gate shows 4 KiB span rows around `207.36` / `204.05` Mreads/s versus legacy chunked `144.98` / `138.96` Mreads/s for README/roadmap symbol+extra streams.
 
