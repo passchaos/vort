@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import sys
 from pathlib import Path
 
@@ -68,6 +69,17 @@ def positive_float(row: dict[str, str], key: str) -> bool:
         return False
 
 
+def throughput_ratio(numerator: dict[str, str], denominator: dict[str, str]) -> float:
+    return float(numerator["reads_per_s"]) / float(denominator["reads_per_s"])
+
+
+def summarize_ratios(ratios: list[float]) -> tuple[float, float, float]:
+    if not ratios:
+        return (0.0, 0.0, 0.0)
+    geomean = math.prod(ratios) ** (1.0 / len(ratios))
+    return (geomean, min(ratios), max(ratios))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, default=Path("zig-out/vort-deflate-extra-bits-bench.csv"))
@@ -126,6 +138,7 @@ def main() -> int:
     if cases != EXPECTED_CASES or readers != EXPECTED_READERS:
         print(f"deflate_extra_bits_bench_gate=bad_sets cases={sorted(cases)} readers={sorted(readers)}", file=sys.stderr)
         return 1
+    length_ratios: list[float] = []
     for case in ("mixed-readme-length", "mixed-roadmap-length"):
         for reader in EXPECTED_READERS:
             current = by_key[(case, reader, "current")]
@@ -137,6 +150,8 @@ def main() -> int:
                     file=sys.stderr,
                 )
                 return 1
+            length_ratios.append(throughput_ratio(staged, current))
+    distance_ratios: list[float] = []
     for case in ("distance-readme-symbol-extra", "distance-roadmap-symbol-extra"):
         for reader in EXPECTED_READERS:
             current = by_key[(case, reader, "current")]
@@ -148,7 +163,18 @@ def main() -> int:
                     file=sys.stderr,
                 )
                 return 1
-    print(f"deflate_extra_bits_bench_gate=ok cases={len(cases)} readers={len(readers)} rows={len(rows)}")
+            distance_ratios.append(throughput_ratio(fused, current))
+    length_gm, length_min, length_max = summarize_ratios(length_ratios)
+    distance_gm, distance_min, distance_max = summarize_ratios(distance_ratios)
+    print(
+        f"deflate_extra_bits_bench_gate=ok cases={len(cases)} readers={len(readers)} rows={len(rows)} "
+        f"length_staged_over_current_gm={length_gm:.3f} "
+        f"length_staged_over_current_min={length_min:.3f} "
+        f"length_staged_over_current_max={length_max:.3f} "
+        f"distance_fused18_over_current_gm={distance_gm:.3f} "
+        f"distance_fused18_over_current_min={distance_min:.3f} "
+        f"distance_fused18_over_current_max={distance_max:.3f}"
+    )
     return 0
 
 
