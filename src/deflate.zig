@@ -7003,6 +7003,15 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.m
     const compressed_len = try chunksTotalLen(chunks);
     const header = try parseZlibHeaderFromChunks(chunks, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+    if (singleNonEmptyChunk(chunks)) |frame| {
+        const raw_input = frame[header.data_offset..];
+        if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+            if (try planRawStoredOnly(raw_input)) |stored_plan| {
+                try ensureOutputLimit(0, stored_plan.output_len, max_output_len);
+                try validateZlibStoredPlanBeforeAlloc(frame, header.data_offset, stored_plan, options);
+            }
+        }
+    }
 
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -10264,6 +10273,12 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     var stored_adler_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.ChecksumMismatch, decodeZlibChunksAllocExactSize(stored_adler_failing.allocator(), &bad_stored_single_chunk, input.len));
     try std.testing.expectEqual(@as(usize, 0), stored_adler_failing.allocations);
+    var stored_adler_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibChunksAlloc(stored_adler_alloc_failing.allocator(), &bad_stored_single_chunk));
+    try std.testing.expectEqual(@as(usize, 0), stored_adler_alloc_failing.allocations);
+    var stored_limit_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutputLimitExceeded, decodeZlibChunksAllocLimited(stored_limit_failing.allocator(), &stored_single_chunk, input.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), stored_limit_failing.allocations);
 
     @memset(&output, 0);
     try std.testing.expectEqual(input.len, try decodeZlibChunksInto(&stored_chunks, &output));
