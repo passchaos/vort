@@ -107,29 +107,31 @@ cross the HLIT/HDIST boundary.
 ### Current Rust deflate gap snapshot
 
 Latest local ReleaseFast `run-rust-deflate-benchmark-summary-repeat3` evidence
-shows Vort is close on deflate size but still behind the broader Rust compression
-ecosystem on several hot paths. Size ratios below 1.0 are smaller than the best
-Rust row, while throughput ratios above 1.0 are faster:
+(2026-07-20) shows Vort remains close on deflate size but is still mixed on
+throughput versus the Rust ecosystem. Size ratios below 1.0 are smaller than the
+best Rust row, while throughput ratios above 1.0 are faster:
 
 | metric | geomean ratio | weakest case | next focus |
 | --- | ---: | --- | --- |
 | `zlib encode default size / best Rust` | `0.999` | `distance-heavy 1.027` | default match parsing / cost model |
-| `zlib encode best size / best Rust` | `0.989` | `dynamic-match 1.008` | dynamic header/token byte-boundary gap |
+| `zlib encode best size / best Rust` | `0.990` | `dynamic-match 1.008` | dynamic header/token byte-boundary gap |
 | `raw encode default size / best Rust` | `0.999` | `distance-heavy 1.029` | default match parsing / cost model |
 | `raw encode best size / best Rust` | `0.989` | `dynamic-match 1.008` | dynamic header/token byte-boundary gap |
-| `zlib decode into / best Rust` | `1.258` | `roadmap 0.479` | roadmap/readme text-heavy dynamic decode |
-| `raw decode into / miniz_oxide` | `2.069` | `roadmap 0.667` | roadmap/readme text-heavy dynamic decode |
-| `zlib decode alloc / best Rust` | `0.759` | `stored-binary 0.196` | stored/binary allocation and wrapper path |
-| `raw decode alloc / miniz_oxide` | `1.047` | `binary 0.292` | binary allocation/exact-size path |
+| `zlib decode into / best Rust` | `1.221` | `roadmap 0.401` | roadmap/readme text-heavy dynamic decode |
+| `raw decode into / miniz_oxide` | `1.874` | `readme 0.613` | README/roadmap text-heavy dynamic decode |
+| `zlib decode alloc / best Rust` | `0.775` | `roadmap 0.358` | allocator-returning text decode and wrapper path |
+| `raw decode alloc / miniz_oxide` | `1.012` | `stored-binary 0.295` | stored/binary allocation and exact-size path |
+| `zlib encode best-speed / best Rust` | `1.023` | `readme 0.233` | fast/default source-text parser throughput |
+| `raw encode best-speed / best Rust` | `1.076` | `readme 0.269` | fast/default source-text parser throughput |
 
 
-The same repeat3 run now emits decode-stage rows for `README.md` and
+The same repeat3 run emits decode-stage rows for `README.md` and
 `docs/roadmap.md`: in the current sample `README.md` reports raw/zlib/gzip
-caller-buffer decode at about `568.31` / `664.02` / `524.79` MiB/s, with a
-`579`-bit dynamic header (`HLIT/HDIST/HCLEN=284/29/13`, literal
-`112/172/12`, distance `28/1/11`). `docs/roadmap.md` reports about `406.68` /
-`386.60` / `329.99` MiB/s, with a `574`-bit dynamic header
-(`HLIT/HDIST/HCLEN=279/30/15`, literal `105/174/13`, distance `28/2/13`).
+caller-buffer decode at about `649.00` / `584.61` / `519.35` MiB/s, with a
+`577`-bit dynamic header (`HLIT/HDIST/HCLEN=284/29/13`, literal
+`112/172/12`, distance `28/1/11`). `docs/roadmap.md` reports about `346.29` /
+`372.59` / `336.51` MiB/s, with a `593`-bit dynamic header
+(`HLIT/HDIST/HCLEN=279/30/17`, literal `108/171/14`, distance `28/2/13`).
 These rows should be used to separate text-heavy dynamic payload cost from
 wrapper and allocation overhead before changing Huffman table policies again.
 
