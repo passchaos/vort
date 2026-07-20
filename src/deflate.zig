@@ -7938,9 +7938,8 @@ pub fn decodeGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: 
 }
 
 fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {
-    if (try decodeGzipAllocFooterSize(allocator, input, options, max_output_len)) |decoded| return decoded;
-
     const data_offset = try parseGzipHeader(input);
+    if (try decodeGzipAllocFooterSize(allocator, input, data_offset, options, max_output_len)) |decoded| return decoded;
 
     if (options.ignore_crc32) {
         if (try decodeRawStoredOnlyAllocMaybe(allocator, input[data_offset..], max_output_len)) |stored| {
@@ -7966,8 +7965,8 @@ fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input
     return raw.bytes;
 }
 
-fn decodeGzipAllocFooterSize(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) !?[]u8 {
-    if (input.len < gzip_header.len + 8) return null;
+fn decodeGzipAllocFooterSize(allocator: std.mem.Allocator, input: []const u8, data_offset: usize, options: GzipDecodeOptions, max_output_len: ?usize) !?[]u8 {
+    if (input.len < data_offset + 8) return null;
     if (options.ignore_isize or options.allow_trailing_data) return null;
     const expected_size: usize = std.mem.readInt(u32, input[input.len - 4 ..][0..4], .little);
     try ensureOutputLimit(0, expected_size, max_output_len);
@@ -11454,6 +11453,16 @@ test "gzip FHCRC is validated when present" {
     var invalid: [valid.len]u8 = valid.*;
     invalid[10] ^= 1;
     try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(std.testing.allocator, &invalid));
+}
+
+test "gzip allocation validates header before footer-size allocation" {
+    var invalid = [_]u8{
+        0x00, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03,
+        0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x7f,
+    };
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.BadGzipHeader, decodeGzipAlloc(failing.allocator(), &invalid));
+    try std.testing.expectEqual(@as(usize, 0), failing.allocations);
 }
 
 test "zlib header rejects bad method window check and dictionary flag" {
