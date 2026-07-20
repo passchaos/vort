@@ -8,6 +8,19 @@ const core = @import("core.zig");
 pub const Error = core.Error;
 pub const max_stored_block_len: usize = std.math.maxInt(u16);
 
+const BlockHeader = struct {
+    final: bool,
+    block_type: u2,
+};
+
+fn readBlockHeader(reader: anytype) Error!BlockHeader {
+    const header = try reader.readBits(u3, 3);
+    return .{
+        .final = (header & 0x01) != 0,
+        .block_type = @intCast(header >> 1),
+    };
+}
+
 pub const DecodeResult = struct {
     input_read: usize,
     output_written: usize,
@@ -1331,9 +1344,9 @@ test "fast length and distance code selection matches RFC tables" {
 
 pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {
     var reader = bitstream.BufferedBitReader.init(input);
-    const final = try reader.readBits(u1, 1);
-    const block_type = try reader.readBits(u2, 2);
-    if (block_type != 0b01) return error.InvalidDeflateBlockType;
+    const header = try readBlockHeader(&reader);
+    if (header.block_type != 0b01) return error.InvalidDeflateBlockType;
+    const final = header.final;
 
     var out_offset: usize = 0;
     while (true) {
@@ -1343,7 +1356,7 @@ pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {
             output[out_offset] = @intCast(symbol);
             out_offset += 1;
         } else if (symbol == 256) {
-            if (final == 0) return error.TruncatedFrame;
+            if (!final) return error.TruncatedFrame;
             return .{ .input_read = reader.byteOffset(), .output_written = out_offset };
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, &reader);
@@ -1363,16 +1376,16 @@ pub fn decodeRawFixedAlloc(allocator: std.mem.Allocator, input: []const u8) !Own
     try out.ensureTotalCapacity(allocator, @min(input.len * 4, 1 << 20));
 
     var reader = bitstream.BufferedBitReader.init(input);
-    const final = try reader.readBits(u1, 1);
-    const block_type = try reader.readBits(u2, 2);
-    if (block_type != 0b01) return error.InvalidDeflateBlockType;
+    const header = try readBlockHeader(&reader);
+    if (header.block_type != 0b01) return error.InvalidDeflateBlockType;
+    const final = header.final;
 
     while (true) {
         const symbol = try huffman.decodeFixedLiteralValueFast(&reader);
         if (symbol < 256) {
             try out.append(allocator, @intCast(symbol));
         } else if (symbol == 256) {
-            if (final == 0) return error.TruncatedFrame;
+            if (!final) return error.TruncatedFrame;
             return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, &reader);
@@ -1614,13 +1627,12 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
 
     var reader = bitstream.BufferedBitReader.init(input);
     while (true) {
-        const final = (try reader.readBits(u1, 1)) != 0;
-        const block_type = try reader.readBits(u2, 2);
-        switch (block_type) {
+        const header = try readBlockHeader(&reader);
+        switch (header.block_type) {
             0 => try decodeStoredBlockFromReader(allocator, &reader, &out, max_output_len),
             1 => try decodeFixedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len),
             2 => {
-                const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &reader);
+                const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, &reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
@@ -1638,16 +1650,16 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
             },
             else => return error.InvalidDeflateBlockType,
         }
-        if (final) return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
+        if (header.final) return .{ .bytes = try out.toOwnedSlice(allocator), .input_read = reader.byteOffset() };
     }
 }
 
 pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
     if (input.len == 0) return error.TruncatedFrame;
     var reader = bitstream.BitReader.init(input);
-    const final = (try reader.readBits(u1, 1)) != 0;
-    const btype = try reader.readBits(u2, 2);
-    const block_type: RawDeflateBlockType = switch (btype) {
+    const header = try readBlockHeader(&reader);
+    const final = header.final;
+    const block_type: RawDeflateBlockType = switch (header.block_type) {
         0 => .stored,
         1 => .fixed,
         2 => .dynamic,
@@ -1793,13 +1805,12 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
 ) !DecodeResult {
     const start_len = out.items.len;
     while (true) {
-        const final = (try reader.readBits(u1, 1)) != 0;
-        const block_type = try reader.readBits(u2, 2);
-        switch (block_type) {
+        const header = try readBlockHeader(reader);
+        switch (header.block_type) {
             0 => try decodeStoredBlockFromReader(allocator, reader, out, max_output_len),
             1 => try decodeFixedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len),
             2 => {
-                const parsed = try huffman.parseDynamicLengthsAfterHeader(final, reader);
+                const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
@@ -1817,7 +1828,7 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
             },
             else => return error.InvalidDeflateBlockType,
         }
-        if (final) return .{ .input_read = reader.byteOffset() - raw_base_offset, .output_written = out.items.len - start_len };
+        if (header.final) return .{ .input_read = reader.byteOffset() - raw_base_offset, .output_written = out.items.len - start_len };
     }
 }
 
@@ -1909,13 +1920,12 @@ pub fn decodeRawAutoWithDictionary(input: []const u8, dictionary: []const u8, ou
 fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize, dictionary: []const u8, output: []u8) Error!DecodeResult {
     var out_offset: usize = 0;
     while (true) {
-        const final = (try reader.readBits(u1, 1)) != 0;
-        const block_type = try reader.readBits(u2, 2);
-        switch (block_type) {
+        const header = try readBlockHeader(reader);
+        switch (header.block_type) {
             0 => try decodeStoredBlockIntoReader(reader, output, &out_offset),
             1 => try decodeFixedBlockIntoReader(reader, output, &out_offset, dictionary),
             2 => {
-                const parsed = try huffman.parseDynamicLengthsAfterHeader(final, reader);
+                const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const dist_decoder = makeDynamicDistanceDecoder(dist_table);
@@ -1933,7 +1943,7 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
             },
             else => return error.InvalidDeflateBlockType,
         }
-        if (final) return .{ .input_read = reader.byteOffset() - raw_base_offset, .output_written = out_offset };
+        if (header.final) return .{ .input_read = reader.byteOffset() - raw_base_offset, .output_written = out_offset };
     }
 }
 
@@ -5135,10 +5145,9 @@ pub const PngStreamingZlibScanlineDecoder = struct {
 
     fn startNextBlock(self: *PngStreamingZlibScanlineDecoder) Error!void {
         if (self.block_kind == .done) return;
-        const final = (try self.reader.readBits(u1, 1)) != 0;
-        const block_type = try self.reader.readBits(u2, 2);
-        self.final_block = final;
-        switch (block_type) {
+        const header = try readBlockHeader(&self.reader);
+        self.final_block = header.final;
+        switch (header.block_type) {
             0 => {
                 self.reader.alignToByte();
                 const len = try self.reader.readAlignedInt(u16, .little);
@@ -5149,7 +5158,7 @@ pub const PngStreamingZlibScanlineDecoder = struct {
             },
             1 => self.block_kind = .fixed,
             2 => {
-                const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &self.reader);
+                const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, &self.reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_lookup_bits = pngStreamingDynamicLiteralLookupBits(parsed);
@@ -5509,10 +5518,9 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
 
     fn startNextBlock(self: *PngStreamingZlibChunkedScanlineDecoder) Error!void {
         if (self.block_kind == .done) return;
-        const final = (try self.reader.readBits(u1, 1)) != 0;
-        const block_type = try self.reader.readBits(u2, 2);
-        self.final_block = final;
-        switch (block_type) {
+        const header = try readBlockHeader(&self.reader);
+        self.final_block = header.final;
+        switch (header.block_type) {
             0 => {
                 self.reader.alignToByte();
                 const len = try self.reader.readAlignedInt(u16, .little);
@@ -5523,7 +5531,7 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
             },
             1 => self.block_kind = .fixed,
             2 => {
-                const parsed = try huffman.parseDynamicLengthsAfterHeader(final, &self.reader);
+                const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, &self.reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
                 const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_lookup_bits = pngStreamingDynamicLiteralLookupBits(parsed);
