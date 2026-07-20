@@ -82,10 +82,14 @@ const cases = [_]CaseSpec{
 // production distance/length decoding.
 const readme_distance_width_pattern = makeWidthPattern(.{ 0, 4, 10, 27, 82, 138, 257, 188, 163, 164, 180, 121, 91, 75, 73 });
 const roadmap_distance_width_pattern = makeWidthPattern(.{ 0, 3, 11, 36, 61, 238, 812, 726, 726, 870, 1012, 1123, 1200, 1392, 1435 });
+const readme_length_width_pattern = makeWidthPattern(.{ 1026, 216, 191, 125, 20, 2 });
+const roadmap_length_width_pattern = makeWidthPattern(.{ 7435, 1982, 709, 291, 31, 0 });
 const readme_distance_symbol_pattern = makeWidthPattern(.{ 2, 0, 1, 1, 5, 5, 11, 16, 37, 45, 78, 60, 152, 105, 100, 88, 93, 70, 82, 82, 101, 79, 79, 42, 52, 39, 52, 23, 73, 0 });
 const roadmap_distance_symbol_pattern = makeWidthPattern(.{ 0, 0, 1, 2, 7, 4, 22, 14, 21, 40, 105, 133, 477, 335, 416, 310, 417, 309, 522, 348, 585, 427, 648, 475, 681, 519, 743, 649, 854, 581 });
 
 const mixed_cases = [_]MixedCaseSpec{
+    .{ .name = "mixed-readme-length", .pattern = &readme_length_width_pattern, .reads_per_iter = readme_length_width_pattern.len * 64 },
+    .{ .name = "mixed-roadmap-length", .pattern = &roadmap_length_width_pattern, .reads_per_iter = roadmap_length_width_pattern.len * 16 },
     .{ .name = "mixed-readme-distance", .pattern = &readme_distance_width_pattern, .reads_per_iter = readme_distance_width_pattern.len * 64 },
     .{ .name = "mixed-roadmap-distance", .pattern = &roadmap_distance_width_pattern, .reads_per_iter = roadmap_distance_width_pattern.len * 16 },
 };

@@ -1114,6 +1114,12 @@ architecture blindly.
 
 - Added README/roadmap mixed distance-extra distributions to `run-deflate-extra-bits-bench-gate`, derived from the dynamic decode profile width histograms. The first local ReleaseFast gate shows span 4 KiB rows around `227.61` / `241.66` Mreads/s versus legacy chunked `145.07` / `176.11` Mreads/s for those mixed distributions, making real text-heavy extra-bit reader costs visible before production bitreader changes.
 
+- Added README/roadmap mixed length-extra distributions to the same extra-bit
+  benchmark/gate, derived from the dynamic profile length width histograms
+  (`1026;216;191;125;20;2` and `7435;1982;709;291;31;0`). This keeps the
+  recently rejected length-extra staged-reader idea measurable as a first-class
+  benchmark row instead of relying on noisy end-to-end decode-stage probes.
+
 - Extended `run-deflate-extra-bits-bench-gate` again with README/roadmap distance-symbol-plus-extra distributions, so it now measures a closer proxy for production distance decode rather than only raw extra-bit reads. The first local ReleaseFast gate shows 4 KiB span rows around `207.36` / `204.05` Mreads/s versus legacy chunked `144.98` / `138.96` Mreads/s for README/roadmap symbol+extra streams.
 
 - Rejected a production hot-distance-symbol switch for symbols `12/13/20/22/24/26/28` after the new mixed distance+extra benchmark suggested a target. The ReleaseFast repeat3 README probe improved some rows, but `docs/roadmap.md` regressed (`~313.27/300.05/308.80` MiB/s baseline raw/zlib/gzip caller-buffer versus `~269.45/266.90/270.21` MiB/s with the switch), so future distance decode work should look for a narrower fused path rather than symbol-specific branching in `decodeDistance`.

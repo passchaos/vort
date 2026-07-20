@@ -29,6 +29,8 @@ EXPECTED_CASES = {
     "extra-5",
     "extra-9",
     "extra-13",
+    "mixed-readme-length",
+    "mixed-roadmap-length",
     "mixed-readme-distance",
     "mixed-roadmap-distance",
     "distance-readme-symbol-extra",
@@ -42,6 +44,8 @@ EXPECTED_BITS = {
     "extra-5": 5,
     "extra-9": 9,
     "extra-13": 13,
+    "mixed-readme-length": 0,
+    "mixed-roadmap-length": 0,
     "mixed-readme-distance": 0,
     "mixed-roadmap-distance": 0,
     "distance-readme-symbol-extra": 0,
@@ -76,7 +80,7 @@ def main() -> int:
             print(f"deflate_extra_bits_bench_gate=bad_header fields={reader.fieldnames}", file=sys.stderr)
             return 1
         rows = list(reader)
-    expected_rows = (5 + 2) * len(EXPECTED_READERS) + 2 * len(EXPECTED_READERS) * len(EXPECTED_DISTANCE_KERNELS)
+    expected_rows = (5 + 4) * len(EXPECTED_READERS) + 2 * len(EXPECTED_READERS) * len(EXPECTED_DISTANCE_KERNELS)
     if len(rows) != expected_rows:
         print(f"deflate_extra_bits_bench_gate=bad_row_count rows={len(rows)}", file=sys.stderr)
         return 1
