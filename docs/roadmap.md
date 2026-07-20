@@ -693,6 +693,9 @@ architecture blindly.
 - [x] Dynamic literal-only blocks omit unused distance code lengths, shrinking
   headers for Huffman-only and literal-only zlib/gzip/raw deflate payloads while
   remaining valid for streams that never decode a distance symbol.
+- [x] Audited a decoder-side literal-only dynamic shortcut that skipped distance
+  setup entirely; rejected it after ReleaseFast A/B showed caller-buffer raw/gzip
+  regressions despite some exact-size gains.
 - [x] Allocating inflate paths use a smaller capacity hint for tiny compressed
   frames, reducing over-reservation and shrink work for small API/CLI payloads
   while keeping the larger capped expansion hint for real compressed data.
