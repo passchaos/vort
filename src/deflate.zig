@@ -7017,7 +7017,16 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.m
 }
 
 fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
-    _ = try parseZlibHeaderFromChunks(chunks, dictionary);
+    const header = try parseZlibHeaderFromChunks(chunks, dictionary);
+    if (singleNonEmptyChunk(chunks)) |frame| {
+        const raw_input = frame[header.data_offset..];
+        if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+            if (try planRawStoredOnly(raw_input)) |stored_plan| {
+                if (stored_plan.output_len != expected_output_len) return error.SizeMismatch;
+                try validateZlibStoredPlanBeforeAlloc(frame, header.data_offset, stored_plan, options);
+            }
+        }
+    }
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = decodeZlibChunksWithOptionalDictionaryAndOptionsDirect(chunks, out, dictionary, options) catch |err| switch (err) {
@@ -7026,6 +7035,16 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std
     };
     if (written != expected_output_len) return error.SizeMismatch;
     return out;
+}
+
+fn singleNonEmptyChunk(chunks: []const []const u8) ?[]const u8 {
+    var single: ?[]const u8 = null;
+    for (chunks) |chunk| {
+        if (chunk.len == 0) continue;
+        if (single != null) return null;
+        single = chunk;
+    }
+    return single;
 }
 
 fn decodeZlibAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
@@ -10221,11 +10240,30 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
         stored[3 .. stored.len - 2],
         stored[stored.len - 2 ..],
     };
+    const stored_single_chunk = [_][]const u8{
+        stored[0..0],
+        stored,
+        stored[stored.len..],
+    };
     var stored_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
     const stored_direct = try decodeZlibChunksAllocExactSize(stored_failing.allocator(), &stored_chunks, input.len);
     defer stored_failing.allocator().free(stored_direct);
     try std.testing.expectEqualSlices(u8, input, stored_direct);
     try std.testing.expectEqual(@as(usize, 1), stored_failing.allocations);
+    var stored_short_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.SizeMismatch, decodeZlibChunksAllocExactSize(stored_short_failing.allocator(), &stored_single_chunk, input.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), stored_short_failing.allocations);
+    var bad_stored_adler = try std.testing.allocator.dupe(u8, stored);
+    defer std.testing.allocator.free(bad_stored_adler);
+    bad_stored_adler[bad_stored_adler.len - 1] ^= 1;
+    const bad_stored_single_chunk = [_][]const u8{
+        bad_stored_adler[0..0],
+        bad_stored_adler,
+        bad_stored_adler[bad_stored_adler.len..],
+    };
+    var stored_adler_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibChunksAllocExactSize(stored_adler_failing.allocator(), &bad_stored_single_chunk, input.len));
+    try std.testing.expectEqual(@as(usize, 0), stored_adler_failing.allocations);
 
     @memset(&output, 0);
     try std.testing.expectEqual(input.len, try decodeZlibChunksInto(&stored_chunks, &output));
