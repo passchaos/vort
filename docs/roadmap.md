@@ -1143,6 +1143,8 @@ architecture blindly.
   until a broader A/B proves consistent wins across raw/zlib/gzip and binary
   dynamic rows.
 
+- Retried a narrower production length-extra staged helper only in the no-dictionary caller-buffer dynamic block path after the median-of-3 extra-bit gate turned positive. It was rejected because ReleaseFast decode-stage repeat3 still regressed end-to-end rows: README `gzip_into` fell from about `553.72` to `436.26` MiB/s, structured `gzip_into` from about `2180.39` to `1817.18` MiB/s, and several exact-size rows were mixed. Keep the staged length-extra path benchmark-only until a variant proves raw/zlib/gzip caller-buffer and wrapper rows together.
+
 - Rejected a broader production fused dynamic-distance FastDecoder hit path that consumed the distance Huffman code and extra bits together. It helped `docs/roadmap.md` in the targeted repeat3 probe but regressed README caller-buffer raw/zlib/gzip rows to about `474.04` / `495.73` / `453.28` MiB/s, so production keeps only the narrower staged helper for distance extra bits.
 
 - Combined DEFLATE block-header reads in raw/zlib and PNG streaming decode paths,
