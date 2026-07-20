@@ -116,7 +116,9 @@ pub const DynamicDecodeProfile = struct {
     length_extra_reads: usize = 0,
     distance_extra_reads: usize = 0,
     length_extra_bits: usize = 0,
+    length_code_bits: usize = 0,
     distance_extra_bits: usize = 0,
+    distance_code_bits: usize = 0,
     literal_fast_hits: usize = 0,
     literal_fast_misses: usize = 0,
     distance_fast_hits: usize = 0,
@@ -138,6 +140,7 @@ pub const DynamicDecodeProfile = struct {
     match_class_length_extra_bits: [match_class_count]usize = @splat(0),
     match_class_distance_extra_reads: [match_class_count]usize = @splat(0),
     match_class_distance_extra_bits: [match_class_count]usize = @splat(0),
+    match_class_distance_code_bits: [match_class_count]usize = @splat(0),
     mix: u64 = 0,
 };
 
@@ -1463,6 +1466,8 @@ fn profileCompressedBlock(
 ) Error!DynamicDecodeProfile {
     const lit_decoder = huffman.FastDecoder(286, lit_lookup_bits).init(lit_table);
     const dist_decoder = makeDynamicDistanceDecoder(dist_table);
+    const lit_code_bits_by_symbol = codeBitsBySymbol(286, lit_table);
+    const dist_code_bits_by_symbol = codeBitsBySymbol(30, dist_table);
     var profile = DynamicDecodeProfile{
         .literal_lookup_bits = lit_lookup_bits,
         .literal_lookup_covered = lit_decoder.lookupCoverage(),
@@ -1483,6 +1488,7 @@ fn profileCompressedBlock(
         } else if (symbol <= 285) {
             profile.length_symbols += 1;
             profile.length_symbol_histogram[symbol - 257] += 1;
+            profile.length_code_bits += lit_code_bits_by_symbol[symbol];
             const length_extra_reads_before = profile.length_extra_reads;
             const length_extra_bits_before = profile.length_extra_bits;
             const length = try profileDecodeLength(symbol, reader, &profile);
@@ -1490,6 +1496,8 @@ fn profileCompressedBlock(
             const distance_symbol = try dist_decoder.decodeValue(reader);
             if (dist_hit) profile.distance_fast_hits += 1 else profile.distance_fast_misses += 1;
             profile.distance_symbol_histogram[distance_symbol] += 1;
+            const distance_code_bits = dist_code_bits_by_symbol[distance_symbol];
+            profile.distance_code_bits += distance_code_bits;
             const distance_extra_reads_before = profile.distance_extra_reads;
             const distance_extra_bits_before = profile.distance_extra_bits;
             const distance = try profileDecodeDistance(distance_symbol, reader, &profile);
@@ -1501,6 +1509,7 @@ fn profileCompressedBlock(
                 profile.length_extra_bits - length_extra_bits_before,
                 profile.distance_extra_reads - distance_extra_reads_before,
                 profile.distance_extra_bits - distance_extra_bits_before,
+                distance_code_bits,
                 &profile,
             );
             profile.mix +%= length;
@@ -1510,6 +1519,14 @@ fn profileCompressedBlock(
     }
 }
 
+fn codeBitsBySymbol(comptime max_symbols: usize, table: huffman.HuffmanTable(max_symbols)) [max_symbols]u4 {
+    var bits: [max_symbols]u4 = @splat(0);
+    for (table.entries[0..table.len]) |entry| {
+        bits[entry.symbol] = entry.bits;
+    }
+    return bits;
+}
+
 fn profileRecordMatch(
     length: usize,
     distance: usize,
@@ -1517,6 +1534,7 @@ fn profileRecordMatch(
     length_extra_bits: usize,
     distance_extra_reads: usize,
     distance_extra_bits: usize,
+    distance_code_bits: usize,
     profile: *DynamicDecodeProfile,
 ) Error!void {
     if (length == 0 or distance == 0 or distance > profile.output_bytes) return error.InvalidMatch;
@@ -1542,6 +1560,7 @@ fn profileRecordMatch(
     profile.match_class_length_extra_bits[class_index] += length_extra_bits;
     profile.match_class_distance_extra_reads[class_index] += distance_extra_reads;
     profile.match_class_distance_extra_bits[class_index] += distance_extra_bits;
+    profile.match_class_distance_code_bits[class_index] += distance_code_bits;
     profile.match_bytes += length;
     profile.output_bytes += length;
 }

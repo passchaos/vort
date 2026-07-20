@@ -38,7 +38,10 @@ EXPECTED_COLUMNS = {
     "length_extra_reads",
     "distance_extra_reads",
     "length_extra_bits",
+    "length_code_bits",
     "distance_extra_bits",
+    "distance_code_bits",
+    "distance_code_plus_extra_bits",
     "literal_fast_hits",
     "literal_fast_misses",
     "distance_fast_hits",
@@ -67,6 +70,7 @@ EXPECTED_COLUMNS = {
     "match_class_length_extra_bits",
     "match_class_distance_extra_reads",
     "match_class_distance_extra_bits",
+    "match_class_distance_code_bits",
     "match_rle_extra_bits_per_match",
     "match_small_distance_extra_bits_per_match",
     "match_non_overlapping_extra_bits_per_match",
@@ -75,9 +79,14 @@ EXPECTED_COLUMNS = {
     "match_small_distance_extra_bits_per_byte",
     "match_non_overlapping_extra_bits_per_byte",
     "match_overlapping_extra_bits_per_byte",
+    "match_rle_distance_code_plus_extra_bits_per_match",
+    "match_small_distance_code_plus_extra_bits_per_match",
+    "match_non_overlapping_distance_code_plus_extra_bits_per_match",
+    "match_overlapping_distance_code_plus_extra_bits_per_match",
     "literal_fast_miss_ratio",
     "distance_fast_miss_ratio",
     "extra_bits_per_match",
+    "distance_code_plus_extra_bits_per_match",
     "mix",
 }
 
@@ -175,6 +184,12 @@ def validate_row(row: dict[str, str], strict_top_counts: bool = True) -> None:
         raise AssertionError(f"length width bit sum mismatch row={row}")
     if sum(distance_width_bits) != parse_int(row, "distance_extra_bits"):
         raise AssertionError(f"distance width bit sum mismatch row={row}")
+    if parse_int(row, "length_code_bits") <= 0:
+        raise AssertionError(f"length_code_bits must be positive row={row}")
+    if parse_int(row, "distance_code_bits") <= 0:
+        raise AssertionError(f"distance_code_bits must be positive row={row}")
+    if parse_int(row, "distance_code_plus_extra_bits") != parse_int(row, "distance_code_bits") + parse_int(row, "distance_extra_bits"):
+        raise AssertionError(f"distance code+extra mismatch row={row}")
     literal_lookup_covered = parse_int(row, "literal_lookup_covered")
     literal_lookup_size = parse_int(row, "literal_lookup_size")
     distance_lookup_covered = parse_int(row, "distance_lookup_covered")
@@ -238,7 +253,9 @@ def validate_row(row: dict[str, str], strict_top_counts: bool = True) -> None:
     ]
     class_length_extra_bits = parse_class_hist(row, "match_class_length_extra_bits")
     class_distance_extra_bits = parse_class_hist(row, "match_class_distance_extra_bits")
+    class_distance_code_bits = parse_class_hist(row, "match_class_distance_code_bits")
     class_total_extra_bits = [left + right for left, right in zip(class_length_extra_bits, class_distance_extra_bits)]
+    class_total_distance_bits = [left + right for left, right in zip(class_distance_code_bits, class_distance_extra_bits)]
     if sum(parse_class_hist(row, "match_class_length_extra_reads")) != parse_int(row, "length_extra_reads"):
         raise AssertionError(f"match class length extra read sum mismatch row={row}")
     if sum(class_length_extra_bits) != parse_int(row, "length_extra_bits"):
@@ -247,6 +264,8 @@ def validate_row(row: dict[str, str], strict_top_counts: bool = True) -> None:
         raise AssertionError(f"match class distance extra read sum mismatch row={row}")
     if sum(class_distance_extra_bits) != parse_int(row, "distance_extra_bits"):
         raise AssertionError(f"match class distance extra bit sum mismatch row={row}")
+    if sum(class_distance_code_bits) != parse_int(row, "distance_code_bits"):
+        raise AssertionError(f"match class distance code bit sum mismatch row={row}")
     assert_ratio(row, "match_rle_extra_bits_per_match", class_total_extra_bits[0], class_counts[0])
     assert_ratio(row, "match_small_distance_extra_bits_per_match", class_total_extra_bits[1], class_counts[1])
     assert_ratio(row, "match_non_overlapping_extra_bits_per_match", class_total_extra_bits[2], class_counts[2])
@@ -255,6 +274,10 @@ def validate_row(row: dict[str, str], strict_top_counts: bool = True) -> None:
     assert_ratio(row, "match_small_distance_extra_bits_per_byte", class_total_extra_bits[1], class_byte_counts[1])
     assert_ratio(row, "match_non_overlapping_extra_bits_per_byte", class_total_extra_bits[2], class_byte_counts[2])
     assert_ratio(row, "match_overlapping_extra_bits_per_byte", class_total_extra_bits[3], class_byte_counts[3])
+    assert_ratio(row, "match_rle_distance_code_plus_extra_bits_per_match", class_total_distance_bits[0], class_counts[0])
+    assert_ratio(row, "match_small_distance_code_plus_extra_bits_per_match", class_total_distance_bits[1], class_counts[1])
+    assert_ratio(row, "match_non_overlapping_distance_code_plus_extra_bits_per_match", class_total_distance_bits[2], class_counts[2])
+    assert_ratio(row, "match_overlapping_distance_code_plus_extra_bits_per_match", class_total_distance_bits[3], class_counts[3])
     for key in (
         "dominant_match_byte_ratio",
         "match_rle_byte_ratio",
@@ -272,6 +295,7 @@ def validate_row(row: dict[str, str], strict_top_counts: bool = True) -> None:
         parse_top(row["top_distance_extra_symbols"], "top_distance_extra_symbols")
     if parse_float(row, "extra_bits_per_match") <= 0:
         raise AssertionError(f"extra_bits_per_match must be positive row={row}")
+    assert_ratio(row, "distance_code_plus_extra_bits_per_match", parse_int(row, "distance_code_plus_extra_bits"), parse_int(row, "distance_symbols"))
 
 
 def main() -> int:

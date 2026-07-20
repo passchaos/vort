@@ -21,7 +21,9 @@ const Row = struct {
     length_extra_reads: usize,
     distance_extra_reads: usize,
     length_extra_bits: usize,
+    length_code_bits: usize,
     distance_extra_bits: usize,
+    distance_code_bits: usize,
     literal_fast_hits: usize,
     literal_fast_misses: usize,
     distance_fast_hits: usize,
@@ -42,6 +44,7 @@ const Row = struct {
     match_class_length_extra_bits: [vort.DynamicDecodeProfile.match_class_count]usize,
     match_class_distance_extra_reads: [vort.DynamicDecodeProfile.match_class_count]usize,
     match_class_distance_extra_bits: [vort.DynamicDecodeProfile.match_class_count]usize,
+    match_class_distance_code_bits: [vort.DynamicDecodeProfile.match_class_count]usize,
     mix: u64,
 };
 
@@ -166,7 +169,9 @@ fn measurePayload(init: std.process.Init, name: []const u8, payload: []const u8)
         .length_extra_reads = profile.length_extra_reads,
         .distance_extra_reads = profile.distance_extra_reads,
         .length_extra_bits = profile.length_extra_bits,
+        .length_code_bits = profile.length_code_bits,
         .distance_extra_bits = profile.distance_extra_bits,
+        .distance_code_bits = profile.distance_code_bits,
         .literal_fast_hits = profile.literal_fast_hits,
         .literal_fast_misses = profile.literal_fast_misses,
         .distance_fast_hits = profile.distance_fast_hits,
@@ -187,6 +192,7 @@ fn measurePayload(init: std.process.Init, name: []const u8, payload: []const u8)
         .match_class_length_extra_bits = profile.match_class_length_extra_bits,
         .match_class_distance_extra_reads = profile.match_class_distance_extra_reads,
         .match_class_distance_extra_bits = profile.match_class_distance_extra_bits,
+        .match_class_distance_code_bits = profile.match_class_distance_code_bits,
         .mix = profile.mix,
     };
 }
@@ -197,7 +203,7 @@ fn rawSliceFromZlib(frame: []const u8) []const u8 {
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_symbol_histogram,distance_symbol_histogram,top_length_symbols,top_distance_symbols,top_length_extra_symbols,top_distance_extra_symbols,length_extra_width_reads,distance_extra_width_reads,length_extra_width_bits,distance_extra_width_bits,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_lookup_covered,literal_lookup_size,distance_lookup_covered,distance_lookup_size,literal_lookup_coverage_ratio,distance_lookup_coverage_ratio,dominant_match_class,dominant_match_byte_ratio,match_rle_count,match_rle_bytes,match_small_distance_count,match_small_distance_bytes,match_non_overlapping_count,match_non_overlapping_bytes,match_overlapping_count,match_overlapping_bytes,match_rle_byte_ratio,match_small_distance_byte_ratio,match_non_overlapping_byte_ratio,match_overlapping_byte_ratio,match_class_length_extra_reads,match_class_length_extra_bits,match_class_distance_extra_reads,match_class_distance_extra_bits,match_rle_extra_bits_per_match,match_small_distance_extra_bits_per_match,match_non_overlapping_extra_bits_per_match,match_overlapping_extra_bits_per_match,match_rle_extra_bits_per_byte,match_small_distance_extra_bits_per_byte,match_non_overlapping_extra_bits_per_byte,match_overlapping_extra_bits_per_byte,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
+    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_symbol_histogram,distance_symbol_histogram,top_length_symbols,top_distance_symbols,top_length_extra_symbols,top_distance_extra_symbols,length_extra_width_reads,distance_extra_width_reads,length_extra_width_bits,distance_extra_width_bits,length_extra_reads,distance_extra_reads,length_extra_bits,length_code_bits,distance_extra_bits,distance_code_bits,distance_code_plus_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_lookup_covered,literal_lookup_size,distance_lookup_covered,distance_lookup_size,literal_lookup_coverage_ratio,distance_lookup_coverage_ratio,dominant_match_class,dominant_match_byte_ratio,match_rle_count,match_rle_bytes,match_small_distance_count,match_small_distance_bytes,match_non_overlapping_count,match_non_overlapping_bytes,match_overlapping_count,match_overlapping_bytes,match_rle_byte_ratio,match_small_distance_byte_ratio,match_non_overlapping_byte_ratio,match_overlapping_byte_ratio,match_class_length_extra_reads,match_class_length_extra_bits,match_class_distance_extra_reads,match_class_distance_extra_bits,match_class_distance_code_bits,match_rle_extra_bits_per_match,match_small_distance_extra_bits_per_match,match_non_overlapping_extra_bits_per_match,match_overlapping_extra_bits_per_match,match_rle_extra_bits_per_byte,match_small_distance_extra_bits_per_byte,match_non_overlapping_extra_bits_per_byte,match_overlapping_extra_bits_per_byte,match_rle_distance_code_plus_extra_bits_per_match,match_small_distance_code_plus_extra_bits_per_match,match_non_overlapping_distance_code_plus_extra_bits_per_match,match_overlapping_distance_code_plus_extra_bits_per_match,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,distance_code_plus_extra_bits_per_match,mix\n");
     for (rows) |row| {
         try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},", .{
             row.case,
@@ -235,11 +241,14 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
         try writer.writeByte(',');
         try writeExtraWidthHistogram(writer, &row.distance_symbol_histogram, &distance_extra_bits_by_symbol, true);
         const dominant_match = dominantMatchClass(row);
-        try writer.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{s},{d:.6},{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{d:.6},{d:.6}", .{
+        try writer.print(",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{s},{d:.6},{d},{d},{d},{d},{d},{d},{d},{d},{d:.6},{d:.6},{d:.6},{d:.6}", .{
             row.length_extra_reads,
             row.distance_extra_reads,
             row.length_extra_bits,
+            row.length_code_bits,
             row.distance_extra_bits,
+            row.distance_code_bits,
+            row.distance_code_bits + row.distance_extra_bits,
             row.literal_fast_hits,
             row.literal_fast_misses,
             row.distance_fast_hits,
@@ -273,8 +282,11 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
         try writeHistogram(writer, &row.match_class_distance_extra_reads);
         try writer.writeByte(',');
         try writeHistogram(writer, &row.match_class_distance_extra_bits);
+        try writer.writeByte(',');
+        try writeHistogram(writer, &row.match_class_distance_code_bits);
         const class_total_extra_bits = matchClassTotalExtraBits(row);
-        try writer.print(",{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d}\n", .{
+        const class_total_distance_bits = matchClassTotalDistanceBits(row);
+        try writer.print(",{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d}\n", .{
             ratio(class_total_extra_bits[0], row.match_rle_count),
             ratio(class_total_extra_bits[1], row.match_small_distance_count),
             ratio(class_total_extra_bits[2], row.match_non_overlapping_count),
@@ -283,9 +295,14 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
             ratio(class_total_extra_bits[1], row.match_small_distance_bytes),
             ratio(class_total_extra_bits[2], row.match_non_overlapping_bytes),
             ratio(class_total_extra_bits[3], row.match_overlapping_bytes),
+            ratio(class_total_distance_bits[0], row.match_rle_count),
+            ratio(class_total_distance_bits[1], row.match_small_distance_count),
+            ratio(class_total_distance_bits[2], row.match_non_overlapping_count),
+            ratio(class_total_distance_bits[3], row.match_overlapping_count),
             ratio(row.literal_fast_misses, row.literal_fast_hits + row.literal_fast_misses),
             ratio(row.distance_fast_misses, row.distance_fast_hits + row.distance_fast_misses),
             ratio(row.length_extra_bits + row.distance_extra_bits, row.length_symbols),
+            ratio(row.distance_code_bits + row.distance_extra_bits, row.distance_symbols),
             row.mix,
         });
     }
@@ -313,6 +330,14 @@ fn matchClassTotalExtraBits(row: Row) [vort.DynamicDecodeProfile.match_class_cou
     var totals: [vort.DynamicDecodeProfile.match_class_count]usize = undefined;
     for (&totals, 0..) |*total, i| {
         total.* = row.match_class_length_extra_bits[i] + row.match_class_distance_extra_bits[i];
+    }
+    return totals;
+}
+
+fn matchClassTotalDistanceBits(row: Row) [vort.DynamicDecodeProfile.match_class_count]usize {
+    var totals: [vort.DynamicDecodeProfile.match_class_count]usize = undefined;
+    for (&totals, 0..) |*total, i| {
+        total.* = row.match_class_distance_code_bits[i] + row.match_class_distance_extra_bits[i];
     }
     return totals;
 }
