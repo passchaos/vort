@@ -3202,10 +3202,14 @@ pub fn decodeZlibWithDictionaryAndOptions(input: []const u8, output: []u8, dicti
 }
 
 fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
-    const total = try chunksTotalLen(chunks);
+    var total: usize = 0;
     var single_non_empty: ?[]const u8 = null;
     var non_empty_count: usize = 0;
     for (chunks) |chunk| {
+        // Compute total length and identify the single-chunk fast path together;
+        // legacy wrapper chunk joins are small but hot in tests and PNG-style
+        // adapters, so avoid scanning the slice list twice before every decode.
+        total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
         if (chunk.len == 0) continue;
         single_non_empty = chunk;
         non_empty_count += 1;
