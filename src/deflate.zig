@@ -6788,7 +6788,11 @@ fn decodeZlibStoredAllocWithOptionalDictionaryExactSize(allocator: std.mem.Alloc
 
 fn decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
     const header = try parseZlibHeader(input, dictionary);
-    const stored = (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, input[header.data_offset..], max_output_len)) orelse return error.InvalidDeflateBlockType;
+    const raw_input = input[header.data_offset..];
+    if (try planRawStoredOnly(raw_input)) |stored_plan| {
+        try validateZlibStoredPlanBeforeAlloc(input, header.data_offset, stored_plan, .{});
+    }
+    const stored = (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, raw_input, max_output_len)) orelse return error.InvalidDeflateBlockType;
     errdefer stored.deinit(allocator);
     const footer_offset = header.data_offset + stored.result.input_read;
     try validateZlibFooter(input, footer_offset, stored.digest);
@@ -7035,16 +7039,22 @@ fn decodeZlibConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
 fn decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, max_output_len: ?usize) ![]u8 {
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+    const raw_input = input[header.data_offset..];
+    if (raw_dictionary.len == 0 and raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+        if (try planRawStoredOnly(raw_input)) |stored_plan| {
+            try validateZlibStoredPlanBeforeAlloc(input, header.data_offset, stored_plan, options);
+        }
+    }
 
     if (options.ignore_adler) {
-        if (try decodeRawStoredOnlyAllocMaybe(allocator, input[header.data_offset..], max_output_len)) |stored| {
+        if (try decodeRawStoredOnlyAllocMaybe(allocator, raw_input, max_output_len)) |stored| {
             errdefer stored.deinit(allocator);
             const footer_offset = header.data_offset + stored.input_read;
             try validateZlibFooterWithOptions(input, footer_offset, 0, options);
             return stored.bytes;
         }
     } else {
-        if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, input[header.data_offset..], max_output_len)) |stored| {
+        if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, raw_input, max_output_len)) |stored| {
             errdefer stored.deinit(allocator);
             const footer_offset = header.data_offset + stored.result.input_read;
             try validateZlibFooterWithOptions(input, footer_offset, stored.digest, options);
@@ -7054,12 +7064,18 @@ fn decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.All
 
     if (try decodeZlibAllocSmallIntoMaybe(allocator, input, header, raw_dictionary, options, max_output_len)) |decoded| return decoded;
 
-    const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[header.data_offset..], raw_dictionary, max_output_len);
+    const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, raw_input, raw_dictionary, max_output_len);
     errdefer raw.deinit(allocator);
     const footer_offset = header.data_offset + raw.input_read;
     const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(raw.bytes);
     try validateZlibFooterWithOptions(input, footer_offset, actual_adler, options);
     return raw.bytes;
+}
+
+fn validateZlibStoredPlanBeforeAlloc(input: []const u8, data_offset: usize, plan: StoredOnlyPlan, options: ZlibDecodeOptions) Error!void {
+    const footer_offset = data_offset + plan.input_read;
+    if (footer_offset > input.len or input.len - footer_offset < 4) return error.TruncatedFrame;
+    if (!options.allow_trailing_data and footer_offset + 4 != input.len) return error.TrailingData;
 }
 
 fn decodeZlibAllocSmallIntoMaybe(
@@ -8477,6 +8493,9 @@ test "zlib stored wrapper validates checksum header and trailing data" {
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeZlibStored(with_trailing[0 .. encoded.len + 1], &out));
     try std.testing.expectError(error.TrailingData, decodeZlibStoredAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]));
+    var trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TrailingData, decodeZlibAlloc(trailing_failing.allocator(), with_trailing[0 .. encoded.len + 1]));
+    try std.testing.expectEqual(@as(usize, 0), trailing_failing.allocations);
 }
 
 test "zlib relaxed decode options ignore Adler and trailing bytes" {
