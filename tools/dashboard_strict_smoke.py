@@ -457,6 +457,8 @@ def write_decode_stage_report(path: Path, *, ok: bool = True) -> None:
                 "gzip_mib_s": 1.0,
                 "gzip_exact_mib_s": 1.0,
                 "gzip_into_mib_s": 1.0,
+                "gzip_into_relaxed_mib_s": 1.0,
+                "gzip_into_relaxed_over_strict": 1.0,
                 "raw_stored_mib_s": 0.0,
                 "raw_stored_exact_mib_s": 0.0,
                 "raw_stored_into_mib_s": 0.0,

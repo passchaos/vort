@@ -141,7 +141,7 @@ showed mixed binary/structured behavior in the same sample. Keep the production
 staged helper limited to distance extra bits until broader A/B evidence proves
 length extra-bit changes are corpus-safe across raw/zlib/gzip decode.
 A narrower no-dictionary caller-buffer-only retry was also rejected the same day: even after the focused extra-bit gate showed positive median-of-3 staged/current ratios, decode-stage repeat3 regressed README `gzip_into` (`~553.72 -> ~436.26` MiB/s) and structured `gzip_into` (`~2180.39 -> ~1817.18` MiB/s), so length staged reads remain benchmark-only.
-Single-member gzip caller-buffer decode now has `GzipDecodeOptions` through `decodeGzipWithOptions`, exposing strict-by-default toggles for CRC-32, ISIZE, and trailing-data validation; this gives wrapper/checksum investigations a public measurement surface analogous to `ZlibDecodeOptions` without changing normal API behavior.
+Single-member gzip caller-buffer decode now has `GzipDecodeOptions` through `decodeGzipWithOptions`, exposing strict-by-default toggles for CRC-32, ISIZE, and trailing-data validation; this gives wrapper/checksum investigations a public measurement surface analogous to `ZlibDecodeOptions` without changing normal API behavior. The decode-stage report now emits `gzip_into_relaxed_mib_s` and `gzip_into_relaxed_over_strict`, using relaxed CRC/ISIZE validation to estimate gzip trailer cost beside strict `gzip_into_mib_s`.
 
 This is not a final ecosystem claim: Rust's compression stack still has broader
 zstd/brotli/lz4 coverage, mature fuzzing, platform dispatch, and production

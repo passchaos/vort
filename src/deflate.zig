@@ -7300,10 +7300,14 @@ fn validateGzipFooterPartial(input: []const u8, footer_offset: usize, actual_crc
 
 fn validateGzipFooterPartialWithOptions(input: []const u8, footer_offset: usize, actual_crc: u32, output_len: usize, options: GzipDecodeOptions) Error!void {
     if (footer_offset > input.len or input.len - footer_offset < 8) return error.TruncatedFrame;
-    const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
-    const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-    if (!options.ignore_crc32 and actual_crc != expected_crc) return error.ChecksumMismatch;
-    if (!options.ignore_isize and @as(u32, @truncate(output_len)) != expected_size) return error.SizeMismatch;
+    if (!options.ignore_crc32) {
+        const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
+        if (actual_crc != expected_crc) return error.ChecksumMismatch;
+    }
+    if (!options.ignore_isize) {
+        const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
+        if (@as(u32, @truncate(output_len)) != expected_size) return error.SizeMismatch;
+    }
 }
 
 fn validateGzipFooter(input: []const u8, footer_offset: usize, actual_crc: u32, output_len: usize) Error!void {
@@ -7378,17 +7382,26 @@ pub fn decodeGzip(input: []const u8, output: []u8) Error!usize {
 pub fn decodeGzipWithOptions(input: []const u8, output: []u8, options: GzipDecodeOptions) Error!usize {
     const data_offset = try parseGzipHeader(input);
 
-    if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[data_offset..], output)) |stored| {
-        const footer_offset = data_offset + stored.result.input_read;
-        try validateGzipFooterWithOptions(input, footer_offset, stored.digest, stored.result.output_written, options);
-        return stored.result.output_written;
+    if (options.ignore_crc32) {
+        if (try decodeRawStoredOnlyIntoMaybe(input[data_offset..], output)) |stored| {
+            const footer_offset = data_offset + stored.input_read;
+            try validateGzipFooterWithOptions(input, footer_offset, 0, stored.output_written, options);
+            return stored.output_written;
+        }
+    } else {
+        if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[data_offset..], output)) |stored| {
+            const footer_offset = data_offset + stored.result.input_read;
+            try validateGzipFooterWithOptions(input, footer_offset, stored.digest, stored.result.output_written, options);
+            return stored.result.output_written;
+        }
     }
 
     var reader = bitstream.BufferedBitReader.init(input[data_offset..]);
     const raw = try decodeRawAutoWithDictionaryFromReader(&reader, 0, "", output);
     const footer_offset = data_offset + raw.input_read;
     const payload = output[0..raw.output_written];
-    try validateGzipFooterWithOptions(input, footer_offset, checksum.crc32Best(payload), raw.output_written, options);
+    const actual_crc = if (options.ignore_crc32) 0 else checksum.crc32Best(payload);
+    try validateGzipFooterWithOptions(input, footer_offset, actual_crc, raw.output_written, options);
     return raw.output_written;
 }
 
