@@ -6947,7 +6947,8 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.m
     var reader = try bitstream.ChunkedSpanBitReader.initAtKnownTotal(chunks, header.data_offset, compressed_len);
     const raw = try decodeRawAutoAppendPartialWithDictionaryFromReader(allocator, &reader, header.data_offset, raw_dictionary, &out, max_output_len);
     const footer_offset = header.data_offset + raw.input_read;
-    try validateZlibFooterChunksWithKnownTotal(chunks, compressed_len, footer_offset, checksum.adler32(out.items), options);
+    const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(out.items);
+    try validateZlibFooterChunksWithKnownTotal(chunks, compressed_len, footer_offset, actual_adler, options);
     return out.toOwnedSlice(allocator);
 }
 
@@ -7001,11 +7002,20 @@ fn decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.All
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
 
-    if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, input[header.data_offset..], max_output_len)) |stored| {
-        errdefer stored.deinit(allocator);
-        const footer_offset = header.data_offset + stored.result.input_read;
-        try validateZlibFooterWithOptions(input, footer_offset, stored.digest, options);
-        return stored.result.bytes;
+    if (options.ignore_adler) {
+        if (try decodeRawStoredOnlyAllocMaybe(allocator, input[header.data_offset..], max_output_len)) |stored| {
+            errdefer stored.deinit(allocator);
+            const footer_offset = header.data_offset + stored.input_read;
+            try validateZlibFooterWithOptions(input, footer_offset, 0, options);
+            return stored.bytes;
+        }
+    } else {
+        if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, input[header.data_offset..], max_output_len)) |stored| {
+            errdefer stored.deinit(allocator);
+            const footer_offset = header.data_offset + stored.result.input_read;
+            try validateZlibFooterWithOptions(input, footer_offset, stored.digest, options);
+            return stored.result.bytes;
+        }
     }
 
     if (try decodeZlibAllocSmallIntoMaybe(allocator, input, header, raw_dictionary, options, max_output_len)) |decoded| return decoded;
@@ -7013,7 +7023,8 @@ fn decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.All
     const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[header.data_offset..], raw_dictionary, max_output_len);
     errdefer raw.deinit(allocator);
     const footer_offset = header.data_offset + raw.input_read;
-    try validateZlibFooterWithOptions(input, footer_offset, checksum.adler32(raw.bytes), options);
+    const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(raw.bytes);
+    try validateZlibFooterWithOptions(input, footer_offset, actual_adler, options);
     return raw.bytes;
 }
 
@@ -7043,7 +7054,8 @@ fn decodeZlibAllocSmallIntoMaybe(
     };
     const written = raw.output_written;
     const footer_offset = header.data_offset + raw.input_read;
-    try validateZlibFooterWithOptions(input, footer_offset, checksum.adler32(scratch[0..written]), options);
+    const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(scratch[0..written]);
+    try validateZlibFooterWithOptions(input, footer_offset, actual_adler, options);
 
     const owned = try allocator.alloc(u8, written);
     errdefer allocator.free(owned);
