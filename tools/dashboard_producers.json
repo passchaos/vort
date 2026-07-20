@@ -6,7 +6,7 @@
   "artifact_metadata": {
     "vort-checksum-bench.csv": {
       "expected_format": "csv",
-      "smoke_gate": "zig build -Doptimize=ReleaseFast bench-checksum-csv"
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-checksum-bench-gate"
     },
     "vort-chunk-cursor-bench.csv": {
       "expected_format": "csv",
@@ -308,7 +308,7 @@
     }
   ],
   "exact": {
-    "vort-checksum-bench.csv": "zig build -Doptimize=ReleaseFast bench-checksum-csv",
+    "vort-checksum-bench.csv": "zig build -Doptimize=ReleaseFast run-checksum-bench-gate",
     "vort-chunk-cursor-bench.csv": "zig build run-chunk-cursor-bench-gate",
     "vort-chunked-zlib-bench-report-repeat3.csv": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-gate",
     "vort-chunked-zlib-bench-report.csv": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-csv",
@@ -382,6 +382,7 @@
     "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report"
   },
   "required_smoke_gates": [
+    "vort-checksum-bench.csv",
     "vort-chunk-cursor-bench.csv",
     "vort-chunked-zlib-bench-report-repeat3.csv",
     "vort-dashboard-category-negative-smoke.json",

@@ -68,6 +68,16 @@ pub fn build(b: *std.Build) void {
     const checksum_bench_csv_step = b.step("bench-checksum-csv", "Write per-checksum throughput CSV to zig-out");
     checksum_bench_csv_step.dependOn(&run_checksum_bench_csv.step);
 
+    const checksum_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/checksum_bench_gate.py",
+        "--csv",
+        "zig-out/vort-checksum-bench.csv",
+    });
+    checksum_bench_gate.step.dependOn(checksum_bench_csv_step);
+    const checksum_bench_gate_step = b.step("run-checksum-bench-gate", "Validate checksum benchmark CSV");
+    checksum_bench_gate_step.dependOn(&checksum_bench_gate.step);
+
     const deflate_bench_exe = b.addExecutable(.{
         .name = "vort-bench-deflate-decode",
         .root_module = b.createModule(.{
@@ -1253,6 +1263,7 @@ pub fn build(b: *std.Build) void {
     dashboard_strict_dashboard_step.dependOn(&dashboard_strict_dashboard.step);
 
     const dashboard_index = b.addSystemCommand(&.{ "python3", "tools/dashboard_index.py", "--strict-producers", "--strict-smoke-gates", "--strict-header-inspect", "--strict-validation-health" });
+    dashboard_index.step.dependOn(checksum_bench_gate_step);
     dashboard_index.step.dependOn(sidecar_corrupt_dashboard_step);
     dashboard_index.step.dependOn(python_zlib_diff_dashboard_step);
     dashboard_index.step.dependOn(zlib_relaxed_report_gate_step);
@@ -1443,6 +1454,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(fuzz_target_step);
     ci_smoke_step.dependOn(libfuzzer_smoke_step);
     ci_smoke_step.dependOn(afl_smoke_step);
+    ci_smoke_step.dependOn(checksum_bench_gate_step);
     ci_smoke_step.dependOn(checksum_diff_step);
     ci_smoke_step.dependOn(checksum_zlib_diff_step);
     ci_smoke_step.dependOn(zlib_diff_step);

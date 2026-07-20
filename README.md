@@ -160,6 +160,7 @@ zig build run-libfuzzer-smoke
 zig build run-afl-smoke
 zig build run-checksum-diff
 zig build run-checksum-zlib-diff
+zig build -Doptimize=ReleaseFast run-checksum-bench-gate
 zig build run-zlib-diff
 zig build run-gzip-diff
 zig build run-python-zlib-diff
@@ -228,6 +229,7 @@ zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- ~/Work/zlib-rs/sil
 zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard -- --limit 3
 zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard -- --limit 3
 zig build bench-checksum -Doptimize=ReleaseFast
+zig build -Doptimize=ReleaseFast run-checksum-bench-gate
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report -- --iterations 1000

@@ -3,9 +3,9 @@
     {
       "expected_format": "csv",
       "name": "vort-checksum-bench.csv",
-      "producer_step": "zig build -Doptimize=ReleaseFast bench-checksum-csv",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build -Doptimize=ReleaseFast bench-checksum-csv"
+      "producer_step": "zig build -Doptimize=ReleaseFast run-checksum-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build -Doptimize=ReleaseFast run-checksum-bench-gate"
     },
     {
       "expected_format": "csv",
