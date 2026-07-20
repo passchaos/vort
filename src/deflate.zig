@@ -2153,6 +2153,25 @@ fn decodeRawStoredOnlyAllocMaybeWithHash(comptime Hash: type, allocator: std.mem
     };
 }
 
+fn hashRawStoredOnlyPlanned(comptime Hash: type, input: []const u8, plan: StoredOnlyPlan) u32 {
+    var hash = Hash.init();
+    var in_offset: usize = 0;
+    while (true) {
+        const final = (input[in_offset] & 0x01) != 0;
+        in_offset += 1;
+        const len = std.mem.readInt(u16, input[in_offset..][0..2], .little);
+        const chunk_len: usize = len;
+        in_offset += 4;
+        const chunk = input[in_offset..][0..chunk_len];
+        hash.update(chunk);
+        in_offset += chunk_len;
+        if (final) {
+            std.debug.assert(in_offset == plan.input_read);
+            return hash.digest();
+        }
+    }
+}
+
 fn planRawStoredOnly(input: []const u8) Error!?StoredOnlyPlan {
     if (input.len == 0) return error.TruncatedFrame;
     var offset: usize = 0;
@@ -7080,6 +7099,11 @@ fn validateZlibStoredPlanBeforeAlloc(input: []const u8, data_offset: usize, plan
     const footer_offset = data_offset + plan.input_read;
     if (footer_offset > input.len or input.len - footer_offset < 4) return error.TruncatedFrame;
     if (!options.allow_trailing_data and footer_offset + 4 != input.len) return error.TrailingData;
+    if (!options.ignore_adler) {
+        const expected = std.mem.readInt(u32, input[footer_offset..][0..4], .big);
+        const actual = hashRawStoredOnlyPlanned(checksum.Adler32, input[data_offset..], plan);
+        if (actual != expected) return error.ChecksumMismatch;
+    }
 }
 
 fn decodeZlibAllocSmallIntoMaybe(
@@ -8000,6 +8024,11 @@ fn validateGzipStoredPlanBeforeAlloc(input: []const u8, data_offset: usize, plan
     const footer_offset = data_offset + plan.input_read;
     if (footer_offset > input.len or input.len - footer_offset < 8) return error.TruncatedFrame;
     if (!options.allow_trailing_data and footer_offset + 8 != input.len) return error.TrailingData;
+    if (!options.ignore_crc32) {
+        const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
+        const actual_crc = hashRawStoredOnlyPlanned(checksum.Crc32Slice32, input[data_offset..], plan);
+        if (actual_crc != expected_crc) return error.ChecksumMismatch;
+    }
     if (!options.ignore_isize) {
         const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
         if (@as(u32, @truncate(plan.output_len)) != expected_size) return error.SizeMismatch;
@@ -8508,6 +8537,9 @@ test "zlib stored wrapper validates checksum header and trailing data" {
     defer std.testing.allocator.free(bad_checksum);
     bad_checksum[bad_checksum.len - 1] ^= 1;
     try std.testing.expectError(error.ChecksumMismatch, decodeZlibStored(bad_checksum, &out));
+    var bad_checksum_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibAlloc(bad_checksum_failing.allocator(), bad_checksum));
+    try std.testing.expectEqual(@as(usize, 0), bad_checksum_failing.allocations);
 
     var with_trailing: [64]u8 = undefined;
     @memcpy(with_trailing[0..encoded.len], encoded);
@@ -10569,6 +10601,9 @@ test "gzip stored wrapper validates crc size header and trailing data" {
     defer std.testing.allocator.free(bad_crc);
     bad_crc[bad_crc.len - 8] ^= 1;
     try std.testing.expectError(error.ChecksumMismatch, decodeGzipStored(bad_crc, &out));
+    var bad_crc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzipAlloc(bad_crc_failing.allocator(), bad_crc));
+    try std.testing.expectEqual(@as(usize, 0), bad_crc_failing.allocations);
 
     var bad_size = try encodeGzipStoredAlloc(std.testing.allocator, "payload");
     defer std.testing.allocator.free(bad_size);
