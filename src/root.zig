@@ -468,9 +468,13 @@ pub const decodeGzipAllocWithOptions = deflate.decodeGzipAllocWithOptions;
 pub const decodeGzipAllocWithOptionsExactSize = deflate.decodeGzipAllocWithOptionsExactSize;
 pub const decodeGzipAllocWithOptionsLimited = deflate.decodeGzipAllocWithOptionsLimited;
 pub const decodeGzipConcatenated = deflate.decodeGzipConcatenated;
+pub const decodeGzipConcatenatedWithOptions = deflate.decodeGzipConcatenatedWithOptions;
 pub const decodeGzipConcatenatedAlloc = deflate.decodeGzipConcatenatedAlloc;
 pub const decodeGzipConcatenatedAllocExactSize = deflate.decodeGzipConcatenatedAllocExactSize;
 pub const decodeGzipConcatenatedAllocLimited = deflate.decodeGzipConcatenatedAllocLimited;
+pub const decodeGzipConcatenatedAllocWithOptions = deflate.decodeGzipConcatenatedAllocWithOptions;
+pub const decodeGzipConcatenatedAllocWithOptionsExactSize = deflate.decodeGzipConcatenatedAllocWithOptionsExactSize;
+pub const decodeGzipConcatenatedAllocWithOptionsLimited = deflate.decodeGzipConcatenatedAllocWithOptionsLimited;
 
 pub const Lz77Token = lz77.Token;
 pub const fixedLz77BitCost = lz77.fixedBitCost;
