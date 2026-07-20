@@ -2014,9 +2014,8 @@ pub fn decodeRawStored(input: []const u8, output: []u8) Error!DecodeResult {
     var out_offset: usize = 0;
 
     while (true) {
-        const final = (try reader.readBits(u1, 1)) != 0;
-        const block_type = try reader.readBits(u2, 2);
-        if (block_type != 0) return error.InvalidDeflateBlockType;
+        const header = try readBlockHeader(&reader);
+        if (header.block_type != 0) return error.InvalidDeflateBlockType;
 
         reader.alignToByte();
         const offset = reader.byte_index;
@@ -2033,7 +2032,7 @@ pub fn decodeRawStored(input: []const u8, output: []u8) Error!DecodeResult {
         reader.byte_index = offset + 4 + chunk_len;
         reader.bit_index = 0;
 
-        if (final) return .{ .input_read = reader.byteOffset(), .output_written = out_offset };
+        if (header.final) return .{ .input_read = reader.byteOffset(), .output_written = out_offset };
     }
 }
 
