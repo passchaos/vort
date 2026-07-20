@@ -1094,6 +1094,7 @@
         "gzip_mib_s": "float",
         "gzip_stored_alloc_time_ratio": "float",
         "gzip_stored_mib_s": "float",
+        "gzip_stored_into_mib_s": "float",
         "gzip_wrapper_exact_time_ratio": "float",
         "gzip_wrapper_into_time_ratio": "float",
         "gzip_wrapper_time_ratio": "float",
@@ -1121,6 +1122,7 @@
         "zlib_mib_s": "float",
         "zlib_stored_alloc_time_ratio": "float",
         "zlib_stored_mib_s": "float",
+        "zlib_stored_into_mib_s": "float",
         "zlib_wrapper_exact_time_ratio": "float",
         "zlib_wrapper_into_time_ratio": "float",
         "zlib_wrapper_time_ratio": "float"

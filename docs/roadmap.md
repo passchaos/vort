@@ -1136,3 +1136,9 @@ architecture blindly.
   directly on stored payloads. This keeps the no-allocation stored decode path
   visible beside allocator-returning raw/zlib/gzip stored rows after routing it
   through the byte-level stored-only helper.
+
+- Extended the same decode-stage stored-path ledger with `zlib_stored_into_mib_s`
+  and `gzip_stored_into_mib_s`, measuring public caller-buffer
+  `decodeZlibStored`/`decodeGzipStored` beside their allocator-returning stored
+  helpers. This makes wrapper validation/checksum overhead visible separately
+  from allocation for stored members.
