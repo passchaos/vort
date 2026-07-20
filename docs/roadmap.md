@@ -1130,3 +1130,9 @@ architecture blindly.
   separate BitReader stored-block loop. Two ReleaseFast repeat3 decode-stage
   smokes kept the `stored-binary` raw stored allocation row in the same throughput
   class while preserving malformed stored-block coverage.
+
+- Extended the deflate decode-stage CSV/Markdown/JSON schema with
+  `raw_stored_into_mib_s`, measuring public caller-buffer `decodeRawStored`
+  directly on stored payloads. This keeps the no-allocation stored decode path
+  visible beside allocator-returning raw/zlib/gzip stored rows after routing it
+  through the byte-level stored-only helper.

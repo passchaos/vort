@@ -1111,6 +1111,7 @@
         "raw_mib_s": "float",
         "raw_stored_alloc_time_ratio": "float",
         "raw_stored_mib_s": "float",
+        "raw_stored_into_mib_s": "float",
         "repeat": "int",
         "zlib_alloc_exact_time_ratio": "float",
         "zlib_alloc_into_time_ratio": "float",
