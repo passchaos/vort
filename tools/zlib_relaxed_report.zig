@@ -25,6 +25,11 @@ pub fn main(init: std.process.Init) !void {
     var relaxed_successes: usize = 0;
     var dictionary_successes: usize = 0;
     var limited_rejections: usize = 0;
+    var gzip_strict_rejections: usize = 0;
+    var gzip_relaxed_successes: usize = 0;
+    var gzip_concatenated_successes: usize = 0;
+    var gzip_decoder_successes: usize = 0;
+    var gzip_limited_rejections: usize = 0;
 
     const frame = try vort.encodeZlibLevelAlloc(init.gpa, Payload, 6);
     defer init.gpa.free(frame);
@@ -79,13 +84,93 @@ pub fn main(init: std.process.Init) !void {
     if (!std.mem.eql(u8, Payload, dict_alloc)) return error.PayloadMismatch;
     dictionary_successes += 1;
 
+    const gzip_frame = try vort.encodeGzipFixedAlloc(init.gpa, Payload);
+    defer init.gpa.free(gzip_frame);
+
+    var bad_crc = try init.gpa.dupe(u8, gzip_frame);
+    defer init.gpa.free(bad_crc);
+    bad_crc[bad_crc.len - 8] ^= 1;
+    try expectGzipError(error.ChecksumMismatch, bad_crc, .{});
+    gzip_strict_rejections += 1;
+    try expectGzipPayload(init.gpa, bad_crc, .{ .ignore_crc32 = true });
+    gzip_relaxed_successes += 1;
+
+    var bad_isize = try init.gpa.dupe(u8, gzip_frame);
+    defer init.gpa.free(bad_isize);
+    bad_isize[bad_isize.len - 4] ^= 1;
+    try expectGzipError(error.SizeMismatch, bad_isize, .{});
+    gzip_strict_rejections += 1;
+    try expectGzipPayload(init.gpa, bad_isize, .{ .ignore_isize = true });
+    gzip_relaxed_successes += 1;
+
+    var gzip_trailing = try init.gpa.alloc(u8, gzip_frame.len + 1);
+    defer init.gpa.free(gzip_trailing);
+    @memcpy(gzip_trailing[0..gzip_frame.len], gzip_frame);
+    gzip_trailing[gzip_frame.len] = 0xdd;
+    try expectGzipError(error.TrailingData, gzip_trailing, .{});
+    gzip_strict_rejections += 1;
+    try expectGzipPayload(init.gpa, gzip_trailing, .{ .allow_trailing_data = true });
+    gzip_relaxed_successes += 1;
+
+    var gzip_combined = try init.gpa.alloc(u8, gzip_frame.len + 1);
+    defer init.gpa.free(gzip_combined);
+    @memcpy(gzip_combined[0..gzip_frame.len], gzip_frame);
+    gzip_combined[gzip_frame.len - 8] ^= 1;
+    gzip_combined[gzip_frame.len - 4] ^= 1;
+    gzip_combined[gzip_frame.len] = 0xee;
+    const gzip_relaxed = vort.GzipDecodeOptions{ .ignore_crc32 = true, .ignore_isize = true, .allow_trailing_data = true };
+    try expectGzipPayload(init.gpa, gzip_combined, gzip_relaxed);
+    gzip_relaxed_successes += 1;
+    try expectGzipAllocExact(init.gpa, gzip_combined, gzip_relaxed);
+    gzip_relaxed_successes += 1;
+    try expectGzipAllocLimited(init.gpa, gzip_combined, gzip_relaxed);
+    gzip_relaxed_successes += 1;
+    try expectGzipLimitExceeded(init.gpa, gzip_combined, gzip_relaxed);
+    gzip_limited_rejections += 1;
+
+    var gzip_scratch: [Payload.len]u8 = undefined;
+    var gzip_decoder = try vort.GzipDecoder.initWithOptionsExactSize(gzip_combined, &gzip_scratch, gzip_relaxed, Payload.len);
+    try drainDecoderPayload(&gzip_decoder, Payload);
+    gzip_decoder_successes += 1;
+
+    const gzip_chunks = [_][]const u8{
+        gzip_combined[0..4],
+        gzip_combined[4 .. gzip_combined.len - 9],
+        gzip_combined[gzip_combined.len - 9 ..],
+    };
+    var compressed_scratch: [128]u8 = undefined;
+    var gzip_chunk_decoder = try vort.GzipDecoder.initFromChunksWithOptionsExactSize(&gzip_chunks, &compressed_scratch, &gzip_scratch, gzip_relaxed, Payload.len);
+    try drainDecoderPayload(&gzip_chunk_decoder, Payload);
+    gzip_decoder_successes += 1;
+
+    var cat = try init.gpa.alloc(u8, bad_crc.len + gzip_frame.len);
+    defer init.gpa.free(cat);
+    @memcpy(cat[0..bad_crc.len], bad_crc);
+    @memcpy(cat[bad_crc.len..], gzip_frame);
+    const gzip_concat_relaxed = vort.GzipDecodeOptions{ .ignore_crc32 = true };
+    var cat_out: [Payload.len * 2]u8 = undefined;
+    const cat_written = try vort.decodeGzipConcatenatedWithOptions(cat, &cat_out, gzip_concat_relaxed);
+    if (cat_written != Payload.len * 2 or !std.mem.eql(u8, Payload ++ Payload, &cat_out)) return error.PayloadMismatch;
+    gzip_concatenated_successes += 1;
+    const cat_alloc = try vort.decodeGzipConcatenatedAllocWithOptionsExactSize(init.gpa, cat, gzip_concat_relaxed, Payload.len * 2);
+    defer init.gpa.free(cat_alloc);
+    if (!std.mem.eql(u8, Payload ++ Payload, cat_alloc)) return error.PayloadMismatch;
+    gzip_concatenated_successes += 1;
+    var cat_decoder = try vort.GzipDecoder.initConcatenatedWithOptionsExactSize(cat, &cat_out, gzip_concat_relaxed, Payload.len * 2);
+    try drainDecoderPayload(&cat_decoder, Payload ++ Payload);
+    gzip_decoder_successes += 1;
+    const cat_chunks = [_][]const u8{ cat[0..5], cat[5 .. cat.len - 3], cat[cat.len - 3 ..] };
+    var cat_chunk_decoder = try vort.GzipDecoder.initConcatenatedFromChunksWithOptionsExactSize(&cat_chunks, &compressed_scratch, &cat_out, gzip_concat_relaxed, Payload.len * 2);
+    try drainDecoderPayload(&cat_chunk_decoder, Payload ++ Payload);
+    gzip_decoder_successes += 1;
+
     var stdout_buffer: [512]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
-    try stdout_writer.interface.print("zlib relaxed report: strict_rejections={d} relaxed_successes={d} dictionary_successes={d} limited_rejections={d}\n", .{ strict_rejections, relaxed_successes, dictionary_successes, limited_rejections });
+    try stdout_writer.interface.print("relaxed wrapper report: zlib_strict_rejections={d} zlib_relaxed_successes={d} dictionary_successes={d} limited_rejections={d} gzip_strict_rejections={d} gzip_relaxed_successes={d} gzip_concatenated_successes={d} gzip_decoder_successes={d} gzip_limited_rejections={d}\n", .{ strict_rejections, relaxed_successes, dictionary_successes, limited_rejections, gzip_strict_rejections, gzip_relaxed_successes, gzip_concatenated_successes, gzip_decoder_successes, gzip_limited_rejections });
     try stdout_writer.interface.flush();
 
-    if (json_path) |path| try writeJson(init, path, strict_rejections, relaxed_successes, dictionary_successes, limited_rejections);
-    if (markdown_path) |path| try writeMarkdown(init, path, strict_rejections, relaxed_successes, dictionary_successes, limited_rejections);
+    if (json_path) |path| try writeJson(init, path, strict_rejections, relaxed_successes, dictionary_successes, limited_rejections, gzip_strict_rejections, gzip_relaxed_successes, gzip_concatenated_successes, gzip_decoder_successes, gzip_limited_rejections);
+    if (markdown_path) |path| try writeMarkdown(init, path, strict_rejections, relaxed_successes, dictionary_successes, limited_rejections, gzip_strict_rejections, gzip_relaxed_successes, gzip_concatenated_successes, gzip_decoder_successes, gzip_limited_rejections);
 }
 
 fn expectZlibError(expected: anyerror, frame: []const u8, options: vort.ZlibDecodeOptions) !void {
@@ -102,6 +187,58 @@ fn expectZlibPayload(allocator: std.mem.Allocator, frame: []const u8, options: v
     const decoded = try vort.decodeZlibAllocWithOptions(allocator, frame, options);
     defer allocator.free(decoded);
     if (!std.mem.eql(u8, Payload, decoded)) return error.PayloadMismatch;
+}
+
+fn expectGzipError(expected: anyerror, frame: []const u8, options: vort.GzipDecodeOptions) !void {
+    var out: [Payload.len]u8 = undefined;
+    if (vort.decodeGzipWithOptions(frame, &out, options)) |_| return error.ExpectedFailure else |err| {
+        if (err != expected) return err;
+    }
+}
+
+fn expectGzipPayload(allocator: std.mem.Allocator, frame: []const u8, options: vort.GzipDecodeOptions) !void {
+    var out: [Payload.len]u8 = undefined;
+    const written = try vort.decodeGzipWithOptions(frame, &out, options);
+    if (written != Payload.len or !std.mem.eql(u8, Payload, &out)) return error.PayloadMismatch;
+    const decoded = try vort.decodeGzipAllocWithOptions(allocator, frame, options);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, Payload, decoded)) return error.PayloadMismatch;
+}
+
+fn expectGzipAllocExact(allocator: std.mem.Allocator, frame: []const u8, options: vort.GzipDecodeOptions) !void {
+    const decoded = try vort.decodeGzipAllocWithOptionsExactSize(allocator, frame, options, Payload.len);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, Payload, decoded)) return error.PayloadMismatch;
+}
+
+fn expectGzipAllocLimited(allocator: std.mem.Allocator, frame: []const u8, options: vort.GzipDecodeOptions) !void {
+    const decoded = try vort.decodeGzipAllocWithOptionsLimited(allocator, frame, options, Payload.len);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, Payload, decoded)) return error.PayloadMismatch;
+}
+
+fn expectGzipLimitExceeded(allocator: std.mem.Allocator, frame: []const u8, options: vort.GzipDecodeOptions) !void {
+    if (vort.decodeGzipAllocWithOptionsLimited(allocator, frame, options, Payload.len - 1)) |decoded| {
+        allocator.free(decoded);
+        return error.ExpectedFailure;
+    } else |err| switch (err) {
+        error.OutputLimitExceeded => return,
+        else => return err,
+    }
+}
+
+fn drainDecoderPayload(decoder: *vort.GzipDecoder, expected: []const u8) !void {
+    var output: [Payload.len * 2]u8 = undefined;
+    var written: usize = 0;
+    while (true) {
+        var chunk: [3]u8 = undefined;
+        const step = try decoder.step(&chunk);
+        @memcpy(output[written..][0..step.progress.output_written], chunk[0..step.progress.output_written]);
+        written += step.progress.output_written;
+        if (step.status == .done) break;
+        if (step.status != .need_output) return error.UnexpectedDecoderStatus;
+    }
+    if (written != expected.len or !std.mem.eql(u8, expected, output[0..written])) return error.PayloadMismatch;
 }
 
 fn expectAllocExact(allocator: std.mem.Allocator, frame: []const u8, options: vort.ZlibDecodeOptions) !void {
@@ -126,22 +263,89 @@ fn expectLimitExceeded(allocator: std.mem.Allocator, frame: []const u8, options:
     }
 }
 
-fn writeJson(init: std.process.Init, path: []const u8, strict_rejections: usize, relaxed_successes: usize, dictionary_successes: usize, limited_rejections: usize) !void {
+fn writeJson(
+    init: std.process.Init,
+    path: []const u8,
+    strict_rejections: usize,
+    relaxed_successes: usize,
+    dictionary_successes: usize,
+    limited_rejections: usize,
+    gzip_strict_rejections: usize,
+    gzip_relaxed_successes: usize,
+    gzip_concatenated_successes: usize,
+    gzip_decoder_successes: usize,
+    gzip_limited_rejections: usize,
+) !void {
     var writer = std.Io.Writer.Allocating.init(init.gpa);
     defer writer.deinit();
     try writer.writer.print(
-        "{{\n  \"schema\": \"vort.zlib_relaxed_report\",\n  \"schema_version\": 1,\n  \"strict_rejections\": {d},\n  \"relaxed_successes\": {d},\n  \"dictionary_successes\": {d},\n  \"limited_rejections\": {d}\n}}\n",
-        .{ strict_rejections, relaxed_successes, dictionary_successes, limited_rejections },
+        "{{\n" ++
+            "  \"schema\": \"vort.zlib_relaxed_report\",\n" ++
+            "  \"schema_version\": 2,\n" ++
+            "  \"strict_rejections\": {d},\n" ++
+            "  \"relaxed_successes\": {d},\n" ++
+            "  \"dictionary_successes\": {d},\n" ++
+            "  \"limited_rejections\": {d},\n" ++
+            "  \"gzip_strict_rejections\": {d},\n" ++
+            "  \"gzip_relaxed_successes\": {d},\n" ++
+            "  \"gzip_concatenated_successes\": {d},\n" ++
+            "  \"gzip_decoder_successes\": {d},\n" ++
+            "  \"gzip_limited_rejections\": {d}\n" ++
+            "}}\n",
+        .{
+            strict_rejections,
+            relaxed_successes,
+            dictionary_successes,
+            limited_rejections,
+            gzip_strict_rejections,
+            gzip_relaxed_successes,
+            gzip_concatenated_successes,
+            gzip_decoder_successes,
+            gzip_limited_rejections,
+        },
     );
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
 }
 
-fn writeMarkdown(init: std.process.Init, path: []const u8, strict_rejections: usize, relaxed_successes: usize, dictionary_successes: usize, limited_rejections: usize) !void {
+fn writeMarkdown(
+    init: std.process.Init,
+    path: []const u8,
+    strict_rejections: usize,
+    relaxed_successes: usize,
+    dictionary_successes: usize,
+    limited_rejections: usize,
+    gzip_strict_rejections: usize,
+    gzip_relaxed_successes: usize,
+    gzip_concatenated_successes: usize,
+    gzip_decoder_successes: usize,
+    gzip_limited_rejections: usize,
+) !void {
     var writer = std.Io.Writer.Allocating.init(init.gpa);
     defer writer.deinit();
     try writer.writer.print(
-        "# zlib relaxed decode report\n\n| metric | value |\n| --- | ---: |\n| strict rejections | {d} |\n| relaxed successes | {d} |\n| dictionary successes | {d} |\n| limited rejections | {d} |\n",
-        .{ strict_rejections, relaxed_successes, dictionary_successes, limited_rejections },
+        "# relaxed wrapper decode report\n\n" ++
+            "| metric | value |\n" ++
+            "| --- | ---: |\n" ++
+            "| zlib strict rejections | {d} |\n" ++
+            "| zlib relaxed successes | {d} |\n" ++
+            "| zlib dictionary successes | {d} |\n" ++
+            "| zlib limited rejections | {d} |\n" ++
+            "| gzip strict rejections | {d} |\n" ++
+            "| gzip relaxed successes | {d} |\n" ++
+            "| gzip concatenated successes | {d} |\n" ++
+            "| gzip decoder successes | {d} |\n" ++
+            "| gzip limited rejections | {d} |\n",
+        .{
+            strict_rejections,
+            relaxed_successes,
+            dictionary_successes,
+            limited_rejections,
+            gzip_strict_rejections,
+            gzip_relaxed_successes,
+            gzip_concatenated_successes,
+            gzip_decoder_successes,
+            gzip_limited_rejections,
+        },
     );
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = writer.written() });
 }

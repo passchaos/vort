@@ -2568,6 +2568,11 @@
       "boolean_formula_rules": {},
       "fields": {
         "dictionary_successes": "int",
+        "gzip_concatenated_successes": "int",
+        "gzip_decoder_successes": "int",
+        "gzip_limited_rejections": "int",
+        "gzip_relaxed_successes": "int",
+        "gzip_strict_rejections": "int",
         "limited_rejections": "int",
         "relaxed_successes": "int",
         "schema": "str",

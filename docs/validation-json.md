@@ -1188,9 +1188,25 @@ Example:
       "zlib_mib_s": 1.0,
       "zlib_exact_mib_s": 1.0,
       "zlib_into_mib_s": 1.0,
+      "zlib_into_no_adler_mib_s": 1.0,
+      "zlib_into_no_adler_over_strict": 1.0,
       "gzip_mib_s": 1.0,
+      "gzip_no_crc_mib_s": 1.0,
+      "gzip_no_crc_over_strict": 1.0,
       "gzip_exact_mib_s": 1.0,
+      "gzip_exact_no_crc_mib_s": 1.0,
+      "gzip_exact_no_crc_over_strict": 1.0,
       "gzip_into_mib_s": 1.0,
+      "gzip_into_no_crc_mib_s": 1.0,
+      "gzip_into_no_crc_over_strict": 1.0,
+      "gzip_into_no_isize_mib_s": 1.0,
+      "gzip_into_no_isize_over_strict": 1.0,
+      "gzip_into_relaxed_mib_s": 1.0,
+      "gzip_into_relaxed_over_strict": 1.0,
+      "adler32_mib_s": 1.0,
+      "zlib_adler_time_ratio": 1.0,
+      "crc32_mib_s": 1.0,
+      "gzip_crc_time_ratio": 1.0,
       "raw_stored_mib_s": 0.0,
       "raw_stored_exact_mib_s": 0.0,
       "raw_stored_into_mib_s": 0.0,
@@ -1975,20 +1991,26 @@ zig build run-zlib-relaxed-report  # writes JSON and Markdown artifacts
 zig build run-zlib-relaxed-report-gate
 ```
 
-This schema records direct public-API coverage for relaxed zlib decode options,
-including strict rejection, relaxed success, dictionary-aware relaxed decode, and
-output-limit rejection behavior.
+This schema records direct public-API coverage for relaxed zlib and gzip decode
+options, including strict rejection, relaxed success, dictionary-aware zlib
+decode, gzip concatenated decode, caller-owned `GzipDecoder` chunked/options
+coverage, and output-limit rejection behavior.
 
 Example:
 
 ```json
 {
   "schema": "vort.zlib_relaxed_report",
-  "schema_version": 1,
+  "schema_version": 2,
   "strict_rejections": 2,
   "relaxed_successes": 5,
   "dictionary_successes": 2,
-  "limited_rejections": 1
+  "limited_rejections": 1,
+  "gzip_strict_rejections": 3,
+  "gzip_relaxed_successes": 6,
+  "gzip_concatenated_successes": 2,
+  "gzip_decoder_successes": 4,
+  "gzip_limited_rejections": 1
 }
 ```
 

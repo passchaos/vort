@@ -193,11 +193,16 @@ def main() -> int:
         validate_value_against_manifest(python_zlib_diff, schemas_def)
         zlib_relaxed = json.loads(zlib_relaxed_path.read_text())
         assert zlib_relaxed["schema"] == "vort.zlib_relaxed_report"
-        assert zlib_relaxed["schema_version"] == 1
+        assert zlib_relaxed["schema_version"] >= 2
         assert zlib_relaxed["strict_rejections"] >= 2
         assert zlib_relaxed["relaxed_successes"] >= 5
         assert zlib_relaxed["dictionary_successes"] >= 2
         assert zlib_relaxed["limited_rejections"] >= 1
+        assert zlib_relaxed["gzip_strict_rejections"] >= 3
+        assert zlib_relaxed["gzip_relaxed_successes"] >= 6
+        assert zlib_relaxed["gzip_concatenated_successes"] >= 2
+        assert zlib_relaxed["gzip_decoder_successes"] >= 4
+        assert zlib_relaxed["gzip_limited_rejections"] >= 1
         validate_value_against_manifest(zlib_relaxed, schemas_def)
         native_allocation = json.loads(native_allocation_path.read_text())
         assert native_allocation["schema"] == "vort.native_allocation_report"

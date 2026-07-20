@@ -448,7 +448,7 @@ pub fn build(b: *std.Build) void {
 
     const run_zlib_relaxed_report = b.addRunArtifact(zlib_relaxed_report_exe);
     run_zlib_relaxed_report.addArgs(&.{ "--json", "zig-out/vort-zlib-relaxed-report.json", "--markdown", "zig-out/vort-zlib-relaxed-report.md" });
-    const zlib_relaxed_report_step = b.step("run-zlib-relaxed-report", "Write zlib relaxed decode options JSON report");
+    const zlib_relaxed_report_step = b.step("run-zlib-relaxed-report", "Write zlib/gzip relaxed decode options JSON report");
     zlib_relaxed_report_step.dependOn(&run_zlib_relaxed_report.step);
 
     const zlib_relaxed_report_gate = b.addSystemCommand(&.{
@@ -458,7 +458,7 @@ pub fn build(b: *std.Build) void {
         "zig-out/vort-zlib-relaxed-report-gate.json",
     });
     zlib_relaxed_report_gate.step.dependOn(zlib_relaxed_report_step);
-    const zlib_relaxed_report_gate_step = b.step("run-zlib-relaxed-report-gate", "Validate zlib relaxed decode options report budgets");
+    const zlib_relaxed_report_gate_step = b.step("run-zlib-relaxed-report-gate", "Validate zlib/gzip relaxed decode options report budgets");
     zlib_relaxed_report_gate_step.dependOn(&zlib_relaxed_report_gate.step);
 
     const zlib_encode_bench_exe = b.addExecutable(.{
