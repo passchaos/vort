@@ -90,6 +90,7 @@ def main() -> int:
         print(f"deflate_extra_bits_bench_gate=bad_row_count rows={len(rows)}", file=sys.stderr)
         return 1
     seen = set()
+    by_key = {}
     cases = set()
     readers = set()
     for row in rows:
@@ -101,6 +102,7 @@ def main() -> int:
             print(f"deflate_extra_bits_bench_gate=duplicate row={row}", file=sys.stderr)
             return 1
         seen.add(key)
+        by_key[key] = row
         cases.add(case)
         readers.add(reader)
         if case not in EXPECTED_BITS or int(row.get("bits", "-1")) != EXPECTED_BITS[case]:
@@ -124,6 +126,28 @@ def main() -> int:
     if cases != EXPECTED_CASES or readers != EXPECTED_READERS:
         print(f"deflate_extra_bits_bench_gate=bad_sets cases={sorted(cases)} readers={sorted(readers)}", file=sys.stderr)
         return 1
+    for case in ("mixed-readme-length", "mixed-roadmap-length"):
+        for reader in EXPECTED_READERS:
+            current = by_key[(case, reader, "current")]
+            staged = by_key[(case, reader, "staged")]
+            if current["checksum"] != staged["checksum"]:
+                print(
+                    "deflate_extra_bits_bench_gate=checksum_mismatch "
+                    f"case={case} reader={reader} current={current['checksum']} staged={staged['checksum']}",
+                    file=sys.stderr,
+                )
+                return 1
+    for case in ("distance-readme-symbol-extra", "distance-roadmap-symbol-extra"):
+        for reader in EXPECTED_READERS:
+            current = by_key[(case, reader, "current")]
+            fused = by_key[(case, reader, "fused18")]
+            if current["checksum"] != fused["checksum"]:
+                print(
+                    "deflate_extra_bits_bench_gate=checksum_mismatch "
+                    f"case={case} reader={reader} current={current['checksum']} fused18={fused['checksum']}",
+                    file=sys.stderr,
+                )
+                return 1
     print(f"deflate_extra_bits_bench_gate=ok cases={len(cases)} readers={len(readers)} rows={len(rows)}")
     return 0
 
