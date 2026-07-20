@@ -2295,6 +2295,10 @@ pub fn decodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
 }
 
 pub fn decodeRawStoredAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    const plan = (try planRawStoredOnly(input)) orelse return error.InvalidDeflateBlockType;
+    if (expected_output_len < plan.output_len) return error.SizeMismatch;
+    if (plan.input_read != input.len) return error.TrailingData;
+    if (expected_output_len != plan.output_len) return error.SizeMismatch;
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const decoded = decodeRawStored(input, out) catch |err| switch (err) {
@@ -8456,6 +8460,19 @@ test "stored deflate exact-size alloc decoders validate exact lengths" {
     try std.testing.expectEqualSlices(u8, plain, raw_exact);
     try std.testing.expectError(error.SizeMismatch, decodeRawStoredAllocExactSize(std.testing.allocator, raw, plain.len - 1));
     try std.testing.expectError(error.SizeMismatch, decodeRawStoredAllocExactSize(std.testing.allocator, raw, plain.len + 1));
+    var raw_short_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.SizeMismatch, decodeRawStoredAllocExactSize(raw_short_failing.allocator(), raw, plain.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), raw_short_failing.allocations);
+    var raw_long_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.SizeMismatch, decodeRawStoredAllocExactSize(raw_long_failing.allocator(), raw, plain.len + 1));
+    try std.testing.expectEqual(@as(usize, 0), raw_long_failing.allocations);
+    var raw_trailing = try std.testing.allocator.alloc(u8, raw.len + 1);
+    defer std.testing.allocator.free(raw_trailing);
+    @memcpy(raw_trailing[0..raw.len], raw);
+    raw_trailing[raw.len] = 0;
+    var raw_trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TrailingData, decodeRawStoredAllocExactSize(raw_trailing_failing.allocator(), raw_trailing, plain.len));
+    try std.testing.expectEqual(@as(usize, 0), raw_trailing_failing.allocations);
 
     const zlib_frame = try encodeZlibStoredAlloc(std.testing.allocator, plain);
     defer std.testing.allocator.free(zlib_frame);
