@@ -1918,7 +1918,7 @@ pub fn decodeRawAutoAllocExactSize(allocator: std.mem.Allocator, input: []const 
 }
 
 pub fn decodeRawAutoAllocWithDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, expected_output_len: usize) ![]u8 {
-    if (dictionary.len == 0 and input.len != 0 and isStoredBlockHeaderByte(input[0])) {
+    if (input.len != 0 and isStoredBlockHeaderByte(input[0])) {
         if (try planRawStoredOnly(input)) |stored_plan| {
             if (expected_output_len < stored_plan.output_len) return error.SizeMismatch;
             if (stored_plan.input_read != input.len) return error.TrailingData;
@@ -11954,6 +11954,19 @@ test "dictionary exact-size alloc decoders enforce declared output length" {
     defer std.testing.allocator.free(raw_exact);
     try std.testing.expectEqualSlices(u8, input, raw_exact);
     try std.testing.expectError(error.SizeMismatch, decodeRawAutoAllocWithDictionaryExactSize(std.testing.allocator, raw, dictionary, input.len - 1));
+
+    const raw_stored = try encodeRawStoredAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(raw_stored);
+    var raw_stored_short_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.SizeMismatch, decodeRawAutoAllocWithDictionaryExactSize(raw_stored_short_failing.allocator(), raw_stored, dictionary, input.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), raw_stored_short_failing.allocations);
+    var raw_stored_trailing = try std.testing.allocator.alloc(u8, raw_stored.len + 1);
+    defer std.testing.allocator.free(raw_stored_trailing);
+    @memcpy(raw_stored_trailing[0..raw_stored.len], raw_stored);
+    raw_stored_trailing[raw_stored.len] = 0;
+    var raw_stored_trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TrailingData, decodeRawAutoAllocWithDictionaryExactSize(raw_stored_trailing_failing.allocator(), raw_stored_trailing, dictionary, input.len));
+    try std.testing.expectEqual(@as(usize, 0), raw_stored_trailing_failing.allocations);
 
     const zlib_frame = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, input, dictionary, optionsForLevel(.default));
     defer std.testing.allocator.free(zlib_frame);
