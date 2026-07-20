@@ -297,7 +297,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_deflate_extra_bits_bench_csv = b.addRunArtifact(deflate_extra_bits_bench_exe);
-    run_deflate_extra_bits_bench_csv.addArgs(&.{ "--csv", "zig-out/vort-deflate-extra-bits-bench.csv" });
+    run_deflate_extra_bits_bench_csv.addArgs(&.{ "--repeat", "3", "--csv", "zig-out/vort-deflate-extra-bits-bench.csv" });
     const deflate_extra_bits_bench_csv_step = b.step("run-deflate-extra-bits-bench-csv", "Write focused DEFLATE extra-bit reader benchmark CSV");
     deflate_extra_bits_bench_csv_step.dependOn(&run_deflate_extra_bits_bench_csv.step);
 

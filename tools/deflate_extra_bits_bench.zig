@@ -72,6 +72,7 @@ const Row = struct {
     bits: u6,
     reads_per_iter: usize,
     iterations: usize,
+    repeat: usize,
     input_bytes: usize,
     elapsed_ns: i128,
     reads_per_s: f64,
@@ -120,6 +121,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv_path: ?[]const u8 = null;
     var iterations_override: ?usize = null;
+    var repeat: usize = 1;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--csv")) {
             csv_path = args.next() orelse return error.MissingReportPath;
@@ -130,17 +132,22 @@ pub fn main(init: std.process.Init) !void {
             if (iterations_override.? == 0) return error.InvalidBlockPlan;
             continue;
         }
+        if (std.mem.eql(u8, arg, "--repeat")) {
+            repeat = try std.fmt.parseInt(usize, args.next() orelse return error.MissingReportPath, 10);
+            if (repeat == 0) return error.InvalidBlockPlan;
+            continue;
+        }
         return error.UnknownArgument;
     }
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,reader,kernel,bits,reads_per_iter,iterations,input_bytes,elapsed_ns,reads_per_s,mib_per_s,checksum\n");
+    try csv.writer.writeAll("case,reader,kernel,bits,reads_per_iter,iterations,repeat,input_bytes,elapsed_ns,reads_per_s,mib_per_s,checksum\n");
 
     for (cases) |case| {
         const iterations = iterations_override orelse iterationsFor(case);
         for (readers) |reader| {
-            const row = try runCase(init, case, reader, iterations);
+            const row = try runCase(init, case, reader, iterations, repeat);
             try writeRow(&csv.writer, row);
         }
     }
@@ -149,11 +156,11 @@ pub fn main(init: std.process.Init) !void {
         for (readers) |reader| {
             if (std.mem.endsWith(u8, case.name, "-length")) {
                 inline for (.{ ExtraKernel.current, ExtraKernel.staged }) |kernel| {
-                    const row = try runMixedCase(init, case, reader, kernel, iterations);
+                    const row = try runMixedCase(init, case, reader, kernel, iterations, repeat);
                     try writeRow(&csv.writer, row);
                 }
             } else {
-                const row = try runMixedCase(init, case, reader, null, iterations);
+                const row = try runMixedCase(init, case, reader, null, iterations, repeat);
                 try writeRow(&csv.writer, row);
             }
         }
@@ -162,7 +169,7 @@ pub fn main(init: std.process.Init) !void {
         const iterations = iterations_override orelse iterationsForDistance(case);
         for (readers) |reader| {
             inline for (.{ DistanceKernel.current, DistanceKernel.fused18 }) |kernel| {
-                const row = try runDistanceCase(init, case, reader, kernel, iterations);
+                const row = try runDistanceCase(init, case, reader, kernel, iterations, repeat);
                 try writeRow(&csv.writer, row);
             }
         }
@@ -196,7 +203,7 @@ fn sumCounts(comptime counts_by_width: anytype) usize {
     return total;
 }
 
-fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iterations: usize) !Row {
+fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iterations: usize, repeat: usize) !Row {
     const input_len = try bytesForReads(case.bits, case.reads_per_iter);
     const input = try init.gpa.alloc(u8, input_len);
     defer init.gpa.free(input);
@@ -213,18 +220,26 @@ fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iter
         });
     defer if (reader_kind != .buffered) init.gpa.free(chunks);
 
-    const start = std.Io.Clock.awake.now(init.io);
-    var checksum: u64 = 0;
-    var iter: usize = 0;
-    while (iter < iterations) : (iter += 1) {
-        checksum +%= switch (reader_kind) {
-            .buffered => try runBuffered(input, case.bits, case.reads_per_iter),
-            .chunked_4096, .chunked_64, .chunked_1 => try runChunked(chunks, case.bits, case.reads_per_iter),
-            .span_4096, .span_64, .span_1 => try runSpan(chunks, case.bits, case.reads_per_iter),
-        };
-    }
-    const elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
-    std.mem.doNotOptimizeAway(checksum);
+    const timed = try runRepeated(init, repeat, struct {
+        fn run(ctx: @TypeOf(.{ input, chunks, reader_kind, case.bits, case.reads_per_iter, iterations })) !u64 {
+            const in = ctx[0];
+            const ch = ctx[1];
+            const kind = ctx[2];
+            const bits = ctx[3];
+            const reads = ctx[4];
+            const iters = ctx[5];
+            var checksum: u64 = 0;
+            var iter: usize = 0;
+            while (iter < iters) : (iter += 1) {
+                checksum +%= switch (kind) {
+                    .buffered => try runBuffered(in, bits, reads),
+                    .chunked_4096, .chunked_64, .chunked_1 => try runChunked(ch, bits, reads),
+                    .span_4096, .span_64, .span_1 => try runSpan(ch, bits, reads),
+                };
+            }
+            return checksum;
+        }
+    }.run, .{ input, chunks, reader_kind, case.bits, case.reads_per_iter, iterations });
 
     return .{
         .case = case.name,
@@ -233,15 +248,16 @@ fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iter
         .bits = case.bits,
         .reads_per_iter = case.reads_per_iter,
         .iterations = iterations,
+        .repeat = repeat,
         .input_bytes = input.len * iterations,
-        .elapsed_ns = elapsed_ns,
-        .reads_per_s = readsPerSecond(case.reads_per_iter * iterations, elapsed_ns),
-        .mib_per_s = mibPerSecond(input.len * iterations, elapsed_ns),
-        .checksum = checksum,
+        .elapsed_ns = timed.elapsed_ns,
+        .reads_per_s = readsPerSecond(case.reads_per_iter * iterations, timed.elapsed_ns),
+        .mib_per_s = mibPerSecond(input.len * iterations, timed.elapsed_ns),
+        .checksum = timed.checksum,
     };
 }
 
-fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: ReaderKind, comptime kernel: ?ExtraKernel, iterations: usize) !Row {
+fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: ReaderKind, comptime kernel: ?ExtraKernel, iterations: usize, repeat: usize) !Row {
     const input_len = try bytesForPattern(case.pattern, case.reads_per_iter);
     const input = try init.gpa.alloc(u8, input_len);
     defer init.gpa.free(input);
@@ -258,18 +274,26 @@ fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: Reader
         });
     defer if (reader_kind != .buffered) init.gpa.free(chunks);
 
-    const start = std.Io.Clock.awake.now(init.io);
-    var checksum: u64 = 0;
-    var iter: usize = 0;
-    while (iter < iterations) : (iter += 1) {
-        checksum +%= switch (reader_kind) {
-            .buffered => try runMixedBuffered(input, case.pattern, case.reads_per_iter, kernel),
-            .chunked_4096, .chunked_64, .chunked_1 => try runMixedChunked(chunks, case.pattern, case.reads_per_iter, kernel),
-            .span_4096, .span_64, .span_1 => try runMixedSpan(chunks, case.pattern, case.reads_per_iter, kernel),
-        };
-    }
-    const elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
-    std.mem.doNotOptimizeAway(checksum);
+    const timed = try runRepeated(init, repeat, struct {
+        fn run(ctx: @TypeOf(.{ input, chunks, reader_kind, case.pattern, case.reads_per_iter, iterations })) !u64 {
+            const in = ctx[0];
+            const ch = ctx[1];
+            const kind = ctx[2];
+            const pattern = ctx[3];
+            const reads = ctx[4];
+            const iters = ctx[5];
+            var checksum: u64 = 0;
+            var iter: usize = 0;
+            while (iter < iters) : (iter += 1) {
+                checksum +%= switch (kind) {
+                    .buffered => try runMixedBuffered(in, pattern, reads, kernel),
+                    .chunked_4096, .chunked_64, .chunked_1 => try runMixedChunked(ch, pattern, reads, kernel),
+                    .span_4096, .span_64, .span_1 => try runMixedSpan(ch, pattern, reads, kernel),
+                };
+            }
+            return checksum;
+        }
+    }.run, .{ input, chunks, reader_kind, case.pattern, case.reads_per_iter, iterations });
 
     return .{
         .case = case.name,
@@ -278,15 +302,16 @@ fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: Reader
         .bits = 0,
         .reads_per_iter = case.reads_per_iter,
         .iterations = iterations,
+        .repeat = repeat,
         .input_bytes = input.len * iterations,
-        .elapsed_ns = elapsed_ns,
-        .reads_per_s = readsPerSecond(case.reads_per_iter * iterations, elapsed_ns),
-        .mib_per_s = mibPerSecond(input.len * iterations, elapsed_ns),
-        .checksum = checksum,
+        .elapsed_ns = timed.elapsed_ns,
+        .reads_per_s = readsPerSecond(case.reads_per_iter * iterations, timed.elapsed_ns),
+        .mib_per_s = mibPerSecond(input.len * iterations, timed.elapsed_ns),
+        .checksum = timed.checksum,
     };
 }
 
-fn runDistanceCase(init: std.process.Init, case: DistanceCaseSpec, reader_kind: ReaderKind, kernel: DistanceKernel, iterations: usize) !Row {
+fn runDistanceCase(init: std.process.Init, case: DistanceCaseSpec, reader_kind: ReaderKind, kernel: DistanceKernel, iterations: usize, repeat: usize) !Row {
     const input_len = try bytesForDistanceSymbols(case.symbols, case.reads_per_iter);
     const input = try init.gpa.alloc(u8, input_len);
     defer init.gpa.free(input);
@@ -303,18 +328,26 @@ fn runDistanceCase(init: std.process.Init, case: DistanceCaseSpec, reader_kind: 
         });
     defer if (reader_kind != .buffered) init.gpa.free(chunks);
 
-    const start = std.Io.Clock.awake.now(init.io);
-    var checksum: u64 = 0;
-    var iter: usize = 0;
-    while (iter < iterations) : (iter += 1) {
-        checksum +%= switch (reader_kind) {
-            .buffered => try runDistanceBuffered(input, case.reads_per_iter, kernel),
-            .chunked_4096, .chunked_64, .chunked_1 => try runDistanceChunked(chunks, case.reads_per_iter, kernel),
-            .span_4096, .span_64, .span_1 => try runDistanceSpan(chunks, case.reads_per_iter, kernel),
-        };
-    }
-    const elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
-    std.mem.doNotOptimizeAway(checksum);
+    const timed = try runRepeated(init, repeat, struct {
+        fn run(ctx: @TypeOf(.{ input, chunks, reader_kind, case.reads_per_iter, kernel, iterations })) !u64 {
+            const in = ctx[0];
+            const ch = ctx[1];
+            const kind = ctx[2];
+            const reads = ctx[3];
+            const active_kernel = ctx[4];
+            const iters = ctx[5];
+            var checksum: u64 = 0;
+            var iter: usize = 0;
+            while (iter < iters) : (iter += 1) {
+                checksum +%= switch (kind) {
+                    .buffered => try runDistanceBuffered(in, reads, active_kernel),
+                    .chunked_4096, .chunked_64, .chunked_1 => try runDistanceChunked(ch, reads, active_kernel),
+                    .span_4096, .span_64, .span_1 => try runDistanceSpan(ch, reads, active_kernel),
+                };
+            }
+            return checksum;
+        }
+    }.run, .{ input, chunks, reader_kind, case.reads_per_iter, kernel, iterations });
 
     return .{
         .case = case.name,
@@ -323,11 +356,39 @@ fn runDistanceCase(init: std.process.Init, case: DistanceCaseSpec, reader_kind: 
         .bits = 0,
         .reads_per_iter = case.reads_per_iter,
         .iterations = iterations,
+        .repeat = repeat,
         .input_bytes = input.len * iterations,
-        .elapsed_ns = elapsed_ns,
-        .reads_per_s = readsPerSecond(case.reads_per_iter * iterations, elapsed_ns),
-        .mib_per_s = mibPerSecond(input.len * iterations, elapsed_ns),
-        .checksum = checksum,
+        .elapsed_ns = timed.elapsed_ns,
+        .reads_per_s = readsPerSecond(case.reads_per_iter * iterations, timed.elapsed_ns),
+        .mib_per_s = mibPerSecond(input.len * iterations, timed.elapsed_ns),
+        .checksum = timed.checksum,
+    };
+}
+
+const TimedResult = struct {
+    elapsed_ns: i128,
+    checksum: u64,
+};
+
+fn runRepeated(init: std.process.Init, repeat: usize, runFn: anytype, ctx: anytype) !TimedResult {
+    const elapsed_samples = try init.gpa.alloc(i128, repeat);
+    defer init.gpa.free(elapsed_samples);
+    var checksum: ?u64 = null;
+    for (elapsed_samples) |*elapsed| {
+        const start = std.Io.Clock.awake.now(init.io);
+        const sample_checksum = try runFn(ctx);
+        elapsed.* = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+        if (checksum) |expected| {
+            if (sample_checksum != expected) return error.ChecksumMismatch;
+        } else {
+            checksum = sample_checksum;
+        }
+        std.mem.doNotOptimizeAway(sample_checksum);
+    }
+    std.mem.sort(i128, elapsed_samples, {}, comptime std.sort.asc(i128));
+    return .{
+        .elapsed_ns = elapsed_samples[repeat / 2],
+        .checksum = checksum orelse 0,
     };
 }
 
@@ -557,13 +618,14 @@ fn mibPerSecond(bytes: usize, elapsed_ns: i128) f64 {
 }
 
 fn writeRow(writer: *std.Io.Writer, row: Row) !void {
-    try writer.print("{s},{s},{s},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d}\n", .{
+    try writer.print("{s},{s},{s},{d},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d}\n", .{
         row.case,
         row.reader,
         row.kernel,
         row.bits,
         row.reads_per_iter,
         row.iterations,
+        row.repeat,
         row.input_bytes,
         row.elapsed_ns,
         row.reads_per_s,

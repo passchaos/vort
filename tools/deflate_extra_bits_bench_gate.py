@@ -18,6 +18,7 @@ EXPECTED_COLUMNS = {
     "bits",
     "reads_per_iter",
     "iterations",
+    "repeat",
     "input_bytes",
     "elapsed_ns",
     "reads_per_s",
@@ -131,6 +132,9 @@ def main() -> int:
             return 1
         if not all(positive_int(row, field) for field in ("reads_per_iter", "iterations", "input_bytes", "elapsed_ns", "checksum")):
             print(f"deflate_extra_bits_bench_gate=bad_int row={row}", file=sys.stderr)
+            return 1
+        if not positive_int(row, "repeat"):
+            print(f"deflate_extra_bits_bench_gate=bad_repeat row={row}", file=sys.stderr)
             return 1
         if not all(positive_float(row, field) for field in ("reads_per_s", "mib_per_s")):
             print(f"deflate_extra_bits_bench_gate=bad_float row={row}", file=sys.stderr)
