@@ -24,10 +24,12 @@ EXPECTED_COLUMNS = {
     "contiguous_mib_s",
     "chunk_join_mib_s",
     "chunk_direct_mib_s",
+    "chunk_exact_mib_s",
     "direct_strategy",
     "direct_over_contiguous",
     "direct_over_join",
     "join_over_contiguous",
+    "exact_over_direct",
     "mix",
 }
 
@@ -158,7 +160,7 @@ def main() -> int:
         if not all(positive_int(row, key) for key in ("zlib_bytes", "chunk_count", "iterations", "repeat", "mix")):
             print(f"chunked_zlib_bench_gate=bad_positive_int case={case} row={row}", file=sys.stderr)
             return 1
-        if not all(positive_float(row, key) for key in ("contiguous_mib_s", "chunk_join_mib_s", "chunk_direct_mib_s", "direct_over_contiguous", "direct_over_join", "join_over_contiguous")):
+        if not all(positive_float(row, key) for key in ("contiguous_mib_s", "chunk_join_mib_s", "chunk_direct_mib_s", "chunk_exact_mib_s", "direct_over_contiguous", "direct_over_join", "join_over_contiguous", "exact_over_direct")):
             print(f"chunked_zlib_bench_gate=bad_positive_float case={case} row={row}", file=sys.stderr)
             return 1
 
@@ -179,6 +181,9 @@ def main() -> int:
             return 1
         if not check_ratio(row, "chunk_join_mib_s", "contiguous_mib_s", "join_over_contiguous"):
             print(f"chunked_zlib_bench_gate=bad_join_contiguous_ratio case={case} row={row}", file=sys.stderr)
+            return 1
+        if not check_ratio(row, "chunk_exact_mib_s", "chunk_direct_mib_s", "exact_over_direct"):
+            print(f"chunked_zlib_bench_gate=bad_exact_direct_ratio case={case} row={row}", file=sys.stderr)
             return 1
 
     print(f"chunked_zlib_bench_gate=ok rows={len(rows)}")

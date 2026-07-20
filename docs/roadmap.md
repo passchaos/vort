@@ -155,6 +155,10 @@ architecture blindly.
   non-stored compressed members, keeping tiny PNG IDAT joins off the 64 KiB stack
   path while preserving the direct cursor path for large streams.
 - [x] Chunked zlib benchmark repeat3 CSV now has a schema/value gate for the PNG-like contiguous/join/direct chunked decode cases, including a `direct_strategy` column and large literal/match rows that record current `span-reader` execution instead of bounded stack-join.
+- [x] Chunked zlib benchmark rows now include exact-size allocating chunk decode
+  throughput (`chunk_exact_mib_s`) and `exact_over_direct` ratios, so known-size
+  callers such as imx split-IDAT full-inflate fallback have direct evidence
+  beside join-then-decode and caller-buffer direct chunked decode.
 - [x] Extended the chunked zlib benchmark/gate with a large match-heavy dynamic row that also exceeds the bounded stack-join limit, keeping true chunked-reader match-copy/history costs visible beside the literal-only row.
 - [x] Extended the dynamic decode profile gate with the same chunked-window-match shape, requiring a match-heavy non-overlap-dominated row above the stack-join threshold so future chunked-reader optimizations can see match/history/extra-bit attribution.
 - [x] Tested routing every stored chunked zlib stream through the direct stored reader, but rejected it because the repeat5 chunked benchmark regressed tiny/empty stored chunks; the existing stack-join cutoff remains the safer policy.
