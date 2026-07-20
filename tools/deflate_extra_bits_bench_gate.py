@@ -22,9 +22,17 @@ EXPECTED_COLUMNS = {
     "mib_per_s",
     "checksum",
 }
-EXPECTED_CASES = {"extra-1", "extra-3", "extra-5", "extra-9", "extra-13"}
+EXPECTED_CASES = {"extra-1", "extra-3", "extra-5", "extra-9", "extra-13", "mixed-readme-distance", "mixed-roadmap-distance"}
 EXPECTED_READERS = {"buffered", "chunked_4096", "span_4096", "chunked_64", "span_64", "chunked_1", "span_1"}
-EXPECTED_BITS = {"extra-1": 1, "extra-3": 3, "extra-5": 5, "extra-9": 9, "extra-13": 13}
+EXPECTED_BITS = {
+    "extra-1": 1,
+    "extra-3": 3,
+    "extra-5": 5,
+    "extra-9": 9,
+    "extra-13": 13,
+    "mixed-readme-distance": 0,
+    "mixed-roadmap-distance": 0,
+}
 
 
 def positive_int(row: dict[str, str], key: str) -> bool:

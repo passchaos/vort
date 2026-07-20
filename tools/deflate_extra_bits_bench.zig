@@ -29,6 +29,12 @@ const CaseSpec = struct {
     reads_per_iter: usize,
 };
 
+const MixedCaseSpec = struct {
+    name: []const u8,
+    pattern: []const u6,
+    reads_per_iter: usize,
+};
+
 const Row = struct {
     case: []const u8,
     reader: []const u8,
@@ -48,6 +54,19 @@ const cases = [_]CaseSpec{
     .{ .name = "extra-5", .bits = 5, .reads_per_iter = 96 * 1024 },
     .{ .name = "extra-9", .bits = 9, .reads_per_iter = 64 * 1024 },
     .{ .name = "extra-13", .bits = 13, .reads_per_iter = 48 * 1024 },
+};
+
+// Width distributions copied from the ReleaseFast dynamic profile rows for
+// README.md and docs/roadmap.md. They preserve the actual mixed extra-bit
+// cadence better than the single-width rows above, so reader changes can be
+// screened against the text-heavy non-overlap workload before touching
+// production distance/length decoding.
+const readme_distance_width_pattern = makeWidthPattern(.{ 0, 4, 10, 27, 82, 138, 257, 188, 163, 164, 180, 121, 91, 75, 73 });
+const roadmap_distance_width_pattern = makeWidthPattern(.{ 0, 3, 11, 36, 61, 238, 812, 726, 726, 870, 1012, 1123, 1200, 1392, 1435 });
+
+const mixed_cases = [_]MixedCaseSpec{
+    .{ .name = "mixed-readme-distance", .pattern = &readme_distance_width_pattern, .reads_per_iter = readme_distance_width_pattern.len * 64 },
+    .{ .name = "mixed-roadmap-distance", .pattern = &roadmap_distance_width_pattern, .reads_per_iter = roadmap_distance_width_pattern.len * 16 },
 };
 
 const readers = [_]ReaderKind{ .buffered, .chunked_4096, .span_4096, .chunked_64, .span_64, .chunked_1, .span_1 };
@@ -83,6 +102,13 @@ pub fn main(init: std.process.Init) !void {
             try writeRow(&csv.writer, row);
         }
     }
+    for (mixed_cases) |case| {
+        const iterations = iterations_override orelse iterationsForMixed(case);
+        for (readers) |reader| {
+            const row = try runMixedCase(init, case, reader, iterations);
+            try writeRow(&csv.writer, row);
+        }
+    }
 
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
@@ -91,6 +117,25 @@ pub fn main(init: std.process.Init) !void {
     try stdout.flush();
 
     if (csv_path) |path| try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
+}
+
+fn makeWidthPattern(comptime counts_by_width: anytype) [sumCounts(counts_by_width)]u6 {
+    @setEvalBranchQuota(20000);
+    var pattern: [sumCounts(counts_by_width)]u6 = undefined;
+    var offset: usize = 0;
+    inline for (counts_by_width, 0..) |count, width| {
+        inline for (0..count) |_| {
+            pattern[offset] = @intCast(width);
+            offset += 1;
+        }
+    }
+    return pattern;
+}
+
+fn sumCounts(comptime counts_by_width: anytype) usize {
+    var total: usize = 0;
+    inline for (counts_by_width) |count| total += count;
+    return total;
 }
 
 fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iterations: usize) !Row {
@@ -137,11 +182,66 @@ fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iter
     };
 }
 
+fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: ReaderKind, iterations: usize) !Row {
+    const input_len = try bytesForPattern(case.pattern, case.reads_per_iter);
+    const input = try init.gpa.alloc(u8, input_len);
+    defer init.gpa.free(input);
+    fillInput(input, 17);
+
+    const chunks = if (reader_kind == .buffered)
+        &[_][]const u8{}
+    else
+        try makeChunks(init.gpa, input, switch (reader_kind) {
+            .chunked_4096, .span_4096 => 4096,
+            .chunked_64, .span_64 => 64,
+            .chunked_1, .span_1 => 1,
+            .buffered => unreachable,
+        });
+    defer if (reader_kind != .buffered) init.gpa.free(chunks);
+
+    const start = std.Io.Clock.awake.now(init.io);
+    var checksum: u64 = 0;
+    var iter: usize = 0;
+    while (iter < iterations) : (iter += 1) {
+        checksum +%= switch (reader_kind) {
+            .buffered => try runMixedBuffered(input, case.pattern, case.reads_per_iter),
+            .chunked_4096, .chunked_64, .chunked_1 => try runMixedChunked(chunks, case.pattern, case.reads_per_iter),
+            .span_4096, .span_64, .span_1 => try runMixedSpan(chunks, case.pattern, case.reads_per_iter),
+        };
+    }
+    const elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+    std.mem.doNotOptimizeAway(checksum);
+
+    return .{
+        .case = case.name,
+        .reader = reader_kind.label(),
+        .bits = 0,
+        .reads_per_iter = case.reads_per_iter,
+        .iterations = iterations,
+        .input_bytes = input.len * iterations,
+        .elapsed_ns = elapsed_ns,
+        .reads_per_s = readsPerSecond(case.reads_per_iter * iterations, elapsed_ns),
+        .mib_per_s = mibPerSecond(input.len * iterations, elapsed_ns),
+        .checksum = checksum,
+    };
+}
+
 fn runBuffered(input: []const u8, bits: u6, reads: usize) !u64 {
     var reader = vort.bitstream.BufferedBitReader.init(input);
     var sum: u64 = 0;
     var i: usize = 0;
     while (i < reads) : (i += 1) sum +%= try reader.readBits(u16, bits);
+    return sum;
+}
+
+fn runMixedBuffered(input: []const u8, pattern: []const u6, reads: usize) !u64 {
+    var reader = vort.bitstream.BufferedBitReader.init(input);
+    var sum: u64 = 0;
+    var i: usize = 0;
+    while (i < reads) : (i += 1) {
+        const bits = pattern[i % pattern.len];
+        if (bits != 0) sum +%= try reader.readBits(u16, bits);
+    }
     return sum;
 }
 
@@ -153,6 +253,17 @@ fn runChunked(chunks: []const []const u8, bits: u6, reads: usize) !u64 {
     return sum;
 }
 
+fn runMixedChunked(chunks: []const []const u8, pattern: []const u6, reads: usize) !u64 {
+    var reader = try vort.bitstream.ChunkedBitReader.init(chunks);
+    var sum: u64 = 0;
+    var i: usize = 0;
+    while (i < reads) : (i += 1) {
+        const bits = pattern[i % pattern.len];
+        if (bits != 0) sum +%= try reader.readBits(u16, bits);
+    }
+    return sum;
+}
+
 fn runSpan(chunks: []const []const u8, bits: u6, reads: usize) !u64 {
     var reader = try vort.bitstream.ChunkedSpanBitReader.init(chunks);
     var sum: u64 = 0;
@@ -161,8 +272,29 @@ fn runSpan(chunks: []const []const u8, bits: u6, reads: usize) !u64 {
     return sum;
 }
 
+fn runMixedSpan(chunks: []const []const u8, pattern: []const u6, reads: usize) !u64 {
+    var reader = try vort.bitstream.ChunkedSpanBitReader.init(chunks);
+    var sum: u64 = 0;
+    var i: usize = 0;
+    while (i < reads) : (i += 1) {
+        const bits = pattern[i % pattern.len];
+        if (bits != 0) sum +%= try reader.readBits(u16, bits);
+    }
+    return sum;
+}
+
 fn bytesForReads(bits: u6, reads: usize) !usize {
     const total_bits = try std.math.mul(usize, bits, reads);
+    return (total_bits + 7) / 8 + 8;
+}
+
+fn bytesForPattern(pattern: []const u6, reads: usize) !usize {
+    var bits_per_pattern: usize = 0;
+    for (pattern) |bits| bits_per_pattern += bits;
+    const full_patterns = reads / pattern.len;
+    const remainder = reads % pattern.len;
+    var total_bits = try std.math.mul(usize, bits_per_pattern, full_patterns);
+    for (pattern[0..remainder]) |bits| total_bits = try std.math.add(usize, total_bits, bits);
     return (total_bits + 7) / 8 + 8;
 }
 
@@ -185,6 +317,11 @@ fn makeChunks(allocator: std.mem.Allocator, input: []const u8, chunk_len: usize)
 }
 
 fn iterationsFor(case: CaseSpec) usize {
+    const target_reads: usize = 4 * 1024 * 1024;
+    return @max(@as(usize, 8), @min(@as(usize, 512), target_reads / @max(case.reads_per_iter, 1)));
+}
+
+fn iterationsForMixed(case: MixedCaseSpec) usize {
     const target_reads: usize = 4 * 1024 * 1024;
     return @max(@as(usize, 8), @min(@as(usize, 512), target_reads / @max(case.reads_per_iter, 1)));
 }
