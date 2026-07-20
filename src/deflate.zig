@@ -3438,7 +3438,8 @@ fn decodeZlibChunksWithOptionalDictionaryAndOptionsDirectKnownTotal(chunks: []co
     var reader = try bitstream.ChunkedSpanBitReader.initAtKnownTotal(chunks, header.data_offset, total_len);
     const raw = try decodeRawAutoWithDictionaryFromReader(&reader, header.data_offset, raw_dictionary, output);
     const footer_offset = header.data_offset + raw.input_read;
-    try validateZlibFooterChunksWithKnownTotal(chunks, total_len, footer_offset, checksum.adler32(output[0..raw.output_written]), options);
+    const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(output[0..raw.output_written]);
+    try validateZlibFooterChunksWithKnownTotal(chunks, total_len, footer_offset, actual_adler, options);
     return raw.output_written;
 }
 
@@ -9994,6 +9995,35 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     const relaxed_alloc = try decodeZlibChunksAllocWithOptionsLimited(std.testing.allocator, &relaxed_chunks, relaxed, input.len);
     defer std.testing.allocator.free(relaxed_alloc);
     try std.testing.expectEqualSlices(u8, input, relaxed_alloc);
+
+    var large_input: [70 * 1024]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&large_input) |*byte| {
+        state = state *% 1664525 +% 1013904223;
+        byte.* = @truncate(state >> 24);
+    }
+    const large_frame = try encodeZlibFixedAlloc(std.testing.allocator, &large_input);
+    defer std.testing.allocator.free(large_frame);
+    try std.testing.expect(large_frame.len > stack_chunked_zlib_join_max_input_len);
+    try std.testing.expectEqual(RawDeflateBlockType.fixed, (try parseRawDeflateHeaderInfo(large_frame[2..])).block_type);
+
+    var large_bad_adler = try std.testing.allocator.dupe(u8, large_frame);
+    defer std.testing.allocator.free(large_bad_adler);
+    large_bad_adler[large_bad_adler.len - 1] ^= 0x80;
+    const large_chunks = [_][]const u8{
+        large_bad_adler[0..2],
+        large_bad_adler[2..32771],
+        large_bad_adler[32771 .. large_bad_adler.len - 4],
+        large_bad_adler[large_bad_adler.len - 4 ..],
+    };
+    var large_output: [large_input.len]u8 = undefined;
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibChunksInto(&large_chunks, &large_output));
+    @memset(&large_output, 0);
+    // Keep this above the stack-join threshold so the direct chunked span reader,
+    // not the contiguous stack buffer fallback, proves that relaxed callers avoid
+    // the full-output Adler pass.
+    try std.testing.expectEqual(large_input.len, try decodeZlibChunksIntoWithOptions(&large_chunks, &large_output, .{ .ignore_adler = true }));
+    try std.testing.expectEqualSlices(u8, &large_input, &large_output);
 
     const dict = "chunked ";
     const dict_frame = try encodeZlibLevelWithDictionaryAlloc(std.testing.allocator, input, dict, 6);
