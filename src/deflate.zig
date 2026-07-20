@@ -1916,6 +1916,13 @@ pub fn decodeRawAutoAllocExactSize(allocator: std.mem.Allocator, input: []const 
 }
 
 pub fn decodeRawAutoAllocWithDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, expected_output_len: usize) ![]u8 {
+    if (dictionary.len == 0 and input.len != 0 and isStoredBlockHeaderByte(input[0])) {
+        if (try planRawStoredOnly(input)) |stored_plan| {
+            if (expected_output_len < stored_plan.output_len) return error.SizeMismatch;
+            if (stored_plan.input_read != input.len) return error.TrailingData;
+            if (expected_output_len != stored_plan.output_len) return error.SizeMismatch;
+        }
+    }
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const decoded = decodeRawAutoWithDictionary(input, dictionary, out) catch |err| switch (err) {
@@ -8486,6 +8493,12 @@ test "stored deflate exact-size alloc decoders validate exact lengths" {
     var raw_trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.TrailingData, decodeRawStoredAllocExactSize(raw_trailing_failing.allocator(), raw_trailing, plain.len));
     try std.testing.expectEqual(@as(usize, 0), raw_trailing_failing.allocations);
+    var raw_auto_short_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.SizeMismatch, decodeRawAutoAllocExactSize(raw_auto_short_failing.allocator(), raw, plain.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), raw_auto_short_failing.allocations);
+    var raw_auto_trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TrailingData, decodeRawAutoAllocExactSize(raw_auto_trailing_failing.allocator(), raw_trailing, plain.len));
+    try std.testing.expectEqual(@as(usize, 0), raw_auto_trailing_failing.allocations);
 
     const zlib_frame = try encodeZlibStoredAlloc(std.testing.allocator, plain);
     defer std.testing.allocator.free(zlib_frame);
