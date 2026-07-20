@@ -38,7 +38,11 @@ const Row = struct {
     zlib_into_no_adler_mib_s: f64,
     zlib_into_no_adler_over_strict: f64,
     gzip_mib_s: f64,
+    gzip_no_crc_mib_s: f64,
+    gzip_no_crc_over_strict: f64,
     gzip_exact_mib_s: f64,
+    gzip_exact_no_crc_mib_s: f64,
+    gzip_exact_no_crc_over_strict: f64,
     gzip_into_mib_s: f64,
     gzip_into_no_crc_mib_s: f64,
     gzip_into_no_crc_over_strict: f64,
@@ -463,6 +467,22 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
     }
     const gzip_ns = gzip_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 
+    const gzip_no_crc_options = vort.GzipDecodeOptions{ .ignore_crc32 = true };
+    const gzip_no_crc_warmup = try vort.decodeGzipAllocWithOptions(init.gpa, gzip_frame, gzip_no_crc_options);
+    if (!std.mem.eql(u8, gzip_no_crc_warmup, case.payload)) return error.DecodeLengthMismatch;
+    init.gpa.free(gzip_no_crc_warmup);
+    const gzip_no_crc_start = std.Io.Clock.awake.now(init.io);
+    for (0..iterations) |_| {
+        const decoded = try vort.decodeGzipAllocWithOptions(init.gpa, gzip_frame, gzip_no_crc_options);
+        {
+            defer init.gpa.free(decoded);
+            if (decoded.len != case.payload.len) return error.DecodeLengthMismatch;
+            mix +%= decoded.len;
+            if (decoded.len != 0) mix +%= decoded[0];
+        }
+    }
+    const gzip_no_crc_ns = gzip_no_crc_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+
     const gzip_exact_warmup = try vort.decodeGzipAllocExactSize(init.gpa, gzip_frame, case.payload.len);
     if (!std.mem.eql(u8, gzip_exact_warmup, case.payload)) return error.DecodeLengthMismatch;
     init.gpa.free(gzip_exact_warmup);
@@ -477,6 +497,20 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
     }
     const gzip_exact_ns = gzip_exact_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 
+    const gzip_exact_no_crc_warmup = try vort.decodeGzipAllocWithOptionsExactSize(init.gpa, gzip_frame, gzip_no_crc_options, case.payload.len);
+    if (!std.mem.eql(u8, gzip_exact_no_crc_warmup, case.payload)) return error.DecodeLengthMismatch;
+    init.gpa.free(gzip_exact_no_crc_warmup);
+    const gzip_exact_no_crc_start = std.Io.Clock.awake.now(init.io);
+    for (0..iterations) |_| {
+        const decoded = try vort.decodeGzipAllocWithOptionsExactSize(init.gpa, gzip_frame, gzip_no_crc_options, case.payload.len);
+        {
+            defer init.gpa.free(decoded);
+            mix +%= decoded.len;
+            if (decoded.len != 0) mix +%= decoded[0];
+        }
+    }
+    const gzip_exact_no_crc_ns = gzip_exact_no_crc_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+
     const gzip_scratch = try init.gpa.alloc(u8, case.payload.len);
     defer init.gpa.free(gzip_scratch);
     const gzip_into_warmup = try vort.decodeGzip(gzip_frame, gzip_scratch);
@@ -490,7 +524,6 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
     }
     const gzip_into_ns = gzip_into_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
 
-    const gzip_no_crc_options = vort.GzipDecodeOptions{ .ignore_crc32 = true };
     const gzip_into_no_crc_warmup = try vort.decodeGzipWithOptions(gzip_frame, gzip_scratch, gzip_no_crc_options);
     if (gzip_into_no_crc_warmup != case.payload.len or !std.mem.eql(u8, gzip_scratch, case.payload)) return error.DecodeLengthMismatch;
     const gzip_into_no_crc_start = std.Io.Clock.awake.now(init.io);
@@ -699,7 +732,11 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
         .zlib_into_no_adler_mib_s = throughput(case.payload.len, iterations, zlib_into_no_adler_ns),
         .zlib_into_no_adler_over_strict = ratioSigned(zlib_into_ns, zlib_into_no_adler_ns),
         .gzip_mib_s = throughput(case.payload.len, iterations, gzip_ns),
+        .gzip_no_crc_mib_s = throughput(case.payload.len, iterations, gzip_no_crc_ns),
+        .gzip_no_crc_over_strict = ratioSigned(gzip_ns, gzip_no_crc_ns),
         .gzip_exact_mib_s = throughput(case.payload.len, iterations, gzip_exact_ns),
+        .gzip_exact_no_crc_mib_s = throughput(case.payload.len, iterations, gzip_exact_no_crc_ns),
+        .gzip_exact_no_crc_over_strict = ratioSigned(gzip_exact_ns, gzip_exact_no_crc_ns),
         .gzip_into_mib_s = throughput(case.payload.len, iterations, gzip_into_ns),
         .gzip_into_no_crc_mib_s = throughput(case.payload.len, iterations, gzip_into_no_crc_ns),
         .gzip_into_no_crc_over_strict = ratioSigned(gzip_into_ns, gzip_into_no_crc_ns),
@@ -743,7 +780,7 @@ fn measureCase(init: std.process.Init, case: Case, iterations_override: ?usize) 
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,input_bytes,zlib_bytes,gzip_bytes,raw_bytes,raw_block_type,raw_header_bits,raw_header_bytes,dynamic_hlit,dynamic_hdist,dynamic_hclen,dynamic_literal_nonzero,dynamic_literal_zero,dynamic_literal_max_bits,dynamic_distance_nonzero,dynamic_distance_zero,dynamic_distance_max_bits,iterations,repeat,raw_mib_s,raw_exact_mib_s,raw_into_mib_s,zlib_mib_s,zlib_exact_mib_s,zlib_into_mib_s,zlib_into_no_adler_mib_s,zlib_into_no_adler_over_strict,gzip_mib_s,gzip_exact_mib_s,gzip_into_mib_s,gzip_into_no_crc_mib_s,gzip_into_no_crc_over_strict,gzip_into_no_isize_mib_s,gzip_into_no_isize_over_strict,gzip_into_relaxed_mib_s,gzip_into_relaxed_over_strict,adler32_mib_s,zlib_adler_time_ratio,crc32_mib_s,gzip_crc_time_ratio,raw_stored_mib_s,raw_stored_exact_mib_s,raw_stored_into_mib_s,zlib_stored_mib_s,zlib_stored_exact_mib_s,zlib_stored_into_mib_s,gzip_stored_mib_s,gzip_stored_exact_mib_s,gzip_stored_into_mib_s,zlib_wrapper_time_ratio,zlib_wrapper_exact_time_ratio,zlib_wrapper_into_time_ratio,gzip_wrapper_time_ratio,zlib_wrapper_exact_time_ratio,gzip_wrapper_into_time_ratio,raw_alloc_exact_time_ratio,raw_alloc_into_time_ratio,zlib_alloc_exact_time_ratio,zlib_alloc_into_time_ratio,gzip_alloc_exact_time_ratio,gzip_alloc_into_time_ratio,raw_stored_alloc_time_ratio,zlib_stored_alloc_time_ratio,gzip_stored_alloc_time_ratio,raw_stored_alloc_exact_time_ratio,zlib_stored_alloc_exact_time_ratio,gzip_stored_alloc_exact_time_ratio,mix\n");
+    try writer.writeAll("case,input_bytes,zlib_bytes,gzip_bytes,raw_bytes,raw_block_type,raw_header_bits,raw_header_bytes,dynamic_hlit,dynamic_hdist,dynamic_hclen,dynamic_literal_nonzero,dynamic_literal_zero,dynamic_literal_max_bits,dynamic_distance_nonzero,dynamic_distance_zero,dynamic_distance_max_bits,iterations,repeat,raw_mib_s,raw_exact_mib_s,raw_into_mib_s,zlib_mib_s,zlib_exact_mib_s,zlib_into_mib_s,zlib_into_no_adler_mib_s,zlib_into_no_adler_over_strict,gzip_mib_s,gzip_no_crc_mib_s,gzip_no_crc_over_strict,gzip_exact_mib_s,gzip_exact_no_crc_mib_s,gzip_exact_no_crc_over_strict,gzip_into_mib_s,gzip_into_no_crc_mib_s,gzip_into_no_crc_over_strict,gzip_into_no_isize_mib_s,gzip_into_no_isize_over_strict,gzip_into_relaxed_mib_s,gzip_into_relaxed_over_strict,adler32_mib_s,zlib_adler_time_ratio,crc32_mib_s,gzip_crc_time_ratio,raw_stored_mib_s,raw_stored_exact_mib_s,raw_stored_into_mib_s,zlib_stored_mib_s,zlib_stored_exact_mib_s,zlib_stored_into_mib_s,gzip_stored_mib_s,gzip_stored_exact_mib_s,gzip_stored_into_mib_s,zlib_wrapper_time_ratio,zlib_wrapper_exact_time_ratio,zlib_wrapper_into_time_ratio,gzip_wrapper_time_ratio,zlib_wrapper_exact_time_ratio,gzip_wrapper_into_time_ratio,raw_alloc_exact_time_ratio,raw_alloc_into_time_ratio,zlib_alloc_exact_time_ratio,zlib_alloc_into_time_ratio,gzip_alloc_exact_time_ratio,gzip_alloc_into_time_ratio,raw_stored_alloc_time_ratio,zlib_stored_alloc_time_ratio,gzip_stored_alloc_time_ratio,raw_stored_alloc_exact_time_ratio,zlib_stored_alloc_exact_time_ratio,gzip_stored_alloc_exact_time_ratio,mix\n");
     for (rows) |row| try writeCsvRow(writer, row);
 }
 
@@ -769,7 +806,7 @@ fn writeCsvRow(writer: *std.Io.Writer, row: Row) !void {
         row.iterations,
         row.repeat,
     });
-    try writer.print(",{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.2},{d:.4},{d:.2},{d:.4},{d:.2},{d:.4},{d:.2},{d:.4},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2}", .{
+    try writer.print(",{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.2},{d:.2},{d:.4},{d:.2},{d:.2},{d:.4},{d:.2},{d:.2},{d:.4},{d:.2},{d:.4},{d:.2},{d:.4}", .{
         row.raw_mib_s,
         row.raw_exact_mib_s,
         row.raw_into_mib_s,
@@ -779,7 +816,11 @@ fn writeCsvRow(writer: *std.Io.Writer, row: Row) !void {
         row.zlib_into_no_adler_mib_s,
         row.zlib_into_no_adler_over_strict,
         row.gzip_mib_s,
+        row.gzip_no_crc_mib_s,
+        row.gzip_no_crc_over_strict,
         row.gzip_exact_mib_s,
+        row.gzip_exact_no_crc_mib_s,
+        row.gzip_exact_no_crc_over_strict,
         row.gzip_into_mib_s,
         row.gzip_into_no_crc_mib_s,
         row.gzip_into_no_crc_over_strict,
@@ -787,6 +828,8 @@ fn writeCsvRow(writer: *std.Io.Writer, row: Row) !void {
         row.gzip_into_no_isize_over_strict,
         row.gzip_into_relaxed_mib_s,
         row.gzip_into_relaxed_over_strict,
+    });
+    try writer.print(",{d:.2},{d:.4},{d:.2},{d:.4},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2}", .{
         row.adler32_mib_s,
         row.zlib_adler_time_ratio,
         row.crc32_mib_s,
@@ -828,7 +871,7 @@ fn writeMarkdown(writer: *std.Io.Writer, rows: []const Row, error_rows: []const 
     try writer.writeAll(
         \\# Deflate decode stage report
         \\
-        \\| case | input bytes | raw bytes | block | header bits/bytes | HLIT/HDIST/HCLEN | lit nz/zero/max | dist nz/zero/max | iterations | repeat | raw alloc MiB/s | raw exact MiB/s | raw into MiB/s | zlib alloc MiB/s | zlib exact MiB/s | zlib into MiB/s | zlib no-adler into MiB/s | no-adler/strict | gzip alloc MiB/s | gzip exact MiB/s | gzip into MiB/s | gzip no-crc into MiB/s | no-crc/strict | gzip no-isize into MiB/s | no-isize/strict | gzip relaxed into MiB/s | relaxed/strict | adler32 MiB/s | zlib adler/standalone | crc32 MiB/s | gzip crc/standalone | raw stored alloc MiB/s | raw stored exact MiB/s | raw stored into MiB/s | zlib stored alloc MiB/s | zlib stored exact MiB/s | zlib stored into MiB/s | gzip stored alloc MiB/s | gzip stored exact MiB/s | gzip stored into MiB/s | zlib/raw alloc time | zlib/raw exact time | zlib/raw into time | gzip/raw alloc time | gzip/raw exact time | gzip/raw into time | raw alloc/exact time | raw alloc/into time | zlib alloc/exact time | zlib alloc/into time | gzip alloc/exact time | gzip alloc/into time | raw stored/raw alloc time | zlib stored/zlib alloc time | gzip stored/gzip alloc time | raw stored alloc/exact time | zlib stored alloc/exact time | gzip stored alloc/exact time |
+        \\| case | input bytes | raw bytes | block | header bits/bytes | HLIT/HDIST/HCLEN | lit nz/zero/max | dist nz/zero/max | iterations | repeat | raw alloc MiB/s | raw exact MiB/s | raw into MiB/s | zlib alloc MiB/s | zlib exact MiB/s | zlib into MiB/s | zlib no-adler into MiB/s | no-adler/strict | gzip alloc MiB/s | gzip alloc no-crc MiB/s | alloc no-crc/strict | gzip exact MiB/s | gzip exact no-crc MiB/s | exact no-crc/strict | gzip into MiB/s | gzip no-crc into MiB/s | no-crc/strict | gzip no-isize into MiB/s | no-isize/strict | gzip relaxed into MiB/s | relaxed/strict | adler32 MiB/s | zlib adler/standalone | crc32 MiB/s | gzip crc/standalone | raw stored alloc MiB/s | raw stored exact MiB/s | raw stored into MiB/s | zlib stored alloc MiB/s | zlib stored exact MiB/s | zlib stored into MiB/s | gzip stored alloc MiB/s | gzip stored exact MiB/s | gzip stored into MiB/s | zlib/raw alloc time | zlib/raw exact time | zlib/raw into time | gzip/raw alloc time | gzip/raw exact time | gzip/raw into time | raw alloc/exact time | raw alloc/into time | zlib alloc/exact time | zlib alloc/into time | gzip alloc/exact time | gzip alloc/into time | raw stored/raw alloc time | zlib stored/zlib alloc time | gzip stored/gzip alloc time | raw stored alloc/exact time | zlib stored alloc/exact time | gzip stored alloc/exact time |
         \\| --- | ---: | ---: | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
         \\
     );
@@ -875,7 +918,7 @@ fn writeMarkdownRow(writer: *std.Io.Writer, row: Row) !void {
         row.iterations,
         row.repeat,
     });
-    try writer.print(" | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.3} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.3} | {d:.2} | {d:.3} | {d:.2} | {d:.3} | {d:.2} | {d:.3} | {d:.2} | {d:.3} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2}", .{
+    try writer.print(" | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.3} | {d:.2} | {d:.2} | {d:.3} | {d:.2} | {d:.2} | {d:.3} | {d:.2} | {d:.2} | {d:.3} | {d:.2} | {d:.3} | {d:.2} | {d:.3}", .{
         row.raw_mib_s,
         row.raw_exact_mib_s,
         row.raw_into_mib_s,
@@ -885,7 +928,11 @@ fn writeMarkdownRow(writer: *std.Io.Writer, row: Row) !void {
         row.zlib_into_no_adler_mib_s,
         row.zlib_into_no_adler_over_strict,
         row.gzip_mib_s,
+        row.gzip_no_crc_mib_s,
+        row.gzip_no_crc_over_strict,
         row.gzip_exact_mib_s,
+        row.gzip_exact_no_crc_mib_s,
+        row.gzip_exact_no_crc_over_strict,
         row.gzip_into_mib_s,
         row.gzip_into_no_crc_mib_s,
         row.gzip_into_no_crc_over_strict,
@@ -893,6 +940,8 @@ fn writeMarkdownRow(writer: *std.Io.Writer, row: Row) !void {
         row.gzip_into_no_isize_over_strict,
         row.gzip_into_relaxed_mib_s,
         row.gzip_into_relaxed_over_strict,
+    });
+    try writer.print(" | {d:.2} | {d:.3} | {d:.2} | {d:.3} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2} | {d:.2}", .{
         row.adler32_mib_s,
         row.zlib_adler_time_ratio,
         row.crc32_mib_s,
@@ -991,7 +1040,7 @@ fn writeJsonRow(writer: *std.Io.Writer, row: Row, last: bool) !void {
         row.iterations,
         row.repeat,
     });
-    try writer.print(", \"raw_mib_s\": {d:.6}, \"raw_exact_mib_s\": {d:.6}, \"raw_into_mib_s\": {d:.6}, \"zlib_mib_s\": {d:.6}, \"zlib_exact_mib_s\": {d:.6}, \"zlib_into_mib_s\": {d:.6}, \"zlib_into_no_adler_mib_s\": {d:.6}, \"zlib_into_no_adler_over_strict\": {d:.6}, \"gzip_mib_s\": {d:.6}, \"gzip_exact_mib_s\": {d:.6}, \"gzip_into_mib_s\": {d:.6}, \"gzip_into_no_crc_mib_s\": {d:.6}, \"gzip_into_no_crc_over_strict\": {d:.6}, \"gzip_into_no_isize_mib_s\": {d:.6}, \"gzip_into_no_isize_over_strict\": {d:.6}, \"gzip_into_relaxed_mib_s\": {d:.6}, \"gzip_into_relaxed_over_strict\": {d:.6}, \"adler32_mib_s\": {d:.6}, \"zlib_adler_time_ratio\": {d:.6}, \"crc32_mib_s\": {d:.6}, \"gzip_crc_time_ratio\": {d:.6}, \"raw_stored_mib_s\": {d:.6}, \"raw_stored_exact_mib_s\": {d:.6}, \"raw_stored_into_mib_s\": {d:.6}, \"zlib_stored_mib_s\": {d:.6}, \"zlib_stored_exact_mib_s\": {d:.6}, \"zlib_stored_into_mib_s\": {d:.6}, \"gzip_stored_mib_s\": {d:.6}, \"gzip_stored_exact_mib_s\": {d:.6}, \"gzip_stored_into_mib_s\": {d:.6}", .{
+    try writer.print(", \"raw_mib_s\": {d:.6}, \"raw_exact_mib_s\": {d:.6}, \"raw_into_mib_s\": {d:.6}, \"zlib_mib_s\": {d:.6}, \"zlib_exact_mib_s\": {d:.6}, \"zlib_into_mib_s\": {d:.6}, \"zlib_into_no_adler_mib_s\": {d:.6}, \"zlib_into_no_adler_over_strict\": {d:.6}, \"gzip_mib_s\": {d:.6}, \"gzip_no_crc_mib_s\": {d:.6}, \"gzip_no_crc_over_strict\": {d:.6}, \"gzip_exact_mib_s\": {d:.6}, \"gzip_exact_no_crc_mib_s\": {d:.6}, \"gzip_exact_no_crc_over_strict\": {d:.6}, \"gzip_into_mib_s\": {d:.6}, \"gzip_into_no_crc_mib_s\": {d:.6}, \"gzip_into_no_crc_over_strict\": {d:.6}, \"gzip_into_no_isize_mib_s\": {d:.6}, \"gzip_into_no_isize_over_strict\": {d:.6}, \"gzip_into_relaxed_mib_s\": {d:.6}, \"gzip_into_relaxed_over_strict\": {d:.6}", .{
         row.raw_mib_s,
         row.raw_exact_mib_s,
         row.raw_into_mib_s,
@@ -1001,7 +1050,11 @@ fn writeJsonRow(writer: *std.Io.Writer, row: Row, last: bool) !void {
         row.zlib_into_no_adler_mib_s,
         row.zlib_into_no_adler_over_strict,
         row.gzip_mib_s,
+        row.gzip_no_crc_mib_s,
+        row.gzip_no_crc_over_strict,
         row.gzip_exact_mib_s,
+        row.gzip_exact_no_crc_mib_s,
+        row.gzip_exact_no_crc_over_strict,
         row.gzip_into_mib_s,
         row.gzip_into_no_crc_mib_s,
         row.gzip_into_no_crc_over_strict,
@@ -1009,6 +1062,8 @@ fn writeJsonRow(writer: *std.Io.Writer, row: Row, last: bool) !void {
         row.gzip_into_no_isize_over_strict,
         row.gzip_into_relaxed_mib_s,
         row.gzip_into_relaxed_over_strict,
+    });
+    try writer.print(", \"adler32_mib_s\": {d:.6}, \"zlib_adler_time_ratio\": {d:.6}, \"crc32_mib_s\": {d:.6}, \"gzip_crc_time_ratio\": {d:.6}, \"raw_stored_mib_s\": {d:.6}, \"raw_stored_exact_mib_s\": {d:.6}, \"raw_stored_into_mib_s\": {d:.6}, \"zlib_stored_mib_s\": {d:.6}, \"zlib_stored_exact_mib_s\": {d:.6}, \"zlib_stored_into_mib_s\": {d:.6}, \"gzip_stored_mib_s\": {d:.6}, \"gzip_stored_exact_mib_s\": {d:.6}, \"gzip_stored_into_mib_s\": {d:.6}", .{
         row.adler32_mib_s,
         row.zlib_adler_time_ratio,
         row.crc32_mib_s,
