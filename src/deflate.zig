@@ -7118,6 +7118,7 @@ fn decodeZlibAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, 
 }
 
 fn decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
+    _ = try parseZlibHeader(input, dictionary);
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = decodeZlibWithOptionalDictionaryAndOptions(input, out, dictionary, options) catch |err| switch (err) {
@@ -7943,6 +7944,7 @@ pub fn decodeGzipAllocExactSize(allocator: std.mem.Allocator, input: []const u8,
 }
 
 pub fn decodeGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, expected_output_len: usize) ![]u8 {
+    _ = try parseGzipHeader(input);
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = decodeGzipWithOptions(input, out, options) catch |err| switch (err) {
@@ -8501,6 +8503,13 @@ test "zlib stored wrapper validates checksum header and trailing data" {
 test "zlib relaxed decode options ignore Adler and trailing bytes" {
     const encoded = try encodeZlibLevelAlloc(std.testing.allocator, "payload", 6);
     defer std.testing.allocator.free(encoded);
+
+    var bad_header = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_header);
+    bad_header[1] ^= 1;
+    var bad_header_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.BadZlibHeader, decodeZlibAllocExactSize(bad_header_failing.allocator(), bad_header, 7));
+    try std.testing.expectEqual(@as(usize, 0), bad_header_failing.allocations);
 
     var bad_checksum = try std.testing.allocator.dupe(u8, encoded);
     defer std.testing.allocator.free(bad_checksum);
@@ -11320,6 +11329,13 @@ test "gzip relaxed decode options ignore trailer checks and trailing bytes" {
     defer std.testing.allocator.free(encoded);
 
     var out: [32]u8 = undefined;
+    var bad_header = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_header);
+    bad_header[0] = 0;
+    var bad_header_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.BadGzipHeader, decodeGzipAllocExactSize(bad_header_failing.allocator(), bad_header, 7));
+    try std.testing.expectEqual(@as(usize, 0), bad_header_failing.allocations);
+
     var bad_crc = try std.testing.allocator.dupe(u8, encoded);
     defer std.testing.allocator.free(bad_crc);
     bad_crc[bad_crc.len - 8] ^= 1;
