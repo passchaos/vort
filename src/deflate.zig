@@ -7939,17 +7939,23 @@ pub fn decodeGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: 
 
 fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {
     const data_offset = try parseGzipHeader(input);
+    const raw_input = input[data_offset..];
+    if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+        if (try planRawStoredOnly(raw_input)) |stored_plan| {
+            try validateGzipStoredPlanBeforeAlloc(input, data_offset, stored_plan, options);
+        }
+    }
     if (try decodeGzipAllocFooterSize(allocator, input, data_offset, options, max_output_len)) |decoded| return decoded;
 
     if (options.ignore_crc32) {
-        if (try decodeRawStoredOnlyAllocMaybe(allocator, input[data_offset..], max_output_len)) |stored| {
+        if (try decodeRawStoredOnlyAllocMaybe(allocator, raw_input, max_output_len)) |stored| {
             errdefer stored.deinit(allocator);
             const footer_offset = data_offset + stored.input_read;
             try validateGzipFooterWithOptions(input, footer_offset, 0, stored.bytes.len, options);
             return stored.bytes;
         }
     } else {
-        if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice32, allocator, input[data_offset..], max_output_len)) |stored| {
+        if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice32, allocator, raw_input, max_output_len)) |stored| {
             errdefer stored.deinit(allocator);
             const footer_offset = data_offset + stored.result.input_read;
             try validateGzipFooterWithOptions(input, footer_offset, stored.digest, stored.result.bytes.len, options);
@@ -7957,12 +7963,18 @@ fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input
         }
     }
 
-    const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[data_offset..], "", max_output_len);
+    const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, raw_input, "", max_output_len);
     errdefer raw.deinit(allocator);
     const footer_offset = data_offset + raw.input_read;
     const actual_crc = if (options.ignore_crc32) 0 else checksum.crc32Best(raw.bytes);
     try validateGzipFooterWithOptions(input, footer_offset, actual_crc, raw.bytes.len, options);
     return raw.bytes;
+}
+
+fn validateGzipStoredPlanBeforeAlloc(input: []const u8, data_offset: usize, plan: StoredOnlyPlan, options: GzipDecodeOptions) Error!void {
+    const footer_offset = data_offset + plan.input_read;
+    if (footer_offset > input.len or input.len - footer_offset < 8) return error.TruncatedFrame;
+    if (!options.allow_trailing_data and footer_offset + 8 != input.len) return error.TrailingData;
 }
 
 fn decodeGzipAllocFooterSize(allocator: std.mem.Allocator, input: []const u8, data_offset: usize, options: GzipDecodeOptions, max_output_len: ?usize) !?[]u8 {
@@ -10498,6 +10510,9 @@ test "gzip stored wrapper validates crc size header and trailing data" {
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeGzipStored(with_trailing[0 .. encoded.len + 1], &out));
     try std.testing.expectError(error.TrailingData, decodeGzipStoredAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]));
+    var trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TrailingData, decodeGzipAlloc(trailing_failing.allocator(), with_trailing[0 .. encoded.len + 1]));
+    try std.testing.expectEqual(@as(usize, 0), trailing_failing.allocations);
 }
 
 test "gzip decoder drains bounded output from caller scratch" {

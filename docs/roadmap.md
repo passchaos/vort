@@ -513,6 +513,7 @@ architecture blindly.
 - [x] ZlibDecoder reports bad-header, missing-dictionary, truncated-footer, and Adler mismatch diagnostics.
 - [x] gzip wrapper and CRC/ISIZE verification for stored blocks.
 - [x] Gzip allocator-returning unknown-size decode validates the gzip header before trusting trailer ISIZE as an allocation hint, avoiding attacker-controlled allocation attempts on malformed headers.
+- [x] Gzip allocator-returning stored-block decode validates footer availability/trailing-data boundaries from the stored-block plan before allocating output, preserving strict errors without unnecessary heap work.
 - [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC validation.
 - [x] gzip encoders can emit configurable MTIME/XFL/OS plus FEXTRA/FNAME/FCOMMENT/FHCRC metadata while preserving deterministic defaults.
 - [x] Public gzip header metadata parser exposes MTIME/XFL/OS/FEXTRA/FNAME/FCOMMENT/FHCRC slices for library callers.
