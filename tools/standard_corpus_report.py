@@ -263,6 +263,49 @@ def summarize_codecs(records: list[dict[str, str]]) -> list[dict[str, object]]:
     return summaries
 
 
+def finite_positive(value: float) -> bool:
+    return value > 0.0 and value != float("inf")
+
+
+def summarize_gaps(summaries: list[dict[str, object]]) -> list[dict[str, object]]:
+    by_codec = {str(summary["codec"]): summary for summary in summaries}
+    competitors = [summary for summary in summaries if not str(summary["codec"]).startswith("vort-") and int(summary["files"]) != 0]
+    if not competitors:
+        return []
+
+    ratio_candidates = [summary for summary in competitors if finite_positive(float(summary["ratio"]))]
+    decode_candidates = [summary for summary in competitors if finite_positive(float(summary["decode_mib_s"]))]
+    if not ratio_candidates or not decode_candidates:
+        return []
+
+    best_ratio_summary = min(ratio_candidates, key=lambda summary: float(summary["ratio"]))
+    best_decode_summary = max(decode_candidates, key=lambda summary: float(summary["decode_mib_s"]))
+    best_ratio = float(best_ratio_summary["ratio"])
+    best_ratio_codec = best_ratio_summary["codec"]
+    best_decode = float(best_decode_summary["decode_mib_s"])
+    best_decode_codec = best_decode_summary["codec"]
+
+    rows: list[dict[str, object]] = []
+    for name in ("vort-fastest", "vort-default", "vort-best"):
+        summary = by_codec.get(name)
+        if summary is None or int(summary["files"]) == 0:
+            continue
+        ratio = float(summary["ratio"])
+        decode = float(summary["decode_mib_s"])
+        rows.append({
+            "codec": name,
+            "ratio": ratio,
+            "best_ratio_codec": best_ratio_codec,
+            "best_ratio": best_ratio,
+            "ratio_gap_pct": 0.0 if best_ratio == 0 else ((ratio / best_ratio) - 1.0) * 100.0,
+            "decode_mib_s": decode,
+            "best_decode_codec": best_decode_codec,
+            "best_decode_mib_s": best_decode,
+            "decode_vs_best_x": 0.0 if best_decode == 0 else decode / best_decode,
+        })
+    return rows
+
+
 def capture_metadata() -> dict[str, str]:
     meta: dict[str, str] = {}
     try:
@@ -317,6 +360,7 @@ def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool,
     title = "External corpus benchmark suite" if external_paths else ("Silesia per-file benchmark suite" if suite else "Silesia benchmark smoke")
     mode = "full" if full else "bounded-128KiB"
     meta = capture_metadata()
+    summaries = summarize_codecs(records)
     lines = [
         f"# {title}",
         "",
@@ -341,10 +385,25 @@ def write_markdown(rows: list[str], path: pathlib.Path, suite: bool, full: bool,
         "| codec | files | total input | compressed bytes | ratio | encode ms | encode MiB/s | decode ms | decode MiB/s |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
-    for summary in summarize_codecs(records):
+    for summary in summaries:
         lines.append(
             "| {codec} | {files} | {input_bytes} | {compressed_bytes} | {ratio:.4f} | {encode_ms:.3f} | {encode_mib_s:.2f} | {decode_ms:.3f} | {decode_mib_s:.2f} |".format(**summary)
         )
+    gap_rows = summarize_gaps(summaries)
+    if gap_rows:
+        lines.extend([
+            "",
+            "## Vort gap snapshot",
+            "",
+            "This table compares Vort presets against the best available non-Vort codec in this run. `ratio gap` is positive when Vort output is larger than the best competitor. `decode vs best` is a speed ratio where `1.0x` means Vort matches the fastest competitor.",
+            "",
+            "| Vort preset | ratio | best external ratio | ratio gap | decode MiB/s | best external decode MiB/s | decode vs best |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ])
+        for gap in gap_rows:
+            lines.append(
+                "| {codec} | {ratio:.4f} | {best_ratio:.4f} ({best_ratio_codec}) | {ratio_gap_pct:+.2f}% | {decode_mib_s:.2f} | {best_decode_mib_s:.2f} ({best_decode_codec}) | {decode_vs_best_x:.3f}x |".format(**gap)
+            )
     lines.extend([
         "",
         "## Rows",
