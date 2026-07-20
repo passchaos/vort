@@ -525,6 +525,7 @@ architecture blindly.
 - [x] Zlib chunked allocator-returning decode applies the stored-block plan precheck for single contiguous stored frames before allocating output, covering exact-size, unknown-size, and limited variants.
 - [x] Raw stored allocator-returning decode uses the stored-block plan to reject limit, exact-length, and trailing-data errors before allocating output.
 - [x] Raw auto allocator-returning decode uses the stored-block plan for stored frames with or without preset dictionaries, rejecting limit, exact-length, and trailing-data errors before allocating output.
+- [x] Zlib/gzip concatenated exact-size allocator-returning decode prechecks all-stored member sequences, rejecting aggregate length and member checksum errors before allocating output.
 - [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC validation.
 - [x] gzip encoders can emit configurable MTIME/XFL/OS plus FEXTRA/FNAME/FCOMMENT/FHCRC metadata while preserving deterministic defaults.
 - [x] Public gzip header metadata parser exposes MTIME/XFL/OS/FEXTRA/FNAME/FCOMMENT/FHCRC slices for library callers.

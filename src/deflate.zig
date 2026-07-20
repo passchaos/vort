@@ -7016,6 +7016,9 @@ pub fn decodeZlibConcatenatedAllocWithDictionaryExactSize(allocator: std.mem.All
 fn decodeZlibConcatenatedAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, expected_output_len: usize) ![]u8 {
     if (input.len == 0) return error.TruncatedFrame;
     _ = try parseZlibHeader(input, dictionary);
+    if (try precheckZlibConcatenatedStoredExact(input, dictionary)) |stored_output_len| {
+        if (stored_output_len != expected_output_len) return error.SizeMismatch;
+    }
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = decodeZlibConcatenatedWithOptionalDictionary(input, out, dictionary) catch |err| switch (err) {
@@ -7024,6 +7027,28 @@ fn decodeZlibConcatenatedAllocWithOptionalDictionaryExactSize(allocator: std.mem
     };
     if (written != expected_output_len) return error.SizeMismatch;
     return out;
+}
+
+fn precheckZlibConcatenatedStoredExact(input: []const u8, dictionary: ?[]const u8) !?usize {
+    var offset: usize = 0;
+    var output_len: usize = 0;
+    while (offset < input.len) {
+        const header = try parseZlibHeader(input[offset..], dictionary);
+        const raw_offset = offset + header.data_offset;
+        const raw_input = input[raw_offset..];
+        if (raw_input.len == 0 or !isStoredBlockHeaderByte(raw_input[0])) return null;
+        const stored_plan = (try planRawStoredOnly(raw_input)) orelse return null;
+        try validateZlibStoredMemberBeforeAlloc(input, raw_offset, stored_plan);
+        output_len = std.math.add(usize, output_len, stored_plan.output_len) catch return error.IntegerOverflow;
+        offset = raw_offset + stored_plan.input_read + 4;
+    }
+    return output_len;
+}
+
+fn validateZlibStoredMemberBeforeAlloc(input: []const u8, raw_offset: usize, plan: StoredOnlyPlan) Error!void {
+    const footer_offset = raw_offset + plan.input_read;
+    const actual = hashRawStoredOnlyPlanned(checksum.Adler32, input[raw_offset..], plan);
+    try validateZlibFooterPartial(input, footer_offset, actual);
 }
 
 fn decodeZlibAllocWithOptionalDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8) ![]u8 {
@@ -7937,6 +7962,9 @@ pub fn decodeGzipConcatenatedAllocExactSize(allocator: std.mem.Allocator, input:
 pub fn decodeGzipConcatenatedAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, expected_output_len: usize) ![]u8 {
     if (input.len == 0) return error.TruncatedFrame;
     _ = try parseGzipHeader(input);
+    if (try precheckGzipConcatenatedStoredExact(input, options)) |stored_output_len| {
+        if (stored_output_len != expected_output_len) return error.SizeMismatch;
+    }
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = decodeGzipConcatenatedWithOptions(input, out, options) catch |err| switch (err) {
@@ -7945,6 +7973,31 @@ pub fn decodeGzipConcatenatedAllocWithOptionsExactSize(allocator: std.mem.Alloca
     };
     if (written != expected_output_len) return error.SizeMismatch;
     return out;
+}
+
+fn precheckGzipConcatenatedStoredExact(input: []const u8, options: GzipDecodeOptions) !?usize {
+    var offset: usize = 0;
+    var output_len: usize = 0;
+    while (offset < input.len) {
+        const data_offset = parseGzipHeader(input[offset..]) catch |err| {
+            if (options.allow_trailing_data and offset != 0) break;
+            return err;
+        };
+        const raw_offset = offset + data_offset;
+        const raw_input = input[raw_offset..];
+        if (raw_input.len == 0 or !isStoredBlockHeaderByte(raw_input[0])) return null;
+        const stored_plan = (try planRawStoredOnly(raw_input)) orelse return null;
+        try validateGzipStoredMemberBeforeAlloc(input, raw_offset, stored_plan, options);
+        output_len = std.math.add(usize, output_len, stored_plan.output_len) catch return error.IntegerOverflow;
+        offset = raw_offset + stored_plan.input_read + 8;
+    }
+    return output_len;
+}
+
+fn validateGzipStoredMemberBeforeAlloc(input: []const u8, raw_offset: usize, plan: StoredOnlyPlan, options: GzipDecodeOptions) Error!void {
+    const footer_offset = raw_offset + plan.input_read;
+    const actual_crc = if (options.ignore_crc32) 0 else hashRawStoredOnlyPlanned(checksum.Crc32Slice32, input[raw_offset..], plan);
+    try validateGzipFooterPartialWithOptions(input, footer_offset, actual_crc, plan.output_len, options);
 }
 
 pub fn decodeGzipConcatenated(input: []const u8, output: []u8) Error!usize {
@@ -10503,6 +10556,9 @@ test "zlib concatenated stored streams decode and validate per-member trailers" 
     const exact = try decodeZlibConcatenatedAllocExactSize(std.testing.allocator, cat.items, into.len);
     defer std.testing.allocator.free(exact);
     try std.testing.expectEqualSlices(u8, &into, exact);
+    var exact_short_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.SizeMismatch, decodeZlibConcatenatedAllocExactSize(exact_short_failing.allocator(), cat.items, into.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), exact_short_failing.allocations);
     try std.testing.expectError(error.OutputLimitExceeded, decodeZlibConcatenatedAllocLimited(std.testing.allocator, cat.items, into.len - 1));
 
     var bad_second_adler = try std.testing.allocator.dupe(u8, cat.items);
@@ -10510,6 +10566,9 @@ test "zlib concatenated stored streams decode and validate per-member trailers" 
     bad_second_adler[bad_second_adler.len - 1] ^= 1;
     try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenatedAlloc(std.testing.allocator, bad_second_adler));
     try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenated(bad_second_adler, &into));
+    var bad_second_exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenatedAllocExactSize(bad_second_exact_failing.allocator(), bad_second_adler, into.len));
+    try std.testing.expectEqual(@as(usize, 0), bad_second_exact_failing.allocations);
 }
 
 test "zlib concatenated streams reject empty and corrupt later members" {
@@ -12599,6 +12658,9 @@ test "gzip concatenated stored members decode and validate per-member trailers" 
     const exact = try decodeGzipConcatenatedAllocExactSize(std.testing.allocator, cat.items, into.len);
     defer std.testing.allocator.free(exact);
     try std.testing.expectEqualSlices(u8, &into, exact);
+    var exact_short_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAllocExactSize(exact_short_failing.allocator(), cat.items, into.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), exact_short_failing.allocations);
     try std.testing.expectError(error.OutputLimitExceeded, decodeGzipConcatenatedAllocLimited(std.testing.allocator, cat.items, into.len - 1));
 
     var bad_second_crc = try std.testing.allocator.dupe(u8, cat.items);
@@ -12606,6 +12668,9 @@ test "gzip concatenated stored members decode and validate per-member trailers" 
     bad_second_crc[bad_second_crc.len - 8] ^= 1;
     try std.testing.expectError(error.ChecksumMismatch, decodeGzipConcatenatedAlloc(std.testing.allocator, bad_second_crc));
     try std.testing.expectError(error.ChecksumMismatch, decodeGzipConcatenated(bad_second_crc, &into));
+    var bad_second_exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzipConcatenatedAllocExactSize(bad_second_exact_failing.allocator(), bad_second_crc, into.len));
+    try std.testing.expectEqual(@as(usize, 0), bad_second_exact_failing.allocations);
 
     const relaxed = GzipDecodeOptions{ .ignore_crc32 = true };
     const relaxed_alloc = try decodeGzipConcatenatedAllocWithOptions(std.testing.allocator, bad_second_crc, relaxed);
