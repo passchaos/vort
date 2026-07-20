@@ -249,7 +249,9 @@ Adler-32 mismatch, and PNG row-boundary diagnostics through the shared
 gzip-wrapped deflate streams. It accepts either a complete gzip member or
 caller-provided gzip byte chunks, decodes and validates that member into
 caller-provided scratch, then drains the scratch through caller-sized output
-chunks without requiring an allocator in the decode/drain path. Concatenated gzip
+chunks without requiring an allocator in the decode/drain path. Legacy chunked
+entrypoints borrow a single non-empty compressed chunk directly and only require
+compressed join scratch when multiple non-empty spans must be coalesced. Concatenated gzip
 member initializers use the same scratch contract and preserve empty middle
 members while draining the combined logical payload. Exact-size initialization is
 intended for callers that already know the uncompressed length from surrounding

@@ -516,6 +516,7 @@ architecture blindly.
 - [x] gzip encoders can emit configurable MTIME/XFL/OS plus FEXTRA/FNAME/FCOMMENT/FHCRC metadata while preserving deterministic defaults.
 - [x] Public gzip header metadata parser exposes MTIME/XFL/OS/FEXTRA/FNAME/FCOMMENT/FHCRC slices for library callers.
 - [x] GzipDecoder drains validated gzip-wrapped deflate payloads and caller-provided gzip byte chunks through reusable caller-owned scratch and bounded output.
+- [x] Legacy chunked wrapper helpers borrow a single non-empty compressed chunk directly, avoiding an unnecessary join copy and scratch-size requirement for already-contiguous chunk callers.
 - [x] GzipDecoder drains concatenated gzip members, including empty middle members, from caller-owned scratch and chunked compressed input.
 - [x] GzipDecoder exposes `WithOptions` initializers/resets for single-member, concatenated, and chunked caller-scratch decode so trusted streaming users can opt into relaxed CRC/ISIZE/trailing-data handling without switching to allocation-returning APIs.
 - [x] GzipDecoder exact-size initializers reject decoded-size mismatches before payload drain.

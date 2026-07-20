@@ -3203,6 +3203,23 @@ pub fn decodeZlibWithDictionaryAndOptions(input: []const u8, output: []u8, dicti
 
 fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
     const total = try chunksTotalLen(chunks);
+    var single_non_empty: ?[]const u8 = null;
+    var non_empty_count: usize = 0;
+    for (chunks) |chunk| {
+        if (chunk.len == 0) continue;
+        single_non_empty = chunk;
+        non_empty_count += 1;
+    }
+    if (non_empty_count == 1) {
+        const chunk = single_non_empty.?;
+        std.debug.assert(chunk.len == total);
+        // Legacy chunked APIs need a caller-provided compressed scratch buffer
+        // only when they must coalesce multiple spans. A single non-empty chunk
+        // is already contiguous and lives for the duration of the synchronous
+        // decode/reset call, so borrowing it avoids both the scratch-size
+        // requirement and an otherwise redundant memcpy.
+        return chunk;
+    }
     if (compressed_scratch.len < total) return error.OutputTooSmall;
     var offset: usize = 0;
     for (chunks) |chunk| {
@@ -9993,6 +10010,15 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     var output: [input.len]u8 = undefined;
     try std.testing.expectEqual(input.len, try decodeZlibChunks(&chunks, &compressed_scratch, &output));
     try std.testing.expectEqualSlices(u8, input, &output);
+    const single_chunk = [_][]const u8{
+        encoded[0..0],
+        encoded,
+        encoded[encoded.len..],
+    };
+    var no_compressed_scratch: [0]u8 = .{};
+    @memset(&output, 0);
+    try std.testing.expectEqual(input.len, try decodeZlibChunks(&single_chunk, &no_compressed_scratch, &output));
+    try std.testing.expectEqualSlices(u8, input, &output);
     @memset(&output, 0);
     try std.testing.expectEqual(input.len, try decodeZlibChunksInto(&chunks, &output));
     try std.testing.expectEqualSlices(u8, input, &output);
@@ -10506,6 +10532,19 @@ test "gzip decoder drains bounded output from caller scratch" {
     try std.testing.expectEqual(encoded.len, chunk_step.progress.input_read);
     try std.testing.expectEqualSlices(u8, input, &out);
     try std.testing.expectError(error.OutputTooSmall, GzipDecoder.initFromChunksExactSize(&chunks, compressed_scratch[0 .. encoded.len - 1], &scratch, input.len));
+
+    const single_chunk = [_][]const u8{
+        encoded[0..0],
+        encoded,
+        encoded[encoded.len..],
+    };
+    var no_compressed_scratch: [0]u8 = .{};
+    var single_chunk_decoder = try GzipDecoder.initFromChunksExactSize(&single_chunk, &no_compressed_scratch, &scratch, input.len);
+    @memset(&out, 0);
+    const single_chunk_step = try single_chunk_decoder.step(&out);
+    try std.testing.expectEqual(core.StepResult.Status.done, single_chunk_step.status);
+    try std.testing.expectEqual(encoded.len, single_chunk_step.progress.input_read);
+    try std.testing.expectEqualSlices(u8, input, &out);
 
     var bad_chunk_crc = try std.testing.allocator.dupe(u8, encoded);
     defer std.testing.allocator.free(bad_chunk_crc);
