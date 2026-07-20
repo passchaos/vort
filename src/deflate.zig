@@ -2288,6 +2288,8 @@ fn appendRawStoredOnlyPlannedWithHash(comptime Hash: type, allocator: std.mem.Al
 }
 
 pub fn decodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const plan = (try planRawStoredOnly(input)) orelse return error.InvalidDeflateBlockType;
+    if (plan.input_read != input.len) return error.TrailingData;
     const result = try decodeRawStoredAllocPartial(allocator, input);
     errdefer result.deinit(allocator);
     if (result.input_read != input.len) return error.TrailingData;
@@ -2311,6 +2313,9 @@ pub fn decodeRawStoredAllocExactSize(allocator: std.mem.Allocator, input: []cons
 }
 
 pub fn decodeRawStoredAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
+    const plan = (try planRawStoredOnly(input)) orelse return error.InvalidDeflateBlockType;
+    try ensureOutputLimit(0, plan.output_len, max_output_len);
+    if (plan.input_read != input.len) return error.TrailingData;
     const result = try decodeRawStoredAllocPartialLimitedInternal(allocator, input, max_output_len);
     errdefer result.deinit(allocator);
     if (result.input_read != input.len) return error.TrailingData;
@@ -8389,6 +8394,11 @@ test "raw stored deflate reports malformed blocks" {
 
     const valid = [_]u8{ 0x01, 0x04, 0x00, 0xfb, 0xff, 't', 'e', 's', 't' };
     try std.testing.expectError(error.OutputTooSmall, decodeRawStored(&valid, out[0..2]));
+
+    const trailing = valid ++ .{0};
+    var trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TrailingData, decodeRawStoredAlloc(trailing_failing.allocator(), &trailing));
+    try std.testing.expectEqual(@as(usize, 0), trailing_failing.allocations);
 }
 
 test "stored deflate decoders ignore byte-alignment padding bits" {
@@ -8431,6 +8441,9 @@ test "stored deflate alloc decoders enforce output limits" {
     const raw = try encodeRawStoredAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(raw);
     try std.testing.expectError(error.OutputLimitExceeded, decodeRawStoredAllocLimited(std.testing.allocator, raw, 4));
+    var raw_limit_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutputLimitExceeded, decodeRawStoredAllocLimited(raw_limit_failing.allocator(), raw, 4));
+    try std.testing.expectEqual(@as(usize, 0), raw_limit_failing.allocations);
     const raw_ok = try decodeRawStoredAllocLimited(std.testing.allocator, raw, 5);
     defer std.testing.allocator.free(raw_ok);
     try std.testing.expectEqualSlices(u8, "hello", raw_ok);
