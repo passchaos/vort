@@ -6770,6 +6770,7 @@ pub fn decodeZlibStoredAllocWithDictionaryLimited(allocator: std.mem.Allocator, 
 }
 
 fn decodeZlibStoredAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, expected_output_len: usize) ![]u8 {
+    _ = try parseZlibHeader(input, dictionary);
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = if (dictionary) |dict|
@@ -7766,6 +7767,7 @@ pub fn decodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
 }
 
 pub fn decodeGzipStoredAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    _ = try parseGzipHeader(input);
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = decodeGzipStored(input, out) catch |err| switch (err) {
@@ -8383,6 +8385,12 @@ test "stored deflate exact-size alloc decoders validate exact lengths" {
     try std.testing.expectEqualSlices(u8, plain, zlib_exact);
     try std.testing.expectError(error.SizeMismatch, decodeZlibStoredAllocExactSize(std.testing.allocator, zlib_frame, plain.len - 1));
     try std.testing.expectError(error.SizeMismatch, decodeZlibStoredAllocExactSize(std.testing.allocator, zlib_frame, plain.len + 1));
+    var bad_zlib_header = try std.testing.allocator.dupe(u8, zlib_frame);
+    defer std.testing.allocator.free(bad_zlib_header);
+    bad_zlib_header[1] ^= 1;
+    var zlib_header_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.BadZlibHeader, decodeZlibStoredAllocExactSize(zlib_header_failing.allocator(), bad_zlib_header, plain.len));
+    try std.testing.expectEqual(@as(usize, 0), zlib_header_failing.allocations);
 
     const dictionary = "stored ";
     const dict_plain = "stored exact";
@@ -8401,6 +8409,12 @@ test "stored deflate exact-size alloc decoders validate exact lengths" {
     try std.testing.expectEqualSlices(u8, plain, gzip_exact);
     try std.testing.expectError(error.SizeMismatch, decodeGzipStoredAllocExactSize(std.testing.allocator, gzip_frame, plain.len - 1));
     try std.testing.expectError(error.SizeMismatch, decodeGzipStoredAllocExactSize(std.testing.allocator, gzip_frame, plain.len + 1));
+    var bad_gzip_header = try std.testing.allocator.dupe(u8, gzip_frame);
+    defer std.testing.allocator.free(bad_gzip_header);
+    bad_gzip_header[0] = 0;
+    var gzip_header_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.BadGzipHeader, decodeGzipStoredAllocExactSize(gzip_header_failing.allocator(), bad_gzip_header, plain.len));
+    try std.testing.expectEqual(@as(usize, 0), gzip_header_failing.allocations);
 }
 
 test "zlib stored wrapper matches level-0 vectors" {
