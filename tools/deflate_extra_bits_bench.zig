@@ -23,6 +23,18 @@ const ReaderKind = enum {
     }
 };
 
+const DistanceKernel = enum {
+    current,
+    fused18,
+
+    fn label(self: DistanceKernel) []const u8 {
+        return switch (self) {
+            .current => "current",
+            .fused18 => "fused18",
+        };
+    }
+};
+
 const CaseSpec = struct {
     name: []const u8,
     bits: u6,
@@ -44,6 +56,7 @@ const DistanceCaseSpec = struct {
 const Row = struct {
     case: []const u8,
     reader: []const u8,
+    kernel: []const u8,
     bits: u6,
     reads_per_iter: usize,
     iterations: usize,
@@ -106,7 +119,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,reader,bits,reads_per_iter,iterations,input_bytes,elapsed_ns,reads_per_s,mib_per_s,checksum\n");
+    try csv.writer.writeAll("case,reader,kernel,bits,reads_per_iter,iterations,input_bytes,elapsed_ns,reads_per_s,mib_per_s,checksum\n");
 
     for (cases) |case| {
         const iterations = iterations_override orelse iterationsFor(case);
@@ -125,8 +138,10 @@ pub fn main(init: std.process.Init) !void {
     for (distance_cases) |case| {
         const iterations = iterations_override orelse iterationsForDistance(case);
         for (readers) |reader| {
-            const row = try runDistanceCase(init, case, reader, iterations);
-            try writeRow(&csv.writer, row);
+            inline for (.{ DistanceKernel.current, DistanceKernel.fused18 }) |kernel| {
+                const row = try runDistanceCase(init, case, reader, kernel, iterations);
+                try writeRow(&csv.writer, row);
+            }
         }
     }
 
@@ -191,6 +206,7 @@ fn runCase(init: std.process.Init, case: CaseSpec, reader_kind: ReaderKind, iter
     return .{
         .case = case.name,
         .reader = reader_kind.label(),
+        .kernel = "single",
         .bits = case.bits,
         .reads_per_iter = case.reads_per_iter,
         .iterations = iterations,
@@ -235,6 +251,7 @@ fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: Reader
     return .{
         .case = case.name,
         .reader = reader_kind.label(),
+        .kernel = "mixed-extra",
         .bits = 0,
         .reads_per_iter = case.reads_per_iter,
         .iterations = iterations,
@@ -246,7 +263,7 @@ fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: Reader
     };
 }
 
-fn runDistanceCase(init: std.process.Init, case: DistanceCaseSpec, reader_kind: ReaderKind, iterations: usize) !Row {
+fn runDistanceCase(init: std.process.Init, case: DistanceCaseSpec, reader_kind: ReaderKind, kernel: DistanceKernel, iterations: usize) !Row {
     const input_len = try bytesForDistanceSymbols(case.symbols, case.reads_per_iter);
     const input = try init.gpa.alloc(u8, input_len);
     defer init.gpa.free(input);
@@ -268,9 +285,9 @@ fn runDistanceCase(init: std.process.Init, case: DistanceCaseSpec, reader_kind: 
     var iter: usize = 0;
     while (iter < iterations) : (iter += 1) {
         checksum +%= switch (reader_kind) {
-            .buffered => try runDistanceBuffered(input, case.reads_per_iter),
-            .chunked_4096, .chunked_64, .chunked_1 => try runDistanceChunked(chunks, case.reads_per_iter),
-            .span_4096, .span_64, .span_1 => try runDistanceSpan(chunks, case.reads_per_iter),
+            .buffered => try runDistanceBuffered(input, case.reads_per_iter, kernel),
+            .chunked_4096, .chunked_64, .chunked_1 => try runDistanceChunked(chunks, case.reads_per_iter, kernel),
+            .span_4096, .span_64, .span_1 => try runDistanceSpan(chunks, case.reads_per_iter, kernel),
         };
     }
     const elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
@@ -279,6 +296,7 @@ fn runDistanceCase(init: std.process.Init, case: DistanceCaseSpec, reader_kind: 
     return .{
         .case = case.name,
         .reader = reader_kind.label(),
+        .kernel = kernel.label(),
         .bits = 0,
         .reads_per_iter = case.reads_per_iter,
         .iterations = iterations,
@@ -347,32 +365,50 @@ fn runMixedSpan(chunks: []const []const u8, pattern: []const u6, reads: usize) !
     return sum;
 }
 
-fn runDistanceBuffered(input: []const u8, reads: usize) !u64 {
+fn runDistanceBuffered(input: []const u8, reads: usize, kernel: DistanceKernel) !u64 {
     var reader = vort.bitstream.BufferedBitReader.init(input);
-    return runDistanceReads(&reader, reads);
+    return runDistanceReads(&reader, reads, kernel);
 }
 
-fn runDistanceChunked(chunks: []const []const u8, reads: usize) !u64 {
+fn runDistanceChunked(chunks: []const []const u8, reads: usize, kernel: DistanceKernel) !u64 {
     var reader = try vort.bitstream.ChunkedBitReader.init(chunks);
-    return runDistanceReads(&reader, reads);
+    return runDistanceReads(&reader, reads, kernel);
 }
 
-fn runDistanceSpan(chunks: []const []const u8, reads: usize) !u64 {
+fn runDistanceSpan(chunks: []const []const u8, reads: usize, kernel: DistanceKernel) !u64 {
     var reader = try vort.bitstream.ChunkedSpanBitReader.init(chunks);
-    return runDistanceReads(&reader, reads);
+    return runDistanceReads(&reader, reads, kernel);
 }
 
-fn runDistanceReads(reader: anytype, reads: usize) !u64 {
+fn runDistanceReads(reader: anytype, reads: usize, kernel: DistanceKernel) !u64 {
     var sum: u64 = 0;
     var i: usize = 0;
     while (i < reads) : (i += 1) {
-        const symbol = try reader.readBits(u16, 5);
-        if (symbol >= distance_extra_bits_by_symbol.len) return error.InvalidHuffmanCode;
-        const extra_bits = distance_extra_bits_by_symbol[symbol];
-        const extra = if (extra_bits == 0) 0 else try reader.readBits(u16, extra_bits);
-        sum +%= symbol + extra;
+        sum +%= switch (kernel) {
+            .current => try readDistanceCurrent(reader),
+            .fused18 => try readDistanceFused18(reader),
+        };
     }
     return sum;
+}
+
+fn readDistanceCurrent(reader: anytype) !u64 {
+    const symbol = try reader.readBits(u16, 5);
+    if (symbol >= distance_extra_bits_by_symbol.len) return error.InvalidHuffmanCode;
+    const extra_bits = distance_extra_bits_by_symbol[symbol];
+    const extra = if (extra_bits == 0) 0 else try reader.readBits(u16, extra_bits);
+    return symbol + extra;
+}
+
+fn readDistanceFused18(reader: anytype) !u64 {
+    const symbol = try reader.readBits(u16, 5);
+    if (symbol >= distance_extra_bits_by_symbol.len) return error.InvalidHuffmanCode;
+    const extra_bits = distance_extra_bits_by_symbol[symbol];
+    if (extra_bits == 0) return symbol;
+    if (!reader.hasBits(extra_bits)) return error.TruncatedFrame;
+    const extra = reader.peekBitsPadded(u16, extra_bits);
+    reader.advanceBitsStagedAssumeAvailable(extra_bits);
+    return symbol + extra;
 }
 
 fn bytesForReads(bits: u6, reads: usize) !usize {
@@ -485,9 +521,10 @@ fn mibPerSecond(bytes: usize, elapsed_ns: i128) f64 {
 }
 
 fn writeRow(writer: *std.Io.Writer, row: Row) !void {
-    try writer.print("{s},{s},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d}\n", .{
+    try writer.print("{s},{s},{s},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d}\n", .{
         row.case,
         row.reader,
+        row.kernel,
         row.bits,
         row.reads_per_iter,
         row.iterations,

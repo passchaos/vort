@@ -13,6 +13,7 @@ sys.dont_write_bytecode = True
 EXPECTED_COLUMNS = {
     "case",
     "reader",
+    "kernel",
     "bits",
     "reads_per_iter",
     "iterations",
@@ -34,6 +35,7 @@ EXPECTED_CASES = {
     "distance-roadmap-symbol-extra",
 }
 EXPECTED_READERS = {"buffered", "chunked_4096", "span_4096", "chunked_64", "span_64", "chunked_1", "span_1"}
+EXPECTED_DISTANCE_KERNELS = {"current", "fused18"}
 EXPECTED_BITS = {
     "extra-1": 1,
     "extra-3": 3,
@@ -74,7 +76,8 @@ def main() -> int:
             print(f"deflate_extra_bits_bench_gate=bad_header fields={reader.fieldnames}", file=sys.stderr)
             return 1
         rows = list(reader)
-    if len(rows) != len(EXPECTED_CASES) * len(EXPECTED_READERS):
+    expected_rows = (5 + 2) * len(EXPECTED_READERS) + 2 * len(EXPECTED_READERS) * len(EXPECTED_DISTANCE_KERNELS)
+    if len(rows) != expected_rows:
         print(f"deflate_extra_bits_bench_gate=bad_row_count rows={len(rows)}", file=sys.stderr)
         return 1
     seen = set()
@@ -83,7 +86,8 @@ def main() -> int:
     for row in rows:
         case = row.get("case", "")
         reader = row.get("reader", "")
-        key = (case, reader)
+        kernel = row.get("kernel", "")
+        key = (case, reader, kernel)
         if key in seen:
             print(f"deflate_extra_bits_bench_gate=duplicate row={row}", file=sys.stderr)
             return 1
@@ -92,6 +96,10 @@ def main() -> int:
         readers.add(reader)
         if case not in EXPECTED_BITS or int(row.get("bits", "-1")) != EXPECTED_BITS[case]:
             print(f"deflate_extra_bits_bench_gate=bad_bits row={row}", file=sys.stderr)
+            return 1
+        expected_kernel = EXPECTED_DISTANCE_KERNELS if case.startswith("distance-") else {"single" if case.startswith("extra-") else "mixed-extra"}
+        if kernel not in expected_kernel:
+            print(f"deflate_extra_bits_bench_gate=bad_kernel row={row}", file=sys.stderr)
             return 1
         if not all(positive_int(row, field) for field in ("reads_per_iter", "iterations", "input_bytes", "elapsed_ns", "checksum")):
             print(f"deflate_extra_bits_bench_gate=bad_int row={row}", file=sys.stderr)
