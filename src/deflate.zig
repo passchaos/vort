@@ -7866,7 +7866,7 @@ fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input
 
 fn decodeGzipAllocFooterSize(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) !?[]u8 {
     if (input.len < gzip_header.len + 8) return null;
-    if (options.ignore_isize) return null;
+    if (options.ignore_isize or options.allow_trailing_data) return null;
     const expected_size: usize = std.mem.readInt(u32, input[input.len - 4 ..][0..4], .little);
     try ensureOutputLimit(0, expected_size, max_output_len);
     const out = try allocator.alloc(u8, expected_size);
@@ -11114,6 +11114,16 @@ test "gzip relaxed decode options ignore trailer checks and trailing bytes" {
     const trailing = with_trailing[0 .. encoded.len + 1];
     try std.testing.expectError(error.TrailingData, decodeGzip(trailing, &out));
     try std.testing.expectEqual(@as(usize, 7), try decodeGzipWithOptions(trailing, &out, .{ .allow_trailing_data = true }));
+
+    const trailing_alloc = try decodeGzipAllocWithOptions(std.testing.allocator, trailing, .{ .allow_trailing_data = true });
+    defer std.testing.allocator.free(trailing_alloc);
+    try std.testing.expectEqualSlices(u8, "payload", trailing_alloc);
+
+    var trailing_limited_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
+    const trailing_limited = try decodeGzipAllocWithOptionsLimited(trailing_limited_failing.allocator(), trailing, .{ .allow_trailing_data = true }, 7);
+    defer trailing_limited_failing.allocator().free(trailing_limited);
+    try std.testing.expectEqualSlices(u8, "payload", trailing_limited);
+    try std.testing.expectEqual(@as(usize, 1), trailing_limited_failing.allocations);
 
     var fully_relaxed = try std.testing.allocator.dupe(u8, trailing);
     defer std.testing.allocator.free(fully_relaxed);
