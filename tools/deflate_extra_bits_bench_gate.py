@@ -22,7 +22,17 @@ EXPECTED_COLUMNS = {
     "mib_per_s",
     "checksum",
 }
-EXPECTED_CASES = {"extra-1", "extra-3", "extra-5", "extra-9", "extra-13", "mixed-readme-distance", "mixed-roadmap-distance"}
+EXPECTED_CASES = {
+    "extra-1",
+    "extra-3",
+    "extra-5",
+    "extra-9",
+    "extra-13",
+    "mixed-readme-distance",
+    "mixed-roadmap-distance",
+    "distance-readme-symbol-extra",
+    "distance-roadmap-symbol-extra",
+}
 EXPECTED_READERS = {"buffered", "chunked_4096", "span_4096", "chunked_64", "span_64", "chunked_1", "span_1"}
 EXPECTED_BITS = {
     "extra-1": 1,
@@ -32,6 +42,8 @@ EXPECTED_BITS = {
     "extra-13": 13,
     "mixed-readme-distance": 0,
     "mixed-roadmap-distance": 0,
+    "distance-readme-symbol-extra": 0,
+    "distance-roadmap-symbol-extra": 0,
 }
 
 

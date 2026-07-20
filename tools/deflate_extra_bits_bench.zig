@@ -35,6 +35,12 @@ const MixedCaseSpec = struct {
     reads_per_iter: usize,
 };
 
+const DistanceCaseSpec = struct {
+    name: []const u8,
+    symbols: []const u6,
+    reads_per_iter: usize,
+};
+
 const Row = struct {
     case: []const u8,
     reader: []const u8,
@@ -63,10 +69,17 @@ const cases = [_]CaseSpec{
 // production distance/length decoding.
 const readme_distance_width_pattern = makeWidthPattern(.{ 0, 4, 10, 27, 82, 138, 257, 188, 163, 164, 180, 121, 91, 75, 73 });
 const roadmap_distance_width_pattern = makeWidthPattern(.{ 0, 3, 11, 36, 61, 238, 812, 726, 726, 870, 1012, 1123, 1200, 1392, 1435 });
+const readme_distance_symbol_pattern = makeWidthPattern(.{ 2, 0, 1, 1, 5, 5, 11, 16, 37, 45, 78, 60, 152, 105, 100, 88, 93, 70, 82, 82, 101, 79, 79, 42, 52, 39, 52, 23, 73, 0 });
+const roadmap_distance_symbol_pattern = makeWidthPattern(.{ 0, 0, 1, 2, 7, 4, 22, 14, 21, 40, 105, 133, 477, 335, 416, 310, 417, 309, 522, 348, 585, 427, 648, 475, 681, 519, 743, 649, 854, 581 });
 
 const mixed_cases = [_]MixedCaseSpec{
     .{ .name = "mixed-readme-distance", .pattern = &readme_distance_width_pattern, .reads_per_iter = readme_distance_width_pattern.len * 64 },
     .{ .name = "mixed-roadmap-distance", .pattern = &roadmap_distance_width_pattern, .reads_per_iter = roadmap_distance_width_pattern.len * 16 },
+};
+
+const distance_cases = [_]DistanceCaseSpec{
+    .{ .name = "distance-readme-symbol-extra", .symbols = &readme_distance_symbol_pattern, .reads_per_iter = readme_distance_symbol_pattern.len * 64 },
+    .{ .name = "distance-roadmap-symbol-extra", .symbols = &roadmap_distance_symbol_pattern, .reads_per_iter = roadmap_distance_symbol_pattern.len * 16 },
 };
 
 const readers = [_]ReaderKind{ .buffered, .chunked_4096, .span_4096, .chunked_64, .span_64, .chunked_1, .span_1 };
@@ -106,6 +119,13 @@ pub fn main(init: std.process.Init) !void {
         const iterations = iterations_override orelse iterationsForMixed(case);
         for (readers) |reader| {
             const row = try runMixedCase(init, case, reader, iterations);
+            try writeRow(&csv.writer, row);
+        }
+    }
+    for (distance_cases) |case| {
+        const iterations = iterations_override orelse iterationsForDistance(case);
+        for (readers) |reader| {
+            const row = try runDistanceCase(init, case, reader, iterations);
             try writeRow(&csv.writer, row);
         }
     }
@@ -226,6 +246,50 @@ fn runMixedCase(init: std.process.Init, case: MixedCaseSpec, reader_kind: Reader
     };
 }
 
+fn runDistanceCase(init: std.process.Init, case: DistanceCaseSpec, reader_kind: ReaderKind, iterations: usize) !Row {
+    const input_len = try bytesForDistanceSymbols(case.symbols, case.reads_per_iter);
+    const input = try init.gpa.alloc(u8, input_len);
+    defer init.gpa.free(input);
+    fillDistanceInput(input, case.symbols, case.reads_per_iter);
+
+    const chunks = if (reader_kind == .buffered)
+        &[_][]const u8{}
+    else
+        try makeChunks(init.gpa, input, switch (reader_kind) {
+            .chunked_4096, .span_4096 => 4096,
+            .chunked_64, .span_64 => 64,
+            .chunked_1, .span_1 => 1,
+            .buffered => unreachable,
+        });
+    defer if (reader_kind != .buffered) init.gpa.free(chunks);
+
+    const start = std.Io.Clock.awake.now(init.io);
+    var checksum: u64 = 0;
+    var iter: usize = 0;
+    while (iter < iterations) : (iter += 1) {
+        checksum +%= switch (reader_kind) {
+            .buffered => try runDistanceBuffered(input, case.reads_per_iter),
+            .chunked_4096, .chunked_64, .chunked_1 => try runDistanceChunked(chunks, case.reads_per_iter),
+            .span_4096, .span_64, .span_1 => try runDistanceSpan(chunks, case.reads_per_iter),
+        };
+    }
+    const elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+    std.mem.doNotOptimizeAway(checksum);
+
+    return .{
+        .case = case.name,
+        .reader = reader_kind.label(),
+        .bits = 0,
+        .reads_per_iter = case.reads_per_iter,
+        .iterations = iterations,
+        .input_bytes = input.len * iterations,
+        .elapsed_ns = elapsed_ns,
+        .reads_per_s = readsPerSecond(case.reads_per_iter * iterations, elapsed_ns),
+        .mib_per_s = mibPerSecond(input.len * iterations, elapsed_ns),
+        .checksum = checksum,
+    };
+}
+
 fn runBuffered(input: []const u8, bits: u6, reads: usize) !u64 {
     var reader = vort.bitstream.BufferedBitReader.init(input);
     var sum: u64 = 0;
@@ -283,6 +347,34 @@ fn runMixedSpan(chunks: []const []const u8, pattern: []const u6, reads: usize) !
     return sum;
 }
 
+fn runDistanceBuffered(input: []const u8, reads: usize) !u64 {
+    var reader = vort.bitstream.BufferedBitReader.init(input);
+    return runDistanceReads(&reader, reads);
+}
+
+fn runDistanceChunked(chunks: []const []const u8, reads: usize) !u64 {
+    var reader = try vort.bitstream.ChunkedBitReader.init(chunks);
+    return runDistanceReads(&reader, reads);
+}
+
+fn runDistanceSpan(chunks: []const []const u8, reads: usize) !u64 {
+    var reader = try vort.bitstream.ChunkedSpanBitReader.init(chunks);
+    return runDistanceReads(&reader, reads);
+}
+
+fn runDistanceReads(reader: anytype, reads: usize) !u64 {
+    var sum: u64 = 0;
+    var i: usize = 0;
+    while (i < reads) : (i += 1) {
+        const symbol = try reader.readBits(u16, 5);
+        if (symbol >= distance_extra_bits_by_symbol.len) return error.InvalidHuffmanCode;
+        const extra_bits = distance_extra_bits_by_symbol[symbol];
+        const extra = if (extra_bits == 0) 0 else try reader.readBits(u16, extra_bits);
+        sum +%= symbol + extra;
+    }
+    return sum;
+}
+
 fn bytesForReads(bits: u6, reads: usize) !usize {
     const total_bits = try std.math.mul(usize, bits, reads);
     return (total_bits + 7) / 8 + 8;
@@ -298,10 +390,47 @@ fn bytesForPattern(pattern: []const u6, reads: usize) !usize {
     return (total_bits + 7) / 8 + 8;
 }
 
+fn bytesForDistanceSymbols(symbols: []const u6, reads: usize) !usize {
+    var bits_per_pattern: usize = 0;
+    for (symbols) |symbol| bits_per_pattern += 5 + distance_extra_bits_by_symbol[symbol];
+    const full_patterns = reads / symbols.len;
+    const remainder = reads % symbols.len;
+    var total_bits = try std.math.mul(usize, bits_per_pattern, full_patterns);
+    for (symbols[0..remainder]) |symbol| total_bits = try std.math.add(usize, total_bits, 5 + distance_extra_bits_by_symbol[symbol]);
+    return (total_bits + 7) / 8 + 8;
+}
+
 fn fillInput(input: []u8, bits: u6) void {
     for (input, 0..) |*byte, i| {
         byte.* = @truncate((i * 131 + @as(usize, bits) * 17 + (i >> 2)) & 0xff);
     }
+}
+
+fn fillDistanceInput(input: []u8, symbols: []const u6, reads: usize) void {
+    @memset(input, 0);
+    var bit_pos: usize = 0;
+    var i: usize = 0;
+    while (i < reads) : (i += 1) {
+        const symbol = symbols[i % symbols.len];
+        writeBits(input, &bit_pos, symbol, 5);
+        const extra_bits = distance_extra_bits_by_symbol[symbol];
+        if (extra_bits != 0) {
+            const mask = (@as(u16, 1) << @intCast(extra_bits)) - 1;
+            const extra: u16 = @truncate((i * 131 + @as(usize, symbol) * 17) & mask);
+            writeBits(input, &bit_pos, extra, extra_bits);
+        }
+    }
+}
+
+fn writeBits(output: []u8, bit_pos: *usize, value: u16, count: u6) void {
+    var written: u6 = 0;
+    while (written < count) : (written += 1) {
+        if (((value >> @intCast(written)) & 1) != 0) {
+            const absolute = bit_pos.* + written;
+            output[absolute / 8] |= @as(u8, 1) << @intCast(absolute % 8);
+        }
+    }
+    bit_pos.* += count;
 }
 
 fn makeChunks(allocator: std.mem.Allocator, input: []const u8, chunk_len: usize) ![][]const u8 {
@@ -325,6 +454,22 @@ fn iterationsForMixed(case: MixedCaseSpec) usize {
     const target_reads: usize = 4 * 1024 * 1024;
     return @max(@as(usize, 8), @min(@as(usize, 512), target_reads / @max(case.reads_per_iter, 1)));
 }
+
+fn iterationsForDistance(case: DistanceCaseSpec) usize {
+    const target_reads: usize = 4 * 1024 * 1024;
+    return @max(@as(usize, 8), @min(@as(usize, 512), target_reads / @max(case.reads_per_iter, 1)));
+}
+
+const distance_extra_bits_by_symbol = [_]u6{
+    0,  0,  0,  0,
+    1,  1,  2,  2,
+    3,  3,  4,  4,
+    5,  5,  6,  6,
+    7,  7,  8,  8,
+    9,  9,  10, 10,
+    11, 11, 12, 12,
+    13, 13,
+};
 
 fn readsPerSecond(reads: usize, elapsed_ns: i128) f64 {
     if (elapsed_ns <= 0) return 0;
