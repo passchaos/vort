@@ -134,6 +134,12 @@ caller-buffer decode at about `649.00` / `584.61` / `519.35` MiB/s, with a
 (`HLIT/HDIST/HCLEN=279/30/17`, literal `108/171/14`, distance `28/2/13`).
 These rows should be used to separate text-heavy dynamic payload cost from
 wrapper and allocation overhead before changing Huffman table policies again.
+A follow-up length-extra-bit staged peek/advance experiment was rejected on
+2026-07-20: one short ReleaseFast repeat3 candidate improved some
+README/roadmap caller-buffer rows, but also regressed README `gzip_into` and
+showed mixed binary/structured behavior in the same sample. Keep the production
+staged helper limited to distance extra bits until broader A/B evidence proves
+length extra-bit changes are corpus-safe across raw/zlib/gzip decode.
 
 This is not a final ecosystem claim: Rust's compression stack still has broader
 zstd/brotli/lz4 coverage, mature fuzzing, platform dispatch, and production

@@ -1124,6 +1124,15 @@ architecture blindly.
 
 - Added a narrow production helper for distance extra-bit reads that uses the staged peek/advance path after distance symbol decode, without changing length decoding or introducing symbol-specific branches. ReleaseFast repeat3 README/roadmap probes were mixed-positive overall, and the chunked zlib plus PNG streaming zlib gates passed, so this keeps the safer fused-extra signal while avoiding the rejected hot-distance-symbol switch.
 
+- Tried extending the same staged extra-bit helper to length extra bits, but did
+  not keep it. A short ReleaseFast repeat3 candidate improved some
+  README/roadmap caller-buffer rows, yet the same sample regressed README
+  `gzip_into` and showed mixed binary/structured behavior; the immediate
+  rollback probe also showed enough variance that the change was not
+  corpus-safe evidence. Keep length extra-bit reads on the generic reader path
+  until a broader A/B proves consistent wins across raw/zlib/gzip and binary
+  dynamic rows.
+
 - Rejected a broader production fused dynamic-distance FastDecoder hit path that consumed the distance Huffman code and extra bits together. It helped `docs/roadmap.md` in the targeted repeat3 probe but regressed README caller-buffer raw/zlib/gzip rows to about `474.04` / `495.73` / `453.28` MiB/s, so production keeps only the narrower staged helper for distance extra bits.
 
 - Combined DEFLATE block-header reads in raw/zlib and PNG streaming decode paths,
