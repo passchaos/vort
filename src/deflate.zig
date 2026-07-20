@@ -7975,6 +7975,10 @@ fn validateGzipStoredPlanBeforeAlloc(input: []const u8, data_offset: usize, plan
     const footer_offset = data_offset + plan.input_read;
     if (footer_offset > input.len or input.len - footer_offset < 8) return error.TruncatedFrame;
     if (!options.allow_trailing_data and footer_offset + 8 != input.len) return error.TrailingData;
+    if (!options.ignore_isize) {
+        const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
+        if (@as(u32, @truncate(plan.output_len)) != expected_size) return error.SizeMismatch;
+    }
 }
 
 fn decodeGzipAllocFooterSize(allocator: std.mem.Allocator, input: []const u8, data_offset: usize, options: GzipDecodeOptions, max_output_len: ?usize) !?[]u8 {
@@ -10504,6 +10508,9 @@ test "gzip stored wrapper validates crc size header and trailing data" {
     defer std.testing.allocator.free(bad_size);
     bad_size[bad_size.len - 4] ^= 1;
     try std.testing.expectError(error.SizeMismatch, decodeGzipStored(bad_size, &out));
+    var bad_size_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.SizeMismatch, decodeGzipAlloc(bad_size_failing.allocator(), bad_size));
+    try std.testing.expectEqual(@as(usize, 0), bad_size_failing.allocations);
 
     var with_trailing: [64]u8 = undefined;
     @memcpy(with_trailing[0..encoded.len], encoded);
