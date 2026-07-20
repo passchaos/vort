@@ -325,6 +325,12 @@ pub const ZlibDecodeOptions = struct {
     allow_trailing_data: bool = false,
 };
 
+pub const GzipDecodeOptions = struct {
+    ignore_crc32: bool = false,
+    ignore_isize: bool = false,
+    allow_trailing_data: bool = false,
+};
+
 pub fn optionsForLevel(level: CompressionLevel) CompressionOptions {
     return switch (level) {
         .fastest => .{ .parser = .hash, .lz77_options = .{ .window_len = 16 * 1024, .max_chain = 6, .nice_len = 16, .max_candidates = 1, .lazy_min_gain = 3, .min_match = 4, .max_match = 96, .min_savings_bits = 6 }, .block_selection = .stored_fixed_dynamic, .split_options = .{ .min_block_len = 32 * 1024, .max_block_len = max_stored_block_len, .sample_len = 1024, .search_step = 32 * 1024 } },
@@ -7289,16 +7295,24 @@ fn smallerWrappedAdaptiveOrOneShot(allocator: std.mem.Allocator, writer: *bitstr
 }
 
 fn validateGzipFooterPartial(input: []const u8, footer_offset: usize, actual_crc: u32, output_len: usize) Error!void {
+    try validateGzipFooterPartialWithOptions(input, footer_offset, actual_crc, output_len, .{});
+}
+
+fn validateGzipFooterPartialWithOptions(input: []const u8, footer_offset: usize, actual_crc: u32, output_len: usize, options: GzipDecodeOptions) Error!void {
     if (footer_offset > input.len or input.len - footer_offset < 8) return error.TruncatedFrame;
     const expected_crc = std.mem.readInt(u32, input[footer_offset..][0..4], .little);
     const expected_size = std.mem.readInt(u32, input[footer_offset + 4 ..][0..4], .little);
-    if (actual_crc != expected_crc) return error.ChecksumMismatch;
-    if (@as(u32, @truncate(output_len)) != expected_size) return error.SizeMismatch;
+    if (!options.ignore_crc32 and actual_crc != expected_crc) return error.ChecksumMismatch;
+    if (!options.ignore_isize and @as(u32, @truncate(output_len)) != expected_size) return error.SizeMismatch;
 }
 
 fn validateGzipFooter(input: []const u8, footer_offset: usize, actual_crc: u32, output_len: usize) Error!void {
-    try validateGzipFooterPartial(input, footer_offset, actual_crc, output_len);
-    if (footer_offset + 8 != input.len) return error.TrailingData;
+    try validateGzipFooterWithOptions(input, footer_offset, actual_crc, output_len, .{});
+}
+
+fn validateGzipFooterWithOptions(input: []const u8, footer_offset: usize, actual_crc: u32, output_len: usize, options: GzipDecodeOptions) Error!void {
+    try validateGzipFooterPartialWithOptions(input, footer_offset, actual_crc, output_len, options);
+    if (!options.allow_trailing_data and footer_offset + 8 != input.len) return error.TrailingData;
 }
 
 pub fn inspectGzipMemberAlloc(allocator: std.mem.Allocator, input: []const u8, member_index: usize) !GzipMemberInfo {
@@ -7358,11 +7372,15 @@ pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
 }
 
 pub fn decodeGzip(input: []const u8, output: []u8) Error!usize {
+    return decodeGzipWithOptions(input, output, .{});
+}
+
+pub fn decodeGzipWithOptions(input: []const u8, output: []u8, options: GzipDecodeOptions) Error!usize {
     const data_offset = try parseGzipHeader(input);
 
     if (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[data_offset..], output)) |stored| {
         const footer_offset = data_offset + stored.result.input_read;
-        try validateGzipFooter(input, footer_offset, stored.digest, stored.result.output_written);
+        try validateGzipFooterWithOptions(input, footer_offset, stored.digest, stored.result.output_written, options);
         return stored.result.output_written;
     }
 
@@ -7370,7 +7388,7 @@ pub fn decodeGzip(input: []const u8, output: []u8) Error!usize {
     const raw = try decodeRawAutoWithDictionaryFromReader(&reader, 0, "", output);
     const footer_offset = data_offset + raw.input_read;
     const payload = output[0..raw.output_written];
-    try validateGzipFooter(input, footer_offset, checksum.crc32Best(payload), raw.output_written);
+    try validateGzipFooterWithOptions(input, footer_offset, checksum.crc32Best(payload), raw.output_written, options);
     return raw.output_written;
 }
 
@@ -10960,6 +10978,39 @@ test "gzip decoder accepts optional extra name comment and header crc fields" {
     const decoded = try decodeGzipAlloc(std.testing.allocator, with_options);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "hello", decoded);
+}
+
+test "gzip relaxed decode options ignore trailer checks and trailing bytes" {
+    const encoded = try encodeGzipFixedAlloc(std.testing.allocator, "payload");
+    defer std.testing.allocator.free(encoded);
+
+    var out: [32]u8 = undefined;
+    var bad_crc = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_crc);
+    bad_crc[bad_crc.len - 8] ^= 1;
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzip(bad_crc, &out));
+    try std.testing.expectEqual(@as(usize, 7), try decodeGzipWithOptions(bad_crc, &out, .{ .ignore_crc32 = true }));
+    try std.testing.expectEqualSlices(u8, "payload", out[0..7]);
+
+    var bad_isize = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_isize);
+    bad_isize[bad_isize.len - 4] ^= 1;
+    try std.testing.expectError(error.SizeMismatch, decodeGzip(bad_isize, &out));
+    try std.testing.expectEqual(@as(usize, 7), try decodeGzipWithOptions(bad_isize, &out, .{ .ignore_isize = true }));
+
+    var with_trailing: [64]u8 = undefined;
+    @memcpy(with_trailing[0..encoded.len], encoded);
+    with_trailing[encoded.len] = 0xaa;
+    const trailing = with_trailing[0 .. encoded.len + 1];
+    try std.testing.expectError(error.TrailingData, decodeGzip(trailing, &out));
+    try std.testing.expectEqual(@as(usize, 7), try decodeGzipWithOptions(trailing, &out, .{ .allow_trailing_data = true }));
+
+    var fully_relaxed = try std.testing.allocator.dupe(u8, trailing);
+    defer std.testing.allocator.free(fully_relaxed);
+    fully_relaxed[encoded.len - 8] ^= 1;
+    fully_relaxed[encoded.len - 4] ^= 1;
+    const relaxed = GzipDecodeOptions{ .ignore_crc32 = true, .ignore_isize = true, .allow_trailing_data = true };
+    try std.testing.expectEqual(@as(usize, 7), try decodeGzipWithOptions(fully_relaxed, &out, relaxed));
 }
 
 test "gzip decoder rejects truncated optional headers" {
