@@ -1152,3 +1152,14 @@ architecture blindly.
   generic raw/zlib/gzip inflate. A same-machine ReleaseFast probe kept explicit
   raw/zlib/gzip stored allocator rows near baseline with small positive movement
   on the alloc rows, while preserving caller-buffer stored correctness.
+
+- Added exact-size allocation APIs for raw, zlib, zlib-with-dictionary, and gzip
+  stored wrappers. These paths allocate the caller-declared output length and
+  decode/checksum stored streams directly into that exact slice, returning
+  `SizeMismatch` for both undersized and oversized expectations. The
+  decode-stage report now tracks `raw_stored_exact_mib_s`,
+  `zlib_stored_exact_mib_s`, and `gzip_stored_exact_mib_s`, plus stored
+  alloc/exact time ratios, so known-size users can compare explicit stored
+  alloc, exact-size alloc, and caller-buffer decode paths. The first local
+  ReleaseFast repeat3 probe kept stored exact rows in the same throughput class
+  as stored allocator rows on `stored-binary`.

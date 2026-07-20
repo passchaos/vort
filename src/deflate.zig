@@ -2257,6 +2257,18 @@ pub fn decodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
     return result.bytes;
 }
 
+pub fn decodeRawStoredAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    const out = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(out);
+    const decoded = decodeRawStored(input, out) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (decoded.input_read != input.len) return error.TrailingData;
+    if (decoded.output_written != expected_output_len) return error.SizeMismatch;
+    return out;
+}
+
 pub fn decodeRawStoredAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
     const result = try decodeRawStoredAllocPartialLimitedInternal(allocator, input, max_output_len);
     errdefer result.deinit(allocator);
@@ -6684,6 +6696,10 @@ pub fn decodeZlibStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator, input, null, null);
 }
 
+pub fn decodeZlibStoredAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeZlibStoredAllocWithOptionalDictionaryExactSize(allocator, input, null, expected_output_len);
+}
+
 pub fn decodeZlibStoredAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
     return decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator, input, null, max_output_len);
 }
@@ -6692,8 +6708,29 @@ pub fn decodeZlibStoredAllocWithDictionary(allocator: std.mem.Allocator, input: 
     return decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator, input, dictionary, null);
 }
 
+pub fn decodeZlibStoredAllocWithDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeZlibStoredAllocWithOptionalDictionaryExactSize(allocator, input, dictionary, expected_output_len);
+}
+
 pub fn decodeZlibStoredAllocWithDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
     return decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator, input, dictionary, max_output_len);
+}
+
+fn decodeZlibStoredAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, expected_output_len: usize) ![]u8 {
+    const out = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(out);
+    const written = if (dictionary) |dict|
+        decodeZlibStoredWithDictionary(input, out, dict) catch |err| switch (err) {
+            error.OutputTooSmall => return error.SizeMismatch,
+            else => return err,
+        }
+    else
+        decodeZlibStored(input, out) catch |err| switch (err) {
+            error.OutputTooSmall => return error.SizeMismatch,
+            else => return err,
+        };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return out;
 }
 
 fn decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
@@ -7538,6 +7575,17 @@ pub fn decodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![
     return decodeGzipStoredAllocLimitedInternal(allocator, input, null);
 }
 
+pub fn decodeGzipStoredAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    const out = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(out);
+    const written = decodeGzipStored(input, out) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return out;
+}
+
 pub fn decodeGzipStoredAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
     return decodeGzipStoredAllocLimitedInternal(allocator, input, max_output_len);
 }
@@ -8047,6 +8095,44 @@ test "stored deflate alloc decoders enforce output limits" {
     const gzip_ok = try decodeGzipStoredAllocLimited(std.testing.allocator, gzip_frame, 5);
     defer std.testing.allocator.free(gzip_ok);
     try std.testing.expectEqualSlices(u8, "hello", gzip_ok);
+}
+
+test "stored deflate exact-size alloc decoders validate exact lengths" {
+    const plain = "stored exact payload";
+
+    const raw = try encodeRawStoredAlloc(std.testing.allocator, plain);
+    defer std.testing.allocator.free(raw);
+    const raw_exact = try decodeRawStoredAllocExactSize(std.testing.allocator, raw, plain.len);
+    defer std.testing.allocator.free(raw_exact);
+    try std.testing.expectEqualSlices(u8, plain, raw_exact);
+    try std.testing.expectError(error.SizeMismatch, decodeRawStoredAllocExactSize(std.testing.allocator, raw, plain.len - 1));
+    try std.testing.expectError(error.SizeMismatch, decodeRawStoredAllocExactSize(std.testing.allocator, raw, plain.len + 1));
+
+    const zlib_frame = try encodeZlibStoredAlloc(std.testing.allocator, plain);
+    defer std.testing.allocator.free(zlib_frame);
+    const zlib_exact = try decodeZlibStoredAllocExactSize(std.testing.allocator, zlib_frame, plain.len);
+    defer std.testing.allocator.free(zlib_exact);
+    try std.testing.expectEqualSlices(u8, plain, zlib_exact);
+    try std.testing.expectError(error.SizeMismatch, decodeZlibStoredAllocExactSize(std.testing.allocator, zlib_frame, plain.len - 1));
+    try std.testing.expectError(error.SizeMismatch, decodeZlibStoredAllocExactSize(std.testing.allocator, zlib_frame, plain.len + 1));
+
+    const dictionary = "stored ";
+    const dict_plain = "stored exact";
+    const zlib_dict = try encodeZlibStoredWithDictionaryAlloc(std.testing.allocator, dict_plain, dictionary);
+    defer std.testing.allocator.free(zlib_dict);
+    const zlib_dict_exact = try decodeZlibStoredAllocWithDictionaryExactSize(std.testing.allocator, zlib_dict, dictionary, dict_plain.len);
+    defer std.testing.allocator.free(zlib_dict_exact);
+    try std.testing.expectEqualSlices(u8, dict_plain, zlib_dict_exact);
+    try std.testing.expectError(error.SizeMismatch, decodeZlibStoredAllocWithDictionaryExactSize(std.testing.allocator, zlib_dict, dictionary, dict_plain.len - 1));
+    try std.testing.expectError(error.SizeMismatch, decodeZlibStoredAllocWithDictionaryExactSize(std.testing.allocator, zlib_dict, dictionary, dict_plain.len + 1));
+
+    const gzip_frame = try encodeGzipStoredAlloc(std.testing.allocator, plain);
+    defer std.testing.allocator.free(gzip_frame);
+    const gzip_exact = try decodeGzipStoredAllocExactSize(std.testing.allocator, gzip_frame, plain.len);
+    defer std.testing.allocator.free(gzip_exact);
+    try std.testing.expectEqualSlices(u8, plain, gzip_exact);
+    try std.testing.expectError(error.SizeMismatch, decodeGzipStoredAllocExactSize(std.testing.allocator, gzip_frame, plain.len - 1));
+    try std.testing.expectError(error.SizeMismatch, decodeGzipStoredAllocExactSize(std.testing.allocator, gzip_frame, plain.len + 1));
 }
 
 test "zlib stored wrapper matches level-0 vectors" {
