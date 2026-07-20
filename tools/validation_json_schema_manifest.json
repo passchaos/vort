@@ -1097,6 +1097,8 @@
         "gzip_into_no_isize_over_strict": "float",
         "gzip_into_relaxed_mib_s": "float",
         "gzip_into_relaxed_over_strict": "float",
+        "crc32_mib_s": "float",
+        "gzip_crc_time_ratio": "float",
         "gzip_mib_s": "float",
         "gzip_stored_alloc_exact_time_ratio": "float",
         "gzip_stored_alloc_time_ratio": "float",
