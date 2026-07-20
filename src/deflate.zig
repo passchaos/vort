@@ -2497,7 +2497,16 @@ fn decodeDistance(symbol: u16, reader: anytype) Error!usize {
     if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
     if (symbol < 4) return symbol + 1;
     const entry = distance_table[symbol];
-    return entry.base + try reader.readBits(u16, entry.extra_bits);
+    return entry.base + try readDistanceExtraBits(reader, entry.extra_bits);
+}
+
+fn readDistanceExtraBits(reader: anytype, count: u6) Error!usize {
+    std.debug.assert(count <= 13);
+    if (count == 0) return 0;
+    if (!reader.hasBits(count)) return error.TruncatedFrame;
+    const extra = reader.peekBitsPadded(u16, count);
+    reader.advanceBitsStagedAssumeAvailable(count);
+    return extra;
 }
 
 fn copyMatchAt(output: []u8, out_offset: usize, length: usize, distance: usize) Error!void {
