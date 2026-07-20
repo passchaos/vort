@@ -23,7 +23,8 @@ architecture blindly.
 - [x] Portable CRC32 slice-by-8 fast variant.
 - [x] Portable CRC32 slice-by-16 fast variant selected by dispatch.
 - [x] Portable CRC32C slice-by-8 fallback.
-- [x] Portable CRC32C slice-by-16 fallback selected when hardware CRC32C is unavailable.
+- [x] Portable CRC32C slice-by-16 fallback.
+- [x] Portable CRC32C slice-by-32 fallback selected when hardware CRC32C is unavailable.
 - [x] Runtime checksum dispatch API selecting portable fast path.
 - [x] Adler-32, CRC-32, and CRC-32C combine helpers compose independently checksummed blocks without rereading payload bytes.
 - [x] Adler-32 update uses 64-byte vector folding for zlib wrapper throughput.
@@ -1095,6 +1096,8 @@ architecture blindly.
 - Extended the deflate decode-stage report with explicit raw/zlib/gzip stored allocator throughput and stored-vs-generic allocation time ratios. This keeps the `stored-binary` wrapper weakness visible separately from generic decode alloc rows and from caller-buffer stored copy speed.
 
 - Added a portable IEEE CRC-32 slice-by-32 implementation, exposed it through `crc32Slice32`, switched `crc32Best` to dispatch to it on portable/x86 builds, and wired gzip stored-only wrapper fast paths to the same wider table state while leaving the unvalidated x86 PCLMUL path disabled. Local ReleaseFast checksum smoke moved CRC-32 best from about `2493.10` to `2971.17` MiB/s with matching scalar/slice digest mixes, and the stored-binary decode-stage row now reports gzip/gzip-stored alloc around `1609.57` / `1622.22` MiB/s, directly targeting the gzip stored/wrapper CRC-bound gap.
+
+- Added a portable CRC-32C slice-by-32 implementation, exposed `crc32cSlice32`, included it in the checksum benchmark CSV, and made it the non-hardware `crc32cBest` fallback while preserving SSE4.2 hardware dispatch when available. Local ReleaseFast checksum smoke on the same 1 MiB benchmark reported `crc32c-slice32` around `2967.36` MiB/s versus the previous portable `crc32c-slice16` baseline around `2478.71` MiB/s; hardware `crc32c-best` remains faster on this machine at about `10099.78` MiB/s.
 
 - Added stored-only fast paths for concatenated zlib and gzip members in both caller-buffer and allocator-returning APIs. Stored members now append/copy while computing the per-member Adler-32/CRC-32 instead of materializing then re-reading the member payload for trailer validation; `bench-deflate-decode` now carries `zlib-concat-stored-{alloc,exact,into}` and `gzip-concat-stored-{alloc,exact,into}` rows, with the latest local ReleaseFast smoke around zlib `18228.62` / `23057.08` / `24119.46` MiB/s and gzip `2594.14` / `2876.94` / `2901.15` MiB/s.
 
