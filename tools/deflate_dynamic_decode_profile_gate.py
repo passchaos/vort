@@ -67,6 +67,14 @@ EXPECTED_COLUMNS = {
     "match_class_length_extra_bits",
     "match_class_distance_extra_reads",
     "match_class_distance_extra_bits",
+    "match_rle_extra_bits_per_match",
+    "match_small_distance_extra_bits_per_match",
+    "match_non_overlapping_extra_bits_per_match",
+    "match_overlapping_extra_bits_per_match",
+    "match_rle_extra_bits_per_byte",
+    "match_small_distance_extra_bits_per_byte",
+    "match_non_overlapping_extra_bits_per_byte",
+    "match_overlapping_extra_bits_per_byte",
     "literal_fast_miss_ratio",
     "distance_fast_miss_ratio",
     "extra_bits_per_match",
@@ -118,6 +126,13 @@ def parse_top(value: str, label: str) -> list[tuple[int, int]]:
 
 def parse_class_hist(row: dict[str, str], key: str) -> list[int]:
     return parse_hist(row[key], 4, key)
+
+
+def assert_ratio(row: dict[str, str], key: str, numerator: int, denominator: int) -> None:
+    value = parse_float(row, key)
+    expected = 0.0 if denominator == 0 else numerator / denominator
+    if abs(value - expected) > 0.000001:
+        raise AssertionError(f"{key} mismatch expected={expected:.6f} got={value:.6f} row={row}")
 
 
 def validate_row(row: dict[str, str], strict_top_counts: bool = True) -> None:
@@ -209,14 +224,37 @@ def validate_row(row: dict[str, str], strict_top_counts: bool = True) -> None:
     expected_dominant_ratio = class_bytes[dominant_class] / parse_int(row, "match_bytes")
     if abs(dominant_ratio - expected_dominant_ratio) > 0.000001:
         raise AssertionError(f"dominant match ratio mismatch row={row}")
+    class_counts = [
+        parse_int(row, "match_rle_count"),
+        parse_int(row, "match_small_distance_count"),
+        parse_int(row, "match_non_overlapping_count"),
+        parse_int(row, "match_overlapping_count"),
+    ]
+    class_byte_counts = [
+        parse_int(row, "match_rle_bytes"),
+        parse_int(row, "match_small_distance_bytes"),
+        parse_int(row, "match_non_overlapping_bytes"),
+        parse_int(row, "match_overlapping_bytes"),
+    ]
+    class_length_extra_bits = parse_class_hist(row, "match_class_length_extra_bits")
+    class_distance_extra_bits = parse_class_hist(row, "match_class_distance_extra_bits")
+    class_total_extra_bits = [left + right for left, right in zip(class_length_extra_bits, class_distance_extra_bits)]
     if sum(parse_class_hist(row, "match_class_length_extra_reads")) != parse_int(row, "length_extra_reads"):
         raise AssertionError(f"match class length extra read sum mismatch row={row}")
-    if sum(parse_class_hist(row, "match_class_length_extra_bits")) != parse_int(row, "length_extra_bits"):
+    if sum(class_length_extra_bits) != parse_int(row, "length_extra_bits"):
         raise AssertionError(f"match class length extra bit sum mismatch row={row}")
     if sum(parse_class_hist(row, "match_class_distance_extra_reads")) != parse_int(row, "distance_extra_reads"):
         raise AssertionError(f"match class distance extra read sum mismatch row={row}")
-    if sum(parse_class_hist(row, "match_class_distance_extra_bits")) != parse_int(row, "distance_extra_bits"):
+    if sum(class_distance_extra_bits) != parse_int(row, "distance_extra_bits"):
         raise AssertionError(f"match class distance extra bit sum mismatch row={row}")
+    assert_ratio(row, "match_rle_extra_bits_per_match", class_total_extra_bits[0], class_counts[0])
+    assert_ratio(row, "match_small_distance_extra_bits_per_match", class_total_extra_bits[1], class_counts[1])
+    assert_ratio(row, "match_non_overlapping_extra_bits_per_match", class_total_extra_bits[2], class_counts[2])
+    assert_ratio(row, "match_overlapping_extra_bits_per_match", class_total_extra_bits[3], class_counts[3])
+    assert_ratio(row, "match_rle_extra_bits_per_byte", class_total_extra_bits[0], class_byte_counts[0])
+    assert_ratio(row, "match_small_distance_extra_bits_per_byte", class_total_extra_bits[1], class_byte_counts[1])
+    assert_ratio(row, "match_non_overlapping_extra_bits_per_byte", class_total_extra_bits[2], class_byte_counts[2])
+    assert_ratio(row, "match_overlapping_extra_bits_per_byte", class_total_extra_bits[3], class_byte_counts[3])
     for key in (
         "dominant_match_byte_ratio",
         "match_rle_byte_ratio",

@@ -197,7 +197,7 @@ fn rawSliceFromZlib(frame: []const u8) []const u8 {
 }
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
-    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_symbol_histogram,distance_symbol_histogram,top_length_symbols,top_distance_symbols,top_length_extra_symbols,top_distance_extra_symbols,length_extra_width_reads,distance_extra_width_reads,length_extra_width_bits,distance_extra_width_bits,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_lookup_covered,literal_lookup_size,distance_lookup_covered,distance_lookup_size,literal_lookup_coverage_ratio,distance_lookup_coverage_ratio,dominant_match_class,dominant_match_byte_ratio,match_rle_count,match_rle_bytes,match_small_distance_count,match_small_distance_bytes,match_non_overlapping_count,match_non_overlapping_bytes,match_overlapping_count,match_overlapping_bytes,match_rle_byte_ratio,match_small_distance_byte_ratio,match_non_overlapping_byte_ratio,match_overlapping_byte_ratio,match_class_length_extra_reads,match_class_length_extra_bits,match_class_distance_extra_reads,match_class_distance_extra_bits,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
+    try writer.writeAll("case,input_bytes,raw_bytes,dynamic_hlit,dynamic_hdist,dynamic_literal_max_bits,dynamic_distance_max_bits,literal_lookup_bits,payload_ns,output_bytes,literal_symbols,length_symbols,match_bytes,distance_symbols,length_symbol_histogram,distance_symbol_histogram,top_length_symbols,top_distance_symbols,top_length_extra_symbols,top_distance_extra_symbols,length_extra_width_reads,distance_extra_width_reads,length_extra_width_bits,distance_extra_width_bits,length_extra_reads,distance_extra_reads,length_extra_bits,distance_extra_bits,literal_fast_hits,literal_fast_misses,distance_fast_hits,distance_fast_misses,literal_lookup_covered,literal_lookup_size,distance_lookup_covered,distance_lookup_size,literal_lookup_coverage_ratio,distance_lookup_coverage_ratio,dominant_match_class,dominant_match_byte_ratio,match_rle_count,match_rle_bytes,match_small_distance_count,match_small_distance_bytes,match_non_overlapping_count,match_non_overlapping_bytes,match_overlapping_count,match_overlapping_bytes,match_rle_byte_ratio,match_small_distance_byte_ratio,match_non_overlapping_byte_ratio,match_overlapping_byte_ratio,match_class_length_extra_reads,match_class_length_extra_bits,match_class_distance_extra_reads,match_class_distance_extra_bits,match_rle_extra_bits_per_match,match_small_distance_extra_bits_per_match,match_non_overlapping_extra_bits_per_match,match_overlapping_extra_bits_per_match,match_rle_extra_bits_per_byte,match_small_distance_extra_bits_per_byte,match_non_overlapping_extra_bits_per_byte,match_overlapping_extra_bits_per_byte,literal_fast_miss_ratio,distance_fast_miss_ratio,extra_bits_per_match,mix\n");
     for (rows) |row| {
         try writer.print("{s},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},", .{
             row.case,
@@ -273,7 +273,16 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
         try writeHistogram(writer, &row.match_class_distance_extra_reads);
         try writer.writeByte(',');
         try writeHistogram(writer, &row.match_class_distance_extra_bits);
-        try writer.print(",{d:.6},{d:.6},{d:.6},{d}\n", .{
+        const class_total_extra_bits = matchClassTotalExtraBits(row);
+        try writer.print(",{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d:.6},{d}\n", .{
+            ratio(class_total_extra_bits[0], row.match_rle_count),
+            ratio(class_total_extra_bits[1], row.match_small_distance_count),
+            ratio(class_total_extra_bits[2], row.match_non_overlapping_count),
+            ratio(class_total_extra_bits[3], row.match_overlapping_count),
+            ratio(class_total_extra_bits[0], row.match_rle_bytes),
+            ratio(class_total_extra_bits[1], row.match_small_distance_bytes),
+            ratio(class_total_extra_bits[2], row.match_non_overlapping_bytes),
+            ratio(class_total_extra_bits[3], row.match_overlapping_bytes),
             ratio(row.literal_fast_misses, row.literal_fast_hits + row.literal_fast_misses),
             ratio(row.distance_fast_misses, row.distance_fast_hits + row.distance_fast_misses),
             ratio(row.length_extra_bits + row.distance_extra_bits, row.length_symbols),
@@ -298,6 +307,14 @@ fn dominantMatchClass(row: Row) DominantMatchClass {
         if (candidate.bytes > best.bytes) best = candidate;
     }
     return best;
+}
+
+fn matchClassTotalExtraBits(row: Row) [vort.DynamicDecodeProfile.match_class_count]usize {
+    var totals: [vort.DynamicDecodeProfile.match_class_count]usize = undefined;
+    for (&totals, 0..) |*total, i| {
+        total.* = row.match_class_length_extra_bits[i] + row.match_class_distance_extra_bits[i];
+    }
+    return totals;
 }
 
 fn writeHistogram(writer: *std.Io.Writer, histogram: []const usize) !void {
