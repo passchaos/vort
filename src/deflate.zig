@@ -7744,17 +7744,29 @@ fn decodeGzipConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
 }
 
 pub fn decodeGzipAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    return decodeGzipAllocLimitedInternal(allocator, input, null);
+    return decodeGzipAllocWithOptionsLimitedInternal(allocator, input, .{}, null);
 }
 
 pub fn decodeGzipAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
-    return decodeGzipAllocLimitedInternal(allocator, input, max_output_len);
+    return decodeGzipAllocWithOptionsLimitedInternal(allocator, input, .{}, max_output_len);
+}
+
+pub fn decodeGzipAllocWithOptions(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions) ![]u8 {
+    return decodeGzipAllocWithOptionsLimitedInternal(allocator, input, options, null);
+}
+
+pub fn decodeGzipAllocWithOptionsLimited(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: usize) ![]u8 {
+    return decodeGzipAllocWithOptionsLimitedInternal(allocator, input, options, max_output_len);
 }
 
 pub fn decodeGzipAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
+    return decodeGzipAllocWithOptionsExactSize(allocator, input, .{}, expected_output_len);
+}
+
+pub fn decodeGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, expected_output_len: usize) ![]u8 {
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
-    const written = decodeGzip(input, out) catch |err| switch (err) {
+    const written = decodeGzipWithOptions(input, out, options) catch |err| switch (err) {
         error.OutputTooSmall => return error.SizeMismatch,
         else => return err,
     };
@@ -7762,32 +7774,43 @@ pub fn decodeGzipAllocExactSize(allocator: std.mem.Allocator, input: []const u8,
     return out;
 }
 
-fn decodeGzipAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
-    if (try decodeGzipAllocFooterSize(allocator, input, max_output_len)) |decoded| return decoded;
+fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {
+    if (try decodeGzipAllocFooterSize(allocator, input, options, max_output_len)) |decoded| return decoded;
 
     const data_offset = try parseGzipHeader(input);
 
-    if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice32, allocator, input[data_offset..], max_output_len)) |stored| {
-        errdefer stored.deinit(allocator);
-        const footer_offset = data_offset + stored.result.input_read;
-        try validateGzipFooter(input, footer_offset, stored.digest, stored.result.bytes.len);
-        return stored.result.bytes;
+    if (options.ignore_crc32) {
+        if (try decodeRawStoredOnlyAllocMaybe(allocator, input[data_offset..], max_output_len)) |stored| {
+            errdefer stored.deinit(allocator);
+            const footer_offset = data_offset + stored.input_read;
+            try validateGzipFooterWithOptions(input, footer_offset, 0, stored.bytes.len, options);
+            return stored.bytes;
+        }
+    } else {
+        if (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice32, allocator, input[data_offset..], max_output_len)) |stored| {
+            errdefer stored.deinit(allocator);
+            const footer_offset = data_offset + stored.result.input_read;
+            try validateGzipFooterWithOptions(input, footer_offset, stored.digest, stored.result.bytes.len, options);
+            return stored.result.bytes;
+        }
     }
 
     const raw = try decodeRawAutoAllocPartialWithDictionary(allocator, input[data_offset..], "", max_output_len);
     errdefer raw.deinit(allocator);
     const footer_offset = data_offset + raw.input_read;
-    try validateGzipFooter(input, footer_offset, checksum.crc32Best(raw.bytes), raw.bytes.len);
+    const actual_crc = if (options.ignore_crc32) 0 else checksum.crc32Best(raw.bytes);
+    try validateGzipFooterWithOptions(input, footer_offset, actual_crc, raw.bytes.len, options);
     return raw.bytes;
 }
 
-fn decodeGzipAllocFooterSize(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?[]u8 {
+fn decodeGzipAllocFooterSize(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) !?[]u8 {
     if (input.len < gzip_header.len + 8) return null;
+    if (options.ignore_isize) return null;
     const expected_size: usize = std.mem.readInt(u32, input[input.len - 4 ..][0..4], .little);
     try ensureOutputLimit(0, expected_size, max_output_len);
     const out = try allocator.alloc(u8, expected_size);
     errdefer allocator.free(out);
-    const written = decodeGzip(input, out) catch |err| switch (err) {
+    const written = decodeGzipWithOptions(input, out, options) catch |err| switch (err) {
         error.OutputTooSmall => return null,
         else => return err,
     };
@@ -11037,6 +11060,19 @@ test "gzip relaxed decode options ignore trailer checks and trailing bytes" {
     fully_relaxed[encoded.len - 4] ^= 1;
     const relaxed = GzipDecodeOptions{ .ignore_crc32 = true, .ignore_isize = true, .allow_trailing_data = true };
     try std.testing.expectEqual(@as(usize, 7), try decodeGzipWithOptions(fully_relaxed, &out, relaxed));
+
+    const relaxed_alloc = try decodeGzipAllocWithOptions(std.testing.allocator, fully_relaxed, relaxed);
+    defer std.testing.allocator.free(relaxed_alloc);
+    try std.testing.expectEqualSlices(u8, "payload", relaxed_alloc);
+
+    const relaxed_exact = try decodeGzipAllocWithOptionsExactSize(std.testing.allocator, fully_relaxed, relaxed, 7);
+    defer std.testing.allocator.free(relaxed_exact);
+    try std.testing.expectEqualSlices(u8, "payload", relaxed_exact);
+
+    try std.testing.expectError(error.OutputLimitExceeded, decodeGzipAllocWithOptionsLimited(std.testing.allocator, fully_relaxed, relaxed, 6));
+    const relaxed_limited = try decodeGzipAllocWithOptionsLimited(std.testing.allocator, fully_relaxed, relaxed, 7);
+    defer std.testing.allocator.free(relaxed_limited);
+    try std.testing.expectEqualSlices(u8, "payload", relaxed_limited);
 }
 
 test "gzip decoder rejects truncated optional headers" {
