@@ -254,7 +254,10 @@ member initializers use the same scratch contract and preserve empty middle
 members while draining the combined logical payload. Exact-size initialization is
 intended for callers that already know the uncompressed length from surrounding
 metadata; it rejects length mismatches before exposing any payload bytes. Gzip
-header, truncation, CRC-32, and ISIZE failures are retained in the shared
+single-member, concatenated, and chunked initializers also have `WithOptions`
+variants that accept `GzipDecodeOptions`, so trusted callers can deliberately
+relax CRC-32, ISIZE, or trailing-data checks without leaving the caller-owned
+scratch/drain API shape. Gzip header, truncation, CRC-32, and ISIZE failures are retained in the shared
 diagnostics view with recoverability hints for corrupt headers, truncated input,
 or payload/footer corruption.
 

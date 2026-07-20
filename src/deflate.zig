@@ -7487,6 +7487,18 @@ pub const GzipDecoder = struct {
         return self;
     }
 
+    pub fn initWithOptions(input: []const u8, scratch: []u8, options: GzipDecodeOptions) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetWithOptions(input, scratch, options);
+        return self;
+    }
+
+    pub fn initWithOptionsExactSize(input: []const u8, scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetWithOptionsExactSize(input, scratch, options, expected_output_len);
+        return self;
+    }
+
     pub fn initFromChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!GzipDecoder {
         var self = GzipDecoder{};
         try self.resetFromChunks(chunks, compressed_scratch, output_scratch);
@@ -7496,6 +7508,18 @@ pub const GzipDecoder = struct {
     pub fn initFromChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!GzipDecoder {
         var self = GzipDecoder{};
         try self.resetFromChunksExactSize(chunks, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
+        return self;
+    }
+
+    pub fn initFromChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetFromChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, options, expected_output_len);
         return self;
     }
 
@@ -7511,6 +7535,18 @@ pub const GzipDecoder = struct {
         return self;
     }
 
+    pub fn initConcatenatedWithOptions(input: []const u8, scratch: []u8, options: GzipDecodeOptions) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetConcatenatedWithOptions(input, scratch, options);
+        return self;
+    }
+
+    pub fn initConcatenatedWithOptionsExactSize(input: []const u8, scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetConcatenatedWithOptionsExactSize(input, scratch, options, expected_output_len);
+        return self;
+    }
+
     pub fn initConcatenatedFromChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!GzipDecoder {
         var self = GzipDecoder{};
         try self.resetConcatenatedFromChunks(chunks, compressed_scratch, output_scratch);
@@ -7523,8 +7559,24 @@ pub const GzipDecoder = struct {
         return self;
     }
 
+    pub fn initConcatenatedFromChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetConcatenatedFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
+        return self;
+    }
+
+    pub fn initConcatenatedFromChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!GzipDecoder {
+        var self = GzipDecoder{};
+        try self.resetConcatenatedFromChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, options, expected_output_len);
+        return self;
+    }
+
     pub fn reset(self: *GzipDecoder, input: []const u8, scratch: []u8) Error!void {
-        const written = decodeGzip(input, scratch) catch |err| {
+        return self.resetWithOptions(input, scratch, .{});
+    }
+
+    pub fn resetWithOptions(self: *GzipDecoder, input: []const u8, scratch: []u8, options: GzipDecodeOptions) Error!void {
+        const written = decodeGzipWithOptions(input, scratch, options) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -7532,7 +7584,11 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetExactSize(self: *GzipDecoder, input: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
-        try self.reset(input, scratch);
+        return self.resetWithOptionsExactSize(input, scratch, .{}, expected_output_len);
+    }
+
+    pub fn resetWithOptionsExactSize(self: *GzipDecoder, input: []const u8, scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!void {
+        try self.resetWithOptions(input, scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
             return error.SizeMismatch;
@@ -7540,17 +7596,29 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetFromChunks(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        return self.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
+    }
+
+    pub fn resetFromChunksWithOptions(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) Error!void {
         const joined = try joinChunks(chunks, compressed_scratch);
-        return self.reset(joined, output_scratch);
+        return self.resetWithOptions(joined, output_scratch, options);
     }
 
     pub fn resetFromChunksExactSize(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetFromChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, .{}, expected_output_len);
+    }
+
+    pub fn resetFromChunksWithOptionsExactSize(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!void {
         const joined = try joinChunks(chunks, compressed_scratch);
-        return self.resetExactSize(joined, output_scratch, expected_output_len);
+        return self.resetWithOptionsExactSize(joined, output_scratch, options, expected_output_len);
     }
 
     pub fn resetConcatenated(self: *GzipDecoder, input: []const u8, scratch: []u8) Error!void {
-        const written = decodeGzipConcatenated(input, scratch) catch |err| {
+        return self.resetConcatenatedWithOptions(input, scratch, .{});
+    }
+
+    pub fn resetConcatenatedWithOptions(self: *GzipDecoder, input: []const u8, scratch: []u8, options: GzipDecodeOptions) Error!void {
+        const written = decodeGzipConcatenatedWithOptions(input, scratch, options) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -7558,7 +7626,11 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetConcatenatedExactSize(self: *GzipDecoder, input: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
-        try self.resetConcatenated(input, scratch);
+        return self.resetConcatenatedWithOptionsExactSize(input, scratch, .{}, expected_output_len);
+    }
+
+    pub fn resetConcatenatedWithOptionsExactSize(self: *GzipDecoder, input: []const u8, scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!void {
+        try self.resetConcatenatedWithOptions(input, scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
             return error.SizeMismatch;
@@ -7566,13 +7638,21 @@ pub const GzipDecoder = struct {
     }
 
     pub fn resetConcatenatedFromChunks(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        return self.resetConcatenatedFromChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
+    }
+
+    pub fn resetConcatenatedFromChunksWithOptions(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) Error!void {
         const joined = try joinChunks(chunks, compressed_scratch);
-        return self.resetConcatenated(joined, output_scratch);
+        return self.resetConcatenatedWithOptions(joined, output_scratch, options);
     }
 
     pub fn resetConcatenatedFromChunksExactSize(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetConcatenatedFromChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, .{}, expected_output_len);
+    }
+
+    pub fn resetConcatenatedFromChunksWithOptionsExactSize(self: *GzipDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) Error!void {
         const joined = try joinChunks(chunks, compressed_scratch);
-        return self.resetConcatenatedExactSize(joined, output_scratch, expected_output_len);
+        return self.resetConcatenatedWithOptionsExactSize(joined, output_scratch, options, expected_output_len);
     }
 
     fn installDecoded(self: *GzipDecoder, frame_len: usize, scratch: []u8, written: usize) void {
@@ -10427,6 +10507,22 @@ test "gzip decoder drains bounded output from caller scratch" {
     try std.testing.expectEqualSlices(u8, input, &out);
     try std.testing.expectError(error.OutputTooSmall, GzipDecoder.initFromChunksExactSize(&chunks, compressed_scratch[0 .. encoded.len - 1], &scratch, input.len));
 
+    var bad_chunk_crc = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_chunk_crc);
+    bad_chunk_crc[bad_chunk_crc.len - 8] ^= 1;
+    const bad_chunks = [_][]const u8{
+        bad_chunk_crc[0..4],
+        bad_chunk_crc[4 .. bad_chunk_crc.len - 8],
+        bad_chunk_crc[bad_chunk_crc.len - 8 ..],
+    };
+    try std.testing.expectError(error.ChecksumMismatch, GzipDecoder.initFromChunksExactSize(&bad_chunks, &compressed_scratch, &scratch, input.len));
+    var relaxed_chunk_decoder = try GzipDecoder.initFromChunksWithOptionsExactSize(&bad_chunks, &compressed_scratch, &scratch, .{ .ignore_crc32 = true }, input.len);
+    @memset(&out, 0);
+    const relaxed_chunk_step = try relaxed_chunk_decoder.step(&out);
+    try std.testing.expectEqual(core.StepResult.Status.done, relaxed_chunk_step.status);
+    try std.testing.expectEqual(bad_chunk_crc.len, relaxed_chunk_step.progress.input_read);
+    try std.testing.expectEqualSlices(u8, input, &out);
+
     try std.testing.expectError(error.OutputTooSmall, GzipDecoder.initExactSize(encoded, scratch[0 .. scratch.len - 1], input.len));
     try std.testing.expectError(error.SizeMismatch, GzipDecoder.initExactSize(encoded, &scratch, input.len + 1));
 }
@@ -10479,6 +10575,22 @@ test "gzip decoder drains concatenated members from caller scratch" {
     try std.testing.expectEqual(input.len, chunk_step.progress.input_read);
     try std.testing.expectEqualSlices(u8, "hello world", &out);
     try std.testing.expectError(error.OutputTooSmall, GzipDecoder.initConcatenatedFromChunksExactSize(&chunks, compressed_scratch[0 .. input.len - 1], &scratch, "hello world".len));
+
+    var bad_cat = try std.testing.allocator.dupe(u8, input);
+    defer std.testing.allocator.free(bad_cat);
+    bad_cat[bad_cat.len - 8] ^= 1;
+    const bad_chunks = [_][]const u8{
+        bad_cat[0 .. first.len - 1],
+        bad_cat[first.len - 1 .. first.len + empty.len + 2],
+        bad_cat[first.len + empty.len + 2 ..],
+    };
+    try std.testing.expectError(error.ChecksumMismatch, GzipDecoder.initConcatenatedFromChunksExactSize(&bad_chunks, &compressed_scratch, &scratch, "hello world".len));
+    var relaxed_chunk_decoder = try GzipDecoder.initConcatenatedFromChunksWithOptionsExactSize(&bad_chunks, &compressed_scratch, &scratch, .{ .ignore_crc32 = true }, "hello world".len);
+    @memset(&out, 0);
+    const relaxed_chunk_step = try relaxed_chunk_decoder.step(&out);
+    try std.testing.expectEqual(core.StepResult.Status.done, relaxed_chunk_step.status);
+    try std.testing.expectEqual(input.len, relaxed_chunk_step.progress.input_read);
+    try std.testing.expectEqualSlices(u8, "hello world", &out);
 
     try std.testing.expectError(error.OutputTooSmall, GzipDecoder.initConcatenatedExactSize(input, scratch[0 .. scratch.len - 1], "hello world".len));
     try std.testing.expectError(error.SizeMismatch, GzipDecoder.initConcatenatedExactSize(input, &scratch, "hello world".len + 1));
