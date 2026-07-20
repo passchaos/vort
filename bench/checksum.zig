@@ -37,6 +37,10 @@ pub fn main(init: std.process.Init) !void {
         measure("crc32-slice8", input, iterations, vort.crc32Slice8, init.io),
         measure("crc32-slice16", input, iterations, vort.crc32Slice16, init.io),
         measure("crc32-slice32", input, iterations, vort.crc32Slice32, init.io),
+        measureCrc32Slice32Segmented("crc32-slice32-seg64", input, iterations, 64, init.io),
+        measureCrc32Slice32Segmented("crc32-slice32-seg256", input, iterations, 256, init.io),
+        measureCrc32Slice32Segmented("crc32-slice32-seg1024", input, iterations, 1024, init.io),
+        measureCrc32Slice32Segmented("crc32-slice32-seg4096", input, iterations, 4096, init.io),
         measure("crc32-best", input, iterations, vort.crc32Best, init.io),
         measure("crc32c-scalar", input, iterations, vort.crc32c, init.io),
         measure("crc32c-slice8", input, iterations, vort.crc32cSlice8, init.io),
@@ -99,6 +103,37 @@ fn measure(name: []const u8, input: []u8, iterations: usize, comptime hash: fn (
         const index = (iteration * 4099) & (input.len - 1);
         input[index] +%= @truncate(iteration + 1);
         const digest = hash(input);
+        std.mem.doNotOptimizeAway(digest);
+        mix +%= digest;
+        input[index] -%= @truncate(iteration + 1);
+    }
+    const elapsed_ns_signed = start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
+    const elapsed_ns: f64 = @floatFromInt(elapsed_ns_signed);
+    const elapsed_s = elapsed_ns / @as(f64, std.time.ns_per_s);
+    const mib = (@as(f64, @floatFromInt(input.len)) * @as(f64, @floatFromInt(iterations))) / (1024.0 * 1024.0);
+    return .{
+        .name = name,
+        .throughput_mib_s = mib / elapsed_s,
+        .elapsed_s = elapsed_s,
+        .digest_mix = mix,
+    };
+}
+
+fn measureCrc32Slice32Segmented(name: []const u8, input: []u8, iterations: usize, segment_len: usize, io: std.Io) Row {
+    var mix: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |iteration| {
+        const index = (iteration * 4099) & (input.len - 1);
+        input[index] +%= @truncate(iteration + 1);
+
+        var crc = vort.checksum.Crc32Slice32.init();
+        var offset: usize = 0;
+        while (offset < input.len) {
+            const n = @min(segment_len, input.len - offset);
+            crc.update(input[offset..][0..n]);
+            offset += n;
+        }
+        const digest = crc.digest();
         std.mem.doNotOptimizeAway(digest);
         mix +%= digest;
         input[index] -%= @truncate(iteration + 1);
