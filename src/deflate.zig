@@ -7150,7 +7150,14 @@ fn decodeZlibAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, 
 }
 
 fn decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
-    _ = try parseZlibHeader(input, dictionary);
+    const header = try parseZlibHeader(input, dictionary);
+    const raw_input = input[header.data_offset..];
+    if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+        if (try planRawStoredOnly(raw_input)) |stored_plan| {
+            if (stored_plan.output_len != expected_output_len) return error.SizeMismatch;
+            try validateZlibStoredPlanBeforeAlloc(input, header.data_offset, stored_plan, options);
+        }
+    }
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = decodeZlibWithOptionalDictionaryAndOptions(input, out, dictionary, options) catch |err| switch (err) {
@@ -7983,7 +7990,14 @@ pub fn decodeGzipAllocExactSize(allocator: std.mem.Allocator, input: []const u8,
 }
 
 pub fn decodeGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, expected_output_len: usize) ![]u8 {
-    _ = try parseGzipHeader(input);
+    const data_offset = try parseGzipHeader(input);
+    const raw_input = input[data_offset..];
+    if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+        if (try planRawStoredOnly(raw_input)) |stored_plan| {
+            if (stored_plan.output_len != expected_output_len) return error.SizeMismatch;
+            try validateGzipStoredPlanBeforeAlloc(input, data_offset, stored_plan, options);
+        }
+    }
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = decodeGzipWithOptions(input, out, options) catch |err| switch (err) {
@@ -11788,6 +11802,30 @@ test "raw zlib gzip exact-size alloc decoders enforce declared output length" {
     try std.testing.expectEqualSlices(u8, input, gzip_exact);
     try std.testing.expectError(error.SizeMismatch, decodeGzipAllocExactSize(std.testing.allocator, gzip_frame, input.len - 1));
     try std.testing.expectError(error.SizeMismatch, decodeGzipAllocExactSize(std.testing.allocator, gzip_frame, input.len + 1));
+
+    const zlib_stored_frame = try encodeZlibStoredAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(zlib_stored_frame);
+    var zlib_stored_short_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.SizeMismatch, decodeZlibAllocExactSize(zlib_stored_short_failing.allocator(), zlib_stored_frame, input.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), zlib_stored_short_failing.allocations);
+    var bad_zlib_stored_adler = try std.testing.allocator.dupe(u8, zlib_stored_frame);
+    defer std.testing.allocator.free(bad_zlib_stored_adler);
+    bad_zlib_stored_adler[bad_zlib_stored_adler.len - 1] ^= 1;
+    var zlib_stored_adler_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibAllocExactSize(zlib_stored_adler_failing.allocator(), bad_zlib_stored_adler, input.len));
+    try std.testing.expectEqual(@as(usize, 0), zlib_stored_adler_failing.allocations);
+
+    const gzip_stored_frame = try encodeGzipStoredAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(gzip_stored_frame);
+    var gzip_stored_short_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.SizeMismatch, decodeGzipAllocExactSize(gzip_stored_short_failing.allocator(), gzip_stored_frame, input.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), gzip_stored_short_failing.allocations);
+    var bad_gzip_stored_crc = try std.testing.allocator.dupe(u8, gzip_stored_frame);
+    defer std.testing.allocator.free(bad_gzip_stored_crc);
+    bad_gzip_stored_crc[bad_gzip_stored_crc.len - 8] ^= 1;
+    var gzip_stored_crc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzipAllocExactSize(gzip_stored_crc_failing.allocator(), bad_gzip_stored_crc, input.len));
+    try std.testing.expectEqual(@as(usize, 0), gzip_stored_crc_failing.allocations);
 }
 
 test "dictionary exact-size alloc decoders enforce declared output length" {
