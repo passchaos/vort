@@ -1643,8 +1643,8 @@ pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8
 fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: ?usize) !OwnedDecodeResult {
     if (input.len == 0) return error.TruncatedFrame;
     if (try decodeRawStoredOnlyAllocMaybe(allocator, input, max_output_len)) |stored| return stored;
-    if (dictionary.len == 0 and max_output_len == null) {
-        if (try decodeRawAutoSmallIntoAlloc(allocator, input)) |small| return small;
+    if (dictionary.len == 0) {
+        if (try decodeRawAutoSmallIntoAlloc(allocator, input, max_output_len)) |small| return small;
     }
 
     var out: std.ArrayList(u8) = .empty;
@@ -1863,7 +1863,7 @@ const stack_chunked_zlib_join_small_input_len = 16 * 1024;
 const stack_chunked_zlib_join_max_input_len = 64 * 1024;
 const stack_chunked_zlib_tiny_chunk_count = 512;
 
-fn decodeRawAutoSmallIntoAlloc(allocator: std.mem.Allocator, input: []const u8) !?OwnedDecodeResult {
+fn decodeRawAutoSmallIntoAlloc(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?OwnedDecodeResult {
     if (input.len > stack_inflate_alloc_max_input_len) return null;
 
     // Small and medium compressed members dominate wrapper metadata, test
@@ -1875,10 +1875,22 @@ fn decodeRawAutoSmallIntoAlloc(allocator: std.mem.Allocator, input: []const u8) 
     // streaming ArrayList path so hostile or unusually large expansions do not
     // keep growing hidden stack usage.
     var scratch: [stack_inflate_alloc_scratch_len]u8 = undefined;
-    const decoded = decodeRawAuto(input, &scratch) catch |err| switch (err) {
-        error.OutputTooSmall => return null,
+    const decode_buffer = if (max_output_len) |limit| scratch[0..@min(limit, scratch.len)] else scratch[0..];
+    const decoded = decodeRawAuto(input, decode_buffer) catch |err| switch (err) {
+        error.OutputTooSmall => {
+            // When the caller supplied a limit that fits inside the bounded stack
+            // scratch, OutputTooSmall means the DEFLATE stream exceeded that
+            // public limit. Report the limit violation directly instead of
+            // re-decoding through the heap-growing ArrayList path just to discover
+            // the same error.
+            if (max_output_len) |limit| {
+                if (limit <= scratch.len) return error.OutputLimitExceeded;
+            }
+            return null;
+        },
         else => return err,
     };
+    try ensureOutputLimit(0, decoded.output_written, max_output_len);
     const owned = allocator.alloc(u8, decoded.output_written) catch return error.OutOfMemory;
     errdefer allocator.free(owned);
     @memcpy(owned, scratch[0..decoded.output_written]);
@@ -11465,6 +11477,16 @@ test "one-shot deflate wrappers enforce output limits" {
     const raw_ok = try decodeRawAutoAllocLimited(std.testing.allocator, raw, 5);
     defer std.testing.allocator.free(raw_ok);
     try std.testing.expectEqualSlices(u8, "hello", raw_ok);
+
+    var raw_limit_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutputLimitExceeded, decodeRawAutoAllocLimited(raw_limit_failing.allocator(), raw, 4));
+    try std.testing.expectEqual(@as(usize, 0), raw_limit_failing.allocations);
+
+    var raw_exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
+    const raw_direct = try decodeRawAutoAllocLimited(raw_exact_failing.allocator(), raw, 5);
+    defer raw_exact_failing.allocator().free(raw_direct);
+    try std.testing.expectEqualSlices(u8, "hello", raw_direct);
+    try std.testing.expectEqual(@as(usize, 1), raw_exact_failing.allocations);
 
     const zlib_frame = try encodeZlibFixedAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(zlib_frame);
