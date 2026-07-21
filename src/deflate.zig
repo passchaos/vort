@@ -7040,6 +7040,7 @@ fn decodeZlibConcatenatedAllocWithOptionalDictionaryExactSize(allocator: std.mem
     if (input.len == 0) return error.TruncatedFrame;
     const header = try parseZlibHeader(input, dictionary);
     if (input.len == header.data_offset) return error.TruncatedFrame;
+    try rejectReservedFirstBlockBeforeAlloc(input[header.data_offset..]);
     if (try precheckZlibConcatenatedStoredExact(input, dictionary)) |stored_output_len| {
         if (stored_output_len != expected_output_len) return error.SizeMismatch;
     }
@@ -7990,6 +7991,7 @@ pub fn decodeGzipConcatenatedAllocWithOptionsExactSize(allocator: std.mem.Alloca
     if (input.len == 0) return error.TruncatedFrame;
     const data_offset = try parseGzipHeader(input);
     if (input.len == data_offset) return error.TruncatedFrame;
+    try rejectReservedFirstBlockBeforeAlloc(input[data_offset..]);
     if (try precheckGzipConcatenatedStoredExact(input, options)) |stored_output_len| {
         if (stored_output_len != expected_output_len) return error.SizeMismatch;
     }
@@ -10632,6 +10634,9 @@ test "zlib concatenated streams decode in sequence" {
     var header_only_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.TruncatedFrame, decodeZlibConcatenatedAllocExactSize(header_only_failing.allocator(), &.{ 0x78, 0x01 }, 11));
     try std.testing.expectEqual(@as(usize, 0), header_only_failing.allocations);
+    var reserved_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibConcatenatedAllocExactSize(reserved_failing.allocator(), &.{ 0x78, 0x01, 0x07 }, 11));
+    try std.testing.expectEqual(@as(usize, 0), reserved_failing.allocations);
 }
 
 test "zlib concatenated stored streams decode and validate per-member trailers" {
@@ -12897,6 +12902,10 @@ test "gzip concatenated decoders reject empty input" {
     var header_only_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.TruncatedFrame, decodeGzipConcatenatedAllocExactSize(header_only_failing.allocator(), &gzip_header, 5));
     try std.testing.expectEqual(@as(usize, 0), header_only_failing.allocations);
+    var reserved_first = gzip_header ++ [_]u8{0x07};
+    var reserved_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeGzipConcatenatedAllocExactSize(reserved_failing.allocator(), &reserved_first, 5));
+    try std.testing.expectEqual(@as(usize, 0), reserved_failing.allocations);
 }
 
 test "gzip member inspector reports concatenated offsets and trailer diagnostics" {

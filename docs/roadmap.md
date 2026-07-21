@@ -1150,6 +1150,8 @@ architecture blindly.
 
 - Zlib/gzip concatenated exact-size allocator-returning decode now applies the same wrapper-only no-payload precheck before allocating the caller-declared output length, covering the first concatenated member with zero-allocation TruncatedFrame tests.
 
+- Zlib/gzip concatenated exact-size allocator-returning decode now also rejects a reserved first raw-DEFLATE block type before allocating the caller-declared output length, covering the first concatenated member with zero-allocation malformed-block tests.
+
 - Extended the dynamic deflate decode profile CSV and gate with match-class extra-bit density columns (`*_extra_bits_per_match` and `*_extra_bits_per_byte`). The latest README/roadmap profiles show non-overlap matches spend about `7.946` / `9.824` extra bits per match and `0.612` / `0.970` extra bits per non-overlap byte, giving the next dynamic-decode work a clearer target than repeating rejected distance-formula or branch-order experiments.
 
 - Added README/roadmap mixed distance-extra distributions to `run-deflate-extra-bits-bench-gate`, derived from the dynamic decode profile width histograms. The first local ReleaseFast gate shows span 4 KiB rows around `227.61` / `241.66` Mreads/s versus legacy chunked `145.07` / `176.11` Mreads/s for those mixed distributions, making real text-heavy extra-bit reader costs visible before production bitreader changes.
