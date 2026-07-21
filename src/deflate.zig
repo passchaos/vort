@@ -30,6 +30,15 @@ fn isStoredBlockHeaderByte(header: u8) bool {
     return (header & 0x06) == 0;
 }
 
+fn rejectReservedFirstBlockBeforeAlloc(input: []const u8) Error!void {
+    if (input.len == 0) return;
+    // BTYPE=3 is reserved by RFC 1951 and can be detected from the first
+    // byte without decoding any payload. Allocator-returning wrapper helpers
+    // use this to preserve corruption errors before trusting wrapper-side size
+    // hints for heap allocation.
+    if ((input[0] & 0x06) == 0x06) return error.InvalidDeflateBlockType;
+}
+
 fn readStoredLengthPairUnchecked(input: []const u8, offset: usize) Error!StoredLengthPair {
     const pair = std.mem.readInt(u32, input[offset..][0..4], .little);
     const len: u16 = @truncate(pair);
@@ -8125,6 +8134,7 @@ pub fn decodeGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: 
             return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, null)).bytes;
         }
     }
+    try rejectReservedFirstBlockBeforeAlloc(raw_input);
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = decodeGzipWithOptions(input, out, options) catch |err| switch (err) {
@@ -8144,6 +8154,7 @@ fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input
             return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, max_output_len)).bytes;
         }
     }
+    try rejectReservedFirstBlockBeforeAlloc(raw_input);
     if (try decodeGzipAllocFooterSize(allocator, input, data_offset, options, max_output_len)) |decoded| return decoded;
 
     if (options.ignore_crc32) {
@@ -11678,6 +11689,18 @@ test "gzip relaxed decode options ignore trailer checks and trailing bytes" {
     var bad_header_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.BadGzipHeader, decodeGzipAllocExactSize(bad_header_failing.allocator(), bad_header, 7));
     try std.testing.expectEqual(@as(usize, 0), bad_header_failing.allocations);
+
+    var reserved_block = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(reserved_block);
+    const data_offset = try parseGzipHeader(reserved_block);
+    reserved_block[data_offset] = 0x07;
+    std.mem.writeInt(u32, reserved_block[reserved_block.len - 4 ..][0..4], 7, .little);
+    var reserved_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeGzipAlloc(reserved_alloc_failing.allocator(), reserved_block));
+    try std.testing.expectEqual(@as(usize, 0), reserved_alloc_failing.allocations);
+    var reserved_exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeGzipAllocExactSize(reserved_exact_failing.allocator(), reserved_block, 7));
+    try std.testing.expectEqual(@as(usize, 0), reserved_exact_failing.allocations);
 
     var bad_crc = try std.testing.allocator.dupe(u8, encoded);
     defer std.testing.allocator.free(bad_crc);
