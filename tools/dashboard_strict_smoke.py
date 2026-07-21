@@ -919,6 +919,17 @@ def main() -> int:
         assert manifest["native_tier_range_standard_corpus_summary_count"] == 1
         assert manifest["native_tier_range_missing_sources"] == []
         assert manifest["native_tier_range_seek_fast_min_range_mib_s"] >= 80.0
+        assert manifest["native_tier_corpus_discovery_present"] is True
+        assert manifest["native_tier_corpus_discovery_healthy"] is True
+        assert manifest["native_tier_corpus_discovery_source_mode"] == "discovered"
+        assert manifest["native_tier_corpus_discovery_source_count"] == 1
+        assert manifest["native_tier_corpus_discovery_selected_case_count"] == 3
+        assert [case["label"] for case in manifest["native_tier_corpus_discovery_selected_cases"]] == [
+            "ooffice-128k",
+            "nci-128k",
+            "mozilla-128k",
+        ]
+        assert manifest["native_tier_corpus_discovery_missing_reason"] == ""
         assert any(
             artifact["name"] == NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT
             and artifact["schema"] == "vort.native_tier_range_corpus_discovery"

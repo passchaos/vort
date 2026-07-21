@@ -433,6 +433,48 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
     }
 
 
+def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") != "vort.native_tier_range_corpus_discovery":
+            continue
+        selected_cases = data.get("selected_cases")
+        selected_cases = selected_cases if isinstance(selected_cases, list) else []
+        sources = data.get("sources")
+        sources = sources if isinstance(sources, list) else []
+        missing_reason = data.get("missing_reason")
+        return {
+            "present": True,
+            "ok": bool(data.get("ok")),
+            "source_mode": str(data.get("source_mode") or ""),
+            "full": bool(data.get("full")),
+            "limit": data.get("limit") if isinstance(data.get("limit"), int) and not isinstance(data.get("limit"), bool) else None,
+            "candidate_count": int(data.get("candidate_count") or 0),
+            "source_count": int(data.get("source_count") or 0),
+            "selected_case_count": int(data.get("selected_case_count") or 0),
+            "sources": [str(source) for source in sources],
+            "selected_cases": selected_cases,
+            "csv": str(data.get("csv") or ""),
+            "missing_reason": str(missing_reason) if isinstance(missing_reason, str) else "",
+            "healthy": bool(data.get("ok")) and int(data.get("selected_case_count") or 0) > 0 and not missing_reason,
+        }
+    return {
+        "present": False,
+        "ok": False,
+        "source_mode": "",
+        "full": False,
+        "limit": None,
+        "candidate_count": 0,
+        "source_count": 0,
+        "selected_case_count": 0,
+        "sources": [],
+        "selected_cases": [],
+        "csv": "",
+        "missing_reason": "missing_discovery_artifact",
+        "healthy": False,
+    }
+
+
 def python_zlib_diff_health(artifacts: list[Path]) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
@@ -674,6 +716,7 @@ def main() -> int:
     decode_stage_health_summary = decode_stage_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
     native_tier_health = native_tier_range_health(artifacts)
+    native_tier_discovery_health = native_tier_corpus_discovery_health(artifacts)
     producer_healthy = len(producer_step_missing) == 0
     smoke_gate_healthy = len(smoke_gate_required_missing) == 0
     header_healthy = (
@@ -769,6 +812,7 @@ def main() -> int:
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
         f"- Python zlib differential: payloads {python_zlib_health['payloads']}, dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
         f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
+        f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
     ]
     if native_tier_health["source_details"]:
@@ -946,6 +990,19 @@ def main() -> int:
                 "native_tier_range_legacy_rows": native_tier_health["legacy_rows"],
                 "native_tier_range_missing_sources": native_tier_health["missing_sources"],
                 "native_tier_range_source_details": native_tier_health["source_details"],
+                "native_tier_corpus_discovery_present": native_tier_discovery_health["present"],
+                "native_tier_corpus_discovery_ok": native_tier_discovery_health["ok"],
+                "native_tier_corpus_discovery_healthy": native_tier_discovery_health["healthy"],
+                "native_tier_corpus_discovery_source_mode": native_tier_discovery_health["source_mode"],
+                "native_tier_corpus_discovery_full": native_tier_discovery_health["full"],
+                "native_tier_corpus_discovery_limit": native_tier_discovery_health["limit"],
+                "native_tier_corpus_discovery_candidate_count": native_tier_discovery_health["candidate_count"],
+                "native_tier_corpus_discovery_source_count": native_tier_discovery_health["source_count"],
+                "native_tier_corpus_discovery_sources": native_tier_discovery_health["sources"],
+                "native_tier_corpus_discovery_selected_case_count": native_tier_discovery_health["selected_case_count"],
+                "native_tier_corpus_discovery_selected_cases": native_tier_discovery_health["selected_cases"],
+                "native_tier_corpus_discovery_csv": native_tier_discovery_health["csv"],
+                "native_tier_corpus_discovery_missing_reason": native_tier_discovery_health["missing_reason"],
                 "native_tier_range_seek_fast_min_range_mib_s": native_tier_health["seek_fast_min_range_mib_s"],
                 "native_tier_range_balanced_min_range_mib_s": native_tier_health["balanced_min_range_mib_s"],
                 "native_tier_range_ratio_min_range_mib_s": native_tier_health["ratio_min_range_mib_s"],

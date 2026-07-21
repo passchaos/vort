@@ -272,6 +272,23 @@ def main() -> int:
                 "native_tier_range_custom_rows": 0,
                 "native_tier_range_legacy_rows": 0,
                 "native_tier_range_missing_sources": [],
+                "native_tier_corpus_discovery_present": True,
+                "native_tier_corpus_discovery_ok": True,
+                "native_tier_corpus_discovery_healthy": True,
+                "native_tier_corpus_discovery_source_mode": "discovered",
+                "native_tier_corpus_discovery_full": False,
+                "native_tier_corpus_discovery_limit": 3,
+                "native_tier_corpus_discovery_candidate_count": 5,
+                "native_tier_corpus_discovery_source_count": 1,
+                "native_tier_corpus_discovery_sources": ["/tmp/silesia-small.tar"],
+                "native_tier_corpus_discovery_selected_case_count": 3,
+                "native_tier_corpus_discovery_selected_cases": [
+                    {"label": "ooffice-128k", "bytes": 131072},
+                    {"label": "nci-128k", "bytes": 131072},
+                    {"label": "mozilla-128k", "bytes": 131072},
+                ],
+                "native_tier_corpus_discovery_csv": "zig-out/vort-native-tier-range-corpus-bench.csv",
+                "native_tier_corpus_discovery_missing_reason": "",
                 "native_tier_range_source_details": [
                     {
                         "source": "built_in",

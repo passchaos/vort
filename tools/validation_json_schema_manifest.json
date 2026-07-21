@@ -447,6 +447,19 @@
         "native_tier_range_legacy_rows": "int",
         "native_tier_range_missing_sources": "list",
         "native_tier_range_source_details": "list",
+        "native_tier_corpus_discovery_present": "bool",
+        "native_tier_corpus_discovery_ok": "bool",
+        "native_tier_corpus_discovery_healthy": "bool",
+        "native_tier_corpus_discovery_source_mode": "str",
+        "native_tier_corpus_discovery_full": "bool",
+        "native_tier_corpus_discovery_limit": "int?",
+        "native_tier_corpus_discovery_candidate_count": "int",
+        "native_tier_corpus_discovery_source_count": "int",
+        "native_tier_corpus_discovery_sources": "list",
+        "native_tier_corpus_discovery_selected_case_count": "int",
+        "native_tier_corpus_discovery_selected_cases": "list",
+        "native_tier_corpus_discovery_csv": "str",
+        "native_tier_corpus_discovery_missing_reason": "str",
         "native_tier_range_seek_fast_min_range_mib_s": "float",
         "native_tier_range_balanced_min_range_mib_s": "float",
         "native_tier_range_ratio_min_range_mib_s": "float",
@@ -507,7 +520,21 @@
               "legacy"
             ]
           }
+        },
+        "native_tier_corpus_discovery_selected_cases": {
+          "allow_empty": true,
+          "fields": {
+            "label": "str",
+            "bytes": "int"
+          }
         }
+      },
+      "enums": {
+        "native_tier_corpus_discovery_source_mode": [
+          "",
+          "discovered",
+          "paths"
+        ]
       },
       "list_item_enums": {
         "native_tier_range_missing_sources": [
