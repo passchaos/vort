@@ -136,6 +136,8 @@ def main() -> int:
                     "native_tier_range_bench_gate=ok" in result.stdout
                     and summary_path.exists()
                     and json.loads(summary_path.read_text()).get("rows") == 3
+                    and json.loads(summary_path.read_text()).get("source") == "custom"
+                    and json.loads(summary_path.read_text()).get("range_mib_s_floor_by_tier", {}).get("seek_fast") == 20.0
                 ),
             )
         )
@@ -175,10 +177,18 @@ def main() -> int:
         slow_csv = root / "slow.csv"
         slow_rows = valid_rows()
         # Keep the reported throughput mathematically consistent, but below the
-        # ReleaseFast floor so the floor check itself is what fails.
+        # custom ReleaseFast floor so the floor check itself is what fails.
         slow_rows[0] = row("sample", "seek_fast", elapsed_ns=1_562_500_000)
         write_csv(slow_csv, slow_rows)
-        cases.append(expect_failure("releasefast_floor_rejected", slow_csv, "below ReleaseFast floor", "--enforce-throughput"))
+        cases.append(expect_failure("releasefast_floor_rejected", slow_csv, "custom/seek_fast", "--enforce-throughput"))
+
+        source_floor_csv = root / "source-floor.csv"
+        source_floor_rows = valid_rows()
+        # About 50 MiB/s clears the custom/project seek_fast floors but must fail
+        # the tighter built-in floor, proving --source selects the threshold set.
+        source_floor_rows[0] = row("sample", "seek_fast", elapsed_ns=31_250_000)
+        write_csv(source_floor_csv, source_floor_rows)
+        cases.append(expect_failure("built_in_source_floor_rejected", source_floor_csv, "built_in/seek_fast", "--source", "built_in", "--enforce-throughput"))
 
     failed = [case for case in cases if not case["matched"]]
     if failed:

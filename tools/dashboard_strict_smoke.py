@@ -30,6 +30,12 @@ NATIVE_TIER_RANGE_ARTIFACTS = (
     (NATIVE_TIER_RANGE_FILES_ARTIFACT, "zig build run-native-tier-range-files-bench-gate"),
     (NATIVE_TIER_RANGE_CORPUS_ARTIFACT, "zig build run-native-tier-range-corpus-bench-gate"),
 )
+NATIVE_TIER_RANGE_FLOORS = {
+    "built_in": {"seek_fast": 60.0, "balanced": 16.0, "ratio": 12.0},
+    "project_files": {"seek_fast": 40.0, "balanced": 8.0, "ratio": 4.0},
+    "standard_corpus": {"seek_fast": 30.0, "balanced": 6.5, "ratio": 3.5},
+    "custom": {"seek_fast": 20.0, "balanced": 6.0, "ratio": 3.0},
+}
 
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -572,6 +578,7 @@ def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
 
 
 def write_native_tier_range_summary(path: Path, *, ok: bool = True, source: str = "built_in", rows: int = 9, fixture_count: int = 3) -> None:
+    floors = NATIVE_TIER_RANGE_FLOORS.get(source, NATIVE_TIER_RANGE_FLOORS["custom"])
     payload = {
         "schema": "vort.native_tier_range_bench_gate",
         "schema_version": 1,
@@ -585,6 +592,7 @@ def write_native_tier_range_summary(path: Path, *, ok: bool = True, source: str 
         "enforce_throughput": False,
         "min_range_mib_s_by_tier": {"seek_fast": 80.0, "balanced": 25.0, "ratio": 20.0},
         "min_full_input_mib_s_by_tier": {"seek_fast": 700.0, "balanced": 250.0, "ratio": 180.0},
+        "range_mib_s_floor_by_tier": floors,
         "total_stream_bytes_by_tier": {"seek_fast": 9000, "balanced": 5000, "ratio": 4000},
         "total_index_entries_by_tier": {"seek_fast": 32, "balanced": 12, "ratio": 8},
         "csv": "zig-out/vort-native-tier-range-bench.csv",

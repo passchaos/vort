@@ -2271,6 +2271,11 @@ Example:
     "balanced": 257.766141,
     "ratio": 179.718533
   },
+  "range_mib_s_floor_by_tier": {
+    "seek_fast": 40.0,
+    "balanced": 8.0,
+    "ratio": 4.0
+  },
   "total_stream_bytes_by_tier": {
     "seek_fast": 51345,
     "balanced": 46313,

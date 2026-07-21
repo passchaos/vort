@@ -33,12 +33,23 @@ EXPECTED_TIERS = {
     "balanced": 32 * 1024,
     "ratio": 64 * 1024,
 }
-MIN_RELEASEFAST_RANGE_MIB_S = {
+DEFAULT_RELEASEFAST_RANGE_MIB_S = {
     "seek_fast": 20.0,
     "balanced": 6.0,
     "ratio": 3.0,
 }
 SUMMARY_SOURCES = ("built_in", "project_files", "standard_corpus", "custom")
+SOURCE_RELEASEFAST_RANGE_MIB_S = {
+    # Built-in fixtures are deterministic and intentionally simple, so they can
+    # carry the tightest floors without making corpus-dependent dashboards
+    # flaky.  The file/corpus buckets stay conservative enough for noisy local
+    # developer machines while still proving that each source is actually timed
+    # rather than merely shape-checked.
+    "built_in": {"seek_fast": 60.0, "balanced": 16.0, "ratio": 12.0},
+    "project_files": {"seek_fast": 40.0, "balanced": 8.0, "ratio": 4.0},
+    "standard_corpus": {"seek_fast": 30.0, "balanced": 6.5, "ratio": 3.5},
+    "custom": DEFAULT_RELEASEFAST_RANGE_MIB_S,
+}
 
 
 def positive_int(row: dict[str, str], key: str) -> int:
@@ -65,6 +76,10 @@ def positive_float(row: dict[str, str], key: str) -> float:
 def assert_close(actual: float, expected: float, label: str, tolerance: float = 1e-4) -> None:
     if abs(actual - expected) > tolerance:
         raise AssertionError(f"{label} mismatch: expected {expected}, got {actual}")
+
+
+def releasefast_floors(source: str) -> dict[str, float]:
+    return SOURCE_RELEASEFAST_RANGE_MIB_S.get(source, DEFAULT_RELEASEFAST_RANGE_MIB_S)
 
 
 def main() -> int:
@@ -99,6 +114,7 @@ def main() -> int:
     tier_min_full_input_mib_s = {tier: float("inf") for tier in EXPECTED_TIERS}
     tier_total_stream_bytes = {tier: 0 for tier in EXPECTED_TIERS}
     tier_total_index_entries = {tier: 0 for tier in EXPECTED_TIERS}
+    range_mib_s_floor_by_tier = releasefast_floors(args.source)
 
     for row in rows:
         fixture = row["fixture"]
@@ -133,8 +149,11 @@ def main() -> int:
         tier_min_full_input_mib_s[tier] = min(tier_min_full_input_mib_s[tier], full_input_mib_s)
         tier_total_stream_bytes[tier] += stream_bytes
         tier_total_index_entries[tier] += index_entries
-        if args.enforce_throughput and range_mib_s < MIN_RELEASEFAST_RANGE_MIB_S[tier]:
-            raise AssertionError(f"range throughput below ReleaseFast floor for {tier}: {range_mib_s}")
+        if args.enforce_throughput and range_mib_s < range_mib_s_floor_by_tier[tier]:
+            raise AssertionError(
+                f"range throughput below ReleaseFast floor for {args.source}/{tier}: "
+                f"{range_mib_s} < {range_mib_s_floor_by_tier[tier]}"
+            )
         if repeat < 1:
             raise AssertionError(f"repeat must be positive: {row}")
 
@@ -153,6 +172,7 @@ def main() -> int:
         "allow_any_fixtures": args.allow_any_fixtures,
         "min_range_mib_s_by_tier": {tier: tier_min_range_mib_s[tier] for tier in ordered_tiers},
         "min_full_input_mib_s_by_tier": {tier: tier_min_full_input_mib_s[tier] for tier in ordered_tiers},
+        "range_mib_s_floor_by_tier": {tier: range_mib_s_floor_by_tier[tier] for tier in ordered_tiers},
         "total_stream_bytes_by_tier": {tier: tier_total_stream_bytes[tier] for tier in ordered_tiers},
         "total_index_entries_by_tier": {tier: tier_total_index_entries[tier] for tier in ordered_tiers},
         "csv": str(args.csv),

@@ -1909,6 +1909,7 @@
         "min_full_input_mib_s_by_tier": "dict",
         "min_range_mib_s_by_tier": "dict",
         "ok": "bool",
+        "range_mib_s_floor_by_tier": "dict",
         "rows": "int",
         "schema": "str",
         "schema_version": "int",
