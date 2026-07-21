@@ -29,6 +29,9 @@ REQUIRED_FIELDS = [
     "vort_native_decode_vs_zstd",
     "decode_repeats",
     "native_block_len",
+    "source_mode",
+    "size_mode",
+    "case_limit",
     "zstd_version",
     "vort_commit",
     "zig_version",
@@ -63,6 +66,10 @@ def main() -> int:
     parser.add_argument("--csv", type=Path, default=DEFAULT_CSV)
     parser.add_argument("--markdown", type=Path, default=DEFAULT_MARKDOWN)
     parser.add_argument("--summary", type=Path)
+    parser.add_argument("--expect-source-mode")
+    parser.add_argument("--expect-size-mode")
+    parser.add_argument("--expect-optimize")
+    parser.add_argument("--expect-case-limit")
     args = parser.parse_args()
 
     rows = list(csv.DictReader(args.csv.open(newline="")))
@@ -129,6 +136,18 @@ def main() -> int:
         raise AssertionError("TOTAL vort_native_decode_vs_zstd mismatch")
     decode_repeats = positive_int(total["decode_repeats"])
     native_block_len = positive_int(total["native_block_len"])
+    source_mode = total["source_mode"]
+    size_mode = total["size_mode"]
+    case_limit = total["case_limit"]
+    optimize = total["optimize"]
+    if args.expect_source_mode is not None and source_mode != args.expect_source_mode:
+        raise AssertionError(f"source_mode mismatch: expected {args.expect_source_mode!r}, got {source_mode!r}")
+    if args.expect_size_mode is not None and size_mode != args.expect_size_mode:
+        raise AssertionError(f"size_mode mismatch: expected {args.expect_size_mode!r}, got {size_mode!r}")
+    if args.expect_optimize is not None and optimize != args.expect_optimize:
+        raise AssertionError(f"optimize mismatch: expected {args.expect_optimize!r}, got {optimize!r}")
+    if args.expect_case_limit is not None and case_limit != args.expect_case_limit:
+        raise AssertionError(f"case_limit mismatch: expected {args.expect_case_limit!r}, got {case_limit!r}")
     if total["zstd_version"] in {"", "missing"}:
         raise AssertionError("zstd version missing from retained artifact")
     for row in rows:
@@ -138,6 +157,8 @@ def main() -> int:
             raise AssertionError(f"decode repeat count drift in row {row!r}")
         if positive_int(row["native_block_len"]) != native_block_len:
             raise AssertionError(f"native block length drift in row {row!r}")
+        if row["source_mode"] != source_mode or row["size_mode"] != size_mode or row["case_limit"] != case_limit or row["optimize"] != optimize:
+            raise AssertionError(f"metadata drift in row {row!r}")
         positive_float(row["zstd_decode_mib_s"])
         positive_float(row["vort_raw_fixed_decode_mib_s"])
         positive_float(row["vort_native_decode_mib_s"])
@@ -151,6 +172,9 @@ def main() -> int:
         or "Optimize" not in markdown
         or "Decode repeats" not in markdown
         or "Native block length" not in markdown
+        or "source mode" not in markdown
+        or "size mode" not in markdown
+        or "case limit" not in markdown
         or "CLI-internal decode loops" not in markdown
         or "Vort raw decode / zstd" not in markdown
         or "Vort native" not in markdown
@@ -165,6 +189,10 @@ def main() -> int:
         "data_rows": len(data_rows),
         "decode_repeats": decode_repeats,
         "native_block_len": native_block_len,
+        "source_mode": source_mode,
+        "size_mode": size_mode,
+        "case_limit": case_limit,
+        "optimize": optimize,
         "total_ratio": actual_ratio,
         "total_native_ratio": actual_native_ratio,
         "total_zstd_decode_mib_s": total_zstd_decode_mib_s,

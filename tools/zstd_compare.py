@@ -41,6 +41,9 @@ CSV_FIELDS = [
     "vort_native_decode_vs_zstd",
     "decode_repeats",
     "native_block_len",
+    "source_mode",
+    "size_mode",
+    "case_limit",
     "zstd_version",
     "vort_commit",
     "zig_version",
@@ -253,6 +256,19 @@ def load_cases(args: argparse.Namespace, path_args: list[str]) -> list[tuple[str
     return default_cases(args.limit)
 
 
+def source_mode_for(args: argparse.Namespace, cli_items: int) -> str:
+    has_path_items = len(args.items) > cli_items
+    if args.standard_suite:
+        return "standard-suite"
+    return "paths" if has_path_items else "default-samples"
+
+
+def size_mode_for(args: argparse.Namespace) -> str:
+    if args.standard_suite and not args.full:
+        return "bounded-128KiB"
+    return "full"
+
+
 def cli_arg_count(items: list[str]) -> int:
     if not items:
         return 0
@@ -269,15 +285,18 @@ def cpu_model() -> str:
     return "unknown"
 
 
-def metadata(optimize: str, decode_repeats: int, native_block_len: int) -> dict[str, str]:
+def metadata(args: argparse.Namespace, cli_items: int) -> dict[str, str]:
     return {
         "zstd_version": zstd_version(),
         "vort_commit": command_output(["git", "rev-parse", "--short", "HEAD"]),
         "zig_version": command_output(["zig", "version"]),
         "cpu_model": cpu_model(),
-        "optimize": optimize,
-        "decode_repeats": str(decode_repeats),
-        "native_block_len": str(native_block_len),
+        "optimize": args.optimize,
+        "decode_repeats": str(args.decode_repeats),
+        "native_block_len": str(args.native_block_len),
+        "source_mode": source_mode_for(args, cli_items),
+        "size_mode": size_mode_for(args),
+        "case_limit": str(args.limit if args.limit is not None else "none"),
     }
 
 
@@ -291,15 +310,12 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
 
     if args.markdown:
         args.markdown.parent.mkdir(parents=True, exist_ok=True)
-        has_path_items = len(args.items) > cli_arg_count(args.items)
-        source_mode = "standard-suite" if args.standard_suite else ("paths" if has_path_items else "default-samples")
-        size_mode = "bounded-128KiB" if args.standard_suite and not args.full else "full"
         lines = [
             "# Vort vs zstd size and decode smoke",
             "",
-            f"- source mode: `{source_mode}`",
-            f"- size mode: `{size_mode}`",
-            f"- case limit: `{args.limit if args.limit is not None else 'none'}`",
+            f"- source mode: `{meta['source_mode']}`",
+            f"- size mode: `{meta['size_mode']}`",
+            f"- case limit: `{meta['case_limit']}`",
             f"- zstd: `{meta['zstd_version']}`",
             f"- Vort commit: `{meta['vort_commit']}`",
             f"- Zig version: `{meta['zig_version']}`",
@@ -337,18 +353,18 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
 
 def main() -> int:
     args = parse_args()
+    cli_items = cli_arg_count(args.items)
     if not ZSTD:
         print("zstd compare: zstd=missing")
-        write_outputs(args, [], metadata(args.optimize, args.decode_repeats, args.native_block_len))
+        write_outputs(args, [], metadata(args, cli_items))
         return 0
 
-    cli_items = cli_arg_count(args.items)
     cli = pathlib.Path(args.items[0]) if cli_items else None
     path_args = args.items[cli_items:]
     cases = load_cases(args, path_args)
 
     rows: list[dict[str, Any]] = []
-    meta = metadata(args.optimize, args.decode_repeats, args.native_block_len)
+    meta = metadata(args, cli_items)
     print("path,input_bytes,zstd_bytes,vort_raw_fixed_bytes,vort_native_embedded_bytes,zstd_decode_ms,vort_raw_fixed_decode_ms,vort_native_decode_ms")
     for label, data in cases:
         with tempfile.TemporaryDirectory() as td:
