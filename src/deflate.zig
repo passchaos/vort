@@ -7973,6 +7973,15 @@ pub fn decodeGzipWithOptions(input: []const u8, output: []u8, options: GzipDecod
     return raw.output_written;
 }
 
+pub fn decodeGzipChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
+    return decodeGzipChunksWithOptions(chunks, compressed_scratch, output, .{});
+}
+
+pub fn decodeGzipChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: GzipDecodeOptions) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipWithOptions(joined, output, options);
+}
+
 /// Bounded-output gzip wrapper decoder.
 ///
 /// This mirrors `ZlibDecoder` for gzip members: callers provide all compressed
@@ -11530,12 +11539,16 @@ test "gzip decoder drains bounded output from caller scratch" {
         encoded[4 .. encoded.len - 8],
         encoded[encoded.len - 8 ..],
     };
+    @memset(&out, 0);
+    try std.testing.expectEqual(input.len, try decodeGzipChunks(&chunks, &compressed_scratch, &out));
+    try std.testing.expectEqualSlices(u8, input, &out);
     var chunk_decoder = try GzipDecoder.initFromChunksExactSize(&chunks, &compressed_scratch, &scratch, input.len);
     @memset(&out, 0);
     const chunk_step = try chunk_decoder.step(&out);
     try std.testing.expectEqual(core.StepResult.Status.done, chunk_step.status);
     try std.testing.expectEqual(encoded.len, chunk_step.progress.input_read);
     try std.testing.expectEqualSlices(u8, input, &out);
+    try std.testing.expectError(error.OutputTooSmall, decodeGzipChunks(&chunks, compressed_scratch[0 .. encoded.len - 1], &out));
     try std.testing.expectError(error.OutputTooSmall, GzipDecoder.initFromChunksExactSize(&chunks, compressed_scratch[0 .. encoded.len - 1], &scratch, input.len));
 
     const single_chunk = [_][]const u8{
@@ -11544,6 +11557,9 @@ test "gzip decoder drains bounded output from caller scratch" {
         encoded[encoded.len..],
     };
     var no_compressed_scratch: [0]u8 = .{};
+    @memset(&out, 0);
+    try std.testing.expectEqual(input.len, try decodeGzipChunks(&single_chunk, &no_compressed_scratch, &out));
+    try std.testing.expectEqualSlices(u8, input, &out);
     var single_chunk_decoder = try GzipDecoder.initFromChunksExactSize(&single_chunk, &no_compressed_scratch, &scratch, input.len);
     @memset(&out, 0);
     const single_chunk_step = try single_chunk_decoder.step(&out);
@@ -11559,6 +11575,10 @@ test "gzip decoder drains bounded output from caller scratch" {
         bad_chunk_crc[4 .. bad_chunk_crc.len - 8],
         bad_chunk_crc[bad_chunk_crc.len - 8 ..],
     };
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzipChunks(&bad_chunks, &compressed_scratch, &out));
+    @memset(&out, 0);
+    try std.testing.expectEqual(input.len, try decodeGzipChunksWithOptions(&bad_chunks, &compressed_scratch, &out, .{ .ignore_crc32 = true }));
+    try std.testing.expectEqualSlices(u8, input, &out);
     try std.testing.expectError(error.ChecksumMismatch, GzipDecoder.initFromChunksExactSize(&bad_chunks, &compressed_scratch, &scratch, input.len));
     var relaxed_chunk_decoder = try GzipDecoder.initFromChunksWithOptionsExactSize(&bad_chunks, &compressed_scratch, &scratch, .{ .ignore_crc32 = true }, input.len);
     @memset(&out, 0);
