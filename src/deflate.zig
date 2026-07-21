@@ -2096,6 +2096,10 @@ const StoredOnlyHashResult = struct {
 
 fn decodeRawStoredOnlyAllocMaybe(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) !?OwnedDecodeResult {
     const plan = (try planRawStoredOnly(input)) orelse return null;
+    return try decodeRawStoredOnlyAllocPlanned(allocator, input, plan, max_output_len);
+}
+
+fn decodeRawStoredOnlyAllocPlanned(allocator: std.mem.Allocator, input: []const u8, plan: StoredOnlyPlan, max_output_len: ?usize) !OwnedDecodeResult {
     try ensureOutputLimit(0, plan.output_len, max_output_len);
     const out = try allocator.alloc(u8, plan.output_len);
     errdefer allocator.free(out);
@@ -7957,35 +7961,29 @@ pub fn decodeGzipStoredAllocLimited(allocator: std.mem.Allocator, input: []const
 
 fn decodeGzipStoredAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, max_output_len: ?usize) ![]u8 {
     const data_offset = try parseGzipHeader(input);
-    if (try decodeGzipStoredAllocFooterSizeMaybe(allocator, input, data_offset, max_output_len)) |decoded| return decoded;
-    const stored = (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Crc32Slice32, allocator, input[data_offset..], max_output_len)) orelse return error.InvalidDeflateBlockType;
+    const raw_input = input[data_offset..];
+    const stored_plan = (try planRawStoredOnly(raw_input)) orelse return error.InvalidDeflateBlockType;
+    try validateGzipStoredPlanBeforeAlloc(input, data_offset, stored_plan, .{});
+    if (try decodeGzipStoredAllocFooterSizeMaybe(allocator, input, data_offset, stored_plan, max_output_len)) |decoded| return decoded;
+    const stored = try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, max_output_len);
     errdefer stored.deinit(allocator);
-    const footer_offset = data_offset + stored.result.input_read;
-    try validateGzipFooter(input, footer_offset, stored.digest, stored.result.bytes.len);
-    return stored.result.bytes;
+    return stored.bytes;
 }
 
-fn decodeGzipStoredAllocFooterSizeMaybe(allocator: std.mem.Allocator, input: []const u8, data_offset: usize, max_output_len: ?usize) !?[]u8 {
+fn decodeGzipStoredAllocFooterSizeMaybe(allocator: std.mem.Allocator, input: []const u8, data_offset: usize, plan: StoredOnlyPlan, max_output_len: ?usize) !?[]u8 {
     if (input.len < data_offset + 8) return null;
     const expected_size: usize = std.mem.readInt(u32, input[input.len - 4 ..][0..4], .little);
-    // The gzip trailer carries ISIZE modulo 2^32. For ordinary stored members
-    // below that limit, it gives us the exact allocation size and lets the
-    // stored decoder copy while computing CRC-32 in one pass. If the trailer
-    // looks impossible for this byte stream, fall back to the planner path so
-    // malformed/trailing inputs do not use an attacker-controlled large tail
-    // value as an allocation hint.
-    if (expected_size > input.len) return null;
+    // The gzip trailer carries ISIZE modulo 2^32. The caller has already used
+    // the stored-block plan to validate boundaries, CRC-32, and ISIZE before
+    // any heap allocation. Use the trailer only when it is the exact size for
+    // this ordinary (<4 GiB) member; larger valid members fall back to the
+    // planned allocator path, which uses the full usize output length.
+    if (expected_size != plan.output_len) return null;
     try ensureOutputLimit(0, expected_size, max_output_len);
 
     const out = try allocator.alloc(u8, expected_size);
     errdefer allocator.free(out);
-    const stored = decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[data_offset..], out) catch |err| switch (err) {
-        error.OutputTooSmall => return null,
-        else => return err,
-    };
-    const decoded = stored orelse return null;
-    const footer_offset = data_offset + decoded.result.input_read;
-    try validateGzipFooter(input, footer_offset, decoded.digest, decoded.result.output_written);
+    copyRawStoredOnly(input[data_offset..][0..plan.input_read], out);
     return out;
 }
 
@@ -8592,6 +8590,9 @@ test "stored deflate alloc decoders enforce output limits" {
     const gzip_frame = try encodeGzipStoredAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(gzip_frame);
     try std.testing.expectError(error.OutputLimitExceeded, decodeGzipStoredAllocLimited(std.testing.allocator, gzip_frame, 4));
+    var gzip_limit_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutputLimitExceeded, decodeGzipStoredAllocLimited(gzip_limit_failing.allocator(), gzip_frame, 4));
+    try std.testing.expectEqual(@as(usize, 0), gzip_limit_failing.allocations);
     const gzip_ok = try decodeGzipStoredAllocLimited(std.testing.allocator, gzip_frame, 5);
     defer std.testing.allocator.free(gzip_ok);
     try std.testing.expectEqualSlices(u8, "hello", gzip_ok);
@@ -10887,6 +10888,9 @@ test "gzip stored wrapper validates crc size header and trailing data" {
     defer std.testing.allocator.free(bad_crc);
     bad_crc[bad_crc.len - 8] ^= 1;
     try std.testing.expectError(error.ChecksumMismatch, decodeGzipStored(bad_crc, &out));
+    var bad_crc_stored_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzipStoredAlloc(bad_crc_stored_failing.allocator(), bad_crc));
+    try std.testing.expectEqual(@as(usize, 0), bad_crc_stored_failing.allocations);
     var bad_crc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.ChecksumMismatch, decodeGzipAlloc(bad_crc_failing.allocator(), bad_crc));
     try std.testing.expectEqual(@as(usize, 0), bad_crc_failing.allocations);
@@ -10895,6 +10899,9 @@ test "gzip stored wrapper validates crc size header and trailing data" {
     defer std.testing.allocator.free(bad_size);
     bad_size[bad_size.len - 4] ^= 1;
     try std.testing.expectError(error.SizeMismatch, decodeGzipStored(bad_size, &out));
+    var bad_size_stored_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.SizeMismatch, decodeGzipStoredAlloc(bad_size_stored_failing.allocator(), bad_size));
+    try std.testing.expectEqual(@as(usize, 0), bad_size_stored_failing.allocations);
     var bad_size_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.SizeMismatch, decodeGzipAlloc(bad_size_failing.allocator(), bad_size));
     try std.testing.expectEqual(@as(usize, 0), bad_size_failing.allocations);
@@ -10904,6 +10911,9 @@ test "gzip stored wrapper validates crc size header and trailing data" {
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeGzipStored(with_trailing[0 .. encoded.len + 1], &out));
     try std.testing.expectError(error.TrailingData, decodeGzipStoredAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]));
+    var stored_trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TrailingData, decodeGzipStoredAlloc(stored_trailing_failing.allocator(), with_trailing[0 .. encoded.len + 1]));
+    try std.testing.expectEqual(@as(usize, 0), stored_trailing_failing.allocations);
     var trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.TrailingData, decodeGzipAlloc(trailing_failing.allocator(), with_trailing[0 .. encoded.len + 1]));
     try std.testing.expectEqual(@as(usize, 0), trailing_failing.allocations);
