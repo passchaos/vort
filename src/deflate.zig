@@ -33,9 +33,9 @@ fn isStoredBlockHeaderByte(header: u8) bool {
 fn rejectReservedFirstBlockBeforeAlloc(input: []const u8) Error!void {
     if (input.len == 0) return;
     // BTYPE=3 is reserved by RFC 1951 and can be detected from the first
-    // byte without decoding any payload. Allocator-returning wrapper helpers
-    // use this to preserve corruption errors before trusting wrapper-side size
-    // hints for heap allocation.
+    // byte without decoding any payload. Allocator-returning helpers use this
+    // to preserve corruption errors before trusting caller- or wrapper-provided
+    // size hints for heap allocation.
     if ((input[0] & 0x06) == 0x06) return error.InvalidDeflateBlockType;
 }
 
@@ -1651,6 +1651,7 @@ pub fn decodeRawAutoAllocPartial(allocator: std.mem.Allocator, input: []const u8
 
 fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, max_output_len: ?usize) !OwnedDecodeResult {
     if (input.len == 0) return error.TruncatedFrame;
+    try rejectReservedFirstBlockBeforeAlloc(input);
     if (try decodeRawStoredOnlyAllocMaybe(allocator, input, max_output_len)) |stored| return stored;
     if (dictionary.len == 0) {
         if (try decodeRawAutoSmallIntoAlloc(allocator, input, max_output_len)) |small| return small;
@@ -1934,6 +1935,7 @@ pub fn decodeRawAutoAllocWithDictionaryExactSize(allocator: std.mem.Allocator, i
             if (expected_output_len != stored_plan.output_len) return error.SizeMismatch;
         }
     }
+    try rejectReservedFirstBlockBeforeAlloc(input);
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const decoded = decodeRawAutoWithDictionary(input, dictionary, out) catch |err| switch (err) {
@@ -8608,6 +8610,26 @@ test "stored deflate exact-size alloc decoders validate exact lengths" {
     var raw_auto_trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.TrailingData, decodeRawAutoAllocExactSize(raw_auto_trailing_failing.allocator(), raw_trailing, plain.len));
     try std.testing.expectEqual(@as(usize, 0), raw_auto_trailing_failing.allocations);
+    var raw_reserved_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeRawAutoAllocExactSize(raw_reserved_failing.allocator(), &.{0x07}, plain.len));
+    try std.testing.expectEqual(@as(usize, 0), raw_reserved_failing.allocations);
+    var raw_reserved_dict_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeRawAutoAllocWithDictionaryExactSize(raw_reserved_dict_failing.allocator(), &.{0x07}, "dict", plain.len));
+    try std.testing.expectEqual(@as(usize, 0), raw_reserved_dict_failing.allocations);
+
+    const reserved_large = try std.testing.allocator.alloc(u8, stack_inflate_alloc_max_input_len + 1);
+    defer std.testing.allocator.free(reserved_large);
+    @memset(reserved_large, 0);
+    reserved_large[0] = 0x07;
+    var raw_reserved_large_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeRawAutoAlloc(raw_reserved_large_failing.allocator(), reserved_large));
+    try std.testing.expectEqual(@as(usize, 0), raw_reserved_large_failing.allocations);
+    var raw_reserved_large_dict_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeRawAutoAllocWithDictionary(raw_reserved_large_dict_failing.allocator(), reserved_large, "dict"));
+    try std.testing.expectEqual(@as(usize, 0), raw_reserved_large_dict_failing.allocations);
+    var raw_reserved_large_limit_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeRawAutoAllocLimited(raw_reserved_large_limit_failing.allocator(), reserved_large, plain.len));
+    try std.testing.expectEqual(@as(usize, 0), raw_reserved_large_limit_failing.allocations);
 
     const zlib_frame = try encodeZlibStoredAlloc(std.testing.allocator, plain);
     defer std.testing.allocator.free(zlib_frame);
