@@ -2589,6 +2589,8 @@
         "best_embedded_over_native_stream_bytes": "int",
         "best_native_stream_bytes": "int",
         "best_native_stream_ratio": "float",
+        "best_range_decode_full_input_mib_s": "float",
+        "best_range_decode_mib_s": "float",
         "best_stream_over_native_best": "float",
         "best_stream_over_native_best_bytes": "int",
         "block_len_count": "int",

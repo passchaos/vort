@@ -762,8 +762,19 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(stream);
         const output = try init.gpa.alloc(u8, length);
         defer init.gpa.free(output);
-        const result = try benchDecodeVortEmbedded(init.gpa, stream, output, iterations, init.io);
+        const result = try benchDecodeVortEmbeddedRange(init.gpa, stream, 0, output, iterations, init.io);
         try stdout.print("mode=vort_embedded compressed_bytes={d} decoded_bytes={d} iterations={d} elapsed_ns={d} checksum={d}\n", .{ stream.len, result.decoded_bytes, iterations, result.elapsed_ns, result.checksum });
+    } else if (std.mem.eql(u8, command, "bench-decode-vort-embedded-offset-range-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const offset = try std.fmt.parseInt(u64, args.next() orelse return error.MissingCorpusPath, 10);
+        const length = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+        const iterations = try parseIterations(args.next(), 3);
+        const stream = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(stream);
+        const output = try init.gpa.alloc(u8, length);
+        defer init.gpa.free(output);
+        const result = try benchDecodeVortEmbeddedRange(init.gpa, stream, offset, output, iterations, init.io);
+        try stdout.print("mode=vort_embedded_range offset={d} compressed_bytes={d} decoded_bytes={d} iterations={d} elapsed_ns={d} checksum={d}\n", .{ offset, stream.len, result.decoded_bytes, iterations, result.elapsed_ns, result.checksum });
     } else if (std.mem.eql(u8, command, "decode-vort-embedded-auto-range-file")) {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1236,6 +1247,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Time native Vort best-frame decode in one CLI process
         \\  bench-decode-vort-embedded-range-file <stream> <decoded_len> [iterations]
         \\                              Time embedded-index range decode in one CLI process
+        \\  bench-decode-vort-embedded-offset-range-file <stream> <offset> <len> [iterations]
+        \\                              Time embedded-index offset range decode in one CLI process
         \\  encode-vort-embedded-dict-file <in> <stream> [block_len]
         \\                              Encode self-contained dictionary stream with embedded index
         \\  decode-vort-embedded-auto-range-file <stream> <out> <offset> <len>
@@ -1323,7 +1336,7 @@ fn benchDecodeVortBest(frame: []const u8, output: []u8, iterations: usize, io: s
     };
 }
 
-fn benchDecodeVortEmbedded(allocator: std.mem.Allocator, stream: []const u8, output: []u8, iterations: usize, io: std.Io) !DecodeBenchResult {
+fn benchDecodeVortEmbeddedRange(allocator: std.mem.Allocator, stream: []const u8, offset: u64, output: []u8, iterations: usize, io: std.Io) !DecodeBenchResult {
     const embedded_index = try vort.storeViewEmbeddedIndex(stream);
     const index_len = embedded_index.entry_count;
     const index_buffer = try allocator.alloc(vort.StoreFrameIndexEntry, index_len);
@@ -1332,7 +1345,7 @@ fn benchDecodeVortEmbedded(allocator: std.mem.Allocator, stream: []const u8, out
     var checksum: u32 = 0;
     var decoded_bytes: usize = 0;
     for (0..iterations) |_| {
-        const result = try vort.storeDecodeIndexedRangeIntoWithIndexBuffer(allocator, stream, 0, output.len, output, index_buffer);
+        const result = try vort.storeDecodeIndexedRangeIntoWithIndexBuffer(allocator, stream, offset, output.len, output, index_buffer);
         decoded_bytes = result.output_written;
         checksum +%= result.crc32;
     }

@@ -31,6 +31,12 @@ REQUIRED_FIELDS = [
     "vort_embedded_over_native_stream",
     "vort_embedded_over_native_stream_bytes",
     "vort_embedded_over_native_stream_pct",
+    "range_offset",
+    "range_len",
+    "range_iterations",
+    "vort_range_decode_ms",
+    "vort_range_decode_mib_s",
+    "vort_range_decode_full_input_mib_s",
     "source_mode",
     "size_mode",
     "case_limit",
@@ -88,6 +94,17 @@ def validate_size_math(row: dict[str, str], label: str) -> tuple[int, int, int, 
     assert_close(float(row["vort_stream_over_native_best_pct"]), ((native_stream_bytes / native_best_bytes) - 1.0) * 100.0, f"{label} stream/native-best pct")
     assert_close(float(row["vort_embedded_over_native_stream"]), native_embedded_bytes / native_stream_bytes, f"{label} embedded/native-stream")
     assert_close(float(row["vort_embedded_over_native_stream_pct"]), ((native_embedded_bytes / native_stream_bytes) - 1.0) * 100.0, f"{label} embedded/native-stream pct")
+    range_len = positive_int(row["range_len"])
+    range_iterations = positive_int(row["range_iterations"])
+    range_decode_ms = positive_float(row["vort_range_decode_ms"])
+    range_decode_mib_s = positive_float(row["vort_range_decode_mib_s"])
+    range_decode_full_input_mib_s = positive_float(row["vort_range_decode_full_input_mib_s"])
+    expected_range_mib_s = (range_len / (1024.0 * 1024.0)) / (range_decode_ms / 1000.0)
+    expected_full_input_mib_s = (input_bytes / (1024.0 * 1024.0)) / (range_decode_ms / 1000.0)
+    assert_close(range_decode_mib_s, expected_range_mib_s, f"{label} range decode MiB/s")
+    assert_close(range_decode_full_input_mib_s, expected_full_input_mib_s, f"{label} range full-input MiB/s")
+    if range_iterations <= 0:
+        raise AssertionError(f"{label} range iterations must be positive")
     return block_len, input_bytes, zstd_bytes, native_best_bytes, native_stream_bytes, native_embedded_bytes
 
 
@@ -159,6 +176,8 @@ def main() -> int:
         summed_best = sum(non_negative_int(row["vort_native_best_bytes"]) for row in block_rows)
         summed_stream = sum(non_negative_int(row["vort_native_stream_bytes"]) for row in block_rows)
         summed_embedded = sum(non_negative_int(row["vort_native_embedded_bytes"]) for row in block_rows)
+        summed_range_len = sum(positive_int(row["range_len"]) for row in block_rows)
+        summed_range_decode_ms = sum(positive_float(row["vort_range_decode_ms"]) for row in block_rows)
         if positive_int(total["input_bytes"]) != summed_input:
             raise AssertionError(f"TOTAL input mismatch for block_len={block_len}")
         if positive_int(total["zstd_bytes"]) != summed_zstd:
@@ -169,11 +188,16 @@ def main() -> int:
             raise AssertionError(f"TOTAL native stream mismatch for block_len={block_len}")
         if non_negative_int(total["vort_native_embedded_bytes"]) != summed_embedded:
             raise AssertionError(f"TOTAL native embedded mismatch for block_len={block_len}")
+        if positive_int(total["range_len"]) != summed_range_len:
+            raise AssertionError(f"TOTAL range_len mismatch for block_len={block_len}")
+        assert_close(positive_float(total["vort_range_decode_ms"]), summed_range_decode_ms, f"TOTAL range decode ms block_len={block_len}", 1e-6)
 
     best_total = min(total_rows, key=lambda row: non_negative_int(row["vort_native_stream_bytes"]))
     best_block_len = positive_int(best_total["block_len"])
     best_native_stream_bytes = non_negative_int(best_total["vort_native_stream_bytes"])
     best_native_stream_ratio = positive_float(best_total["vort_native_stream_over_zstd"])
+    best_range_decode_mib_s = positive_float(best_total["vort_range_decode_mib_s"])
+    best_range_decode_full_input_mib_s = positive_float(best_total["vort_range_decode_full_input_mib_s"])
     best_stream_over_native_best = positive_float(best_total["vort_stream_over_native_best"])
     best_stream_over_native_best_bytes = int(best_total["vort_stream_over_native_best_bytes"])
     best_embedded_over_native_stream = positive_float(best_total["vort_embedded_over_native_stream"])
@@ -186,6 +210,7 @@ def main() -> int:
         or "Per-input rows" not in markdown
         or "embedded-index bytes" not in markdown
         or "stream overhead bytes" not in markdown
+        or "range decode MiB/s" not in markdown
     ):
         raise AssertionError("block sweep markdown missing retained sections or columns")
 
@@ -206,6 +231,8 @@ def main() -> int:
         "best_block_len": best_block_len,
         "best_native_stream_bytes": best_native_stream_bytes,
         "best_native_stream_ratio": best_native_stream_ratio,
+        "best_range_decode_mib_s": best_range_decode_mib_s,
+        "best_range_decode_full_input_mib_s": best_range_decode_full_input_mib_s,
         "best_stream_over_native_best": best_stream_over_native_best,
         "best_stream_over_native_best_bytes": best_stream_over_native_best_bytes,
         "best_embedded_over_native_stream": best_embedded_over_native_stream,
@@ -222,6 +249,7 @@ def main() -> int:
         f"block_lens={','.join(str(n) for n in block_lens)} "
         f"best_block_len={best_block_len} "
         f"best_native_stream_ratio={best_native_stream_ratio:.4f} "
+        f"best_range_decode_mib_s={best_range_decode_mib_s:.2f} "
         f"best_stream_over_best={best_stream_over_native_best:.4f} "
         f"best_stream_over_best_bytes={best_stream_over_native_best_bytes} "
         f"best_embedded_over_stream={best_embedded_over_native_stream:.4f} "

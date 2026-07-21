@@ -32,6 +32,12 @@ CSV_FIELDS = [
     "vort_embedded_over_native_stream",
     "vort_embedded_over_native_stream_bytes",
     "vort_embedded_over_native_stream_pct",
+    "range_offset",
+    "range_len",
+    "range_iterations",
+    "vort_range_decode_ms",
+    "vort_range_decode_mib_s",
+    "vort_range_decode_full_input_mib_s",
     "source_mode",
     "size_mode",
     "case_limit",
@@ -71,6 +77,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--standard-suite", action="store_true")
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--limit", type=zstd_compare.positive_int_arg)
+    parser.add_argument("--range-len", type=zstd_compare.positive_int_arg, default=4096)
+    parser.add_argument("--range-iterations", type=zstd_compare.positive_int_arg, default=5)
     return parser.parse_args()
 
 
@@ -97,6 +105,42 @@ def metadata(args: argparse.Namespace, cli_items: int) -> dict[str, str]:
         "size_mode": zstd_compare.size_mode_for(args),
         "case_limit": str(args.limit if args.limit is not None else "none"),
     }
+
+
+def range_len_for(input_len: int, requested: int) -> int:
+    return max(1, min(requested, input_len))
+
+
+def range_offset_for(input_len: int, range_len: int) -> int:
+    return 0 if input_len <= range_len else (input_len - range_len) // 2
+
+
+def parse_bench_output(text: str, expected_offset: int, expected_len: int, expected_iterations: int) -> float:
+    fields = zstd_compare.parse_key_values(text)
+    if fields.get("mode") != "vort_embedded_range":
+        raise AssertionError(f"unexpected bench mode in output: {text!r}")
+    if int(fields.get("offset", "-1")) != expected_offset:
+        raise AssertionError(f"unexpected bench offset in output: {text!r}")
+    if int(fields.get("decoded_bytes", "0")) != expected_len:
+        raise AssertionError(f"unexpected decoded byte count in output: {text!r}")
+    if int(fields.get("iterations", "0")) != expected_iterations:
+        raise AssertionError(f"unexpected bench iterations in output: {text!r}")
+    elapsed_ns = int(fields.get("elapsed_ns", "0"))
+    if elapsed_ns <= 0:
+        raise AssertionError(f"missing positive elapsed_ns in output: {text!r}")
+    return elapsed_ns / expected_iterations / 1_000_000_000.0
+
+
+def measure_range_decode(cli: pathlib.Path, stream_path: pathlib.Path, offset: int, length: int, iterations: int) -> float:
+    proc = subprocess.run(
+        [str(cli), "bench-decode-vort-embedded-offset-range-file", str(stream_path), str(offset), str(length), str(iterations)],
+        cwd=zstd_compare.ROOT,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    return parse_bench_output(proc.stdout, offset, length, iterations)
 
 
 def encode_size(cli: pathlib.Path, command: str, input_path: pathlib.Path, output_path: pathlib.Path, block_len: int | None = None) -> int:
@@ -133,6 +177,9 @@ def add_total_rows(rows: list[dict[str, Any]], block_lens: list[int], meta: dict
         total_best = sum(int(row["vort_native_best_bytes"]) for row in block_rows)
         total_stream = sum(int(row["vort_native_stream_bytes"]) for row in block_rows)
         total_embedded = sum(int(row["vort_native_embedded_bytes"]) for row in block_rows)
+        total_range_len = sum(int(row["range_len"]) for row in block_rows)
+        total_range_decode_ms = sum(float(row["vort_range_decode_ms"]) for row in block_rows)
+        total_range_decode_s = total_range_decode_ms / 1000.0
         stream_over_best_bytes = total_stream - total_best
         embedded_over_stream_bytes = total_embedded - total_stream
         rows.append(
@@ -153,6 +200,12 @@ def add_total_rows(rows: list[dict[str, Any]], block_lens: list[int], meta: dict
                 "vort_embedded_over_native_stream": overhead_ratio(total_embedded, total_stream),
                 "vort_embedded_over_native_stream_bytes": embedded_over_stream_bytes,
                 "vort_embedded_over_native_stream_pct": overhead_pct(total_embedded, total_stream),
+                "range_offset": -1,
+                "range_len": total_range_len,
+                "range_iterations": int(block_rows[0]["range_iterations"]),
+                "vort_range_decode_ms": total_range_decode_ms,
+                "vort_range_decode_mib_s": zstd_compare.mib_per_second(total_range_len, total_range_decode_s),
+                "vort_range_decode_full_input_mib_s": zstd_compare.mib_per_second(total_input, total_range_decode_s),
                 **meta,
             }
         )
@@ -182,6 +235,7 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             f"- CPU: `{meta['cpu_model']}`",
             f"- Optimize: `{meta['optimize']}`",
             f"- Swept native block lengths: `{','.join(str(n) for n in block_lens)}`",
+            f"- Range decode: centered `{next((row['range_len'] for row in rows if row['path'] != 'TOTAL'), -1)}` byte range, `{next((row['range_iterations'] for row in rows if row['path'] != 'TOTAL'), -1)}` iterations",
             "",
             "The sweep isolates native block-fragmentation cost by comparing a single-frame native best payload with blocked native streams that omit the embedded index. The embedded rows keep the index-frame cost visible for each block length.",
             "",
@@ -197,28 +251,28 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             [
                 "## TOTAL by block length",
                 "",
-                "| block length | input bytes | zstd bytes | native best bytes | native stream bytes | native embedded bytes | stream / zstd | embedded / zstd | stream / native best | stream overhead bytes | stream overhead pct | embedded / stream | embedded-index bytes |",
-                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| block length | input bytes | zstd bytes | native best bytes | native stream bytes | native embedded bytes | stream / zstd | embedded / zstd | stream / native best | stream overhead bytes | stream overhead pct | embedded / stream | embedded-index bytes | range decode MiB/s |",
+                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for row in total_rows:
             lines.append(
-                f"| {row['block_len']} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | {format_ratio(row['vort_native_stream_over_zstd'])} | {format_ratio(row['vort_native_embedded_over_zstd'])} | {format_ratio(row['vort_stream_over_native_best'])} | {row['vort_stream_over_native_best_bytes']} | {format_pct(row['vort_stream_over_native_best_pct'])} | {format_ratio(row['vort_embedded_over_native_stream'])} | {row['vort_embedded_over_native_stream_bytes']} |"
+                f"| {row['block_len']} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | {format_ratio(row['vort_native_stream_over_zstd'])} | {format_ratio(row['vort_native_embedded_over_zstd'])} | {format_ratio(row['vort_stream_over_native_best'])} | {row['vort_stream_over_native_best_bytes']} | {format_pct(row['vort_stream_over_native_best_pct'])} | {format_ratio(row['vort_embedded_over_native_stream'])} | {row['vort_embedded_over_native_stream_bytes']} | {row['vort_range_decode_mib_s']:.2f} |"
             )
         lines.extend(
             [
                 "",
                 "## Per-input rows",
                 "",
-                "| path | block length | input bytes | zstd bytes | native best bytes | native stream bytes | native embedded bytes | stream / native best | embedded / stream |",
-                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| path | block length | input bytes | zstd bytes | native best bytes | native stream bytes | native embedded bytes | stream / native best | embedded / stream | range offset | range decode MiB/s |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for row in rows:
             if row["path"] == "TOTAL":
                 continue
             lines.append(
-                f"| `{row['path']}` | {row['block_len']} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | {format_ratio(row['vort_stream_over_native_best'])} | {format_ratio(row['vort_embedded_over_native_stream'])} |"
+                f"| `{row['path']}` | {row['block_len']} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | {format_ratio(row['vort_stream_over_native_best'])} | {format_ratio(row['vort_embedded_over_native_stream'])} | {row['range_offset']} | {row['vort_range_decode_mib_s']:.2f} |"
             )
         args.markdown.write_text("\n".join(lines) + "\n")
 
@@ -248,11 +302,16 @@ def main() -> int:
             zstd_size = zstd_path.stat().st_size
             native_best_path = temp_dir / "sample.vort-best"
             native_best_size = encode_size(cli, "encode-vort-best-file", input_path, native_best_path)
+            range_len = range_len_for(len(data), args.range_len)
+            range_offset = range_offset_for(len(data), range_len)
             for block_len in args.block_lens:
                 native_stream_path = temp_dir / f"sample-{block_len}.vort-stream"
                 native_stream_size = encode_size(cli, "encode-vort-blocked-best-file", input_path, native_stream_path, block_len)
                 native_embedded_path = temp_dir / f"sample-{block_len}.vort"
                 native_embedded_size = encode_size(cli, "encode-vort-embedded-best-file", input_path, native_embedded_path, block_len)
+                range_decode_s = measure_range_decode(cli, native_embedded_path, range_offset, range_len, args.range_iterations)
+                range_decode_mib_s = zstd_compare.mib_per_second(range_len, range_decode_s)
+                range_decode_full_input_mib_s = zstd_compare.mib_per_second(len(data), range_decode_s)
                 stream_over_best_bytes = native_stream_size - native_best_size
                 embedded_over_stream_bytes = native_embedded_size - native_stream_size
                 rows.append(
@@ -273,6 +332,12 @@ def main() -> int:
                         "vort_embedded_over_native_stream": overhead_ratio(native_embedded_size, native_stream_size),
                         "vort_embedded_over_native_stream_bytes": embedded_over_stream_bytes,
                         "vort_embedded_over_native_stream_pct": overhead_pct(native_embedded_size, native_stream_size),
+                        "range_offset": range_offset,
+                        "range_len": range_len,
+                        "range_iterations": args.range_iterations,
+                        "vort_range_decode_ms": range_decode_s * 1000.0,
+                        "vort_range_decode_mib_s": range_decode_mib_s,
+                        "vort_range_decode_full_input_mib_s": range_decode_full_input_mib_s,
                         **meta,
                     }
                 )

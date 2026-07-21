@@ -56,12 +56,12 @@ TOTAL: raw/zstd 1.048x, native-best/zstd 0.984x, native-stream/zstd 1.115x, nati
 Example local Debug block-length sweep on the same standard-suite rows:
 
 ```text
-block_len,total_native_stream_bytes,native_stream/zstd,stream/native_best,stream_overhead_bytes,embedded_index_bytes
-4096,130653,1.1884,1.2079,22490,3888
-8192,122581,1.1150,1.1333,14418,1968
-16384,117473,1.0685,1.0861,9310,1008
-32768,113457,1.0320,1.0489,5294,528
-65536,110784,1.0077,1.0242,2621,288
+block_len,total_native_stream_bytes,native_stream/zstd,stream/native_best,stream_overhead_bytes,embedded_index_bytes,range_decode_mib_s
+4096,130653,1.1884,1.2079,22490,3888,15.21
+8192,122581,1.1150,1.1333,14418,1968,8.63
+16384,117473,1.0685,1.0861,9310,1008,4.70
+32768,113457,1.0320,1.0489,5294,528,3.14
+65536,110784,1.0077,1.0242,2621,288,1.44
 ```
 
 Current interpretation:
@@ -78,8 +78,11 @@ Current interpretation:
   The block-length sweep shows that raising the smoke block length from 8 KiB to
   64 KiB cuts the same three-row stream overhead from `+14418` to `+2621` bytes
   and embedded-index bytes from `+1968` to `+288`, bringing native stream size to
-  `1.0077x` zstd. The current embedded-index frame is still a validation/seek
-  surface rather than a final zstd-class native entropy format.
+  `1.0077x` zstd. The same sweep now records centered 4 KiB range-decode smoke
+  throughput, which drops from `15.21` MiB/s at 4 KiB blocks to `1.44` MiB/s at
+  64 KiB blocks because each small range must decode a larger containing frame.
+  The current embedded-index frame is still a validation/seek surface rather than
+  a final zstd-class native entropy format.
 - The current smoke says Vort fixed-deflate is close on these two text files
   (`~1.5%` larger on `README.md`, `~3.2%` larger on `docs/roadmap.md`), but it
   now times Vort decode inside one CLI process; zstd decode still includes
@@ -95,8 +98,9 @@ Recommended next comparison steps:
 
 1. Add library-level decode throughput rows for zstd and Vort native/zlib/raw
    modes rather than CLI smoke timings.
-2. Use the block-length sweep to define seekability tiers (for example 8 KiB,
-   32 KiB, and 64 KiB) and then add decode/range-latency rows for those tiers.
+2. Use the block-length sweep's size/range-decode tradeoff rows to define
+   seekability tiers (for example 8 KiB, 32 KiB, and 64 KiB) and then add
+   ReleaseFast or library-level range-latency rows for those tiers.
 3. Expand the standard-corpus comparison beyond the first three bounded rows and
    expand the ReleaseFast artifact beyond the local Silesia-small bounded set once stable.
 4. Split compatibility-format goals (raw/zlib/gzip deflate behavior) from native

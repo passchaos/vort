@@ -2027,8 +2027,9 @@ zig build run-zstd-compare-block-sweep-gate
 This schema records the validation summary for retained native block-length
 sweep artifacts. The gate validates the CSV field layout, requires one `TOTAL`
 row per swept block length, verifies the complete path/block matrix, checks the
-native-best, native-stream, and native-embedded byte/ratio math, and records the
-block length that produced the smallest total native stream in the smoke.
+native-best, native-stream, and native-embedded byte/ratio math, verifies
+centered range-decode timing aggregates, and records the block length that
+produced the smallest total native stream in the smoke.
 
 Example:
 
@@ -2056,6 +2057,8 @@ Example:
   "best_block_len": 65536,
   "best_native_stream_bytes": 110784,
   "best_native_stream_ratio": 1.0077044125271746,
+  "best_range_decode_mib_s": 1.4442983531738895,
+  "best_range_decode_full_input_mib_s": 46.217547301564466,
   "best_stream_over_native_best": 1.0242319462293021,
   "best_stream_over_native_best_bytes": 2621,
   "best_embedded_over_native_stream": 1.0025996533795494,
