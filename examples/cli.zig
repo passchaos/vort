@@ -491,6 +491,15 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeZlibBestAlloc(init.gpa, data, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-vort-best-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const encoded = try vort.storeEncodeBestAlloc(init.gpa, data);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("input_bytes={d} output_bytes={d} path={s}\n", .{ data.len, encoded.len, output_path });
     } else if (std.mem.eql(u8, command, "encode-raw-fixed-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -723,6 +732,16 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(output);
         const result = try benchDecodeRaw(compressed, output, iterations, init.io);
         try stdout.print("mode=raw compressed_bytes={d} decoded_bytes={d} iterations={d} elapsed_ns={d} checksum={d}\n", .{ compressed.len, result.decoded_bytes, iterations, result.elapsed_ns, result.checksum });
+    } else if (std.mem.eql(u8, command, "bench-decode-vort-best-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const expected_output_len = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+        const iterations = try parseIterations(args.next(), 3);
+        const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(frame);
+        const output = try init.gpa.alloc(u8, expected_output_len);
+        defer init.gpa.free(output);
+        const result = try benchDecodeVortBest(frame, output, iterations, init.io);
+        try stdout.print("mode=vort_best compressed_bytes={d} decoded_bytes={d} iterations={d} elapsed_ns={d} checksum={d}\n", .{ frame.len, result.decoded_bytes, iterations, result.elapsed_ns, result.checksum });
     } else if (std.mem.eql(u8, command, "bench-decode-vort-embedded-range-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const length = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
@@ -1161,6 +1180,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode raw deflate that may reference preset dictionary history
         \\  encode-zlib-dict-best-hex [text] [dict] [level]
         \\                              Encode a zlib FDICT/DICTID frame requiring a preset dictionary
+        \\  encode-vort-best-file <in> <out>
+        \\                              Encode one native Vort best frame
         \\  encode-raw-fixed-file <in> <out> [level]
         \\                              Encode raw deflate file bytes with fixed Huffman blocks
         \\  encode-zlib-best-file <in> <out> [level]
@@ -1197,6 +1218,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode an indexed range from an embedded-index stream
         \\  bench-decode-raw-file <in> <decoded_len> [iterations]
         \\                              Time raw deflate decode in one CLI process
+        \\  bench-decode-vort-best-file <in> <decoded_len> [iterations]
+        \\                              Time native Vort best-frame decode in one CLI process
         \\  bench-decode-vort-embedded-range-file <stream> <decoded_len> [iterations]
         \\                              Time embedded-index range decode in one CLI process
         \\  encode-vort-embedded-dict-file <in> <stream> [block_len]
@@ -1258,6 +1281,23 @@ fn benchDecodeRaw(compressed: []const u8, output: []u8, iterations: usize, io: s
     for (0..iterations) |_| {
         const result = try vort.decodeRawDeflate(compressed, output);
         decoded_bytes = result.output_written;
+        checksum +%= vort.crc32(output[0..decoded_bytes]);
+    }
+    const elapsed_ns_signed = start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
+    if (elapsed_ns_signed < 0) return error.InvalidTimestamp;
+    return .{
+        .elapsed_ns = @intCast(elapsed_ns_signed),
+        .decoded_bytes = decoded_bytes,
+        .checksum = checksum,
+    };
+}
+
+fn benchDecodeVortBest(frame: []const u8, output: []u8, iterations: usize, io: std.Io) !DecodeBenchResult {
+    const start = std.Io.Clock.awake.now(io);
+    var checksum: u32 = 0;
+    var decoded_bytes: usize = 0;
+    for (0..iterations) |_| {
+        decoded_bytes = try vort.storeDecodeAnyInto(frame, output);
         checksum +%= vort.crc32(output[0..decoded_bytes]);
     }
     const elapsed_ns_signed = start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();

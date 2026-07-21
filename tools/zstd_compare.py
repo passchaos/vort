@@ -28,16 +28,21 @@ CSV_FIELDS = [
     "input_bytes",
     "zstd_bytes",
     "vort_raw_fixed_bytes",
+    "vort_native_best_bytes",
     "vort_native_embedded_bytes",
     "vort_over_zstd",
+    "vort_native_best_over_zstd",
     "vort_native_over_zstd",
     "zstd_decode_ms",
     "vort_raw_fixed_decode_ms",
+    "vort_native_best_decode_ms",
     "vort_native_decode_ms",
     "zstd_decode_mib_s",
     "vort_raw_fixed_decode_mib_s",
+    "vort_native_best_decode_mib_s",
     "vort_native_decode_mib_s",
     "vort_decode_vs_zstd",
+    "vort_native_best_decode_vs_zstd",
     "vort_native_decode_vs_zstd",
     "decode_repeats",
     "native_block_len",
@@ -132,6 +137,18 @@ def measure_vort_raw_decode(cli: pathlib.Path, raw_path: pathlib.Path, decoded_p
         stderr=subprocess.STDOUT,
     )
     return elapsed_seconds_from_bench(proc.stdout, "raw", repeats, len(expected), expected_accumulated_crc32(expected, repeats))
+
+
+def measure_vort_best_decode(cli: pathlib.Path, frame_path: pathlib.Path, expected: bytes, repeats: int) -> float:
+    proc = subprocess.run(
+        [str(cli), "bench-decode-vort-best-file", str(frame_path), str(len(expected)), str(repeats)],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    return elapsed_seconds_from_bench(proc.stdout, "vort_best", repeats, len(expected), expected_accumulated_crc32(expected, repeats))
 
 
 def measure_vort_native_decode(cli: pathlib.Path, stream_path: pathlib.Path, decoded_path: pathlib.Path, expected: bytes, repeats: int) -> float:
@@ -321,32 +338,38 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             f"- Zig version: `{meta['zig_version']}`",
             f"- CPU: `{meta['cpu_model']}`",
             f"- Optimize: `{meta['optimize']}`",
-            f"- Decode repeats: `{meta['decode_repeats']}` median per input and codec",
+            f"- Decode repeats: `{meta['decode_repeats']}`; zstd uses median process decode, Vort uses an internal loop divided by this count",
             f"- Native block length: `{meta['native_block_len']}`",
             "- zstd command: `zstd -q -f -1 -o <tmp> <path>`",
             "- zstd decode command: `zstd -q -dc <tmp.zst>`",
-            "- Vort command: `vort encode-raw-fixed-hex <utf8 text>`",
-            "- Vort decode command: `vort decode-raw-file <tmp.raw> <tmp.out> <input_bytes>`",
-            "- Vort native command: `vort encode-vort-embedded-best-file <path> <tmp.vort> <block_len>`",
-            "- Vort native decode command: `vort decode-vort-embedded-range-file <tmp.vort> <tmp.out> 0 <input_bytes>`",
+            "- Vort raw command: `vort encode-raw-fixed-file <path> <tmp.raw>`",
+            "- Vort raw decode command: `vort decode-raw-file <tmp.raw> <tmp.out> <input_bytes>` and `vort bench-decode-raw-file <tmp.raw> <input_bytes> <repeat>`",
+            "- Vort native best command: `vort encode-vort-best-file <path> <tmp.vort-best>`",
+            "- Vort native best decode command: `vort bench-decode-vort-best-file <tmp.vort-best> <input_bytes> <repeat>`",
+            "- Vort native embedded command: `vort encode-vort-embedded-best-file <path> <tmp.vort> <block_len>`",
+            "- Vort native embedded decode command: `vort decode-vort-embedded-range-file <tmp.vort> <tmp.out> 0 <input_bytes>`",
             "",
             "Decode timings are a retained smoke signal, not a standalone throughput claim: zstd rows include process/stdout plumbing, while Vort raw/native rows use CLI-internal decode loops divided by the repeat count after a one-shot output check.",
             "",
-            "| path | input bytes | zstd bytes | Vort raw fixed bytes | Vort native bytes | Vort raw / zstd | Vort native / zstd | zstd decode MiB/s | Vort raw fixed decode MiB/s | Vort native decode MiB/s | Vort raw decode / zstd | Vort native decode / zstd |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| path | input bytes | zstd bytes | Vort raw fixed bytes | Vort native best bytes | Vort native embedded bytes | Vort raw / zstd | Vort native best / zstd | Vort native embedded / zstd | zstd decode MiB/s | Vort raw fixed decode MiB/s | Vort native best decode MiB/s | Vort native embedded decode MiB/s | Vort raw decode / zstd | Vort native best decode / zstd | Vort native embedded decode / zstd |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
         for row in rows:
             raw_ratio = row["vort_over_zstd"]
+            native_best_ratio = row["vort_native_best_over_zstd"]
             native_ratio = row["vort_native_over_zstd"]
             raw_ratio_text = "n/a" if not isinstance(raw_ratio, float) or raw_ratio < 0 else f"{raw_ratio:.4f}"
+            native_best_ratio_text = "n/a" if not isinstance(native_best_ratio, float) or native_best_ratio < 0 else f"{native_best_ratio:.4f}"
             native_ratio_text = "n/a" if not isinstance(native_ratio, float) or native_ratio < 0 else f"{native_ratio:.4f}"
             zstd_decode = row["zstd_decode_mib_s"]
             raw_decode = row["vort_raw_fixed_decode_mib_s"]
+            native_best_decode = row["vort_native_best_decode_mib_s"]
             native_decode = row["vort_native_decode_mib_s"]
             raw_decode_ratio = row["vort_decode_vs_zstd"]
+            native_best_decode_ratio = row["vort_native_best_decode_vs_zstd"]
             native_decode_ratio = row["vort_native_decode_vs_zstd"]
             lines.append(
-                f"| {('**TOTAL**' if row['path'] == 'TOTAL' else '`' + row['path'] + '`')} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_raw_fixed_bytes']} | {row['vort_native_embedded_bytes']} | {raw_ratio_text} | {native_ratio_text} | {zstd_decode:.2f} | {raw_decode:.2f} | {native_decode:.2f} | {raw_decode_ratio:.4f} | {native_decode_ratio:.4f} |"
+                f"| {('**TOTAL**' if row['path'] == 'TOTAL' else '`' + row['path'] + '`')} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_raw_fixed_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_embedded_bytes']} | {raw_ratio_text} | {native_best_ratio_text} | {native_ratio_text} | {zstd_decode:.2f} | {raw_decode:.2f} | {native_best_decode:.2f} | {native_decode:.2f} | {raw_decode_ratio:.4f} | {native_best_decode_ratio:.4f} | {native_decode_ratio:.4f} |"
             )
         args.markdown.write_text("\n".join(lines) + "\n")
 
@@ -365,7 +388,7 @@ def main() -> int:
 
     rows: list[dict[str, Any]] = []
     meta = metadata(args, cli_items)
-    print("path,input_bytes,zstd_bytes,vort_raw_fixed_bytes,vort_native_embedded_bytes,zstd_decode_ms,vort_raw_fixed_decode_ms,vort_native_decode_ms")
+    print("path,input_bytes,zstd_bytes,vort_raw_fixed_bytes,vort_native_best_bytes,vort_native_embedded_bytes,zstd_decode_ms,vort_raw_fixed_decode_ms,vort_native_best_decode_ms,vort_native_decode_ms")
     for label, data in cases:
         with tempfile.TemporaryDirectory() as td:
             temp_dir = pathlib.Path(td)
@@ -379,6 +402,10 @@ def main() -> int:
             vort_decode_s = -1.0
             vort_decode_mib_s = -1.0
             vort_decode_vs_zstd = -1.0
+            native_best_size = -1
+            native_best_decode_s = -1.0
+            native_best_decode_mib_s = -1.0
+            native_best_decode_vs_zstd = -1.0
             native_size = -1
             native_decode_s = -1.0
             native_decode_mib_s = -1.0
@@ -401,6 +428,20 @@ def main() -> int:
                 vort_decode_mib_s = mib_per_second(len(data), vort_decode_s)
                 vort_decode_vs_zstd = vort_decode_mib_s / zstd_decode_mib_s if zstd_decode_mib_s > 0.0 else -1.0
 
+                native_best_path = temp_dir / "sample.vort-best"
+                subprocess.run(
+                    [str(cli), "encode-vort-best-file", str(input_path), str(native_best_path)],
+                    cwd=ROOT,
+                    check=True,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                )
+                native_best_size = native_best_path.stat().st_size
+                native_best_decode_s = measure_vort_best_decode(cli, native_best_path, data, args.decode_repeats)
+                native_best_decode_mib_s = mib_per_second(len(data), native_best_decode_s)
+                native_best_decode_vs_zstd = native_best_decode_mib_s / zstd_decode_mib_s if zstd_decode_mib_s > 0.0 else -1.0
+
                 native_path = temp_dir / "sample.vort"
                 native_decoded_path = temp_dir / "sample.native.out"
                 subprocess.run(
@@ -417,7 +458,9 @@ def main() -> int:
                 native_decode_vs_zstd = native_decode_mib_s / zstd_decode_mib_s if zstd_decode_mib_s > 0.0 else -1.0
             else:
                 vort_size = -1
+                native_best_size = -1
         ratio = (vort_size / zstd_size) if zstd_size and vort_size >= 0 else -1.0
+        native_best_ratio = (native_best_size / zstd_size) if zstd_size and native_best_size >= 0 else -1.0
         native_ratio = (native_size / zstd_size) if zstd_size and native_size >= 0 else -1.0
         rows.append(
             {
@@ -425,36 +468,45 @@ def main() -> int:
                 "input_bytes": len(data),
                 "zstd_bytes": zstd_size,
                 "vort_raw_fixed_bytes": vort_size,
+                "vort_native_best_bytes": native_best_size,
                 "vort_native_embedded_bytes": native_size,
                 "vort_over_zstd": ratio,
+                "vort_native_best_over_zstd": native_best_ratio,
                 "vort_native_over_zstd": native_ratio,
                 "zstd_decode_ms": zstd_decode_s * 1000.0,
                 "vort_raw_fixed_decode_ms": vort_decode_s * 1000.0,
+                "vort_native_best_decode_ms": native_best_decode_s * 1000.0,
                 "vort_native_decode_ms": native_decode_s * 1000.0,
                 "zstd_decode_mib_s": zstd_decode_mib_s,
                 "vort_raw_fixed_decode_mib_s": vort_decode_mib_s,
+                "vort_native_best_decode_mib_s": native_best_decode_mib_s,
                 "vort_native_decode_mib_s": native_decode_mib_s,
                 "vort_decode_vs_zstd": vort_decode_vs_zstd,
+                "vort_native_best_decode_vs_zstd": native_best_decode_vs_zstd,
                 "vort_native_decode_vs_zstd": native_decode_vs_zstd,
                 "decode_repeats": args.decode_repeats,
                 "native_block_len": args.native_block_len,
                 **meta,
             }
         )
-        print(f"{label},{len(data)},{zstd_size},{vort_size},{native_size},{zstd_decode_s * 1000.0:.3f},{vort_decode_s * 1000.0:.3f},{native_decode_s * 1000.0:.3f}")
+        print(f"{label},{len(data)},{zstd_size},{vort_size},{native_best_size},{native_size},{zstd_decode_s * 1000.0:.3f},{vort_decode_s * 1000.0:.3f},{native_best_decode_s * 1000.0:.3f},{native_decode_s * 1000.0:.3f}")
 
     if rows:
         total_input = sum(int(row["input_bytes"]) for row in rows)
         total_zstd = sum(int(row["zstd_bytes"]) for row in rows)
         total_vort = sum(int(row["vort_raw_fixed_bytes"]) for row in rows if int(row["vort_raw_fixed_bytes"]) >= 0)
+        total_native_best = sum(int(row["vort_native_best_bytes"]) for row in rows if int(row["vort_native_best_bytes"]) >= 0)
         total_native = sum(int(row["vort_native_embedded_bytes"]) for row in rows if int(row["vort_native_embedded_bytes"]) >= 0)
         total_ratio = (total_vort / total_zstd) if total_zstd and total_vort >= 0 else -1.0
+        total_native_best_ratio = (total_native_best / total_zstd) if total_zstd and total_native_best >= 0 else -1.0
         total_native_ratio = (total_native / total_zstd) if total_zstd and total_native >= 0 else -1.0
         total_zstd_decode_ms = sum(float(row["zstd_decode_ms"]) for row in rows)
         total_vort_decode_ms = sum(float(row["vort_raw_fixed_decode_ms"]) for row in rows)
+        total_native_best_decode_ms = sum(float(row["vort_native_best_decode_ms"]) for row in rows)
         total_native_decode_ms = sum(float(row["vort_native_decode_ms"]) for row in rows)
         total_zstd_decode_mib_s = mib_per_second(total_input, total_zstd_decode_ms / 1000.0)
         total_vort_decode_mib_s = mib_per_second(total_input, total_vort_decode_ms / 1000.0)
+        total_native_best_decode_mib_s = mib_per_second(total_input, total_native_best_decode_ms / 1000.0)
         total_native_decode_mib_s = mib_per_second(total_input, total_native_decode_ms / 1000.0)
         rows.append(
             {
@@ -462,16 +514,21 @@ def main() -> int:
                 "input_bytes": total_input,
                 "zstd_bytes": total_zstd,
                 "vort_raw_fixed_bytes": total_vort,
+                "vort_native_best_bytes": total_native_best,
                 "vort_native_embedded_bytes": total_native,
                 "vort_over_zstd": total_ratio,
+                "vort_native_best_over_zstd": total_native_best_ratio,
                 "vort_native_over_zstd": total_native_ratio,
                 "zstd_decode_ms": total_zstd_decode_ms,
                 "vort_raw_fixed_decode_ms": total_vort_decode_ms,
+                "vort_native_best_decode_ms": total_native_best_decode_ms,
                 "vort_native_decode_ms": total_native_decode_ms,
                 "zstd_decode_mib_s": total_zstd_decode_mib_s,
                 "vort_raw_fixed_decode_mib_s": total_vort_decode_mib_s,
+                "vort_native_best_decode_mib_s": total_native_best_decode_mib_s,
                 "vort_native_decode_mib_s": total_native_decode_mib_s,
                 "vort_decode_vs_zstd": total_vort_decode_mib_s / total_zstd_decode_mib_s if total_zstd_decode_mib_s > 0.0 else -1.0,
+                "vort_native_best_decode_vs_zstd": total_native_best_decode_mib_s / total_zstd_decode_mib_s if total_zstd_decode_mib_s > 0.0 else -1.0,
                 "vort_native_decode_vs_zstd": total_native_decode_mib_s / total_zstd_decode_mib_s if total_zstd_decode_mib_s > 0.0 else -1.0,
                 "decode_repeats": args.decode_repeats,
                 "native_block_len": args.native_block_len,
