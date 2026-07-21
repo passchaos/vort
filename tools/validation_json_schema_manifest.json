@@ -435,6 +435,17 @@
         "native_tier_range_rows": "int",
         "native_tier_range_fixture_count": "int",
         "native_tier_range_enforced_count": "int",
+        "native_tier_range_built_in_summary_count": "int",
+        "native_tier_range_project_files_summary_count": "int",
+        "native_tier_range_standard_corpus_summary_count": "int",
+        "native_tier_range_custom_summary_count": "int",
+        "native_tier_range_legacy_summary_count": "int",
+        "native_tier_range_built_in_rows": "int",
+        "native_tier_range_project_files_rows": "int",
+        "native_tier_range_standard_corpus_rows": "int",
+        "native_tier_range_custom_rows": "int",
+        "native_tier_range_legacy_rows": "int",
+        "native_tier_range_missing_sources": "list",
         "native_tier_range_seek_fast_min_range_mib_s": "float",
         "native_tier_range_balanced_min_range_mib_s": "float",
         "native_tier_range_ratio_min_range_mib_s": "float",
@@ -474,6 +485,11 @@
         "smoke_gate": "str"
       },
       "list_item_enums": {
+        "native_tier_range_missing_sources": [
+          "built_in",
+          "project_files",
+          "standard_corpus"
+        ],
         "validation_unhealthy_reasons": [
           "missing_producer_steps",
           "missing_required_smoke_gates",
@@ -873,6 +889,7 @@
           "validation_python_zlib_diff_failed",
           "truncated_output",
           "missing_native_tier_range_summary",
+          "missing_native_tier_range_source",
           "failed_native_tier_range_summary"
         ]
       },
@@ -1895,11 +1912,20 @@
         "rows": "int",
         "schema": "str",
         "schema_version": "int",
+        "source": "str",
         "tier_count": "int",
         "tiers": "list",
         "total_index_entries_by_tier": "dict",
         "total_stream_bytes_by_tier": "dict",
         "allow_any_fixtures": "bool"
+      },
+      "enums": {
+        "source": [
+          "built_in",
+          "project_files",
+          "standard_corpus",
+          "custom"
+        ]
       }
     },
     "vort.native_allocation_report": {

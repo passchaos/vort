@@ -325,6 +325,7 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
 
 
 def native_tier_range_health(artifacts: list[Path]) -> dict:
+    expected_sources = ("built_in", "project_files", "standard_corpus")
     summaries = []
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
@@ -335,6 +336,21 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
     row_count = sum(int(data.get("rows") or 0) for data in summaries)
     fixture_count = sum(int(data.get("fixture_count") or 0) for data in summaries)
     enforced_count = sum(1 for data in summaries if bool(data.get("enforce_throughput")))
+    source_counts = {source: 0 for source in expected_sources}
+    source_counts["custom"] = 0
+    source_rows = {source: 0 for source in source_counts}
+    legacy_count = 0
+    legacy_rows = 0
+    for data in summaries:
+        source = data.get("source")
+        rows = int(data.get("rows") or 0)
+        if source in source_counts:
+            source_counts[source] += 1
+            source_rows[source] += rows
+        else:
+            legacy_count += 1
+            legacy_rows += rows
+    missing_sources = [source for source in expected_sources if source_counts[source] == 0]
 
     def tier_min(field: str, tier: str) -> float:
         values = []
@@ -346,7 +362,7 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
                     values.append(float(value))
         return min(values) if values else 0.0
 
-    healthy = present and ok_count == len(summaries) and row_count > 0 and fixture_count > 0
+    healthy = present and ok_count == len(summaries) and row_count > 0 and fixture_count > 0 and not missing_sources and legacy_count == 0
     return {
         "present": present,
         "healthy": healthy,
@@ -355,6 +371,17 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
         "rows": row_count,
         "fixture_count": fixture_count,
         "enforced_count": enforced_count,
+        "built_in_summary_count": source_counts["built_in"],
+        "project_files_summary_count": source_counts["project_files"],
+        "standard_corpus_summary_count": source_counts["standard_corpus"],
+        "custom_summary_count": source_counts["custom"],
+        "legacy_summary_count": legacy_count,
+        "built_in_rows": source_rows["built_in"],
+        "project_files_rows": source_rows["project_files"],
+        "standard_corpus_rows": source_rows["standard_corpus"],
+        "custom_rows": source_rows["custom"],
+        "legacy_rows": legacy_rows,
+        "missing_sources": missing_sources,
         "seek_fast_min_range_mib_s": tier_min("min_range_mib_s_by_tier", "seek_fast"),
         "balanced_min_range_mib_s": tier_min("min_range_mib_s_by_tier", "balanced"),
         "ratio_min_range_mib_s": tier_min("min_range_mib_s_by_tier", "ratio"),
@@ -699,7 +726,7 @@ def main() -> int:
         f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
         f"- Python zlib differential: payloads {python_zlib_health['payloads']}, dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
-        f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
+        f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
         "",
     ]
     if strict_health["missing_modes"]:
@@ -847,6 +874,17 @@ def main() -> int:
                 "native_tier_range_rows": native_tier_health["rows"],
                 "native_tier_range_fixture_count": native_tier_health["fixture_count"],
                 "native_tier_range_enforced_count": native_tier_health["enforced_count"],
+                "native_tier_range_built_in_summary_count": native_tier_health["built_in_summary_count"],
+                "native_tier_range_project_files_summary_count": native_tier_health["project_files_summary_count"],
+                "native_tier_range_standard_corpus_summary_count": native_tier_health["standard_corpus_summary_count"],
+                "native_tier_range_custom_summary_count": native_tier_health["custom_summary_count"],
+                "native_tier_range_legacy_summary_count": native_tier_health["legacy_summary_count"],
+                "native_tier_range_built_in_rows": native_tier_health["built_in_rows"],
+                "native_tier_range_project_files_rows": native_tier_health["project_files_rows"],
+                "native_tier_range_standard_corpus_rows": native_tier_health["standard_corpus_rows"],
+                "native_tier_range_custom_rows": native_tier_health["custom_rows"],
+                "native_tier_range_legacy_rows": native_tier_health["legacy_rows"],
+                "native_tier_range_missing_sources": native_tier_health["missing_sources"],
                 "native_tier_range_seek_fast_min_range_mib_s": native_tier_health["seek_fast_min_range_mib_s"],
                 "native_tier_range_balanced_min_range_mib_s": native_tier_health["balanced_min_range_mib_s"],
                 "native_tier_range_ratio_min_range_mib_s": native_tier_health["ratio_min_range_mib_s"],

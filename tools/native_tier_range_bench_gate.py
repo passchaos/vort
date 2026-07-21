@@ -38,6 +38,7 @@ MIN_RELEASEFAST_RANGE_MIB_S = {
     "balanced": 6.0,
     "ratio": 3.0,
 }
+SUMMARY_SOURCES = ("built_in", "project_files", "standard_corpus", "custom")
 
 
 def positive_int(row: dict[str, str], key: str) -> int:
@@ -72,6 +73,7 @@ def main() -> int:
     parser.add_argument("--enforce-throughput", action="store_true")
     parser.add_argument("--expect-fixtures", help="comma-separated fixture names; defaults to built-in fixtures")
     parser.add_argument("--allow-any-fixtures", action="store_true", help="derive expected fixtures from CSV rows")
+    parser.add_argument("--source", choices=SUMMARY_SOURCES, default="custom", help="summary source bucket for dashboard aggregation")
     parser.add_argument("--summary", type=Path)
     args = parser.parse_args()
 
@@ -140,6 +142,7 @@ def main() -> int:
     summary = {
         "schema": "vort.native_tier_range_bench_gate",
         "schema_version": 1,
+        "source": args.source,
         "ok": True,
         "rows": len(rows),
         "fixture_count": len(expected_fixtures),

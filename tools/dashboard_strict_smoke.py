@@ -23,6 +23,13 @@ FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 NATIVE_TIER_RANGE_ARTIFACT = "vort-native-tier-range-bench-gate.json"
+NATIVE_TIER_RANGE_FILES_ARTIFACT = "vort-native-tier-range-files-bench-gate.json"
+NATIVE_TIER_RANGE_CORPUS_ARTIFACT = "vort-native-tier-range-corpus-bench-gate.json"
+NATIVE_TIER_RANGE_ARTIFACTS = (
+    (NATIVE_TIER_RANGE_ARTIFACT, "zig build run-native-tier-range-bench-gate"),
+    (NATIVE_TIER_RANGE_FILES_ARTIFACT, "zig build run-native-tier-range-files-bench-gate"),
+    (NATIVE_TIER_RANGE_CORPUS_ARTIFACT, "zig build run-native-tier-range-corpus-bench-gate"),
+)
 
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -94,10 +101,11 @@ def write_producer_map(
             "smoke_gate": "zig build run-python-zlib-diff-dashboard",
         }
     if include_native_tier_smoke:
-        artifact_metadata[NATIVE_TIER_RANGE_ARTIFACT] = {
-            "expected_format": "json",
-            "smoke_gate": "zig build run-native-tier-range-bench-gate",
-        }
+        for artifact, smoke_gate in NATIVE_TIER_RANGE_ARTIFACTS:
+            artifact_metadata[artifact] = {
+                "expected_format": "json",
+                "smoke_gate": smoke_gate,
+            }
     exact = {}
     if include_header_exact:
         exact[HEADER_INSPECT_ARTIFACT] = "zig build run-header-inspect-dashboard"
@@ -116,7 +124,8 @@ def write_producer_map(
     if include_python_zlib_exact:
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
     if include_native_tier_exact:
-        exact[NATIVE_TIER_RANGE_ARTIFACT] = "zig build run-native-tier-range-bench-gate"
+        for artifact, smoke_gate in NATIVE_TIER_RANGE_ARTIFACTS:
+            exact[artifact] = smoke_gate
     payload = {
         "schema": "vort.dashboard_producers",
         "schema_version": 1,
@@ -562,13 +571,14 @@ def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
-def write_native_tier_range_summary(path: Path, *, ok: bool = True) -> None:
+def write_native_tier_range_summary(path: Path, *, ok: bool = True, source: str = "built_in", rows: int = 9, fixture_count: int = 3) -> None:
     payload = {
         "schema": "vort.native_tier_range_bench_gate",
         "schema_version": 1,
+        "source": source,
         "ok": ok,
-        "rows": 9 if ok else 0,
-        "fixture_count": 3 if ok else 0,
+        "rows": rows if ok else 0,
+        "fixture_count": fixture_count if ok else 0,
         "tier_count": 3,
         "fixtures": ["repetitive", "structured", "text"],
         "tiers": ["seek_fast", "balanced", "ratio"],
@@ -582,6 +592,12 @@ def write_native_tier_range_summary(path: Path, *, ok: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_native_tier_range_summaries(root: Path) -> None:
+    write_native_tier_range_summary(root / NATIVE_TIER_RANGE_ARTIFACT, source="built_in", rows=9, fixture_count=3)
+    write_native_tier_range_summary(root / NATIVE_TIER_RANGE_FILES_ARTIFACT, source="project_files", rows=6, fixture_count=2)
+    write_native_tier_range_summary(root / NATIVE_TIER_RANGE_CORPUS_ARTIFACT, source="standard_corpus", rows=9, fixture_count=3)
+
+
 def write_healthy_artifacts(root: Path) -> None:
     write_header_summary(root / HEADER_INSPECT_ARTIFACT)
     write_dashboard_strict_summary(root / DASHBOARD_STRICT_ARTIFACT)
@@ -591,7 +607,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
-    write_native_tier_range_summary(root / NATIVE_TIER_RANGE_ARTIFACT)
+    write_native_tier_range_summaries(root)
 
 
 def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
@@ -866,15 +882,20 @@ def main() -> int:
         assert manifest["header_inspect_missing_workflow_count"] == 0
         assert manifest["native_tier_range_present"] is True
         assert manifest["native_tier_range_healthy"] is True
-        assert manifest["native_tier_range_summary_count"] == 1
-        assert manifest["native_tier_range_rows"] == 9
+        assert manifest["native_tier_range_summary_count"] == 3
+        assert manifest["native_tier_range_rows"] == 24
+        assert manifest["native_tier_range_built_in_summary_count"] == 1
+        assert manifest["native_tier_range_project_files_summary_count"] == 1
+        assert manifest["native_tier_range_standard_corpus_summary_count"] == 1
+        assert manifest["native_tier_range_missing_sources"] == []
         assert manifest["native_tier_range_seek_fast_min_range_mib_s"] >= 80.0
         checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
 
         missing_native_tier_root = root / "missing-native-tier"
         missing_native_tier_root.mkdir()
         write_healthy_artifacts(missing_native_tier_root)
-        (missing_native_tier_root / NATIVE_TIER_RANGE_ARTIFACT).unlink()
+        for artifact, _ in NATIVE_TIER_RANGE_ARTIFACTS:
+            (missing_native_tier_root / artifact).unlink()
         missing_native_tier_producer = missing_native_tier_root / "producers.json"
         write_producer_map(missing_native_tier_producer, include_native_tier_exact=False, include_native_tier_smoke=False)
         missing_native_tier_result = run(dashboard_args(missing_native_tier_root, missing_native_tier_producer, "--strict-validation-health"))
@@ -887,6 +908,25 @@ def main() -> int:
             and missing_native_tier_manifest["native_tier_range_rows"] == 0
         )
         checks.append(check_row("missing_native_tier_range_summary", "native-tier-range-health", False, native_tier_missing_matched, missing_native_tier_result.returncode, "dashboard_index=", missing_native_tier_result.stdout))
+
+        missing_native_tier_source_root = root / "missing-native-tier-source"
+        missing_native_tier_source_root.mkdir()
+        write_healthy_artifacts(missing_native_tier_source_root)
+        (missing_native_tier_source_root / NATIVE_TIER_RANGE_ARTIFACT).unlink()
+        missing_native_tier_source_producer = missing_native_tier_source_root / "producers.json"
+        write_producer_map(missing_native_tier_source_producer)
+        missing_native_tier_source_result = run(dashboard_args(missing_native_tier_source_root, missing_native_tier_source_producer, "--strict-validation-health"))
+        missing_native_tier_source_manifest = json.loads((missing_native_tier_source_root / "vort-dashboard-index.json").read_text())
+        native_tier_source_missing_matched = (
+            missing_native_tier_source_result.returncode == 0
+            and missing_native_tier_source_manifest["validation_healthy"] is True
+            and missing_native_tier_source_manifest["native_tier_range_present"] is True
+            and missing_native_tier_source_manifest["native_tier_range_healthy"] is False
+            and missing_native_tier_source_manifest["native_tier_range_summary_count"] == 2
+            and missing_native_tier_source_manifest["native_tier_range_built_in_summary_count"] == 0
+            and missing_native_tier_source_manifest["native_tier_range_missing_sources"] == ["built_in"]
+        )
+        checks.append(check_row("missing_native_tier_range_source", "native-tier-range-health", False, native_tier_source_missing_matched, missing_native_tier_source_result.returncode, "dashboard_index=", missing_native_tier_source_result.stdout))
 
         failed_native_tier_root = root / "failed-native-tier"
         failed_native_tier_root.mkdir()
@@ -901,7 +941,7 @@ def main() -> int:
             and failed_native_tier_manifest["validation_healthy"] is True
             and failed_native_tier_manifest["native_tier_range_present"] is True
             and failed_native_tier_manifest["native_tier_range_healthy"] is False
-            and failed_native_tier_manifest["native_tier_range_ok_count"] == 0
+            and failed_native_tier_manifest["native_tier_range_ok_count"] == 2
         )
         checks.append(check_row("failed_native_tier_range_summary", "native-tier-range-health", False, native_tier_failed_matched, failed_native_tier_result.returncode, "dashboard_index=", failed_native_tier_result.stdout))
 

@@ -1314,6 +1314,8 @@ pub fn build(b: *std.Build) void {
         "tools/native_tier_range_bench_gate.py",
         "--csv",
         "zig-out/vort-native-tier-range-bench.csv",
+        "--source",
+        "built_in",
         "--summary",
         "zig-out/vort-native-tier-range-bench-gate.json",
     });
@@ -1342,6 +1344,8 @@ pub fn build(b: *std.Build) void {
         "zig-out/vort-native-tier-range-files-bench.csv",
         "--expect-fixtures",
         "README.md,roadmap.md",
+        "--source",
+        "project_files",
         "--summary",
         "zig-out/vort-native-tier-range-files-bench-gate.json",
     });
@@ -1368,6 +1372,8 @@ pub fn build(b: *std.Build) void {
         "--csv",
         "zig-out/vort-native-tier-range-corpus-bench.csv",
         "--allow-any-fixtures",
+        "--source",
+        "standard_corpus",
         "--summary",
         "zig-out/vort-native-tier-range-corpus-bench-gate.json",
     });

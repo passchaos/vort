@@ -1557,11 +1557,22 @@ Example:
   "python_zlib_diff_expected_failures": 0,
   "native_tier_range_present": true,
   "native_tier_range_healthy": true,
-  "native_tier_range_summary_count": 2,
-  "native_tier_range_ok_count": 2,
-  "native_tier_range_rows": 15,
-  "native_tier_range_fixture_count": 5,
+  "native_tier_range_summary_count": 3,
+  "native_tier_range_ok_count": 3,
+  "native_tier_range_rows": 24,
+  "native_tier_range_fixture_count": 8,
   "native_tier_range_enforced_count": 1,
+  "native_tier_range_built_in_summary_count": 1,
+  "native_tier_range_project_files_summary_count": 1,
+  "native_tier_range_standard_corpus_summary_count": 1,
+  "native_tier_range_custom_summary_count": 0,
+  "native_tier_range_legacy_summary_count": 0,
+  "native_tier_range_built_in_rows": 9,
+  "native_tier_range_project_files_rows": 6,
+  "native_tier_range_standard_corpus_rows": 9,
+  "native_tier_range_custom_rows": 0,
+  "native_tier_range_legacy_rows": 0,
+  "native_tier_range_missing_sources": [],
   "native_tier_range_seek_fast_min_range_mib_s": 52.58,
   "native_tier_range_balanced_min_range_mib_s": 12.29,
   "native_tier_range_ratio_min_range_mib_s": 5.65,
@@ -1621,9 +1632,9 @@ Example:
     },
     {
       "mode": "native-tier-range-health",
-      "min_checks": 2,
+      "min_checks": 3,
       "min_expected_failures": 0,
-      "min_matched": 2
+      "min_matched": 3
     }
   ]
 }
@@ -1695,7 +1706,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 3,
+  "check_count": 4,
   "mode_count": 2,
   "expected_mode_count": 2,
   "missing_mode_count": 0,
@@ -1709,9 +1720,9 @@ Example:
     },
     {
       "mode": "native-tier-range-health",
-      "min_checks": 2,
+      "min_checks": 3,
       "min_expected_failures": 0,
-      "min_matched": 2
+      "min_matched": 3
     }
   ],
   "missing_modes": [],
@@ -1730,14 +1741,14 @@ Example:
     },
     {
       "mode": "native-tier-range-health",
-      "checks": 2,
-      "min_checks": 2,
+      "checks": 3,
+      "min_checks": 3,
       "missing_checks": 0,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
-      "matched": 2,
-      "min_matched": 2,
+      "matched": 3,
+      "min_matched": 3,
       "missing_matched": 0
     }
   ],
@@ -1750,9 +1761,9 @@ Example:
     },
     {
       "mode": "native-tier-range-health",
-      "checks": 2,
+      "checks": 3,
       "expected_failures": 0,
-      "matched": 2
+      "matched": 3
     }
   ],
   "checks": [
@@ -1770,6 +1781,18 @@ Example:
     },
     {
       "name": "failed_native_tier_range_summary",
+      "mode": "native-tier-range-health",
+      "expected_failure": false,
+      "expected_output": "dashboard_index=",
+      "actual_output": "dashboard_index=ok",
+      "actual_output_bytes": 18,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "missing_native_tier_range_source",
       "mode": "native-tier-range-health",
       "expected_failure": false,
       "expected_output": "dashboard_index=",
@@ -2204,13 +2227,17 @@ Produced by:
 ```sh
 zig build run-native-tier-range-bench-gate
 zig build run-native-tier-range-files-bench-gate
+zig build run-native-tier-range-corpus-bench-gate
 ```
 
 This schema records the validation summary for native seekability tier range
 benchmark CSV artifacts. It captures the fixture/tier matrix size, whether
 ReleaseFast throughput floors were enforced, per-tier minimum centered range
 throughput, per-tier minimum full-input-equivalent throughput, and aggregate
-stream/index sizes.
+stream/index sizes. The `source` field identifies whether a summary came from
+the built-in smoke fixtures, project files, discoverable standard corpus rows,
+or a caller-provided custom matrix; the dashboard uses these buckets to keep
+seekability evidence from silently collapsing back to a single source.
 
 Example:
 
@@ -2218,6 +2245,7 @@ Example:
 {
   "schema": "vort.native_tier_range_bench_gate",
   "schema_version": 1,
+  "source": "project_files",
   "ok": true,
   "rows": 6,
   "fixture_count": 2,
