@@ -26,6 +26,7 @@ def category_for(path: Path) -> str:
         or "deflate-decode-stage" in name
         or "python-zlib-diff" in name
         or "zstd-compare-gate" in name
+        or "zstd-compare-standard-gate" in name
         or "fuzz" in name
     ):
         return "validation"

@@ -512,6 +512,27 @@
       "smoke_gate": "zig build run-zstd-compare-gate"
     },
     {
+      "expected_format": "json",
+      "name": "vort-zstd-compare-standard-gate.json",
+      "producer_step": "zig build run-zstd-compare-standard-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-zstd-compare-standard-gate"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-zstd-compare-standard.csv",
+      "producer_step": "zig build run-zstd-compare-standard-gate",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-zstd-compare-standard-gate"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-zstd-compare-standard.md",
+      "producer_step": "zig build run-zstd-compare-standard-gate",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-zstd-compare-standard-gate"
+    },
+    {
       "expected_format": "csv",
       "name": "vort-zstd-compare.csv",
       "producer_step": "zig build run-zstd-compare-gate",

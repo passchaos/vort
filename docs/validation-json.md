@@ -2022,10 +2022,11 @@ Produced by:
 
 ```sh
 zig build run-zstd-compare-gate
+zig build run-zstd-compare-standard-gate
 ```
 
-This schema records the validation summary for retained
-`vort-zstd-compare.csv` and `vort-zstd-compare.md` artifacts. The gate checks
+This schema records the validation summary for retained `vort-zstd-compare*`
+CSV/Markdown artifacts. The gate checks
 the CSV schema, requires one `TOTAL` aggregate row, verifies the aggregate byte
 and ratio math for raw fixed and native embedded Vort rows, verifies decode
 throughput aggregate math, and verifies that Markdown output retains key run
@@ -2042,13 +2043,13 @@ Example:
   "data_rows": 2,
   "decode_repeats": 3,
   "native_block_len": 8192,
-  "total_ratio": 1.0299816021986508,
-  "total_native_ratio": 1.1646262520725918,
-  "total_zstd_decode_mib_s": 58.87993719821505,
-  "total_vort_raw_fixed_decode_mib_s": 8.370938246109839,
-  "total_vort_decode_vs_zstd": 0.14216961913409792,
-  "total_vort_native_decode_mib_s": 0.32393236463512765,
-  "total_vort_native_decode_vs_zstd": 0.005534320757887205,
+  "total_ratio": 1.0300002271024005,
+  "total_native_ratio": 1.165375968023982,
+  "total_zstd_decode_mib_s": 59.55081832145022,
+  "total_vort_raw_fixed_decode_mib_s": 9.396896652412236,
+  "total_vort_decode_vs_zstd": 0.157796264052806,
+  "total_vort_native_decode_mib_s": 7.408675389563713,
+  "total_vort_native_decode_vs_zstd": 0.12440929610022011,
   "csv": "zig-out/vort-zstd-compare.csv",
   "markdown": "zig-out/vort-zstd-compare.md"
 }

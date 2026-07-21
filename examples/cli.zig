@@ -491,6 +491,16 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeZlibBestAlloc(init.gpa, data, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-raw-fixed-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawFixedWithOptionsAlloc(init.gpa, data, options);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("input_bytes={d} output_bytes={d} path={s}\n", .{ data.len, encoded.len, output_path });
     } else if (std.mem.eql(u8, command, "encode-zlib-best-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1131,6 +1141,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode raw deflate that may reference preset dictionary history
         \\  encode-zlib-dict-best-hex [text] [dict] [level]
         \\                              Encode a zlib FDICT/DICTID frame requiring a preset dictionary
+        \\  encode-raw-fixed-file <in> <out> [level]
+        \\                              Encode raw deflate file bytes with fixed Huffman blocks
         \\  encode-zlib-best-file <in> <out> [level]
         \\                              Encode a zlib-compatible file with best-block selection
         \\  encode-raw-best-file <in> <out> [level]

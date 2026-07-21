@@ -54,6 +54,7 @@ zig build -Doptimize=ReleaseFast run-file-corpus-dashboard -- ~/Work/zlib-rs/sil
 zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard -- --limit 3
 zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard -- --limit 3
 zig build run-zstd-compare-gate
+zig build run-zstd-compare-standard-gate
 zig build -Doptimize=ReleaseFast run-standard-corpus-report
 zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --suite
 zig build -Doptimize=ReleaseFast run-standard-corpus-suite

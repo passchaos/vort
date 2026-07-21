@@ -843,6 +843,37 @@ pub fn build(b: *std.Build) void {
     const zstd_compare_gate_step = b.step("run-zstd-compare-gate", "Validate zstd comparison artifacts");
     zstd_compare_gate_step.dependOn(&zstd_compare_gate.step);
 
+    const zstd_compare_standard = b.addSystemCommand(&.{ "python3", "tools/zstd_compare.py" });
+    zstd_compare_standard.addArtifactArg(cli_exe);
+    zstd_compare_standard.addArgs(&.{
+        "--standard-suite",
+        "--limit",
+        "3",
+        "--csv",
+        "zig-out/vort-zstd-compare-standard.csv",
+        "--markdown",
+        "zig-out/vort-zstd-compare-standard.md",
+        "--optimize",
+        @tagName(optimize),
+    });
+    if (b.args) |args| zstd_compare_standard.addArgs(args);
+    const zstd_compare_standard_step = b.step("run-zstd-compare-standard", "Discover standard corpora and compare zstd/Vort smoke rows");
+    zstd_compare_standard_step.dependOn(&zstd_compare_standard.step);
+
+    const zstd_compare_standard_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/zstd_compare_gate.py",
+        "--csv",
+        "zig-out/vort-zstd-compare-standard.csv",
+        "--markdown",
+        "zig-out/vort-zstd-compare-standard.md",
+        "--summary",
+        "zig-out/vort-zstd-compare-standard-gate.json",
+    });
+    zstd_compare_standard_gate.step.dependOn(zstd_compare_standard_step);
+    const zstd_compare_standard_gate_step = b.step("run-zstd-compare-standard-gate", "Validate standard-corpus zstd comparison artifacts");
+    zstd_compare_standard_gate_step.dependOn(&zstd_compare_standard_gate.step);
+
     const compression_report_exe = b.addExecutable(.{
         .name = "vort-compression-report",
         .root_module = b.createModule(.{
@@ -1303,6 +1334,8 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     dashboard_index.step.dependOn(fuzz_corpus_coverage_smoke_step);
     dashboard_index.step.dependOn(native_fuzz_corpus_coverage_smoke_step);
+    dashboard_index.step.dependOn(zstd_compare_gate_step);
+    dashboard_index.step.dependOn(zstd_compare_standard_gate_step);
     const dashboard_index_step = b.step("run-dashboard-index", "Write a Markdown index for zig-out dashboard artifacts");
     dashboard_index_step.dependOn(&dashboard_index.step);
 
@@ -1480,6 +1513,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(external_probe_step);
     ci_smoke_step.dependOn(cpu_features_step);
     ci_smoke_step.dependOn(zstd_compare_gate_step);
+    ci_smoke_step.dependOn(zstd_compare_standard_gate_step);
     ci_smoke_step.dependOn(compression_report_step);
     ci_smoke_step.dependOn(deflate_decode_stage_report_step);
     ci_smoke_step.dependOn(deflate_decode_stage_report_dashboard_step);

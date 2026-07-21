@@ -296,6 +296,18 @@
       "expected_format": "json",
       "smoke_gate": "zig build run-zstd-compare-gate"
     },
+    "vort-zstd-compare-standard-gate.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-zstd-compare-standard-gate"
+    },
+    "vort-zstd-compare-standard.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-zstd-compare-standard-gate"
+    },
+    "vort-zstd-compare-standard.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-zstd-compare-standard-gate"
+    },
     "vort-zstd-compare.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build run-zstd-compare-gate"
@@ -393,6 +405,9 @@
     "vort-zlib-relaxed-report.json": "zig build run-zlib-relaxed-report",
     "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report",
     "vort-zstd-compare-gate.json": "zig build run-zstd-compare-gate",
+    "vort-zstd-compare-standard-gate.json": "zig build run-zstd-compare-standard-gate",
+    "vort-zstd-compare-standard.csv": "zig build run-zstd-compare-standard-gate",
+    "vort-zstd-compare-standard.md": "zig build run-zstd-compare-standard-gate",
     "vort-zstd-compare.csv": "zig build run-zstd-compare-gate",
     "vort-zstd-compare.md": "zig build run-zstd-compare-gate"
   },
@@ -440,7 +455,8 @@
     "vort-zlib-relaxed-report-gate.json",
     "vort-zlib-relaxed-report.json",
     "vort-zlib-relaxed-report.md",
-    "vort-zstd-compare-gate.json"
+    "vort-zstd-compare-gate.json",
+    "vort-zstd-compare-standard-gate.json"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1

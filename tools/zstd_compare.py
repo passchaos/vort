@@ -1,15 +1,27 @@
 #!/usr/bin/env python3
 import argparse
 import csv
+import os
 import pathlib
 import shutil
 import subprocess
 import tempfile
+import tarfile
 import time
 from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 ZSTD = shutil.which("zstd")
+SMOKE_LIMIT = 128 * 1024
+SILESIA = pathlib.Path(os.environ.get("VORT_SILESIA_PATH", pathlib.Path.home() / "Work" / "zlib-rs" / "silesia-small.tar"))
+CORPORA_DIR = pathlib.Path(os.environ.get("VORT_CORPORA_DIR", pathlib.Path.home() / "Work" / "corpora"))
+STANDARD_CORPUS_CANDIDATES = [
+    SILESIA,
+    CORPORA_DIR / "calgary.tar",
+    CORPORA_DIR / "canterbury.tar",
+    CORPORA_DIR / "large-canterbury.tar",
+    CORPORA_DIR / "enwik8",
+]
 CSV_FIELDS = [
     "path",
     "input_bytes",
@@ -44,6 +56,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--optimize", default="unknown")
     parser.add_argument("--decode-repeats", type=positive_int_arg, default=3)
     parser.add_argument("--native-block-len", type=positive_int_arg, default=8192)
+    parser.add_argument("--standard-suite", action="store_true")
+    parser.add_argument("--full", action="store_true")
+    parser.add_argument("--limit", type=positive_int_arg)
     return parser.parse_args()
 
 
@@ -132,6 +147,78 @@ def mib_per_second(byte_count: int, elapsed_seconds: float) -> float:
     return (byte_count / (1024.0 * 1024.0)) / elapsed_seconds
 
 
+def discover_standard_corpora() -> list[pathlib.Path]:
+    found: list[pathlib.Path] = []
+    seen: set[pathlib.Path] = set()
+    for path in STANDARD_CORPUS_CANDIDATES:
+        if path.exists() and path not in seen:
+            found.append(path)
+            seen.add(path)
+    return found
+
+
+def bounded_case(label: str, data: bytes, full: bool) -> tuple[str, bytes]:
+    if full:
+        return label, data
+    return f"{label}-128k", data[:SMOKE_LIMIT]
+
+
+def append_case(cases: list[tuple[str, bytes]], label: str, data: bytes, full: bool, limit: int | None) -> bool:
+    cases.append(bounded_case(label, data, full))
+    return limit is not None and len(cases) >= limit
+
+
+def load_path_cases(paths: list[pathlib.Path], full: bool, limit: int | None = None) -> list[tuple[str, bytes]]:
+    cases: list[tuple[str, bytes]] = []
+    for path in paths:
+        if path.is_dir():
+            for child in sorted(p for p in path.rglob("*") if p.is_file()):
+                label = str(child.relative_to(path.parent))
+                if append_case(cases, label, child.read_bytes(), full, limit):
+                    return cases
+        elif tarfile.is_tarfile(path):
+            with tarfile.open(path, "r:*") as tar:
+                for member in tar.getmembers():
+                    if not member.isfile():
+                        continue
+                    extracted = tar.extractfile(member)
+                    if extracted is None:
+                        continue
+                    label = f"{path.name}:{member.name}"
+                    if append_case(cases, label, extracted.read(), full, limit):
+                        return cases
+        else:
+            if append_case(cases, path.name, path.read_bytes(), full, limit):
+                return cases
+    return cases
+
+
+def default_cases(limit: int | None = None) -> list[tuple[str, bytes]]:
+    paths = [ROOT / "README.md", ROOT / "docs" / "roadmap.md"]
+    return [(str(path), path.read_bytes()) for path in paths[:limit]]
+
+
+def load_cases(args: argparse.Namespace, path_args: list[str]) -> list[tuple[str, bytes]]:
+    if args.standard_suite:
+        discovered = discover_standard_corpora()
+        if discovered:
+            return load_path_cases(discovered, args.full, args.limit)
+        # Keep the smoke portable in checkouts that do not have the optional
+        # corpora installed; the Markdown output still makes the source choice
+        # visible through the row labels.
+        return default_cases(args.limit)
+    if path_args:
+        return load_path_cases([pathlib.Path(path) for path in path_args], True, args.limit)
+    return default_cases(args.limit)
+
+
+def cli_arg_count(items: list[str]) -> int:
+    if not items:
+        return 0
+    candidate = pathlib.Path(items[0])
+    return 1 if candidate.is_file() and os.access(candidate, os.X_OK) else 0
+
+
 def cpu_model() -> str:
     cpuinfo = pathlib.Path("/proc/cpuinfo")
     if cpuinfo.exists():
@@ -163,9 +250,15 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
 
     if args.markdown:
         args.markdown.parent.mkdir(parents=True, exist_ok=True)
+        has_path_items = len(args.items) > cli_arg_count(args.items)
+        source_mode = "standard-suite" if args.standard_suite else ("paths" if has_path_items else "default-samples")
+        size_mode = "bounded-128KiB" if args.standard_suite and not args.full else "full"
         lines = [
             "# Vort vs zstd size and decode smoke",
             "",
+            f"- source mode: `{source_mode}`",
+            f"- size mode: `{size_mode}`",
+            f"- case limit: `{args.limit if args.limit is not None else 'none'}`",
             f"- zstd: `{meta['zstd_version']}`",
             f"- Vort commit: `{meta['vort_commit']}`",
             f"- Zig version: `{meta['zig_version']}`",
@@ -208,19 +301,21 @@ def main() -> int:
         write_outputs(args, [], metadata(args.optimize, args.decode_repeats, args.native_block_len))
         return 0
 
-    cli = pathlib.Path(args.items[0]) if args.items and pathlib.Path(args.items[0]).exists() else None
-    path_args = args.items[1:] if cli else args.items
-    paths = [ROOT / "README.md", ROOT / "docs" / "roadmap.md"] if not path_args else [pathlib.Path(p) for p in path_args]
+    cli_items = cli_arg_count(args.items)
+    cli = pathlib.Path(args.items[0]) if cli_items else None
+    path_args = args.items[cli_items:]
+    cases = load_cases(args, path_args)
 
     rows: list[dict[str, Any]] = []
     meta = metadata(args.optimize, args.decode_repeats, args.native_block_len)
     print("path,input_bytes,zstd_bytes,vort_raw_fixed_bytes,vort_native_embedded_bytes,zstd_decode_ms,vort_raw_fixed_decode_ms,vort_native_decode_ms")
-    for path in paths:
-        data = path.read_bytes()
+    for label, data in cases:
         with tempfile.TemporaryDirectory() as td:
             temp_dir = pathlib.Path(td)
+            input_path = temp_dir / "sample.input"
+            input_path.write_bytes(data)
             zstd_path = temp_dir / "sample.zst"
-            subprocess.run([ZSTD, "-q", "-f", "-1", "-o", str(zstd_path), str(path)], check=True)
+            subprocess.run([ZSTD, "-q", "-f", "-1", "-o", str(zstd_path), str(input_path)], check=True)
             zstd_size = zstd_path.stat().st_size
             zstd_decode_s = measure_zstd_decode(zstd_path, data, args.decode_repeats)
 
@@ -234,27 +329,25 @@ def main() -> int:
             zstd_decode_mib_s = mib_per_second(len(data), zstd_decode_s)
 
             if cli:
-                # CLI command accepts text payloads; decode as UTF-8 for documentation/source corpora.
-                hex_out = subprocess.run(
-                    [str(cli), "encode-raw-fixed-hex", data.decode("utf-8")],
+                raw_path = temp_dir / "sample.raw"
+                subprocess.run(
+                    [str(cli), "encode-raw-fixed-file", str(input_path), str(raw_path)],
                     cwd=ROOT,
                     check=True,
                     text=True,
                     stdout=subprocess.PIPE,
-                ).stdout.strip()
-                vort_data = bytes.fromhex(hex_out)
-                raw_path = temp_dir / "sample.raw"
+                    stderr=subprocess.STDOUT,
+                )
                 decoded_path = temp_dir / "sample.vort.out"
-                raw_path.write_bytes(vort_data)
                 vort_decode_s = measure_vort_raw_decode(cli, raw_path, decoded_path, data, args.decode_repeats)
-                vort_size = len(vort_data)
+                vort_size = raw_path.stat().st_size
                 vort_decode_mib_s = mib_per_second(len(data), vort_decode_s)
                 vort_decode_vs_zstd = vort_decode_mib_s / zstd_decode_mib_s if zstd_decode_mib_s > 0.0 else -1.0
 
                 native_path = temp_dir / "sample.vort"
                 native_decoded_path = temp_dir / "sample.native.out"
                 subprocess.run(
-                    [str(cli), "encode-vort-embedded-best-file", str(path), str(native_path), str(args.native_block_len)],
+                    [str(cli), "encode-vort-embedded-best-file", str(input_path), str(native_path), str(args.native_block_len)],
                     cwd=ROOT,
                     check=True,
                     text=True,
@@ -271,7 +364,7 @@ def main() -> int:
         native_ratio = (native_size / zstd_size) if zstd_size and native_size >= 0 else -1.0
         rows.append(
             {
-                "path": str(path),
+                "path": label,
                 "input_bytes": len(data),
                 "zstd_bytes": zstd_size,
                 "vort_raw_fixed_bytes": vort_size,
@@ -291,7 +384,7 @@ def main() -> int:
                 **meta,
             }
         )
-        print(f"{path},{len(data)},{zstd_size},{vort_size},{native_size},{zstd_decode_s * 1000.0:.3f},{vort_decode_s * 1000.0:.3f},{native_decode_s * 1000.0:.3f}")
+        print(f"{label},{len(data)},{zstd_size},{vort_size},{native_size},{zstd_decode_s * 1000.0:.3f},{vort_decode_s * 1000.0:.3f},{native_decode_s * 1000.0:.3f}")
 
     if rows:
         total_input = sum(int(row["input_bytes"]) for row in rows)
