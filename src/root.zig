@@ -548,3 +548,55 @@ test {
     _ = long_distance;
     _ = planner;
 }
+
+test "root exports chunked compatibility decode helpers" {
+    // Keep the README/API-sketch split-input helpers tied to root exports. These
+    // references are intentionally compile-time only: codec behavior is covered
+    // in deflate.zig, while this test catches accidental public API drift.
+    _ = decodeRawDeflateChunks;
+    _ = decodeRawDeflateChunksWithDictionary;
+    _ = decodeRawDeflateChunksAlloc;
+    _ = decodeRawDeflateChunksAllocExactSize;
+    _ = decodeRawDeflateChunksAllocLimited;
+    _ = decodeRawDeflateChunksAllocWithDictionary;
+    _ = decodeRawDeflateChunksAllocWithDictionaryExactSize;
+    _ = decodeRawDeflateChunksAllocWithDictionaryLimited;
+
+    _ = decodeZlibChunks;
+    _ = decodeZlibChunksWithDictionary;
+    _ = decodeZlibChunksWithOptions;
+    _ = decodeZlibChunksWithDictionaryAndOptions;
+    _ = decodeZlibChunksInto;
+    _ = decodeZlibChunksIntoWithDictionary;
+    _ = decodeZlibChunksIntoWithOptions;
+    _ = decodeZlibChunksIntoWithDictionaryAndOptions;
+    _ = decodeZlibChunksAlloc;
+    _ = decodeZlibChunksAllocExactSize;
+    _ = decodeZlibChunksAllocLimited;
+    _ = decodeZlibChunksAllocWithDictionary;
+    _ = decodeZlibChunksAllocWithDictionaryExactSize;
+    _ = decodeZlibChunksAllocWithDictionaryLimited;
+    _ = decodeZlibChunksAllocWithOptions;
+    _ = decodeZlibChunksAllocWithOptionsExactSize;
+    _ = decodeZlibChunksAllocWithOptionsLimited;
+    _ = decodeZlibChunksAllocWithDictionaryAndOptions;
+    _ = decodeZlibChunksAllocWithDictionaryAndOptionsExactSize;
+    _ = decodeZlibChunksAllocWithDictionaryAndOptionsLimited;
+
+    _ = decodeGzipChunks;
+    _ = decodeGzipChunksWithOptions;
+    _ = decodeGzipChunksAlloc;
+    _ = decodeGzipChunksAllocExactSize;
+    _ = decodeGzipChunksAllocLimited;
+    _ = decodeGzipChunksAllocWithOptions;
+    _ = decodeGzipChunksAllocWithOptionsExactSize;
+    _ = decodeGzipChunksAllocWithOptionsLimited;
+    _ = decodeGzipConcatenatedChunks;
+    _ = decodeGzipConcatenatedChunksWithOptions;
+    _ = decodeGzipConcatenatedChunksAlloc;
+    _ = decodeGzipConcatenatedChunksAllocExactSize;
+    _ = decodeGzipConcatenatedChunksAllocLimited;
+    _ = decodeGzipConcatenatedChunksAllocWithOptions;
+    _ = decodeGzipConcatenatedChunksAllocWithOptionsExactSize;
+    _ = decodeGzipConcatenatedChunksAllocWithOptionsLimited;
+}

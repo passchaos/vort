@@ -316,6 +316,8 @@ architecture blindly.
   caller-provided compressed join scratch, including caller-buffer,
   allocator-returning, exact-size, output-limited, and preset-dictionary
   variants.
+- [x] Root module compile-time smoke pins public raw/zlib/gzip chunked decode
+  helper exports so README-visible split-input APIs cannot drift silently.
 - [x] Concatenated gzip alloc decoder exposes an exact-size variant.
 - [x] File CLI and Python differential smoke cover raw deflate file decode with output limits.
 - [x] File CLI and Python differential smoke cover raw preset-dictionary file decode.
@@ -1334,3 +1336,8 @@ architecture blindly.
   allocator-returning paths reuse caller-provided compressed join scratch before
   dispatching to existing raw inflate APIs, covering exact-size, output-limited,
   and preset-dictionary workflows for split raw streams.
+
+- Added a root-module compile-time smoke for public split-input decode helpers
+  across raw deflate, zlib, gzip, and concatenated gzip. Codec behavior remains
+  covered in `src/deflate.zig`; the root smoke specifically guards the public
+  export surface used by README examples and downstream callers.
