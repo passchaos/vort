@@ -2029,9 +2029,10 @@ zig build run-zstd-compare-standard-releasefast-gate
 This schema records the validation summary for retained `vort-zstd-compare*`
 CSV/Markdown artifacts. The gate checks
 the CSV schema, requires one `TOTAL` aggregate row, verifies the aggregate byte
-and ratio math for raw fixed, native best, and native embedded Vort rows,
-verifies decode throughput aggregate math, and verifies that Markdown output retains key run
-metadata and decode columns.
+and ratio math for raw fixed, single-frame native best, blocked native stream,
+and embedded-index native stream Vort rows, verifies the stream-fragmentation
+and embedded-index overhead split, verifies decode throughput aggregate math,
+and verifies that Markdown output retains key run metadata and decode columns.
 
 Example:
 
@@ -2050,17 +2051,24 @@ Example:
   "optimize": "Debug",
   "total_ratio": 1.029971390945007,
   "total_native_best_ratio": 1.0221379592207438,
+  "total_native_stream_ratio": 1.1469279324281367,
   "total_native_ratio": 1.1658189909631715,
+  "total_stream_over_native_best": 1.1220872114978786,
+  "total_stream_over_native_best_bytes": 5496,
+  "total_stream_over_native_best_pct": 12.20872114978786,
+  "total_embedded_over_native_stream": 1.0164710074634253,
+  "total_embedded_over_native_stream_bytes": 832,
+  "total_embedded_over_native_stream_pct": 1.6471007463425336,
   "total_embedded_over_native_best": 1.1405691183330742,
   "total_embedded_over_native_best_bytes": 6328,
-  "total_embedded_over_native_best_pct": 14.05691183330742,
-  "total_zstd_decode_mib_s": 54.919359400759724,
-  "total_vort_raw_fixed_decode_mib_s": 52.92823033375049,
-  "total_vort_decode_vs_zstd": 0.9637444957709814,
-  "total_vort_native_best_decode_mib_s": 46.13023216745805,
-  "total_vort_native_best_decode_vs_zstd": 0.8399630416450179,
-  "total_vort_native_decode_mib_s": 36.91675591475824,
-  "total_vort_native_decode_vs_zstd": 0.6721993176462207,
+  "total_embedded_over_native_best_pct": 14.056911833307417,
+  "total_zstd_decode_mib_s": 60.75841159051128,
+  "total_vort_raw_fixed_decode_mib_s": 54.451816466413895,
+  "total_vort_decode_vs_zstd": 0.8962021066876887,
+  "total_vort_native_best_decode_mib_s": 42.214172386767345,
+  "total_vort_native_best_decode_vs_zstd": 0.6947872941655372,
+  "total_vort_native_decode_mib_s": 29.058765310493605,
+  "total_vort_native_decode_vs_zstd": 0.47826736331322645,
   "csv": "zig-out/vort-zstd-compare.csv",
   "markdown": "zig-out/vort-zstd-compare.md"
 }

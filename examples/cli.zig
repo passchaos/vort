@@ -642,6 +642,18 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(stream);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = stream_path, .data = stream });
         try stdout.print("input_bytes={d} stream_bytes={d} embedded_index=true stream={s}\n", .{ data.len, stream.len, stream_path });
+    } else if (std.mem.eql(u8, command, "encode-vort-blocked-best-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const stream_path = args.next() orelse return error.MissingCorpusPath;
+        const block_len = try parseBlockLen(args.next(), 8192);
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const sidecar = try vort.storeEncodeSidecarBlockedBestStreamAlloc(init.gpa, data, block_len);
+        defer sidecar.deinit(init.gpa);
+        // zstd_compare uses this command to isolate block-fragmentation bytes:
+        // write only the concatenated data frames, not the sidecar index payload.
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = stream_path, .data = sidecar.stream });
+        try stdout.print("input_bytes={d} stream_bytes={d} sidecar_bytes={d} embedded_index=false stream={s}\n", .{ data.len, sidecar.stream.len, sidecar.sidecar_index.len, stream_path });
     } else if (std.mem.eql(u8, command, "encode-vort-embedded-dict-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const stream_path = args.next() orelse return error.MissingCorpusPath;
@@ -1212,6 +1224,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode an indexed range through an external sidecar
         \\  encode-vort-embedded-best-file <in> <stream> [block_len]
         \\                              Encode native Vort stream with embedded index
+        \\  encode-vort-blocked-best-file <in> <stream> [block_len]
+        \\                              Encode native Vort blocked stream without embedded index
         \\  verify-vort-embedded-index-file <stream> [full|metadata] [text|json]
         \\                              Validate an embedded-index stream
         \\  decode-vort-embedded-range-file <stream> <out> <offset> <len>

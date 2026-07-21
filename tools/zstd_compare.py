@@ -29,10 +29,18 @@ CSV_FIELDS = [
     "zstd_bytes",
     "vort_raw_fixed_bytes",
     "vort_native_best_bytes",
+    "vort_native_stream_bytes",
     "vort_native_embedded_bytes",
     "vort_over_zstd",
     "vort_native_best_over_zstd",
+    "vort_native_stream_over_zstd",
     "vort_native_over_zstd",
+    "vort_stream_over_native_best",
+    "vort_stream_over_native_best_bytes",
+    "vort_stream_over_native_best_pct",
+    "vort_embedded_over_native_stream",
+    "vort_embedded_over_native_stream_bytes",
+    "vort_embedded_over_native_stream_pct",
     "vort_embedded_over_native_best",
     "vort_embedded_over_native_best_bytes",
     "vort_embedded_over_native_best_pct",
@@ -349,25 +357,32 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             "- Vort raw decode command: `vort decode-raw-file <tmp.raw> <tmp.out> <input_bytes>` and `vort bench-decode-raw-file <tmp.raw> <input_bytes> <repeat>`",
             "- Vort native best command: `vort encode-vort-best-file <path> <tmp.vort-best>`",
             "- Vort native best decode command: `vort bench-decode-vort-best-file <tmp.vort-best> <input_bytes> <repeat>`",
+            "- Vort native stream command: `vort encode-vort-blocked-best-file <path> <tmp.vort-stream> <block_len>`",
             "- Vort native embedded command: `vort encode-vort-embedded-best-file <path> <tmp.vort> <block_len>`",
             "- Vort native embedded decode command: `vort decode-vort-embedded-range-file <tmp.vort> <tmp.out> 0 <input_bytes>`",
             "",
             "Decode timings are a retained smoke signal, not a standalone throughput claim: zstd rows include process/stdout plumbing, while Vort raw/native rows use CLI-internal decode loops divided by the repeat count after a one-shot output check.",
             "",
-            "| path | input bytes | zstd bytes | Vort raw fixed bytes | Vort native best bytes | Vort native embedded bytes | embedded overhead bytes | embedded overhead pct | Vort raw / zstd | Vort native best / zstd | Vort native embedded / zstd | embedded / native best | zstd decode MiB/s | Vort raw fixed decode MiB/s | Vort native best decode MiB/s | Vort native embedded decode MiB/s | Vort raw decode / zstd | Vort native best decode / zstd | Vort native embedded decode / zstd |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| path | input bytes | zstd bytes | Vort raw fixed bytes | Vort native best bytes | Vort native stream bytes | Vort native embedded bytes | stream overhead bytes | embedded-index bytes | total embedded overhead bytes | stream / native best | embedded / stream | embedded / native best | Vort raw / zstd | Vort native best / zstd | Vort native stream / zstd | Vort native embedded / zstd | zstd decode MiB/s | Vort raw fixed decode MiB/s | Vort native best decode MiB/s | Vort native embedded decode MiB/s | Vort raw decode / zstd | Vort native best decode / zstd | Vort native embedded decode / zstd |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
         for row in rows:
             raw_ratio = row["vort_over_zstd"]
             native_best_ratio = row["vort_native_best_over_zstd"]
+            native_stream_ratio = row["vort_native_stream_over_zstd"]
             native_ratio = row["vort_native_over_zstd"]
             raw_ratio_text = "n/a" if not isinstance(raw_ratio, float) or raw_ratio < 0 else f"{raw_ratio:.4f}"
             native_best_ratio_text = "n/a" if not isinstance(native_best_ratio, float) or native_best_ratio < 0 else f"{native_best_ratio:.4f}"
+            native_stream_ratio_text = "n/a" if not isinstance(native_stream_ratio, float) or native_stream_ratio < 0 else f"{native_stream_ratio:.4f}"
             native_ratio_text = "n/a" if not isinstance(native_ratio, float) or native_ratio < 0 else f"{native_ratio:.4f}"
+            stream_over_best = row["vort_stream_over_native_best"]
+            stream_over_best_text = "n/a" if not isinstance(stream_over_best, float) or stream_over_best < 0 else f"{stream_over_best:.4f}"
+            embedded_over_stream = row["vort_embedded_over_native_stream"]
+            embedded_over_stream_text = "n/a" if not isinstance(embedded_over_stream, float) or embedded_over_stream < 0 else f"{embedded_over_stream:.4f}"
             embedded_over_best = row["vort_embedded_over_native_best"]
             embedded_over_best_text = "n/a" if not isinstance(embedded_over_best, float) or embedded_over_best < 0 else f"{embedded_over_best:.4f}"
-            embedded_over_best_pct = row["vort_embedded_over_native_best_pct"]
-            embedded_over_best_pct_text = "n/a" if not isinstance(embedded_over_best_pct, float) or embedded_over_best_pct < 0 else f"{embedded_over_best_pct:.2f}%"
+            stream_over_best_bytes = row["vort_stream_over_native_best_bytes"]
+            embedded_over_stream_bytes = row["vort_embedded_over_native_stream_bytes"]
             embedded_over_best_bytes = row["vort_embedded_over_native_best_bytes"]
             zstd_decode = row["zstd_decode_mib_s"]
             raw_decode = row["vort_raw_fixed_decode_mib_s"]
@@ -377,7 +392,7 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             native_best_decode_ratio = row["vort_native_best_decode_vs_zstd"]
             native_decode_ratio = row["vort_native_decode_vs_zstd"]
             lines.append(
-                f"| {('**TOTAL**' if row['path'] == 'TOTAL' else '`' + row['path'] + '`')} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_raw_fixed_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_embedded_bytes']} | {embedded_over_best_bytes} | {embedded_over_best_pct_text} | {raw_ratio_text} | {native_best_ratio_text} | {native_ratio_text} | {embedded_over_best_text} | {zstd_decode:.2f} | {raw_decode:.2f} | {native_best_decode:.2f} | {native_decode:.2f} | {raw_decode_ratio:.4f} | {native_best_decode_ratio:.4f} | {native_decode_ratio:.4f} |"
+                f"| {('**TOTAL**' if row['path'] == 'TOTAL' else '`' + row['path'] + '`')} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_raw_fixed_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | {stream_over_best_bytes} | {embedded_over_stream_bytes} | {embedded_over_best_bytes} | {stream_over_best_text} | {embedded_over_stream_text} | {embedded_over_best_text} | {raw_ratio_text} | {native_best_ratio_text} | {native_stream_ratio_text} | {native_ratio_text} | {zstd_decode:.2f} | {raw_decode:.2f} | {native_best_decode:.2f} | {native_decode:.2f} | {raw_decode_ratio:.4f} | {native_best_decode_ratio:.4f} | {native_decode_ratio:.4f} |"
             )
         args.markdown.write_text("\n".join(lines) + "\n")
 
@@ -396,7 +411,7 @@ def main() -> int:
 
     rows: list[dict[str, Any]] = []
     meta = metadata(args, cli_items)
-    print("path,input_bytes,zstd_bytes,vort_raw_fixed_bytes,vort_native_best_bytes,vort_native_embedded_bytes,zstd_decode_ms,vort_raw_fixed_decode_ms,vort_native_best_decode_ms,vort_native_decode_ms")
+    print("path,input_bytes,zstd_bytes,vort_raw_fixed_bytes,vort_native_best_bytes,vort_native_stream_bytes,vort_native_embedded_bytes,zstd_decode_ms,vort_raw_fixed_decode_ms,vort_native_best_decode_ms,vort_native_decode_ms")
     for label, data in cases:
         with tempfile.TemporaryDirectory() as td:
             temp_dir = pathlib.Path(td)
@@ -411,6 +426,7 @@ def main() -> int:
             vort_decode_mib_s = -1.0
             vort_decode_vs_zstd = -1.0
             native_best_size = -1
+            native_stream_size = -1
             native_best_decode_s = -1.0
             native_best_decode_mib_s = -1.0
             native_best_decode_vs_zstd = -1.0
@@ -450,6 +466,17 @@ def main() -> int:
                 native_best_decode_mib_s = mib_per_second(len(data), native_best_decode_s)
                 native_best_decode_vs_zstd = native_best_decode_mib_s / zstd_decode_mib_s if zstd_decode_mib_s > 0.0 else -1.0
 
+                native_stream_path = temp_dir / "sample.vort-stream"
+                subprocess.run(
+                    [str(cli), "encode-vort-blocked-best-file", str(input_path), str(native_stream_path), str(args.native_block_len)],
+                    cwd=ROOT,
+                    check=True,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                )
+                native_stream_size = native_stream_path.stat().st_size
+
                 native_path = temp_dir / "sample.vort"
                 native_decoded_path = temp_dir / "sample.native.out"
                 subprocess.run(
@@ -467,10 +494,18 @@ def main() -> int:
             else:
                 vort_size = -1
                 native_best_size = -1
+                native_stream_size = -1
         ratio = (vort_size / zstd_size) if zstd_size and vort_size >= 0 else -1.0
         native_best_ratio = (native_best_size / zstd_size) if zstd_size and native_best_size >= 0 else -1.0
+        native_stream_ratio = (native_stream_size / zstd_size) if zstd_size and native_stream_size >= 0 else -1.0
         native_ratio = (native_size / zstd_size) if zstd_size and native_size >= 0 else -1.0
+        stream_over_best_bytes = native_stream_size - native_best_size if native_stream_size >= 0 and native_best_size >= 0 else -1
+        embedded_over_stream_bytes = native_size - native_stream_size if native_size >= 0 and native_stream_size >= 0 else -1
         embedded_over_best_bytes = native_size - native_best_size if native_size >= 0 and native_best_size >= 0 else -1
+        stream_over_best = (native_stream_size / native_best_size) if native_best_size > 0 and native_stream_size >= 0 else -1.0
+        stream_over_best_pct = ((native_stream_size / native_best_size) - 1.0) * 100.0 if native_best_size > 0 and native_stream_size >= 0 else -1.0
+        embedded_over_stream = (native_size / native_stream_size) if native_stream_size > 0 and native_size >= 0 else -1.0
+        embedded_over_stream_pct = ((native_size / native_stream_size) - 1.0) * 100.0 if native_stream_size > 0 and native_size >= 0 else -1.0
         embedded_over_best = (native_size / native_best_size) if native_best_size > 0 and native_size >= 0 else -1.0
         embedded_over_best_pct = ((native_size / native_best_size) - 1.0) * 100.0 if native_best_size > 0 and native_size >= 0 else -1.0
         rows.append(
@@ -480,10 +515,18 @@ def main() -> int:
                 "zstd_bytes": zstd_size,
                 "vort_raw_fixed_bytes": vort_size,
                 "vort_native_best_bytes": native_best_size,
+                "vort_native_stream_bytes": native_stream_size,
                 "vort_native_embedded_bytes": native_size,
                 "vort_over_zstd": ratio,
                 "vort_native_best_over_zstd": native_best_ratio,
+                "vort_native_stream_over_zstd": native_stream_ratio,
                 "vort_native_over_zstd": native_ratio,
+                "vort_stream_over_native_best": stream_over_best,
+                "vort_stream_over_native_best_bytes": stream_over_best_bytes,
+                "vort_stream_over_native_best_pct": stream_over_best_pct,
+                "vort_embedded_over_native_stream": embedded_over_stream,
+                "vort_embedded_over_native_stream_bytes": embedded_over_stream_bytes,
+                "vort_embedded_over_native_stream_pct": embedded_over_stream_pct,
                 "vort_embedded_over_native_best": embedded_over_best,
                 "vort_embedded_over_native_best_bytes": embedded_over_best_bytes,
                 "vort_embedded_over_native_best_pct": embedded_over_best_pct,
@@ -503,18 +546,26 @@ def main() -> int:
                 **meta,
             }
         )
-        print(f"{label},{len(data)},{zstd_size},{vort_size},{native_best_size},{native_size},{zstd_decode_s * 1000.0:.3f},{vort_decode_s * 1000.0:.3f},{native_best_decode_s * 1000.0:.3f},{native_decode_s * 1000.0:.3f}")
+        print(f"{label},{len(data)},{zstd_size},{vort_size},{native_best_size},{native_stream_size},{native_size},{zstd_decode_s * 1000.0:.3f},{vort_decode_s * 1000.0:.3f},{native_best_decode_s * 1000.0:.3f},{native_decode_s * 1000.0:.3f}")
 
     if rows:
         total_input = sum(int(row["input_bytes"]) for row in rows)
         total_zstd = sum(int(row["zstd_bytes"]) for row in rows)
         total_vort = sum(int(row["vort_raw_fixed_bytes"]) for row in rows if int(row["vort_raw_fixed_bytes"]) >= 0)
         total_native_best = sum(int(row["vort_native_best_bytes"]) for row in rows if int(row["vort_native_best_bytes"]) >= 0)
+        total_native_stream = sum(int(row["vort_native_stream_bytes"]) for row in rows if int(row["vort_native_stream_bytes"]) >= 0)
         total_native = sum(int(row["vort_native_embedded_bytes"]) for row in rows if int(row["vort_native_embedded_bytes"]) >= 0)
         total_ratio = (total_vort / total_zstd) if total_zstd and total_vort >= 0 else -1.0
         total_native_best_ratio = (total_native_best / total_zstd) if total_zstd and total_native_best >= 0 else -1.0
+        total_native_stream_ratio = (total_native_stream / total_zstd) if total_zstd and total_native_stream >= 0 else -1.0
         total_native_ratio = (total_native / total_zstd) if total_zstd and total_native >= 0 else -1.0
+        total_stream_over_best_bytes = total_native_stream - total_native_best if total_native_stream >= 0 and total_native_best >= 0 else -1
+        total_embedded_over_stream_bytes = total_native - total_native_stream if total_native >= 0 and total_native_stream >= 0 else -1
         total_embedded_over_best_bytes = total_native - total_native_best if total_native >= 0 and total_native_best >= 0 else -1
+        total_stream_over_best = (total_native_stream / total_native_best) if total_native_best > 0 and total_native_stream >= 0 else -1.0
+        total_stream_over_best_pct = ((total_native_stream / total_native_best) - 1.0) * 100.0 if total_native_best > 0 and total_native_stream >= 0 else -1.0
+        total_embedded_over_stream = (total_native / total_native_stream) if total_native_stream > 0 and total_native >= 0 else -1.0
+        total_embedded_over_stream_pct = ((total_native / total_native_stream) - 1.0) * 100.0 if total_native_stream > 0 and total_native >= 0 else -1.0
         total_embedded_over_best = (total_native / total_native_best) if total_native_best > 0 and total_native >= 0 else -1.0
         total_embedded_over_best_pct = ((total_native / total_native_best) - 1.0) * 100.0 if total_native_best > 0 and total_native >= 0 else -1.0
         total_zstd_decode_ms = sum(float(row["zstd_decode_ms"]) for row in rows)
@@ -532,10 +583,18 @@ def main() -> int:
                 "zstd_bytes": total_zstd,
                 "vort_raw_fixed_bytes": total_vort,
                 "vort_native_best_bytes": total_native_best,
+                "vort_native_stream_bytes": total_native_stream,
                 "vort_native_embedded_bytes": total_native,
                 "vort_over_zstd": total_ratio,
                 "vort_native_best_over_zstd": total_native_best_ratio,
+                "vort_native_stream_over_zstd": total_native_stream_ratio,
                 "vort_native_over_zstd": total_native_ratio,
+                "vort_stream_over_native_best": total_stream_over_best,
+                "vort_stream_over_native_best_bytes": total_stream_over_best_bytes,
+                "vort_stream_over_native_best_pct": total_stream_over_best_pct,
+                "vort_embedded_over_native_stream": total_embedded_over_stream,
+                "vort_embedded_over_native_stream_bytes": total_embedded_over_stream_bytes,
+                "vort_embedded_over_native_stream_pct": total_embedded_over_stream_pct,
                 "vort_embedded_over_native_best": total_embedded_over_best,
                 "vort_embedded_over_native_best_bytes": total_embedded_over_best_bytes,
                 "vort_embedded_over_native_best_pct": total_embedded_over_best_pct,
