@@ -323,6 +323,7 @@ pub const ZlibHeaderInfo = deflate.ZlibHeaderInfo;
 pub const ZlibStreamInfo = deflate.ZlibStreamInfo;
 pub const ZlibDecodeOptions = deflate.ZlibDecodeOptions;
 pub const parseZlibHeaderInfo = deflate.parseZlibHeaderInfo;
+pub const parseZlibHeaderInfoFromChunks = deflate.parseZlibHeaderInfoFromChunks;
 pub const inspectZlibStreamAlloc = deflate.inspectZlibStreamAlloc;
 pub const inspectZlibStreamAllocLimited = deflate.inspectZlibStreamAllocLimited;
 pub const inspectZlibStreamFromChunksAlloc = deflate.inspectZlibStreamFromChunksAlloc;
@@ -460,6 +461,7 @@ pub const GzipHeaderOptions = deflate.GzipHeaderOptions;
 pub const GzipHeaderInfo = deflate.GzipHeaderInfo;
 pub const GzipMemberInfo = deflate.GzipMemberInfo;
 pub const parseGzipHeaderInfo = deflate.parseGzipHeaderInfo;
+pub const parseGzipHeaderInfoFromChunks = deflate.parseGzipHeaderInfoFromChunks;
 pub const inspectGzipMemberAlloc = deflate.inspectGzipMemberAlloc;
 pub const inspectGzipMemberAllocLimited = deflate.inspectGzipMemberAllocLimited;
 pub const inspectGzipMemberFromChunksAlloc = deflate.inspectGzipMemberFromChunksAlloc;
@@ -590,6 +592,7 @@ test "root exports chunked compatibility decode helpers" {
     _ = decodeZlibChunksAllocWithDictionaryAndOptions;
     _ = decodeZlibChunksAllocWithDictionaryAndOptionsExactSize;
     _ = decodeZlibChunksAllocWithDictionaryAndOptionsLimited;
+    _ = parseZlibHeaderInfoFromChunks;
     _ = inspectZlibStreamFromChunksAlloc;
     _ = inspectZlibStreamFromChunksAllocLimited;
     _ = inspectZlibStreamFromChunksAllocWithDictionary;
@@ -611,6 +614,7 @@ test "root exports chunked compatibility decode helpers" {
     _ = decodeGzipConcatenatedChunksAllocWithOptions;
     _ = decodeGzipConcatenatedChunksAllocWithOptionsExactSize;
     _ = decodeGzipConcatenatedChunksAllocWithOptionsLimited;
+    _ = parseGzipHeaderInfoFromChunks;
     _ = inspectGzipMemberFromChunksAlloc;
     _ = inspectGzipMemberFromChunksAllocLimited;
 }

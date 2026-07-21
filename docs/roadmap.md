@@ -350,6 +350,8 @@ architecture blindly.
   otherwise-valid streams.
 - [x] zlib wrapper reports preset-dictionary streams as dictionary requirements.
 - [x] Public zlib header metadata parser exposes CMF/FLG, window, FDICT/DICTID, and FLEVEL fields.
+- [x] Public zlib header metadata parser supports split input through
+  caller-provided compressed join scratch.
 - [x] CLI zlib header inspection prints parsed metadata for hex/file workflows.
 - [x] CLI zlib header inspection supports schema-checked JSON output.
 - [x] raw/zlib/gzip header inspection CLI smoke runs in local CI aggregate.
@@ -559,6 +561,8 @@ architecture blindly.
 - [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC validation.
 - [x] gzip encoders can emit configurable MTIME/XFL/OS plus FEXTRA/FNAME/FCOMMENT/FHCRC metadata while preserving deterministic defaults.
 - [x] Public gzip header metadata parser exposes MTIME/XFL/OS/FEXTRA/FNAME/FCOMMENT/FHCRC slices for library callers.
+- [x] Public gzip header metadata parser supports split input through
+  caller-provided compressed join scratch.
 - [x] Public gzip member inspector supports split input through
   caller-provided compressed join scratch.
 - [x] GzipDecoder drains validated gzip-wrapped deflate payloads and caller-provided gzip byte chunks through reusable caller-owned scratch and bounded output.
@@ -1360,6 +1364,12 @@ architecture blindly.
   the same caller-owned compressed join scratch used by raw/zlib/gzip chunked
   decode helpers, preserving stored/fixed/dynamic diagnostics without writing
   their own temporary coalescing layer.
+
+- Added split-input wrapper header metadata parsers
+  (`parseZlibHeaderInfoFromChunks` and `parseGzipHeaderInfoFromChunks`). They
+  use the same caller-owned compressed join scratch policy as chunked decode and
+  inspection helpers, preserving zlib CMF/FLG/DICTID fields and gzip optional
+  metadata/FHCRC validation for callers that receive wrapper headers in pieces.
 
 - Added a root-module compile-time smoke for public split-input decode helpers
   across raw deflate, zlib, gzip, and concatenated gzip. Codec behavior remains
