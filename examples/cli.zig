@@ -642,6 +642,17 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(stream);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = stream_path, .data = stream });
         try stdout.print("input_bytes={d} stream_bytes={d} embedded_index=true stream={s}\n", .{ data.len, stream.len, stream_path });
+    } else if (std.mem.eql(u8, command, "encode-vort-seekable-tier-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const stream_path = args.next() orelse return error.MissingCorpusPath;
+        const tier = try parseSeekabilityTier(args.next());
+        const options = vort.SeekableNativeOptions.withSeekabilityTier(tier);
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const stream = try vort.storeEncodeSeekableNativeStreamAlloc(init.gpa, data, options);
+        defer init.gpa.free(stream);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = stream_path, .data = stream });
+        try stdout.print("input_bytes={d} stream_bytes={d} embedded_index=true seekability_tier={s} block_len={d} stream={s}\n", .{ data.len, stream.len, @tagName(tier), options.block_len, stream_path });
     } else if (std.mem.eql(u8, command, "encode-vort-blocked-best-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const stream_path = args.next() orelse return error.MissingCorpusPath;
@@ -1235,6 +1246,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode an indexed range through an external sidecar
         \\  encode-vort-embedded-best-file <in> <stream> [block_len]
         \\                              Encode native Vort stream with embedded index
+        \\  encode-vort-seekable-tier-file <in> <stream> <seek_fast|balanced|ratio>
+        \\                              Encode native Vort stream using a seekability tier block size
         \\  encode-vort-blocked-best-file <in> <stream> [block_len]
         \\                              Encode native Vort blocked stream without embedded index
         \\  verify-vort-embedded-index-file <stream> [full|metadata] [text|json]
@@ -1849,6 +1862,14 @@ fn parseBlockLen(text: ?[]const u8, default: usize) !usize {
     const parsed = try std.fmt.parseInt(usize, value, 10);
     if (parsed == 0) return error.InvalidBlockPlan;
     return parsed;
+}
+
+fn parseSeekabilityTier(text: ?[]const u8) !vort.SeekabilityTier {
+    const value = text orelse return error.MissingCorpusPath;
+    if (std.mem.eql(u8, value, "seek-fast") or std.mem.eql(u8, value, "seek_fast")) return .seek_fast;
+    if (std.mem.eql(u8, value, "balanced")) return .balanced;
+    if (std.mem.eql(u8, value, "ratio")) return .ratio;
+    return error.InvalidSeekabilityTier;
 }
 
 fn parseIterations(text: ?[]const u8, default: usize) !usize {

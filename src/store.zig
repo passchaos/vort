@@ -1998,7 +1998,35 @@ pub const SidecarIndexedStream = struct {
 };
 
 pub const SeekableNativeOptions = struct {
-    block_len: usize = 8192,
+    pub const seek_fast_block_len: usize = 8 * 1024;
+    pub const balanced_block_len: usize = 32 * 1024;
+    pub const ratio_block_len: usize = 64 * 1024;
+
+    pub const SeekabilityTier = enum {
+        /// Small blocks keep range decode close to the requested bytes, at the
+        /// cost of more frame/index overhead and weaker compression context.
+        seek_fast,
+        /// Middle tier for callers that need practical random access without
+        /// paying the full 8 KiB fragmentation overhead on text corpora.
+        balanced,
+        /// Larger blocks favor size/ratio and sequential reads; small random
+        /// ranges decode a larger containing frame.
+        ratio,
+    };
+
+    pub fn blockLenForSeekabilityTier(tier: SeekabilityTier) usize {
+        return switch (tier) {
+            .seek_fast => seek_fast_block_len,
+            .balanced => balanced_block_len,
+            .ratio => ratio_block_len,
+        };
+    }
+
+    pub fn withSeekabilityTier(tier: SeekabilityTier) SeekableNativeOptions {
+        return .{ .block_len = blockLenForSeekabilityTier(tier) };
+    }
+
+    block_len: usize = seek_fast_block_len,
     deflate_options: deflate.CompressionOptions = .{},
     dictionary: Dictionary = .{},
     long_distance: LongDistance = .{},
@@ -6596,6 +6624,44 @@ test "trained dictionary best stream falls back safely and auto range decodes" {
     const plain_range = try decodeIndexedRangeAutoAlloc(std.testing.allocator, plain, 0, 10);
     defer std.testing.allocator.free(plain_range);
     try std.testing.expectEqualSlices(u8, "plain text", plain_range);
+}
+
+test "seekable native seekability tiers select documented block sizes" {
+    const input = try std.testing.allocator.alloc(u8, 70 * 1024);
+    defer std.testing.allocator.free(input);
+    for (input, 0..) |*byte, i| {
+        byte.* = @truncate((i *% 131 + i / 7) & 0xff);
+    }
+
+    const TierCase = struct {
+        tier: SeekableNativeOptions.SeekabilityTier,
+        block_len: usize,
+        expected_frames: usize,
+    };
+    const cases = [_]TierCase{
+        .{ .tier = .seek_fast, .block_len = 8 * 1024, .expected_frames = 9 },
+        .{ .tier = .balanced, .block_len = 32 * 1024, .expected_frames = 3 },
+        .{ .tier = .ratio, .block_len = 64 * 1024, .expected_frames = 2 },
+    };
+
+    for (cases) |row| {
+        const options = SeekableNativeOptions.withSeekabilityTier(row.tier);
+        try std.testing.expectEqual(row.block_len, options.block_len);
+        try std.testing.expectEqual(row.block_len, SeekableNativeOptions.blockLenForSeekabilityTier(row.tier));
+
+        const stream = try encodeSeekableNativeStreamAlloc(std.testing.allocator, input, options);
+        defer std.testing.allocator.free(stream);
+        const embedded = try parseEmbeddedIndexAlloc(std.testing.allocator, stream);
+        defer embedded.deinit(std.testing.allocator);
+        try std.testing.expectEqual(row.expected_frames, embedded.entries.len);
+
+        const offset: u64 = 33 * 1024 + 17;
+        const len: usize = 4096;
+        const range = try decodeIndexedRangeAlloc(std.testing.allocator, stream, offset, len);
+        defer std.testing.allocator.free(range);
+        const start = @as(usize, @intCast(offset));
+        try std.testing.expectEqualSlices(u8, input[start..][0..len], range);
+    }
 }
 
 test "seekable native stream integrates native modes trained dictionary and LDM" {

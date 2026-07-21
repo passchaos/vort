@@ -98,9 +98,9 @@ Recommended next comparison steps:
 
 1. Add library-level decode throughput rows for zstd and Vort native/zlib/raw
    modes rather than CLI smoke timings.
-2. Use the block-length sweep's size/range-decode tradeoff rows to define
-   seekability tiers (for example 8 KiB, 32 KiB, and 64 KiB) and then add
-   ReleaseFast or library-level range-latency rows for those tiers.
+2. Add ReleaseFast or library-level range-latency rows for the public seekability
+   tiers (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because the
+   current tier evidence is still Debug CLI smoke.
 3. Expand the standard-corpus comparison beyond the first three bounded rows and
    expand the ReleaseFast artifact beyond the local Silesia-small bounded set once stable.
 4. Split compatibility-format goals (raw/zlib/gzip deflate behavior) from native

@@ -53,7 +53,13 @@ integrates these production paths:
 store/deflate/RLE, trained dictionary-patch/deflate, and LDM reference frames per
 block. It can embed the trained dictionary as skippable metadata, align blocks
 around LDM candidates, preserve indexed range decode, and append skippable
-long-distance-match summaries for encoder/planner feedback. Future native
+long-distance-match summaries for encoder/planner feedback.
+`SeekableNativeOptions.SeekabilityTier` exposes the current block-size policy as
+three documented tiers: `seek_fast` uses 8 KiB blocks for small-range latency,
+`balanced` uses 32 KiB blocks for a middle ratio/seekability point, and `ratio`
+uses 64 KiB blocks for lower fragmentation overhead and sequential-size focus.
+These tier names are policy hints rather than wire-format features; the actual
+embedded/sidecar index still records exact frame offsets and sizes. Future native
 versions should preserve the same engineering constraints: explicit sizes,
 bounded memory, deterministic decoding, independent corruption localization, and
 simple parser states that can be fuzzed aggressively.
