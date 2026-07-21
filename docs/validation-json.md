@@ -2051,6 +2051,7 @@ Example:
   "total_ratio": 1.029971390945007,
   "total_native_best_ratio": 1.0221379592207438,
   "total_native_ratio": 1.1658189909631715,
+  "total_embedded_over_native_best": 1.1405691183330742,
   "total_zstd_decode_mib_s": 54.919359400759724,
   "total_vort_raw_fixed_decode_mib_s": 52.92823033375049,
   "total_vort_decode_vs_zstd": 0.9637444957709814,

@@ -18,8 +18,8 @@ CLI paths unless the ReleaseFast step is selected. The build steps retain
 `zig-out/vort-zstd-compare-standard-releasefast.csv` / `.md`, so the size smoke
 can be linked from dashboard indexes instead of only appearing on stdout. The
 retained CSV/Markdown include per-input rows plus a `TOTAL` aggregate row for
-raw fixed, native best, and native embedded size ratios, native block length,
-and median-of-3 decode throughput. The zstd decode rows still include
+raw fixed, native best, native embedded size ratios, embedded/native-best
+overhead, native block length, and median-of-3 decode throughput. The zstd decode rows still include
 process/stdout plumbing, while Vort raw/native best/native embedded rows now
 use CLI-internal decode loops divided by the repeat count after a one-shot
 output check. The three gate steps validate the retained artifacts and write
@@ -33,7 +33,7 @@ intentionally treated as smoke evidence):
 path,input_bytes,zstd_bytes,vort_raw_fixed_bytes,vort_native_best_bytes,vort_native_embedded_bytes
 /home/passchaos/project-z/vort/README.md,25924,6176,6271,5757,6514
 /home/passchaos/project-z/vort/docs/roadmap.md,130331,37866,39091,39260,44831
-TOTAL: raw/zstd 1.030x, native-best/zstd 1.022x, native-embedded/zstd 1.166x
+TOTAL: raw/zstd 1.030x, native-best/zstd 1.022x, native-embedded/zstd 1.166x, embedded/best 1.1406x
 ```
 
 Example local Debug standard-suite smoke (`--standard-suite --limit 3`, bounded
@@ -44,7 +44,7 @@ path,input_bytes,zstd_bytes,vort_raw_fixed_bytes,vort_native_best_bytes,vort_nat
 silesia-small.tar:silesia-small/ooffice-128k,131072,76985,74575,70298,75004
 silesia-small.tar:silesia-small/nci-128k,131072,11129,15154,13877,19875
 silesia-small.tar:silesia-small/mozilla-128k,131072,21823,25437,23988,29670
-TOTAL: raw/zstd 1.048x, native-best/zstd 0.992x, native-embedded/zstd 1.133x
+TOTAL: raw/zstd 1.048x, native-best/zstd 0.992x, native-embedded/zstd 1.133x, embedded/best 1.1343x
 ```
 
 Current interpretation:
@@ -53,7 +53,8 @@ Current interpretation:
 - Vort's current fixed-Huffman encoder is a compatibility/bootstrap encoder, not
   the native format that is expected to compete with zstd.
 - The native best and embedded rows prove the comparison artifacts now include
-  both native payload and native indexed stream surfaces on both project-file and
+  both native payload and native indexed stream surfaces, and quantify the indexed
+  framing overhead on both project-file and
   standard-corpus inputs, but the current embedded-index frame is still a
   validation/seek surface rather than a final
   zstd-class native entropy format.
