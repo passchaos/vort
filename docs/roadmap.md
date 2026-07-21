@@ -1134,6 +1134,8 @@ architecture blindly.
 
 - Extended the stored-plan reuse to unknown-size and output-limited zlib/gzip allocator-returning decode paths. Single-member all-stored wrappers now validate checksum, size, and trailing policy before allocation, then copy planned stored payload bytes once instead of recomputing wrapper hashes during allocation.
 
+- Refreshed ReleaseFast decode-stage evidence for the stored-plan reuse work. The local repeat3 `stored-binary` row now reports zlib stored alloc/exact/into around `3140.35` / `3264.16` / `18085.36` MiB/s and gzip stored alloc/exact/into around `1620.25` / `1627.33` / `2732.22` MiB/s, with stored-vs-generic allocation time ratios near neutral (`zlib_stored_alloc_time_ratio=1.0146`, `gzip_stored_alloc_time_ratio=0.9863`) and exact stored ratios slightly positive (`1.0394` / `1.0044`).
+
 - Extended the dynamic deflate decode profile CSV and gate with match-class extra-bit density columns (`*_extra_bits_per_match` and `*_extra_bits_per_byte`). The latest README/roadmap profiles show non-overlap matches spend about `7.946` / `9.824` extra bits per match and `0.612` / `0.970` extra bits per non-overlap byte, giving the next dynamic-decode work a clearer target than repeating rejected distance-formula or branch-order experiments.
 
 - Added README/roadmap mixed distance-extra distributions to `run-deflate-extra-bits-bench-gate`, derived from the dynamic decode profile width histograms. The first local ReleaseFast gate shows span 4 KiB rows around `227.61` / `241.66` Mreads/s versus legacy chunked `145.07` / `176.11` Mreads/s for those mixed distributions, making real text-heavy extra-bit reader costs visible before production bitreader changes.

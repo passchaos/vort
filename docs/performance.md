@@ -86,6 +86,20 @@ writes `zig-out/vort-deflate-decode-stage-report-repeat3.csv` for the repeat3
 summary path, and `-- --iterations <n>` can keep ad-hoc repeat probes short during
 local investigations.
 
+Latest local ReleaseFast stored-wrapper evidence after the stored-plan reuse
+work (2026-07-21, `zig build -Doptimize=ReleaseFast
+run-deflate-decode-stage-report-csv-repeat3`) keeps the `stored-binary` row at
+repeat 3 / 512 iterations over 64 KiB input. The row reports `zlib_stored_mib_s
+= 3140.35`, `zlib_stored_exact_mib_s = 3264.16`, and
+`zlib_stored_into_mib_s = 18085.36`; gzip reports `gzip_stored_mib_s =
+1620.25`, `gzip_stored_exact_mib_s = 1627.33`, and
+`gzip_stored_into_mib_s = 2732.22`. The same row records
+`zlib_stored_alloc_time_ratio = 1.0146`, `gzip_stored_alloc_time_ratio =
+0.9863`, `zlib_stored_alloc_exact_time_ratio = 1.0394`, and
+`gzip_stored_alloc_exact_time_ratio = 1.0044`, so the recent safety-preserving
+plan reuse is documented as roughly neutral-to-positive rather than assumed
+from code structure alone.
+
 Current deflate tuning keeps speed and ratio goals separate by preset. The
 production `.default` path remains the speed/ratio compromise used by zlib-level
 6 style callers, while `.best` now spends a measured 256-candidate optimal
