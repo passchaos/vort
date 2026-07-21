@@ -1618,6 +1618,12 @@ Example:
       "min_checks": 3,
       "min_expected_failures": 3,
       "min_matched": 3
+    },
+    {
+      "mode": "native-tier-range-health",
+      "min_checks": 2,
+      "min_expected_failures": 0,
+      "min_matched": 2
     }
   ]
 }
@@ -1666,8 +1672,9 @@ python3 tools/dashboard_strict_smoke.py --summary zig-out/vort-dashboard-strict-
 ```
 
 This schema summarizes positive and negative smoke checks for dashboard strict
-modes: producer coverage, smoke-gate coverage, header-inspection health, and
-aggregate validation-health failures. Each check records the expected output
+modes: producer coverage, smoke-gate coverage, header-inspection health,
+native-tier range health-field coverage, and aggregate validation-health
+failures. Each check records the expected output
 marker, actual truncated output, original output length, truncation limit/flag,
 and process return code for CI diagnostics. `mode_counts` groups checks by
 strict mode for a compact dashboard overview, while `expected_modes` defines the
@@ -1688,9 +1695,9 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 1,
-  "mode_count": 1,
-  "expected_mode_count": 1,
+  "check_count": 3,
+  "mode_count": 2,
+  "expected_mode_count": 2,
   "missing_mode_count": 0,
   "validation_unhealthy_reason_count": 1,
   "expected_modes": [
@@ -1699,6 +1706,12 @@ Example:
       "min_checks": 1,
       "min_expected_failures": 0,
       "min_matched": 1
+    },
+    {
+      "mode": "native-tier-range-health",
+      "min_checks": 2,
+      "min_expected_failures": 0,
+      "min_matched": 2
     }
   ],
   "missing_modes": [],
@@ -1714,6 +1727,18 @@ Example:
       "matched": 1,
       "min_matched": 1,
       "missing_matched": 0
+    },
+    {
+      "mode": "native-tier-range-health",
+      "checks": 2,
+      "min_checks": 2,
+      "missing_checks": 0,
+      "expected_failures": 0,
+      "min_expected_failures": 0,
+      "missing_expected_failures": 0,
+      "matched": 2,
+      "min_matched": 2,
+      "missing_matched": 0
     }
   ],
   "mode_counts": [
@@ -1722,9 +1747,39 @@ Example:
       "checks": 1,
       "expected_failures": 0,
       "matched": 1
+    },
+    {
+      "mode": "native-tier-range-health",
+      "checks": 2,
+      "expected_failures": 0,
+      "matched": 2
     }
   ],
   "checks": [
+    {
+      "name": "missing_native_tier_range_summary",
+      "mode": "native-tier-range-health",
+      "expected_failure": false,
+      "expected_output": "dashboard_index=",
+      "actual_output": "dashboard_index=ok",
+      "actual_output_bytes": 18,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "failed_native_tier_range_summary",
+      "mode": "native-tier-range-health",
+      "expected_failure": false,
+      "expected_output": "dashboard_index=",
+      "actual_output": "dashboard_index=ok",
+      "actual_output_bytes": 18,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
     {
       "name": "all_strict_ok",
       "mode": "all",

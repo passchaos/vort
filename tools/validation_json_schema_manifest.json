@@ -613,7 +613,8 @@
           "strict-smoke-gates",
           "strict-header-inspect",
           "strict-validation-health",
-          "synthetic"
+          "synthetic",
+          "native-tier-range-health"
         ]
       },
       "item_fields": {
@@ -639,7 +640,8 @@
               "strict-smoke-gates",
               "strict-header-inspect",
               "strict-validation-health",
-              "synthetic"
+              "synthetic",
+              "native-tier-range-health"
             ]
           },
           "fields": {
@@ -658,7 +660,8 @@
               "strict-smoke-gates",
               "strict-header-inspect",
               "strict-validation-health",
-              "synthetic"
+              "synthetic",
+              "native-tier-range-health"
             ]
           },
           "fields": {
@@ -676,7 +679,8 @@
               "strict-smoke-gates",
               "strict-header-inspect",
               "strict-validation-health",
-              "synthetic"
+              "synthetic",
+              "native-tier-range-health"
             ]
           },
           "fields": {
@@ -694,7 +698,8 @@
               "strict-smoke-gates",
               "strict-header-inspect",
               "strict-validation-health",
-              "synthetic"
+              "synthetic",
+              "native-tier-range-health"
             ]
           },
           "fields": {
@@ -835,7 +840,8 @@
           "strict-smoke-gates",
           "strict-header-inspect",
           "strict-validation-health",
-          "synthetic"
+          "synthetic",
+          "native-tier-range-health"
         ],
         "name": [
           "all_strict_ok",
@@ -865,7 +871,9 @@
           "validation_decode_stage_failed",
           "validation_missing_python_zlib_diff_artifact",
           "validation_python_zlib_diff_failed",
-          "truncated_output"
+          "truncated_output",
+          "missing_native_tier_range_summary",
+          "failed_native_tier_range_summary"
         ]
       },
       "item_fields": {

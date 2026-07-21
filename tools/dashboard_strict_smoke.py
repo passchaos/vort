@@ -22,6 +22,7 @@ FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
+NATIVE_TIER_RANGE_ARTIFACT = "vort-native-tier-range-bench-gate.json"
 
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -47,6 +48,8 @@ def write_producer_map(
     include_decode_stage_smoke: bool = True,
     include_python_zlib_exact: bool = True,
     include_python_zlib_smoke: bool = True,
+    include_native_tier_exact: bool = True,
+    include_native_tier_smoke: bool = True,
     required_names: list[str] | None = None,
 ) -> None:
     artifact_metadata = {}
@@ -90,6 +93,11 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-python-zlib-diff-dashboard",
         }
+    if include_native_tier_smoke:
+        artifact_metadata[NATIVE_TIER_RANGE_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-native-tier-range-bench-gate",
+        }
     exact = {}
     if include_header_exact:
         exact[HEADER_INSPECT_ARTIFACT] = "zig build run-header-inspect-dashboard"
@@ -107,6 +115,8 @@ def write_producer_map(
         exact[DECODE_STAGE_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
     if include_python_zlib_exact:
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
+    if include_native_tier_exact:
+        exact[NATIVE_TIER_RANGE_ARTIFACT] = "zig build run-native-tier-range-bench-gate"
     payload = {
         "schema": "vort.dashboard_producers",
         "schema_version": 1,
@@ -552,6 +562,26 @@ def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_native_tier_range_summary(path: Path, *, ok: bool = True) -> None:
+    payload = {
+        "schema": "vort.native_tier_range_bench_gate",
+        "schema_version": 1,
+        "ok": ok,
+        "rows": 9 if ok else 0,
+        "fixture_count": 3 if ok else 0,
+        "tier_count": 3,
+        "fixtures": ["repetitive", "structured", "text"],
+        "tiers": ["seek_fast", "balanced", "ratio"],
+        "enforce_throughput": False,
+        "min_range_mib_s_by_tier": {"seek_fast": 80.0, "balanced": 25.0, "ratio": 20.0},
+        "min_full_input_mib_s_by_tier": {"seek_fast": 700.0, "balanced": 250.0, "ratio": 180.0},
+        "total_stream_bytes_by_tier": {"seek_fast": 9000, "balanced": 5000, "ratio": 4000},
+        "total_index_entries_by_tier": {"seek_fast": 32, "balanced": 12, "ratio": 8},
+        "csv": "zig-out/vort-native-tier-range-bench.csv",
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def write_healthy_artifacts(root: Path) -> None:
     write_header_summary(root / HEADER_INSPECT_ARTIFACT)
     write_dashboard_strict_summary(root / DASHBOARD_STRICT_ARTIFACT)
@@ -561,6 +591,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
+    write_native_tier_range_summary(root / NATIVE_TIER_RANGE_ARTIFACT)
 
 
 def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
@@ -833,7 +864,46 @@ def main() -> int:
         assert manifest["header_inspect_present"] is True
         assert manifest["header_inspect_ok"] is True
         assert manifest["header_inspect_missing_workflow_count"] == 0
+        assert manifest["native_tier_range_present"] is True
+        assert manifest["native_tier_range_healthy"] is True
+        assert manifest["native_tier_range_summary_count"] == 1
+        assert manifest["native_tier_range_rows"] == 9
+        assert manifest["native_tier_range_seek_fast_min_range_mib_s"] >= 80.0
         checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
+
+        missing_native_tier_root = root / "missing-native-tier"
+        missing_native_tier_root.mkdir()
+        write_healthy_artifacts(missing_native_tier_root)
+        (missing_native_tier_root / NATIVE_TIER_RANGE_ARTIFACT).unlink()
+        missing_native_tier_producer = missing_native_tier_root / "producers.json"
+        write_producer_map(missing_native_tier_producer, include_native_tier_exact=False, include_native_tier_smoke=False)
+        missing_native_tier_result = run(dashboard_args(missing_native_tier_root, missing_native_tier_producer, "--strict-validation-health"))
+        missing_native_tier_manifest = json.loads((missing_native_tier_root / "vort-dashboard-index.json").read_text())
+        native_tier_missing_matched = (
+            missing_native_tier_result.returncode == 0
+            and missing_native_tier_manifest["validation_healthy"] is True
+            and missing_native_tier_manifest["native_tier_range_present"] is False
+            and missing_native_tier_manifest["native_tier_range_healthy"] is False
+            and missing_native_tier_manifest["native_tier_range_rows"] == 0
+        )
+        checks.append(check_row("missing_native_tier_range_summary", "native-tier-range-health", False, native_tier_missing_matched, missing_native_tier_result.returncode, "dashboard_index=", missing_native_tier_result.stdout))
+
+        failed_native_tier_root = root / "failed-native-tier"
+        failed_native_tier_root.mkdir()
+        write_healthy_artifacts(failed_native_tier_root)
+        write_native_tier_range_summary(failed_native_tier_root / NATIVE_TIER_RANGE_ARTIFACT, ok=False)
+        failed_native_tier_producer = failed_native_tier_root / "producers.json"
+        write_producer_map(failed_native_tier_producer)
+        failed_native_tier_result = run(dashboard_args(failed_native_tier_root, failed_native_tier_producer, "--strict-validation-health"))
+        failed_native_tier_manifest = json.loads((failed_native_tier_root / "vort-dashboard-index.json").read_text())
+        native_tier_failed_matched = (
+            failed_native_tier_result.returncode == 0
+            and failed_native_tier_manifest["validation_healthy"] is True
+            and failed_native_tier_manifest["native_tier_range_present"] is True
+            and failed_native_tier_manifest["native_tier_range_healthy"] is False
+            and failed_native_tier_manifest["native_tier_range_ok_count"] == 0
+        )
+        checks.append(check_row("failed_native_tier_range_summary", "native-tier-range-health", False, native_tier_failed_matched, failed_native_tier_result.returncode, "dashboard_index=", failed_native_tier_result.stdout))
 
         no_producer = root / "no-producer.json"
         write_producer_map(no_producer, include_header_exact=False, required_names=[HEADER_INSPECT_ARTIFACT, DASHBOARD_STRICT_ARTIFACT])
