@@ -6,7 +6,8 @@ performance claim: it uses documentation/source-like inputs, zstd level 1 via
 the local CLI, and the Vort debug-built CLI's raw fixed-Huffman encoder. The
 build step now retains `zig-out/vort-zstd-compare.csv` and
 `zig-out/vort-zstd-compare.md` so the size smoke can be linked from dashboard
-indexes instead of only appearing on stdout.
+indexes instead of only appearing on stdout. The retained CSV/Markdown include
+per-input rows plus a `TOTAL` aggregate row for the overall size ratio.
 
 Latest local smoke (2026-07-21):
 

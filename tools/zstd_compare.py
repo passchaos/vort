@@ -79,7 +79,7 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             ratio = row["vort_over_zstd"]
             ratio_text = "n/a" if not isinstance(ratio, float) or ratio < 0 else f"{ratio:.4f}"
             lines.append(
-                f"| `{row['path']}` | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_raw_fixed_bytes']} | {ratio_text} |"
+                f"| {('**TOTAL**' if row['path'] == 'TOTAL' else '`' + row['path'] + '`')} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_raw_fixed_bytes']} | {ratio_text} |"
             )
         args.markdown.write_text("\n".join(lines) + "\n")
 
@@ -127,6 +127,22 @@ def main() -> int:
             }
         )
         print(f"{path},{len(data)},{zstd_size},{vort_size}")
+
+    if rows:
+        total_input = sum(int(row["input_bytes"]) for row in rows)
+        total_zstd = sum(int(row["zstd_bytes"]) for row in rows)
+        total_vort = sum(int(row["vort_raw_fixed_bytes"]) for row in rows if int(row["vort_raw_fixed_bytes"]) >= 0)
+        total_ratio = (total_vort / total_zstd) if total_zstd and total_vort >= 0 else -1.0
+        rows.append(
+            {
+                "path": "TOTAL",
+                "input_bytes": total_input,
+                "zstd_bytes": total_zstd,
+                "vort_raw_fixed_bytes": total_vort,
+                "vort_over_zstd": total_ratio,
+                **meta,
+            }
+        )
 
     write_outputs(args, rows, meta)
     return 0
