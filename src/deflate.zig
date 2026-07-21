@@ -7084,6 +7084,8 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.m
     const compressed_len = try chunksTotalLen(chunks);
     const header = try parseZlibHeaderFromChunks(chunks, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+    const first_deflate_byte = chunkByteAt(chunks, header.data_offset) orelse return error.TruncatedFrame;
+    try rejectReservedFirstBlockBeforeAlloc(&.{first_deflate_byte});
     if (try precheckZlibStoredChunksBeforeAlloc(chunks, compressed_len, header.data_offset, options)) |stored_output_len| {
         try ensureOutputLimit(0, stored_output_len, max_output_len);
     }
@@ -7101,8 +7103,11 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.m
 }
 
 fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
+    const total_len = try chunksTotalLen(chunks);
     const header = try parseZlibHeaderFromChunks(chunks, dictionary);
-    if (try precheckZlibStoredChunksBeforeAlloc(chunks, try chunksTotalLen(chunks), header.data_offset, options)) |stored_output_len| {
+    const first_deflate_byte = chunkByteAt(chunks, header.data_offset) orelse return error.TruncatedFrame;
+    try rejectReservedFirstBlockBeforeAlloc(&.{first_deflate_byte});
+    if (try precheckZlibStoredChunksBeforeAlloc(chunks, total_len, header.data_offset, options)) |stored_output_len| {
         if (stored_output_len != expected_output_len) return error.SizeMismatch;
     }
     const out = try allocator.alloc(u8, expected_output_len);
@@ -10436,6 +10441,17 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     var bad_header_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.BadZlibHeader, decodeZlibChunksAllocExactSize(bad_header_failing.allocator(), &bad_header_chunks, input.len));
     try std.testing.expectEqual(@as(usize, 0), bad_header_failing.allocations);
+
+    const reserved_chunks = [_][]const u8{ &.{0x78}, &.{ 0x01, 0x07 } };
+    var reserved_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibChunksAlloc(reserved_alloc_failing.allocator(), &reserved_chunks));
+    try std.testing.expectEqual(@as(usize, 0), reserved_alloc_failing.allocations);
+    var reserved_limited_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibChunksAllocLimited(reserved_limited_failing.allocator(), &reserved_chunks, input.len));
+    try std.testing.expectEqual(@as(usize, 0), reserved_limited_failing.allocations);
+    var reserved_exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibChunksAllocExactSize(reserved_exact_failing.allocator(), &reserved_chunks, input.len));
+    try std.testing.expectEqual(@as(usize, 0), reserved_exact_failing.allocations);
 
     var exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 1 });
     const direct_exact = try decodeZlibChunksAllocExactSize(exact_failing.allocator(), &chunks, input.len);
