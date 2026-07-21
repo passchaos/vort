@@ -829,7 +829,7 @@ pub fn build(b: *std.Build) void {
 
     const zstd_compare = b.addSystemCommand(&.{ "python3", "tools/zstd_compare.py" });
     zstd_compare.addArtifactArg(cli_exe);
-    zstd_compare.addArgs(&.{ "--csv", "zig-out/vort-zstd-compare.csv", "--markdown", "zig-out/vort-zstd-compare.md" });
+    zstd_compare.addArgs(&.{ "--csv", "zig-out/vort-zstd-compare.csv", "--markdown", "zig-out/vort-zstd-compare.md", "--optimize", @tagName(optimize) });
     const zstd_compare_step = b.step("run-zstd-compare", "Report zstd CLI and Vort fixed compressed sizes for sample files");
     zstd_compare_step.dependOn(&zstd_compare.step);
 

@@ -16,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("items", nargs="*", help="optional vort CLI artifact followed by paths")
     parser.add_argument("--csv", type=pathlib.Path)
     parser.add_argument("--markdown", type=pathlib.Path)
+    parser.add_argument("--optimize", default="unknown")
     return parser.parse_args()
 
 
@@ -40,12 +41,13 @@ def cpu_model() -> str:
     return "unknown"
 
 
-def metadata() -> dict[str, str]:
+def metadata(optimize: str) -> dict[str, str]:
     return {
         "zstd_version": zstd_version(),
         "vort_commit": command_output(["git", "rev-parse", "--short", "HEAD"]),
         "zig_version": command_output(["zig", "version"]),
         "cpu_model": cpu_model(),
+        "optimize": optimize,
     }
 
 
@@ -53,7 +55,7 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
     if args.csv:
         args.csv.parent.mkdir(parents=True, exist_ok=True)
         with args.csv.open("w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["path", "input_bytes", "zstd_bytes", "vort_raw_fixed_bytes", "vort_over_zstd", "zstd_version", "vort_commit", "zig_version", "cpu_model"])
+            writer = csv.DictWriter(f, fieldnames=["path", "input_bytes", "zstd_bytes", "vort_raw_fixed_bytes", "vort_over_zstd", "zstd_version", "vort_commit", "zig_version", "cpu_model", "optimize"])
             writer.writeheader()
             writer.writerows(rows)
 
@@ -66,6 +68,7 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             f"- Vort commit: `{meta['vort_commit']}`",
             f"- Zig version: `{meta['zig_version']}`",
             f"- CPU: `{meta['cpu_model']}`",
+            f"- Optimize: `{meta['optimize']}`",
             "- zstd command: `zstd -q -f -1 -o <tmp> <path>`",
             "- Vort command: `vort encode-raw-fixed-hex <utf8 text>`",
             "",
@@ -85,7 +88,7 @@ def main() -> int:
     args = parse_args()
     if not ZSTD:
         print("zstd compare: zstd=missing")
-        write_outputs(args, [], metadata())
+        write_outputs(args, [], metadata(args.optimize))
         return 0
 
     cli = pathlib.Path(args.items[0]) if args.items and pathlib.Path(args.items[0]).exists() else None
@@ -93,7 +96,7 @@ def main() -> int:
     paths = [ROOT / "README.md", ROOT / "docs" / "roadmap.md"] if not path_args else [pathlib.Path(p) for p in path_args]
 
     rows: list[dict[str, Any]] = []
-    meta = metadata()
+    meta = metadata(args.optimize)
     print("path,input_bytes,zstd_bytes,vort_raw_fixed_bytes")
     for path in paths:
         data = path.read_bytes()

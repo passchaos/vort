@@ -32,13 +32,10 @@ Current interpretation:
 
 Recommended next comparison steps:
 
-1. Add target optimization mode to `run-zstd-compare` metadata; the retained
-   CSV/Markdown artifacts already include the zstd version, Vort commit, Zig
-   version, and CPU model.
-2. Add decode throughput rows for zstd and Vort native/zlib/raw modes rather
+1. Add decode throughput rows for zstd and Vort native/zlib/raw modes rather
    than size-only output.
-3. Run the comparison over the standard corpus discovery used by
+2. Run the comparison over the standard corpus discovery used by
    `run-standard-multi-corpus-dashboard`, not only README/roadmap text files.
-4. Split compatibility-format goals (raw/zlib/gzip deflate behavior) from native
+3. Split compatibility-format goals (raw/zlib/gzip deflate behavior) from native
    Vort goals; fixed deflate can be near zstd on small text while still being the
    wrong benchmark for the long-term native-format target.
