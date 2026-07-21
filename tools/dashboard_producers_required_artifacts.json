@@ -505,18 +505,25 @@
       "smoke_gate": "zig build run-zlib-relaxed-report-gate"
     },
     {
+      "expected_format": "json",
+      "name": "vort-zstd-compare-gate.json",
+      "producer_step": "zig build run-zstd-compare-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-zstd-compare-gate"
+    },
+    {
       "expected_format": "csv",
       "name": "vort-zstd-compare.csv",
-      "producer_step": "zig build run-zstd-compare",
+      "producer_step": "zig build run-zstd-compare-gate",
       "required_smoke_gate": false,
-      "smoke_gate": "zig build run-zstd-compare"
+      "smoke_gate": "zig build run-zstd-compare-gate"
     },
     {
       "expected_format": "md",
       "name": "vort-zstd-compare.md",
-      "producer_step": "zig build run-zstd-compare",
+      "producer_step": "zig build run-zstd-compare-gate",
       "required_smoke_gate": false,
-      "smoke_gate": "zig build run-zstd-compare"
+      "smoke_gate": "zig build run-zstd-compare-gate"
     }
   ],
   "schema": "vort.dashboard_producers_required_artifacts",

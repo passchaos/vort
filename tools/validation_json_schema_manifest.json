@@ -2581,6 +2581,18 @@
         "zlib_concatenated_successes": "int",
         "zlib_decoder_successes": "int"
       }
+    },
+    "vort.zstd_compare_gate": {
+      "fields": {
+        "csv": "str",
+        "data_rows": "int",
+        "markdown": "str",
+        "ok": "bool",
+        "rows": "int",
+        "schema": "str",
+        "schema_version": "int",
+        "total_ratio": "float"
+      }
     }
   }
 }

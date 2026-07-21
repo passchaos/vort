@@ -2016,6 +2016,34 @@ Example:
 }
 ```
 
+## `vort.zstd_compare_gate`
+
+Produced by:
+
+```sh
+zig build run-zstd-compare-gate
+```
+
+This schema records the validation summary for retained
+`vort-zstd-compare.csv` and `vort-zstd-compare.md` artifacts. The gate checks
+the CSV schema, requires one `TOTAL` aggregate row, verifies the aggregate byte
+and ratio math, and verifies that Markdown output retains key run metadata.
+
+Example:
+
+```json
+{
+  "schema": "vort.zstd_compare_gate",
+  "schema_version": 1,
+  "ok": true,
+  "rows": 3,
+  "data_rows": 2,
+  "total_ratio": 1.029890069955483,
+  "csv": "zig-out/vort-zstd-compare.csv",
+  "markdown": "zig-out/vort-zstd-compare.md"
+}
+```
+
 ## `vort.png_scratch_report`
 
 Produced by:

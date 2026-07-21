@@ -833,6 +833,16 @@ pub fn build(b: *std.Build) void {
     const zstd_compare_step = b.step("run-zstd-compare", "Report zstd CLI and Vort fixed compressed sizes for sample files");
     zstd_compare_step.dependOn(&zstd_compare.step);
 
+    const zstd_compare_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/zstd_compare_gate.py",
+        "--summary",
+        "zig-out/vort-zstd-compare-gate.json",
+    });
+    zstd_compare_gate.step.dependOn(zstd_compare_step);
+    const zstd_compare_gate_step = b.step("run-zstd-compare-gate", "Validate zstd comparison artifacts");
+    zstd_compare_gate_step.dependOn(&zstd_compare_gate.step);
+
     const compression_report_exe = b.addExecutable(.{
         .name = "vort-compression-report",
         .root_module = b.createModule(.{
@@ -1469,7 +1479,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(rust_deflate_diff_step);
     ci_smoke_step.dependOn(external_probe_step);
     ci_smoke_step.dependOn(cpu_features_step);
-    ci_smoke_step.dependOn(zstd_compare_step);
+    ci_smoke_step.dependOn(zstd_compare_gate_step);
     ci_smoke_step.dependOn(compression_report_step);
     ci_smoke_step.dependOn(deflate_decode_stage_report_step);
     ci_smoke_step.dependOn(deflate_decode_stage_report_dashboard_step);
