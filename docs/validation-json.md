@@ -2023,6 +2023,7 @@ Produced by:
 ```sh
 zig build run-zstd-compare-gate
 zig build run-zstd-compare-standard-gate
+zig build run-zstd-compare-standard-releasefast-gate
 ```
 
 This schema records the validation summary for retained `vort-zstd-compare*`

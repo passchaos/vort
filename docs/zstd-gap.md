@@ -4,17 +4,20 @@
 fixed-deflate output and a native embedded-index stream on sample project
 files. `zig build run-zstd-compare-standard-gate` runs the same comparison over
 standard corpus discovery, bounded to the first three 128 KiB cases by default.
-This is a smoke comparison, not a performance claim: it uses zstd level 1 via
-the local CLI and debug-built Vort CLI paths. The build steps retain
+`zig build run-zstd-compare-standard-releasefast-gate` retains the same
+comparison through a ReleaseFast Vort CLI for performance-oriented smoke
+evidence; it is intentionally opt-in because compiling the extra ReleaseFast CLI
+is much more expensive than the Debug CI smoke. This is a smoke comparison, not
+a performance claim: it uses zstd level 1 via the local CLI and debug-built Vort
+CLI paths unless the ReleaseFast step is selected. The build steps retain
 `zig-out/vort-zstd-compare.csv` / `.md` and
-`zig-out/vort-zstd-compare-standard.csv` / `.md` so the size smoke can be linked
-from dashboard indexes instead of only appearing on stdout. The retained
-CSV/Markdown include per-input rows plus a `TOTAL` aggregate row for raw fixed
-and native embedded size ratios, native block length, and median-of-3
-process-level decode throughput. `zig build run-zstd-compare-gate` and
-`zig build run-zstd-compare-standard-gate` validate the retained artifacts plus
-write `zig-out/vort-zstd-compare-gate.json` and
-`zig-out/vort-zstd-compare-standard-gate.json`.
+`zig-out/vort-zstd-compare-standard.csv` / `.md`, plus opt-in
+`zig-out/vort-zstd-compare-standard-releasefast.csv` / `.md`, so the size smoke
+can be linked from dashboard indexes instead of only appearing on stdout. The
+retained CSV/Markdown include per-input rows plus a `TOTAL` aggregate row for
+raw fixed and native embedded size ratios, native block length, and median-of-3
+process-level decode throughput. The three gate steps validate the retained
+artifacts and write matching `*-gate.json` summaries.
 
 Example local Debug default-sample size smoke after adding native embedded rows
 (2026-07-21; process-level decode columns are retained in CSV/Markdown but are
@@ -63,7 +66,7 @@ Recommended next comparison steps:
 1. Add library-level decode throughput rows for zstd and Vort native/zlib/raw
    modes rather than only process-level CLI smoke timings.
 2. Expand the standard-corpus comparison beyond the first three bounded rows and
-   add ReleaseFast evidence once the smoke remains stable.
+   expand the ReleaseFast artifact beyond the same bounded smoke once stable.
 3. Split compatibility-format goals (raw/zlib/gzip deflate behavior) from native
    Vort goals; fixed deflate can be near zstd on small text while still being the
    wrong benchmark for the long-term native-format target.

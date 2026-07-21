@@ -175,6 +175,7 @@ zig build run-external-probe
 zig build run-cpu-features
 zig build run-zstd-compare-gate
 zig build run-zstd-compare-standard-gate
+zig build run-zstd-compare-standard-releasefast-gate
 zig build -Doptimize=ReleaseFast run-compat-benchmark
 zig build -Doptimize=ReleaseFast run-standard-corpus-report
 zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --suite

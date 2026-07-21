@@ -142,6 +142,20 @@
     },
     {
       "category": "benchmark",
+      "name": "vort-zstd-compare-standard-releasefast.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-standard-releasefast.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
       "name": "vort-zstd-compare.md",
       "require_present": false,
       "require_producer_step": false,
@@ -412,6 +426,13 @@
       "require_present": true,
       "require_producer_step": true,
       "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-zstd-compare-standard-releasefast-gate.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
     }
   ],
   "schema": "vort.dashboard_category_expected_artifacts",

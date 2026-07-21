@@ -9,6 +9,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const vort_mod_releasefast = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
 
     const lib = b.addLibrary(.{
         .name = "vort",
@@ -45,6 +50,18 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_cli.addArgs(args);
     const run_step = b.step("run", "Run the vort CLI smoke example");
     run_step.dependOn(&run_cli.step);
+
+    const cli_releasefast_exe = b.addExecutable(.{
+        .name = "vort-releasefast",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/cli.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+            },
+        }),
+    });
 
     const bench_exe = b.addExecutable(.{
         .name = "vort-bench-checksum",
@@ -873,6 +890,37 @@ pub fn build(b: *std.Build) void {
     zstd_compare_standard_gate.step.dependOn(zstd_compare_standard_step);
     const zstd_compare_standard_gate_step = b.step("run-zstd-compare-standard-gate", "Validate standard-corpus zstd comparison artifacts");
     zstd_compare_standard_gate_step.dependOn(&zstd_compare_standard_gate.step);
+
+    const zstd_compare_standard_releasefast = b.addSystemCommand(&.{ "python3", "tools/zstd_compare.py" });
+    zstd_compare_standard_releasefast.addArtifactArg(cli_releasefast_exe);
+    zstd_compare_standard_releasefast.addArgs(&.{
+        "--standard-suite",
+        "--limit",
+        "3",
+        "--csv",
+        "zig-out/vort-zstd-compare-standard-releasefast.csv",
+        "--markdown",
+        "zig-out/vort-zstd-compare-standard-releasefast.md",
+        "--optimize",
+        "ReleaseFast",
+    });
+    if (b.args) |args| zstd_compare_standard_releasefast.addArgs(args);
+    const zstd_compare_standard_releasefast_step = b.step("run-zstd-compare-standard-releasefast", "Discover standard corpora and compare zstd/Vort ReleaseFast smoke rows");
+    zstd_compare_standard_releasefast_step.dependOn(&zstd_compare_standard_releasefast.step);
+
+    const zstd_compare_standard_releasefast_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/zstd_compare_gate.py",
+        "--csv",
+        "zig-out/vort-zstd-compare-standard-releasefast.csv",
+        "--markdown",
+        "zig-out/vort-zstd-compare-standard-releasefast.md",
+        "--summary",
+        "zig-out/vort-zstd-compare-standard-releasefast-gate.json",
+    });
+    zstd_compare_standard_releasefast_gate.step.dependOn(zstd_compare_standard_releasefast_step);
+    const zstd_compare_standard_releasefast_gate_step = b.step("run-zstd-compare-standard-releasefast-gate", "Validate ReleaseFast standard-corpus zstd comparison artifacts");
+    zstd_compare_standard_releasefast_gate_step.dependOn(&zstd_compare_standard_releasefast_gate.step);
 
     const compression_report_exe = b.addExecutable(.{
         .name = "vort-compression-report",
