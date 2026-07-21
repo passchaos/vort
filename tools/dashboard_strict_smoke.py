@@ -897,6 +897,15 @@ def main() -> int:
         assert manifest["native_tier_range_standard_corpus_summary_count"] == 1
         assert manifest["native_tier_range_missing_sources"] == []
         assert manifest["native_tier_range_seek_fast_min_range_mib_s"] >= 80.0
+        source_details = {row["source"]: row for row in manifest["native_tier_range_source_details"]}
+        assert source_details["built_in"]["summary_count"] == 1
+        assert source_details["built_in"]["range_mib_s_floor_by_tier"]["seek_fast"] == 60.0
+        assert source_details["project_files"]["rows"] == 6
+        assert source_details["project_files"]["range_mib_s_floor_by_tier"]["balanced"] == 8.0
+        assert source_details["standard_corpus"]["fixture_count"] == 3
+        assert source_details["standard_corpus"]["range_mib_s_floor_by_tier"]["ratio"] == 3.5
+        assert source_details["custom"]["summary_count"] == 0
+        assert source_details["legacy"]["summary_count"] == 0
         dashboard_markdown = (root / "vort-dashboard-index.md").read_text()
         assert "## Native tier range source health" in dashboard_markdown
         assert "`built_in`" in dashboard_markdown

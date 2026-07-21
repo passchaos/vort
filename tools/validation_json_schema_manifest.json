@@ -446,6 +446,7 @@
         "native_tier_range_custom_rows": "int",
         "native_tier_range_legacy_rows": "int",
         "native_tier_range_missing_sources": "list",
+        "native_tier_range_source_details": "list",
         "native_tier_range_seek_fast_min_range_mib_s": "float",
         "native_tier_range_balanced_min_range_mib_s": "float",
         "native_tier_range_ratio_min_range_mib_s": "float",
@@ -483,6 +484,30 @@
         "schema_version": "int?",
         "size_bytes": "int",
         "smoke_gate": "str"
+      },
+      "collections": {
+        "native_tier_range_source_details": {
+          "fields": {
+            "source": "str",
+            "summary_count": "int",
+            "ok_count": "int",
+            "rows": "int",
+            "fixture_count": "int",
+            "enforced_count": "int",
+            "missing": "bool",
+            "min_range_mib_s_by_tier": "dict",
+            "range_mib_s_floor_by_tier": "dict"
+          },
+          "enums": {
+            "source": [
+              "built_in",
+              "project_files",
+              "standard_corpus",
+              "custom",
+              "legacy"
+            ]
+          }
+        }
       },
       "list_item_enums": {
         "native_tier_range_missing_sources": [

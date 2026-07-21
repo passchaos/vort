@@ -945,6 +945,7 @@ def main() -> int:
                 "native_tier_range_custom_rows": native_tier_health["custom_rows"],
                 "native_tier_range_legacy_rows": native_tier_health["legacy_rows"],
                 "native_tier_range_missing_sources": native_tier_health["missing_sources"],
+                "native_tier_range_source_details": native_tier_health["source_details"],
                 "native_tier_range_seek_fast_min_range_mib_s": native_tier_health["seek_fast_min_range_mib_s"],
                 "native_tier_range_balanced_min_range_mib_s": native_tier_health["balanced_min_range_mib_s"],
                 "native_tier_range_ratio_min_range_mib_s": native_tier_health["ratio_min_range_mib_s"],

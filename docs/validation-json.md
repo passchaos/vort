@@ -1573,6 +1573,103 @@ Example:
   "native_tier_range_custom_rows": 0,
   "native_tier_range_legacy_rows": 0,
   "native_tier_range_missing_sources": [],
+  "native_tier_range_source_details": [
+    {
+      "source": "built_in",
+      "summary_count": 1,
+      "ok_count": 1,
+      "rows": 9,
+      "fixture_count": 3,
+      "enforced_count": 1,
+      "missing": false,
+      "min_range_mib_s_by_tier": {
+        "seek_fast": 87.39,
+        "balanced": 26.48,
+        "ratio": 24.0
+      },
+      "range_mib_s_floor_by_tier": {
+        "seek_fast": 60.0,
+        "balanced": 16.0,
+        "ratio": 12.0
+      }
+    },
+    {
+      "source": "project_files",
+      "summary_count": 1,
+      "ok_count": 1,
+      "rows": 6,
+      "fixture_count": 2,
+      "enforced_count": 1,
+      "missing": false,
+      "min_range_mib_s_by_tier": {
+        "seek_fast": 52.58,
+        "balanced": 12.29,
+        "ratio": 5.65
+      },
+      "range_mib_s_floor_by_tier": {
+        "seek_fast": 40.0,
+        "balanced": 8.0,
+        "ratio": 4.0
+      }
+    },
+    {
+      "source": "standard_corpus",
+      "summary_count": 1,
+      "ok_count": 1,
+      "rows": 9,
+      "fixture_count": 3,
+      "enforced_count": 1,
+      "missing": false,
+      "min_range_mib_s_by_tier": {
+        "seek_fast": 37.93,
+        "balanced": 8.51,
+        "ratio": 4.15
+      },
+      "range_mib_s_floor_by_tier": {
+        "seek_fast": 30.0,
+        "balanced": 6.5,
+        "ratio": 3.5
+      }
+    },
+    {
+      "source": "custom",
+      "summary_count": 0,
+      "ok_count": 0,
+      "rows": 0,
+      "fixture_count": 0,
+      "enforced_count": 0,
+      "missing": false,
+      "min_range_mib_s_by_tier": {
+        "seek_fast": 0.0,
+        "balanced": 0.0,
+        "ratio": 0.0
+      },
+      "range_mib_s_floor_by_tier": {
+        "seek_fast": 0.0,
+        "balanced": 0.0,
+        "ratio": 0.0
+      }
+    },
+    {
+      "source": "legacy",
+      "summary_count": 0,
+      "ok_count": 0,
+      "rows": 0,
+      "fixture_count": 0,
+      "enforced_count": 0,
+      "missing": false,
+      "min_range_mib_s_by_tier": {
+        "seek_fast": 0.0,
+        "balanced": 0.0,
+        "ratio": 0.0
+      },
+      "range_mib_s_floor_by_tier": {
+        "seek_fast": 0.0,
+        "balanced": 0.0,
+        "ratio": 0.0
+      }
+    }
+  ],
   "native_tier_range_seek_fast_min_range_mib_s": 52.58,
   "native_tier_range_balanced_min_range_mib_s": 12.29,
   "native_tier_range_ratio_min_range_mib_s": 5.65,
