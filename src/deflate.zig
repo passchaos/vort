@@ -1810,6 +1810,11 @@ pub fn parseRawDeflateHeaderInfo(input: []const u8) Error!RawDeflateHeaderInfo {
     };
 }
 
+pub fn parseRawDeflateHeaderInfoFromChunks(chunks: []const []const u8, compressed_scratch: []u8) Error!RawDeflateHeaderInfo {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return parseRawDeflateHeaderInfo(joined);
+}
+
 fn decodeRawAutoAppendPartialWithDictionary(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -8931,6 +8936,13 @@ test "raw deflate header parser exposes first block metadata" {
     try std.testing.expectEqual(@as(?u16, 0), stored.stored_len);
     try std.testing.expectEqual(@as(?u16, 0xffff), stored.stored_nlen);
     try std.testing.expectEqual(@as(?usize, 5), stored.stored_payload_offset);
+    const stored_chunks = [_][]const u8{ &.{0x01}, &.{ 0x00, 0x00 }, &.{ 0xff, 0xff } };
+    var compressed_scratch: [8]u8 = undefined;
+    const stored_from_chunks = try parseRawDeflateHeaderInfoFromChunks(&stored_chunks, &compressed_scratch);
+    try std.testing.expectEqual(stored.block_type, stored_from_chunks.block_type);
+    try std.testing.expectEqual(stored.header_bits_consumed, stored_from_chunks.header_bits_consumed);
+    try std.testing.expectEqual(stored.stored_len, stored_from_chunks.stored_len);
+    try std.testing.expectError(error.OutputTooSmall, parseRawDeflateHeaderInfoFromChunks(&stored_chunks, compressed_scratch[0..4]));
 
     const fixed = try parseRawDeflateHeaderInfo(&.{ 0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 });
     try std.testing.expect(fixed.final);

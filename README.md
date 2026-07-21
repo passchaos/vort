@@ -280,6 +280,8 @@ defer allocator.free(bounded);
 const raw_chunks = [_][]const u8{ raw[0..1], raw[1..] };
 var raw_join_scratch: [1024]u8 = undefined;
 var raw_out: [1024]u8 = undefined;
+const raw_chunk_header = try vort.parseRawDeflateHeaderInfoFromChunks(&raw_chunks, &raw_join_scratch);
+_ = raw_chunk_header.block_type;
 const raw_chunked = try vort.decodeRawDeflateChunks(&raw_chunks, &raw_join_scratch, &raw_out);
 _ = raw_chunked;
 

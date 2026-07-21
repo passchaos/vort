@@ -275,6 +275,7 @@ pub const ParserMode = deflate.ParserMode;
 pub const RawDeflateBlockType = deflate.RawDeflateBlockType;
 pub const RawDeflateHeaderInfo = deflate.RawDeflateHeaderInfo;
 pub const parseRawDeflateHeaderInfo = deflate.parseRawDeflateHeaderInfo;
+pub const parseRawDeflateHeaderInfoFromChunks = deflate.parseRawDeflateHeaderInfoFromChunks;
 pub const DynamicDecodeProfile = deflate.DynamicDecodeProfile;
 pub const profileFirstDynamicDeflateBlock = deflate.profileFirstDynamicDeflateBlock;
 pub const DynamicPlanStats = deflate.DynamicPlanStats;
@@ -559,6 +560,7 @@ test "root exports chunked compatibility decode helpers" {
     // Keep the README/API-sketch split-input helpers tied to root exports. These
     // references are intentionally compile-time only: codec behavior is covered
     // in deflate.zig, while this test catches accidental public API drift.
+    _ = parseRawDeflateHeaderInfoFromChunks;
     _ = decodeRawDeflateChunks;
     _ = decodeRawDeflateChunksWithDictionary;
     _ = decodeRawDeflateChunksAlloc;

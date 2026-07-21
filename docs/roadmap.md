@@ -316,6 +316,8 @@ architecture blindly.
   caller-provided compressed join scratch, including caller-buffer,
   allocator-returning, exact-size, output-limited, and preset-dictionary
   variants.
+- [x] Public raw deflate header inspection supports split input through
+  caller-provided compressed join scratch.
 - [x] Root module compile-time smoke pins public raw/zlib/gzip chunked decode
   helper exports so README-visible split-input APIs cannot drift silently.
 - [x] Concatenated gzip alloc decoder exposes an exact-size variant.
@@ -1352,6 +1354,12 @@ architecture blindly.
   (`inspectGzipMemberFromChunksAlloc*`). They reuse caller-provided join scratch
   before the existing member inspector, preserving concatenated-member offsets,
   exact DEFLATE byte counts, and CRC/ISIZE diagnostics for chunked gzip callers.
+
+- Added `parseRawDeflateHeaderInfoFromChunks` and rooted it in the public API
+  smoke. Split raw-deflate callers can now inspect the first block header through
+  the same caller-owned compressed join scratch used by raw/zlib/gzip chunked
+  decode helpers, preserving stored/fixed/dynamic diagnostics without writing
+  their own temporary coalescing layer.
 
 - Added a root-module compile-time smoke for public split-input decode helpers
   across raw deflate, zlib, gzip, and concatenated gzip. Codec behavior remains
