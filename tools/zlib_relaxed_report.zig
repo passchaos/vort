@@ -123,6 +123,11 @@ pub fn main(init: std.process.Init) !void {
     try zlib_cat_reused_decoder.resetConcatenatedWithOptionsExactSize(zlib_cat, &zlib_cat_out, zlib_cat_relaxed, Payload.len * 2);
     try drainZlibDecoderPayload(&zlib_cat_reused_decoder, Payload ++ Payload);
     zlib_decoder_successes += 1;
+    const zlib_cat_chunks = [_][]const u8{ zlib_cat[0..5], zlib_cat[5 .. zlib_cat.len - 4], zlib_cat[zlib_cat.len - 4 ..] };
+    var zlib_cat_compressed_scratch: [128]u8 = undefined;
+    var zlib_cat_chunk_decoder = try vort.ZlibDecoder.initConcatenatedFromChunksWithOptionsExactSize(&zlib_cat_chunks, &zlib_cat_compressed_scratch, &zlib_cat_out, zlib_cat_relaxed, Payload.len * 2);
+    try drainZlibDecoderPayload(&zlib_cat_chunk_decoder, Payload ++ Payload);
+    zlib_decoder_successes += 1;
 
     const gzip_frame = try vort.encodeGzipFixedAlloc(init.gpa, Payload);
     defer init.gpa.free(gzip_frame);

@@ -4302,6 +4302,54 @@ pub const ZlibDecoder = struct {
         return self;
     }
 
+    pub fn initConcatenatedFromChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetConcatenatedFromChunks(chunks, compressed_scratch, output_scratch);
+        return self;
+    }
+
+    pub fn initConcatenatedFromChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetConcatenatedFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
+        return self;
+    }
+
+    pub fn initConcatenatedFromChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetConcatenatedFromChunksExactSize(chunks, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initConcatenatedFromChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetConcatenatedFromChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, options, expected_output_len);
+        return self;
+    }
+
+    pub fn initConcatenatedFromChunksWithDictionary(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetConcatenatedFromChunksWithDictionary(chunks, dictionary, compressed_scratch, output_scratch);
+        return self;
+    }
+
+    pub fn initConcatenatedFromChunksWithDictionaryAndOptions(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetConcatenatedFromChunksWithDictionaryAndOptions(chunks, dictionary, compressed_scratch, output_scratch, options);
+        return self;
+    }
+
+    pub fn initConcatenatedFromChunksWithDictionaryExactSize(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetConcatenatedFromChunksWithDictionaryExactSize(chunks, dictionary, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initConcatenatedFromChunksWithDictionaryAndOptionsExactSize(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetConcatenatedFromChunksWithDictionaryAndOptionsExactSize(chunks, dictionary, compressed_scratch, output_scratch, options, expected_output_len);
+        return self;
+    }
+
     pub fn initFromChunksWithDictionary(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!ZlibDecoder {
         var self = ZlibDecoder{};
         try self.resetFromChunksWithDictionary(chunks, dictionary, compressed_scratch, output_scratch);
@@ -4520,6 +4568,42 @@ pub const ZlibDecoder = struct {
             self.recordError(error.SizeMismatch);
             return error.SizeMismatch;
         }
+    }
+
+    pub fn resetConcatenatedFromChunks(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        return self.resetConcatenatedFromChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
+    }
+
+    pub fn resetConcatenatedFromChunksWithOptions(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
+        const joined = try joinChunks(chunks, compressed_scratch);
+        return self.resetConcatenatedWithOptions(joined, output_scratch, options);
+    }
+
+    pub fn resetConcatenatedFromChunksExactSize(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetConcatenatedFromChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, .{}, expected_output_len);
+    }
+
+    pub fn resetConcatenatedFromChunksWithOptionsExactSize(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
+        const joined = try joinChunks(chunks, compressed_scratch);
+        return self.resetConcatenatedWithOptionsExactSize(joined, output_scratch, options, expected_output_len);
+    }
+
+    pub fn resetConcatenatedFromChunksWithDictionary(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        return self.resetConcatenatedFromChunksWithDictionaryAndOptions(chunks, dictionary, compressed_scratch, output_scratch, .{});
+    }
+
+    pub fn resetConcatenatedFromChunksWithDictionaryAndOptions(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
+        const joined = try joinChunks(chunks, compressed_scratch);
+        return self.resetConcatenatedWithDictionaryAndOptions(joined, dictionary, output_scratch, options);
+    }
+
+    pub fn resetConcatenatedFromChunksWithDictionaryExactSize(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetConcatenatedFromChunksWithDictionaryAndOptionsExactSize(chunks, dictionary, compressed_scratch, output_scratch, .{}, expected_output_len);
+    }
+
+    pub fn resetConcatenatedFromChunksWithDictionaryAndOptionsExactSize(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
+        const joined = try joinChunks(chunks, compressed_scratch);
+        return self.resetConcatenatedWithDictionaryAndOptionsExactSize(joined, dictionary, output_scratch, options, expected_output_len);
     }
 
     pub fn snapshot(self: *const ZlibDecoder) Snapshot {
@@ -10916,6 +11000,14 @@ test "zlib concatenated streams decode in sequence" {
     const concat_step = try concat_decoder.step(&drained);
     try std.testing.expectEqual(core.StepResult.Status.done, concat_step.status);
     try std.testing.expectEqualSlices(u8, "hello world", &drained);
+    const cat_chunks = [_][]const u8{ cat.items[0..5], cat.items[5 .. cat.items.len - 3], cat.items[cat.items.len - 3 ..] };
+    var compressed_scratch: [128]u8 = undefined;
+    var chunk_decoder = try ZlibDecoder.initConcatenatedFromChunksExactSize(&cat_chunks, &compressed_scratch, &into, into.len);
+    @memset(&drained, 0);
+    const chunk_step = try chunk_decoder.step(&drained);
+    try std.testing.expectEqual(core.StepResult.Status.done, chunk_step.status);
+    try std.testing.expectEqualSlices(u8, "hello world", &drained);
+    try std.testing.expectError(error.OutputTooSmall, ZlibDecoder.initConcatenatedFromChunksExactSize(&cat_chunks, compressed_scratch[0 .. cat.items.len - 1], &into, into.len));
     try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initConcatenatedExactSize(cat.items, &into, into.len + 1));
     try std.testing.expectError(error.OutputTooSmall, decodeZlibConcatenated(cat.items, into[0..10]));
     try std.testing.expectError(error.OutputLimitExceeded, decodeZlibConcatenatedAllocLimited(std.testing.allocator, cat.items, 10));
@@ -10972,6 +11064,13 @@ test "zlib concatenated decode options ignore adler and allow trailing data" {
     @memset(&drained, 0);
     const reset_step = try concat_decoder.step(&drained);
     try std.testing.expectEqual(core.StepResult.Status.done, reset_step.status);
+    try std.testing.expectEqualSlices(u8, "hello world", &drained);
+    const cat_chunks = [_][]const u8{ cat.items[0..4], cat.items[4 .. cat.items.len - 7], cat.items[cat.items.len - 7 ..] };
+    var compressed_scratch: [128]u8 = undefined;
+    var chunk_decoder = try ZlibDecoder.initConcatenatedFromChunksWithOptionsExactSize(&cat_chunks, &compressed_scratch, &into, options, into.len);
+    @memset(&drained, 0);
+    const chunk_step = try chunk_decoder.step(&drained);
+    try std.testing.expectEqual(core.StepResult.Status.done, chunk_step.status);
     try std.testing.expectEqualSlices(u8, "hello world", &drained);
 
     const decoded = try decodeZlibConcatenatedAllocWithOptions(std.testing.allocator, cat.items, options);
@@ -11123,6 +11222,13 @@ test "zlib concatenated streams decode preset dictionary members" {
     var drained: [first_payload.len + second_payload.len]u8 = undefined;
     const step = try decoder.step(&drained);
     try std.testing.expectEqual(core.StepResult.Status.done, step.status);
+    try std.testing.expectEqualSlices(u8, first_payload ++ second_payload, &drained);
+    const cat_chunks = [_][]const u8{ cat.items[0..6], cat.items[6 .. cat.items.len - 4], cat.items[cat.items.len - 4 ..] };
+    var compressed_scratch: [256]u8 = undefined;
+    var chunk_decoder = try ZlibDecoder.initConcatenatedFromChunksWithDictionaryExactSize(&cat_chunks, dictionary, &compressed_scratch, &into, into.len);
+    @memset(&drained, 0);
+    const chunk_step = try chunk_decoder.step(&drained);
+    try std.testing.expectEqual(core.StepResult.Status.done, chunk_step.status);
     try std.testing.expectEqualSlices(u8, first_payload ++ second_payload, &drained);
 
     const limited = try decodeZlibConcatenatedAllocWithDictionaryLimited(std.testing.allocator, cat.items, dictionary, into.len);

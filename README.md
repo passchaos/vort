@@ -335,6 +335,15 @@ var zlib_cat_decoder = try vort.ZlibDecoder.initConcatenatedWithOptionsExactSize
 );
 var zlib_cat_step_out: ["payloadpayload".len]u8 = undefined;
 _ = try zlib_cat_decoder.step(&zlib_cat_step_out);
+const zlib_cat_chunks = [_][]const u8{ zlib_cat.items[0..2], zlib_cat.items[2..] };
+var zlib_cat_join_scratch: [1024]u8 = undefined;
+var zlib_cat_chunk_decoder = try vort.ZlibDecoder.initConcatenatedFromChunksExactSize(
+    &zlib_cat_chunks,
+    &zlib_cat_join_scratch,
+    &zlib_out,
+    "payloadpayload".len,
+);
+_ = try zlib_cat_chunk_decoder.step(&zlib_cat_step_out);
 // FDICT concatenated streams can use the dictionary-aware variants:
 // const zlib_dict_cat = try vort.decodeZlibConcatenatedAllocWithDictionary(
 //     allocator, zlib_dict_bytes, "preset dictionary",
