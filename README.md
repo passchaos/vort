@@ -301,6 +301,14 @@ const zlib_relaxed = try vort.decodeZlibAllocWithOptions(
 defer allocator.free(zlib_relaxed);
 var zlib_out: [1024]u8 = undefined;
 const zlib_written = try vort.decodeZlib(zlib_bytes, &zlib_out);
+var zlib_decoder = try vort.ZlibDecoder.initWithOptionsExactSize(
+    zlib_bytes,
+    &zlib_out,
+    .{ .ignore_adler = false },
+    "payload".len,
+);
+var zlib_step_out: ["payload".len]u8 = undefined;
+_ = try zlib_decoder.step(&zlib_step_out);
 const zlib_chunks = [_][]const u8{ zlib_bytes[0..2], zlib_bytes[2..] };
 const zlib_chunked_written = try vort.decodeZlibChunksInto(&zlib_chunks, &zlib_out);
 _ = zlib_chunked_written;

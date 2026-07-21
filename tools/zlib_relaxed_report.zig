@@ -25,6 +25,7 @@ pub fn main(init: std.process.Init) !void {
     var relaxed_successes: usize = 0;
     var dictionary_successes: usize = 0;
     var zlib_concatenated_successes: usize = 0;
+    var zlib_decoder_successes: usize = 0;
     var limited_rejections: usize = 0;
     var gzip_strict_rejections: usize = 0;
     var gzip_relaxed_successes: usize = 0;
@@ -103,6 +104,18 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(zlib_cat_limited);
     if (!std.mem.eql(u8, Payload ++ Payload, zlib_cat_limited)) return error.PayloadMismatch;
     zlib_concatenated_successes += 1;
+
+    var zlib_scratch: [Payload.len]u8 = undefined;
+    var zlib_decoder = try vort.ZlibDecoder.initWithOptionsExactSize(combined, &zlib_scratch, relaxed, Payload.len);
+    try drainZlibDecoderPayload(&zlib_decoder, Payload);
+    zlib_decoder_successes += 1;
+    var zlib_reused_decoder = vort.ZlibDecoder{};
+    try zlib_reused_decoder.resetWithOptionsExactSize(combined, &zlib_scratch, relaxed, Payload.len);
+    try drainZlibDecoderPayload(&zlib_reused_decoder, Payload);
+    zlib_decoder_successes += 1;
+    var zlib_dict_decoder = try vort.ZlibDecoder.initWithDictionaryAndOptionsExactSize(dict_combined, dictionary, &zlib_scratch, relaxed, Payload.len);
+    try drainZlibDecoderPayload(&zlib_dict_decoder, Payload);
+    zlib_decoder_successes += 1;
 
     const gzip_frame = try vort.encodeGzipFixedAlloc(init.gpa, Payload);
     defer init.gpa.free(gzip_frame);
@@ -186,11 +199,11 @@ pub fn main(init: std.process.Init) !void {
 
     var stdout_buffer: [512]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
-    try stdout_writer.interface.print("relaxed wrapper report: zlib_strict_rejections={d} zlib_relaxed_successes={d} dictionary_successes={d} zlib_concatenated_successes={d} limited_rejections={d} gzip_strict_rejections={d} gzip_relaxed_successes={d} gzip_concatenated_successes={d} gzip_decoder_successes={d} gzip_limited_rejections={d}\n", .{ strict_rejections, relaxed_successes, dictionary_successes, zlib_concatenated_successes, limited_rejections, gzip_strict_rejections, gzip_relaxed_successes, gzip_concatenated_successes, gzip_decoder_successes, gzip_limited_rejections });
+    try stdout_writer.interface.print("relaxed wrapper report: zlib_strict_rejections={d} zlib_relaxed_successes={d} dictionary_successes={d} zlib_concatenated_successes={d} zlib_decoder_successes={d} limited_rejections={d} gzip_strict_rejections={d} gzip_relaxed_successes={d} gzip_concatenated_successes={d} gzip_decoder_successes={d} gzip_limited_rejections={d}\n", .{ strict_rejections, relaxed_successes, dictionary_successes, zlib_concatenated_successes, zlib_decoder_successes, limited_rejections, gzip_strict_rejections, gzip_relaxed_successes, gzip_concatenated_successes, gzip_decoder_successes, gzip_limited_rejections });
     try stdout_writer.interface.flush();
 
-    if (json_path) |path| try writeJson(init, path, strict_rejections, relaxed_successes, dictionary_successes, zlib_concatenated_successes, limited_rejections, gzip_strict_rejections, gzip_relaxed_successes, gzip_concatenated_successes, gzip_decoder_successes, gzip_limited_rejections);
-    if (markdown_path) |path| try writeMarkdown(init, path, strict_rejections, relaxed_successes, dictionary_successes, zlib_concatenated_successes, limited_rejections, gzip_strict_rejections, gzip_relaxed_successes, gzip_concatenated_successes, gzip_decoder_successes, gzip_limited_rejections);
+    if (json_path) |path| try writeJson(init, path, strict_rejections, relaxed_successes, dictionary_successes, zlib_concatenated_successes, zlib_decoder_successes, limited_rejections, gzip_strict_rejections, gzip_relaxed_successes, gzip_concatenated_successes, gzip_decoder_successes, gzip_limited_rejections);
+    if (markdown_path) |path| try writeMarkdown(init, path, strict_rejections, relaxed_successes, dictionary_successes, zlib_concatenated_successes, zlib_decoder_successes, limited_rejections, gzip_strict_rejections, gzip_relaxed_successes, gzip_concatenated_successes, gzip_decoder_successes, gzip_limited_rejections);
 }
 
 fn expectZlibError(expected: anyerror, frame: []const u8, options: vort.ZlibDecodeOptions) !void {
@@ -261,6 +274,20 @@ fn drainDecoderPayload(decoder: *vort.GzipDecoder, expected: []const u8) !void {
     if (written != expected.len or !std.mem.eql(u8, expected, output[0..written])) return error.PayloadMismatch;
 }
 
+fn drainZlibDecoderPayload(decoder: *vort.ZlibDecoder, expected: []const u8) !void {
+    var output: [Payload.len]u8 = undefined;
+    var written: usize = 0;
+    while (true) {
+        var chunk: [3]u8 = undefined;
+        const step = try decoder.step(&chunk);
+        @memcpy(output[written..][0..step.progress.output_written], chunk[0..step.progress.output_written]);
+        written += step.progress.output_written;
+        if (step.status == .done) break;
+        if (step.status != .need_output) return error.UnexpectedDecoderStatus;
+    }
+    if (written != expected.len or !std.mem.eql(u8, expected, output[0..written])) return error.PayloadMismatch;
+}
+
 fn expectAllocExact(allocator: std.mem.Allocator, frame: []const u8, options: vort.ZlibDecodeOptions) !void {
     const decoded = try vort.decodeZlibAllocWithOptionsExactSize(allocator, frame, options, Payload.len);
     defer allocator.free(decoded);
@@ -290,6 +317,7 @@ fn writeJson(
     relaxed_successes: usize,
     dictionary_successes: usize,
     zlib_concatenated_successes: usize,
+    zlib_decoder_successes: usize,
     limited_rejections: usize,
     gzip_strict_rejections: usize,
     gzip_relaxed_successes: usize,
@@ -302,11 +330,12 @@ fn writeJson(
     try writer.writer.print(
         "{{\n" ++
             "  \"schema\": \"vort.zlib_relaxed_report\",\n" ++
-            "  \"schema_version\": 3,\n" ++
+            "  \"schema_version\": 4,\n" ++
             "  \"strict_rejections\": {d},\n" ++
             "  \"relaxed_successes\": {d},\n" ++
             "  \"dictionary_successes\": {d},\n" ++
             "  \"zlib_concatenated_successes\": {d},\n" ++
+            "  \"zlib_decoder_successes\": {d},\n" ++
             "  \"limited_rejections\": {d},\n" ++
             "  \"gzip_strict_rejections\": {d},\n" ++
             "  \"gzip_relaxed_successes\": {d},\n" ++
@@ -319,6 +348,7 @@ fn writeJson(
             relaxed_successes,
             dictionary_successes,
             zlib_concatenated_successes,
+            zlib_decoder_successes,
             limited_rejections,
             gzip_strict_rejections,
             gzip_relaxed_successes,
@@ -337,6 +367,7 @@ fn writeMarkdown(
     relaxed_successes: usize,
     dictionary_successes: usize,
     zlib_concatenated_successes: usize,
+    zlib_decoder_successes: usize,
     limited_rejections: usize,
     gzip_strict_rejections: usize,
     gzip_relaxed_successes: usize,
@@ -354,6 +385,7 @@ fn writeMarkdown(
             "| zlib relaxed successes | {d} |\n" ++
             "| zlib dictionary successes | {d} |\n" ++
             "| zlib concatenated successes | {d} |\n" ++
+            "| zlib decoder successes | {d} |\n" ++
             "| zlib limited rejections | {d} |\n" ++
             "| gzip strict rejections | {d} |\n" ++
             "| gzip relaxed successes | {d} |\n" ++
@@ -365,6 +397,7 @@ fn writeMarkdown(
             relaxed_successes,
             dictionary_successes,
             zlib_concatenated_successes,
+            zlib_decoder_successes,
             limited_rejections,
             gzip_strict_rejections,
             gzip_relaxed_successes,

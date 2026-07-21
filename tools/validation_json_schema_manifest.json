@@ -2578,7 +2578,8 @@
         "schema": "str",
         "schema_version": "int",
         "strict_rejections": "int",
-        "zlib_concatenated_successes": "int"
+        "zlib_concatenated_successes": "int",
+        "zlib_decoder_successes": "int"
       }
     }
   }

@@ -478,6 +478,9 @@ architecture blindly.
   without requiring a compressed join scratch buffer.
 - [x] ZlibDecoder direct chunk initializers include strict, relaxed-option,
   exact-size, and preset-dictionary variants without compressed join scratch.
+- [x] ZlibDecoder exposes single-buffer `WithOptions` initializers/resets for
+  strict, exact-size, and preset-dictionary caller-scratch decode, matching the
+  direct chunked relaxed-option surface.
 - [x] ZlibDecoder chunk smoke covers varied RGB/RGBA PNG-like rows across widths 1, 2, 8, and 17 with filters 0-4.
 - [x] ZlibDecoder drains PNG-style scanlines one row at a time, returning filter bytes separately from caller-owned row payload buffers.
 - [x] PNG scanline reconstruction supports filter methods 0-4 with caller-owned previous/current row buffers.
@@ -1254,3 +1257,10 @@ architecture blindly.
   trailing non-zlib data. Stored-only concatenated preflights honor those
   options before allocating, including zero-allocation limit and size-mismatch
   failures for relaxed corrupt-Adler/trailing-data streams.
+
+- Added single-buffer `ZlibDecoder` `WithOptions` initializers and resets for
+  caller-owned scratch, including exact-size and preset-dictionary variants.
+  This closes the API gap between one-shot zlib relaxed decode, direct chunked
+  `ZlibDecoder` relaxed decode, and gzip decoder options. The relaxed wrapper
+  report now records zlib decoder successes alongside zlib concatenated and gzip
+  decoder coverage, so schema/dashboard validation catches future drift.

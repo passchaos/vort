@@ -4176,9 +4176,21 @@ pub const ZlibDecoder = struct {
         return self;
     }
 
+    pub fn initWithOptions(input: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetWithOptions(input, scratch, options);
+        return self;
+    }
+
     pub fn initExactSize(input: []const u8, scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
         var self = ZlibDecoder{};
         try self.resetExactSize(input, scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initWithOptionsExactSize(input: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetWithOptionsExactSize(input, scratch, options, expected_output_len);
         return self;
     }
 
@@ -4224,9 +4236,21 @@ pub const ZlibDecoder = struct {
         return self;
     }
 
+    pub fn initWithDictionaryAndOptions(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetWithDictionaryAndOptions(input, dictionary, scratch, options);
+        return self;
+    }
+
     pub fn initWithDictionaryExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
         var self = ZlibDecoder{};
         try self.resetWithDictionaryExactSize(input, dictionary, scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initWithDictionaryAndOptionsExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetWithDictionaryAndOptionsExactSize(input, dictionary, scratch, options, expected_output_len);
         return self;
     }
 
@@ -4267,7 +4291,11 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn reset(self: *ZlibDecoder, input: []const u8, scratch: []u8) Error!void {
-        const written = decodeZlib(input, scratch) catch |err| {
+        return self.resetWithOptions(input, scratch, .{});
+    }
+
+    pub fn resetWithOptions(self: *ZlibDecoder, input: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!void {
+        const written = decodeZlibWithOptions(input, scratch, options) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -4278,7 +4306,11 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetExactSize(self: *ZlibDecoder, input: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
-        try self.reset(input, scratch);
+        return self.resetWithOptionsExactSize(input, scratch, .{}, expected_output_len);
+    }
+
+    pub fn resetWithOptionsExactSize(self: *ZlibDecoder, input: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
+        try self.resetWithOptions(input, scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
             return error.SizeMismatch;
@@ -4362,7 +4394,11 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetWithDictionary(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8) Error!void {
-        const written = decodeZlibWithDictionary(input, scratch, dictionary) catch |err| {
+        return self.resetWithDictionaryAndOptions(input, dictionary, scratch, .{});
+    }
+
+    pub fn resetWithDictionaryAndOptions(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!void {
+        const written = decodeZlibWithDictionaryAndOptions(input, scratch, dictionary, options) catch |err| {
             self.recordError(err);
             return err;
         };
@@ -4373,7 +4409,11 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetWithDictionaryExactSize(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
-        try self.resetWithDictionary(input, dictionary, scratch);
+        return self.resetWithDictionaryAndOptionsExactSize(input, dictionary, scratch, .{}, expected_output_len);
+    }
+
+    pub fn resetWithDictionaryAndOptionsExactSize(self: *ZlibDecoder, input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
+        try self.resetWithDictionaryAndOptions(input, dictionary, scratch, options);
         if (self.decoded.len != expected_output_len) {
             self.recordError(error.SizeMismatch);
             return error.SizeMismatch;
@@ -8930,6 +8970,20 @@ test "zlib relaxed decode options ignore Adler and trailing bytes" {
     try std.testing.expectEqual(core.StepResult.Status.done, direct_step.status);
     try std.testing.expectEqualSlices(u8, "payload", &direct_out);
 
+    try std.testing.expectError(error.ChecksumMismatch, ZlibDecoder.initExactSize(bad_checksum_with_trailing, &out, 7));
+    var single_decoder = try ZlibDecoder.initWithOptionsExactSize(bad_checksum_with_trailing, &out, relaxed, 7);
+    @memset(&direct_out, 0);
+    const single_step = try single_decoder.step(&direct_out);
+    try std.testing.expectEqual(core.StepResult.Status.done, single_step.status);
+    try std.testing.expectEqualSlices(u8, "payload", &direct_out);
+
+    var reusable_decoder = ZlibDecoder{};
+    try reusable_decoder.resetWithOptionsExactSize(bad_checksum_with_trailing, &out, relaxed, 7);
+    @memset(&direct_out, 0);
+    const reset_step = try reusable_decoder.step(&direct_out);
+    try std.testing.expectEqual(core.StepResult.Status.done, reset_step.status);
+    try std.testing.expectEqualSlices(u8, "payload", &direct_out);
+
     const alloc = try decodeZlibAllocWithOptions(std.testing.allocator, bad_checksum_with_trailing, relaxed);
     defer std.testing.allocator.free(alloc);
     try std.testing.expectEqualSlices(u8, "payload", alloc);
@@ -8962,6 +9016,11 @@ test "zlib relaxed decode options ignore Adler and trailing bytes" {
     @memset(&direct_out, 0);
     const dict_direct_step = try dict_direct_decoder.step(&direct_out);
     try std.testing.expectEqual(core.StepResult.Status.done, dict_direct_step.status);
+    try std.testing.expectEqualSlices(u8, "payload", &direct_out);
+    var dict_single_decoder = try ZlibDecoder.initWithDictionaryAndOptionsExactSize(dict_bad, dictionary, &out, relaxed, 7);
+    @memset(&direct_out, 0);
+    const dict_single_step = try dict_single_decoder.step(&direct_out);
+    try std.testing.expectEqual(core.StepResult.Status.done, dict_single_step.status);
     try std.testing.expectEqualSlices(u8, "payload", &direct_out);
     const dict_alloc = try decodeZlibAllocWithDictionaryAndOptionsLimited(std.testing.allocator, dict_bad, dictionary, relaxed, 7);
     defer std.testing.allocator.free(dict_alloc);

@@ -198,6 +198,7 @@ def main() -> int:
         assert zlib_relaxed["relaxed_successes"] >= 5
         assert zlib_relaxed["dictionary_successes"] >= 2
         assert zlib_relaxed["zlib_concatenated_successes"] >= 3
+        assert zlib_relaxed["zlib_decoder_successes"] >= 3
         assert zlib_relaxed["limited_rejections"] >= 1
         assert zlib_relaxed["gzip_strict_rejections"] >= 3
         assert zlib_relaxed["gzip_relaxed_successes"] >= 6
