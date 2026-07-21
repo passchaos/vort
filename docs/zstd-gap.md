@@ -17,8 +17,11 @@ CLI paths unless the ReleaseFast step is selected. The build steps retain
 `zig-out/vort-zstd-compare.csv` / `.md` and
 `zig-out/vort-zstd-compare-standard.csv` / `.md`, plus opt-in
 `zig-out/vort-zstd-compare-standard-releasefast.csv` / `.md`, so the size smoke
-can be linked from dashboard indexes instead of only appearing on stdout. The
-retained CSV/Markdown include per-input rows plus a `TOTAL` aggregate row for
+can be linked from dashboard indexes instead of only appearing on stdout.
+`zig build run-zstd-compare-block-sweep-gate` additionally retains
+`zig-out/vort-zstd-compare-block-sweep.csv` / `.md` / `*-gate.json` for a
+standard-suite 4/8/16/32/64 KiB native block-length sweep. The retained
+CSV/Markdown include per-input rows plus a `TOTAL` aggregate row for
 raw fixed, native best, native stream, and native embedded size ratios; the
 stream/native-best overhead from block fragmentation; the embedded/native-stream
 overhead from the index frame itself; native block length; and median-of-3
@@ -50,6 +53,17 @@ silesia-small.tar:silesia-small/mozilla-128k,131072,21823,25437,23988,29014,2967
 TOTAL: raw/zstd 1.048x, native-best/zstd 0.984x, native-stream/zstd 1.115x, native-embedded/zstd 1.133x, stream/best 1.1333x (+14418 bytes, +13.33%), embedded/stream 1.0161x (+1968 bytes, +1.61%), embedded/best 1.1515x (+16386 bytes, +15.15%)
 ```
 
+Example local Debug block-length sweep on the same standard-suite rows:
+
+```text
+block_len,total_native_stream_bytes,native_stream/zstd,stream/native_best,stream_overhead_bytes,embedded_index_bytes
+4096,130653,1.1884,1.2079,22490,3888
+8192,122581,1.1150,1.1333,14418,1968
+16384,117473,1.0685,1.0861,9310,1008
+32768,113457,1.0320,1.0489,5294,528
+65536,110784,1.0077,1.0242,2621,288
+```
+
 Current interpretation:
 
 - zstd is available locally and produces smaller output on documentation files.
@@ -61,8 +75,11 @@ Current interpretation:
   overhead is currently stream fragmentation (`+5496` bytes) rather than the
   embedded index frame (`+832` bytes); the same pattern appears in the bounded
   three-row standard smoke (`+14418` stream bytes versus `+1968` index bytes).
-  The current embedded-index frame is still a validation/seek surface rather than
-  a final zstd-class native entropy format.
+  The block-length sweep shows that raising the smoke block length from 8 KiB to
+  64 KiB cuts the same three-row stream overhead from `+14418` to `+2621` bytes
+  and embedded-index bytes from `+1968` to `+288`, bringing native stream size to
+  `1.0077x` zstd. The current embedded-index frame is still a validation/seek
+  surface rather than a final zstd-class native entropy format.
 - The current smoke says Vort fixed-deflate is close on these two text files
   (`~1.5%` larger on `README.md`, `~3.2%` larger on `docs/roadmap.md`), but it
   now times Vort decode inside one CLI process; zstd decode still includes
@@ -78,8 +95,10 @@ Recommended next comparison steps:
 
 1. Add library-level decode throughput rows for zstd and Vort native/zlib/raw
    modes rather than CLI smoke timings.
-2. Expand the standard-corpus comparison beyond the first three bounded rows and
+2. Use the block-length sweep to define seekability tiers (for example 8 KiB,
+   32 KiB, and 64 KiB) and then add decode/range-latency rows for those tiers.
+3. Expand the standard-corpus comparison beyond the first three bounded rows and
    expand the ReleaseFast artifact beyond the local Silesia-small bounded set once stable.
-3. Split compatibility-format goals (raw/zlib/gzip deflate behavior) from native
+4. Split compatibility-format goals (raw/zlib/gzip deflate behavior) from native
    Vort goals; fixed deflate can be near zstd on small text while still being the
    wrong benchmark for the long-term native-format target.

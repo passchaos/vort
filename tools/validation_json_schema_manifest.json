@@ -2582,6 +2582,32 @@
         "zlib_decoder_successes": "int"
       }
     },
+    "vort.zstd_compare_block_sweep_gate": {
+      "fields": {
+        "best_block_len": "int",
+        "best_embedded_over_native_stream": "float",
+        "best_embedded_over_native_stream_bytes": "int",
+        "best_native_stream_bytes": "int",
+        "best_native_stream_ratio": "float",
+        "best_stream_over_native_best": "float",
+        "best_stream_over_native_best_bytes": "int",
+        "block_len_count": "int",
+        "block_lens": "list",
+        "case_limit": "str",
+        "csv": "str",
+        "data_rows": "int",
+        "markdown": "str",
+        "ok": "bool",
+        "optimize": "str",
+        "path_count": "int",
+        "rows": "int",
+        "schema": "str",
+        "schema_version": "int",
+        "size_mode": "str",
+        "source_mode": "str",
+        "total_rows": "int"
+      }
+    },
     "vort.zstd_compare_gate": {
       "fields": {
         "case_limit": "str",

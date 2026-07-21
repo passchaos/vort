@@ -868,6 +868,49 @@ pub fn build(b: *std.Build) void {
     const zstd_compare_gate_step = b.step("run-zstd-compare-gate", "Validate zstd comparison artifacts");
     zstd_compare_gate_step.dependOn(&zstd_compare_gate.step);
 
+    const zstd_compare_block_sweep = b.addSystemCommand(&.{ "python3", "tools/zstd_compare_block_sweep.py" });
+    zstd_compare_block_sweep.addArtifactArg(cli_exe);
+    zstd_compare_block_sweep.addArgs(&.{
+        "--standard-suite",
+        "--limit",
+        "3",
+        "--block-lens",
+        "4096,8192,16384,32768,65536",
+        "--csv",
+        "zig-out/vort-zstd-compare-block-sweep.csv",
+        "--markdown",
+        "zig-out/vort-zstd-compare-block-sweep.md",
+        "--optimize",
+        @tagName(optimize),
+    });
+    if (b.args) |args| zstd_compare_block_sweep.addArgs(args);
+    const zstd_compare_block_sweep_step = b.step("run-zstd-compare-block-sweep", "Sweep native block lengths in zstd/Vort smoke rows");
+    zstd_compare_block_sweep_step.dependOn(&zstd_compare_block_sweep.step);
+
+    const zstd_compare_block_sweep_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/zstd_compare_block_sweep_gate.py",
+        "--csv",
+        "zig-out/vort-zstd-compare-block-sweep.csv",
+        "--markdown",
+        "zig-out/vort-zstd-compare-block-sweep.md",
+        "--expect-source-mode",
+        "standard-suite",
+        "--expect-size-mode",
+        "bounded-128KiB",
+        "--expect-optimize",
+        @tagName(optimize),
+        "--expect-case-limit",
+        "3",
+        "--expect-block-lens",
+        "4096,8192,16384,32768,65536",
+        "--summary",
+        "zig-out/vort-zstd-compare-block-sweep-gate.json",
+    });
+    zstd_compare_block_sweep_gate.step.dependOn(zstd_compare_block_sweep_step);
+    const zstd_compare_block_sweep_gate_step = b.step("run-zstd-compare-block-sweep-gate", "Validate native block-length sweep artifacts");
+    zstd_compare_block_sweep_gate_step.dependOn(&zstd_compare_block_sweep_gate.step);
+
     const zstd_compare_standard = b.addSystemCommand(&.{ "python3", "tools/zstd_compare.py" });
     zstd_compare_standard.addArtifactArg(cli_exe);
     zstd_compare_standard.addArgs(&.{
@@ -1407,6 +1450,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(fuzz_corpus_coverage_smoke_step);
     dashboard_index.step.dependOn(native_fuzz_corpus_coverage_smoke_step);
     dashboard_index.step.dependOn(zstd_compare_gate_step);
+    dashboard_index.step.dependOn(zstd_compare_block_sweep_gate_step);
     dashboard_index.step.dependOn(zstd_compare_standard_gate_step);
     const dashboard_index_step = b.step("run-dashboard-index", "Write a Markdown index for zig-out dashboard artifacts");
     dashboard_index_step.dependOn(&dashboard_index.step);
@@ -1585,6 +1629,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(external_probe_step);
     ci_smoke_step.dependOn(cpu_features_step);
     ci_smoke_step.dependOn(zstd_compare_gate_step);
+    ci_smoke_step.dependOn(zstd_compare_block_sweep_gate_step);
     ci_smoke_step.dependOn(zstd_compare_standard_gate_step);
     ci_smoke_step.dependOn(compression_report_step);
     ci_smoke_step.dependOn(deflate_decode_stage_report_step);
