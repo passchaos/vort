@@ -9700,6 +9700,20 @@ test "png image helpers reject corrupt zlib wrappers" {
     var history_scratch: [PngStreamingZlibChunkedScanlineDecoder.history_scratch_len]u8 = undefined;
     try std.testing.expectError(error.BadZlibHeader, decodePngAdam7StreamingZlibImageFromChunksDirect(&bad_header_chunks, &history_scratch, &filtered_row_scratch, &previous_row_scratch, adam7, &image));
 
+    const no_payload_chunks = [_][]const u8{ &.{0x78}, &.{0x01} };
+    try std.testing.expectError(error.TruncatedFrame, decodePngZlibImageFromChunks(&no_payload_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+    try std.testing.expectError(error.TruncatedFrame, decodePngAdam7ZlibImageFromChunks(&no_payload_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, adam7, &image));
+    try std.testing.expectError(error.TruncatedFrame, decodePngZlibImageFromChunksDirect(&no_payload_chunks, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+    try std.testing.expectError(error.TruncatedFrame, decodePngAdam7ZlibImageFromChunksDirect(&no_payload_chunks, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, adam7, &image));
+    try std.testing.expectError(error.TruncatedFrame, decodePngAdam7StreamingZlibImageFromChunksDirect(&no_payload_chunks, &history_scratch, &filtered_row_scratch, &previous_row_scratch, adam7, &image));
+
+    const reserved_chunks = [_][]const u8{ &.{0x78}, &.{ 0x01, 0x07 } };
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodePngZlibImageFromChunks(&reserved_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodePngAdam7ZlibImageFromChunks(&reserved_chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, adam7, &image));
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodePngZlibImageFromChunksDirect(&reserved_chunks, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &image));
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodePngAdam7ZlibImageFromChunksDirect(&reserved_chunks, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, adam7, &image));
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodePngAdam7StreamingZlibImageFromChunksDirect(&reserved_chunks, &history_scratch, &filtered_row_scratch, &previous_row_scratch, adam7, &image));
+
     var bad_adler = try std.testing.allocator.dupe(u8, encoded);
     defer std.testing.allocator.free(bad_adler);
     bad_adler[bad_adler.len - 1] ^= 1;
