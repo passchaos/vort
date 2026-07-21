@@ -1379,6 +1379,7 @@ Top-level fields:
 - `smoke_gate_required_missing`
 - `validation_healthy`
 - `validation_unhealthy_reasons`
+- `native_tier_range_*` fields summarize direct-API seekability tier range benchmark summaries.
 - `header_inspect_present`, `header_inspect_ok`, `header_inspect_healthy`,
   `header_inspect_case_count`, `header_inspect_raw_cases`,
   `header_inspect_zlib_cases`, `header_inspect_gzip_cases`,
@@ -1554,6 +1555,19 @@ Example:
   "python_zlib_diff_malformed_deflate_cases": 0,
   "python_zlib_diff_cli_successes": 0,
   "python_zlib_diff_expected_failures": 0,
+  "native_tier_range_present": true,
+  "native_tier_range_healthy": true,
+  "native_tier_range_summary_count": 2,
+  "native_tier_range_ok_count": 2,
+  "native_tier_range_rows": 15,
+  "native_tier_range_fixture_count": 5,
+  "native_tier_range_enforced_count": 1,
+  "native_tier_range_seek_fast_min_range_mib_s": 52.58,
+  "native_tier_range_balanced_min_range_mib_s": 12.29,
+  "native_tier_range_ratio_min_range_mib_s": 5.65,
+  "native_tier_range_seek_fast_min_full_input_mib_s": 732.08,
+  "native_tier_range_balanced_min_full_input_mib_s": 257.77,
+  "native_tier_range_ratio_min_full_input_mib_s": 179.72,
   "artifacts": [
     {
       "name": "vort-validation-json-smoke.json",

@@ -324,6 +324,46 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
     }
 
 
+def native_tier_range_health(artifacts: list[Path]) -> dict:
+    summaries = []
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") == "vort.native_tier_range_bench_gate":
+            summaries.append(data)
+    present = len(summaries) > 0
+    ok_count = sum(1 for data in summaries if bool(data.get("ok")))
+    row_count = sum(int(data.get("rows") or 0) for data in summaries)
+    fixture_count = sum(int(data.get("fixture_count") or 0) for data in summaries)
+    enforced_count = sum(1 for data in summaries if bool(data.get("enforce_throughput")))
+
+    def tier_min(field: str, tier: str) -> float:
+        values = []
+        for data in summaries:
+            by_tier = data.get(field)
+            if isinstance(by_tier, dict):
+                value = by_tier.get(tier)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    values.append(float(value))
+        return min(values) if values else 0.0
+
+    healthy = present and ok_count == len(summaries) and row_count > 0 and fixture_count > 0
+    return {
+        "present": present,
+        "healthy": healthy,
+        "summary_count": len(summaries),
+        "ok_count": ok_count,
+        "rows": row_count,
+        "fixture_count": fixture_count,
+        "enforced_count": enforced_count,
+        "seek_fast_min_range_mib_s": tier_min("min_range_mib_s_by_tier", "seek_fast"),
+        "balanced_min_range_mib_s": tier_min("min_range_mib_s_by_tier", "balanced"),
+        "ratio_min_range_mib_s": tier_min("min_range_mib_s_by_tier", "ratio"),
+        "seek_fast_min_full_input_mib_s": tier_min("min_full_input_mib_s_by_tier", "seek_fast"),
+        "balanced_min_full_input_mib_s": tier_min("min_full_input_mib_s_by_tier", "balanced"),
+        "ratio_min_full_input_mib_s": tier_min("min_full_input_mib_s_by_tier", "ratio"),
+    }
+
+
 def python_zlib_diff_health(artifacts: list[Path]) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
@@ -564,6 +604,7 @@ def main() -> int:
     fuzz_health = fuzz_corpus_health(artifacts)
     decode_stage_health_summary = decode_stage_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
+    native_tier_health = native_tier_range_health(artifacts)
     producer_healthy = len(producer_step_missing) == 0
     smoke_gate_healthy = len(smoke_gate_required_missing) == 0
     header_healthy = (
@@ -658,6 +699,7 @@ def main() -> int:
         f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
         f"- Python zlib differential: payloads {python_zlib_health['payloads']}, dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
+        f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
         "",
     ]
     if strict_health["missing_modes"]:
@@ -798,6 +840,19 @@ def main() -> int:
                 "python_zlib_diff_malformed_deflate_cases": python_zlib_health["malformed_deflate_cases"],
                 "python_zlib_diff_cli_successes": python_zlib_health["cli_successes"],
                 "python_zlib_diff_expected_failures": python_zlib_health["expected_failures"],
+                "native_tier_range_present": native_tier_health["present"],
+                "native_tier_range_healthy": native_tier_health["healthy"],
+                "native_tier_range_summary_count": native_tier_health["summary_count"],
+                "native_tier_range_ok_count": native_tier_health["ok_count"],
+                "native_tier_range_rows": native_tier_health["rows"],
+                "native_tier_range_fixture_count": native_tier_health["fixture_count"],
+                "native_tier_range_enforced_count": native_tier_health["enforced_count"],
+                "native_tier_range_seek_fast_min_range_mib_s": native_tier_health["seek_fast_min_range_mib_s"],
+                "native_tier_range_balanced_min_range_mib_s": native_tier_health["balanced_min_range_mib_s"],
+                "native_tier_range_ratio_min_range_mib_s": native_tier_health["ratio_min_range_mib_s"],
+                "native_tier_range_seek_fast_min_full_input_mib_s": native_tier_health["seek_fast_min_full_input_mib_s"],
+                "native_tier_range_balanced_min_full_input_mib_s": native_tier_health["balanced_min_full_input_mib_s"],
+                "native_tier_range_ratio_min_full_input_mib_s": native_tier_health["ratio_min_full_input_mib_s"],
                 "artifacts": records,
             },
             indent=2,
