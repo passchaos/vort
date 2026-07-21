@@ -45,6 +45,7 @@ pub fn main(init: std.process.Init) !void {
         measureCrc32Slice32SpanThreshold("crc32-slice32-span-threshold1024", input, iterations, 1024, init.io),
         measureCrc32Slice32SpanThreshold("crc32-slice32-span-threshold2048", input, iterations, 2048, init.io),
         measureCrc32Slice32SpanThreshold("crc32-slice32-span-threshold4096", input, iterations, 4096, init.io),
+        measureCrc32Slice32SelectiveAccumulator("crc32-slice32-selective4096", input, iterations, 4096, init.io),
         measure("crc32-best", input, iterations, vort.crc32Best, init.io),
         measure("crc32c-scalar", input, iterations, vort.crc32c, init.io),
         measure("crc32c-slice8", input, iterations, vort.crc32cSlice8, init.io),
@@ -160,6 +161,12 @@ const decoded_span_pattern = [_]usize{
     24, 32, 48, 64,  96,  128,
 };
 
+const selective_span_pattern = [_]usize{
+    3,   5,   8,    13,  21,   34, 55, 89,
+    144, 233, 377,  610, 4096, 17, 31, 8192,
+    64,  128, 2048,
+};
+
 fn measureCrc32Slice32SpanThreshold(name: []const u8, input: []u8, iterations: usize, threshold: usize, io: std.Io) Row {
     var mix: u64 = 0;
     const start = std.Io.Clock.awake.now(io);
@@ -187,6 +194,66 @@ fn measureCrc32Slice32SpanThreshold(name: []const u8, input: []u8, iterations: u
                 crc.update(input[pending_start..][0..pending_len]);
                 pending_start = offset;
                 pending_len = 0;
+            }
+        }
+        if (pending_len != 0) crc.update(input[pending_start..][0..pending_len]);
+
+        const digest = crc.digest();
+        std.mem.doNotOptimizeAway(digest);
+        mix +%= digest;
+        input[index] -%= @truncate(iteration + 1);
+    }
+    const elapsed_ns_signed = start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
+    const elapsed_ns: f64 = @floatFromInt(elapsed_ns_signed);
+    const elapsed_s = elapsed_ns / @as(f64, std.time.ns_per_s);
+    const mib = (@as(f64, @floatFromInt(input.len)) * @as(f64, @floatFromInt(iterations))) / (1024.0 * 1024.0);
+    return .{
+        .name = name,
+        .throughput_mib_s = mib / elapsed_s,
+        .elapsed_s = elapsed_s,
+        .digest_mix = mix,
+    };
+}
+
+fn measureCrc32Slice32SelectiveAccumulator(name: []const u8, input: []u8, iterations: usize, threshold: usize, io: std.Io) Row {
+    var mix: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |iteration| {
+        const index = (iteration * 4099) & (input.len - 1);
+        input[index] +%= @truncate(iteration + 1);
+
+        var crc = vort.checksum.Crc32Slice32.init();
+        var pending_start: usize = 0;
+        var pending_len: usize = 0;
+        var offset: usize = 0;
+        var pattern_index: usize = 0;
+        while (offset < input.len) {
+            const span_len = @min(selective_span_pattern[pattern_index], input.len - offset);
+            pattern_index = (pattern_index + 1) % selective_span_pattern.len;
+
+            if (span_len >= threshold) {
+                if (pending_len != 0) {
+                    crc.update(input[pending_start..][0..pending_len]);
+                    pending_len = 0;
+                }
+                crc.update(input[offset..][0..span_len]);
+                offset += span_len;
+                pending_start = offset;
+                continue;
+            }
+
+            if (pending_len == 0) pending_start = offset;
+            pending_len += span_len;
+            offset += span_len;
+            if (pending_len >= threshold) {
+                // Benchmark-only selective accumulator: tiny decoded spans are
+                // batched up to a threshold, while already-large spans update CRC
+                // directly. This brackets a future gzip integration that would
+                // avoid both per-symbol updates and unnecessary buffering of
+                // large literal/match output spans.
+                crc.update(input[pending_start..][0..pending_len]);
+                pending_len = 0;
+                pending_start = offset;
             }
         }
         if (pending_len != 0) crc.update(input[pending_start..][0..pending_len]);
