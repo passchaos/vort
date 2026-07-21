@@ -1928,7 +1928,8 @@ pub fn decodeRawAutoAllocExactSize(allocator: std.mem.Allocator, input: []const 
 }
 
 pub fn decodeRawAutoAllocWithDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, expected_output_len: usize) ![]u8 {
-    if (input.len != 0 and isStoredBlockHeaderByte(input[0])) {
+    if (input.len == 0) return error.TruncatedFrame;
+    if (isStoredBlockHeaderByte(input[0])) {
         if (try planRawStoredOnly(input)) |stored_plan| {
             if (expected_output_len < stored_plan.output_len) return error.SizeMismatch;
             if (stored_plan.input_read != input.len) return error.TrailingData;
@@ -8610,6 +8611,12 @@ test "stored deflate exact-size alloc decoders validate exact lengths" {
     var raw_auto_trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.TrailingData, decodeRawAutoAllocExactSize(raw_auto_trailing_failing.allocator(), raw_trailing, plain.len));
     try std.testing.expectEqual(@as(usize, 0), raw_auto_trailing_failing.allocations);
+    var raw_empty_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TruncatedFrame, decodeRawAutoAllocExactSize(raw_empty_failing.allocator(), "", plain.len));
+    try std.testing.expectEqual(@as(usize, 0), raw_empty_failing.allocations);
+    var raw_empty_dict_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TruncatedFrame, decodeRawAutoAllocWithDictionaryExactSize(raw_empty_dict_failing.allocator(), "", "dict", plain.len));
+    try std.testing.expectEqual(@as(usize, 0), raw_empty_dict_failing.allocations);
     var raw_reserved_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.InvalidDeflateBlockType, decodeRawAutoAllocExactSize(raw_reserved_failing.allocator(), &.{0x07}, plain.len));
     try std.testing.expectEqual(@as(usize, 0), raw_reserved_failing.allocations);
