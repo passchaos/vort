@@ -2027,7 +2027,8 @@ zig build run-zstd-compare-gate
 This schema records the validation summary for retained
 `vort-zstd-compare.csv` and `vort-zstd-compare.md` artifacts. The gate checks
 the CSV schema, requires one `TOTAL` aggregate row, verifies the aggregate byte
-and ratio math, and verifies that Markdown output retains key run metadata.
+and ratio math, verifies decode throughput aggregate math, and verifies that
+Markdown output retains key run metadata and decode columns.
 
 Example:
 
@@ -2038,7 +2039,11 @@ Example:
   "ok": true,
   "rows": 3,
   "data_rows": 2,
-  "total_ratio": 1.029890069955483,
+  "decode_repeats": 3,
+  "total_ratio": 1.0299816021986508,
+  "total_zstd_decode_mib_s": 58.87993719821505,
+  "total_vort_raw_fixed_decode_mib_s": 8.370938246109839,
+  "total_vort_decode_vs_zstd": 0.14216961913409792,
   "csv": "zig-out/vort-zstd-compare.csv",
   "markdown": "zig-out/vort-zstd-compare.md"
 }

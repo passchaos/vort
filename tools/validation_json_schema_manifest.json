@@ -2586,12 +2586,16 @@
       "fields": {
         "csv": "str",
         "data_rows": "int",
+        "decode_repeats": "int",
         "markdown": "str",
         "ok": "bool",
         "rows": "int",
         "schema": "str",
         "schema_version": "int",
-        "total_ratio": "float"
+        "total_ratio": "float",
+        "total_vort_decode_vs_zstd": "float",
+        "total_vort_raw_fixed_decode_mib_s": "float",
+        "total_zstd_decode_mib_s": "float"
       }
     }
   }
