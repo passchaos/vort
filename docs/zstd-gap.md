@@ -5,8 +5,9 @@ fixed-deflate output and a native embedded-index stream on sample project
 files. `zig build run-zstd-compare-standard-gate` runs the same comparison over
 standard corpus discovery, bounded to the first three 128 KiB cases by default.
 `zig build run-zstd-compare-standard-releasefast-gate` retains the same
-comparison through a ReleaseFast Vort CLI over the first six bounded standard
-rows for performance-oriented smoke evidence; it is intentionally opt-in because
+comparison through a ReleaseFast Vort CLI over the first twelve bounded standard
+rows (the full local Silesia-small bounded set when available) for
+performance-oriented smoke evidence; it is intentionally opt-in because
 compiling the extra ReleaseFast CLI
 is much more expensive than the Debug CI smoke. This is a smoke comparison, not
 a performance claim: it uses zstd level 1 via the local CLI and debug-built Vort
@@ -69,7 +70,7 @@ Recommended next comparison steps:
 1. Add library-level decode throughput rows for zstd and Vort native/zlib/raw
    modes rather than CLI smoke timings.
 2. Expand the standard-corpus comparison beyond the first three bounded rows and
-   expand the ReleaseFast artifact beyond six bounded rows once stable.
+   expand the ReleaseFast artifact beyond the local Silesia-small bounded set once stable.
 3. Split compatibility-format goals (raw/zlib/gzip deflate behavior) from native
    Vort goals; fixed deflate can be near zstd on small text while still being the
    wrong benchmark for the long-term native-format target.

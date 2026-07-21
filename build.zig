@@ -912,7 +912,7 @@ pub fn build(b: *std.Build) void {
     zstd_compare_standard_releasefast.addArgs(&.{
         "--standard-suite",
         "--limit",
-        "6",
+        "12",
         "--csv",
         "zig-out/vort-zstd-compare-standard-releasefast.csv",
         "--markdown",
@@ -938,7 +938,7 @@ pub fn build(b: *std.Build) void {
         "--expect-optimize",
         "ReleaseFast",
         "--expect-case-limit",
-        "6",
+        "12",
         "--summary",
         "zig-out/vort-zstd-compare-standard-releasefast-gate.json",
     });
