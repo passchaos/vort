@@ -2588,12 +2588,16 @@
         "data_rows": "int",
         "decode_repeats": "int",
         "markdown": "str",
+        "native_block_len": "int",
         "ok": "bool",
         "rows": "int",
         "schema": "str",
         "schema_version": "int",
+        "total_native_ratio": "float",
         "total_ratio": "float",
         "total_vort_decode_vs_zstd": "float",
+        "total_vort_native_decode_mib_s": "float",
+        "total_vort_native_decode_vs_zstd": "float",
         "total_vort_raw_fixed_decode_mib_s": "float",
         "total_zstd_decode_mib_s": "float"
       }

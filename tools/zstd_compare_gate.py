@@ -16,13 +16,19 @@ REQUIRED_FIELDS = [
     "input_bytes",
     "zstd_bytes",
     "vort_raw_fixed_bytes",
+    "vort_native_embedded_bytes",
     "vort_over_zstd",
+    "vort_native_over_zstd",
     "zstd_decode_ms",
     "vort_raw_fixed_decode_ms",
+    "vort_native_decode_ms",
     "zstd_decode_mib_s",
     "vort_raw_fixed_decode_mib_s",
+    "vort_native_decode_mib_s",
     "vort_decode_vs_zstd",
+    "vort_native_decode_vs_zstd",
     "decode_repeats",
+    "native_block_len",
     "zstd_version",
     "vort_commit",
     "zig_version",
@@ -74,36 +80,55 @@ def main() -> int:
     summed_input = sum(positive_int(row["input_bytes"]) for row in data_rows)
     summed_zstd = sum(positive_int(row["zstd_bytes"]) for row in data_rows)
     summed_vort = sum(non_negative_int(row["vort_raw_fixed_bytes"]) for row in data_rows)
+    summed_native = sum(non_negative_int(row["vort_native_embedded_bytes"]) for row in data_rows)
     summed_zstd_decode_ms = sum(positive_float(row["zstd_decode_ms"]) for row in data_rows)
     summed_vort_decode_ms = sum(positive_float(row["vort_raw_fixed_decode_ms"]) for row in data_rows)
+    summed_native_decode_ms = sum(positive_float(row["vort_native_decode_ms"]) for row in data_rows)
     if positive_int(total["input_bytes"]) != summed_input:
         raise AssertionError("TOTAL input_bytes mismatch")
     if positive_int(total["zstd_bytes"]) != summed_zstd:
         raise AssertionError("TOTAL zstd_bytes mismatch")
     if non_negative_int(total["vort_raw_fixed_bytes"]) != summed_vort:
         raise AssertionError("TOTAL vort_raw_fixed_bytes mismatch")
+    if non_negative_int(total["vort_native_embedded_bytes"]) != summed_native:
+        raise AssertionError("TOTAL vort_native_embedded_bytes mismatch")
     if abs(positive_float(total["zstd_decode_ms"]) - summed_zstd_decode_ms) > 1e-6:
         raise AssertionError("TOTAL zstd_decode_ms mismatch")
     if abs(positive_float(total["vort_raw_fixed_decode_ms"]) - summed_vort_decode_ms) > 1e-6:
         raise AssertionError("TOTAL vort_raw_fixed_decode_ms mismatch")
+    if abs(positive_float(total["vort_native_decode_ms"]) - summed_native_decode_ms) > 1e-6:
+        raise AssertionError("TOTAL vort_native_decode_ms mismatch")
 
     expected_ratio = summed_vort / summed_zstd
     actual_ratio = float(total["vort_over_zstd"])
     if abs(actual_ratio - expected_ratio) > 1e-9:
         raise AssertionError(f"TOTAL ratio mismatch: expected {expected_ratio}, got {actual_ratio}")
+    expected_native_ratio = summed_native / summed_zstd
+    actual_native_ratio = float(total["vort_native_over_zstd"])
+    if abs(actual_native_ratio - expected_native_ratio) > 1e-9:
+        raise AssertionError(f"TOTAL native ratio mismatch: expected {expected_native_ratio}, got {actual_native_ratio}")
     total_zstd_decode_mib_s = positive_float(total["zstd_decode_mib_s"])
     total_vort_decode_mib_s = positive_float(total["vort_raw_fixed_decode_mib_s"])
+    total_native_decode_mib_s = positive_float(total["vort_native_decode_mib_s"])
     expected_zstd_decode_mib_s = (summed_input / (1024.0 * 1024.0)) / (summed_zstd_decode_ms / 1000.0)
     expected_vort_decode_mib_s = (summed_input / (1024.0 * 1024.0)) / (summed_vort_decode_ms / 1000.0)
+    expected_native_decode_mib_s = (summed_input / (1024.0 * 1024.0)) / (summed_native_decode_ms / 1000.0)
     if abs(total_zstd_decode_mib_s - expected_zstd_decode_mib_s) > 1e-9:
         raise AssertionError("TOTAL zstd_decode_mib_s mismatch")
     if abs(total_vort_decode_mib_s - expected_vort_decode_mib_s) > 1e-9:
         raise AssertionError("TOTAL vort_raw_fixed_decode_mib_s mismatch")
+    if abs(total_native_decode_mib_s - expected_native_decode_mib_s) > 1e-9:
+        raise AssertionError("TOTAL vort_native_decode_mib_s mismatch")
     expected_decode_ratio = total_vort_decode_mib_s / total_zstd_decode_mib_s
     actual_decode_ratio = positive_float(total["vort_decode_vs_zstd"])
     if abs(actual_decode_ratio - expected_decode_ratio) > 1e-9:
         raise AssertionError("TOTAL vort_decode_vs_zstd mismatch")
+    expected_native_decode_ratio = total_native_decode_mib_s / total_zstd_decode_mib_s
+    actual_native_decode_ratio = positive_float(total["vort_native_decode_vs_zstd"])
+    if abs(actual_native_decode_ratio - expected_native_decode_ratio) > 1e-9:
+        raise AssertionError("TOTAL vort_native_decode_vs_zstd mismatch")
     decode_repeats = positive_int(total["decode_repeats"])
+    native_block_len = positive_int(total["native_block_len"])
     if total["zstd_version"] in {"", "missing"}:
         raise AssertionError("zstd version missing from retained artifact")
     for row in rows:
@@ -111,9 +136,13 @@ def main() -> int:
             raise AssertionError(f"missing metadata in row {row!r}")
         if positive_int(row["decode_repeats"]) != decode_repeats:
             raise AssertionError(f"decode repeat count drift in row {row!r}")
+        if positive_int(row["native_block_len"]) != native_block_len:
+            raise AssertionError(f"native block length drift in row {row!r}")
         positive_float(row["zstd_decode_mib_s"])
         positive_float(row["vort_raw_fixed_decode_mib_s"])
+        positive_float(row["vort_native_decode_mib_s"])
         positive_float(row["vort_decode_vs_zstd"])
+        positive_float(row["vort_native_decode_vs_zstd"])
 
     markdown = args.markdown.read_text()
     if (
@@ -121,8 +150,10 @@ def main() -> int:
         or "Vort commit" not in markdown
         or "Optimize" not in markdown
         or "Decode repeats" not in markdown
+        or "Native block length" not in markdown
         or "Decode timings include process startup" not in markdown
-        or "Vort decode / zstd" not in markdown
+        or "Vort raw decode / zstd" not in markdown
+        or "Vort native" not in markdown
     ):
         raise AssertionError("markdown summary missing retained metadata or TOTAL row")
 
@@ -133,10 +164,14 @@ def main() -> int:
         "rows": len(rows),
         "data_rows": len(data_rows),
         "decode_repeats": decode_repeats,
+        "native_block_len": native_block_len,
         "total_ratio": actual_ratio,
+        "total_native_ratio": actual_native_ratio,
         "total_zstd_decode_mib_s": total_zstd_decode_mib_s,
         "total_vort_raw_fixed_decode_mib_s": total_vort_decode_mib_s,
         "total_vort_decode_vs_zstd": actual_decode_ratio,
+        "total_vort_native_decode_mib_s": total_native_decode_mib_s,
+        "total_vort_native_decode_vs_zstd": actual_native_decode_ratio,
         "csv": str(args.csv),
         "markdown": str(args.markdown),
     }
@@ -147,7 +182,9 @@ def main() -> int:
         "zstd_compare_gate=ok "
         f"rows={len(rows)} "
         f"total_ratio={actual_ratio:.4f} "
-        f"decode_vs_zstd={actual_decode_ratio:.4f}"
+        f"native_ratio={actual_native_ratio:.4f} "
+        f"decode_vs_zstd={actual_decode_ratio:.4f} "
+        f"native_decode_vs_zstd={actual_native_decode_ratio:.4f}"
     )
     return 0
 

@@ -1,26 +1,26 @@
 # zstd comparison gap
 
 `zig build run-zstd-compare` reports zstd CLI size beside Vort's current raw
-fixed-deflate output on sample project files. This is a smoke comparison, not a
-performance claim: it uses documentation/source-like inputs, zstd level 1 via
-the local CLI, and the Vort debug-built CLI's raw fixed-Huffman encoder. The
-build step now retains `zig-out/vort-zstd-compare.csv` and
+fixed-deflate output and a native embedded-index stream on sample project
+files. This is a smoke comparison, not a performance claim: it uses
+documentation/source-like inputs, zstd level 1 via the local CLI, and debug-built
+Vort CLI paths. The build step now retains `zig-out/vort-zstd-compare.csv` and
 `zig-out/vort-zstd-compare.md` so the size smoke can be linked from dashboard
 indexes instead of only appearing on stdout. The retained CSV/Markdown include
-per-input rows plus a `TOTAL` aggregate row for the overall size ratio and
-median-of-3 process-level decode throughput. `zig build
-run-zstd-compare-gate` validates the retained artifacts plus writes
-`zig-out/vort-zstd-compare-gate.json`.
+per-input rows plus a `TOTAL` aggregate row for raw fixed and native embedded
+size ratios, native block length, and median-of-3 process-level decode
+throughput. `zig build run-zstd-compare-gate` validates the retained artifacts
+plus writes `zig-out/vort-zstd-compare-gate.json`.
 
-Example local Debug smoke after adding the median-of-3 decode rows
-(2026-07-21; process-level timings are intentionally treated as noisy smoke
-evidence):
+Example local Debug size smoke after adding native embedded rows (2026-07-21;
+process-level decode columns are retained in CSV/Markdown but are intentionally
+treated as noisy smoke evidence):
 
 ```text
-path,input_bytes,zstd_bytes,vort_raw_fixed_bytes,zstd_decode_ms,vort_raw_fixed_decode_ms
-/home/passchaos/project-z/vort/README.md,25830,6161,6256,1.118,9.227
-/home/passchaos/project-z/vort/docs/roadmap.md,130331,37866,39091,1.411,8.564
-TOTAL: zstd decode 58.88 MiB/s, Vort raw fixed decode 8.37 MiB/s, Vort/zstd 0.142x
+path,input_bytes,zstd_bytes,vort_raw_fixed_bytes,vort_native_embedded_bytes
+/home/passchaos/project-z/vort/README.md,25830,6161,6256,6444
+/home/passchaos/project-z/vort/docs/roadmap.md,130331,37866,39091,44831
+TOTAL: raw/zstd 1.030x, native-embedded/zstd 1.165x
 ```
 
 Current interpretation:
@@ -28,6 +28,9 @@ Current interpretation:
 - zstd is available locally and produces smaller output on documentation files.
 - Vort's current fixed-Huffman encoder is a compatibility/bootstrap encoder, not
   the native format that is expected to compete with zstd.
+- The native embedded row proves the comparison artifact now includes a native
+  Vort stream, but the current embedded-index frame is still a validation/seek
+  surface rather than a final zstd-class native entropy format.
 - The current smoke says Vort fixed-deflate is close on these two text files
   (`~1.5%` larger on `README.md`, `~3.2%` larger on `docs/roadmap.md`), but it
   only measures decompression as a process-level smoke that includes CLI startup
