@@ -454,6 +454,8 @@ architecture blindly.
 - [x] Dashboard config-index negative smoke catches missing paths, docs, build steps, consumers, and unchecked schemas.
 - [x] Dashboard category smoke protects raw/zlib/gzip header inspection validation classification.
 - [x] zlib stored-block preset-dictionary API validates DICTID before decode.
+- [x] Public zlib stream inspector supports split input through caller-provided
+  compressed join scratch, including preset-dictionary variants.
 - [x] zlib preset-dictionary decode API validates DICTID and decodes dictionary back-references.
 - [x] zlib preset-dictionary encoders emit FDICT/DICTID frames for stored/fixed/dynamic/best modes.
 - [x] zlib preset-dictionary fixed/dynamic/best encoders seed LZ77 matching from preset history.
@@ -1336,6 +1338,13 @@ architecture blindly.
   allocator-returning paths reuse caller-provided compressed join scratch before
   dispatching to existing raw inflate APIs, covering exact-size, output-limited,
   and preset-dictionary workflows for split raw streams.
+
+- Added zlib stream inspection helpers for split compressed input
+  (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
+  before running the existing diagnostic inspector. They report the same
+  deflate/footer offsets, decoded byte count, and Adler diagnostics as the
+  contiguous inspector, including preset-dictionary streams, and the root API
+  smoke now pins these exports.
 
 - Added a root-module compile-time smoke for public split-input decode helpers
   across raw deflate, zlib, gzip, and concatenated gzip. Codec behavior remains

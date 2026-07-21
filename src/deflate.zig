@@ -3216,8 +3216,32 @@ pub fn inspectZlibStreamAllocLimited(allocator: std.mem.Allocator, input: []cons
     return inspectZlibStreamAllocWithOptionalDictionaryLimited(allocator, input, null, max_output_len);
 }
 
+pub fn inspectZlibStreamFromChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) !ZlibStreamInfo {
+    return inspectZlibStreamFromChunksAllocLimited(allocator, chunks, compressed_scratch, 128 * 1024 * 1024);
+}
+
+pub fn inspectZlibStreamFromChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) !ZlibStreamInfo {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return inspectZlibStreamAllocLimited(allocator, joined, max_output_len);
+}
+
 pub fn inspectZlibStreamAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8) !ZlibStreamInfo {
     return inspectZlibStreamAllocWithDictionaryLimited(allocator, input, dictionary, 128 * 1024 * 1024);
+}
+
+pub fn inspectZlibStreamFromChunksAllocWithDictionary(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8) !ZlibStreamInfo {
+    return inspectZlibStreamFromChunksAllocWithDictionaryLimited(allocator, chunks, compressed_scratch, dictionary, 128 * 1024 * 1024);
+}
+
+pub fn inspectZlibStreamFromChunksAllocWithDictionaryLimited(
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+    compressed_scratch: []u8,
+    dictionary: []const u8,
+    max_output_len: usize,
+) !ZlibStreamInfo {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return inspectZlibStreamAllocWithDictionaryLimited(allocator, joined, dictionary, max_output_len);
 }
 
 pub fn inspectZlibStreamAllocWithDictionaryLimited(
@@ -11515,6 +11539,21 @@ test "zlib stream inspector reports deflate length and adler diagnostics" {
     try std.testing.expectEqual(encoded.len, prefix_info.end_offset);
     try std.testing.expectEqual(@as(usize, encoded.len + 1), with_trailing[0 .. encoded.len + 1].len);
     try std.testing.expectError(error.OutputLimitExceeded, inspectZlibStreamAllocLimited(std.testing.allocator, encoded, 6));
+
+    const chunks = [_][]const u8{
+        encoded[0..2],
+        encoded[2 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+    };
+    var compressed_scratch: [128]u8 = undefined;
+    const chunk_info = try inspectZlibStreamFromChunksAlloc(std.testing.allocator, &chunks, &compressed_scratch);
+    try std.testing.expectEqual(info.deflate_offset, chunk_info.deflate_offset);
+    try std.testing.expectEqual(info.deflate_bytes, chunk_info.deflate_bytes);
+    try std.testing.expectEqual(info.output_bytes, chunk_info.output_bytes);
+    try std.testing.expectEqual(info.footer_offset, chunk_info.footer_offset);
+    try std.testing.expectEqual(info.end_offset, chunk_info.end_offset);
+    try std.testing.expect(chunk_info.adler32_matches);
+    try std.testing.expectError(error.OutputTooSmall, inspectZlibStreamFromChunksAlloc(std.testing.allocator, &chunks, compressed_scratch[0 .. encoded.len - 1]));
 }
 
 test "zlib stream inspector validates preset dictionary IDs" {
@@ -11529,6 +11568,19 @@ test "zlib stream inspector validates preset dictionary IDs" {
     try std.testing.expect(info.adler32_matches);
     try std.testing.expectError(error.NeedDictionary, inspectZlibStreamAlloc(std.testing.allocator, encoded));
     try std.testing.expectError(error.ChecksumMismatch, inspectZlibStreamAllocWithDictionary(std.testing.allocator, encoded, "wrong"));
+
+    const chunks = [_][]const u8{
+        encoded[0..6],
+        encoded[6 .. encoded.len - 4],
+        encoded[encoded.len - 4 ..],
+    };
+    var compressed_scratch: [128]u8 = undefined;
+    const chunk_info = try inspectZlibStreamFromChunksAllocWithDictionary(std.testing.allocator, &chunks, &compressed_scratch, dictionary);
+    try std.testing.expectEqual(info.header.dictionary_id.?, chunk_info.header.dictionary_id.?);
+    try std.testing.expectEqual(info.deflate_bytes, chunk_info.deflate_bytes);
+    try std.testing.expectEqual(info.output_bytes, chunk_info.output_bytes);
+    try std.testing.expect(chunk_info.adler32_matches);
+    try std.testing.expectError(error.ChecksumMismatch, inspectZlibStreamFromChunksAllocWithDictionary(std.testing.allocator, &chunks, &compressed_scratch, "wrong"));
 }
 
 test "gzip stored wrapper matches level-0 vectors" {
