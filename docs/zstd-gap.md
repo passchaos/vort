@@ -32,8 +32,9 @@ Current interpretation:
 
 Recommended next comparison steps:
 
-1. Extend `run-zstd-compare` metadata with the Vort commit, Zig version, CPU
-   model, and target optimization mode.
+1. Add target optimization mode to `run-zstd-compare` metadata; the retained
+   CSV/Markdown artifacts already include the zstd version, Vort commit, Zig
+   version, and CPU model.
 2. Add decode throughput rows for zstd and Vort native/zlib/raw modes rather
    than size-only output.
 3. Run the comparison over the standard corpus discovery used by

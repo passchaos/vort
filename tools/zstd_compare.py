@@ -26,11 +26,34 @@ def zstd_version() -> str:
     return proc.stdout.strip()
 
 
-def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]]) -> None:
+def command_output(args: list[str]) -> str:
+    proc = subprocess.run(args, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+    return proc.stdout.strip() if proc.returncode == 0 else "unknown"
+
+
+def cpu_model() -> str:
+    cpuinfo = pathlib.Path("/proc/cpuinfo")
+    if cpuinfo.exists():
+        for line in cpuinfo.read_text(errors="ignore").splitlines():
+            if line.startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    return "unknown"
+
+
+def metadata() -> dict[str, str]:
+    return {
+        "zstd_version": zstd_version(),
+        "vort_commit": command_output(["git", "rev-parse", "--short", "HEAD"]),
+        "zig_version": command_output(["zig", "version"]),
+        "cpu_model": cpu_model(),
+    }
+
+
+def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: dict[str, str]) -> None:
     if args.csv:
         args.csv.parent.mkdir(parents=True, exist_ok=True)
         with args.csv.open("w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["path", "input_bytes", "zstd_bytes", "vort_raw_fixed_bytes", "vort_over_zstd"])
+            writer = csv.DictWriter(f, fieldnames=["path", "input_bytes", "zstd_bytes", "vort_raw_fixed_bytes", "vort_over_zstd", "zstd_version", "vort_commit", "zig_version", "cpu_model"])
             writer.writeheader()
             writer.writerows(rows)
 
@@ -39,7 +62,10 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]]) -> None:
         lines = [
             "# Vort vs zstd size smoke",
             "",
-            f"- zstd: `{zstd_version()}`",
+            f"- zstd: `{meta['zstd_version']}`",
+            f"- Vort commit: `{meta['vort_commit']}`",
+            f"- Zig version: `{meta['zig_version']}`",
+            f"- CPU: `{meta['cpu_model']}`",
             "- zstd command: `zstd -q -f -1 -o <tmp> <path>`",
             "- Vort command: `vort encode-raw-fixed-hex <utf8 text>`",
             "",
@@ -59,7 +85,7 @@ def main() -> int:
     args = parse_args()
     if not ZSTD:
         print("zstd compare: zstd=missing")
-        write_outputs(args, [])
+        write_outputs(args, [], metadata())
         return 0
 
     cli = pathlib.Path(args.items[0]) if args.items and pathlib.Path(args.items[0]).exists() else None
@@ -67,6 +93,7 @@ def main() -> int:
     paths = [ROOT / "README.md", ROOT / "docs" / "roadmap.md"] if not path_args else [pathlib.Path(p) for p in path_args]
 
     rows: list[dict[str, Any]] = []
+    meta = metadata()
     print("path,input_bytes,zstd_bytes,vort_raw_fixed_bytes")
     for path in paths:
         data = path.read_bytes()
@@ -93,11 +120,12 @@ def main() -> int:
                 "zstd_bytes": zstd_size,
                 "vort_raw_fixed_bytes": vort_size,
                 "vort_over_zstd": ratio,
+                **meta,
             }
         )
         print(f"{path},{len(data)},{zstd_size},{vort_size}")
 
-    write_outputs(args, rows)
+    write_outputs(args, rows, meta)
     return 0
 
 
