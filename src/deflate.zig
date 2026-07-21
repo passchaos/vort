@@ -10442,6 +10442,17 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     try std.testing.expectError(error.BadZlibHeader, decodeZlibChunksAllocExactSize(bad_header_failing.allocator(), &bad_header_chunks, input.len));
     try std.testing.expectEqual(@as(usize, 0), bad_header_failing.allocations);
 
+    const header_only_chunks = [_][]const u8{ &.{0x78}, &.{0x01} };
+    var header_only_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TruncatedFrame, decodeZlibChunksAlloc(header_only_alloc_failing.allocator(), &header_only_chunks));
+    try std.testing.expectEqual(@as(usize, 0), header_only_alloc_failing.allocations);
+    var header_only_limited_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TruncatedFrame, decodeZlibChunksAllocLimited(header_only_limited_failing.allocator(), &header_only_chunks, input.len));
+    try std.testing.expectEqual(@as(usize, 0), header_only_limited_failing.allocations);
+    var header_only_exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TruncatedFrame, decodeZlibChunksAllocExactSize(header_only_exact_failing.allocator(), &header_only_chunks, input.len));
+    try std.testing.expectEqual(@as(usize, 0), header_only_exact_failing.allocations);
+
     const reserved_chunks = [_][]const u8{ &.{0x78}, &.{ 0x01, 0x07 } };
     var reserved_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibChunksAlloc(reserved_alloc_failing.allocator(), &reserved_chunks));
