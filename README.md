@@ -277,6 +277,11 @@ const raw_exact = try vort.decodeRawDeflateAllocExactSize(allocator, raw, "paylo
 defer allocator.free(raw_exact);
 const bounded = try vort.decodeRawDeflateAllocLimited(allocator, raw, 1024);
 defer allocator.free(bounded);
+const raw_chunks = [_][]const u8{ raw[0..1], raw[1..] };
+var raw_join_scratch: [1024]u8 = undefined;
+var raw_out: [1024]u8 = undefined;
+const raw_chunked = try vort.decodeRawDeflateChunks(&raw_chunks, &raw_join_scratch, &raw_out);
+_ = raw_chunked;
 
 const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);

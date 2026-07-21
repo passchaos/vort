@@ -312,6 +312,10 @@ architecture blindly.
 - [x] CLI raw deflate header inspection supports text and schema-checked JSON output.
 - [x] Allocator-returning raw/zlib/gzip decoders use larger capped output capacity hints for highly compressed frames.
 - [x] Raw/zlib/gzip alloc decoders expose exact-size variants for callers that know the output length.
+- [x] Public raw deflate chunked helpers decode split raw input through
+  caller-provided compressed join scratch, including caller-buffer,
+  allocator-returning, exact-size, output-limited, and preset-dictionary
+  variants.
 - [x] Concatenated gzip alloc decoder exposes an exact-size variant.
 - [x] File CLI and Python differential smoke cover raw deflate file decode with output limits.
 - [x] File CLI and Python differential smoke cover raw preset-dictionary file decode.
@@ -1324,3 +1328,9 @@ architecture blindly.
   exact-size, output-limited, and relaxed-option variants. They share the same
   join-scratch compatibility layer as single-member gzip chunk helpers before
   reusing the existing concatenated gzip validators.
+
+- Added public raw deflate chunked decode helpers (`decodeRawChunks*` exported
+  from the root module as `decodeRawDeflateChunks*`). The new caller-buffer and
+  allocator-returning paths reuse caller-provided compressed join scratch before
+  dispatching to existing raw inflate APIs, covering exact-size, output-limited,
+  and preset-dictionary workflows for split raw streams.

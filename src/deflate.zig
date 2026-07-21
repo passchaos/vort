@@ -1968,6 +1968,37 @@ pub fn decodeRawAutoAllocWithDictionaryLimited(allocator: std.mem.Allocator, inp
     return result.bytes;
 }
 
+pub fn decodeRawChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) ![]u8 {
+    return decodeRawChunksAllocWithOptionalDictionaryLimited(allocator, chunks, compressed_scratch, "", null);
+}
+
+pub fn decodeRawChunksAllocWithDictionary(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8) ![]u8 {
+    return decodeRawChunksAllocWithOptionalDictionaryLimited(allocator, chunks, compressed_scratch, dictionary, null);
+}
+
+pub fn decodeRawChunksAllocExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) ![]u8 {
+    return decodeRawChunksAllocWithDictionaryExactSize(allocator, chunks, compressed_scratch, "", expected_output_len);
+}
+
+pub fn decodeRawChunksAllocWithDictionaryExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, expected_output_len: usize) ![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeRawAutoAllocWithDictionaryExactSize(allocator, joined, dictionary, expected_output_len);
+}
+
+pub fn decodeRawChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) ![]u8 {
+    return decodeRawChunksAllocWithOptionalDictionaryLimited(allocator, chunks, compressed_scratch, "", max_output_len);
+}
+
+pub fn decodeRawChunksAllocWithDictionaryLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
+    return decodeRawChunksAllocWithOptionalDictionaryLimited(allocator, chunks, compressed_scratch, dictionary, max_output_len);
+}
+
+fn decodeRawChunksAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: ?usize) ![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    if (max_output_len) |limit| return decodeRawAutoAllocWithDictionaryLimited(allocator, joined, dictionary, limit);
+    return decodeRawAutoAllocWithDictionary(allocator, joined, dictionary);
+}
+
 fn planRawStoredOnlyForFullInput(input: []const u8) Error!?StoredOnlyPlan {
     if (input.len == 0 or !isStoredBlockHeaderByte(input[0])) return null;
     const stored_plan = (try planRawStoredOnly(input)) orelse return null;
@@ -1985,6 +2016,15 @@ pub fn decodeRawAutoWithDictionary(input: []const u8, dictionary: []const u8, ou
 
     var reader = bitstream.BufferedBitReader.init(input);
     return decodeRawAutoWithDictionaryFromReader(&reader, 0, dictionary, output);
+}
+
+pub fn decodeRawChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!DecodeResult {
+    return decodeRawChunksWithDictionary(chunks, compressed_scratch, output, "");
+}
+
+pub fn decodeRawChunksWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: []const u8) Error!DecodeResult {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeRawAutoWithDictionary(joined, dictionary, output);
 }
 
 fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize, dictionary: []const u8, output: []u8) Error!DecodeResult {
@@ -8923,6 +8963,55 @@ test "raw stored deflate reports malformed blocks" {
     var auto_trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.TrailingData, decodeRawAutoAlloc(auto_trailing_failing.allocator(), &trailing));
     try std.testing.expectEqual(@as(usize, 0), auto_trailing_failing.allocations);
+}
+
+test "raw deflate chunk helpers decode split input and dictionaries" {
+    const input = "chunked raw deflate payload";
+    const raw = try encodeRawBestAlloc(std.testing.allocator, input, optionsForLevel(.default));
+    defer std.testing.allocator.free(raw);
+    const chunks = [_][]const u8{
+        raw[0..1],
+        raw[1 .. raw.len - 2],
+        raw[raw.len - 2 ..],
+    };
+
+    var compressed_scratch: [128]u8 = undefined;
+    var output: [input.len]u8 = undefined;
+    const decoded = try decodeRawChunks(&chunks, &compressed_scratch, &output);
+    try std.testing.expectEqual(raw.len, decoded.input_read);
+    try std.testing.expectEqual(input.len, decoded.output_written);
+    try std.testing.expectEqualSlices(u8, input, &output);
+
+    const alloc = try decodeRawChunksAlloc(std.testing.allocator, &chunks, &compressed_scratch);
+    defer std.testing.allocator.free(alloc);
+    try std.testing.expectEqualSlices(u8, input, alloc);
+    const exact = try decodeRawChunksAllocExactSize(std.testing.allocator, &chunks, &compressed_scratch, input.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, input, exact);
+    const limited = try decodeRawChunksAllocLimited(std.testing.allocator, &chunks, &compressed_scratch, input.len);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, input, limited);
+    try std.testing.expectError(error.SizeMismatch, decodeRawChunksAllocExactSize(std.testing.allocator, &chunks, &compressed_scratch, input.len + 1));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeRawChunksAllocLimited(std.testing.allocator, &chunks, &compressed_scratch, input.len - 1));
+    try std.testing.expectError(error.OutputTooSmall, decodeRawChunks(&chunks, compressed_scratch[0 .. raw.len - 1], &output));
+
+    const dictionary = "chunked raw ";
+    const dict_input = "chunked raw dictionary payload";
+    const dict_raw = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, dict_input, dictionary, optionsForLevel(.default));
+    defer std.testing.allocator.free(dict_raw);
+    const dict_chunks = [_][]const u8{
+        dict_raw[0..1],
+        dict_raw[1 .. dict_raw.len - 1],
+        dict_raw[dict_raw.len - 1 ..],
+    };
+    var dict_output: [dict_input.len]u8 = undefined;
+    const dict_decoded = try decodeRawChunksWithDictionary(&dict_chunks, &compressed_scratch, &dict_output, dictionary);
+    try std.testing.expectEqual(dict_raw.len, dict_decoded.input_read);
+    try std.testing.expectEqualSlices(u8, dict_input, &dict_output);
+    const dict_alloc = try decodeRawChunksAllocWithDictionaryExactSize(std.testing.allocator, &dict_chunks, &compressed_scratch, dictionary, dict_input.len);
+    defer std.testing.allocator.free(dict_alloc);
+    try std.testing.expectEqualSlices(u8, dict_input, dict_alloc);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeRawChunksAllocWithDictionaryLimited(std.testing.allocator, &dict_chunks, &compressed_scratch, dictionary, dict_input.len - 1));
 }
 
 test "stored deflate decoders ignore byte-alignment padding bits" {
