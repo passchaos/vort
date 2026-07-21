@@ -911,6 +911,49 @@ pub fn build(b: *std.Build) void {
     const zstd_compare_block_sweep_gate_step = b.step("run-zstd-compare-block-sweep-gate", "Validate native block-length sweep artifacts");
     zstd_compare_block_sweep_gate_step.dependOn(&zstd_compare_block_sweep_gate.step);
 
+    const zstd_compare_block_sweep_releasefast = b.addSystemCommand(&.{ "python3", "tools/zstd_compare_block_sweep.py" });
+    zstd_compare_block_sweep_releasefast.addArtifactArg(cli_releasefast_exe);
+    zstd_compare_block_sweep_releasefast.addArgs(&.{
+        "--standard-suite",
+        "--limit",
+        "3",
+        "--block-lens",
+        "4096,8192,16384,32768,65536",
+        "--csv",
+        "zig-out/vort-zstd-compare-block-sweep-releasefast.csv",
+        "--markdown",
+        "zig-out/vort-zstd-compare-block-sweep-releasefast.md",
+        "--optimize",
+        "ReleaseFast",
+    });
+    if (b.args) |args| zstd_compare_block_sweep_releasefast.addArgs(args);
+    const zstd_compare_block_sweep_releasefast_step = b.step("run-zstd-compare-block-sweep-releasefast", "Sweep native block lengths with a ReleaseFast Vort CLI");
+    zstd_compare_block_sweep_releasefast_step.dependOn(&zstd_compare_block_sweep_releasefast.step);
+
+    const zstd_compare_block_sweep_releasefast_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/zstd_compare_block_sweep_gate.py",
+        "--csv",
+        "zig-out/vort-zstd-compare-block-sweep-releasefast.csv",
+        "--markdown",
+        "zig-out/vort-zstd-compare-block-sweep-releasefast.md",
+        "--expect-source-mode",
+        "standard-suite",
+        "--expect-size-mode",
+        "bounded-128KiB",
+        "--expect-optimize",
+        "ReleaseFast",
+        "--expect-case-limit",
+        "3",
+        "--expect-block-lens",
+        "4096,8192,16384,32768,65536",
+        "--summary",
+        "zig-out/vort-zstd-compare-block-sweep-releasefast-gate.json",
+    });
+    zstd_compare_block_sweep_releasefast_gate.step.dependOn(zstd_compare_block_sweep_releasefast_step);
+    const zstd_compare_block_sweep_releasefast_gate_step = b.step("run-zstd-compare-block-sweep-releasefast-gate", "Validate ReleaseFast native block-length sweep artifacts");
+    zstd_compare_block_sweep_releasefast_gate_step.dependOn(&zstd_compare_block_sweep_releasefast_gate.step);
+
     const zstd_compare_standard = b.addSystemCommand(&.{ "python3", "tools/zstd_compare.py" });
     zstd_compare_standard.addArtifactArg(cli_exe);
     zstd_compare_standard.addArgs(&.{

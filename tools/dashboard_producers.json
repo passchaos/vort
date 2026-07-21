@@ -304,6 +304,18 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-zstd-compare-block-sweep-gate"
     },
+    "vort-zstd-compare-block-sweep-releasefast-gate.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-zstd-compare-block-sweep-releasefast-gate"
+    },
+    "vort-zstd-compare-block-sweep-releasefast.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-zstd-compare-block-sweep-releasefast-gate"
+    },
+    "vort-zstd-compare-block-sweep-releasefast.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-zstd-compare-block-sweep-releasefast-gate"
+    },
     "vort-zstd-compare-gate.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-zstd-compare-gate"
@@ -431,6 +443,9 @@
     "vort-zstd-compare-block-sweep-gate.json": "zig build run-zstd-compare-block-sweep-gate",
     "vort-zstd-compare-block-sweep.csv": "zig build run-zstd-compare-block-sweep-gate",
     "vort-zstd-compare-block-sweep.md": "zig build run-zstd-compare-block-sweep-gate",
+    "vort-zstd-compare-block-sweep-releasefast-gate.json": "zig build run-zstd-compare-block-sweep-releasefast-gate",
+    "vort-zstd-compare-block-sweep-releasefast.csv": "zig build run-zstd-compare-block-sweep-releasefast-gate",
+    "vort-zstd-compare-block-sweep-releasefast.md": "zig build run-zstd-compare-block-sweep-releasefast-gate",
     "vort-zstd-compare-gate.json": "zig build run-zstd-compare-gate",
     "vort-zstd-compare-standard-gate.json": "zig build run-zstd-compare-standard-gate",
     "vort-zstd-compare-standard-releasefast-gate.json": "zig build run-zstd-compare-standard-releasefast-gate",

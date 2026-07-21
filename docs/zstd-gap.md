@@ -20,7 +20,9 @@ CLI paths unless the ReleaseFast step is selected. The build steps retain
 can be linked from dashboard indexes instead of only appearing on stdout.
 `zig build run-zstd-compare-block-sweep-gate` additionally retains
 `zig-out/vort-zstd-compare-block-sweep.csv` / `.md` / `*-gate.json` for a
-standard-suite 4/8/16/32/64 KiB native block-length sweep. The retained
+standard-suite 4/8/16/32/64 KiB native block-length sweep;
+`zig build run-zstd-compare-block-sweep-releasefast-gate` is the opt-in
+ReleaseFast variant for the same tier table. The retained
 CSV/Markdown include per-input rows plus a `TOTAL` aggregate row for
 raw fixed, native best, native stream, and native embedded size ratios; the
 stream/native-best overhead from block fragmentation; the embedded/native-stream
@@ -64,6 +66,18 @@ balanced,32768,113457,1.0320,1.0489,5294,528,2.67
 ratio,65536,110784,1.0077,1.0242,2621,288,0.92
 ```
 
+Example local ReleaseFast block-length sweep on the same standard-suite rows
+(timing is still through the CLI bench surface, but avoids Debug codegen):
+
+```text
+tier,block_len,total_native_stream_bytes,native_stream/zstd,range_decode_mib_s
+custom,4096,130653,1.1884,63.50
+seek_fast,8192,122581,1.1150,38.36
+custom,16384,117473,1.0685,19.64
+balanced,32768,113457,1.0320,10.36
+ratio,65536,110784,1.0077,5.26
+```
+
 Current interpretation:
 
 - zstd is available locally and produces smaller output on documentation files.
@@ -80,7 +94,9 @@ Current interpretation:
   and embedded-index bytes from `+1968` to `+288`, bringing native stream size to
   `1.0077x` zstd. The same sweep now records centered 4 KiB range-decode smoke
   throughput, which drops from `15.37` MiB/s at 4 KiB blocks to `0.92` MiB/s at
-  64 KiB blocks because each small range must decode a larger containing frame.
+  64 KiB blocks in Debug and from `63.50` MiB/s to `5.26` MiB/s in the
+  ReleaseFast CLI sweep because each small range must decode a larger containing
+  frame.
   The current embedded-index frame is still a validation/seek surface rather than
   a final zstd-class native entropy format.
 - The current smoke says Vort fixed-deflate is close on these two text files
@@ -98,9 +114,9 @@ Recommended next comparison steps:
 
 1. Add library-level decode throughput rows for zstd and Vort native/zlib/raw
    modes rather than CLI smoke timings.
-2. Add ReleaseFast or library-level range-latency rows for the public seekability
-   tiers (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because the
-   current tier evidence is still Debug CLI smoke.
+2. Add library-level range-latency rows for the public seekability tiers
+   (`seek_fast` 8 KiB, `balanced` 32 KiB, and `ratio` 64 KiB), because even the
+   ReleaseFast tier sweep still measures through the CLI bench surface.
 3. Expand the standard-corpus comparison beyond the first three bounded rows and
    expand the ReleaseFast artifact beyond the local Silesia-small bounded set once stable.
 4. Split compatibility-format goals (raw/zlib/gzip deflate behavior) from native
