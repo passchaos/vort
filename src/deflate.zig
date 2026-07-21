@@ -7188,6 +7188,7 @@ fn decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.All
             return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, max_output_len)).bytes;
         }
     }
+    try rejectReservedFirstBlockBeforeAlloc(raw_input);
 
     if (options.ignore_adler) {
         if (try decodeRawStoredOnlyAllocMaybe(allocator, raw_input, max_output_len)) |stored| {
@@ -7275,6 +7276,7 @@ fn decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.A
             return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, null)).bytes;
         }
     }
+    try rejectReservedFirstBlockBeforeAlloc(raw_input);
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = decodeZlibWithOptionalDictionaryAndOptions(input, out, dictionary, options) catch |err| switch (err) {
@@ -8785,6 +8787,16 @@ test "zlib relaxed decode options ignore Adler and trailing bytes" {
     var bad_header_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.BadZlibHeader, decodeZlibAllocExactSize(bad_header_failing.allocator(), bad_header, 7));
     try std.testing.expectEqual(@as(usize, 0), bad_header_failing.allocations);
+
+    var reserved_block = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(reserved_block);
+    reserved_block[2] = 0x07;
+    var reserved_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibAlloc(reserved_alloc_failing.allocator(), reserved_block));
+    try std.testing.expectEqual(@as(usize, 0), reserved_alloc_failing.allocations);
+    var reserved_exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibAllocExactSize(reserved_exact_failing.allocator(), reserved_block, 7));
+    try std.testing.expectEqual(@as(usize, 0), reserved_exact_failing.allocations);
 
     var bad_checksum = try std.testing.allocator.dupe(u8, encoded);
     defer std.testing.allocator.free(bad_checksum);
