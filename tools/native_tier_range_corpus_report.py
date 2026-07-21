@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import pathlib
 import subprocess
 import sys
@@ -77,6 +79,40 @@ def load_path_cases(paths: list[pathlib.Path], full: bool, limit: int | None) ->
     return cases
 
 
+def relabel_csv_fixtures(path: pathlib.Path, labels: list[str]) -> str:
+    """Rewrite the benchmark CSV so dashboard fixtures match source corpus labels.
+
+    The Zig benchmark receives temporary files and therefore reports stable temp
+    basenames such as ``000-ooffice-128k.bin``.  Those names are useful only for
+    correlating rows within this wrapper; persisting them into zig-out would hide
+    the real corpus identity in dashboard summaries.  Rewrite the first column
+    after the benchmark succeeds so both stdout and the saved CSV carry the same
+    human-readable source labels.
+    """
+    with path.open(newline="") as source:
+        reader = csv.DictReader(source)
+        fieldnames = reader.fieldnames
+        if fieldnames is None:
+            return ""
+        rows = list(reader)
+
+    for row in rows:
+        fixture = row.get("fixture", "")
+        prefix, sep, _rest = fixture.partition("-")
+        if sep and prefix.isdigit():
+            index = int(prefix)
+            if index < len(labels):
+                row["fixture"] = labels[index]
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    text = output.getvalue()
+    path.write_text(text)
+    return text
+
+
 def main() -> int:
     if not EXE.exists():
         raise SystemExit(f"missing native tier range bench executable at {EXE}; run zig build first")
@@ -114,6 +150,8 @@ def main() -> int:
     sources = paths or discover_standard_corpora()
     cases = load_path_cases(sources, full, limit)
     if not cases:
+        if csv_path is not None:
+            csv_path.unlink(missing_ok=True)
         print("native tier range corpus report: no standard corpora discovered")
         return 0
 
@@ -129,16 +167,10 @@ def main() -> int:
             labels.append(label)
         out_csv = csv_path or (root / "native-tier-range-corpus.csv")
         subprocess.run([str(EXE), "--csv", str(out_csv), *extra_args, "--paths", *sample_paths], cwd=ROOT, check=True)
-        text = out_csv.read_text().splitlines()
+        text = relabel_csv_fixtures(out_csv, labels)
         if not text:
             return 1
-        header = text[0]
-        print(header)
-        for line in text[1:]:
-            parts = line.split(",", 1)
-            fixture = parts[0]
-            label = labels[int(fixture.split("-", 1)[0])] if fixture[:3].isdigit() else fixture
-            print(f"{label},{parts[1]}")
+        print(text, end="")
     return 0
 
 
