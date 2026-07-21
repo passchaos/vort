@@ -6868,20 +6868,7 @@ fn decodeZlibStoredAllocWithOptionalDictionaryExactSize(allocator: std.mem.Alloc
     const stored_plan = (try planRawStoredOnly(raw_input)) orelse return error.InvalidDeflateBlockType;
     if (stored_plan.output_len != expected_output_len) return error.SizeMismatch;
     try validateZlibStoredPlanBeforeAlloc(input, header.data_offset, stored_plan, .{});
-    const out = try allocator.alloc(u8, expected_output_len);
-    errdefer allocator.free(out);
-    const written = if (dictionary) |dict|
-        decodeZlibStoredWithDictionary(input, out, dict) catch |err| switch (err) {
-            error.OutputTooSmall => return error.SizeMismatch,
-            else => return err,
-        }
-    else
-        decodeZlibStored(input, out) catch |err| switch (err) {
-            error.OutputTooSmall => return error.SizeMismatch,
-            else => return err,
-        };
-    if (written != expected_output_len) return error.SizeMismatch;
-    return out;
+    return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, null)).bytes;
 }
 
 fn decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
@@ -7294,6 +7281,7 @@ fn decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.A
         if (try planRawStoredOnly(raw_input)) |stored_plan| {
             if (stored_plan.output_len != expected_output_len) return error.SizeMismatch;
             try validateZlibStoredPlanBeforeAlloc(input, header.data_offset, stored_plan, options);
+            return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, null)).bytes;
         }
     }
     const out = try allocator.alloc(u8, expected_output_len);
@@ -7945,14 +7933,7 @@ pub fn decodeGzipStoredAllocExactSize(allocator: std.mem.Allocator, input: []con
     const stored_plan = (try planRawStoredOnly(raw_input)) orelse return error.InvalidDeflateBlockType;
     if (stored_plan.output_len != expected_output_len) return error.SizeMismatch;
     try validateGzipStoredPlanBeforeAlloc(input, data_offset, stored_plan, .{});
-    const out = try allocator.alloc(u8, expected_output_len);
-    errdefer allocator.free(out);
-    const written = decodeGzipStored(input, out) catch |err| switch (err) {
-        error.OutputTooSmall => return error.SizeMismatch,
-        else => return err,
-    };
-    if (written != expected_output_len) return error.SizeMismatch;
-    return out;
+    return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, null)).bytes;
 }
 
 pub fn decodeGzipStoredAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
@@ -8159,6 +8140,7 @@ pub fn decodeGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: 
         if (try planRawStoredOnly(raw_input)) |stored_plan| {
             if (stored_plan.output_len != expected_output_len) return error.SizeMismatch;
             try validateGzipStoredPlanBeforeAlloc(input, data_offset, stored_plan, options);
+            return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, null)).bytes;
         }
     }
     const out = try allocator.alloc(u8, expected_output_len);
