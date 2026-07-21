@@ -2006,7 +2006,7 @@ Example:
   "relaxed_successes": 5,
   "dictionary_successes": 2,
   "zlib_concatenated_successes": 3,
-  "zlib_decoder_successes": 6,
+  "zlib_decoder_successes": 8,
   "limited_rejections": 1,
   "gzip_strict_rejections": 3,
   "gzip_relaxed_successes": 6,

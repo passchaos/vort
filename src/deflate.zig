@@ -4200,9 +4200,21 @@ pub const ZlibDecoder = struct {
         return self;
     }
 
+    pub fn initFromChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
+        return self;
+    }
+
     pub fn initFromChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
         var self = ZlibDecoder{};
         try self.resetFromChunksExactSize(chunks, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetFromChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, options, expected_output_len);
         return self;
     }
 
@@ -4356,9 +4368,21 @@ pub const ZlibDecoder = struct {
         return self;
     }
 
+    pub fn initFromChunksWithDictionaryAndOptions(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetFromChunksWithDictionaryAndOptions(chunks, dictionary, compressed_scratch, output_scratch, options);
+        return self;
+    }
+
     pub fn initFromChunksWithDictionaryExactSize(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!ZlibDecoder {
         var self = ZlibDecoder{};
         try self.resetFromChunksWithDictionaryExactSize(chunks, dictionary, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunksWithDictionaryAndOptionsExactSize(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!ZlibDecoder {
+        var self = ZlibDecoder{};
+        try self.resetFromChunksWithDictionaryAndOptionsExactSize(chunks, dictionary, compressed_scratch, output_scratch, options, expected_output_len);
         return self;
     }
 
@@ -4414,13 +4438,21 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunks(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        return self.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
+    }
+
+    pub fn resetFromChunksWithOptions(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
         const joined = try joinChunks(chunks, compressed_scratch);
-        return self.reset(joined, output_scratch);
+        return self.resetWithOptions(joined, output_scratch, options);
     }
 
     pub fn resetFromChunksExactSize(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetFromChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, .{}, expected_output_len);
+    }
+
+    pub fn resetFromChunksWithOptionsExactSize(self: *ZlibDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
         const joined = try joinChunks(chunks, compressed_scratch);
-        return self.resetExactSize(joined, output_scratch, expected_output_len);
+        return self.resetWithOptionsExactSize(joined, output_scratch, options, expected_output_len);
     }
 
     pub fn resetFromChunksDirect(self: *ZlibDecoder, chunks: []const []const u8, output_scratch: []u8) Error!void {
@@ -4452,13 +4484,21 @@ pub const ZlibDecoder = struct {
     }
 
     pub fn resetFromChunksWithDictionary(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        return self.resetFromChunksWithDictionaryAndOptions(chunks, dictionary, compressed_scratch, output_scratch, .{});
+    }
+
+    pub fn resetFromChunksWithDictionaryAndOptions(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!void {
         const joined = try joinChunks(chunks, compressed_scratch);
-        return self.resetWithDictionary(joined, dictionary, output_scratch);
+        return self.resetWithDictionaryAndOptions(joined, dictionary, output_scratch, options);
     }
 
     pub fn resetFromChunksWithDictionaryExactSize(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetFromChunksWithDictionaryAndOptionsExactSize(chunks, dictionary, compressed_scratch, output_scratch, .{}, expected_output_len);
+    }
+
+    pub fn resetFromChunksWithDictionaryAndOptionsExactSize(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) Error!void {
         const joined = try joinChunks(chunks, compressed_scratch);
-        return self.resetWithDictionaryExactSize(joined, dictionary, output_scratch, expected_output_len);
+        return self.resetWithDictionaryAndOptionsExactSize(joined, dictionary, output_scratch, options, expected_output_len);
     }
 
     pub fn resetFromChunksWithDictionaryDirect(self: *ZlibDecoder, chunks: []const []const u8, dictionary: []const u8, output_scratch: []u8) Error!void {
@@ -9150,8 +9190,14 @@ test "zlib relaxed decode options ignore Adler and trailing bytes" {
         bad_checksum_with_trailing[3 .. bad_checksum_with_trailing.len - 1],
         bad_checksum_with_trailing[bad_checksum_with_trailing.len - 1 ..],
     };
-    var direct_decoder = try ZlibDecoder.initFromChunksWithOptionsExactSizeDirect(&relaxed_chunks, &out, relaxed, 7);
+    var compressed_scratch: [128]u8 = undefined;
+    var joined_decoder = try ZlibDecoder.initFromChunksWithOptionsExactSize(&relaxed_chunks, &compressed_scratch, &out, relaxed, 7);
     var direct_out: [7]u8 = undefined;
+    const joined_step = try joined_decoder.step(&direct_out);
+    try std.testing.expectEqual(core.StepResult.Status.done, joined_step.status);
+    try std.testing.expectEqualSlices(u8, "payload", &direct_out);
+    var direct_decoder = try ZlibDecoder.initFromChunksWithOptionsExactSizeDirect(&relaxed_chunks, &out, relaxed, 7);
+    @memset(&direct_out, 0);
     const direct_step = try direct_decoder.step(&direct_out);
     try std.testing.expectEqual(core.StepResult.Status.done, direct_step.status);
     try std.testing.expectEqualSlices(u8, "payload", &direct_out);
@@ -9198,6 +9244,11 @@ test "zlib relaxed decode options ignore Adler and trailing bytes" {
         dict_bad[6 .. dict_bad.len - 1],
         dict_bad[dict_bad.len - 1 ..],
     };
+    var dict_joined_decoder = try ZlibDecoder.initFromChunksWithDictionaryAndOptionsExactSize(&dict_chunks, dictionary, &compressed_scratch, &out, relaxed, 7);
+    @memset(&direct_out, 0);
+    const dict_joined_step = try dict_joined_decoder.step(&direct_out);
+    try std.testing.expectEqual(core.StepResult.Status.done, dict_joined_step.status);
+    try std.testing.expectEqualSlices(u8, "payload", &direct_out);
     var dict_direct_decoder = try ZlibDecoder.initFromChunksWithDictionaryAndOptionsExactSizeDirect(&dict_chunks, dictionary, &out, relaxed, 7);
     @memset(&direct_out, 0);
     const dict_direct_step = try dict_direct_decoder.step(&direct_out);

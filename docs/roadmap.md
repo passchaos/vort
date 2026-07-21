@@ -474,6 +474,9 @@ architecture blindly.
 - [x] zlib wrapper integration for multi-block dynamic streams.
 - [x] ZlibDecoder drains multi-filter RGB/RGBA PNG-like zlib-wrapped payloads through reusable caller-owned scratch and bounded output.
 - [x] ZlibDecoder initializes from caller-provided zlib byte chunks for multi-IDAT-style PNG payloads without allocation.
+- [x] ZlibDecoder join-scratch chunk initializers expose relaxed-option,
+  exact-size, and preset-dictionary variants, matching the gzip chunked decoder
+  API while preserving legacy compressed-join compatibility.
 - [x] ZlibDecoder direct chunk initializers decode multi-IDAT-style zlib chunks
   without requiring a compressed join scratch buffer.
 - [x] ZlibDecoder direct chunk initializers include strict, relaxed-option,
@@ -1284,3 +1287,11 @@ architecture blindly.
   multi-IDAT-style integrations a bounded-output multi-member path analogous to
   `GzipDecoder.initConcatenatedFromChunks*`; the relaxed wrapper report now
   includes the chunked concatenated zlib decoder path.
+
+- Added join-scratch `ZlibDecoder.initFromChunks*WithOptions` and dictionary
+  options variants for single zlib streams. This fills the compatibility-path
+  gap beside the existing direct chunked relaxed decoder, so callers that still
+  need a compressed join buffer can use the same relaxed Adler/trailing-data API
+  shape as `GzipDecoder` and the zlib direct chunk path. The relaxed wrapper
+  report now covers both non-dictionary and dictionary join-scratch chunked
+  zlib decoder option paths.

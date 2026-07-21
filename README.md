@@ -315,6 +315,14 @@ _ = zlib_chunked_written;
 var zlib_join_scratch: [1024]u8 = undefined;
 const zlib_chunked_compat_written = try vort.decodeZlibChunks(&zlib_chunks, &zlib_join_scratch, &zlib_out);
 _ = zlib_chunked_compat_written;
+var zlib_chunked_decoder = try vort.ZlibDecoder.initFromChunksWithOptionsExactSize(
+    &zlib_chunks,
+    &zlib_join_scratch,
+    &zlib_out,
+    .{},
+    "payload".len,
+);
+_ = try zlib_chunked_decoder.step(&zlib_step_out);
 var zlib_cat: std.ArrayList(u8) = .empty;
 defer zlib_cat.deinit(allocator);
 try zlib_cat.appendSlice(allocator, zlib_bytes);
