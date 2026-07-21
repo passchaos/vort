@@ -7272,7 +7272,8 @@ fn decodeZlibAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, 
 fn decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
     const header = try parseZlibHeader(input, dictionary);
     const raw_input = input[header.data_offset..];
-    if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+    if (raw_input.len == 0) return error.TruncatedFrame;
+    if (isStoredBlockHeaderByte(raw_input[0])) {
         if (try planRawStoredOnly(raw_input)) |stored_plan| {
             if (stored_plan.output_len != expected_output_len) return error.SizeMismatch;
             try validateZlibStoredPlanBeforeAlloc(input, header.data_offset, stored_plan, options);
@@ -8132,7 +8133,8 @@ pub fn decodeGzipAllocExactSize(allocator: std.mem.Allocator, input: []const u8,
 pub fn decodeGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, expected_output_len: usize) ![]u8 {
     const data_offset = try parseGzipHeader(input);
     const raw_input = input[data_offset..];
-    if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+    if (raw_input.len == 0) return error.TruncatedFrame;
+    if (isStoredBlockHeaderByte(raw_input[0])) {
         if (try planRawStoredOnly(raw_input)) |stored_plan| {
             if (stored_plan.output_len != expected_output_len) return error.SizeMismatch;
             try validateGzipStoredPlanBeforeAlloc(input, data_offset, stored_plan, options);
@@ -8153,7 +8155,8 @@ pub fn decodeGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: 
 fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {
     const data_offset = try parseGzipHeader(input);
     const raw_input = input[data_offset..];
-    if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+    if (raw_input.len == 0) return error.TruncatedFrame;
+    if (isStoredBlockHeaderByte(raw_input[0])) {
         if (try planRawStoredOnly(raw_input)) |stored_plan| {
             try validateGzipStoredPlanBeforeAlloc(input, data_offset, stored_plan, options);
             return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, max_output_len)).bytes;
@@ -12081,6 +12084,11 @@ test "raw zlib gzip exact-size alloc decoders enforce declared output length" {
     try std.testing.expectError(error.SizeMismatch, decodeRawAutoAllocExactSize(std.testing.allocator, raw, input.len - 1));
     try std.testing.expectError(error.SizeMismatch, decodeRawAutoAllocExactSize(std.testing.allocator, raw, input.len + 1));
 
+    const zlib_header_only = &.{ 0x78, 0x01 };
+    var zlib_empty_payload_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TruncatedFrame, decodeZlibAllocExactSize(zlib_empty_payload_failing.allocator(), zlib_header_only, input.len));
+    try std.testing.expectEqual(@as(usize, 0), zlib_empty_payload_failing.allocations);
+
     const zlib_frame = try encodeZlibDynamicWithOptionsAlloc(std.testing.allocator, input, optionsForLevel(.default));
     defer std.testing.allocator.free(zlib_frame);
     const zlib_exact = try decodeZlibAllocExactSize(std.testing.allocator, zlib_frame, input.len);
@@ -12088,6 +12096,10 @@ test "raw zlib gzip exact-size alloc decoders enforce declared output length" {
     try std.testing.expectEqualSlices(u8, input, zlib_exact);
     try std.testing.expectError(error.SizeMismatch, decodeZlibAllocExactSize(std.testing.allocator, zlib_frame, input.len - 1));
     try std.testing.expectError(error.SizeMismatch, decodeZlibAllocExactSize(std.testing.allocator, zlib_frame, input.len + 1));
+
+    var gzip_empty_payload_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TruncatedFrame, decodeGzipAllocExactSize(gzip_empty_payload_failing.allocator(), &gzip_header, input.len));
+    try std.testing.expectEqual(@as(usize, 0), gzip_empty_payload_failing.allocations);
 
     const gzip_frame = try encodeGzipDynamicWithOptionsAlloc(std.testing.allocator, input, optionsForLevel(.default));
     defer std.testing.allocator.free(gzip_frame);
