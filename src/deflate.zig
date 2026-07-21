@@ -10585,6 +10585,26 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
         dict_frame[6 .. dict_frame.len - 3],
         dict_frame[dict_frame.len - 3 ..],
     };
+    const dict_header_only_chunks = [_][]const u8{ dict_frame[0..3], dict_frame[3..6] };
+    var dict_header_only_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TruncatedFrame, decodeZlibChunksAllocWithDictionary(dict_header_only_alloc_failing.allocator(), &dict_header_only_chunks, dict));
+    try std.testing.expectEqual(@as(usize, 0), dict_header_only_alloc_failing.allocations);
+    var dict_header_only_exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TruncatedFrame, decodeZlibChunksAllocWithDictionaryExactSize(dict_header_only_exact_failing.allocator(), &dict_header_only_chunks, dict, input.len));
+    try std.testing.expectEqual(@as(usize, 0), dict_header_only_exact_failing.allocations);
+
+    var dict_reserved = try std.testing.allocator.alloc(u8, 7);
+    defer std.testing.allocator.free(dict_reserved);
+    @memcpy(dict_reserved[0..6], dict_frame[0..6]);
+    dict_reserved[6] = 0x07;
+    const dict_reserved_chunks = [_][]const u8{ dict_reserved[0..3], dict_reserved[3..] };
+    var dict_reserved_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibChunksAllocWithDictionary(dict_reserved_alloc_failing.allocator(), &dict_reserved_chunks, dict));
+    try std.testing.expectEqual(@as(usize, 0), dict_reserved_alloc_failing.allocations);
+    var dict_reserved_exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibChunksAllocWithDictionaryExactSize(dict_reserved_exact_failing.allocator(), &dict_reserved_chunks, dict, input.len));
+    try std.testing.expectEqual(@as(usize, 0), dict_reserved_exact_failing.allocations);
+
     try std.testing.expectEqual(input.len, try decodeZlibChunksWithDictionary(&dict_chunks, &compressed_scratch, &output, dict));
     try std.testing.expectEqualSlices(u8, input, &output);
     @memset(&output, 0);

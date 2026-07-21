@@ -525,6 +525,7 @@ architecture blindly.
 - [x] Zlib chunked allocator-returning decode applies a stored-block cursor precheck before allocating output, covering exact-size, unknown-size, and limited variants across contiguous and split stored chunks.
 - [x] Zlib chunked allocator-returning decode rejects wrapper-only inputs with no DEFLATE payload before allocating output, covering exact-size, unknown-size, and limited variants across split chunks with zero-allocation TruncatedFrame tests.
 - [x] Zlib chunked allocator-returning decode rejects a reserved first raw-DEFLATE block type before allocating output, covering exact-size, unknown-size, and limited variants across split chunks with zero-allocation malformed-block tests.
+- [x] Zlib chunked allocator-returning dictionary variants share the wrapper-only and reserved first raw-DEFLATE block prechecks, covering exact-size and unknown-size split-dictionary chunks with zero-allocation tests.
 - [x] Raw stored allocator-returning decode uses the stored-block plan to reject limit, exact-length, and trailing-data errors before allocating output.
 - [x] Raw auto allocator-returning decode uses the stored-block plan for stored frames with or without preset dictionaries, rejecting limit, exact-length, and trailing-data errors before allocating output.
 - [x] Zlib/gzip concatenated allocator-returning decode prechecks all-stored member sequences, rejecting aggregate length, limit, and member checksum errors before allocating output across exact-size, unknown-size, and limited variants.
