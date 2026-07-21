@@ -326,6 +326,8 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
 
 def native_tier_range_health(artifacts: list[Path]) -> dict:
     expected_sources = ("built_in", "project_files", "standard_corpus")
+    source_order = (*expected_sources, "custom", "legacy")
+    tiers = ("seek_fast", "balanced", "ratio")
     summaries = []
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
@@ -341,16 +343,55 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
     source_rows = {source: 0 for source in source_counts}
     legacy_count = 0
     legacy_rows = 0
+    source_details = {
+        source: {
+            "source": source,
+            "summary_count": 0,
+            "ok_count": 0,
+            "rows": 0,
+            "fixture_count": 0,
+            "enforced_count": 0,
+            "missing": source in expected_sources,
+            "min_range_mib_s_by_tier": {tier: float("inf") for tier in tiers},
+            "range_mib_s_floor_by_tier": {tier: 0.0 for tier in tiers},
+        }
+        for source in source_order
+    }
     for data in summaries:
         source = data.get("source")
         rows = int(data.get("rows") or 0)
+        source_key = str(source) if source in source_counts else "legacy"
         if source in source_counts:
             source_counts[source] += 1
             source_rows[source] += rows
         else:
             legacy_count += 1
             legacy_rows += rows
+        detail = source_details[source_key]
+        detail["summary_count"] += 1
+        detail["ok_count"] += 1 if bool(data.get("ok")) else 0
+        detail["rows"] += rows
+        detail["fixture_count"] += int(data.get("fixture_count") or 0)
+        detail["enforced_count"] += 1 if bool(data.get("enforce_throughput")) else 0
+        min_by_tier = data.get("min_range_mib_s_by_tier")
+        floor_by_tier = data.get("range_mib_s_floor_by_tier")
+        for tier in tiers:
+            if isinstance(min_by_tier, dict):
+                value = min_by_tier.get(tier)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    detail["min_range_mib_s_by_tier"][tier] = min(detail["min_range_mib_s_by_tier"][tier], float(value))
+            if isinstance(floor_by_tier, dict):
+                value = floor_by_tier.get(tier)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    # If a source appears multiple times, display the strictest
+                    # effective floor so the Markdown table remains conservative.
+                    detail["range_mib_s_floor_by_tier"][tier] = max(detail["range_mib_s_floor_by_tier"][tier], float(value))
     missing_sources = [source for source in expected_sources if source_counts[source] == 0]
+    for source, detail in source_details.items():
+        detail["missing"] = source in expected_sources and detail["summary_count"] == 0
+        for tier in tiers:
+            if detail["min_range_mib_s_by_tier"][tier] == float("inf"):
+                detail["min_range_mib_s_by_tier"][tier] = 0.0
 
     def tier_min(field: str, tier: str) -> float:
         values = []
@@ -382,6 +423,7 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
         "custom_rows": source_rows["custom"],
         "legacy_rows": legacy_rows,
         "missing_sources": missing_sources,
+        "source_details": [source_details[source] for source in source_order],
         "seek_fast_min_range_mib_s": tier_min("min_range_mib_s_by_tier", "seek_fast"),
         "balanced_min_range_mib_s": tier_min("min_range_mib_s_by_tier", "balanced"),
         "ratio_min_range_mib_s": tier_min("min_range_mib_s_by_tier", "ratio"),
@@ -729,6 +771,24 @@ def main() -> int:
         f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
         "",
     ]
+    if native_tier_health["source_details"]:
+        lines.extend(
+            [
+                "## Native tier range source health",
+                "",
+                "| source | summaries | ok | rows | fixtures | enforced | missing | min range MiB/s seek_fast/balanced/ratio | floor MiB/s seek_fast/balanced/ratio |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: |",
+            ]
+        )
+        for detail in native_tier_health["source_details"]:
+            min_by_tier = detail["min_range_mib_s_by_tier"]
+            floor_by_tier = detail["range_mib_s_floor_by_tier"]
+            min_text = f"{min_by_tier['seek_fast']:.2f}/{min_by_tier['balanced']:.2f}/{min_by_tier['ratio']:.2f}"
+            floor_text = f"{floor_by_tier['seek_fast']:.2f}/{floor_by_tier['balanced']:.2f}/{floor_by_tier['ratio']:.2f}"
+            lines.append(
+                f"| `{detail['source']}` | {detail['summary_count']} | {detail['ok_count']} | {detail['rows']} | {detail['fixture_count']} | {detail['enforced_count']} | `{detail['missing']}` | {min_text} | {floor_text} |"
+            )
+        lines.append("")
     if strict_health["missing_modes"]:
         lines.extend(["## Missing dashboard strict modes", "", "| mode | min checks | min expected failures | min matched |", "| --- | ---: | ---: | ---: |"])
         for row in strict_health["missing_modes"]:

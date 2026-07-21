@@ -897,6 +897,14 @@ def main() -> int:
         assert manifest["native_tier_range_standard_corpus_summary_count"] == 1
         assert manifest["native_tier_range_missing_sources"] == []
         assert manifest["native_tier_range_seek_fast_min_range_mib_s"] >= 80.0
+        dashboard_markdown = (root / "vort-dashboard-index.md").read_text()
+        assert "## Native tier range source health" in dashboard_markdown
+        assert "`built_in`" in dashboard_markdown
+        assert "`project_files`" in dashboard_markdown
+        assert "`standard_corpus`" in dashboard_markdown
+        assert "60.00/16.00/12.00" in dashboard_markdown
+        assert "40.00/8.00/4.00" in dashboard_markdown
+        assert "30.00/6.50/3.50" in dashboard_markdown
         checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
 
         missing_native_tier_root = root / "missing-native-tier"

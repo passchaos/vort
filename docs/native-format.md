@@ -67,7 +67,14 @@ about 87 MiB/s for `seek_fast`, 26 MiB/s for `balanced`, and 24 MiB/s for
 `ratio` on the built-in text/structured/repetitive fixtures. The companion
 README/roadmap file smoke keeps real project text visible; the latest ReleaseFast
 rows show README around 116 / 41 / 41 MiB/s and roadmap around 53 / 12 / 6 MiB/s
-for `seek_fast` / `balanced` / `ratio` respectively.
+for `seek_fast` / `balanced` / `ratio` respectively. The standard-corpus tier
+gate adds discoverable bounded corpus rows beside those built-in and project-file
+sources, and the dashboard treats `built_in`, `project_files`, and
+`standard_corpus` as separate required evidence buckets. ReleaseFast gates now
+record the per-source floor they enforced (`range_mib_s_floor_by_tier`) and the
+dashboard Markdown includes a source table, so a future tier policy update has to
+keep synthetic fixtures, project text, and corpus rows visible independently
+instead of passing with only one benchmark source.
 Future native
 versions should preserve the same engineering constraints: explicit sizes,
 bounded memory, deterministic decoding, independent corruption localization, and
