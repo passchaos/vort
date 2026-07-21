@@ -43,6 +43,7 @@ zig build run-native-range-report -- --sweep README.md
 zig build -Doptimize=ReleaseFast run-native-tier-range-bench-gate
 zig build -Doptimize=ReleaseFast run-native-tier-range-files-bench-gate
 zig build -Doptimize=ReleaseFast run-native-tier-range-corpus-bench-gate
+zig build run-native-tier-range-corpus-report-smoke
 zig build run-dictionary-report -- README.md docs/roadmap.md
 zig build run-dictionary-report -- --target 512 README.md docs/roadmap.md
 zig build -Doptimize=ReleaseFast run-dictionary-decode-bench-gate

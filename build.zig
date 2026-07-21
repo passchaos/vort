@@ -1376,6 +1376,10 @@ pub fn build(b: *std.Build) void {
     const native_tier_range_corpus_bench_gate_step = b.step("run-native-tier-range-corpus-bench-gate", "Validate native seekability tier range benchmark CSV for standard corpus rows");
     native_tier_range_corpus_bench_gate_step.dependOn(&native_tier_range_corpus_bench_gate.step);
 
+    const native_tier_range_corpus_report_smoke = b.addSystemCommand(&.{ "python3", "tools/native_tier_range_corpus_report_smoke.py" });
+    const native_tier_range_corpus_report_smoke_step = b.step("run-native-tier-range-corpus-report-smoke", "Validate native tier range corpus report wrapper behavior");
+    native_tier_range_corpus_report_smoke_step.dependOn(&native_tier_range_corpus_report_smoke.step);
+
     const native_allocation_report_exe = b.addExecutable(.{
         .name = "vort-native-allocation-report",
         .root_module = b.createModule(.{
@@ -1789,6 +1793,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(native_tier_range_bench_gate_step);
     ci_smoke_step.dependOn(native_tier_range_files_bench_gate_step);
     ci_smoke_step.dependOn(native_tier_range_corpus_bench_gate_step);
+    ci_smoke_step.dependOn(native_tier_range_corpus_report_smoke_step);
     ci_smoke_step.dependOn(native_allocation_report_step);
     ci_smoke_step.dependOn(native_allocation_dashboard_step);
     ci_smoke_step.dependOn(native_allocation_smoke_step);
