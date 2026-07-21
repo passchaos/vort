@@ -6874,14 +6874,9 @@ fn decodeZlibStoredAllocWithOptionalDictionaryExactSize(allocator: std.mem.Alloc
 fn decodeZlibStoredAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
     const header = try parseZlibHeader(input, dictionary);
     const raw_input = input[header.data_offset..];
-    if (try planRawStoredOnly(raw_input)) |stored_plan| {
-        try validateZlibStoredPlanBeforeAlloc(input, header.data_offset, stored_plan, .{});
-    }
-    const stored = (try decodeRawStoredOnlyAllocMaybeWithHash(checksum.Adler32, allocator, raw_input, max_output_len)) orelse return error.InvalidDeflateBlockType;
-    errdefer stored.deinit(allocator);
-    const footer_offset = header.data_offset + stored.result.input_read;
-    try validateZlibFooter(input, footer_offset, stored.digest);
-    return stored.result.bytes;
+    const stored_plan = (try planRawStoredOnly(raw_input)) orelse return error.InvalidDeflateBlockType;
+    try validateZlibStoredPlanBeforeAlloc(input, header.data_offset, stored_plan, .{});
+    return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, max_output_len)).bytes;
 }
 
 pub fn decodeZlibAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -7192,9 +7187,10 @@ fn decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.All
     const header = try parseZlibHeader(input, dictionary);
     const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
     const raw_input = input[header.data_offset..];
-    if (raw_dictionary.len == 0 and raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+    if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
         if (try planRawStoredOnly(raw_input)) |stored_plan| {
             try validateZlibStoredPlanBeforeAlloc(input, header.data_offset, stored_plan, options);
+            return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, max_output_len)).bytes;
         }
     }
 
@@ -8159,6 +8155,7 @@ fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input
     if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
         if (try planRawStoredOnly(raw_input)) |stored_plan| {
             try validateGzipStoredPlanBeforeAlloc(input, data_offset, stored_plan, options);
+            return (try decodeRawStoredOnlyAllocPlanned(allocator, raw_input, stored_plan, max_output_len)).bytes;
         }
     }
     if (try decodeGzipAllocFooterSize(allocator, input, data_offset, options, max_output_len)) |decoded| return decoded;
@@ -8565,6 +8562,9 @@ test "stored deflate alloc decoders enforce output limits" {
     const zlib_frame = try encodeZlibStoredAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(zlib_frame);
     try std.testing.expectError(error.OutputLimitExceeded, decodeZlibStoredAllocLimited(std.testing.allocator, zlib_frame, 4));
+    var zlib_limit_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutputLimitExceeded, decodeZlibStoredAllocLimited(zlib_limit_failing.allocator(), zlib_frame, 4));
+    try std.testing.expectEqual(@as(usize, 0), zlib_limit_failing.allocations);
     const zlib_ok = try decodeZlibStoredAllocLimited(std.testing.allocator, zlib_frame, 5);
     defer std.testing.allocator.free(zlib_ok);
     try std.testing.expectEqualSlices(u8, "hello", zlib_ok);
@@ -8758,6 +8758,9 @@ test "zlib stored wrapper validates checksum header and trailing data" {
     defer std.testing.allocator.free(bad_checksum);
     bad_checksum[bad_checksum.len - 1] ^= 1;
     try std.testing.expectError(error.ChecksumMismatch, decodeZlibStored(bad_checksum, &out));
+    var bad_checksum_stored_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibStoredAlloc(bad_checksum_stored_failing.allocator(), bad_checksum));
+    try std.testing.expectEqual(@as(usize, 0), bad_checksum_stored_failing.allocations);
     var bad_checksum_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.ChecksumMismatch, decodeZlibAlloc(bad_checksum_failing.allocator(), bad_checksum));
     try std.testing.expectEqual(@as(usize, 0), bad_checksum_failing.allocations);
@@ -8767,6 +8770,9 @@ test "zlib stored wrapper validates checksum header and trailing data" {
     with_trailing[encoded.len] = 0;
     try std.testing.expectError(error.TrailingData, decodeZlibStored(with_trailing[0 .. encoded.len + 1], &out));
     try std.testing.expectError(error.TrailingData, decodeZlibStoredAlloc(std.testing.allocator, with_trailing[0 .. encoded.len + 1]));
+    var stored_trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TrailingData, decodeZlibStoredAlloc(stored_trailing_failing.allocator(), with_trailing[0 .. encoded.len + 1]));
+    try std.testing.expectEqual(@as(usize, 0), stored_trailing_failing.allocations);
     var trailing_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.TrailingData, decodeZlibAlloc(trailing_failing.allocator(), with_trailing[0 .. encoded.len + 1]));
     try std.testing.expectEqual(@as(usize, 0), trailing_failing.allocations);
