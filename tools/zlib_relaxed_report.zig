@@ -185,6 +185,14 @@ pub fn main(init: std.process.Init) !void {
     const gzip_chunk_written = try vort.decodeGzipChunksWithOptions(&gzip_combined_chunks, &gzip_chunk_join_scratch, &gzip_chunk_out, gzip_relaxed);
     if (gzip_chunk_written != Payload.len or !std.mem.eql(u8, Payload, &gzip_chunk_out)) return error.PayloadMismatch;
     gzip_relaxed_successes += 1;
+    const gzip_chunk_exact = try vort.decodeGzipChunksAllocWithOptionsExactSize(init.gpa, &gzip_combined_chunks, &gzip_chunk_join_scratch, gzip_relaxed, Payload.len);
+    defer init.gpa.free(gzip_chunk_exact);
+    if (!std.mem.eql(u8, Payload, gzip_chunk_exact)) return error.PayloadMismatch;
+    gzip_relaxed_successes += 1;
+    const gzip_chunk_limited = try vort.decodeGzipChunksAllocWithOptionsLimited(init.gpa, &gzip_combined_chunks, &gzip_chunk_join_scratch, gzip_relaxed, Payload.len);
+    defer init.gpa.free(gzip_chunk_limited);
+    if (!std.mem.eql(u8, Payload, gzip_chunk_limited)) return error.PayloadMismatch;
+    gzip_relaxed_successes += 1;
     try expectGzipAllocExact(init.gpa, gzip_combined, gzip_relaxed);
     gzip_relaxed_successes += 1;
     try expectGzipAllocLimited(init.gpa, gzip_combined, gzip_relaxed);

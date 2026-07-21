@@ -201,7 +201,7 @@ def main() -> int:
         assert zlib_relaxed["zlib_decoder_successes"] >= 8
         assert zlib_relaxed["limited_rejections"] >= 1
         assert zlib_relaxed["gzip_strict_rejections"] >= 3
-        assert zlib_relaxed["gzip_relaxed_successes"] >= 7
+        assert zlib_relaxed["gzip_relaxed_successes"] >= 9
         assert zlib_relaxed["gzip_concatenated_successes"] >= 2
         assert zlib_relaxed["gzip_decoder_successes"] >= 4
         assert zlib_relaxed["gzip_limited_rejections"] >= 1

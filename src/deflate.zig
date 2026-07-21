@@ -7982,6 +7982,36 @@ pub fn decodeGzipChunksWithOptions(chunks: []const []const u8, compressed_scratc
     return decodeGzipWithOptions(joined, output, options);
 }
 
+pub fn decodeGzipChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) ![]u8 {
+    return decodeGzipChunksAllocWithOptionsLimitedInternal(allocator, chunks, compressed_scratch, .{}, null);
+}
+
+pub fn decodeGzipChunksAllocWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions) ![]u8 {
+    return decodeGzipChunksAllocWithOptionsLimitedInternal(allocator, chunks, compressed_scratch, options, null);
+}
+
+pub fn decodeGzipChunksAllocExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) ![]u8 {
+    return decodeGzipChunksAllocWithOptionsExactSize(allocator, chunks, compressed_scratch, .{}, expected_output_len);
+}
+
+pub fn decodeGzipChunksAllocWithOptionsExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) ![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipAllocWithOptionsExactSize(allocator, joined, options, expected_output_len);
+}
+
+pub fn decodeGzipChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) ![]u8 {
+    return decodeGzipChunksAllocWithOptionsLimitedInternal(allocator, chunks, compressed_scratch, .{}, max_output_len);
+}
+
+pub fn decodeGzipChunksAllocWithOptionsLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: usize) ![]u8 {
+    return decodeGzipChunksAllocWithOptionsLimitedInternal(allocator, chunks, compressed_scratch, options, max_output_len);
+}
+
+fn decodeGzipChunksAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipAllocWithOptionsLimitedInternal(allocator, joined, options, max_output_len);
+}
+
 /// Bounded-output gzip wrapper decoder.
 ///
 /// This mirrors `ZlibDecoder` for gzip members: callers provide all compressed
@@ -11542,6 +11572,17 @@ test "gzip decoder drains bounded output from caller scratch" {
     @memset(&out, 0);
     try std.testing.expectEqual(input.len, try decodeGzipChunks(&chunks, &compressed_scratch, &out));
     try std.testing.expectEqualSlices(u8, input, &out);
+    const chunk_alloc = try decodeGzipChunksAlloc(std.testing.allocator, &chunks, &compressed_scratch);
+    defer std.testing.allocator.free(chunk_alloc);
+    try std.testing.expectEqualSlices(u8, input, chunk_alloc);
+    const chunk_exact = try decodeGzipChunksAllocExactSize(std.testing.allocator, &chunks, &compressed_scratch, input.len);
+    defer std.testing.allocator.free(chunk_exact);
+    try std.testing.expectEqualSlices(u8, input, chunk_exact);
+    const chunk_limited = try decodeGzipChunksAllocLimited(std.testing.allocator, &chunks, &compressed_scratch, input.len);
+    defer std.testing.allocator.free(chunk_limited);
+    try std.testing.expectEqualSlices(u8, input, chunk_limited);
+    try std.testing.expectError(error.SizeMismatch, decodeGzipChunksAllocExactSize(std.testing.allocator, &chunks, &compressed_scratch, input.len + 1));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeGzipChunksAllocLimited(std.testing.allocator, &chunks, &compressed_scratch, input.len - 1));
     var chunk_decoder = try GzipDecoder.initFromChunksExactSize(&chunks, &compressed_scratch, &scratch, input.len);
     @memset(&out, 0);
     const chunk_step = try chunk_decoder.step(&out);
@@ -11579,6 +11620,12 @@ test "gzip decoder drains bounded output from caller scratch" {
     @memset(&out, 0);
     try std.testing.expectEqual(input.len, try decodeGzipChunksWithOptions(&bad_chunks, &compressed_scratch, &out, .{ .ignore_crc32 = true }));
     try std.testing.expectEqualSlices(u8, input, &out);
+    const relaxed_alloc = try decodeGzipChunksAllocWithOptionsExactSize(std.testing.allocator, &bad_chunks, &compressed_scratch, .{ .ignore_crc32 = true }, input.len);
+    defer std.testing.allocator.free(relaxed_alloc);
+    try std.testing.expectEqualSlices(u8, input, relaxed_alloc);
+    const relaxed_limited = try decodeGzipChunksAllocWithOptionsLimited(std.testing.allocator, &bad_chunks, &compressed_scratch, .{ .ignore_crc32 = true }, input.len);
+    defer std.testing.allocator.free(relaxed_limited);
+    try std.testing.expectEqualSlices(u8, input, relaxed_limited);
     try std.testing.expectError(error.ChecksumMismatch, GzipDecoder.initFromChunksExactSize(&bad_chunks, &compressed_scratch, &scratch, input.len));
     var relaxed_chunk_decoder = try GzipDecoder.initFromChunksWithOptionsExactSize(&bad_chunks, &compressed_scratch, &scratch, .{ .ignore_crc32 = true }, input.len);
     @memset(&out, 0);

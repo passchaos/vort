@@ -392,6 +392,13 @@ const gzip_chunks = [_][]const u8{ gzip_bytes[0..4], gzip_bytes[4..] };
 var gzip_join_scratch: [1024]u8 = undefined;
 const gzip_chunked_written = try vort.decodeGzipChunks(&gzip_chunks, &gzip_join_scratch, &gzip_out);
 _ = gzip_chunked_written;
+const gzip_chunked_exact = try vort.decodeGzipChunksAllocExactSize(
+    allocator,
+    &gzip_chunks,
+    &gzip_join_scratch,
+    "payload".len,
+);
+defer allocator.free(gzip_chunked_exact);
 const gzip_cat_written = try vort.decodeGzipConcatenated(gzip_bytes, &gzip_out);
 
 // Limited decode APIs return error.OutputLimitExceeded before allocating or

@@ -553,6 +553,9 @@ architecture blindly.
 - [x] Public gzip chunked caller-buffer helpers decode split gzip input through
   caller-provided compressed join scratch, including relaxed CRC/ISIZE/trailing
   options.
+- [x] Public gzip chunked allocator-returning helpers cover unknown-size,
+  exact-size, output-limited, and relaxed-option variants over caller-provided
+  compressed join scratch.
 - [x] Legacy chunked wrapper helpers borrow a single non-empty compressed chunk directly, avoiding an unnecessary join copy and scratch-size requirement for already-contiguous chunk callers.
 - [x] GzipDecoder drains concatenated gzip members, including empty middle members, from caller-owned scratch and chunked compressed input.
 - [x] GzipDecoder exposes `WithOptions` initializers/resets for single-member, concatenated, and chunked caller-scratch decode so trusted streaming users can opt into relaxed CRC/ISIZE/trailing-data handling without switching to allocation-returning APIs.
@@ -1305,3 +1308,10 @@ architecture blindly.
   single-non-empty-chunk borrow fast path) and then validate via
   `decodeGzipWithOptions`, giving gzip the same small-payload convenience shape
   already available to zlib chunk callers.
+
+- Added allocator-returning gzip chunked decode helpers
+  (`decodeGzipChunksAlloc*`) for unknown-size, exact-size, output-limited, and
+  relaxed-option workflows. These reuse the same join-scratch compatibility
+  policy before dispatching to the existing gzip allocator paths, so split-input
+  callers can avoid writing their own coalescing logic while preserving strict
+  prechecks, size/limit errors, and relaxed CRC/ISIZE/trailing behavior.
