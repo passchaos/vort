@@ -313,10 +313,18 @@ try zlib_cat.appendSlice(allocator, zlib_bytes);
 try zlib_cat.appendSlice(allocator, zlib_bytes);
 const zlib_concatenated = try vort.decodeZlibConcatenatedAlloc(allocator, zlib_cat.items);
 defer allocator.free(zlib_concatenated);
+const zlib_cat_relaxed = try vort.decodeZlibConcatenatedAllocWithOptions(
+    allocator,
+    zlib_cat.items,
+    .{ .ignore_adler = true, .allow_trailing_data = true },
+);
+defer allocator.free(zlib_cat_relaxed);
 // FDICT concatenated streams can use the dictionary-aware variants:
 // const zlib_dict_cat = try vort.decodeZlibConcatenatedAllocWithDictionary(
 //     allocator, zlib_dict_bytes, "preset dictionary",
 // );
+// Dictionary-aware concatenated streams also have WithOptions variants when
+// integrations need relaxed per-member Adler or trailing-data behavior.
 
 const gzip_bytes = try vort.encodeGzipFixedAlloc(allocator, "payload");
 defer allocator.free(gzip_bytes);

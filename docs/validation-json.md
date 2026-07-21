@@ -1993,18 +1993,19 @@ zig build run-zlib-relaxed-report-gate
 
 This schema records direct public-API coverage for relaxed zlib and gzip decode
 options, including strict rejection, relaxed success, dictionary-aware zlib
-decode, gzip concatenated decode, caller-owned `GzipDecoder` chunked/options
-coverage, and output-limit rejection behavior.
+decode, zlib/gzip concatenated decode, caller-owned `GzipDecoder`
+chunked/options coverage, and output-limit rejection behavior.
 
 Example:
 
 ```json
 {
   "schema": "vort.zlib_relaxed_report",
-  "schema_version": 2,
+  "schema_version": 3,
   "strict_rejections": 2,
   "relaxed_successes": 5,
   "dictionary_successes": 2,
+  "zlib_concatenated_successes": 3,
   "limited_rejections": 1,
   "gzip_strict_rejections": 3,
   "gzip_relaxed_successes": 6,

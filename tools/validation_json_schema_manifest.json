@@ -2577,7 +2577,8 @@
         "relaxed_successes": "int",
         "schema": "str",
         "schema_version": "int",
-        "strict_rejections": "int"
+        "strict_rejections": "int",
+        "zlib_concatenated_successes": "int"
       }
     }
   }

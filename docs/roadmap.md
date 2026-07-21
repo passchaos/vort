@@ -321,6 +321,9 @@ architecture blindly.
 - [x] zlib decode option APIs can ignore Adler-32 and/or allow trailing data
   while preserving strict defaults for PNG compatibility and relaxed-reader
   integrations.
+- [x] zlib concatenated decode option APIs can ignore per-member Adler-32 and/or
+  allow trailing non-member data across caller-buffer, allocator-returning,
+  exact-size, output-limited, and preset-dictionary variants.
 - [x] Public zlib chunked decode helpers cover strict, relaxed, exact-size,
   output-limited, and preset-dictionary variants. Legacy caller-buffer variants
   can still join into caller scratch, while the new `decodeZlibChunksInto*` and
@@ -1242,3 +1245,12 @@ architecture blindly.
   alloc, exact-size alloc, and caller-buffer decode paths. The first local
   ReleaseFast repeat3 probe kept stored exact rows in the same throughput class
   as stored allocator rows on `stored-binary`.
+
+- Added `decodeZlibConcatenated*WithOptions` APIs so concatenated zlib streams
+  now match the single-member/chunked relaxed surface and gzip concatenated
+  options. The new caller-buffer, allocator-returning, exact-size,
+  output-limited, and dictionary-aware variants preserve strict defaults while
+  allowing integrations to ignore per-member Adler-32 checks or stop before
+  trailing non-zlib data. Stored-only concatenated preflights honor those
+  options before allocating, including zero-allocation limit and size-mismatch
+  failures for relaxed corrupt-Adler/trailing-data streams.

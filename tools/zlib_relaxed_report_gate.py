@@ -33,6 +33,7 @@ def main() -> int:
         "strict_rejections": int_field(report, "strict_rejections") == 2,
         "relaxed_successes": int_field(report, "relaxed_successes") >= 5,
         "dictionary_successes": int_field(report, "dictionary_successes") == 2,
+        "zlib_concatenated_successes": int_field(report, "zlib_concatenated_successes") >= 3,
         "limited_rejections": int_field(report, "limited_rejections") == 1,
         "gzip_strict_rejections": int_field(report, "gzip_strict_rejections") == 3,
         "gzip_relaxed_successes": int_field(report, "gzip_relaxed_successes") >= 6,
