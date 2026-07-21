@@ -25,10 +25,12 @@ PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 NATIVE_TIER_RANGE_ARTIFACT = "vort-native-tier-range-bench-gate.json"
 NATIVE_TIER_RANGE_FILES_ARTIFACT = "vort-native-tier-range-files-bench-gate.json"
 NATIVE_TIER_RANGE_CORPUS_ARTIFACT = "vort-native-tier-range-corpus-bench-gate.json"
+NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT = "vort-native-tier-range-corpus-discovery.json"
 NATIVE_TIER_RANGE_ARTIFACTS = (
     (NATIVE_TIER_RANGE_ARTIFACT, "zig build run-native-tier-range-bench-gate"),
     (NATIVE_TIER_RANGE_FILES_ARTIFACT, "zig build run-native-tier-range-files-bench-gate"),
     (NATIVE_TIER_RANGE_CORPUS_ARTIFACT, "zig build run-native-tier-range-corpus-bench-gate"),
+    (NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT, "zig build run-native-tier-range-corpus-bench-gate"),
 )
 NATIVE_TIER_RANGE_FLOORS = {
     "built_in": {"seek_fast": 60.0, "balanced": 16.0, "ratio": 12.0},
@@ -604,6 +606,26 @@ def write_native_tier_range_summaries(root: Path) -> None:
     write_native_tier_range_summary(root / NATIVE_TIER_RANGE_ARTIFACT, source="built_in", rows=9, fixture_count=3)
     write_native_tier_range_summary(root / NATIVE_TIER_RANGE_FILES_ARTIFACT, source="project_files", rows=6, fixture_count=2)
     write_native_tier_range_summary(root / NATIVE_TIER_RANGE_CORPUS_ARTIFACT, source="standard_corpus", rows=9, fixture_count=3)
+    payload = {
+        "schema": "vort.native_tier_range_corpus_discovery",
+        "schema_version": 1,
+        "ok": True,
+        "source_mode": "discovered",
+        "full": False,
+        "limit": 3,
+        "candidate_count": 5,
+        "source_count": 1,
+        "sources": ["/tmp/silesia-small.tar"],
+        "selected_case_count": 3,
+        "selected_cases": [
+            {"label": "ooffice-128k", "bytes": 131072},
+            {"label": "nci-128k", "bytes": 131072},
+            {"label": "mozilla-128k", "bytes": 131072},
+        ],
+        "csv": "zig-out/vort-native-tier-range-corpus-bench.csv",
+        "missing_reason": "",
+    }
+    (root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def write_healthy_artifacts(root: Path) -> None:
@@ -897,6 +919,12 @@ def main() -> int:
         assert manifest["native_tier_range_standard_corpus_summary_count"] == 1
         assert manifest["native_tier_range_missing_sources"] == []
         assert manifest["native_tier_range_seek_fast_min_range_mib_s"] >= 80.0
+        assert any(
+            artifact["name"] == NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT
+            and artifact["schema"] == "vort.native_tier_range_corpus_discovery"
+            and artifact["ok"] is True
+            for artifact in manifest["artifacts"]
+        )
         source_details = {row["source"]: row for row in manifest["native_tier_range_source_details"]}
         assert source_details["built_in"]["summary_count"] == 1
         assert source_details["built_in"]["range_mib_s_floor_by_tier"]["seek_fast"] == 60.0

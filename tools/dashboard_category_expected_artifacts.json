@@ -512,6 +512,13 @@
       "require_smoke_gate": true
     },
     {
+      "category": "corpus and ratio",
+      "name": "vort-native-tier-range-corpus-discovery.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "benchmark",
       "name": "vort-native-tier-range-corpus-bench.csv",
       "require_present": true,

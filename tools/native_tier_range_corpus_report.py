@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import pathlib
 import subprocess
 import sys
@@ -81,6 +82,36 @@ def load_path_cases(paths: list[pathlib.Path], full: bool, limit: int | None) ->
     return cases
 
 
+def write_summary(
+    path: pathlib.Path,
+    *,
+    sources: list[pathlib.Path],
+    cases: list[tuple[str, bytes]],
+    csv_path: pathlib.Path | None,
+    full: bool,
+    limit: int | None,
+    user_paths: bool,
+) -> None:
+    selected = [{"label": label, "bytes": len(data)} for label, data in cases]
+    payload = {
+        "schema": "vort.native_tier_range_corpus_discovery",
+        "schema_version": 1,
+        "ok": bool(cases),
+        "source_mode": "paths" if user_paths else "discovered",
+        "full": full,
+        "limit": limit,
+        "candidate_count": len(STANDARD_CORPUS_CANDIDATES) if not user_paths else len(sources),
+        "source_count": len(sources),
+        "sources": [str(source) for source in sources],
+        "selected_case_count": len(cases),
+        "selected_cases": selected,
+        "csv": str(csv_path) if csv_path is not None else "",
+        "missing_reason": "" if cases else ("no_input_cases" if user_paths else "no_standard_corpora_discovered"),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def relabel_csv_fixtures(path: pathlib.Path, labels: list[str]) -> str:
     """Rewrite the benchmark CSV so dashboard fixtures match source corpus labels.
 
@@ -121,6 +152,7 @@ def main() -> int:
     full = "--full" in sys.argv[1:]
     limit = 3
     csv_path: pathlib.Path | None = None
+    summary_path: pathlib.Path | None = None
     extra_args: list[str] = []
     paths: list[pathlib.Path] = []
     index = 1
@@ -137,6 +169,10 @@ def main() -> int:
             csv_path = pathlib.Path(sys.argv[index + 1])
             index += 2
             continue
+        if arg == "--summary" and index + 1 < len(sys.argv):
+            summary_path = pathlib.Path(sys.argv[index + 1])
+            index += 2
+            continue
         if arg in {"--iterations", "--repeat", "--range-len"} and index + 1 < len(sys.argv):
             extra_args.extend([arg, sys.argv[index + 1]])
             index += 2
@@ -149,13 +185,19 @@ def main() -> int:
             continue
         index += 1
 
+    user_paths = bool(paths)
     sources = paths or discover_standard_corpora()
     cases = load_path_cases(sources, full, limit)
     if not cases:
         if csv_path is not None:
             csv_path.unlink(missing_ok=True)
+        if summary_path is not None:
+            write_summary(summary_path, sources=sources, cases=cases, csv_path=csv_path, full=full, limit=limit, user_paths=user_paths)
         print("native tier range corpus report: no standard corpora discovered")
         return 0
+
+    if summary_path is not None:
+        write_summary(summary_path, sources=sources, cases=cases, csv_path=csv_path, full=full, limit=limit, user_paths=user_paths)
 
     with tempfile.TemporaryDirectory() as td:
         root = pathlib.Path(td)

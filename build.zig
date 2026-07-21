@@ -1361,6 +1361,8 @@ pub fn build(b: *std.Build) void {
         "3",
         "--csv",
         "zig-out/vort-native-tier-range-corpus-bench.csv",
+        "--summary",
+        "zig-out/vort-native-tier-range-corpus-discovery.json",
     });
     if (b.args) |args| native_tier_range_corpus_bench.addArgs(args);
     const native_tier_range_corpus_bench_csv_step = b.step("run-native-tier-range-corpus-bench-csv", "Write native seekability tier range benchmark CSV for standard corpus rows");

@@ -89,6 +89,7 @@ def main() -> int:
         dashboard_category_negative_path = root / "vort-dashboard-category-negative-smoke.json"
         dashboard_config_index_path = root / "vort-dashboard-config-index-smoke.json"
         dashboard_config_index_negative_path = root / "vort-dashboard-config-index-negative-smoke.json"
+        native_tier_corpus_discovery_path = root / "vort-native-tier-range-corpus-discovery.json"
         huffman_length_csv_path = root / "vort-huffman-length-report.csv"
         huffman_length_markdown_path = root / "vort-huffman-length-report.md"
         fuzz_report_path = ROOT / "zig-out" / "vort-deflate-wrapper-fuzz-corpus.json"
@@ -279,6 +280,23 @@ def main() -> int:
         assert dashboard_category_expected["schema"] == "vort.dashboard_category_expected_artifacts"
         assert dashboard_category_expected["expected_artifacts"]
         validate_value_against_manifest(dashboard_category_expected, schemas_def)
+        native_tier_corpus_discovery = {
+            "schema": "vort.native_tier_range_corpus_discovery",
+            "schema_version": 1,
+            "ok": True,
+            "source_mode": "paths",
+            "full": False,
+            "limit": 2,
+            "candidate_count": 1,
+            "source_count": 1,
+            "sources": ["README.md"],
+            "selected_case_count": 1,
+            "selected_cases": [{"label": "README.md-128k", "bytes": 1024}],
+            "csv": "zig-out/vort-native-tier-range-corpus-bench.csv",
+            "missing_reason": "",
+        }
+        native_tier_corpus_discovery_path.write_text(json.dumps(native_tier_corpus_discovery, indent=2, sort_keys=True) + "\n")
+        validate_value_against_manifest(native_tier_corpus_discovery, schemas_def)
         dashboard_strict_modes = json.loads((ROOT / "tools" / "dashboard_strict_expected_modes.json").read_text())
         assert dashboard_strict_modes["schema"] == "vort.dashboard_strict_expected_modes"
         assert dashboard_strict_modes["expected_modes"]
@@ -700,6 +718,7 @@ def main() -> int:
                 dashboard_config_index_negative["schema"],
                 dashboard_config_index_smoke["schema"],
                 dashboard["schema"],
+                native_tier_corpus_discovery["schema"],
                 header_summary["schema"],
                 required_workflows["schema"],
                 docs_negative["schema"],

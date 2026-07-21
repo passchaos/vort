@@ -10,6 +10,7 @@ and a no-input run must not leave behind stale CSV data for later gates.
 from __future__ import annotations
 
 import csv
+import json
 import subprocess
 import sys
 import tempfile
@@ -89,6 +90,7 @@ def main() -> int:
         (nested / "beta.bin").write_bytes(b"beta" * 5)
 
         label_csv = root / "labels.csv"
+        label_summary = root / "labels.json"
         label_result = run(
             [
                 sys.executable,
@@ -100,13 +102,22 @@ def main() -> int:
                 "2",
                 "--csv",
                 str(label_csv),
+                "--summary",
+                str(label_summary),
             ]
         )
         fixtures = read_fixtures(label_csv)
+        discovery = json.loads(label_summary.read_text())
         unique_fixtures = sorted(set(fixtures))
         expected_fixtures = ["corpus/alpha.txt-128k", "corpus/nested/beta.bin-128k"]
         label_matched = (
             unique_fixtures == expected_fixtures
+            and discovery["schema"] == "vort.native_tier_range_corpus_discovery"
+            and discovery["ok"] is True
+            and discovery["source_mode"] == "paths"
+            and discovery["selected_case_count"] == 2
+            and [case["label"] for case in discovery["selected_cases"]] == expected_fixtures
+            and discovery["missing_reason"] == ""
             and all(not (fixture[:3].isdigit() and fixture[3:4] == "-") for fixture in unique_fixtures)
             and label_result.stdout.splitlines()[0] == HEADER
             and sorted(set(read_fixtures(label_csv))) == sorted(set(line.split(",", 1)[0] for line in label_result.stdout.splitlines()[1:]))
@@ -123,6 +134,7 @@ def main() -> int:
         stale_dir = root / "empty"
         stale_dir.mkdir()
         stale_csv = root / "stale.csv"
+        stale_summary = root / "stale.json"
         stale_csv.write_text("stale\n")
         stale_result = run(
             [
@@ -133,9 +145,19 @@ def main() -> int:
                 str(stale_dir),
                 "--csv",
                 str(stale_csv),
+                "--summary",
+                str(stale_summary),
             ]
         )
-        stale_matched = (not stale_csv.exists()) and "no standard corpora discovered" in stale_result.stdout
+        stale_discovery = json.loads(stale_summary.read_text())
+        stale_matched = (
+            (not stale_csv.exists())
+            and "no standard corpora discovered" in stale_result.stdout
+            and stale_discovery["ok"] is False
+            and stale_discovery["source_mode"] == "paths"
+            and stale_discovery["selected_case_count"] == 0
+            and stale_discovery["missing_reason"] == "no_input_cases"
+        )
         cases.append({"name": "remove_stale_csv_without_cases", "matched": stale_matched})
 
     failed = [case for case in cases if not case["matched"]]

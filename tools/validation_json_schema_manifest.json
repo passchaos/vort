@@ -1954,6 +1954,42 @@
         ]
       }
     },
+    "vort.native_tier_range_corpus_discovery": {
+      "count_rules": {
+        "selected_case_count": {
+          "collection": "selected_cases"
+        },
+        "source_count": {
+          "collection": "sources"
+        }
+      },
+      "enums": {
+        "source_mode": [
+          "discovered",
+          "paths"
+        ]
+      },
+      "fields": {
+        "candidate_count": "int",
+        "csv": "str",
+        "full": "bool",
+        "limit": "int?",
+        "missing_reason": "str",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int",
+        "selected_case_count": "int",
+        "selected_cases": "list",
+        "source_count": "int",
+        "source_mode": "str",
+        "sources": "list"
+      },
+      "item_collection": "selected_cases",
+      "item_fields": {
+        "bytes": "int",
+        "label": "str"
+      }
+    },
     "vort.native_allocation_report": {
       "count_rules": {
         "case_count": {
@@ -2323,6 +2359,7 @@
           "vort.gzip_header_info",
           "vort.header_inspect_required_workflows",
           "vort.header_inspect_smoke",
+          "vort.native_tier_range_corpus_discovery",
           "vort.png_scratch_report",
           "vort.python_zlib_diff_smoke",
           "vort.raw_deflate_header_info",

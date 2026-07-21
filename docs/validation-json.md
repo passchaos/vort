@@ -2387,6 +2387,59 @@ Example:
 }
 ```
 
+
+## `vort.native_tier_range_corpus_discovery`
+
+Produced by:
+
+```sh
+zig build run-native-tier-range-corpus-bench-gate
+python3 tools/native_tier_range_corpus_report.py <bench-exe> --summary <out.json>
+```
+
+This schema records the corpus discovery side of the native tier range corpus
+benchmark. It is intentionally separate from `vort.native_tier_range_bench_gate`:
+the bench gate validates CSV shape and throughput, while this artifact explains
+which standard-corpus paths were discovered, which bounded rows were selected,
+and why the CSV was absent when no input cases were available. `source_mode` is
+`discovered` for automatic local standard-corpus discovery and `paths` when the
+caller supplies explicit `--paths`.
+
+Example:
+
+```json
+{
+  "schema": "vort.native_tier_range_corpus_discovery",
+  "schema_version": 1,
+  "ok": true,
+  "source_mode": "discovered",
+  "full": false,
+  "limit": 3,
+  "candidate_count": 5,
+  "source_count": 1,
+  "sources": [
+    "/home/passchaos/Work/zlib-rs/silesia-small.tar"
+  ],
+  "selected_case_count": 3,
+  "selected_cases": [
+    {
+      "label": "ooffice-128k",
+      "bytes": 131072
+    },
+    {
+      "label": "nci-128k",
+      "bytes": 131072
+    },
+    {
+      "label": "mozilla-128k",
+      "bytes": 131072
+    }
+  ],
+  "csv": "zig-out/vort-native-tier-range-corpus-bench.csv",
+  "missing_reason": ""
+}
+```
+
 ## `vort.png_scratch_report`
 
 Produced by:
