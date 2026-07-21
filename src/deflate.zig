@@ -7038,7 +7038,8 @@ pub fn decodeZlibConcatenatedAllocWithDictionaryExactSize(allocator: std.mem.All
 
 fn decodeZlibConcatenatedAllocWithOptionalDictionaryExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, expected_output_len: usize) ![]u8 {
     if (input.len == 0) return error.TruncatedFrame;
-    _ = try parseZlibHeader(input, dictionary);
+    const header = try parseZlibHeader(input, dictionary);
+    if (input.len == header.data_offset) return error.TruncatedFrame;
     if (try precheckZlibConcatenatedStoredExact(input, dictionary)) |stored_output_len| {
         if (stored_output_len != expected_output_len) return error.SizeMismatch;
     }
@@ -7987,7 +7988,8 @@ pub fn decodeGzipConcatenatedAllocExactSize(allocator: std.mem.Allocator, input:
 
 pub fn decodeGzipConcatenatedAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, expected_output_len: usize) ![]u8 {
     if (input.len == 0) return error.TruncatedFrame;
-    _ = try parseGzipHeader(input);
+    const data_offset = try parseGzipHeader(input);
+    if (input.len == data_offset) return error.TruncatedFrame;
     if (try precheckGzipConcatenatedStoredExact(input, options)) |stored_output_len| {
         if (stored_output_len != expected_output_len) return error.SizeMismatch;
     }
@@ -10626,6 +10628,10 @@ test "zlib concatenated streams decode in sequence" {
     try std.testing.expectEqualSlices(u8, "hello world", exact);
     try std.testing.expectError(error.SizeMismatch, decodeZlibConcatenatedAllocExactSize(std.testing.allocator, cat.items, 10));
     try std.testing.expectError(error.SizeMismatch, decodeZlibConcatenatedAllocExactSize(std.testing.allocator, cat.items, 12));
+
+    var header_only_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TruncatedFrame, decodeZlibConcatenatedAllocExactSize(header_only_failing.allocator(), &.{ 0x78, 0x01 }, 11));
+    try std.testing.expectEqual(@as(usize, 0), header_only_failing.allocations);
 }
 
 test "zlib concatenated stored streams decode and validate per-member trailers" {
@@ -12888,6 +12894,9 @@ test "gzip concatenated decoders reject empty input" {
     var bad_first_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.BadGzipHeader, decodeGzipConcatenatedAllocExactSize(bad_first_failing.allocator(), bad_first_header, 5));
     try std.testing.expectEqual(@as(usize, 0), bad_first_failing.allocations);
+    var header_only_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.TruncatedFrame, decodeGzipConcatenatedAllocExactSize(header_only_failing.allocator(), &gzip_header, 5));
+    try std.testing.expectEqual(@as(usize, 0), header_only_failing.allocations);
 }
 
 test "gzip member inspector reports concatenated offsets and trailer diagnostics" {
