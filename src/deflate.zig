@@ -7118,6 +7118,9 @@ fn decodeZlibAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, in
 
 fn decodeZlibConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, max_output_len: ?usize) ![]u8 {
     if (input.len == 0) return error.TruncatedFrame;
+    if (try precheckZlibConcatenatedStoredExact(input, dictionary)) |stored_output_len| {
+        try ensureOutputLimit(0, stored_output_len, max_output_len);
+    }
 
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -8048,6 +8051,9 @@ pub fn decodeGzipConcatenatedWithOptions(input: []const u8, output: []u8, option
 
 fn decodeGzipConcatenatedAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {
     if (input.len == 0) return error.TruncatedFrame;
+    if (try precheckGzipConcatenatedStoredExact(input, options)) |stored_output_len| {
+        try ensureOutputLimit(0, stored_output_len, max_output_len);
+    }
 
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -10559,6 +10565,9 @@ test "zlib concatenated stored streams decode and validate per-member trailers" 
     var exact_short_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.SizeMismatch, decodeZlibConcatenatedAllocExactSize(exact_short_failing.allocator(), cat.items, into.len - 1));
     try std.testing.expectEqual(@as(usize, 0), exact_short_failing.allocations);
+    var limited_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutputLimitExceeded, decodeZlibConcatenatedAllocLimited(limited_failing.allocator(), cat.items, into.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), limited_failing.allocations);
     try std.testing.expectError(error.OutputLimitExceeded, decodeZlibConcatenatedAllocLimited(std.testing.allocator, cat.items, into.len - 1));
 
     var bad_second_adler = try std.testing.allocator.dupe(u8, cat.items);
@@ -10566,6 +10575,9 @@ test "zlib concatenated stored streams decode and validate per-member trailers" 
     bad_second_adler[bad_second_adler.len - 1] ^= 1;
     try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenatedAlloc(std.testing.allocator, bad_second_adler));
     try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenated(bad_second_adler, &into));
+    var bad_second_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenatedAlloc(bad_second_alloc_failing.allocator(), bad_second_adler));
+    try std.testing.expectEqual(@as(usize, 0), bad_second_alloc_failing.allocations);
     var bad_second_exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.ChecksumMismatch, decodeZlibConcatenatedAllocExactSize(bad_second_exact_failing.allocator(), bad_second_adler, into.len));
     try std.testing.expectEqual(@as(usize, 0), bad_second_exact_failing.allocations);
@@ -12661,6 +12673,9 @@ test "gzip concatenated stored members decode and validate per-member trailers" 
     var exact_short_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedAllocExactSize(exact_short_failing.allocator(), cat.items, into.len - 1));
     try std.testing.expectEqual(@as(usize, 0), exact_short_failing.allocations);
+    var limited_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutputLimitExceeded, decodeGzipConcatenatedAllocLimited(limited_failing.allocator(), cat.items, into.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), limited_failing.allocations);
     try std.testing.expectError(error.OutputLimitExceeded, decodeGzipConcatenatedAllocLimited(std.testing.allocator, cat.items, into.len - 1));
 
     var bad_second_crc = try std.testing.allocator.dupe(u8, cat.items);
@@ -12668,6 +12683,9 @@ test "gzip concatenated stored members decode and validate per-member trailers" 
     bad_second_crc[bad_second_crc.len - 8] ^= 1;
     try std.testing.expectError(error.ChecksumMismatch, decodeGzipConcatenatedAlloc(std.testing.allocator, bad_second_crc));
     try std.testing.expectError(error.ChecksumMismatch, decodeGzipConcatenated(bad_second_crc, &into));
+    var bad_second_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzipConcatenatedAlloc(bad_second_alloc_failing.allocator(), bad_second_crc));
+    try std.testing.expectEqual(@as(usize, 0), bad_second_alloc_failing.allocations);
     var bad_second_exact_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.ChecksumMismatch, decodeGzipConcatenatedAllocExactSize(bad_second_exact_failing.allocator(), bad_second_crc, into.len));
     try std.testing.expectEqual(@as(usize, 0), bad_second_exact_failing.allocations);
