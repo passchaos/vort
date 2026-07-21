@@ -2028,8 +2028,9 @@ This schema records the validation summary for retained native block-length
 sweep artifacts. The gate validates the CSV field layout, requires one `TOTAL`
 row per swept block length, verifies the complete path/block matrix, checks the
 native-best, native-stream, and native-embedded byte/ratio math, verifies
-centered range-decode timing aggregates, and records the block length that
-produced the smallest total native stream in the smoke.
+centered range-decode timing aggregates, checks public seekability tier labels
+for 8/32/64 KiB rows, and records the block length/tier that produced the
+smallest total native stream in the smoke.
 
 Example:
 
@@ -2055,10 +2056,11 @@ Example:
   "case_limit": "3",
   "optimize": "Debug",
   "best_block_len": 65536,
+  "best_seekability_tier": "ratio",
   "best_native_stream_bytes": 110784,
   "best_native_stream_ratio": 1.0077044125271746,
-  "best_range_decode_mib_s": 1.4442983531738895,
-  "best_range_decode_full_input_mib_s": 46.217547301564466,
+  "best_range_decode_mib_s": 0.9161919264686623,
+  "best_range_decode_full_input_mib_s": 29.318141646997194,
   "best_stream_over_native_best": 1.0242319462293021,
   "best_stream_over_native_best_bytes": 2621,
   "best_embedded_over_native_stream": 1.0025996533795494,

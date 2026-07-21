@@ -15,9 +15,16 @@ sys.dont_write_bytecode = True
 
 import zstd_compare
 
+SEEKABILITY_TIER_BY_BLOCK_LEN = {
+    8 * 1024: "seek_fast",
+    32 * 1024: "balanced",
+    64 * 1024: "ratio",
+}
+
 CSV_FIELDS = [
     "path",
     "block_len",
+    "seekability_tier",
     "input_bytes",
     "zstd_bytes",
     "vort_native_best_bytes",
@@ -92,6 +99,10 @@ def overhead_ratio(current: int, baseline: int) -> float:
 
 def overhead_pct(current: int, baseline: int) -> float:
     return ((current / baseline) - 1.0) * 100.0 if baseline > 0 else -1.0
+
+
+def seekability_tier_for(block_len: int) -> str:
+    return SEEKABILITY_TIER_BY_BLOCK_LEN.get(block_len, "custom")
 
 
 def metadata(args: argparse.Namespace, cli_items: int) -> dict[str, str]:
@@ -186,6 +197,7 @@ def add_total_rows(rows: list[dict[str, Any]], block_lens: list[int], meta: dict
             {
                 "path": "TOTAL",
                 "block_len": block_len,
+                "seekability_tier": seekability_tier_for(block_len),
                 "input_bytes": total_input,
                 "zstd_bytes": total_zstd,
                 "vort_native_best_bytes": total_best,
@@ -251,28 +263,28 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             [
                 "## TOTAL by block length",
                 "",
-                "| block length | input bytes | zstd bytes | native best bytes | native stream bytes | native embedded bytes | stream / zstd | embedded / zstd | stream / native best | stream overhead bytes | stream overhead pct | embedded / stream | embedded-index bytes | range decode MiB/s |",
-                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| tier | block length | input bytes | zstd bytes | native best bytes | native stream bytes | native embedded bytes | stream / zstd | embedded / zstd | stream / native best | stream overhead bytes | stream overhead pct | embedded / stream | embedded-index bytes | range decode MiB/s |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for row in total_rows:
             lines.append(
-                f"| {row['block_len']} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | {format_ratio(row['vort_native_stream_over_zstd'])} | {format_ratio(row['vort_native_embedded_over_zstd'])} | {format_ratio(row['vort_stream_over_native_best'])} | {row['vort_stream_over_native_best_bytes']} | {format_pct(row['vort_stream_over_native_best_pct'])} | {format_ratio(row['vort_embedded_over_native_stream'])} | {row['vort_embedded_over_native_stream_bytes']} | {row['vort_range_decode_mib_s']:.2f} |"
+                f"| `{row['seekability_tier']}` | {row['block_len']} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | {format_ratio(row['vort_native_stream_over_zstd'])} | {format_ratio(row['vort_native_embedded_over_zstd'])} | {format_ratio(row['vort_stream_over_native_best'])} | {row['vort_stream_over_native_best_bytes']} | {format_pct(row['vort_stream_over_native_best_pct'])} | {format_ratio(row['vort_embedded_over_native_stream'])} | {row['vort_embedded_over_native_stream_bytes']} | {row['vort_range_decode_mib_s']:.2f} |"
             )
         lines.extend(
             [
                 "",
                 "## Per-input rows",
                 "",
-                "| path | block length | input bytes | zstd bytes | native best bytes | native stream bytes | native embedded bytes | stream / native best | embedded / stream | range offset | range decode MiB/s |",
-                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "| path | tier | block length | input bytes | zstd bytes | native best bytes | native stream bytes | native embedded bytes | stream / native best | embedded / stream | range offset | range decode MiB/s |",
+                "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for row in rows:
             if row["path"] == "TOTAL":
                 continue
             lines.append(
-                f"| `{row['path']}` | {row['block_len']} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | {format_ratio(row['vort_stream_over_native_best'])} | {format_ratio(row['vort_embedded_over_native_stream'])} | {row['range_offset']} | {row['vort_range_decode_mib_s']:.2f} |"
+                f"| `{row['path']}` | `{row['seekability_tier']}` | {row['block_len']} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | {format_ratio(row['vort_stream_over_native_best'])} | {format_ratio(row['vort_embedded_over_native_stream'])} | {row['range_offset']} | {row['vort_range_decode_mib_s']:.2f} |"
             )
         args.markdown.write_text("\n".join(lines) + "\n")
 
@@ -318,6 +330,7 @@ def main() -> int:
                     {
                         "path": label,
                         "block_len": block_len,
+                        "seekability_tier": seekability_tier_for(block_len),
                         "input_bytes": len(data),
                         "zstd_bytes": zstd_size,
                         "vort_native_best_bytes": native_best_size,

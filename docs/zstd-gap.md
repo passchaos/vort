@@ -56,12 +56,12 @@ TOTAL: raw/zstd 1.048x, native-best/zstd 0.984x, native-stream/zstd 1.115x, nati
 Example local Debug block-length sweep on the same standard-suite rows:
 
 ```text
-block_len,total_native_stream_bytes,native_stream/zstd,stream/native_best,stream_overhead_bytes,embedded_index_bytes,range_decode_mib_s
-4096,130653,1.1884,1.2079,22490,3888,15.21
-8192,122581,1.1150,1.1333,14418,1968,8.63
-16384,117473,1.0685,1.0861,9310,1008,4.70
-32768,113457,1.0320,1.0489,5294,528,3.14
-65536,110784,1.0077,1.0242,2621,288,1.44
+tier,block_len,total_native_stream_bytes,native_stream/zstd,stream/native_best,stream_overhead_bytes,embedded_index_bytes,range_decode_mib_s
+custom,4096,130653,1.1884,1.2079,22490,3888,15.37
+seek_fast,8192,122581,1.1150,1.1333,14418,1968,8.37
+custom,16384,117473,1.0685,1.0861,9310,1008,4.59
+balanced,32768,113457,1.0320,1.0489,5294,528,2.67
+ratio,65536,110784,1.0077,1.0242,2621,288,0.92
 ```
 
 Current interpretation:
@@ -79,7 +79,7 @@ Current interpretation:
   64 KiB cuts the same three-row stream overhead from `+14418` to `+2621` bytes
   and embedded-index bytes from `+1968` to `+288`, bringing native stream size to
   `1.0077x` zstd. The same sweep now records centered 4 KiB range-decode smoke
-  throughput, which drops from `15.21` MiB/s at 4 KiB blocks to `1.44` MiB/s at
+  throughput, which drops from `15.37` MiB/s at 4 KiB blocks to `0.92` MiB/s at
   64 KiB blocks because each small range must decode a larger containing frame.
   The current embedded-index frame is still a validation/seek surface rather than
   a final zstd-class native entropy format.

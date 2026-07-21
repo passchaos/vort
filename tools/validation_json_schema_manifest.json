@@ -2585,6 +2585,7 @@
     "vort.zstd_compare_block_sweep_gate": {
       "fields": {
         "best_block_len": "int",
+        "best_seekability_tier": "str",
         "best_embedded_over_native_stream": "float",
         "best_embedded_over_native_stream_bytes": "int",
         "best_native_stream_bytes": "int",

@@ -14,9 +14,16 @@ sys.dont_write_bytecode = True
 
 DEFAULT_CSV = Path("zig-out/vort-zstd-compare-block-sweep.csv")
 DEFAULT_MARKDOWN = Path("zig-out/vort-zstd-compare-block-sweep.md")
+SEEKABILITY_TIER_BY_BLOCK_LEN = {
+    8 * 1024: "seek_fast",
+    32 * 1024: "balanced",
+    64 * 1024: "ratio",
+}
+
 REQUIRED_FIELDS = [
     "path",
     "block_len",
+    "seekability_tier",
     "input_bytes",
     "zstd_bytes",
     "vort_native_best_bytes",
@@ -74,8 +81,16 @@ def assert_close(actual: float, expected: float, label: str, tolerance: float = 
         raise AssertionError(f"{label} mismatch: expected {expected}, got {actual}")
 
 
+def expected_seekability_tier(block_len: int) -> str:
+    return SEEKABILITY_TIER_BY_BLOCK_LEN.get(block_len, "custom")
+
+
 def validate_size_math(row: dict[str, str], label: str) -> tuple[int, int, int, int, int, int]:
     block_len = positive_int(row["block_len"])
+    seekability_tier = row["seekability_tier"]
+    expected_tier = expected_seekability_tier(block_len)
+    if seekability_tier != expected_tier:
+        raise AssertionError(f"{label} seekability tier mismatch: expected {expected_tier!r}, got {seekability_tier!r}")
     input_bytes = positive_int(row["input_bytes"])
     zstd_bytes = positive_int(row["zstd_bytes"])
     native_best_bytes = non_negative_int(row["vort_native_best_bytes"])
@@ -194,6 +209,7 @@ def main() -> int:
 
     best_total = min(total_rows, key=lambda row: non_negative_int(row["vort_native_stream_bytes"]))
     best_block_len = positive_int(best_total["block_len"])
+    best_seekability_tier = best_total["seekability_tier"]
     best_native_stream_bytes = non_negative_int(best_total["vort_native_stream_bytes"])
     best_native_stream_ratio = positive_float(best_total["vort_native_stream_over_zstd"])
     best_range_decode_mib_s = positive_float(best_total["vort_range_decode_mib_s"])
@@ -211,6 +227,9 @@ def main() -> int:
         or "embedded-index bytes" not in markdown
         or "stream overhead bytes" not in markdown
         or "range decode MiB/s" not in markdown
+        or "seek_fast" not in markdown
+        or "balanced" not in markdown
+        or "ratio" not in markdown
     ):
         raise AssertionError("block sweep markdown missing retained sections or columns")
 
@@ -229,6 +248,7 @@ def main() -> int:
         "case_limit": case_limit,
         "optimize": optimize,
         "best_block_len": best_block_len,
+        "best_seekability_tier": best_seekability_tier,
         "best_native_stream_bytes": best_native_stream_bytes,
         "best_native_stream_ratio": best_native_stream_ratio,
         "best_range_decode_mib_s": best_range_decode_mib_s,
@@ -248,6 +268,7 @@ def main() -> int:
         f"rows={len(rows)} "
         f"block_lens={','.join(str(n) for n in block_lens)} "
         f"best_block_len={best_block_len} "
+        f"best_seekability_tier={best_seekability_tier} "
         f"best_native_stream_ratio={best_native_stream_ratio:.4f} "
         f"best_range_decode_mib_s={best_range_decode_mib_s:.2f} "
         f"best_stream_over_best={best_stream_over_native_best:.4f} "
