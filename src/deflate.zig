@@ -7163,6 +7163,7 @@ fn decodeZlibConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
         const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
         const raw_offset = offset + header.data_offset;
         const raw_input = input[raw_offset..];
+        try rejectReservedFirstBlockBeforeAlloc(raw_input);
 
         if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
             if (try planRawStoredOnly(raw_input)) |plan| {
@@ -8092,6 +8093,7 @@ fn decodeGzipConcatenatedAllocWithOptionsLimitedInternal(allocator: std.mem.Allo
         };
         const raw_offset = offset + data_offset;
         const raw_input = input[raw_offset..];
+        try rejectReservedFirstBlockBeforeAlloc(raw_input);
         if (try planRawStoredOnly(raw_input)) |plan| {
             const digest = if (options.ignore_crc32) blk: {
                 try appendRawStoredOnlyPlanned(allocator, raw_input[0..plan.input_read], &out, plan, max_output_len);
@@ -10637,6 +10639,12 @@ test "zlib concatenated streams decode in sequence" {
     var reserved_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibConcatenatedAllocExactSize(reserved_failing.allocator(), &.{ 0x78, 0x01, 0x07 }, 11));
     try std.testing.expectEqual(@as(usize, 0), reserved_failing.allocations);
+    var reserved_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibConcatenatedAlloc(reserved_alloc_failing.allocator(), &.{ 0x78, 0x01, 0x07 }));
+    try std.testing.expectEqual(@as(usize, 0), reserved_alloc_failing.allocations);
+    var reserved_limited_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeZlibConcatenatedAllocLimited(reserved_limited_failing.allocator(), &.{ 0x78, 0x01, 0x07 }, 11));
+    try std.testing.expectEqual(@as(usize, 0), reserved_limited_failing.allocations);
 }
 
 test "zlib concatenated stored streams decode and validate per-member trailers" {
@@ -12906,6 +12914,12 @@ test "gzip concatenated decoders reject empty input" {
     var reserved_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.InvalidDeflateBlockType, decodeGzipConcatenatedAllocExactSize(reserved_failing.allocator(), &reserved_first, 5));
     try std.testing.expectEqual(@as(usize, 0), reserved_failing.allocations);
+    var reserved_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeGzipConcatenatedAlloc(reserved_alloc_failing.allocator(), &reserved_first));
+    try std.testing.expectEqual(@as(usize, 0), reserved_alloc_failing.allocations);
+    var reserved_limited_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDeflateBlockType, decodeGzipConcatenatedAllocLimited(reserved_limited_failing.allocator(), &reserved_first, 5));
+    try std.testing.expectEqual(@as(usize, 0), reserved_limited_failing.allocations);
 }
 
 test "gzip member inspector reports concatenated offsets and trailer diagnostics" {
