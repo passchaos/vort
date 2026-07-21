@@ -64,7 +64,10 @@ embedded/sidecar index still records exact frame offsets and sizes.
 these tiers so future policy changes can be judged without CLI process overhead;
 local ReleaseFast rows currently show minimum centered-4 KiB range throughput of
 about 87 MiB/s for `seek_fast`, 26 MiB/s for `balanced`, and 24 MiB/s for
-`ratio` on the built-in text/structured/repetitive fixtures.
+`ratio` on the built-in text/structured/repetitive fixtures. The companion
+README/roadmap file smoke keeps real project text visible; the latest ReleaseFast
+rows show README around 116 / 41 / 41 MiB/s and roadmap around 53 / 12 / 6 MiB/s
+for `seek_fast` / `balanced` / `ratio` respectively.
 Future native
 versions should preserve the same engineering constraints: explicit sizes,
 bounded memory, deterministic decoding, independent corruption localization, and

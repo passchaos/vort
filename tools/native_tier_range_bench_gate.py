@@ -26,7 +26,7 @@ EXPECTED_COLUMNS = {
     "full_input_mib_s",
     "checksum",
 }
-EXPECTED_FIXTURES = {"text", "structured", "repetitive"}
+DEFAULT_EXPECTED_FIXTURES = {"text", "structured", "repetitive"}
 EXPECTED_TIERS = {
     "seek_fast": 8 * 1024,
     "balanced": 32 * 1024,
@@ -69,7 +69,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, default=Path("zig-out/vort-native-tier-range-bench.csv"))
     parser.add_argument("--enforce-throughput", action="store_true")
+    parser.add_argument("--expect-fixtures", help="comma-separated fixture names; defaults to built-in fixtures")
     args = parser.parse_args()
+    expected_fixtures = set(args.expect_fixtures.split(",")) if args.expect_fixtures else DEFAULT_EXPECTED_FIXTURES
 
     rows = list(csv.DictReader(args.csv.open(newline="")))
     if not rows:
@@ -78,14 +80,14 @@ def main() -> int:
         raise AssertionError(f"bad CSV header: {list(rows[0].keys())!r}")
 
     seen = {(row["fixture"], row["tier"]) for row in rows}
-    expected = {(fixture, tier) for fixture in EXPECTED_FIXTURES for tier in EXPECTED_TIERS}
+    expected = {(fixture, tier) for fixture in expected_fixtures for tier in EXPECTED_TIERS}
     if seen != expected or len(rows) != len(expected):
         raise AssertionError(f"bad fixture/tier matrix: seen={sorted(seen)!r}")
 
     for row in rows:
         fixture = row["fixture"]
         tier = row["tier"]
-        if fixture not in EXPECTED_FIXTURES or tier not in EXPECTED_TIERS:
+        if fixture not in expected_fixtures or tier not in EXPECTED_TIERS:
             raise AssertionError(f"unexpected row identity: {row}")
         block_len = positive_int(row, "block_len")
         if block_len != EXPECTED_TIERS[tier]:

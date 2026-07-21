@@ -6,6 +6,13 @@ const Tier = vort.SeekabilityTier;
 const Fixture = struct {
     name: []const u8,
     data: []const u8,
+    owned_name: bool = false,
+    owned_data: bool = false,
+
+    fn deinit(self: Fixture, allocator: std.mem.Allocator) void {
+        if (self.owned_name) allocator.free(self.name);
+        if (self.owned_data) allocator.free(self.data);
+    }
 };
 
 const Row = struct {
@@ -39,6 +46,8 @@ pub fn main(init: std.process.Init) !void {
     var iterations: usize = 400;
     var repeat: usize = 3;
     var range_len: usize = 4096;
+    var path_args = try std.ArrayList([]const u8).initCapacity(init.gpa, 0);
+    defer path_args.deinit(init.gpa);
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--csv")) {
             csv_path = args.next() orelse return error.MissingReportPath;
@@ -56,23 +65,24 @@ pub fn main(init: std.process.Init) !void {
             range_len = try parsePositiveUsize(args.next());
             continue;
         }
+        if (std.mem.eql(u8, arg, "--paths")) {
+            while (args.next()) |path| try path_args.append(init.gpa, path);
+            break;
+        }
         return error.UnknownArgument;
     }
 
-    const text = "Seekable native tier range benchmark text payload. " ** 2048;
-    const structured = "{\"service\":\"vort\",\"tier\":\"seekability\",\"value\":12345}\n" ** 1600;
-    const repetitive = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 512;
-    const fixtures = [_]Fixture{
-        .{ .name = "text", .data = text },
-        .{ .name = "structured", .data = structured },
-        .{ .name = "repetitive", .data = repetitive },
-    };
+    var fixtures = try loadFixtures(init, path_args.items);
+    defer {
+        for (fixtures.items) |fixture| fixture.deinit(init.gpa);
+        fixtures.deinit(init.gpa);
+    }
     const tiers = [_]Tier{ .seek_fast, .balanced, .ratio };
 
-    var rows = try std.ArrayList(Row).initCapacity(init.gpa, fixtures.len * tiers.len);
+    var rows = try std.ArrayList(Row).initCapacity(init.gpa, fixtures.items.len * tiers.len);
     defer rows.deinit(init.gpa);
 
-    for (fixtures) |fixture| {
+    for (fixtures.items) |fixture| {
         const effective_range_len = @min(range_len, fixture.data.len);
         const range_offset = if (fixture.data.len <= effective_range_len) 0 else (fixture.data.len - effective_range_len) / 2;
         const expected = fixture.data[range_offset..][0..effective_range_len];
@@ -138,6 +148,32 @@ fn parsePositiveUsize(text: ?[]const u8) !usize {
     const parsed = try std.fmt.parseInt(usize, value, 10);
     if (parsed == 0) return error.InvalidBlockPlan;
     return parsed;
+}
+
+fn loadFixtures(init: std.process.Init, paths: []const []const u8) !std.ArrayList(Fixture) {
+    var fixtures = try std.ArrayList(Fixture).initCapacity(init.gpa, if (paths.len == 0) 3 else paths.len);
+    errdefer {
+        for (fixtures.items) |fixture| fixture.deinit(init.gpa);
+        fixtures.deinit(init.gpa);
+    }
+    if (paths.len == 0) {
+        const text = "Seekable native tier range benchmark text payload. " ** 2048;
+        const structured = "{\"service\":\"vort\",\"tier\":\"seekability\",\"value\":12345}\n" ** 1600;
+        const repetitive = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 512;
+        try fixtures.append(init.gpa, .{ .name = "text", .data = text });
+        try fixtures.append(init.gpa, .{ .name = "structured", .data = structured });
+        try fixtures.append(init.gpa, .{ .name = "repetitive", .data = repetitive });
+        return fixtures;
+    }
+    for (paths) |path| {
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        errdefer init.gpa.free(data);
+        const name = std.fs.path.basename(path);
+        const owned_name = try init.gpa.dupe(u8, name);
+        errdefer init.gpa.free(owned_name);
+        try fixtures.append(init.gpa, .{ .name = owned_name, .data = data, .owned_name = true, .owned_data = true });
+    }
+    return fixtures;
 }
 
 fn runRangeDecodeBench(allocator: std.mem.Allocator, stream: []const u8, index: []vort.StoreFrameIndexEntry, offset: usize, output: []u8, iterations: usize, io: std.Io) !RunResult {

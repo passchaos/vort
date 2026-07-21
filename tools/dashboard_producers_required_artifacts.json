@@ -359,6 +359,13 @@
     },
     {
       "expected_format": "csv",
+      "name": "vort-native-tier-range-files-bench.csv",
+      "producer_step": "zig build run-native-tier-range-files-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-tier-range-files-bench-gate"
+    },
+    {
+      "expected_format": "csv",
       "name": "vort-png-scanline-bench.csv",
       "producer_step": "zig build run-png-scanline-bench-gate",
       "required_smoke_gate": true,
