@@ -481,6 +481,9 @@ architecture blindly.
 - [x] ZlibDecoder exposes single-buffer `WithOptions` initializers/resets for
   strict, exact-size, and preset-dictionary caller-scratch decode, matching the
   direct chunked relaxed-option surface.
+- [x] ZlibDecoder exposes concatenated zlib initializers/resets with strict,
+  relaxed-option, exact-size, and preset-dictionary variants for caller-scratch
+  bounded output, aligning zlib multi-member workflows with `GzipDecoder`.
 - [x] ZlibDecoder chunk smoke covers varied RGB/RGBA PNG-like rows across widths 1, 2, 8, and 17 with filters 0-4.
 - [x] ZlibDecoder drains PNG-style scanlines one row at a time, returning filter bytes separately from caller-owned row payload buffers.
 - [x] PNG scanline reconstruction supports filter methods 0-4 with caller-owned previous/current row buffers.
@@ -1264,3 +1267,10 @@ architecture blindly.
   `ZlibDecoder` relaxed decode, and gzip decoder options. The relaxed wrapper
   report now records zlib decoder successes alongside zlib concatenated and gzip
   decoder coverage, so schema/dashboard validation catches future drift.
+
+- Added `ZlibDecoder` concatenated zlib initializers and resets for
+  caller-owned scratch, including `WithOptions`, exact-size, dictionary, and
+  dictionary-plus-options variants. This lets bounded-output users drain
+  multi-member zlib streams through the same decoder shape used for gzip
+  concatenation, while the relaxed wrapper report now covers both single-member
+  and concatenated zlib decoder option paths.

@@ -116,6 +116,13 @@ pub fn main(init: std.process.Init) !void {
     var zlib_dict_decoder = try vort.ZlibDecoder.initWithDictionaryAndOptionsExactSize(dict_combined, dictionary, &zlib_scratch, relaxed, Payload.len);
     try drainZlibDecoderPayload(&zlib_dict_decoder, Payload);
     zlib_decoder_successes += 1;
+    var zlib_cat_decoder = try vort.ZlibDecoder.initConcatenatedWithOptionsExactSize(zlib_cat, &zlib_cat_out, zlib_cat_relaxed, Payload.len * 2);
+    try drainZlibDecoderPayload(&zlib_cat_decoder, Payload ++ Payload);
+    zlib_decoder_successes += 1;
+    var zlib_cat_reused_decoder = vort.ZlibDecoder{};
+    try zlib_cat_reused_decoder.resetConcatenatedWithOptionsExactSize(zlib_cat, &zlib_cat_out, zlib_cat_relaxed, Payload.len * 2);
+    try drainZlibDecoderPayload(&zlib_cat_reused_decoder, Payload ++ Payload);
+    zlib_decoder_successes += 1;
 
     const gzip_frame = try vort.encodeGzipFixedAlloc(init.gpa, Payload);
     defer init.gpa.free(gzip_frame);
@@ -275,7 +282,7 @@ fn drainDecoderPayload(decoder: *vort.GzipDecoder, expected: []const u8) !void {
 }
 
 fn drainZlibDecoderPayload(decoder: *vort.ZlibDecoder, expected: []const u8) !void {
-    var output: [Payload.len]u8 = undefined;
+    var output: [Payload.len * 2]u8 = undefined;
     var written: usize = 0;
     while (true) {
         var chunk: [3]u8 = undefined;

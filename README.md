@@ -327,6 +327,14 @@ const zlib_cat_relaxed = try vort.decodeZlibConcatenatedAllocWithOptions(
     .{ .ignore_adler = true, .allow_trailing_data = true },
 );
 defer allocator.free(zlib_cat_relaxed);
+var zlib_cat_decoder = try vort.ZlibDecoder.initConcatenatedWithOptionsExactSize(
+    zlib_cat.items,
+    &zlib_out,
+    .{},
+    "payloadpayload".len,
+);
+var zlib_cat_step_out: ["payloadpayload".len]u8 = undefined;
+_ = try zlib_cat_decoder.step(&zlib_cat_step_out);
 // FDICT concatenated streams can use the dictionary-aware variants:
 // const zlib_dict_cat = try vort.decodeZlibConcatenatedAllocWithDictionary(
 //     allocator, zlib_dict_bytes, "preset dictionary",
