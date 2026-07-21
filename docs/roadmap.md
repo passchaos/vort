@@ -557,6 +557,8 @@ architecture blindly.
 - [x] gzip optional header fields: FEXTRA, FNAME, FCOMMENT, FHCRC validation.
 - [x] gzip encoders can emit configurable MTIME/XFL/OS plus FEXTRA/FNAME/FCOMMENT/FHCRC metadata while preserving deterministic defaults.
 - [x] Public gzip header metadata parser exposes MTIME/XFL/OS/FEXTRA/FNAME/FCOMMENT/FHCRC slices for library callers.
+- [x] Public gzip member inspector supports split input through
+  caller-provided compressed join scratch.
 - [x] GzipDecoder drains validated gzip-wrapped deflate payloads and caller-provided gzip byte chunks through reusable caller-owned scratch and bounded output.
 - [x] Public gzip chunked caller-buffer helpers decode split gzip input through
   caller-provided compressed join scratch, including relaxed CRC/ISIZE/trailing
@@ -1345,6 +1347,11 @@ architecture blindly.
   deflate/footer offsets, decoded byte count, and Adler diagnostics as the
   contiguous inspector, including preset-dictionary streams, and the root API
   smoke now pins these exports.
+
+- Added gzip member inspection helpers for split compressed input
+  (`inspectGzipMemberFromChunksAlloc*`). They reuse caller-provided join scratch
+  before the existing member inspector, preserving concatenated-member offsets,
+  exact DEFLATE byte counts, and CRC/ISIZE diagnostics for chunked gzip callers.
 
 - Added a root-module compile-time smoke for public split-input decode helpers
   across raw deflate, zlib, gzip, and concatenated gzip. Codec behavior remains

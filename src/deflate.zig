@@ -7999,6 +7999,21 @@ pub fn inspectGzipMemberAllocLimited(
     return error.RangeOutOfBounds;
 }
 
+pub fn inspectGzipMemberFromChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, member_index: usize) !GzipMemberInfo {
+    return inspectGzipMemberFromChunksAllocLimited(allocator, chunks, compressed_scratch, member_index, 128 * 1024 * 1024);
+}
+
+pub fn inspectGzipMemberFromChunksAllocLimited(
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+    compressed_scratch: []u8,
+    member_index: usize,
+    max_output_len: usize,
+) !GzipMemberInfo {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return inspectGzipMemberAllocLimited(allocator, joined, member_index, max_output_len);
+}
+
 pub fn decodeGzipStored(input: []const u8, output: []u8) Error!usize {
     const data_offset = try parseGzipHeader(input);
     const stored = (try decodeRawStoredOnlyIntoMaybeWithHash(checksum.Crc32Slice32, input[data_offset..], output)) orelse return error.InvalidDeflateBlockType;
@@ -13768,6 +13783,24 @@ test "gzip member inspector reports concatenated offsets and trailer diagnostics
     try std.testing.expectEqual(second.footer_isize, second.isize);
     try std.testing.expect(second.isize_matches);
     try std.testing.expectError(error.RangeOutOfBounds, inspectGzipMemberAlloc(std.testing.allocator, cat.items, 2));
+
+    const chunks = [_][]const u8{
+        cat.items[0 .. a.len - 1],
+        cat.items[a.len - 1 .. a.len + 2],
+        cat.items[a.len + 2 ..],
+    };
+    var compressed_scratch: [128]u8 = undefined;
+    const chunk_second = try inspectGzipMemberFromChunksAlloc(std.testing.allocator, &chunks, &compressed_scratch, 1);
+    try std.testing.expectEqual(second.member_index, chunk_second.member_index);
+    try std.testing.expectEqual(second.member_offset, chunk_second.member_offset);
+    try std.testing.expectEqual(second.deflate_offset, chunk_second.deflate_offset);
+    try std.testing.expectEqual(second.deflate_bytes, chunk_second.deflate_bytes);
+    try std.testing.expectEqual(second.output_bytes, chunk_second.output_bytes);
+    try std.testing.expectEqual(second.footer_offset, chunk_second.footer_offset);
+    try std.testing.expectEqual(second.end_offset, chunk_second.end_offset);
+    try std.testing.expect(chunk_second.crc32_matches);
+    try std.testing.expect(chunk_second.isize_matches);
+    try std.testing.expectError(error.OutputTooSmall, inspectGzipMemberFromChunksAlloc(std.testing.allocator, &chunks, compressed_scratch[0 .. cat.items.len - 1], 1));
 }
 
 test "gzip member inspector reports trailer mismatches without rejecting payload" {

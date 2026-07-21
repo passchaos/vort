@@ -461,6 +461,8 @@ pub const GzipMemberInfo = deflate.GzipMemberInfo;
 pub const parseGzipHeaderInfo = deflate.parseGzipHeaderInfo;
 pub const inspectGzipMemberAlloc = deflate.inspectGzipMemberAlloc;
 pub const inspectGzipMemberAllocLimited = deflate.inspectGzipMemberAllocLimited;
+pub const inspectGzipMemberFromChunksAlloc = deflate.inspectGzipMemberFromChunksAlloc;
+pub const inspectGzipMemberFromChunksAllocLimited = deflate.inspectGzipMemberFromChunksAllocLimited;
 pub const gzipStoredEncodedSizeWithHeader = deflate.gzipStoredEncodedSizeWithHeader;
 pub const encodeGzipStoredWithHeader = deflate.encodeGzipStoredWithHeader;
 pub const encodeGzipStoredWithHeaderAlloc = deflate.encodeGzipStoredWithHeaderAlloc;
@@ -607,4 +609,6 @@ test "root exports chunked compatibility decode helpers" {
     _ = decodeGzipConcatenatedChunksAllocWithOptions;
     _ = decodeGzipConcatenatedChunksAllocWithOptionsExactSize;
     _ = decodeGzipConcatenatedChunksAllocWithOptionsLimited;
+    _ = inspectGzipMemberFromChunksAlloc;
+    _ = inspectGzipMemberFromChunksAllocLimited;
 }
