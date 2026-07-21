@@ -59,7 +59,13 @@ three documented tiers: `seek_fast` uses 8 KiB blocks for small-range latency,
 `balanced` uses 32 KiB blocks for a middle ratio/seekability point, and `ratio`
 uses 64 KiB blocks for lower fragmentation overhead and sequential-size focus.
 These tier names are policy hints rather than wire-format features; the actual
-embedded/sidecar index still records exact frame offsets and sizes. Future native
+embedded/sidecar index still records exact frame offsets and sizes.
+`run-native-tier-range-bench-gate` keeps a library-level throughput smoke for
+these tiers so future policy changes can be judged without CLI process overhead;
+local ReleaseFast rows currently show minimum centered-4 KiB range throughput of
+about 87 MiB/s for `seek_fast`, 26 MiB/s for `balanced`, and 24 MiB/s for
+`ratio` on the built-in text/structured/repetitive fixtures.
+Future native
 versions should preserve the same engineering constraints: explicit sizes,
 bounded memory, deterministic decoding, independent corruption localization, and
 simple parser states that can be fuzzed aggressively.
