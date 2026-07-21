@@ -713,6 +713,26 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(range);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = range });
         try stdout.print("range_bytes={d} crc32={d} path={s}\n", .{ range.len, vort.crc32(range), output_path });
+    } else if (std.mem.eql(u8, command, "bench-decode-raw-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const expected_output_len = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+        const iterations = try parseIterations(args.next(), 3);
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const output = try init.gpa.alloc(u8, expected_output_len);
+        defer init.gpa.free(output);
+        const result = try benchDecodeRaw(compressed, output, iterations, init.io);
+        try stdout.print("mode=raw compressed_bytes={d} decoded_bytes={d} iterations={d} elapsed_ns={d} checksum={d}\n", .{ compressed.len, result.decoded_bytes, iterations, result.elapsed_ns, result.checksum });
+    } else if (std.mem.eql(u8, command, "bench-decode-vort-embedded-range-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const length = try std.fmt.parseInt(usize, args.next() orelse return error.MissingCorpusPath, 10);
+        const iterations = try parseIterations(args.next(), 3);
+        const stream = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(stream);
+        const output = try init.gpa.alloc(u8, length);
+        defer init.gpa.free(output);
+        const result = try benchDecodeVortEmbedded(init.gpa, stream, output, iterations, init.io);
+        try stdout.print("mode=vort_embedded compressed_bytes={d} decoded_bytes={d} iterations={d} elapsed_ns={d} checksum={d}\n", .{ stream.len, result.decoded_bytes, iterations, result.elapsed_ns, result.checksum });
     } else if (std.mem.eql(u8, command, "decode-vort-embedded-auto-range-file")) {
         const stream_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1175,6 +1195,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Validate an embedded-index stream
         \\  decode-vort-embedded-range-file <stream> <out> <offset> <len>
         \\                              Decode an indexed range from an embedded-index stream
+        \\  bench-decode-raw-file <in> <decoded_len> [iterations]
+        \\                              Time raw deflate decode in one CLI process
+        \\  bench-decode-vort-embedded-range-file <stream> <decoded_len> [iterations]
+        \\                              Time embedded-index range decode in one CLI process
         \\  encode-vort-embedded-dict-file <in> <stream> [block_len]
         \\                              Encode self-contained dictionary stream with embedded index
         \\  decode-vort-embedded-auto-range-file <stream> <out> <offset> <len>
@@ -1219,6 +1243,52 @@ fn printHex(stdout: *std.Io.Writer, bytes: []const u8) !void {
 
 fn printHexInline(stdout: *std.Io.Writer, bytes: []const u8) !void {
     for (bytes) |byte| try stdout.print("{x:0>2}", .{byte});
+}
+
+const DecodeBenchResult = struct {
+    elapsed_ns: u64,
+    decoded_bytes: usize,
+    checksum: u32,
+};
+
+fn benchDecodeRaw(compressed: []const u8, output: []u8, iterations: usize, io: std.Io) !DecodeBenchResult {
+    const start = std.Io.Clock.awake.now(io);
+    var checksum: u32 = 0;
+    var decoded_bytes: usize = 0;
+    for (0..iterations) |_| {
+        const result = try vort.decodeRawDeflate(compressed, output);
+        decoded_bytes = result.output_written;
+        checksum +%= vort.crc32(output[0..decoded_bytes]);
+    }
+    const elapsed_ns_signed = start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
+    if (elapsed_ns_signed < 0) return error.InvalidTimestamp;
+    return .{
+        .elapsed_ns = @intCast(elapsed_ns_signed),
+        .decoded_bytes = decoded_bytes,
+        .checksum = checksum,
+    };
+}
+
+fn benchDecodeVortEmbedded(allocator: std.mem.Allocator, stream: []const u8, output: []u8, iterations: usize, io: std.Io) !DecodeBenchResult {
+    const embedded_index = try vort.storeViewEmbeddedIndex(stream);
+    const index_len = embedded_index.entry_count;
+    const index_buffer = try allocator.alloc(vort.StoreFrameIndexEntry, index_len);
+    defer allocator.free(index_buffer);
+    const start = std.Io.Clock.awake.now(io);
+    var checksum: u32 = 0;
+    var decoded_bytes: usize = 0;
+    for (0..iterations) |_| {
+        const result = try vort.storeDecodeIndexedRangeIntoWithIndexBuffer(allocator, stream, 0, output.len, output, index_buffer);
+        decoded_bytes = result.output_written;
+        checksum +%= result.crc32;
+    }
+    const elapsed_ns_signed = start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
+    if (elapsed_ns_signed < 0) return error.InvalidTimestamp;
+    return .{
+        .elapsed_ns = @intCast(elapsed_ns_signed),
+        .decoded_bytes = decoded_bytes,
+        .checksum = checksum,
+    };
 }
 
 const HeaderInspectOutputFormat = enum { text, json };
@@ -1708,6 +1778,13 @@ fn makeDemoLdmPrefix() [33_000]u8 {
 }
 
 fn parseBlockLen(text: ?[]const u8, default: usize) !usize {
+    const value = text orelse return default;
+    const parsed = try std.fmt.parseInt(usize, value, 10);
+    if (parsed == 0) return error.InvalidBlockPlan;
+    return parsed;
+}
+
+fn parseIterations(text: ?[]const u8, default: usize) !usize {
     const value = text orelse return default;
     const parsed = try std.fmt.parseInt(usize, value, 10);
     if (parsed == 0) return error.InvalidBlockPlan;

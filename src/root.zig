@@ -90,6 +90,7 @@ pub const storeDecodeFrameIndex = store.decodeFrameIndex;
 pub const storeDecodeFrameIndexAlloc = store.decodeFrameIndexAlloc;
 pub const StoreEmbeddedIndexView = store.EmbeddedIndexView;
 pub const StoreEmbeddedIndexDecodeResult = store.EmbeddedIndexDecodeResult;
+pub const StoreFrameIndexEntry = store.FrameIndexEntry;
 pub const storeViewEmbeddedIndex = store.viewEmbeddedIndex;
 pub const storeDecodeEmbeddedIndex = store.decodeEmbeddedIndex;
 pub const storeFindFrameForOffset = store.findFrameForOffset;

@@ -16,12 +16,14 @@ CLI paths unless the ReleaseFast step is selected. The build steps retain
 can be linked from dashboard indexes instead of only appearing on stdout. The
 retained CSV/Markdown include per-input rows plus a `TOTAL` aggregate row for
 raw fixed and native embedded size ratios, native block length, and median-of-3
-process-level decode throughput. The three gate steps validate the retained
+decode throughput. The zstd decode rows still include process/stdout plumbing,
+while Vort raw/native rows now use CLI-internal decode loops divided by the
+repeat count after a one-shot output check. The three gate steps validate the retained
 artifacts and write matching `*-gate.json` summaries.
 
 Example local Debug default-sample size smoke after adding native embedded rows
-(2026-07-21; process-level decode columns are retained in CSV/Markdown but are
-intentionally treated as noisy smoke evidence):
+(2026-07-21; decode columns are retained in CSV/Markdown but are still
+intentionally treated as smoke evidence):
 
 ```text
 path,input_bytes,zstd_bytes,vort_raw_fixed_bytes,vort_native_embedded_bytes
@@ -52,10 +54,10 @@ Current interpretation:
   zstd-class native entropy format.
 - The current smoke says Vort fixed-deflate is close on these two text files
   (`~1.5%` larger on `README.md`, `~3.2%` larger on `docs/roadmap.md`), but it
-  only measures decompression as a process-level smoke that includes CLI startup
-  and temporary-file/stdout overhead. It still does **not** measure library-level
-  decompression speed, memory use, binary corpora, or zstd's higher compression
-  levels.
+  now times Vort decode inside one CLI process, but zstd decode still includes
+  process/stdout overhead and the result remains a smoke signal. It still does
+  **not** measure library-level decompression speed, memory use, full binary
+  corpora, or zstd's higher compression levels.
 - The gap remains open until Vort has a native frame entropy mode, dictionary
   training integrated with the native format, long-distance matching in the
   encoder/decoder pipeline, corpus throughput/ratio dashboards, and repeatable
@@ -64,7 +66,7 @@ Current interpretation:
 Recommended next comparison steps:
 
 1. Add library-level decode throughput rows for zstd and Vort native/zlib/raw
-   modes rather than only process-level CLI smoke timings.
+   modes rather than CLI smoke timings.
 2. Expand the standard-corpus comparison beyond the first three bounded rows and
    expand the ReleaseFast artifact beyond the same bounded smoke once stable.
 3. Split compatibility-format goals (raw/zlib/gzip deflate behavior) from native

@@ -151,7 +151,7 @@ def main() -> int:
         or "Optimize" not in markdown
         or "Decode repeats" not in markdown
         or "Native block length" not in markdown
-        or "Decode timings include process startup" not in markdown
+        or "CLI-internal decode loops" not in markdown
         or "Vort raw decode / zstd" not in markdown
         or "Vort native" not in markdown
     ):

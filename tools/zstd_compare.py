@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import tarfile
 import time
+import zlib
 from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -110,35 +111,75 @@ def measure_zstd_decode(zstd_path: pathlib.Path, expected: bytes, repeats: int) 
 
 
 def measure_vort_raw_decode(cli: pathlib.Path, raw_path: pathlib.Path, decoded_path: pathlib.Path, expected: bytes, repeats: int) -> float:
-    timings: list[float] = []
-    for _ in range(repeats):
-        _, elapsed = timed_subprocess(
-            [str(cli), "decode-raw-file", str(raw_path), str(decoded_path), str(len(expected))],
-            cwd=ROOT,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        if decoded_path.read_bytes() != expected:
-            raise AssertionError(f"Vort raw fixed decode mismatch for {raw_path}")
-        timings.append(elapsed)
-    return median(timings)
+    subprocess.run(
+        [str(cli), "decode-raw-file", str(raw_path), str(decoded_path), str(len(expected))],
+        cwd=ROOT,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    if decoded_path.read_bytes() != expected:
+        raise AssertionError(f"Vort raw fixed decode mismatch for {raw_path}")
+    proc = subprocess.run(
+        [str(cli), "bench-decode-raw-file", str(raw_path), str(len(expected)), str(repeats)],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    return elapsed_seconds_from_bench(proc.stdout, "raw", repeats, len(expected), expected_accumulated_crc32(expected, repeats))
 
 
 def measure_vort_native_decode(cli: pathlib.Path, stream_path: pathlib.Path, decoded_path: pathlib.Path, expected: bytes, repeats: int) -> float:
-    timings: list[float] = []
-    for _ in range(repeats):
-        _, elapsed = timed_subprocess(
-            [str(cli), "decode-vort-embedded-range-file", str(stream_path), str(decoded_path), "0", str(len(expected))],
-            cwd=ROOT,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        if decoded_path.read_bytes() != expected:
-            raise AssertionError(f"Vort native embedded decode mismatch for {stream_path}")
-        timings.append(elapsed)
-    return median(timings)
+    subprocess.run(
+        [str(cli), "decode-vort-embedded-range-file", str(stream_path), str(decoded_path), "0", str(len(expected))],
+        cwd=ROOT,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    if decoded_path.read_bytes() != expected:
+        raise AssertionError(f"Vort native embedded decode mismatch for {stream_path}")
+    proc = subprocess.run(
+        [str(cli), "bench-decode-vort-embedded-range-file", str(stream_path), str(len(expected)), str(repeats)],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    return elapsed_seconds_from_bench(proc.stdout, "vort_embedded", repeats, len(expected), expected_accumulated_crc32(expected, repeats))
+
+
+def parse_key_values(text: str) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for part in text.strip().split():
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        result[key] = value
+    return result
+
+
+def expected_accumulated_crc32(payload: bytes, iterations: int) -> int:
+    return ((zlib.crc32(payload) & 0xFFFF_FFFF) * iterations) & 0xFFFF_FFFF
+
+
+def elapsed_seconds_from_bench(text: str, expected_mode: str, expected_iterations: int, expected_decoded_bytes: int, expected_checksum: int) -> float:
+    fields = parse_key_values(text)
+    if fields.get("mode") != expected_mode:
+        raise AssertionError(f"unexpected bench mode in output: {text!r}")
+    if int(fields.get("iterations", "0")) != expected_iterations:
+        raise AssertionError(f"unexpected bench iterations in output: {text!r}")
+    if int(fields.get("decoded_bytes", "0")) != expected_decoded_bytes:
+        raise AssertionError(f"unexpected bench decoded byte count in output: {text!r}")
+    if int(fields.get("checksum", "0")) != expected_checksum:
+        raise AssertionError(f"unexpected bench checksum in output: {text!r}")
+    elapsed_ns = int(fields.get("elapsed_ns", "0"))
+    if elapsed_ns <= 0:
+        raise AssertionError(f"missing positive elapsed_ns in output: {text!r}")
+    return elapsed_ns / expected_iterations / 1_000_000_000.0
 
 
 def mib_per_second(byte_count: int, elapsed_seconds: float) -> float:
@@ -273,7 +314,7 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             "- Vort native command: `vort encode-vort-embedded-best-file <path> <tmp.vort> <block_len>`",
             "- Vort native decode command: `vort decode-vort-embedded-range-file <tmp.vort> <tmp.out> 0 <input_bytes>`",
             "",
-            "Decode timings include process startup and temporary-file/stdout plumbing; they are a retained smoke signal, not a standalone throughput claim.",
+            "Decode timings are a retained smoke signal, not a standalone throughput claim: zstd rows include process/stdout plumbing, while Vort raw/native rows use CLI-internal decode loops divided by the repeat count after a one-shot output check.",
             "",
             "| path | input bytes | zstd bytes | Vort raw fixed bytes | Vort native bytes | Vort raw / zstd | Vort native / zstd | zstd decode MiB/s | Vort raw fixed decode MiB/s | Vort native decode MiB/s | Vort raw decode / zstd | Vort native decode / zstd |",
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
