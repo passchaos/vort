@@ -2232,6 +2232,7 @@ Example:
     "ratio"
   ],
   "enforce_throughput": true,
+  "allow_any_fixtures": false,
   "min_range_mib_s_by_tier": {
     "seek_fast": 52.580107,
     "balanced": 12.292282,

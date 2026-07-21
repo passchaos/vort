@@ -367,6 +367,14 @@
     "vort-native-tier-range-files-bench-gate.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-native-tier-range-files-bench-gate"
+    },
+    "vort-native-tier-range-corpus-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
+    },
+    "vort-native-tier-range-corpus-bench-gate.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
     }
   },
   "contains": [
@@ -474,7 +482,9 @@
     "vort-zstd-compare.csv": "zig build run-zstd-compare-gate",
     "vort-zstd-compare.md": "zig build run-zstd-compare-gate",
     "vort-native-tier-range-bench-gate.json": "zig build run-native-tier-range-bench-gate",
-    "vort-native-tier-range-files-bench-gate.json": "zig build run-native-tier-range-files-bench-gate"
+    "vort-native-tier-range-files-bench-gate.json": "zig build run-native-tier-range-files-bench-gate",
+    "vort-native-tier-range-corpus-bench.csv": "zig build run-native-tier-range-corpus-bench-gate",
+    "vort-native-tier-range-corpus-bench-gate.json": "zig build run-native-tier-range-corpus-bench-gate"
   },
   "required_smoke_gates": [
     "vort-checksum-bench.csv",
@@ -512,6 +522,8 @@
     "vort-native-tier-range-files-bench-gate.json",
     "vort-native-tier-range-bench.csv",
     "vort-native-tier-range-files-bench.csv",
+    "vort-native-tier-range-corpus-bench-gate.json",
+    "vort-native-tier-range-corpus-bench.csv",
     "vort-png-scanline-bench.csv",
     "vort-png-scratch-report.json",
     "vort-png-scratch-report.md",

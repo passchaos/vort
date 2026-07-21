@@ -71,15 +71,22 @@ def main() -> int:
     parser.add_argument("--csv", type=Path, default=Path("zig-out/vort-native-tier-range-bench.csv"))
     parser.add_argument("--enforce-throughput", action="store_true")
     parser.add_argument("--expect-fixtures", help="comma-separated fixture names; defaults to built-in fixtures")
+    parser.add_argument("--allow-any-fixtures", action="store_true", help="derive expected fixtures from CSV rows")
     parser.add_argument("--summary", type=Path)
     args = parser.parse_args()
-    expected_fixtures = set(args.expect_fixtures.split(",")) if args.expect_fixtures else DEFAULT_EXPECTED_FIXTURES
 
     rows = list(csv.DictReader(args.csv.open(newline="")))
     if not rows:
         raise AssertionError("native tier range bench CSV has no rows")
     if set(rows[0].keys()) != EXPECTED_COLUMNS:
         raise AssertionError(f"bad CSV header: {list(rows[0].keys())!r}")
+
+    if args.allow_any_fixtures:
+        expected_fixtures = {row["fixture"] for row in rows}
+    else:
+        expected_fixtures = set(args.expect_fixtures.split(",")) if args.expect_fixtures else DEFAULT_EXPECTED_FIXTURES
+    if not expected_fixtures:
+        raise AssertionError("expected fixture set must be non-empty")
 
     seen = {(row["fixture"], row["tier"]) for row in rows}
     expected = {(fixture, tier) for fixture in expected_fixtures for tier in EXPECTED_TIERS}
@@ -140,6 +147,7 @@ def main() -> int:
         "fixtures": sorted(expected_fixtures),
         "tiers": ordered_tiers,
         "enforce_throughput": args.enforce_throughput,
+        "allow_any_fixtures": args.allow_any_fixtures,
         "min_range_mib_s_by_tier": {tier: tier_min_range_mib_s[tier] for tier in ordered_tiers},
         "min_full_input_mib_s_by_tier": {tier: tier_min_full_input_mib_s[tier] for tier in ordered_tiers},
         "total_stream_bytes_by_tier": {tier: tier_total_stream_bytes[tier] for tier in ordered_tiers},

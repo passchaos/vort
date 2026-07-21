@@ -503,6 +503,20 @@
       "require_present": true,
       "require_producer_step": true,
       "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-corpus-bench-gate.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-corpus-bench.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
     }
   ],
   "schema": "vort.dashboard_category_expected_artifacts",

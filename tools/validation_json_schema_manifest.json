@@ -1898,7 +1898,8 @@
         "tier_count": "int",
         "tiers": "list",
         "total_index_entries_by_tier": "dict",
-        "total_stream_bytes_by_tier": "dict"
+        "total_stream_bytes_by_tier": "dict",
+        "allow_any_fixtures": "bool"
       }
     },
     "vort.native_allocation_report": {

@@ -1350,6 +1350,32 @@ pub fn build(b: *std.Build) void {
     const native_tier_range_files_bench_gate_step = b.step("run-native-tier-range-files-bench-gate", "Validate native seekability tier range benchmark CSV for README/roadmap");
     native_tier_range_files_bench_gate_step.dependOn(&native_tier_range_files_bench_gate.step);
 
+    const native_tier_range_corpus_bench = b.addSystemCommand(&.{ "python3", "tools/native_tier_range_corpus_report.py" });
+    native_tier_range_corpus_bench.addArtifactArg(native_tier_range_bench_exe);
+    native_tier_range_corpus_bench.addArgs(&.{
+        "--limit",
+        "3",
+        "--csv",
+        "zig-out/vort-native-tier-range-corpus-bench.csv",
+    });
+    if (b.args) |args| native_tier_range_corpus_bench.addArgs(args);
+    const native_tier_range_corpus_bench_csv_step = b.step("run-native-tier-range-corpus-bench-csv", "Write native seekability tier range benchmark CSV for standard corpus rows");
+    native_tier_range_corpus_bench_csv_step.dependOn(&native_tier_range_corpus_bench.step);
+
+    const native_tier_range_corpus_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/native_tier_range_bench_gate.py",
+        "--csv",
+        "zig-out/vort-native-tier-range-corpus-bench.csv",
+        "--allow-any-fixtures",
+        "--summary",
+        "zig-out/vort-native-tier-range-corpus-bench-gate.json",
+    });
+    if (optimize == .ReleaseFast) native_tier_range_corpus_bench_gate.addArg("--enforce-throughput");
+    native_tier_range_corpus_bench_gate.step.dependOn(native_tier_range_corpus_bench_csv_step);
+    const native_tier_range_corpus_bench_gate_step = b.step("run-native-tier-range-corpus-bench-gate", "Validate native seekability tier range benchmark CSV for standard corpus rows");
+    native_tier_range_corpus_bench_gate_step.dependOn(&native_tier_range_corpus_bench_gate.step);
+
     const native_allocation_report_exe = b.addExecutable(.{
         .name = "vort-native-allocation-report",
         .root_module = b.createModule(.{
@@ -1548,6 +1574,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(huffman_length_report_dashboard_step);
     dashboard_index.step.dependOn(native_tier_range_bench_gate_step);
     dashboard_index.step.dependOn(native_tier_range_files_bench_gate_step);
+    dashboard_index.step.dependOn(native_tier_range_corpus_bench_gate_step);
     dashboard_index.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     dashboard_index.step.dependOn(fuzz_corpus_coverage_smoke_step);
     dashboard_index.step.dependOn(native_fuzz_corpus_coverage_smoke_step);
@@ -1761,6 +1788,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(native_range_report_step);
     ci_smoke_step.dependOn(native_tier_range_bench_gate_step);
     ci_smoke_step.dependOn(native_tier_range_files_bench_gate_step);
+    ci_smoke_step.dependOn(native_tier_range_corpus_bench_gate_step);
     ci_smoke_step.dependOn(native_allocation_report_step);
     ci_smoke_step.dependOn(native_allocation_dashboard_step);
     ci_smoke_step.dependOn(native_allocation_smoke_step);
