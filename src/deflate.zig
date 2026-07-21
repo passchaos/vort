@@ -10351,6 +10351,14 @@ test "zlib decoder supports preset dictionary streams" {
     try std.testing.expectEqual(encoded.len, direct_chunk_step.progress.input_read);
     try std.testing.expectEqualSlices(u8, input, &out);
 
+    const header_only_chunks = [_][]const u8{ encoded[0..3], encoded[3..6] };
+    try std.testing.expectError(error.TruncatedFrame, ZlibDecoder.initFromChunksWithDictionaryExactSizeDirect(&header_only_chunks, dict, &scratch, input.len));
+    var reserved_frame: [7]u8 = undefined;
+    @memcpy(reserved_frame[0..6], encoded[0..6]);
+    reserved_frame[6] = 0x07;
+    const reserved_chunks = [_][]const u8{ reserved_frame[0..3], reserved_frame[3..] };
+    try std.testing.expectError(error.InvalidDeflateBlockType, ZlibDecoder.initFromChunksWithDictionaryExactSizeDirect(&reserved_chunks, dict, &scratch, input.len));
+
     try std.testing.expectError(error.SizeMismatch, ZlibDecoder.initWithDictionaryExactSize(encoded, dict, &scratch, input.len - 1));
     try std.testing.expectError(error.NeedDictionary, ZlibDecoder.init(encoded, &scratch));
 }
@@ -10441,6 +10449,11 @@ test "zlib chunked one-shot helpers cover relaxed and dictionary paths" {
     var bad_header_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.BadZlibHeader, decodeZlibChunksAllocExactSize(bad_header_failing.allocator(), &bad_header_chunks, input.len));
     try std.testing.expectEqual(@as(usize, 0), bad_header_failing.allocations);
+
+    const direct_header_only_chunks = [_][]const u8{ &.{0x78}, &.{0x01} };
+    try std.testing.expectError(error.TruncatedFrame, ZlibDecoder.initFromChunksExactSizeDirect(&direct_header_only_chunks, &output, input.len));
+    const direct_reserved_chunks = [_][]const u8{ &.{0x78}, &.{ 0x01, 0x07 } };
+    try std.testing.expectError(error.InvalidDeflateBlockType, ZlibDecoder.initFromChunksExactSizeDirect(&direct_reserved_chunks, &output, input.len));
 
     const header_only_chunks = [_][]const u8{ &.{0x78}, &.{0x01} };
     var header_only_alloc_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
