@@ -559,6 +559,9 @@ architecture blindly.
 - [x] Legacy chunked wrapper helpers borrow a single non-empty compressed chunk directly, avoiding an unnecessary join copy and scratch-size requirement for already-contiguous chunk callers.
 - [x] GzipDecoder drains concatenated gzip members, including empty middle members, from caller-owned scratch and chunked compressed input.
 - [x] GzipDecoder exposes `WithOptions` initializers/resets for single-member, concatenated, and chunked caller-scratch decode so trusted streaming users can opt into relaxed CRC/ISIZE/trailing-data handling without switching to allocation-returning APIs.
+- [x] Public gzip concatenated chunked helpers cover caller-buffer,
+  allocator-returning, exact-size, output-limited, and relaxed-option workflows
+  over caller-provided compressed join scratch.
 - [x] GzipDecoder exact-size initializers reject decoded-size mismatches before payload drain.
 - [x] GzipDecoder reports bad-header, truncated-frame, CRC, and ISIZE diagnostics through the shared streaming diagnostics surface.
 - [x] CLI gzip header inspection prints parsed metadata for hex/file workflows.
@@ -1315,3 +1318,9 @@ architecture blindly.
   policy before dispatching to the existing gzip allocator paths, so split-input
   callers can avoid writing their own coalescing logic while preserving strict
   prechecks, size/limit errors, and relaxed CRC/ISIZE/trailing behavior.
+
+- Added public one-shot `decodeGzipConcatenatedChunks*` helpers for split-input
+  concatenated gzip streams, including caller-buffer, allocator-returning,
+  exact-size, output-limited, and relaxed-option variants. They share the same
+  join-scratch compatibility layer as single-member gzip chunk helpers before
+  reusing the existing concatenated gzip validators.

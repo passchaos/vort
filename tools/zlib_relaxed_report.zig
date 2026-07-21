@@ -227,6 +227,13 @@ pub fn main(init: std.process.Init) !void {
     try drainDecoderPayload(&cat_decoder, Payload ++ Payload);
     gzip_decoder_successes += 1;
     const cat_chunks = [_][]const u8{ cat[0..5], cat[5 .. cat.len - 3], cat[cat.len - 3 ..] };
+    const cat_chunk_written = try vort.decodeGzipConcatenatedChunksWithOptions(&cat_chunks, &compressed_scratch, &cat_out, gzip_concat_relaxed);
+    if (cat_chunk_written != Payload.len * 2 or !std.mem.eql(u8, Payload ++ Payload, &cat_out)) return error.PayloadMismatch;
+    gzip_concatenated_successes += 1;
+    const cat_chunk_alloc = try vort.decodeGzipConcatenatedChunksAllocWithOptionsExactSize(init.gpa, &cat_chunks, &compressed_scratch, gzip_concat_relaxed, Payload.len * 2);
+    defer init.gpa.free(cat_chunk_alloc);
+    if (!std.mem.eql(u8, Payload ++ Payload, cat_chunk_alloc)) return error.PayloadMismatch;
+    gzip_concatenated_successes += 1;
     var cat_chunk_decoder = try vort.GzipDecoder.initConcatenatedFromChunksWithOptionsExactSize(&cat_chunks, &compressed_scratch, &cat_out, gzip_concat_relaxed, Payload.len * 2);
     try drainDecoderPayload(&cat_chunk_decoder, Payload ++ Payload);
     gzip_decoder_successes += 1;

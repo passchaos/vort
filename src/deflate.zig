@@ -8443,6 +8443,45 @@ pub fn decodeGzipConcatenatedWithOptions(input: []const u8, output: []u8, option
     return out_offset;
 }
 
+pub fn decodeGzipConcatenatedChunks(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
+    return decodeGzipConcatenatedChunksWithOptions(chunks, compressed_scratch, output, .{});
+}
+
+pub fn decodeGzipConcatenatedChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, options: GzipDecodeOptions) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipConcatenatedWithOptions(joined, output, options);
+}
+
+pub fn decodeGzipConcatenatedChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) ![]u8 {
+    return decodeGzipConcatenatedChunksAllocWithOptionsLimitedInternal(allocator, chunks, compressed_scratch, .{}, null);
+}
+
+pub fn decodeGzipConcatenatedChunksAllocWithOptions(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions) ![]u8 {
+    return decodeGzipConcatenatedChunksAllocWithOptionsLimitedInternal(allocator, chunks, compressed_scratch, options, null);
+}
+
+pub fn decodeGzipConcatenatedChunksAllocExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) ![]u8 {
+    return decodeGzipConcatenatedChunksAllocWithOptionsExactSize(allocator, chunks, compressed_scratch, .{}, expected_output_len);
+}
+
+pub fn decodeGzipConcatenatedChunksAllocWithOptionsExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) ![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipConcatenatedAllocWithOptionsExactSize(allocator, joined, options, expected_output_len);
+}
+
+pub fn decodeGzipConcatenatedChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) ![]u8 {
+    return decodeGzipConcatenatedChunksAllocWithOptionsLimitedInternal(allocator, chunks, compressed_scratch, .{}, max_output_len);
+}
+
+pub fn decodeGzipConcatenatedChunksAllocWithOptionsLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: usize) ![]u8 {
+    return decodeGzipConcatenatedChunksAllocWithOptionsLimitedInternal(allocator, chunks, compressed_scratch, options, max_output_len);
+}
+
+fn decodeGzipConcatenatedChunksAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipConcatenatedAllocWithOptionsLimitedInternal(allocator, joined, options, max_output_len);
+}
+
 fn decodeGzipConcatenatedAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {
     if (input.len == 0) return error.TruncatedFrame;
     if (try precheckGzipConcatenatedStoredExact(input, options)) |stored_output_len| {
@@ -11679,6 +11718,20 @@ test "gzip decoder drains concatenated members from caller scratch" {
         input[first.len - 1 .. first.len + empty.len + 2],
         input[first.len + empty.len + 2 ..],
     };
+    @memset(&out, 0);
+    try std.testing.expectEqual(out.len, try decodeGzipConcatenatedChunks(&chunks, &compressed_scratch, &out));
+    try std.testing.expectEqualSlices(u8, "hello world", &out);
+    const chunk_alloc = try decodeGzipConcatenatedChunksAlloc(std.testing.allocator, &chunks, &compressed_scratch);
+    defer std.testing.allocator.free(chunk_alloc);
+    try std.testing.expectEqualSlices(u8, "hello world", chunk_alloc);
+    const chunk_exact = try decodeGzipConcatenatedChunksAllocExactSize(std.testing.allocator, &chunks, &compressed_scratch, out.len);
+    defer std.testing.allocator.free(chunk_exact);
+    try std.testing.expectEqualSlices(u8, "hello world", chunk_exact);
+    const chunk_limited = try decodeGzipConcatenatedChunksAllocLimited(std.testing.allocator, &chunks, &compressed_scratch, out.len);
+    defer std.testing.allocator.free(chunk_limited);
+    try std.testing.expectEqualSlices(u8, "hello world", chunk_limited);
+    try std.testing.expectError(error.SizeMismatch, decodeGzipConcatenatedChunksAllocExactSize(std.testing.allocator, &chunks, &compressed_scratch, out.len + 1));
+    try std.testing.expectError(error.OutputLimitExceeded, decodeGzipConcatenatedChunksAllocLimited(std.testing.allocator, &chunks, &compressed_scratch, out.len - 1));
     var chunk_decoder = try GzipDecoder.initConcatenatedFromChunksExactSize(&chunks, &compressed_scratch, &scratch, "hello world".len);
     @memset(&out, 0);
     const chunk_step = try chunk_decoder.step(&out);
@@ -11695,6 +11748,16 @@ test "gzip decoder drains concatenated members from caller scratch" {
         bad_cat[first.len - 1 .. first.len + empty.len + 2],
         bad_cat[first.len + empty.len + 2 ..],
     };
+    try std.testing.expectError(error.ChecksumMismatch, decodeGzipConcatenatedChunks(&bad_chunks, &compressed_scratch, &out));
+    @memset(&out, 0);
+    try std.testing.expectEqual(out.len, try decodeGzipConcatenatedChunksWithOptions(&bad_chunks, &compressed_scratch, &out, .{ .ignore_crc32 = true }));
+    try std.testing.expectEqualSlices(u8, "hello world", &out);
+    const relaxed_exact = try decodeGzipConcatenatedChunksAllocWithOptionsExactSize(std.testing.allocator, &bad_chunks, &compressed_scratch, .{ .ignore_crc32 = true }, out.len);
+    defer std.testing.allocator.free(relaxed_exact);
+    try std.testing.expectEqualSlices(u8, "hello world", relaxed_exact);
+    const relaxed_limited = try decodeGzipConcatenatedChunksAllocWithOptionsLimited(std.testing.allocator, &bad_chunks, &compressed_scratch, .{ .ignore_crc32 = true }, out.len);
+    defer std.testing.allocator.free(relaxed_limited);
+    try std.testing.expectEqualSlices(u8, "hello world", relaxed_limited);
     try std.testing.expectError(error.ChecksumMismatch, GzipDecoder.initConcatenatedFromChunksExactSize(&bad_chunks, &compressed_scratch, &scratch, "hello world".len));
     var relaxed_chunk_decoder = try GzipDecoder.initConcatenatedFromChunksWithOptionsExactSize(&bad_chunks, &compressed_scratch, &scratch, .{ .ignore_crc32 = true }, "hello world".len);
     @memset(&out, 0);

@@ -400,6 +400,9 @@ const gzip_chunked_exact = try vort.decodeGzipChunksAllocExactSize(
 );
 defer allocator.free(gzip_chunked_exact);
 const gzip_cat_written = try vort.decodeGzipConcatenated(gzip_bytes, &gzip_out);
+const gzip_cat_chunks = [_][]const u8{ gzip_bytes[0..4], gzip_bytes[4..] };
+const gzip_cat_chunked_written = try vort.decodeGzipConcatenatedChunks(&gzip_cat_chunks, &gzip_join_scratch, &gzip_out);
+_ = gzip_cat_chunked_written;
 
 // Limited decode APIs return error.OutputLimitExceeded before allocating or
 // appending beyond the caller's declared uncompressed-size budget. Dictionary

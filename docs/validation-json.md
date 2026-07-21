@@ -2010,7 +2010,7 @@ Example:
   "limited_rejections": 1,
   "gzip_strict_rejections": 3,
   "gzip_relaxed_successes": 9,
-  "gzip_concatenated_successes": 2,
+  "gzip_concatenated_successes": 4,
   "gzip_decoder_successes": 4,
   "gzip_limited_rejections": 1
 }
