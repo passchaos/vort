@@ -351,6 +351,20 @@
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard"
     },
     {
+      "expected_format": "json",
+      "name": "vort-native-tier-range-bench-gate.json",
+      "producer_step": "zig build run-native-tier-range-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-tier-range-bench-gate"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-native-tier-range-files-bench-gate.json",
+      "producer_step": "zig build run-native-tier-range-files-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-tier-range-files-bench-gate"
+    },
+    {
       "expected_format": "csv",
       "name": "vort-native-tier-range-bench.csv",
       "producer_step": "zig build run-native-tier-range-bench-gate",

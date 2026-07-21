@@ -2128,6 +2128,65 @@ Example:
 }
 ```
 
+## `vort.native_tier_range_bench_gate`
+
+Produced by:
+
+```sh
+zig build run-native-tier-range-bench-gate
+zig build run-native-tier-range-files-bench-gate
+```
+
+This schema records the validation summary for native seekability tier range
+benchmark CSV artifacts. It captures the fixture/tier matrix size, whether
+ReleaseFast throughput floors were enforced, per-tier minimum centered range
+throughput, per-tier minimum full-input-equivalent throughput, and aggregate
+stream/index sizes.
+
+Example:
+
+```json
+{
+  "schema": "vort.native_tier_range_bench_gate",
+  "schema_version": 1,
+  "ok": true,
+  "rows": 6,
+  "fixture_count": 2,
+  "tier_count": 3,
+  "fixtures": [
+    "README.md",
+    "roadmap.md"
+  ],
+  "tiers": [
+    "seek_fast",
+    "balanced",
+    "ratio"
+  ],
+  "enforce_throughput": true,
+  "min_range_mib_s_by_tier": {
+    "seek_fast": 52.580107,
+    "balanced": 12.292282,
+    "ratio": 5.648135
+  },
+  "min_full_input_mib_s_by_tier": {
+    "seek_fast": 732.078195,
+    "balanced": 257.766141,
+    "ratio": 179.718533
+  },
+  "total_stream_bytes_by_tier": {
+    "seek_fast": 51345,
+    "balanced": 46313,
+    "ratio": 45478
+  },
+  "total_index_entries_by_tier": {
+    "seek_fast": 20,
+    "balanced": 5,
+    "ratio": 3
+  },
+  "csv": "zig-out/vort-native-tier-range-files-bench.csv"
+}
+```
+
 ## `vort.png_scratch_report`
 
 Produced by:

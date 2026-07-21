@@ -1862,6 +1862,24 @@
         "returncode": "int"
       }
     },
+    "vort.native_tier_range_bench_gate": {
+      "fields": {
+        "csv": "str",
+        "enforce_throughput": "bool",
+        "fixture_count": "int",
+        "fixtures": "list",
+        "min_full_input_mib_s_by_tier": "dict",
+        "min_range_mib_s_by_tier": "dict",
+        "ok": "bool",
+        "rows": "int",
+        "schema": "str",
+        "schema_version": "int",
+        "tier_count": "int",
+        "tiers": "list",
+        "total_index_entries_by_tier": "dict",
+        "total_stream_bytes_by_tier": "dict"
+      }
+    },
     "vort.native_allocation_report": {
       "count_rules": {
         "case_count": {

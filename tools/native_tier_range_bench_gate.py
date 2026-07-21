@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 from pathlib import Path
 
@@ -70,6 +71,7 @@ def main() -> int:
     parser.add_argument("--csv", type=Path, default=Path("zig-out/vort-native-tier-range-bench.csv"))
     parser.add_argument("--enforce-throughput", action="store_true")
     parser.add_argument("--expect-fixtures", help="comma-separated fixture names; defaults to built-in fixtures")
+    parser.add_argument("--summary", type=Path)
     args = parser.parse_args()
     expected_fixtures = set(args.expect_fixtures.split(",")) if args.expect_fixtures else DEFAULT_EXPECTED_FIXTURES
 
@@ -83,6 +85,11 @@ def main() -> int:
     expected = {(fixture, tier) for fixture in expected_fixtures for tier in EXPECTED_TIERS}
     if seen != expected or len(rows) != len(expected):
         raise AssertionError(f"bad fixture/tier matrix: seen={sorted(seen)!r}")
+
+    tier_min_range_mib_s = {tier: float("inf") for tier in EXPECTED_TIERS}
+    tier_min_full_input_mib_s = {tier: float("inf") for tier in EXPECTED_TIERS}
+    tier_total_stream_bytes = {tier: 0 for tier in EXPECTED_TIERS}
+    tier_total_index_entries = {tier: 0 for tier in EXPECTED_TIERS}
 
     for row in rows:
         fixture = row["fixture"]
@@ -113,10 +120,35 @@ def main() -> int:
         expected_full = ((input_bytes * iterations) / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
         assert_close(range_mib_s, expected_range, f"{fixture}/{tier} range_mib_s")
         assert_close(full_input_mib_s, expected_full, f"{fixture}/{tier} full_input_mib_s")
+        tier_min_range_mib_s[tier] = min(tier_min_range_mib_s[tier], range_mib_s)
+        tier_min_full_input_mib_s[tier] = min(tier_min_full_input_mib_s[tier], full_input_mib_s)
+        tier_total_stream_bytes[tier] += stream_bytes
+        tier_total_index_entries[tier] += index_entries
         if args.enforce_throughput and range_mib_s < MIN_RELEASEFAST_RANGE_MIB_S[tier]:
             raise AssertionError(f"range throughput below ReleaseFast floor for {tier}: {range_mib_s}")
         if repeat < 1:
             raise AssertionError(f"repeat must be positive: {row}")
+
+    ordered_tiers = ["seek_fast", "balanced", "ratio"]
+    summary = {
+        "schema": "vort.native_tier_range_bench_gate",
+        "schema_version": 1,
+        "ok": True,
+        "rows": len(rows),
+        "fixture_count": len(expected_fixtures),
+        "tier_count": len(EXPECTED_TIERS),
+        "fixtures": sorted(expected_fixtures),
+        "tiers": ordered_tiers,
+        "enforce_throughput": args.enforce_throughput,
+        "min_range_mib_s_by_tier": {tier: tier_min_range_mib_s[tier] for tier in ordered_tiers},
+        "min_full_input_mib_s_by_tier": {tier: tier_min_full_input_mib_s[tier] for tier in ordered_tiers},
+        "total_stream_bytes_by_tier": {tier: tier_total_stream_bytes[tier] for tier in ordered_tiers},
+        "total_index_entries_by_tier": {tier: tier_total_index_entries[tier] for tier in ordered_tiers},
+        "csv": str(args.csv),
+    }
+    if args.summary:
+        args.summary.parent.mkdir(parents=True, exist_ok=True)
+        args.summary.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
 
     print(f"native_tier_range_bench_gate=ok rows={len(rows)} enforce={args.enforce_throughput}")
     return 0

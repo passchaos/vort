@@ -1314,6 +1314,8 @@ pub fn build(b: *std.Build) void {
         "tools/native_tier_range_bench_gate.py",
         "--csv",
         "zig-out/vort-native-tier-range-bench.csv",
+        "--summary",
+        "zig-out/vort-native-tier-range-bench-gate.json",
     });
     if (optimize == .ReleaseFast) native_tier_range_bench_gate.addArg("--enforce-throughput");
     native_tier_range_bench_gate.step.dependOn(native_tier_range_bench_csv_step);
@@ -1340,6 +1342,8 @@ pub fn build(b: *std.Build) void {
         "zig-out/vort-native-tier-range-files-bench.csv",
         "--expect-fixtures",
         "README.md,roadmap.md",
+        "--summary",
+        "zig-out/vort-native-tier-range-files-bench-gate.json",
     });
     if (optimize == .ReleaseFast) native_tier_range_files_bench_gate.addArg("--enforce-throughput");
     native_tier_range_files_bench_gate.step.dependOn(native_tier_range_files_bench_csv_step);
