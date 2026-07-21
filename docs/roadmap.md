@@ -1134,9 +1134,9 @@ architecture blindly.
 
 - Extended the stored-plan reuse to unknown-size and output-limited zlib/gzip allocator-returning decode paths. Single-member all-stored wrappers now validate checksum, size, and trailing policy before allocation, then copy planned stored payload bytes once instead of recomputing wrapper hashes during allocation.
 
-- Refreshed ReleaseFast decode-stage evidence for the stored-plan reuse work. The local repeat3 `stored-binary` row now reports zlib stored alloc/exact/into around `3140.35` / `3264.16` / `18085.36` MiB/s and gzip stored alloc/exact/into around `1620.25` / `1627.33` / `2732.22` MiB/s, with stored-vs-generic allocation time ratios near neutral (`zlib_stored_alloc_time_ratio=1.0146`, `gzip_stored_alloc_time_ratio=0.9863`) and exact stored ratios slightly positive (`1.0394` / `1.0044`).
-
 - Routed raw stored allocator-returning decode through the same validated stored-block plan used by wrapper paths. Raw stored unknown-size, exact-size, and output-limited APIs now reject trailing/size/limit errors before allocation and copy planned stored payload bytes once instead of re-running stored decode after preflight.
+
+- Refreshed ReleaseFast decode-stage evidence for the stored-plan reuse work after including the raw stored allocator paths. The local repeat3 `stored-binary` row now reports raw stored alloc/exact/into around `3746.44` / `3775.82` / `43776.01` MiB/s, zlib stored alloc/exact/into around `3282.02` / `3194.62` / `17584.83` MiB/s, and gzip stored alloc/exact/into around `1601.41` / `1575.41` / `2656.78` MiB/s. Stored allocation ratios remain near neutral in this smoke (`raw=0.9769`, `zlib=0.9910`, `gzip=1.0167`; exact ratios `1.0078` / `0.9734` / `0.9838`).
 
 - Extended the dynamic deflate decode profile CSV and gate with match-class extra-bit density columns (`*_extra_bits_per_match` and `*_extra_bits_per_byte`). The latest README/roadmap profiles show non-overlap matches spend about `7.946` / `9.824` extra bits per match and `0.612` / `0.970` extra bits per non-overlap byte, giving the next dynamic-decode work a clearer target than repeating rejected distance-formula or branch-order experiments.
 
