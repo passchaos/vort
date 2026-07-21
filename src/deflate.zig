@@ -2316,10 +2316,7 @@ fn appendRawStoredOnlyPlannedWithHash(comptime Hash: type, allocator: std.mem.Al
 pub fn decodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const plan = (try planRawStoredOnly(input)) orelse return error.InvalidDeflateBlockType;
     if (plan.input_read != input.len) return error.TrailingData;
-    const result = try decodeRawStoredAllocPartial(allocator, input);
-    errdefer result.deinit(allocator);
-    if (result.input_read != input.len) return error.TrailingData;
-    return result.bytes;
+    return (try decodeRawStoredOnlyAllocPlanned(allocator, input, plan, null)).bytes;
 }
 
 pub fn decodeRawStoredAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
@@ -2327,25 +2324,14 @@ pub fn decodeRawStoredAllocExactSize(allocator: std.mem.Allocator, input: []cons
     if (expected_output_len < plan.output_len) return error.SizeMismatch;
     if (plan.input_read != input.len) return error.TrailingData;
     if (expected_output_len != plan.output_len) return error.SizeMismatch;
-    const out = try allocator.alloc(u8, expected_output_len);
-    errdefer allocator.free(out);
-    const decoded = decodeRawStored(input, out) catch |err| switch (err) {
-        error.OutputTooSmall => return error.SizeMismatch,
-        else => return err,
-    };
-    if (decoded.input_read != input.len) return error.TrailingData;
-    if (decoded.output_written != expected_output_len) return error.SizeMismatch;
-    return out;
+    return (try decodeRawStoredOnlyAllocPlanned(allocator, input, plan, null)).bytes;
 }
 
 pub fn decodeRawStoredAllocLimited(allocator: std.mem.Allocator, input: []const u8, max_output_len: usize) ![]u8 {
     const plan = (try planRawStoredOnly(input)) orelse return error.InvalidDeflateBlockType;
     try ensureOutputLimit(0, plan.output_len, max_output_len);
     if (plan.input_read != input.len) return error.TrailingData;
-    const result = try decodeRawStoredAllocPartialLimitedInternal(allocator, input, max_output_len);
-    errdefer result.deinit(allocator);
-    if (result.input_read != input.len) return error.TrailingData;
-    return result.bytes;
+    return (try decodeRawStoredOnlyAllocPlanned(allocator, input, plan, max_output_len)).bytes;
 }
 
 fn decodeStoredBlockFromReader(allocator: std.mem.Allocator, reader: anytype, out: *std.ArrayList(u8), max_output_len: ?usize) !void {
