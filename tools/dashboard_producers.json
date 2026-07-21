@@ -291,6 +291,14 @@
     "vort-zlib-relaxed-report.md": {
       "expected_format": "md",
       "smoke_gate": "zig build run-zlib-relaxed-report-gate"
+    },
+    "vort-zstd-compare.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-zstd-compare"
+    },
+    "vort-zstd-compare.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-zstd-compare"
     }
   },
   "contains": [
@@ -379,7 +387,9 @@
     "vort-validation-json-smoke.json": "zig build run-validation-json-dashboard",
     "vort-zlib-relaxed-report-gate.json": "zig build run-zlib-relaxed-report-gate",
     "vort-zlib-relaxed-report.json": "zig build run-zlib-relaxed-report",
-    "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report"
+    "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report",
+    "vort-zstd-compare.csv": "zig build run-zstd-compare",
+    "vort-zstd-compare.md": "zig build run-zstd-compare"
   },
   "required_smoke_gates": [
     "vort-checksum-bench.csv",

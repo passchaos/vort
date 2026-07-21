@@ -28,7 +28,7 @@ def category_for(path: Path) -> str:
         or "fuzz" in name
     ):
         return "validation"
-    if "bench" in name or "benchmark" in name:
+    if "bench" in name or "benchmark" in name or "zstd-compare" in name:
         return "benchmark"
     if "standard" in name or "corpus" in name or "dictionary" in name or "level-report" in name:
         return "corpus and ratio"

@@ -3,7 +3,10 @@
 `zig build run-zstd-compare` reports zstd CLI size beside Vort's current raw
 fixed-deflate output on sample project files. This is a smoke comparison, not a
 performance claim: it uses documentation/source-like inputs, zstd level 1 via
-the local CLI, and the Vort debug-built CLI's raw fixed-Huffman encoder.
+the local CLI, and the Vort debug-built CLI's raw fixed-Huffman encoder. The
+build step now retains `zig-out/vort-zstd-compare.csv` and
+`zig-out/vort-zstd-compare.md` so the size smoke can be linked from dashboard
+indexes instead of only appearing on stdout.
 
 Latest local smoke (2026-07-21):
 
@@ -29,8 +32,8 @@ Current interpretation:
 
 Recommended next comparison steps:
 
-1. Extend `run-zstd-compare` to emit a retained CSV/Markdown artifact with the
-   zstd command line, Vort commit, Zig version, and CPU model.
+1. Extend `run-zstd-compare` metadata with the Vort commit, Zig version, CPU
+   model, and target optimization mode.
 2. Add decode throughput rows for zstd and Vort native/zlib/raw modes rather
    than size-only output.
 3. Run the comparison over the standard corpus discovery used by
