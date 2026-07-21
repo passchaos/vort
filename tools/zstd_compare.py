@@ -34,6 +34,8 @@ CSV_FIELDS = [
     "vort_native_best_over_zstd",
     "vort_native_over_zstd",
     "vort_embedded_over_native_best",
+    "vort_embedded_over_native_best_bytes",
+    "vort_embedded_over_native_best_pct",
     "zstd_decode_ms",
     "vort_raw_fixed_decode_ms",
     "vort_native_best_decode_ms",
@@ -352,8 +354,8 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             "",
             "Decode timings are a retained smoke signal, not a standalone throughput claim: zstd rows include process/stdout plumbing, while Vort raw/native rows use CLI-internal decode loops divided by the repeat count after a one-shot output check.",
             "",
-            "| path | input bytes | zstd bytes | Vort raw fixed bytes | Vort native best bytes | Vort native embedded bytes | Vort raw / zstd | Vort native best / zstd | Vort native embedded / zstd | embedded / native best | zstd decode MiB/s | Vort raw fixed decode MiB/s | Vort native best decode MiB/s | Vort native embedded decode MiB/s | Vort raw decode / zstd | Vort native best decode / zstd | Vort native embedded decode / zstd |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| path | input bytes | zstd bytes | Vort raw fixed bytes | Vort native best bytes | Vort native embedded bytes | embedded overhead bytes | embedded overhead pct | Vort raw / zstd | Vort native best / zstd | Vort native embedded / zstd | embedded / native best | zstd decode MiB/s | Vort raw fixed decode MiB/s | Vort native best decode MiB/s | Vort native embedded decode MiB/s | Vort raw decode / zstd | Vort native best decode / zstd | Vort native embedded decode / zstd |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
         for row in rows:
             raw_ratio = row["vort_over_zstd"]
@@ -364,6 +366,9 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             native_ratio_text = "n/a" if not isinstance(native_ratio, float) or native_ratio < 0 else f"{native_ratio:.4f}"
             embedded_over_best = row["vort_embedded_over_native_best"]
             embedded_over_best_text = "n/a" if not isinstance(embedded_over_best, float) or embedded_over_best < 0 else f"{embedded_over_best:.4f}"
+            embedded_over_best_pct = row["vort_embedded_over_native_best_pct"]
+            embedded_over_best_pct_text = "n/a" if not isinstance(embedded_over_best_pct, float) or embedded_over_best_pct < 0 else f"{embedded_over_best_pct:.2f}%"
+            embedded_over_best_bytes = row["vort_embedded_over_native_best_bytes"]
             zstd_decode = row["zstd_decode_mib_s"]
             raw_decode = row["vort_raw_fixed_decode_mib_s"]
             native_best_decode = row["vort_native_best_decode_mib_s"]
@@ -372,7 +377,7 @@ def write_outputs(args: argparse.Namespace, rows: list[dict[str, Any]], meta: di
             native_best_decode_ratio = row["vort_native_best_decode_vs_zstd"]
             native_decode_ratio = row["vort_native_decode_vs_zstd"]
             lines.append(
-                f"| {('**TOTAL**' if row['path'] == 'TOTAL' else '`' + row['path'] + '`')} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_raw_fixed_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_embedded_bytes']} | {raw_ratio_text} | {native_best_ratio_text} | {native_ratio_text} | {embedded_over_best_text} | {zstd_decode:.2f} | {raw_decode:.2f} | {native_best_decode:.2f} | {native_decode:.2f} | {raw_decode_ratio:.4f} | {native_best_decode_ratio:.4f} | {native_decode_ratio:.4f} |"
+                f"| {('**TOTAL**' if row['path'] == 'TOTAL' else '`' + row['path'] + '`')} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_raw_fixed_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_embedded_bytes']} | {embedded_over_best_bytes} | {embedded_over_best_pct_text} | {raw_ratio_text} | {native_best_ratio_text} | {native_ratio_text} | {embedded_over_best_text} | {zstd_decode:.2f} | {raw_decode:.2f} | {native_best_decode:.2f} | {native_decode:.2f} | {raw_decode_ratio:.4f} | {native_best_decode_ratio:.4f} | {native_decode_ratio:.4f} |"
             )
         args.markdown.write_text("\n".join(lines) + "\n")
 
@@ -465,7 +470,9 @@ def main() -> int:
         ratio = (vort_size / zstd_size) if zstd_size and vort_size >= 0 else -1.0
         native_best_ratio = (native_best_size / zstd_size) if zstd_size and native_best_size >= 0 else -1.0
         native_ratio = (native_size / zstd_size) if zstd_size and native_size >= 0 else -1.0
+        embedded_over_best_bytes = native_size - native_best_size if native_size >= 0 and native_best_size >= 0 else -1
         embedded_over_best = (native_size / native_best_size) if native_best_size > 0 and native_size >= 0 else -1.0
+        embedded_over_best_pct = ((native_size / native_best_size) - 1.0) * 100.0 if native_best_size > 0 and native_size >= 0 else -1.0
         rows.append(
             {
                 "path": label,
@@ -478,6 +485,8 @@ def main() -> int:
                 "vort_native_best_over_zstd": native_best_ratio,
                 "vort_native_over_zstd": native_ratio,
                 "vort_embedded_over_native_best": embedded_over_best,
+                "vort_embedded_over_native_best_bytes": embedded_over_best_bytes,
+                "vort_embedded_over_native_best_pct": embedded_over_best_pct,
                 "zstd_decode_ms": zstd_decode_s * 1000.0,
                 "vort_raw_fixed_decode_ms": vort_decode_s * 1000.0,
                 "vort_native_best_decode_ms": native_best_decode_s * 1000.0,
@@ -505,7 +514,9 @@ def main() -> int:
         total_ratio = (total_vort / total_zstd) if total_zstd and total_vort >= 0 else -1.0
         total_native_best_ratio = (total_native_best / total_zstd) if total_zstd and total_native_best >= 0 else -1.0
         total_native_ratio = (total_native / total_zstd) if total_zstd and total_native >= 0 else -1.0
+        total_embedded_over_best_bytes = total_native - total_native_best if total_native >= 0 and total_native_best >= 0 else -1
         total_embedded_over_best = (total_native / total_native_best) if total_native_best > 0 and total_native >= 0 else -1.0
+        total_embedded_over_best_pct = ((total_native / total_native_best) - 1.0) * 100.0 if total_native_best > 0 and total_native >= 0 else -1.0
         total_zstd_decode_ms = sum(float(row["zstd_decode_ms"]) for row in rows)
         total_vort_decode_ms = sum(float(row["vort_raw_fixed_decode_ms"]) for row in rows)
         total_native_best_decode_ms = sum(float(row["vort_native_best_decode_ms"]) for row in rows)
@@ -526,6 +537,8 @@ def main() -> int:
                 "vort_native_best_over_zstd": total_native_best_ratio,
                 "vort_native_over_zstd": total_native_ratio,
                 "vort_embedded_over_native_best": total_embedded_over_best,
+                "vort_embedded_over_native_best_bytes": total_embedded_over_best_bytes,
+                "vort_embedded_over_native_best_pct": total_embedded_over_best_pct,
                 "zstd_decode_ms": total_zstd_decode_ms,
                 "vort_raw_fixed_decode_ms": total_vort_decode_ms,
                 "vort_native_best_decode_ms": total_native_best_decode_ms,

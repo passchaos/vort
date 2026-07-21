@@ -22,6 +22,8 @@ REQUIRED_FIELDS = [
     "vort_native_best_over_zstd",
     "vort_native_over_zstd",
     "vort_embedded_over_native_best",
+    "vort_embedded_over_native_best_bytes",
+    "vort_embedded_over_native_best_pct",
     "zstd_decode_ms",
     "vort_raw_fixed_decode_ms",
     "vort_native_best_decode_ms",
@@ -130,10 +132,18 @@ def main() -> int:
     actual_native_ratio = float(total["vort_native_over_zstd"])
     if abs(actual_native_ratio - expected_native_ratio) > 1e-9:
         raise AssertionError(f"TOTAL native ratio mismatch: expected {expected_native_ratio}, got {actual_native_ratio}")
+    expected_embedded_over_best_bytes = summed_native - summed_native_best
+    actual_embedded_over_best_bytes = int(total["vort_embedded_over_native_best_bytes"])
+    if actual_embedded_over_best_bytes != expected_embedded_over_best_bytes:
+        raise AssertionError(f"TOTAL embedded/native-best bytes mismatch: expected {expected_embedded_over_best_bytes}, got {actual_embedded_over_best_bytes}")
     expected_embedded_over_best = summed_native / summed_native_best
     actual_embedded_over_best = float(total["vort_embedded_over_native_best"])
     if abs(actual_embedded_over_best - expected_embedded_over_best) > 1e-9:
         raise AssertionError(f"TOTAL embedded/native-best mismatch: expected {expected_embedded_over_best}, got {actual_embedded_over_best}")
+    expected_embedded_over_best_pct = (expected_embedded_over_best - 1.0) * 100.0
+    actual_embedded_over_best_pct = float(total["vort_embedded_over_native_best_pct"])
+    if abs(actual_embedded_over_best_pct - expected_embedded_over_best_pct) > 1e-9:
+        raise AssertionError(f"TOTAL embedded/native-best pct mismatch: expected {expected_embedded_over_best_pct}, got {actual_embedded_over_best_pct}")
     total_zstd_decode_mib_s = positive_float(total["zstd_decode_mib_s"])
     total_vort_decode_mib_s = positive_float(total["vort_raw_fixed_decode_mib_s"])
     total_native_best_decode_mib_s = positive_float(total["vort_native_best_decode_mib_s"])
@@ -210,6 +220,7 @@ def main() -> int:
         or "Vort raw decode / zstd" not in markdown
         or "Vort native best" not in markdown
         or "embedded / native best" not in markdown
+        or "embedded overhead bytes" not in markdown
         or "Vort native embedded" not in markdown
     ):
         raise AssertionError("markdown summary missing retained metadata or TOTAL row")
@@ -230,6 +241,8 @@ def main() -> int:
         "total_native_best_ratio": actual_native_best_ratio,
         "total_native_ratio": actual_native_ratio,
         "total_embedded_over_native_best": actual_embedded_over_best,
+        "total_embedded_over_native_best_bytes": actual_embedded_over_best_bytes,
+        "total_embedded_over_native_best_pct": actual_embedded_over_best_pct,
         "total_zstd_decode_mib_s": total_zstd_decode_mib_s,
         "total_vort_raw_fixed_decode_mib_s": total_vort_decode_mib_s,
         "total_vort_decode_vs_zstd": actual_decode_ratio,
@@ -250,6 +263,7 @@ def main() -> int:
         f"native_best_ratio={actual_native_best_ratio:.4f} "
         f"native_ratio={actual_native_ratio:.4f} "
         f"embedded_over_best={actual_embedded_over_best:.4f} "
+        f"embedded_over_best_bytes={actual_embedded_over_best_bytes} "
         f"decode_vs_zstd={actual_decode_ratio:.4f} "
         f"native_best_decode_vs_zstd={actual_native_best_decode_ratio:.4f} "
         f"native_decode_vs_zstd={actual_native_decode_ratio:.4f}"

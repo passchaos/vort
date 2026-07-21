@@ -2604,6 +2604,8 @@
         "total_vort_native_best_decode_mib_s": "float",
         "total_vort_native_best_decode_vs_zstd": "float",
         "total_embedded_over_native_best": "float",
+        "total_embedded_over_native_best_bytes": "int",
+        "total_embedded_over_native_best_pct": "float",
         "total_vort_native_decode_mib_s": "float",
         "total_vort_native_decode_vs_zstd": "float",
         "total_vort_raw_fixed_decode_mib_s": "float",
