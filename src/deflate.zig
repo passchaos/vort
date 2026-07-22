@@ -5182,7 +5182,13 @@ pub const PngZlibScanlineDecoder = struct {
         }
 
         const row_output = output[0..self.row_len];
-        const result = try self.zlib.stepPngScanlineReconstruct(self.filtered_row_scratch, previous, self.bytes_per_pixel, row_output);
+        const result = try self.zlib.stepPngScanline(row_output);
+        if (result.filter) |filter| {
+            _ = reconstructPngScanline(filter, row_output, previous, self.bytes_per_pixel, row_output) catch |err| {
+                self.zlib.recordError(err);
+                return err;
+            };
+        }
 
         const row_index = self.row_index;
         self.row_index += 1;
@@ -5609,9 +5615,14 @@ pub const PngStreamingZlibScanlineDecoder = struct {
 
         const filter = (try self.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
         if (filter > 4) return error.CorruptFrame;
-        try self.readInflatedBytes(self.filtered_row_scratch);
         const row_output = output[0..self.row_len];
-        _ = try reconstructPngScanline(filter, self.filtered_row_scratch, previous, self.bytes_per_pixel, row_output);
+        // Whole-image drainers own the destination image and never need to hand
+        // the filtered bytes to a caller. Inflate directly into the destination
+        // row, then reverse the PNG filter in place. History and Adler state are
+        // updated while the row still contains filtered bytes, before
+        // reconstruction overwrites it.
+        try self.readInflatedBytes(row_output);
+        _ = try reconstructPngScanline(filter, row_output, previous, self.bytes_per_pixel, row_output);
 
         const row_index = self.row_index;
         self.row_index += 1;
@@ -6019,9 +6030,13 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
 
         const filter = (try self.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
         if (filter > 4) return error.CorruptFrame;
-        try self.readInflatedBytes(self.filtered_row_scratch);
         const row_output = output[0..self.row_len];
-        _ = try reconstructPngScanline(filter, self.filtered_row_scratch, previous, self.bytes_per_pixel, row_output);
+        // See the contiguous streaming decoder: full-image chunked drains can
+        // use the destination row as temporary filtered storage because the
+        // row's compressed bytes have already been accounted into zlib history
+        // and checksum state before in-place reconstruction runs.
+        try self.readInflatedBytes(row_output);
+        _ = try reconstructPngScanline(filter, row_output, previous, self.bytes_per_pixel, row_output);
 
         const row_index = self.row_index;
         self.row_index += 1;
@@ -10734,6 +10749,15 @@ test "png streaming zlib scanline decoder reconstructs fixed and dynamic rows wi
         try std.testing.expectEqual(expected_image.len, result.output_written);
         try std.testing.expectEqual(encoded.len, result.zlib_input_read);
         try std.testing.expectEqualSlices(u8, &expected_image, &image);
+
+        var no_copy_filtered_row_scratch: [row_len]u8 = @splat(0xa5);
+        var no_copy_previous_row_scratch: [row_len]u8 = @splat(0x5a);
+        var no_copy_image: [expected_image.len]u8 = undefined;
+        _ = try decodePngStreamingZlibImage(encoded, &history_scratch, &no_copy_filtered_row_scratch, &no_copy_previous_row_scratch, info, &no_copy_image);
+        try std.testing.expectEqualSlices(u8, &expected_image, &no_copy_image);
+        try std.testing.expectEqualSlices(u8, &([_]u8{0xa5} ** row_len), &no_copy_filtered_row_scratch);
+        try std.testing.expectEqualSlices(u8, &([_]u8{0x5a} ** row_len), &no_copy_previous_row_scratch);
+
         @memset(&image, 0);
         const chunked_result = try decodePngStreamingZlibImageFromChunksDirect(&chunks, &chunked_history_scratch, &chunked_filtered_row_scratch, &chunked_previous_row_scratch, info, &image);
         try std.testing.expectEqual(result.rows, chunked_result.rows);
@@ -10741,11 +10765,26 @@ test "png streaming zlib scanline decoder reconstructs fixed and dynamic rows wi
         try std.testing.expectEqual(encoded.len, chunked_result.zlib_input_read);
         try std.testing.expectEqualSlices(u8, &expected_image, &image);
 
+        var no_copy_chunked_filtered_row_scratch: [row_len]u8 = @splat(0xc3);
+        var no_copy_chunked_previous_row_scratch: [row_len]u8 = @splat(0x3c);
+        @memset(&no_copy_image, 0);
+        _ = try decodePngStreamingZlibImageFromChunksDirect(&chunks, &chunked_history_scratch, &no_copy_chunked_filtered_row_scratch, &no_copy_chunked_previous_row_scratch, info, &no_copy_image);
+        try std.testing.expectEqualSlices(u8, &expected_image, &no_copy_image);
+        try std.testing.expectEqualSlices(u8, &([_]u8{0xc3} ** row_len), &no_copy_chunked_filtered_row_scratch);
+        try std.testing.expectEqualSlices(u8, &([_]u8{0x3c} ** row_len), &no_copy_chunked_previous_row_scratch);
+
         var zlib_scratch: [filtered_payload.len]u8 = undefined;
         var classic_image: [expected_image.len]u8 = undefined;
         const classic = try decodePngZlibImage(encoded, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &classic_image);
         try std.testing.expectEqual(classic.output_written, result.output_written);
         try std.testing.expectEqualSlices(u8, &classic_image, &image);
+
+        var no_copy_classic_filtered_row_scratch: [row_len]u8 = @splat(0x96);
+        var no_copy_classic_previous_row_scratch: [row_len]u8 = @splat(0x69);
+        _ = try decodePngZlibImage(encoded, &zlib_scratch, &no_copy_classic_filtered_row_scratch, &no_copy_classic_previous_row_scratch, info, &no_copy_image);
+        try std.testing.expectEqualSlices(u8, &expected_image, &no_copy_image);
+        try std.testing.expectEqualSlices(u8, &([_]u8{0x96} ** row_len), &no_copy_classic_filtered_row_scratch);
+        try std.testing.expectEqualSlices(u8, &([_]u8{0x69} ** row_len), &no_copy_classic_previous_row_scratch);
     }
 
     const match_row_len = 64;

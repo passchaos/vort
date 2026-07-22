@@ -1163,13 +1163,15 @@ architecture blindly.
 - Optimized whole-image PNG zlib drainers so decoded image paths use the
   already-written destination row as the next row's PNG predictor input instead
   of copying every reconstructed row into the public row-iteration
-  `previous_row_scratch`. The public `step` APIs still maintain their scratch
-  because callers may reuse one output row buffer; only full-image drain helpers
-  take the no-copy path. Local imx ReleaseFast stage evidence moved the PNG
-  `decode-into` comparison to about `295.36` MiB/s against Rust image-png's
-  `1010.02` MiB/s (`0.292x` aggregate), with the matching stage breakdown
-  reporting `decode-into` at about `295.97` MiB/s and `dynamic-decode` at
-  about `271.89` MiB/s.
+  `previous_row_scratch`. A follow-up moved full-image filtered row storage into
+  the destination row too: zlib history/checksum accounting happens while the
+  row still holds filtered bytes, then PNG reconstruction runs in place. The
+  public `step` APIs still maintain their scratch because callers may reuse one
+  output row buffer; only full-image drain helpers take the no-copy path. Local
+  imx ReleaseFast stage evidence moved the PNG `decode-into` comparison to about
+  `297.85` MiB/s against Rust image-png's `1010.02` MiB/s (`0.295x`
+  aggregate), with the matching stage breakdown reporting `decode-into` at about
+  `298.30` MiB/s and `dynamic-decode` at about `274.95` MiB/s.
 - Rechecked stored-binary allocation/wrapper weak paths after the decode-stage ledger identified `stored-binary` as a decode-alloc gap. Rejected a single-pass stored-only allocator rewrite because it regressed raw/zlib/gzip alloc rows in the focused probe, and rejected enabling the existing x86 IEEE CRC-32 hardware path because a scalar/table differential check failed. Keep future work focused on a correct faster CRC-32 path, exact-size stored wrapper APIs, or allocation policy instead of repeating those experiments.
 - Extended the deflate decode-stage report with explicit raw/zlib/gzip stored allocator throughput and stored-vs-generic allocation time ratios. This keeps the `stored-binary` wrapper weakness visible separately from generic decode alloc rows and from caller-buffer stored copy speed.
 
