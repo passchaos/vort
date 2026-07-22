@@ -1172,6 +1172,13 @@ architecture blindly.
   `297.85` MiB/s against Rust image-png's `1010.02` MiB/s (`0.295x`
   aggregate), with the matching stage breakdown reporting `decode-into` at about
   `298.30` MiB/s and `dynamic-decode` at about `274.95` MiB/s.
+- Routed PNG streaming dynamic literal decoding through the same 9/11/12-bit
+  lookup-width policy as the general dynamic inflater. Real PNG IDAT profiling
+  showed high literal lookup pressure on near-full long alphabets, and the
+  12-bit streaming path improved the imx ReleaseFast `decode-into` total from
+  the recent `292.11` MiB/s artifact to `300.16` MiB/s, with `filtered-inflate`
+  at `291.70` MiB/s. The Vort PNG streaming zlib gate still passes, including
+  row-repeat, wide-RLE, Up/Average/Paeth rows.
 - Rechecked stored-binary allocation/wrapper weak paths after the decode-stage ledger identified `stored-binary` as a decode-alloc gap. Rejected a single-pass stored-only allocator rewrite because it regressed raw/zlib/gzip alloc rows in the focused probe, and rejected enabling the existing x86 IEEE CRC-32 hardware path because a scalar/table differential check failed. Keep future work focused on a correct faster CRC-32 path, exact-size stored wrapper APIs, or allocation policy instead of repeating those experiments.
 - Extended the deflate decode-stage report with explicit raw/zlib/gzip stored allocator throughput and stored-vs-generic allocation time ratios. This keeps the `stored-binary` wrapper weakness visible separately from generic decode alloc rows and from caller-buffer stored copy speed.
 
