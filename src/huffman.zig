@@ -185,16 +185,24 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
 
         pub fn init(table: HuffmanTable(max_symbols)) Self {
             var decoder = Self{ .table = table };
+            const coverage = decoder.lookupCoverage();
             // Use the already-maintained length histogram to decide whether the
             // fast lookup is fully covered. That preserves the no-memset path
             // for fixed-style full tables while avoiding the old partial-table
             // cost of filling lookup entries once, clearing, then filling the
-            // same entries again. Dynamic literal/distance tables are often
-            // partial, so this keeps setup cost proportional to one fill pass.
-            if (decoder.lookupCoverage() != decoder.lookup.len) {
+            // same entries again. Some dynamic PNG tables are almost full: every
+            // lookup slot is either covered by a short code or is the prefix of a
+            // long fallback code. For that shape, fill short entries and clear
+            // only those long prefixes instead of memseting thousands of entries.
+            if (coverage == decoder.lookup.len) {
+                _ = decoder.fillLookup();
+            } else if (coverage + decoder.longPrefixCoverage() == decoder.lookup.len) {
+                _ = decoder.fillLookup();
+                decoder.clearLongPrefixes();
+            } else {
                 @memset(&decoder.lookup, .{ .symbol = 0, .bits = 0 });
+                _ = decoder.fillLookup();
             }
-            _ = decoder.fillLookup();
             return decoder;
         }
 
@@ -215,6 +223,36 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
                 }
             }
             return covered;
+        }
+
+        fn longPrefixCoverage(self: *const Self) usize {
+            var seen: [@as(usize, 1) << lookup_bits]bool = @splat(false);
+            var covered: usize = 0;
+            var bits: usize = lookup_bits + 1;
+            while (bits <= self.table.max_bits) : (bits += 1) {
+                const first = self.table.first_by_bits[bits];
+                const end = first + self.table.count_by_bits[bits];
+                for (self.table.entries[first..end]) |entry| {
+                    const prefix: usize = @as(usize, entry.code) & ((@as(usize, 1) << lookup_bits) - 1);
+                    if (!seen[prefix]) {
+                        seen[prefix] = true;
+                        covered += 1;
+                    }
+                }
+            }
+            return covered;
+        }
+
+        fn clearLongPrefixes(self: *Self) void {
+            var bits: usize = lookup_bits + 1;
+            while (bits <= self.table.max_bits) : (bits += 1) {
+                const first = self.table.first_by_bits[bits];
+                const end = first + self.table.count_by_bits[bits];
+                for (self.table.entries[first..end]) |entry| {
+                    const prefix: usize = @as(usize, entry.code) & ((@as(usize, 1) << lookup_bits) - 1);
+                    self.lookup[prefix] = .{ .symbol = 0, .bits = 0 };
+                }
+            }
         }
 
         pub fn lookupCoverage(self: *const Self) usize {
@@ -1061,6 +1099,33 @@ test "tree Huffman length limiter preserves skewed short codes" {
     const Table = HuffmanTable(freqs.len);
     const table = try Table.init(&lengths);
     try std.testing.expectEqual(@as(usize, freqs.len), table.len);
+}
+
+test "fast decoder sparse-clears long prefixes" {
+    const lengths = [_]u4{
+        1, // covers 4 of the 8 lookup slots for a 3-bit fast table
+        2, // covers 2 more slots
+        3, // covers one more slot
+        4, // the only long code covers the last prefix that must fast-miss
+    };
+    const table = try HuffmanTable(lengths.len).init(&lengths);
+    const decoder = FastDecoder(lengths.len, 3).init(table);
+    try std.testing.expectEqual(@as(usize, decoder.lookup.len), decoder.lookupCoverage() + decoder.longPrefixCoverage());
+
+    var symbol: usize = 0;
+    while (symbol < lengths.len) : (symbol += 1) {
+        const bits = lengths[symbol];
+        var writer = bitstream.BitWriter{};
+        defer writer.deinit(std.testing.allocator);
+        const encoder = try HuffmanTable(lengths.len).Encoder.init(&lengths);
+        try encoder.writeSymbol(&writer, std.testing.allocator, symbol);
+        const bytes = try writer.toOwnedSlice(std.testing.allocator);
+        defer std.testing.allocator.free(bytes);
+
+        var reader = bitstream.BitReader.init(bytes);
+        try std.testing.expectEqual(@as(u16, @intCast(symbol)), try decoder.decodeValue(&reader));
+        try std.testing.expectEqual(@as(usize, bits), reader.bitPosition());
+    }
 }
 
 fn codeLengthCost(comptime n: usize, freqs: *const [n]u32, lengths: *const [n]u4) usize {

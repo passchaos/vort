@@ -1196,6 +1196,13 @@ architecture blindly.
   entering the generic scanline reconstruction function. This slightly improved
   the local imx ReleaseFast `decode-into` comparison (`356.25` MiB/s,
   `0.353x` aggregate), with Lohengrin around `142.27` MiB/s.
+- Optimized dynamic Huffman FastDecoder setup for nearly-covered lookup tables.
+  When every lookup slot is either covered by a short code or is a long-code
+  fallback prefix, initialization now fills short-code entries and clears only
+  the long prefixes instead of memseting the whole table. This targets PNG IDAT
+  blocks like Lohengrin whose literal lookup coverage is close to full; local imx
+  ReleaseFast `decode-into` moved to about `359.30` MiB/s (`0.354x` aggregate)
+  with Lohengrin around `145.56` MiB/s.
 - Rechecked stored-binary allocation/wrapper weak paths after the decode-stage ledger identified `stored-binary` as a decode-alloc gap. Rejected a single-pass stored-only allocator rewrite because it regressed raw/zlib/gzip alloc rows in the focused probe, and rejected enabling the existing x86 IEEE CRC-32 hardware path because a scalar/table differential check failed. Keep future work focused on a correct faster CRC-32 path, exact-size stored wrapper APIs, or allocation policy instead of repeating those experiments.
 - Extended the deflate decode-stage report with explicit raw/zlib/gzip stored allocator throughput and stored-vs-generic allocation time ratios. This keeps the `stored-binary` wrapper weakness visible separately from generic decode alloc rows and from caller-buffer stored copy speed.
 
