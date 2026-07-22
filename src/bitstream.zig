@@ -187,7 +187,7 @@ pub const BufferedBitReader = struct {
         self.consumed_bits += count;
     }
 
-    pub fn peekBitsPadded(self: *BufferedBitReader, comptime T: type, count: u6) T {
+    pub inline fn peekBitsPadded(self: *BufferedBitReader, comptime T: type, count: u6) T {
         std.debug.assert(count <= @bitSizeOf(T));
         if (count == 0) return 0;
         self.fill(count);
