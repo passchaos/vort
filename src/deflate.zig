@@ -4945,6 +4945,53 @@ pub const ZlibDecoder = struct {
         }
         return result;
     }
+
+    pub fn stepPngScanlineReconstructDirect(self: *ZlibDecoder, previous_row: ?[]const u8, bytes_per_pixel: usize, output: []u8) Error!PngScanlineStep {
+        if (self.done) return .{ .status = .done };
+        if (previous_row) |prev| {
+            if (prev.len != output.len) {
+                self.recordError(error.SizeMismatch);
+                return error.SizeMismatch;
+            }
+        }
+        if (bytes_per_pixel == 0) {
+            self.recordError(error.CorruptFrame);
+            return error.CorruptFrame;
+        }
+        const decoded_consumed = std.math.add(usize, 1, output.len) catch {
+            self.recordError(error.IntegerOverflow);
+            return error.IntegerOverflow;
+        };
+        if (self.decoded.len - self.offset < decoded_consumed) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+
+        const filter = self.decoded[self.offset];
+        if (filter > 4) {
+            self.recordError(error.CorruptFrame);
+            return error.CorruptFrame;
+        }
+
+        const row_start = self.offset + 1;
+        const filtered = self.decoded[row_start..][0..output.len];
+        _ = reconstructPngScanline(filter, filtered, previous_row, bytes_per_pixel, output) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        self.offset += decoded_consumed;
+        if (self.offset == self.decoded.len) self.done = true;
+        return .{
+            .filter = filter,
+            .row_bytes = output.len,
+            .decoded_consumed = decoded_consumed,
+            .progress = .{
+                .input_read = if (self.done) self.frame_len else 0,
+                .output_written = output.len,
+            },
+            .status = if (self.done) .done else .need_output,
+        };
+    }
 };
 
 fn pngScanlinePayloadLen(row_len: usize, row_count: usize) Error!usize {
@@ -6941,9 +6988,10 @@ fn drainPngZlibImage(decoder: *PngZlibScanlineDecoder, output: []u8) Error!PngIm
     for (0..decoder.row_count) |_| {
         const row = output[offset..][0..decoder.row_len];
         const previous = previousPngOutputRow(output, offset, decoder.row_len);
-        const step = try decoder.stepWithPrevious(row, previous);
+        const step = try decoder.zlib.stepPngScanlineReconstructDirect(previous, decoder.bytes_per_pixel, row);
         offset += step.row_bytes;
         zlib_input_read += step.progress.input_read;
+        decoder.row_index += 1;
     }
     if (!decoder.snapshot().done) {
         decoder.zlib.recordError(error.SizeMismatch);

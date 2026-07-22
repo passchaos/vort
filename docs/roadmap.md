@@ -1184,6 +1184,13 @@ architecture blindly.
   `ignore_adler`/`allow_trailing_data` behavior without wrapping a single IDAT
   payload as a one-element chunked stream, preserving the direct contiguous zlib
   decode path for full-image PNG drainers.
+- Reworked full-image PNG zlib drains to reconstruct directly from the decoded
+  zlib scratch row into the final image row. The public scanline step API still
+  copies into caller row storage first, but whole-image drain helpers now skip
+  the extra filtered-row copy before unfiltering. Local imx ReleaseFast evidence
+  stayed roughly neutral after the larger contiguous-helper win (`decode-into`
+  about `352.91` MiB/s, `0.349x` aggregate versus image-png), so this mainly
+  keeps the full-drain dataflow simpler for the next zlib/unfilter pass.
 - Rechecked stored-binary allocation/wrapper weak paths after the decode-stage ledger identified `stored-binary` as a decode-alloc gap. Rejected a single-pass stored-only allocator rewrite because it regressed raw/zlib/gzip alloc rows in the focused probe, and rejected enabling the existing x86 IEEE CRC-32 hardware path because a scalar/table differential check failed. Keep future work focused on a correct faster CRC-32 path, exact-size stored wrapper APIs, or allocation policy instead of repeating those experiments.
 - Extended the deflate decode-stage report with explicit raw/zlib/gzip stored allocator throughput and stored-vs-generic allocation time ratios. This keeps the `stored-binary` wrapper weakness visible separately from generic decode alloc rows and from caller-buffer stored copy speed.
 
