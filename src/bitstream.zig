@@ -230,7 +230,7 @@ pub const BufferedBitReader = struct {
         return std.mem.readInt(T, &bytes, endian);
     }
 
-    fn fill(self: *BufferedBitReader, requested_bits: usize) void {
+    inline fn fill(self: *BufferedBitReader, requested_bits: usize) void {
         std.debug.assert(requested_bits <= 63);
         while (self.bit_count < requested_bits and self.byte_index < self.input.len and self.bit_count <= 56) {
             self.bit_buffer |= @as(u64, self.input[self.byte_index]) << @intCast(self.bit_count);
