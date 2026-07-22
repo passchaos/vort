@@ -4975,10 +4975,14 @@ pub const ZlibDecoder = struct {
 
         const row_start = self.offset + 1;
         const filtered = self.decoded[row_start..][0..output.len];
-        _ = reconstructPngScanline(filter, filtered, previous_row, bytes_per_pixel, output) catch |err| {
-            self.recordError(err);
-            return err;
-        };
+        if (filter == @intFromEnum(PngFilterMethod.none)) {
+            @memcpy(output, filtered);
+        } else {
+            _ = reconstructPngScanline(filter, filtered, previous_row, bytes_per_pixel, output) catch |err| {
+                self.recordError(err);
+                return err;
+            };
+        }
         self.offset += decoded_consumed;
         if (self.offset == self.decoded.len) self.done = true;
         return .{
