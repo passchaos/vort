@@ -1208,6 +1208,12 @@ architecture blindly.
   cache ideas evidence-based: imx's PNG zlib profile can now show whether many
   dynamic blocks actually reuse identical literal/distance tables before any
   production cache is attempted.
+- Added a single-symbol dynamic distance decoder variant. Dynamic distance
+  alphabets with one active symbol no longer build an 8-bit lookup table and
+  instead validate/consume that one canonical code directly; Lohengrin's PNG IDAT
+  profile uses only distance symbol 0 in its dynamic blocks. Local imx
+  ReleaseFast `decode-into` moved to about `361.72` MiB/s (`0.358x` aggregate),
+  with Lohengrin around `149.15` MiB/s.
 - Rechecked stored-binary allocation/wrapper weak paths after the decode-stage ledger identified `stored-binary` as a decode-alloc gap. Rejected a single-pass stored-only allocator rewrite because it regressed raw/zlib/gzip alloc rows in the focused probe, and rejected enabling the existing x86 IEEE CRC-32 hardware path because a scalar/table differential check failed. Keep future work focused on a correct faster CRC-32 path, exact-size stored wrapper APIs, or allocation policy instead of repeating those experiments.
 - Extended the deflate decode-stage report with explicit raw/zlib/gzip stored allocator throughput and stored-vs-generic allocation time ratios. This keeps the `stored-binary` wrapper weakness visible separately from generic decode alloc rows and from caller-buffer stored copy speed.
 

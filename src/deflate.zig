@@ -1480,7 +1480,50 @@ pub fn decodeRawDynamicAllocStrict(allocator: std.mem.Allocator, input: []const 
     return result.bytes;
 }
 
-const DynamicDistanceDecoder = huffman.FastDecoder(30, 8);
+const DynamicDistanceDecoder = union(enum) {
+    single: huffman.HuffmanTable(30).Entry,
+    fast8: huffman.FastDecoder(30, 8),
+
+    fn init(table: huffman.HuffmanTable(30)) DynamicDistanceDecoder {
+        if (table.len == 1) return .{ .single = table.entries[0] };
+        return .{ .fast8 = huffman.FastDecoder(30, 8).init(table) };
+    }
+
+    inline fn decodeValue(self: *const DynamicDistanceDecoder, reader: anytype) Error!u16 {
+        return switch (self.*) {
+            .single => |entry| blk: {
+                const bits: u6 = entry.bits;
+                const code = reader.peekBitsPadded(u16, bits);
+                if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+                if (code != entry.code) return error.InvalidHuffmanCode;
+                reader.advanceBitsStagedAssumeAvailable(bits);
+                break :blk entry.symbol;
+            },
+            .fast8 => |*decoder| try decoder.decodeValue(reader),
+        };
+    }
+
+    fn fastWouldHit(self: *const DynamicDistanceDecoder, reader: *bitstream.BufferedBitReader) bool {
+        return switch (self.*) {
+            .single => |entry| entry.bits <= 8 and reader.hasBits(entry.bits),
+            .fast8 => |*decoder| huffmanFastWouldHit(30, 8, decoder, reader),
+        };
+    }
+
+    fn lookupCoverage(self: *const DynamicDistanceDecoder) usize {
+        return switch (self.*) {
+            .single => 0,
+            .fast8 => |*decoder| decoder.lookupCoverage(),
+        };
+    }
+
+    fn lookupSize(self: *const DynamicDistanceDecoder) usize {
+        return switch (self.*) {
+            .single => 0,
+            .fast8 => |*decoder| decoder.lookup.len,
+        };
+    }
+};
 
 fn dynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
     if (parsed.literal_max_bits <= 9) return 9;
@@ -1682,7 +1725,7 @@ fn profileCompressedBlockInto(
     profile.literal_lookup_covered += lit_decoder.lookupCoverage();
     profile.literal_lookup_size += lit_decoder.lookup.len;
     profile.distance_lookup_covered += dist_decoder.lookupCoverage();
-    profile.distance_lookup_size += dist_decoder.lookup.len;
+    profile.distance_lookup_size += dist_decoder.lookupSize();
     while (true) {
         const lit_hit = huffmanFastWouldHit(286, lit_lookup_bits, &lit_decoder, reader);
         const symbol = try lit_decoder.decodeValue(reader);
@@ -1700,7 +1743,7 @@ fn profileCompressedBlockInto(
             const length_extra_reads_before = profile.length_extra_reads;
             const length_extra_bits_before = profile.length_extra_bits;
             const length = try profileDecodeLength(symbol, reader, profile);
-            const dist_hit = huffmanFastWouldHit(30, 8, &dist_decoder, reader);
+            const dist_hit = dist_decoder.fastWouldHit(reader);
             const distance_symbol = try dist_decoder.decodeValue(reader);
             if (dist_hit) profile.distance_fast_hits += 1 else profile.distance_fast_misses += 1;
             profile.distance_symbol_histogram[distance_symbol] += 1;
