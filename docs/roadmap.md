@@ -290,6 +290,8 @@ architecture blindly.
   per-symbol call overhead in dynamic PNG inflate hot paths.
 - [x] Buffered bit-reader padded peeks are explicitly inline, removing another
   per-symbol call boundary from fast Huffman lookup probes.
+- [x] Buffered bit-reader staged availability checks are explicitly inline for
+  fast Huffman lookup hit validation.
 - [x] BitReader skipBits advances directly for fast Huffman decode hot paths.
 - [x] BitReader read/peek use little-endian byte windows instead of per-bit loops.
 - [x] Deflate decode stage report isolates raw/zlib/gzip alloc and caller-buffer decode overhead, including wrapper/checksum costs.

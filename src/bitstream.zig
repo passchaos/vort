@@ -167,7 +167,7 @@ pub const BufferedBitReader = struct {
         return @as(usize, count) <= remaining_staged + remaining_input_bits;
     }
 
-    pub fn hasStagedBits(self: BufferedBitReader, count: u6) bool {
+    pub inline fn hasStagedBits(self: BufferedBitReader, count: u6) bool {
         return @as(usize, count) <= self.bit_count;
     }
 
