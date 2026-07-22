@@ -5169,6 +5169,38 @@ pub const PngZlibScanlineDecoder = struct {
             .status = if (done) .done else .need_output,
         };
     }
+
+    fn stepWithPrevious(self: *PngZlibScanlineDecoder, output: []u8, previous: ?[]const u8) Error!Step {
+        if (self.row_index == self.row_count) return .{
+            .row_index = self.row_index,
+            .rows_done = self.row_index,
+            .status = .done,
+        };
+        if (output.len < self.row_len) {
+            self.zlib.recordError(error.OutputTooSmall);
+            return error.OutputTooSmall;
+        }
+
+        const row_output = output[0..self.row_len];
+        const result = try self.zlib.stepPngScanlineReconstruct(self.filtered_row_scratch, previous, self.bytes_per_pixel, row_output);
+
+        const row_index = self.row_index;
+        self.row_index += 1;
+        const done = self.row_index == self.row_count;
+        if (done != self.zlib.snapshot().done) {
+            self.zlib.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+
+        return .{
+            .filter = result.filter,
+            .row_index = row_index,
+            .row_bytes = self.row_len,
+            .rows_done = self.row_index,
+            .progress = result.progress,
+            .status = if (done) .done else .need_output,
+        };
+    }
 };
 
 const PngStreamingDynamicLiteralDecoder = union(enum) {
@@ -5561,6 +5593,43 @@ pub const PngStreamingZlibScanlineDecoder = struct {
         };
     }
 
+    fn stepWithPrevious(self: *PngStreamingZlibScanlineDecoder, output: []u8, previous: ?[]const u8) Error!Step {
+        return self.stepWithPreviousInternal(output, previous) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+    }
+
+    fn stepWithPreviousInternal(self: *PngStreamingZlibScanlineDecoder, output: []u8, previous: ?[]const u8) Error!Step {
+        if (self.row_index == self.row_count) {
+            try self.finish();
+            return .{ .row_index = self.row_index, .rows_done = self.row_index, .status = .done };
+        }
+        if (output.len < self.row_len) return error.OutputTooSmall;
+
+        const filter = (try self.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
+        if (filter > 4) return error.CorruptFrame;
+        try self.readInflatedBytes(self.filtered_row_scratch);
+        const row_output = output[0..self.row_len];
+        _ = try reconstructPngScanline(filter, self.filtered_row_scratch, previous, self.bytes_per_pixel, row_output);
+
+        const row_index = self.row_index;
+        self.row_index += 1;
+        const done = self.row_index == self.row_count;
+        if (done) try self.finish();
+        return .{
+            .filter = filter,
+            .row_index = row_index,
+            .row_bytes = self.row_len,
+            .rows_done = self.row_index,
+            .progress = .{
+                .input_read = if (done) self.finished_input_read else 0,
+                .output_written = self.row_len,
+            },
+            .status = if (done) .done else .need_output,
+        };
+    }
+
     fn readInflatedBytes(self: *PngStreamingZlibScanlineDecoder, output: []u8) Error!void {
         return readPngStreamingInflatedBytes(self, output);
     }
@@ -5916,6 +5985,43 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
         _ = try reconstructPngScanline(filter, self.filtered_row_scratch, previous, self.bytes_per_pixel, row_output);
         @memcpy(self.previous_row_scratch, row_output);
         self.has_previous = true;
+
+        const row_index = self.row_index;
+        self.row_index += 1;
+        const done = self.row_index == self.row_count;
+        if (done) try self.finish();
+        return .{
+            .filter = filter,
+            .row_index = row_index,
+            .row_bytes = self.row_len,
+            .rows_done = self.row_index,
+            .progress = .{
+                .input_read = if (done) self.finished_input_read else 0,
+                .output_written = self.row_len,
+            },
+            .status = if (done) .done else .need_output,
+        };
+    }
+
+    fn stepWithPrevious(self: *PngStreamingZlibChunkedScanlineDecoder, output: []u8, previous: ?[]const u8) Error!Step {
+        return self.stepWithPreviousInternal(output, previous) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+    }
+
+    fn stepWithPreviousInternal(self: *PngStreamingZlibChunkedScanlineDecoder, output: []u8, previous: ?[]const u8) Error!Step {
+        if (self.row_index == self.row_count) {
+            try self.finish();
+            return .{ .row_index = self.row_index, .rows_done = self.row_index, .status = .done };
+        }
+        if (output.len < self.row_len) return error.OutputTooSmall;
+
+        const filter = (try self.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
+        if (filter > 4) return error.CorruptFrame;
+        try self.readInflatedBytes(self.filtered_row_scratch);
+        const row_output = output[0..self.row_len];
+        _ = try reconstructPngScanline(filter, self.filtered_row_scratch, previous, self.bytes_per_pixel, row_output);
 
         const row_index = self.row_index;
         self.row_index += 1;
@@ -6658,7 +6764,8 @@ fn drainPngZlibImage(decoder: *PngZlibScanlineDecoder, output: []u8) Error!PngIm
     var zlib_input_read: usize = 0;
     for (0..decoder.row_count) |_| {
         const row = output[offset..][0..decoder.row_len];
-        const step = try decoder.step(row);
+        const previous = previousPngOutputRow(output, offset, decoder.row_len);
+        const step = try decoder.stepWithPrevious(row, previous);
         offset += step.row_bytes;
         zlib_input_read += step.progress.input_read;
     }
@@ -6677,7 +6784,8 @@ fn drainPngStreamingZlibImage(decoder: *PngStreamingZlibScanlineDecoder, output:
     var offset: usize = 0;
     for (0..decoder.row_count) |_| {
         const row = output[offset..][0..decoder.row_len];
-        const step = try decoder.step(row);
+        const previous = previousPngOutputRow(output, offset, decoder.row_len);
+        const step = try decoder.stepWithPrevious(row, previous);
         offset += step.row_bytes;
     }
     if (!decoder.snapshot().done) return error.SizeMismatch;
@@ -6692,7 +6800,8 @@ fn drainPngStreamingZlibChunksImage(decoder: *PngStreamingZlibChunkedScanlineDec
     var offset: usize = 0;
     for (0..decoder.row_count) |_| {
         const row = output[offset..][0..decoder.row_len];
-        const step = try decoder.step(row);
+        const previous = previousPngOutputRow(output, offset, decoder.row_len);
+        const step = try decoder.stepWithPrevious(row, previous);
         offset += step.row_bytes;
     }
     if (!decoder.snapshot().done) return error.SizeMismatch;
@@ -6701,6 +6810,16 @@ fn drainPngStreamingZlibChunksImage(decoder: *PngStreamingZlibChunkedScanlineDec
         .output_written = offset,
         .zlib_input_read = decoder.snapshot().input_read,
     };
+}
+
+fn previousPngOutputRow(output: []const u8, offset: usize, row_len: usize) ?[]const u8 {
+    // Whole-image PNG drainers write rows contiguously, so the previous
+    // reconstructed row is already resident immediately before the destination
+    // row. Passing that slice into reconstruction avoids copying every row into
+    // the decoder's public row-iteration scratch. The public `step` APIs keep
+    // updating their scratch because their callers may reuse a single output
+    // row buffer between calls.
+    return if (offset == 0) null else output[offset - row_len ..][0..row_len];
 }
 
 fn drainPngStoredZlibImage(decoder: *PngStoredZlibScanlineDecoder, output: []u8) Error!PngImageDecodeResult {
