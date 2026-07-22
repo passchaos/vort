@@ -602,30 +602,36 @@ def write_native_tier_range_summary(path: Path, *, ok: bool = True, source: str 
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
-def write_native_tier_range_summaries(root: Path) -> None:
-    write_native_tier_range_summary(root / NATIVE_TIER_RANGE_ARTIFACT, source="built_in", rows=9, fixture_count=3)
-    write_native_tier_range_summary(root / NATIVE_TIER_RANGE_FILES_ARTIFACT, source="project_files", rows=6, fixture_count=2)
-    write_native_tier_range_summary(root / NATIVE_TIER_RANGE_CORPUS_ARTIFACT, source="standard_corpus", rows=9, fixture_count=3)
+def write_native_tier_corpus_discovery_summary(path: Path, *, ok: bool = True) -> None:
     payload = {
         "schema": "vort.native_tier_range_corpus_discovery",
         "schema_version": 1,
-        "ok": True,
+        "ok": ok,
         "source_mode": "discovered",
         "full": False,
         "limit": 3,
         "candidate_count": 5,
-        "source_count": 1,
-        "sources": ["/tmp/silesia-small.tar"],
-        "selected_case_count": 3,
+        "source_count": 1 if ok else 0,
+        "sources": ["/tmp/silesia-small.tar"] if ok else [],
+        "selected_case_count": 3 if ok else 0,
         "selected_cases": [
             {"label": "ooffice-128k", "bytes": 131072},
             {"label": "nci-128k", "bytes": 131072},
             {"label": "mozilla-128k", "bytes": 131072},
-        ],
-        "csv": "zig-out/vort-native-tier-range-corpus-bench.csv",
-        "missing_reason": "",
+        ]
+        if ok
+        else [],
+        "csv": "zig-out/vort-native-tier-range-corpus-bench.csv" if ok else "",
+        "missing_reason": "" if ok else "no_standard_corpora_discovered",
     }
-    (root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_native_tier_range_summaries(root: Path) -> None:
+    write_native_tier_range_summary(root / NATIVE_TIER_RANGE_ARTIFACT, source="built_in", rows=9, fixture_count=3)
+    write_native_tier_range_summary(root / NATIVE_TIER_RANGE_FILES_ARTIFACT, source="project_files", rows=6, fixture_count=2)
+    write_native_tier_range_summary(root / NATIVE_TIER_RANGE_CORPUS_ARTIFACT, source="standard_corpus", rows=9, fixture_count=3)
+    write_native_tier_corpus_discovery_summary(root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT)
 
 
 def write_healthy_artifacts(root: Path) -> None:
@@ -907,6 +913,7 @@ def main() -> int:
         if "dashboard_index=" not in ok.stdout:
             raise AssertionError(f"dashboard index success output missing marker: {ok.stdout!r}")
         manifest = json.loads((root / "vort-dashboard-index.json").read_text())
+        assert manifest["validation_healthy"] is True
         assert manifest["header_inspect_present"] is True
         assert manifest["header_inspect_ok"] is True
         assert manifest["header_inspect_missing_workflow_count"] == 0
@@ -958,10 +965,10 @@ def main() -> int:
         missing_native_tier_root = root / "missing-native-tier"
         missing_native_tier_root.mkdir()
         write_healthy_artifacts(missing_native_tier_root)
-        for artifact, _ in NATIVE_TIER_RANGE_ARTIFACTS:
+        for artifact in (NATIVE_TIER_RANGE_ARTIFACT, NATIVE_TIER_RANGE_FILES_ARTIFACT, NATIVE_TIER_RANGE_CORPUS_ARTIFACT):
             (missing_native_tier_root / artifact).unlink()
         missing_native_tier_producer = missing_native_tier_root / "producers.json"
-        write_producer_map(missing_native_tier_producer, include_native_tier_exact=False, include_native_tier_smoke=False)
+        write_producer_map(missing_native_tier_producer)
         missing_native_tier_result = run(dashboard_args(missing_native_tier_root, missing_native_tier_producer, "--strict-validation-health"))
         missing_native_tier_manifest = json.loads((missing_native_tier_root / "vort-dashboard-index.json").read_text())
         native_tier_missing_matched = (
@@ -1150,6 +1157,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "python_zlib_diff_failed":
                 write_python_zlib_diff_report(fixture_root / PYTHON_ZLIB_DIFF_ARTIFACT, ok=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_native_tier_corpus_discovery_artifact":
+                (fixture_root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "native_tier_corpus_discovery_failed":
+                write_native_tier_corpus_discovery_summary(fixture_root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT, ok=False)
                 write_producer_map(producer_map)
             else:
                 raise AssertionError(f"unsupported validation reason fixture {fixture!r}")

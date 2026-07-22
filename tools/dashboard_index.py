@@ -438,25 +438,48 @@ def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") != "vort.native_tier_range_corpus_discovery":
             continue
+        def int_field(name: str) -> int:
+            value = data.get(name)
+            return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
         selected_cases = data.get("selected_cases")
         selected_cases = selected_cases if isinstance(selected_cases, list) else []
         sources = data.get("sources")
         sources = sources if isinstance(sources, list) else []
         missing_reason = data.get("missing_reason")
+        limit = data.get("limit")
+        limit = limit if isinstance(limit, int) and not isinstance(limit, bool) else None
+        candidate_count = int_field("candidate_count")
+        source_count = int_field("source_count")
+        selected_case_count = int_field("selected_case_count")
+        csv_path = str(data.get("csv") or "")
+        missing_reason_text = str(missing_reason) if isinstance(missing_reason, str) else ""
+        healthy = (
+            bool(data.get("ok"))
+            and str(data.get("source_mode") or "") in {"discovered", "paths"}
+            and candidate_count >= source_count
+            and source_count > 0
+            and source_count == len(sources)
+            and selected_case_count > 0
+            and selected_case_count == len(selected_cases)
+            and bool(csv_path)
+            and isinstance(missing_reason, str)
+            and missing_reason_text == ""
+        )
         return {
             "present": True,
             "ok": bool(data.get("ok")),
             "source_mode": str(data.get("source_mode") or ""),
             "full": bool(data.get("full")),
-            "limit": data.get("limit") if isinstance(data.get("limit"), int) and not isinstance(data.get("limit"), bool) else None,
-            "candidate_count": int(data.get("candidate_count") or 0),
-            "source_count": int(data.get("source_count") or 0),
-            "selected_case_count": int(data.get("selected_case_count") or 0),
+            "limit": limit,
+            "candidate_count": candidate_count,
+            "source_count": source_count,
+            "selected_case_count": selected_case_count,
             "sources": [str(source) for source in sources],
             "selected_cases": selected_cases,
-            "csv": str(data.get("csv") or ""),
-            "missing_reason": str(missing_reason) if isinstance(missing_reason, str) else "",
-            "healthy": bool(data.get("ok")) and int(data.get("selected_case_count") or 0) > 0 and not missing_reason,
+            "csv": csv_path,
+            "missing_reason": missing_reason_text,
+            "healthy": healthy,
         }
     return {
         "present": False,
@@ -746,7 +769,8 @@ def main() -> int:
     fuzz_healthy = fuzz_health["healthy"]
     decode_stage_healthy = decode_stage_health_summary["healthy"]
     python_zlib_healthy = python_zlib_health["healthy"]
-    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and sidecar_corrupt_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy and python_zlib_healthy
+    native_tier_discovery_healthy = native_tier_discovery_health["healthy"]
+    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and sidecar_corrupt_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy and python_zlib_healthy and native_tier_discovery_healthy
     validation_unhealthy_reasons = []
     if not producer_healthy:
         validation_unhealthy_reasons.append("missing_producer_steps")
@@ -790,6 +814,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_python_zlib_diff_artifact")
     elif not python_zlib_healthy:
         validation_unhealthy_reasons.append("python_zlib_diff_failed")
+    if not native_tier_discovery_health["present"]:
+        validation_unhealthy_reasons.append("missing_native_tier_corpus_discovery_artifact")
+    elif not native_tier_discovery_healthy:
+        validation_unhealthy_reasons.append("native_tier_corpus_discovery_failed")
 
     lines = [
         "# Vort dashboard index",

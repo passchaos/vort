@@ -350,12 +350,18 @@ def require_boolean_formula_rules(value: dict[str, Any], boolean_formula_rules: 
         all_fields = rule.get("all", [])
         positive_fields = rule.get("positive", [])
         zero_fields = rule.get("zero", [])
+        empty_string_fields = rule.get("empty_string", [])
+        non_empty_string_fields = rule.get("non_empty_string", [])
         if not isinstance(all_fields, list) or not all(isinstance(field, str) for field in all_fields):
             raise AssertionError(f"{label}.{target_field}.all must be a list of field names")
         if not isinstance(positive_fields, list) or not all(isinstance(field, str) for field in positive_fields):
             raise AssertionError(f"{label}.{target_field}.positive must be a list of field names")
         if not isinstance(zero_fields, list) or not all(isinstance(field, str) for field in zero_fields):
             raise AssertionError(f"{label}.{target_field}.zero must be a list of field names")
+        if not isinstance(empty_string_fields, list) or not all(isinstance(field, str) for field in empty_string_fields):
+            raise AssertionError(f"{label}.{target_field}.empty_string must be a list of field names")
+        if not isinstance(non_empty_string_fields, list) or not all(isinstance(field, str) for field in non_empty_string_fields):
+            raise AssertionError(f"{label}.{target_field}.non_empty_string must be a list of field names")
         expected = True
         for field in all_fields:
             field_value = value.get(field)
@@ -378,6 +384,16 @@ def require_boolean_formula_rules(value: dict[str, Any], boolean_formula_rules: 
                 expected = expected and len(field_value) == 0
                 continue
             raise AssertionError(f"{label}.{field} must be an integer or list for {target_field} formula")
+        for field in empty_string_fields:
+            field_value = value.get(field)
+            if not isinstance(field_value, str):
+                raise AssertionError(f"{label}.{field} must be a string for {target_field} formula")
+            expected = expected and field_value == ""
+        for field in non_empty_string_fields:
+            field_value = value.get(field)
+            if not isinstance(field_value, str):
+                raise AssertionError(f"{label}.{field} must be a string for {target_field} formula")
+            expected = expected and field_value != ""
         actual = value.get(target_field)
         if not isinstance(actual, bool):
             raise AssertionError(f"{label}.{target_field} must be a boolean for formula validation")

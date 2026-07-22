@@ -657,6 +657,11 @@ def main() -> int:
         assert dashboard["python_zlib_diff_malformed_deflate_cases"] == python_zlib_diff["malformed_deflate_cases"]
         assert dashboard["python_zlib_diff_cli_successes"] == python_zlib_diff["cli_successes"]
         assert dashboard["python_zlib_diff_expected_failures"] == python_zlib_diff["expected_failures"]
+        assert dashboard["native_tier_corpus_discovery_present"] is True
+        assert dashboard["native_tier_corpus_discovery_ok"] is True
+        assert dashboard["native_tier_corpus_discovery_healthy"] is True
+        assert dashboard["native_tier_corpus_discovery_source_count"] == len(native_tier_corpus_discovery["sources"])
+        assert dashboard["native_tier_corpus_discovery_selected_case_count"] == len(native_tier_corpus_discovery["selected_cases"])
         assert dashboard["validation_healthy"] == (
             dashboard["producer_healthy"]
             and dashboard["smoke_gate_healthy"]
@@ -667,6 +672,7 @@ def main() -> int:
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]
             and dashboard["python_zlib_diff_healthy"]
+            and dashboard["native_tier_corpus_discovery_healthy"]
         )
         assert dashboard["validation_unhealthy_reasons"] == ([] if dashboard["validation_healthy"] else dashboard["validation_unhealthy_reasons"])
         validate_value_against_manifest(dashboard, schemas_def)

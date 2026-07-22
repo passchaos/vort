@@ -234,6 +234,24 @@
             "huffman_length_package_merge_worst_gap_bits"
           ]
         },
+        "native_tier_corpus_discovery_healthy": {
+          "all": [
+            "native_tier_corpus_discovery_present",
+            "native_tier_corpus_discovery_ok"
+          ],
+          "empty_string": [
+            "native_tier_corpus_discovery_missing_reason"
+          ],
+          "non_empty_string": [
+            "native_tier_corpus_discovery_source_mode",
+            "native_tier_corpus_discovery_csv"
+          ],
+          "positive": [
+            "native_tier_corpus_discovery_candidate_count",
+            "native_tier_corpus_discovery_source_count",
+            "native_tier_corpus_discovery_selected_case_count"
+          ]
+        },
         "producer_healthy": {
           "zero": [
             "producer_step_missing"
@@ -284,7 +302,8 @@
             "huffman_length_healthy",
             "fuzz_corpus_healthy",
             "decode_stage_healthy",
-            "python_zlib_diff_healthy"
+            "python_zlib_diff_healthy",
+            "native_tier_corpus_discovery_healthy"
           ]
         }
       },
@@ -326,6 +345,14 @@
             "format": "str",
             "workflow": "str"
           }
+        }
+      },
+      "count_rules": {
+        "native_tier_corpus_discovery_selected_case_count": {
+          "collection": "native_tier_corpus_discovery_selected_cases"
+        },
+        "native_tier_corpus_discovery_source_count": {
+          "collection": "native_tier_corpus_discovery_sources"
         }
       },
       "fields": {
@@ -563,7 +590,9 @@
           "missing_decode_stage_artifact",
           "decode_stage_failed",
           "missing_python_zlib_diff_artifact",
-          "python_zlib_diff_failed"
+          "python_zlib_diff_failed",
+          "missing_native_tier_corpus_discovery_artifact",
+          "native_tier_corpus_discovery_failed"
         ]
       }
     },
@@ -806,7 +835,9 @@
               "validation_missing_decode_stage_artifact",
               "validation_decode_stage_failed",
               "validation_missing_python_zlib_diff_artifact",
-              "validation_python_zlib_diff_failed"
+              "validation_python_zlib_diff_failed",
+              "validation_missing_native_tier_corpus_discovery_artifact",
+              "validation_native_tier_corpus_discovery_failed"
             ],
             "reason": [
               "missing_producer_steps",
@@ -829,7 +860,9 @@
               "missing_decode_stage_artifact",
               "decode_stage_failed",
               "missing_python_zlib_diff_artifact",
-              "python_zlib_diff_failed"
+              "python_zlib_diff_failed",
+              "missing_native_tier_corpus_discovery_artifact",
+              "native_tier_corpus_discovery_failed"
             ]
           },
           "field_pairs": {
@@ -854,6 +887,8 @@
                 "validation_missing_python_zlib_diff_artifact": "missing_python_zlib_diff_artifact",
                 "validation_missing_required_smoke_gates": "missing_required_smoke_gates",
                 "validation_missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
+                "validation_missing_native_tier_corpus_discovery_artifact": "missing_native_tier_corpus_discovery_artifact",
+                "validation_native_tier_corpus_discovery_failed": "native_tier_corpus_discovery_failed",
                 "validation_python_zlib_diff_failed": "python_zlib_diff_failed",
                 "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed"
               },
@@ -939,6 +974,8 @@
           "validation_decode_stage_failed",
           "validation_missing_python_zlib_diff_artifact",
           "validation_python_zlib_diff_failed",
+          "validation_missing_native_tier_corpus_discovery_artifact",
+          "validation_native_tier_corpus_discovery_failed",
           "truncated_output",
           "missing_native_tier_range_summary",
           "missing_native_tier_range_source",
@@ -987,7 +1024,9 @@
           "validation_missing_decode_stage_artifact",
           "validation_decode_stage_failed",
           "validation_missing_python_zlib_diff_artifact",
-          "validation_python_zlib_diff_failed"
+          "validation_python_zlib_diff_failed",
+          "validation_missing_native_tier_corpus_discovery_artifact",
+          "validation_native_tier_corpus_discovery_failed"
         ],
         "fixture": [
           "missing_producer_steps",
@@ -1010,7 +1049,9 @@
           "missing_decode_stage_artifact",
           "decode_stage_failed",
           "missing_python_zlib_diff_artifact",
-          "python_zlib_diff_failed"
+          "python_zlib_diff_failed",
+          "missing_native_tier_corpus_discovery_artifact",
+          "native_tier_corpus_discovery_failed"
         ],
         "reason": [
           "missing_producer_steps",
@@ -1033,7 +1074,9 @@
           "missing_decode_stage_artifact",
           "decode_stage_failed",
           "missing_python_zlib_diff_artifact",
-          "python_zlib_diff_failed"
+          "python_zlib_diff_failed",
+          "missing_native_tier_corpus_discovery_artifact",
+          "native_tier_corpus_discovery_failed"
         ]
       },
       "item_field_pairs": {
@@ -1058,6 +1101,8 @@
             "validation_missing_python_zlib_diff_artifact": "missing_python_zlib_diff_artifact",
             "validation_missing_required_smoke_gates": "missing_required_smoke_gates",
             "validation_missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
+            "validation_missing_native_tier_corpus_discovery_artifact": "missing_native_tier_corpus_discovery_artifact",
+            "validation_native_tier_corpus_discovery_failed": "native_tier_corpus_discovery_failed",
             "validation_python_zlib_diff_failed": "python_zlib_diff_failed",
             "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed"
           },
@@ -1084,6 +1129,8 @@
             "missing_python_zlib_diff_artifact": "missing_python_zlib_diff_artifact",
             "missing_required_smoke_gates": "missing_required_smoke_gates",
             "missing_sidecar_corrupt_artifact": "missing_sidecar_corrupt_artifact",
+            "missing_native_tier_corpus_discovery_artifact": "missing_native_tier_corpus_discovery_artifact",
+            "native_tier_corpus_discovery_failed": "native_tier_corpus_discovery_failed",
             "python_zlib_diff_failed": "python_zlib_diff_failed",
             "sidecar_corrupt_failed": "sidecar_corrupt_failed"
           },
@@ -2332,7 +2379,8 @@
           "reason_check_pair_mismatch",
           "reason_fixture_pair_mismatch",
           "validation_smoke_checked_schema_enum",
-          "boolean_formula_positive_field"
+          "boolean_formula_positive_field",
+          "boolean_formula_empty_string_field"
         ]
       },
       "item_fields": {

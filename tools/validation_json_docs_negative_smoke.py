@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
@@ -47,6 +48,14 @@ def negative_case(name: str, expected_error: str, action: Callable[[], None]) ->
         "actual_error": "<success>",
         "matched": False,
     }
+
+
+def dashboard_index_doc_example() -> dict[str, Any]:
+    for block in re.findall(r"```json\n(.*?)\n```", docs_check.DOC.read_text(), re.S):
+        payload = json.loads(block)
+        if isinstance(payload, dict) and payload.get("schema") == "vort.dashboard_index":
+            return payload
+    raise AssertionError("missing vort.dashboard_index docs example")
 
 
 def main() -> int:
@@ -380,6 +389,32 @@ def main() -> int:
                 "boolean_formula_positive_field",
                 "huffman_length_healthy=True does not match boolean formula",
                 boolean_formula_positive_field,
+            )
+        )
+
+        def boolean_formula_empty_string_field() -> None:
+            payload = dashboard_index_doc_example()
+            payload.update(
+                {
+                    "native_tier_corpus_discovery_present": True,
+                    "native_tier_corpus_discovery_ok": True,
+                    "native_tier_corpus_discovery_healthy": True,
+                    "native_tier_corpus_discovery_source_mode": "discovered",
+                    "native_tier_corpus_discovery_candidate_count": 5,
+                    "native_tier_corpus_discovery_source_count": 1,
+                    "native_tier_corpus_discovery_sources": ["/tmp/silesia-small.tar"],
+                    "native_tier_corpus_discovery_selected_case_count": 1,
+                    "native_tier_corpus_discovery_selected_cases": [{"label": "ooffice-128k", "bytes": 131072}],
+                    "native_tier_corpus_discovery_missing_reason": "stale_summary",
+                }
+            )
+            docs_check.validate_value_against_manifest(payload, schemas_def)
+
+        cases.append(
+            negative_case(
+                "boolean_formula_empty_string_field",
+                "native_tier_corpus_discovery_healthy=True does not match boolean formula",
+                boolean_formula_empty_string_field,
             )
         )
 

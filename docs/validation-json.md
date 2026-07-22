@@ -1363,6 +1363,8 @@ Current unhealthy reason values are:
 - `decode_stage_failed`
 - `missing_python_zlib_diff_artifact`
 - `python_zlib_diff_failed`
+- `missing_native_tier_corpus_discovery_artifact`
+- `native_tier_corpus_discovery_failed`
 
 Top-level fields:
 
@@ -1380,6 +1382,9 @@ Top-level fields:
 - `validation_healthy`
 - `validation_unhealthy_reasons`
 - `native_tier_range_*` fields summarize direct-API seekability tier range benchmark summaries.
+- `native_tier_corpus_discovery_*` fields summarize standard-corpus discovery
+  inputs for the native tier range benchmark and now participate in aggregate
+  `validation_healthy`.
 - `header_inspect_present`, `header_inspect_ok`, `header_inspect_healthy`,
   `header_inspect_case_count`, `header_inspect_raw_cases`,
   `header_inspect_zlib_cases`, `header_inspect_gzip_cases`,
@@ -1468,7 +1473,8 @@ Example:
     "missing_fuzz_corpus_artifact",
     "missing_fuzz_coverage_artifact",
     "missing_decode_stage_artifact",
-    "missing_python_zlib_diff_artifact"
+    "missing_python_zlib_diff_artifact",
+    "missing_native_tier_corpus_discovery_artifact"
   ],
   "header_inspect_present": false,
   "header_inspect_ok": false,
@@ -1573,34 +1579,19 @@ Example:
   "native_tier_range_custom_rows": 0,
   "native_tier_range_legacy_rows": 0,
   "native_tier_range_missing_sources": [],
-  "native_tier_corpus_discovery_present": true,
-  "native_tier_corpus_discovery_ok": true,
-  "native_tier_corpus_discovery_healthy": true,
-  "native_tier_corpus_discovery_source_mode": "discovered",
+  "native_tier_corpus_discovery_present": false,
+  "native_tier_corpus_discovery_ok": false,
+  "native_tier_corpus_discovery_healthy": false,
+  "native_tier_corpus_discovery_source_mode": "",
   "native_tier_corpus_discovery_full": false,
-  "native_tier_corpus_discovery_limit": 3,
-  "native_tier_corpus_discovery_candidate_count": 5,
-  "native_tier_corpus_discovery_source_count": 1,
-  "native_tier_corpus_discovery_sources": [
-    "/home/passchaos/Work/zlib-rs/silesia-small.tar"
-  ],
-  "native_tier_corpus_discovery_selected_case_count": 3,
-  "native_tier_corpus_discovery_selected_cases": [
-    {
-      "label": "ooffice-128k",
-      "bytes": 131072
-    },
-    {
-      "label": "nci-128k",
-      "bytes": 131072
-    },
-    {
-      "label": "mozilla-128k",
-      "bytes": 131072
-    }
-  ],
-  "native_tier_corpus_discovery_csv": "zig-out/vort-native-tier-range-corpus-bench.csv",
-  "native_tier_corpus_discovery_missing_reason": "",
+  "native_tier_corpus_discovery_limit": null,
+  "native_tier_corpus_discovery_candidate_count": 0,
+  "native_tier_corpus_discovery_source_count": 0,
+  "native_tier_corpus_discovery_sources": [],
+  "native_tier_corpus_discovery_selected_case_count": 0,
+  "native_tier_corpus_discovery_selected_cases": [],
+  "native_tier_corpus_discovery_csv": "",
+  "native_tier_corpus_discovery_missing_reason": "missing_discovery_artifact",
   "native_tier_range_source_details": [
     {
       "source": "built_in",
@@ -1820,7 +1811,8 @@ actual/minimum/delta values, and `missing_modes` reports unmet requirements.
 each `vort.dashboard_index.validation_unhealthy_reasons` enum value so new
 aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
-`tools/dashboard_strict_validation_reasons.json`. A synthetic long-output check
+`tools/dashboard_strict_validation_reasons.json`; the `strict-validation-health`
+mode minimums must cover every configured reason, currently 23. A synthetic long-output check
 keeps the truncation path covered so `actual_output_truncated=true` is exercised
 in CI.
 
