@@ -1454,19 +1454,16 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
     var reader = bitstream.BufferedBitReader.init(input);
     const parsed = try huffman.parseDynamicLengths(&reader);
     const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
-    const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+    const dist_decoder = try makeDynamicDistanceDecoderFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
     const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
     if (lit_lookup_bits == 9) {
         const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
-        const dist_decoder = makeDynamicDistanceDecoder(dist_table);
         try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
     } else if (lit_lookup_bits == 12) {
         const lit_decoder = huffman.FastDecoder(286, 12).init(lit_table);
-        const dist_decoder = makeDynamicDistanceDecoder(dist_table);
         try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
     } else {
         const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
-        const dist_decoder = makeDynamicDistanceDecoder(dist_table);
         try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
     }
     if (!parsed.header.final) return error.TruncatedFrame;
@@ -1541,6 +1538,24 @@ fn makeDynamicDistanceDecoder(table: huffman.HuffmanTable(30)) DynamicDistanceDe
     // pressure, which shows up in the raw decode benchmark for many small
     // dynamic frames and wrapper benchmarks.
     return DynamicDistanceDecoder.init(table);
+}
+
+fn makeDynamicDistanceDecoderFromLengths(lengths: []const u4) Error!DynamicDistanceDecoder {
+    var single_symbol: u16 = 0;
+    var single_bits: u4 = 0;
+    var non_zero: usize = 0;
+    for (lengths, 0..) |bits, symbol| {
+        if (bits == 0) continue;
+        single_symbol = @intCast(symbol);
+        single_bits = bits;
+        non_zero += 1;
+    }
+    // A single-symbol dynamic distance alphabet always has canonical code zero.
+    // Real PNG corpora can contain hundreds of such blocks; detecting the shape
+    // before `HuffmanTable.init` avoids constructing and indexing a 30-symbol
+    // table whose only runtime job would be to validate/consume that zero code.
+    if (non_zero == 1) return .{ .single = .{ .symbol = single_symbol, .code = 0, .bits = single_bits } };
+    return makeDynamicDistanceDecoder(try huffman.HuffmanTable(30).init(lengths));
 }
 
 pub fn profileFirstDynamicDeflateBlock(input: []const u8) Error!DynamicDecodeProfile {
@@ -1873,8 +1888,7 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
             2 => {
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, &reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
-                const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                const dist_decoder = makeDynamicDistanceDecoder(dist_table);
+                const dist_decoder = try makeDynamicDistanceDecoderFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
                 if (lit_lookup_bits == 9) {
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
@@ -2054,8 +2068,7 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
             2 => {
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
-                const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                const dist_decoder = makeDynamicDistanceDecoder(dist_table);
+                const dist_decoder = try makeDynamicDistanceDecoderFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
                 if (lit_lookup_bits == 9) {
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
@@ -2245,8 +2258,7 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
             2 => {
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
-                const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-                const dist_decoder = makeDynamicDistanceDecoder(dist_table);
+                const dist_decoder = try makeDynamicDistanceDecoderFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
                 if (lit_lookup_bits == 9) {
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
@@ -5998,10 +6010,9 @@ pub const PngStreamingZlibScanlineDecoder = struct {
             2 => {
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, &self.reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
-                const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_lookup_bits = pngStreamingDynamicLiteralLookupBits(parsed);
                 self.dynamic_lit = PngStreamingDynamicLiteralDecoder.initWithBits(lit_lookup_bits, lit_table);
-                self.dynamic_dist = makeDynamicDistanceDecoder(dist_table);
+                self.dynamic_dist = try makeDynamicDistanceDecoderFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
                 self.block_kind = switch (lit_lookup_bits) {
                     9 => .dynamic9,
                     12 => .dynamic12,
@@ -6414,10 +6425,9 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
             2 => {
                 const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, &self.reader);
                 const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
-                const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                 const lit_lookup_bits = pngStreamingDynamicLiteralLookupBits(parsed);
                 self.dynamic_lit = PngStreamingDynamicLiteralDecoder.initWithBits(lit_lookup_bits, lit_table);
-                self.dynamic_dist = makeDynamicDistanceDecoder(dist_table);
+                self.dynamic_dist = try makeDynamicDistanceDecoderFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
                 self.block_kind = switch (lit_lookup_bits) {
                     9 => .dynamic9,
                     12 => .dynamic12,

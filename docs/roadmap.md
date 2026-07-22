@@ -283,6 +283,9 @@ architecture blindly.
 - [x] Dynamic-Huffman inflate for single final blocks.
 - [x] Dynamic-Huffman inflate uses a fast lookup decoder with fallback for long codes.
 - [x] Dynamic-Huffman inflate uses a smaller distance lookup table to reduce per-block setup overhead.
+- [x] Dynamic-Huffman inflate specializes single-symbol distance alphabets without
+  building distance lookup tables, improving PNG-style dynamic blocks that only
+  use one match distance code.
 - [x] BitReader skipBits advances directly for fast Huffman decode hot paths.
 - [x] BitReader read/peek use little-endian byte windows instead of per-bit loops.
 - [x] Deflate decode stage report isolates raw/zlib/gzip alloc and caller-buffer decode overhead, including wrapper/checksum costs.
