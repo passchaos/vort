@@ -184,6 +184,9 @@ pub const DynamicDecodeProfile = struct {
     match_class_distance_extra_bits: [match_class_count]usize = @splat(0),
     match_class_distance_code_bits: [match_class_count]usize = @splat(0),
     dynamic_blocks: usize = 0,
+    dynamic_unique_table_signatures: usize = 0,
+    dynamic_repeated_table_signatures: usize = 0,
+    dynamic_consecutive_repeated_table_signatures: usize = 0,
     fixed_blocks: usize = 0,
     stored_blocks: usize = 0,
     mix: u64 = 0,
@@ -1503,6 +1506,8 @@ pub fn profileFirstDynamicDeflateBlock(input: []const u8) Error!DynamicDecodePro
     const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
     const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
     var profile = DynamicDecodeProfile{};
+    var table_tracker = DynamicTableSignatureTracker{};
+    table_tracker.record(parsed, &profile);
     profile.dynamic_blocks = 1;
     switch (dynamicLiteralLookupBits(parsed)) {
         9 => try profileCompressedBlockInto(&reader, lit_table, dist_table, 9, &profile),
@@ -1515,10 +1520,11 @@ pub fn profileFirstDynamicDeflateBlock(input: []const u8) Error!DynamicDecodePro
 pub fn profileDynamicDeflateBlocks(input: []const u8) Error!DynamicDecodeProfile {
     var reader = bitstream.BufferedBitReader.init(input);
     var profile = DynamicDecodeProfile{};
+    var table_tracker = DynamicTableSignatureTracker{};
     while (true) {
         const header = try readBlockHeader(&reader);
         if (header.block_type != 2) return error.InvalidDeflateBlockType;
-        try profileDynamicBlockAfterHeader(&reader, header.final, &profile);
+        try profileDynamicBlockAfterHeader(&reader, header.final, &profile, &table_tracker);
         if (header.final) return profile;
     }
 }
@@ -1526,22 +1532,24 @@ pub fn profileDynamicDeflateBlocks(input: []const u8) Error!DynamicDecodeProfile
 pub fn profileDeflateBlocks(input: []const u8) Error!DynamicDecodeProfile {
     var reader = bitstream.BufferedBitReader.init(input);
     var profile = DynamicDecodeProfile{};
+    var table_tracker = DynamicTableSignatureTracker{};
     while (true) {
         const header = try readBlockHeader(&reader);
         switch (header.block_type) {
             0 => try profileStoredBlockAfterHeader(&reader, &profile),
             1 => try profileFixedBlockAfterHeader(&reader, &profile),
-            2 => try profileDynamicBlockAfterHeader(&reader, header.final, &profile),
+            2 => try profileDynamicBlockAfterHeader(&reader, header.final, &profile, &table_tracker),
             else => return error.InvalidDeflateBlockType,
         }
         if (header.final) return profile;
     }
 }
 
-fn profileDynamicBlockAfterHeader(reader: *bitstream.BufferedBitReader, final: bool, profile: *DynamicDecodeProfile) Error!void {
+fn profileDynamicBlockAfterHeader(reader: *bitstream.BufferedBitReader, final: bool, profile: *DynamicDecodeProfile, table_tracker: *DynamicTableSignatureTracker) Error!void {
     const parsed = try huffman.parseDynamicLengthsAfterHeader(final, reader);
     const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
     const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+    table_tracker.record(parsed, profile);
     profile.dynamic_blocks += 1;
     switch (dynamicLiteralLookupBits(parsed)) {
         9 => try profileCompressedBlockInto(reader, lit_table, dist_table, 9, profile),
@@ -1549,6 +1557,50 @@ fn profileDynamicBlockAfterHeader(reader: *bitstream.BufferedBitReader, final: b
         else => try profileCompressedBlockInto(reader, lit_table, dist_table, 11, profile),
     }
 }
+
+fn dynamicTableSignature(parsed: huffman.DynamicLengths) u64 {
+    var hash: u64 = 0xcbf29ce484222325;
+    hash = fnv1aByte(hash, @intCast(parsed.header.hlit & 0xff));
+    hash = fnv1aByte(hash, @intCast(parsed.header.hlit >> 8));
+    hash = fnv1aByte(hash, @intCast(parsed.header.hdist & 0xff));
+    hash = fnv1aByte(hash, @intCast(parsed.header.hdist >> 8));
+    for (parsed.literal_lengths[0..parsed.header.hlit]) |bits| hash = fnv1aByte(hash, bits);
+    for (parsed.distance_lengths[0..parsed.header.hdist]) |bits| hash = fnv1aByte(hash, bits);
+    return hash;
+}
+
+fn fnv1aByte(hash: u64, byte: u8) u64 {
+    return (hash ^ byte) *% 0x100000001b3;
+}
+
+const DynamicTableSignatureTracker = struct {
+    const capacity = 1024;
+    signatures: [capacity]u64 = @splat(0),
+    count: usize = 0,
+    last: u64 = 0,
+
+    fn record(self: *DynamicTableSignatureTracker, parsed: huffman.DynamicLengths, profile: *DynamicDecodeProfile) void {
+        const signature = dynamicTableSignature(parsed);
+        var seen = false;
+        for (self.signatures[0..self.count]) |existing| {
+            if (existing == signature) {
+                seen = true;
+                break;
+            }
+        }
+        if (seen) {
+            profile.dynamic_repeated_table_signatures += 1;
+        } else if (self.count < capacity) {
+            self.signatures[self.count] = signature;
+            self.count += 1;
+        }
+        profile.dynamic_unique_table_signatures = self.count;
+        if (profile.dynamic_blocks != 0 and self.last == signature) {
+            profile.dynamic_consecutive_repeated_table_signatures += 1;
+        }
+        self.last = signature;
+    }
+};
 
 fn profileStoredBlockAfterHeader(reader: *bitstream.BufferedBitReader, profile: *DynamicDecodeProfile) Error!void {
     reader.alignToByte();
@@ -12429,6 +12481,8 @@ test "dynamic decode profile counts literals and matches" {
     try std.testing.expect(profile.literal_lookup_bits == 9 or profile.literal_lookup_bits == 11 or profile.literal_lookup_bits == 12);
     try std.testing.expect(profile.literal_lookup_covered <= profile.literal_lookup_size);
     try std.testing.expect(profile.distance_lookup_covered <= profile.distance_lookup_size);
+    try std.testing.expectEqual(@as(usize, 1), profile.dynamic_unique_table_signatures);
+    try std.testing.expectEqual(@as(usize, 0), profile.dynamic_repeated_table_signatures);
 
     const match_class_count = profile.match_rle_count + profile.match_small_distance_count + profile.match_non_overlapping_count + profile.match_overlapping_count;
     const match_class_bytes = profile.match_rle_bytes + profile.match_small_distance_bytes + profile.match_non_overlapping_bytes + profile.match_overlapping_bytes;
