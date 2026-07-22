@@ -5035,6 +5035,19 @@ pub const PngZlibScanlineDecoder = struct {
         return init(input, zlib_scratch, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel);
     }
 
+    pub fn initWithInfoAndOptions(
+        input: []const u8,
+        zlib_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+        options: ZlibDecodeOptions,
+    ) Error!PngZlibScanlineDecoder {
+        var self = PngZlibScanlineDecoder{};
+        try self.resetWithInfoAndOptions(input, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, options);
+        return self;
+    }
+
     pub fn initFromChunksWithInfo(
         chunks: []const []const u8,
         compressed_scratch: []u8,
@@ -5126,6 +5139,26 @@ pub const PngZlibScanlineDecoder = struct {
         info: PngImageInfo,
     ) Error!void {
         return self.reset(input, zlib_scratch, filtered_row_scratch, previous_row_scratch, info.row_len, info.height, info.bytes_per_pixel);
+    }
+
+    pub fn resetWithInfoAndOptions(
+        self: *PngZlibScanlineDecoder,
+        input: []const u8,
+        zlib_scratch: []u8,
+        filtered_row_scratch: []u8,
+        previous_row_scratch: []u8,
+        info: PngImageInfo,
+        options: ZlibDecodeOptions,
+    ) Error!void {
+        const expected_payload_len = try validateConfig(info.row_len, info.height, info.bytes_per_pixel, filtered_row_scratch, previous_row_scratch);
+        self.* = .{
+            .filtered_row_scratch = filtered_row_scratch[0..info.row_len],
+            .previous_row_scratch = previous_row_scratch[0..info.row_len],
+            .row_len = info.row_len,
+            .row_count = info.height,
+            .bytes_per_pixel = info.bytes_per_pixel,
+        };
+        self.zlib = try ZlibDecoder.initWithOptionsExactSize(input, zlib_scratch, options, expected_payload_len);
     }
 
     pub fn resetFromChunks(
@@ -6843,9 +6876,21 @@ pub fn decodePngZlibImage(
     info: PngImageInfo,
     output: []u8,
 ) Error!PngImageDecodeResult {
+    return decodePngZlibImageWithOptions(input, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, .{}, output);
+}
+
+pub fn decodePngZlibImageWithOptions(
+    input: []const u8,
+    zlib_scratch: []u8,
+    filtered_row_scratch: []u8,
+    previous_row_scratch: []u8,
+    info: PngImageInfo,
+    options: ZlibDecodeOptions,
+    output: []u8,
+) Error!PngImageDecodeResult {
     const output_len = try pngImageOutputLen(info);
     if (output.len < output_len) return error.OutputTooSmall;
-    var decoder = try PngZlibScanlineDecoder.initWithInfo(input, zlib_scratch, filtered_row_scratch, previous_row_scratch, info);
+    var decoder = try PngZlibScanlineDecoder.initWithInfoAndOptions(input, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, options);
     return drainPngZlibImage(&decoder, output[0..output_len]);
 }
 
@@ -11143,6 +11188,16 @@ test "png zlib image helper reconstructs full image from IDAT chunks" {
     const single = try decodePngZlibImage(encoded, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &single_image);
     try std.testing.expectEqualSlices(u8, &expected_image, &single_image);
     try std.testing.expectEqual(encoded.len, single.zlib_input_read);
+    @memset(&single_image, 0);
+    const single_options = try decodePngZlibImageWithOptions(encoded, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, .{}, &single_image);
+    try std.testing.expectEqual(single.rows, single_options.rows);
+    try std.testing.expectEqualSlices(u8, &expected_image, &single_image);
+
+    var bad_adler = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_adler);
+    bad_adler[bad_adler.len - 1] ^= 1;
+    try std.testing.expectError(error.ChecksumMismatch, decodePngZlibImage(bad_adler, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, &single_image));
+    _ = try decodePngZlibImageWithOptions(bad_adler, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, .{ .ignore_adler = true }, &single_image);
 
     try std.testing.expectError(error.OutputTooSmall, decodePngZlibImageFromChunks(&chunks, &compressed_scratch, &zlib_scratch, &filtered_row_scratch, &previous_row_scratch, info, image[0 .. image.len - 1]));
     var too_tall_image: [(row_count + 1) * row_len]u8 = undefined;
