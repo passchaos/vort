@@ -183,6 +183,9 @@ pub const DynamicDecodeProfile = struct {
     match_class_distance_extra_reads: [match_class_count]usize = @splat(0),
     match_class_distance_extra_bits: [match_class_count]usize = @splat(0),
     match_class_distance_code_bits: [match_class_count]usize = @splat(0),
+    dynamic_blocks: usize = 0,
+    fixed_blocks: usize = 0,
+    stored_blocks: usize = 0,
     mix: u64 = 0,
 };
 
@@ -1499,56 +1502,94 @@ pub fn profileFirstDynamicDeflateBlock(input: []const u8) Error!DynamicDecodePro
     const parsed = try huffman.parseDynamicLengths(&reader);
     const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
     const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-    return switch (dynamicLiteralLookupBits(parsed)) {
-        9 => profileCompressedBlock(&reader, lit_table, dist_table, 9),
-        12 => profileCompressedBlock(&reader, lit_table, dist_table, 12),
-        else => profileCompressedBlock(&reader, lit_table, dist_table, 11),
-    };
+    var profile = DynamicDecodeProfile{};
+    profile.dynamic_blocks = 1;
+    switch (dynamicLiteralLookupBits(parsed)) {
+        9 => try profileCompressedBlockInto(&reader, lit_table, dist_table, 9, &profile),
+        12 => try profileCompressedBlockInto(&reader, lit_table, dist_table, 12, &profile),
+        else => try profileCompressedBlockInto(&reader, lit_table, dist_table, 11, &profile),
+    }
+    return profile;
 }
 
-fn profileCompressedBlock(
-    reader: *bitstream.BufferedBitReader,
-    lit_table: huffman.HuffmanTable(286),
-    dist_table: huffman.HuffmanTable(30),
-    comptime lit_lookup_bits: u4,
-) Error!DynamicDecodeProfile {
-    const lit_decoder = huffman.FastDecoder(286, lit_lookup_bits).init(lit_table);
-    const dist_decoder = makeDynamicDistanceDecoder(dist_table);
-    const lit_code_bits_by_symbol = codeBitsBySymbol(286, lit_table);
-    const dist_code_bits_by_symbol = codeBitsBySymbol(30, dist_table);
-    var profile = DynamicDecodeProfile{
-        .literal_lookup_bits = lit_lookup_bits,
-        .literal_lookup_covered = lit_decoder.lookupCoverage(),
-        .literal_lookup_size = lit_decoder.lookup.len,
-        .distance_lookup_covered = dist_decoder.lookupCoverage(),
-        .distance_lookup_size = dist_decoder.lookup.len,
-    };
+pub fn profileDynamicDeflateBlocks(input: []const u8) Error!DynamicDecodeProfile {
+    var reader = bitstream.BufferedBitReader.init(input);
+    var profile = DynamicDecodeProfile{};
     while (true) {
-        const lit_hit = huffmanFastWouldHit(286, lit_lookup_bits, &lit_decoder, reader);
-        const symbol = try lit_decoder.decodeValue(reader);
-        if (lit_hit) profile.literal_fast_hits += 1 else profile.literal_fast_misses += 1;
+        const header = try readBlockHeader(&reader);
+        if (header.block_type != 2) return error.InvalidDeflateBlockType;
+        try profileDynamicBlockAfterHeader(&reader, header.final, &profile);
+        if (header.final) return profile;
+    }
+}
+
+pub fn profileDeflateBlocks(input: []const u8) Error!DynamicDecodeProfile {
+    var reader = bitstream.BufferedBitReader.init(input);
+    var profile = DynamicDecodeProfile{};
+    while (true) {
+        const header = try readBlockHeader(&reader);
+        switch (header.block_type) {
+            0 => try profileStoredBlockAfterHeader(&reader, &profile),
+            1 => try profileFixedBlockAfterHeader(&reader, &profile),
+            2 => try profileDynamicBlockAfterHeader(&reader, header.final, &profile),
+            else => return error.InvalidDeflateBlockType,
+        }
+        if (header.final) return profile;
+    }
+}
+
+fn profileDynamicBlockAfterHeader(reader: *bitstream.BufferedBitReader, final: bool, profile: *DynamicDecodeProfile) Error!void {
+    const parsed = try huffman.parseDynamicLengthsAfterHeader(final, reader);
+    const lit_table = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+    const dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+    profile.dynamic_blocks += 1;
+    switch (dynamicLiteralLookupBits(parsed)) {
+        9 => try profileCompressedBlockInto(reader, lit_table, dist_table, 9, profile),
+        12 => try profileCompressedBlockInto(reader, lit_table, dist_table, 12, profile),
+        else => try profileCompressedBlockInto(reader, lit_table, dist_table, 11, profile),
+    }
+}
+
+fn profileStoredBlockAfterHeader(reader: *bitstream.BufferedBitReader, profile: *DynamicDecodeProfile) Error!void {
+    reader.alignToByte();
+    const len = try reader.readAlignedInt(u16, .little);
+    const nlen = try reader.readAlignedInt(u16, .little);
+    if (nlen != ~len) return error.StoredLengthMismatch;
+    var scratch: [256]u8 = undefined;
+    var remaining: usize = len;
+    while (remaining != 0) {
+        const n = @min(remaining, scratch.len);
+        try reader.readAlignedBytes(scratch[0..n]);
+        remaining -= n;
+    }
+    profile.stored_blocks += 1;
+    profile.output_bytes += len;
+}
+
+fn profileFixedBlockAfterHeader(reader: *bitstream.BufferedBitReader, profile: *DynamicDecodeProfile) Error!void {
+    profile.fixed_blocks += 1;
+    while (true) {
+        const symbol = try huffman.decodeFixedLiteralValueFast(reader);
         if (symbol < 256) {
             profile.literal_symbols += 1;
             profile.output_bytes += 1;
             profile.mix +%= symbol;
         } else if (symbol == 256) {
-            return profile;
+            return;
         } else if (symbol <= 285) {
             profile.length_symbols += 1;
             profile.length_symbol_histogram[symbol - 257] += 1;
-            profile.length_code_bits += lit_code_bits_by_symbol[symbol];
+            profile.length_code_bits += fixedLiteralCodeBits(symbol);
             const length_extra_reads_before = profile.length_extra_reads;
             const length_extra_bits_before = profile.length_extra_bits;
-            const length = try profileDecodeLength(symbol, reader, &profile);
-            const dist_hit = huffmanFastWouldHit(30, 8, &dist_decoder, reader);
-            const distance_symbol = try dist_decoder.decodeValue(reader);
-            if (dist_hit) profile.distance_fast_hits += 1 else profile.distance_fast_misses += 1;
+            const length = try profileDecodeLength(symbol, reader, profile);
+            const distance_symbol = try huffman.decodeFixedDistanceValueFast(reader);
             profile.distance_symbol_histogram[distance_symbol] += 1;
-            const distance_code_bits = dist_code_bits_by_symbol[distance_symbol];
+            const distance_code_bits: usize = 5;
             profile.distance_code_bits += distance_code_bits;
             const distance_extra_reads_before = profile.distance_extra_reads;
             const distance_extra_bits_before = profile.distance_extra_bits;
-            const distance = try profileDecodeDistance(distance_symbol, reader, &profile);
+            const distance = try profileDecodeDistance(distance_symbol, reader, profile);
             profile.distance_symbols += 1;
             try profileRecordMatch(
                 length,
@@ -1558,7 +1599,74 @@ fn profileCompressedBlock(
                 profile.distance_extra_reads - distance_extra_reads_before,
                 profile.distance_extra_bits - distance_extra_bits_before,
                 distance_code_bits,
-                &profile,
+                profile,
+            );
+            profile.mix +%= length;
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
+}
+
+fn fixedLiteralCodeBits(symbol: u16) u4 {
+    if (symbol <= 143) return 8;
+    if (symbol <= 255) return 9;
+    if (symbol <= 279) return 7;
+    return 8;
+}
+
+fn profileCompressedBlockInto(
+    reader: *bitstream.BufferedBitReader,
+    lit_table: huffman.HuffmanTable(286),
+    dist_table: huffman.HuffmanTable(30),
+    comptime lit_lookup_bits: u4,
+    profile: *DynamicDecodeProfile,
+) Error!void {
+    const lit_decoder = huffman.FastDecoder(286, lit_lookup_bits).init(lit_table);
+    const dist_decoder = makeDynamicDistanceDecoder(dist_table);
+    const lit_code_bits_by_symbol = codeBitsBySymbol(286, lit_table);
+    const dist_code_bits_by_symbol = codeBitsBySymbol(30, dist_table);
+    profile.literal_lookup_bits = lit_lookup_bits;
+    profile.literal_lookup_covered += lit_decoder.lookupCoverage();
+    profile.literal_lookup_size += lit_decoder.lookup.len;
+    profile.distance_lookup_covered += dist_decoder.lookupCoverage();
+    profile.distance_lookup_size += dist_decoder.lookup.len;
+    while (true) {
+        const lit_hit = huffmanFastWouldHit(286, lit_lookup_bits, &lit_decoder, reader);
+        const symbol = try lit_decoder.decodeValue(reader);
+        if (lit_hit) profile.literal_fast_hits += 1 else profile.literal_fast_misses += 1;
+        if (symbol < 256) {
+            profile.literal_symbols += 1;
+            profile.output_bytes += 1;
+            profile.mix +%= symbol;
+        } else if (symbol == 256) {
+            return;
+        } else if (symbol <= 285) {
+            profile.length_symbols += 1;
+            profile.length_symbol_histogram[symbol - 257] += 1;
+            profile.length_code_bits += lit_code_bits_by_symbol[symbol];
+            const length_extra_reads_before = profile.length_extra_reads;
+            const length_extra_bits_before = profile.length_extra_bits;
+            const length = try profileDecodeLength(symbol, reader, profile);
+            const dist_hit = huffmanFastWouldHit(30, 8, &dist_decoder, reader);
+            const distance_symbol = try dist_decoder.decodeValue(reader);
+            if (dist_hit) profile.distance_fast_hits += 1 else profile.distance_fast_misses += 1;
+            profile.distance_symbol_histogram[distance_symbol] += 1;
+            const distance_code_bits = dist_code_bits_by_symbol[distance_symbol];
+            profile.distance_code_bits += distance_code_bits;
+            const distance_extra_reads_before = profile.distance_extra_reads;
+            const distance_extra_bits_before = profile.distance_extra_bits;
+            const distance = try profileDecodeDistance(distance_symbol, reader, profile);
+            profile.distance_symbols += 1;
+            try profileRecordMatch(
+                length,
+                distance,
+                profile.length_extra_reads - length_extra_reads_before,
+                profile.length_extra_bits - length_extra_bits_before,
+                profile.distance_extra_reads - distance_extra_reads_before,
+                profile.distance_extra_bits - distance_extra_bits_before,
+                distance_code_bits,
+                profile,
             );
             profile.mix +%= length;
         } else {
@@ -12215,6 +12323,38 @@ test "dynamic decode profile counts literals and matches" {
     try std.testing.expectEqual(profile.length_extra_bits, sumProfileCounters(&profile.match_class_length_extra_bits));
     try std.testing.expectEqual(profile.distance_extra_reads, sumProfileCounters(&profile.match_class_distance_extra_reads));
     try std.testing.expectEqual(profile.distance_extra_bits, sumProfileCounters(&profile.match_class_distance_extra_bits));
+}
+
+test "deflate profile walks stored fixed and dynamic blocks" {
+    const stored_payload = "stored-profile-block";
+    const fixed_payload = "fixed fixed fixed profile";
+    const dynamic_payload = "dynamic profile payload " ** 32;
+    const stored = try encodeRawStoredAlloc(std.testing.allocator, stored_payload);
+    defer std.testing.allocator.free(stored);
+    const fixed = try encodeRawFixedWithOptionsAlloc(std.testing.allocator, fixed_payload, optionsForLevel(.default));
+    defer std.testing.allocator.free(fixed);
+    const dynamic = try encodeRawDynamicWithOptionsAlloc(std.testing.allocator, dynamic_payload, optionsForLevel(.default));
+    defer std.testing.allocator.free(dynamic);
+
+    var raw = std.ArrayList(u8).empty;
+    defer raw.deinit(std.testing.allocator);
+    try raw.appendSlice(std.testing.allocator, stored);
+    try raw.appendSlice(std.testing.allocator, fixed);
+    raw.items[0] &= 0xfe;
+
+    const mixed_profile = try profileDeflateBlocks(raw.items);
+    try std.testing.expectEqual(@as(usize, 1), mixed_profile.stored_blocks);
+    try std.testing.expectEqual(@as(usize, 1), mixed_profile.fixed_blocks);
+    try std.testing.expectEqual(@as(usize, 0), mixed_profile.dynamic_blocks);
+    try std.testing.expectEqual(stored_payload.len + fixed_payload.len, mixed_profile.output_bytes);
+    try std.testing.expect(mixed_profile.literal_symbols > 0);
+    try std.testing.expectEqual(mixed_profile.length_symbols, mixed_profile.distance_symbols);
+
+    const dynamic_profile = try profileDeflateBlocks(dynamic);
+    try std.testing.expectEqual(@as(usize, 1), dynamic_profile.dynamic_blocks);
+    try std.testing.expectEqual(dynamic_payload.len, dynamic_profile.output_bytes);
+    try std.testing.expect(dynamic_profile.literal_symbols > 0);
+    try std.testing.expectEqual(dynamic_profile.length_symbols, dynamic_profile.distance_symbols);
 }
 
 fn sumProfileCounters(values: []const usize) usize {

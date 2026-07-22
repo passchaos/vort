@@ -1235,6 +1235,8 @@ architecture blindly.
 
 - Added a narrow production helper for distance extra-bit reads that uses the staged peek/advance path after distance symbol decode, without changing length decoding or introducing symbol-specific branches. ReleaseFast repeat3 README/roadmap probes were mixed-positive overall, and the chunked zlib plus PNG streaming zlib gates passed, so this keeps the safer fused-extra signal while avoiding the rejected hot-distance-symbol switch.
 
+- Extended `DynamicDecodeProfile` with a full-deflate-stream profile helper that can walk stored, fixed, and dynamic blocks while accumulating output and match-class totals. The older first-dynamic-block helper remains for narrow probes, but PNG IDAT diagnostics now use the full-stream surface so large multi-block files such as Lohengrin are not characterized by their first block alone.
+
 - Tried extending the same staged extra-bit helper to length extra bits, but did
   not keep it. A short ReleaseFast repeat3 candidate improved some
   README/roadmap caller-buffer rows, yet the same sample regressed README
