@@ -4326,6 +4326,13 @@ fn reconstructPngUpScanline(filtered: []const u8, previous: []const u8, output: 
 }
 
 fn reconstructPngAverageScanline(filtered: []const u8, previous: ?[]const u8, bytes_per_pixel: usize, output: []u8) void {
+    if (bytes_per_pixel == 3) {
+        return reconstructPngAverageBpp3Scanline(filtered, previous, output);
+    }
+    return reconstructPngAverageScanlineReference(filtered, previous, bytes_per_pixel, output);
+}
+
+fn reconstructPngAverageScanlineReference(filtered: []const u8, previous: ?[]const u8, bytes_per_pixel: usize, output: []u8) void {
     if (previous) |prev| {
         const prefix = @min(bytes_per_pixel, filtered.len);
         var i: usize = 0;
@@ -4338,6 +4345,44 @@ fn reconstructPngAverageScanline(filtered: []const u8, previous: ?[]const u8, by
         copyPossiblyAliasedBytes(output[0..prefix], filtered[0..prefix]);
         var i: usize = prefix;
         while (i < filtered.len) : (i += 1) output[i] = filtered[i] +% (output[i - bytes_per_pixel] >> 1);
+    }
+}
+
+fn reconstructPngAverageBpp3Scanline(filtered: []const u8, previous: ?[]const u8, output: []u8) void {
+    // Match image-png's fixed-bpp Average loop: keep the reconstructed RGB
+    // pixel in registers instead of loading output[i - 3] for every byte.
+    // Processing complete pixels also removes modulo/stride work from the hot
+    // loop while the scalar tail preserves malformed/non-pixel-aligned rows.
+    var left = [_]u8{ 0, 0, 0 };
+    var i: usize = 0;
+    if (previous) |prev| {
+        while (i + 3 <= filtered.len) : (i += 3) {
+            inline for (0..3) |channel| {
+                const value = filtered[i + channel] +% @as(u8, @intCast((@as(u16, left[channel]) + @as(u16, prev[i + channel])) >> 1));
+                output[i + channel] = value;
+                left[channel] = value;
+            }
+        }
+        while (i < filtered.len) : (i += 1) {
+            const channel = i % 3;
+            const value = filtered[i] +% @as(u8, @intCast((@as(u16, left[channel]) + @as(u16, prev[i])) >> 1));
+            output[i] = value;
+            left[channel] = value;
+        }
+    } else {
+        while (i + 3 <= filtered.len) : (i += 3) {
+            inline for (0..3) |channel| {
+                const value = filtered[i + channel] +% (left[channel] >> 1);
+                output[i + channel] = value;
+                left[channel] = value;
+            }
+        }
+        while (i < filtered.len) : (i += 1) {
+            const channel = i % 3;
+            const value = filtered[i] +% (left[channel] >> 1);
+            output[i] = value;
+            left[channel] = value;
+        }
     }
 }
 
@@ -10303,6 +10348,47 @@ test "png scanline reconstruction Paeth fixed bpp supports in-place rows" {
         in_place = filtered;
         try std.testing.expectEqual(row_len, try reconstructPngScanline(4, &in_place, null, bpp, &in_place));
         try std.testing.expectEqualSlices(u8, &row, &in_place);
+    }
+}
+
+test "png scanline reconstruction Average bpp3 supports in-place and tail rows" {
+    inline for (.{ 32, 33, 34 }) |row_len| {
+        const previous = pngReconstructionRow(row_len, 5);
+        var row = pngReconstructionRow(row_len, 6);
+        var filtered: [row_len]u8 = undefined;
+
+        filterPngScanlineForTest(3, &row, &previous, 3, &filtered);
+        var in_place = filtered;
+        try std.testing.expectEqual(row_len, try reconstructPngScanline(3, &in_place, &previous, 3, &in_place));
+        try std.testing.expectEqualSlices(u8, &row, &in_place);
+
+        row = pngReconstructionRow(row_len, 0);
+        filterPngScanlineForTest(3, &row, null, 3, &filtered);
+        in_place = filtered;
+        try std.testing.expectEqual(row_len, try reconstructPngScanline(3, &in_place, null, 3, &in_place));
+        try std.testing.expectEqualSlices(u8, &row, &in_place);
+    }
+}
+
+test "png scanline reconstruction Average bpp3 matches scalar reference" {
+    var len: usize = 0;
+    while (len <= 257) : (len += 1) {
+        var filtered: [257]u8 = undefined;
+        var previous: [257]u8 = undefined;
+        for (0..len) |i| {
+            filtered[i] = @truncate(i *% 73 +% len *% 19 +% (i >> 2));
+            previous[i] = @truncate(i *% 29 +% len *% 41 +% (i << 1));
+        }
+
+        var optimized: [257]u8 = undefined;
+        var reference: [257]u8 = undefined;
+        reconstructPngAverageBpp3Scanline(filtered[0..len], previous[0..len], optimized[0..len]);
+        reconstructPngAverageScanlineReference(filtered[0..len], previous[0..len], 3, reference[0..len]);
+        try std.testing.expectEqualSlices(u8, reference[0..len], optimized[0..len]);
+
+        reconstructPngAverageBpp3Scanline(filtered[0..len], null, optimized[0..len]);
+        reconstructPngAverageScanlineReference(filtered[0..len], null, 3, reference[0..len]);
+        try std.testing.expectEqualSlices(u8, reference[0..len], optimized[0..len]);
     }
 }
 

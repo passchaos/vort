@@ -1464,3 +1464,11 @@ architecture blindly.
   Kodak RGB reconstruction moved from a `560.43` MiB/s repeat3 median to
   `1116.66` MiB/s (`+99.2%`), and the focused bpp=3 Paeth scanline gate now
   protects the optimized path.
+
+- Specialized PNG Average reconstruction for bpp=3 RGB rows using the
+  image-png-style per-pixel left-state loop. The optimized kernel retains a
+  generic scalar reference and compares every row length through 257 bytes,
+  including non-pixel-aligned tails and no-previous-row behavior. Synthetic
+  bpp=3 Average throughput moved from about `1258` to `2319` MiB/s, while the
+  real Kodak-trio repeat3 median moved from the Paeth-only `1116.66` to
+  `1218.78` MiB/s (`+9.1%`).

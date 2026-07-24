@@ -34,7 +34,7 @@ MIN_RELEASEFAST_MIB_S = {
     ("up", "8"): 10_000.0,
     ("average", "1"): 300.0,
     ("average", "2"): 600.0,
-    ("average", "3"): 900.0,
+    ("average", "3"): 1_800.0,
     ("average", "4"): 1_000.0,
     ("average", "6"): 1_200.0,
     ("average", "8"): 1_500.0,
