@@ -16,6 +16,12 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 CLI = ROOT / "zig-out" / "bin" / "vort"
 SUMMARY_PATH: pathlib.Path | None = None
 
+# Linux limits each argv entry to roughly 128 KiB even when ARG_MAX is much
+# larger; other hosts can be tighter. Keep inline text/hex arguments well below
+# that implementation limit and exercise the existing file CLI for larger
+# corpus entries.
+INLINE_ARG_BYTES = 32 * 1024
+
 
 METRICS = {
     "cli_successes": 0,
@@ -72,11 +78,76 @@ def write_summary(path: pathlib.Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def payload_requires_file_transport(data: bytes, compressed_frames: tuple[bytes, ...]) -> bool:
+    """Return whether any generated CLI argument would exceed the safe budget."""
+    largest_arg = max((len(data), *(len(frame) * 2 for frame in compressed_frames)))
+    return largest_arg > INLINE_ARG_BYTES
+
+
+def exercise_payload_via_files(
+    data: bytes,
+    raw_fixed: bytes,
+    zlib_fixed: bytes,
+    gzip_fixed: bytes,
+) -> None:
+    """Exercise large corpus entries without placing payload bytes in argv."""
+    cache_dir = ROOT / ".zig-cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="vort-python-zlib-large-", dir=cache_dir) as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+
+        for frame_format, compressed in (
+            ("raw", raw_fixed),
+            ("zlib", zlib_fixed),
+            ("gzip", gzip_fixed),
+        ):
+            compressed_path = tmp / f"python-fixed.{frame_format}"
+            decoded_path = tmp / f"python-fixed-{frame_format}.decoded"
+            limited_path = tmp / f"python-fixed-{frame_format}.limited"
+            compressed_path.write_bytes(compressed)
+
+            out = run_cli(f"decode-{frame_format}-file", str(compressed_path), str(decoded_path))
+            assert int(parse_field(out, "decoded_bytes")) == len(data), out
+            assert decoded_path.read_bytes() == data, (frame_format, len(data))
+
+            limited = run_cli(
+                f"decode-{frame_format}-file",
+                str(compressed_path),
+                str(limited_path),
+                str(len(data)),
+            )
+            assert int(parse_field(limited, "decoded_bytes")) == len(data), limited
+            assert limited_path.read_bytes() == data, (frame_format, len(data), "limited")
+
+        input_path = tmp / "payload.bin"
+        input_path.write_bytes(data)
+        encode_cases = (
+            ("encode-raw-fixed-file", "vort-fixed.raw", -zlib.MAX_WBITS),
+            ("encode-zlib-best-file", "vort-best.zlib", zlib.MAX_WBITS),
+            ("encode-gzip-best-file", "vort-best.gz", 31),
+        )
+        for command, filename, wbits in encode_cases:
+            encoded_path = tmp / filename
+            out = run_cli(command, str(input_path), str(encoded_path), "default")
+            assert int(parse_field(out, "input_bytes")) == len(data), out
+            assert zlib.decompress(encoded_path.read_bytes(), wbits=wbits) == data, command
+
+
+def check_payload_transport_policy() -> None:
+    """Pin both routing branches without spawning subprocesses."""
+    assert not payload_requires_file_transport(b"short", (b"raw", b"zlib", b"gzip"))
+    assert payload_requires_file_transport(b"x" * (INLINE_ARG_BYTES + 1), (b"",))
+    # Hex encoding doubles compressed bytes, so incompressible frames can choose
+    # the file route even when the original payload itself still fits.
+    assert payload_requires_file_transport(b"short", (b"x" * (INLINE_ARG_BYTES // 2 + 1),))
+
+
 def main() -> int:
     global CLI, SUMMARY_PATH
     CLI, SUMMARY_PATH = parse_args(sys.argv)
     if not CLI.exists():
         raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
+    check_payload_transport_policy()
 
     expect_cli_failure("decode-raw-hex", "", error_name="TruncatedFrame")
     expect_cli_failure("decode-zlib-hex", "", error_name="TruncatedFrame")
@@ -100,6 +171,7 @@ def main() -> int:
     ])
 
     # Python -> Vort decode for raw/zlib/gzip fixed and zlib default streams.
+    large_file_payloads = 0
     for text in payloads:
         data = text.encode()
         co = zlib.compressobj(level=1, wbits=-15, strategy=zlib.Z_FIXED)
@@ -108,6 +180,11 @@ def main() -> int:
         zlib_fixed = co.compress(data) + co.flush()
         co = zlib.compressobj(level=1, wbits=31, strategy=zlib.Z_FIXED)
         gzip_fixed = co.compress(data) + co.flush()
+
+        if payload_requires_file_transport(data, (raw_fixed, zlib_fixed, gzip_fixed)):
+            large_file_payloads += 1
+            exercise_payload_via_files(data, raw_fixed, zlib_fixed, gzip_fixed)
+            continue
 
         for command, compressed in [
             ("decode-raw-hex", raw_fixed),
@@ -477,9 +554,10 @@ def main() -> int:
 
     summary = {
         "schema": "vort.python_zlib_diff_smoke",
-        "schema_version": 1,
+        "schema_version": 2,
         "ok": True,
         "payloads": len(payloads),
+        "large_file_payloads": large_file_payloads,
         "match_heavy_payloads": 3,
         "dynamic_payloads": len(dynamic_payloads),
         "dictionary_cases": len(dict_cases),
@@ -494,7 +572,8 @@ def main() -> int:
         write_summary(SUMMARY_PATH, summary)
     print(
         "python zlib differential smoke: "
-        f"payloads={len(payloads)} match_heavy=3 dynamic_payloads={len(dynamic_payloads)} "
+        f"payloads={len(payloads)} large_file_payloads={large_file_payloads} "
+        f"match_heavy=3 dynamic_payloads={len(dynamic_payloads)} "
         f"malformed_wrapper_cases={len(malformed_wrapper_cases)} "
         f"malformed_deflate_cases={len(malformed_deflate_cases)} "
         f"cli_successes={METRICS['cli_successes']} expected_failures={METRICS['expected_failures']} cli={CLI}"

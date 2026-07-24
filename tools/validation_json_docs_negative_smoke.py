@@ -254,6 +254,7 @@ def main() -> int:
                 "python_zlib_diff_ok": True,
                 "python_zlib_diff_healthy": True,
                 "python_zlib_diff_payloads": 1,
+                "python_zlib_diff_large_file_payloads": 1,
                 "python_zlib_diff_match_heavy_payloads": 1,
                 "python_zlib_diff_dynamic_payloads": 1,
                 "python_zlib_diff_dictionary_cases": 1,

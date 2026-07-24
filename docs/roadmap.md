@@ -1449,3 +1449,10 @@ architecture blindly.
   across raw deflate, zlib, gzip, and concatenated gzip. Codec behavior remains
   covered in `src/deflate.zig`; the root smoke specifically guards the public
   export surface used by README examples and downstream callers.
+
+- Hardened the Python zlib black-box differential harness against operating
+  system per-argument limits. Small vectors continue to exercise inline
+  text/hex CLI commands, while large README/roadmap payloads now use raw/zlib/
+  gzip file decode plus Vort file encode paths. The retained JSON/dashboard
+  records and requires `large_file_payloads`, ensuring CI covers this transport
+  branch instead of silently shrinking the corpus.

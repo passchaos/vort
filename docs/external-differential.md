@@ -20,6 +20,11 @@ zlib-ng/zlib-rs family coverage, fdeflate/miniz_oxide source-checkout
 differential smoke, the external-tool probe, fuzz smoke entrypoints, and bounded
 benchmark reports.
 
+The Python zlib harness uses inline text/hex CLI commands for small cases and
+automatically switches large README/roadmap corpus entries to file-based
+encode/decode commands. This keeps the black-box coverage portable across
+platform-specific per-argument limits while still exercising both CLI surfaces.
+
 The optional zlib-family harness detects locally built zlib-ng/zlib-rs minigzip
 binaries and reports explicit skip status when they are not available:
 

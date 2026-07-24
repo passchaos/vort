@@ -504,6 +504,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
         if data.get("schema") != "vort.python_zlib_diff_smoke":
             continue
         payloads = int(data.get("payloads") or 0)
+        large_file_payloads = int(data.get("large_file_payloads") or 0)
         match_heavy_payloads = int(data.get("match_heavy_payloads") or 0)
         dynamic_payloads = int(data.get("dynamic_payloads") or 0)
         dictionary_cases = int(data.get("dictionary_cases") or 0)
@@ -517,6 +518,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
             "present": True,
             "ok": bool(data.get("ok")),
             "payloads": payloads,
+            "large_file_payloads": large_file_payloads,
             "match_heavy_payloads": match_heavy_payloads,
             "dynamic_payloads": dynamic_payloads,
             "dictionary_cases": dictionary_cases,
@@ -528,6 +530,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
             "expected_failures": expected_failures,
             "healthy": bool(data.get("ok"))
             and payloads > 0
+            and large_file_payloads > 0
             and match_heavy_payloads > 0
             and dynamic_payloads > 0
             and dictionary_cases > 0
@@ -542,6 +545,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
         "present": False,
         "ok": False,
         "payloads": 0,
+        "large_file_payloads": 0,
         "match_heavy_payloads": 0,
         "dynamic_payloads": 0,
         "dictionary_cases": 0,
@@ -990,6 +994,7 @@ def main() -> int:
                 "python_zlib_diff_ok": python_zlib_health["ok"],
                 "python_zlib_diff_healthy": python_zlib_healthy,
                 "python_zlib_diff_payloads": python_zlib_health["payloads"],
+                "python_zlib_diff_large_file_payloads": python_zlib_health["large_file_payloads"],
                 "python_zlib_diff_match_heavy_payloads": python_zlib_health["match_heavy_payloads"],
                 "python_zlib_diff_dynamic_payloads": python_zlib_health["dynamic_payloads"],
                 "python_zlib_diff_dictionary_cases": python_zlib_health["dictionary_cases"],

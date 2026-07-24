@@ -563,9 +563,10 @@ def write_decode_stage_report(path: Path, *, ok: bool = True) -> None:
 def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
     payload = {
         "schema": "vort.python_zlib_diff_smoke",
-        "schema_version": 1,
+        "schema_version": 2,
         "ok": ok,
         "payloads": 3,
+        "large_file_payloads": 1,
         "match_heavy_payloads": 1,
         "dynamic_payloads": 1,
         "dictionary_cases": 1,

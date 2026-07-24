@@ -181,9 +181,10 @@ def main() -> int:
         validate_value_against_manifest(decode_stage, schemas_def)
         python_zlib_diff = json.loads(python_zlib_diff_path.read_text())
         assert python_zlib_diff["schema"] == "vort.python_zlib_diff_smoke"
-        assert python_zlib_diff["schema_version"] == 1
+        assert python_zlib_diff["schema_version"] == 2
         assert python_zlib_diff["ok"] is True
         assert python_zlib_diff["payloads"] >= 1
+        assert python_zlib_diff["large_file_payloads"] >= 1
         assert python_zlib_diff["match_heavy_payloads"] >= 1
         assert python_zlib_diff["dynamic_payloads"] >= 1
         assert python_zlib_diff["dictionary_cases"] >= 1
@@ -648,6 +649,7 @@ def main() -> int:
         assert dashboard["python_zlib_diff_ok"] is True
         assert dashboard["python_zlib_diff_healthy"] is True
         assert dashboard["python_zlib_diff_payloads"] == python_zlib_diff["payloads"]
+        assert dashboard["python_zlib_diff_large_file_payloads"] == python_zlib_diff["large_file_payloads"]
         assert dashboard["python_zlib_diff_match_heavy_payloads"] == python_zlib_diff["match_heavy_payloads"]
         assert dashboard["python_zlib_diff_dynamic_payloads"] == python_zlib_diff["dynamic_payloads"]
         assert dashboard["python_zlib_diff_dictionary_cases"] == python_zlib_diff["dictionary_cases"]

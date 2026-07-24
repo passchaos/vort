@@ -432,6 +432,7 @@
         "python_zlib_diff_dynamic_payloads": "int",
         "python_zlib_diff_expected_failures": "int",
         "python_zlib_diff_healthy": "bool",
+        "python_zlib_diff_large_file_payloads": "int",
         "python_zlib_diff_malformed_deflate_cases": "int",
         "python_zlib_diff_malformed_wrapper_cases": "int",
         "python_zlib_diff_match_heavy_payloads": "int",
@@ -2187,6 +2188,7 @@
         "ok": {
           "positive": [
             "payloads",
+            "large_file_payloads",
             "match_heavy_payloads",
             "dynamic_payloads",
             "dictionary_cases",
@@ -2204,6 +2206,7 @@
         "dictionary_cases": "int",
         "dynamic_payloads": "int",
         "expected_failures": "int",
+        "large_file_payloads": "int",
         "malformed_deflate_cases": "int",
         "malformed_wrapper_cases": "int",
         "match_heavy_payloads": "int",
