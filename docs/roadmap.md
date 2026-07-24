@@ -921,6 +921,13 @@ architecture blindly.
   caller-buffer and allocating auto-decode paths, reducing repeated input-window
   reloads in Huffman and extra-bit hot loops while retaining the scalar reader
   for chunked inputs and inspection helpers.
+- [x] Buffered contiguous inflate now stages a 32-bit word whenever its bit
+  reservoir falls below the requested Huffman width, following the larger
+  reservoir strategy used by image-png's `fdeflate` backend while preserving
+  logical bit/byte offsets and strict tail truncation checks. A same-machine
+  ReleaseFast imx Lohengrin decode-into A/B moved the repeat3 median from
+  `158.54` to `214.38` MiB/s (`+35.2%`, `0.279x` to `0.377x` versus the local
+  image-png Criterion result).
 - [x] No-dictionary caller-buffer inflate has specialized fixed/dynamic block
   loops and direct output-offset match copy, avoiding per-match dictionary
   boundary checks on the common PNG/source/text path.
