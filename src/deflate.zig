@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const checksum = @import("checksum.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
@@ -4204,6 +4205,13 @@ fn parsePngFilterMethod(filter: u8) Error!PngFilterMethod {
 }
 
 fn pngPaethPredictor(left: u8, up: u8, up_left: u8) u8 {
+    if (comptime builtin.target.cpu.arch == .x86_64) {
+        return pngPaethPredictorStbi(left, up, up_left);
+    }
+    return pngPaethPredictorReference(left, up, up_left);
+}
+
+fn pngPaethPredictorReference(left: u8, up: u8, up_left: u8) u8 {
     const a: i32 = left;
     const b: i32 = up;
     const c: i32 = up_left;
@@ -4214,6 +4222,21 @@ fn pngPaethPredictor(left: u8, up: u8, up_left: u8) u8 {
     if (pa <= pb and pa <= pc) return left;
     if (pb <= pc) return up;
     return up_left;
+}
+
+fn pngPaethPredictorStbi(left: u8, up: u8, up_left: u8) u8 {
+    // image-png uses this stb_image formulation on x86_64 because LLVM lowers
+    // it to a less branchy dependency chain than the PNG specification's three
+    // absolute-distance comparisons. The threshold form is exactly equivalent,
+    // including PNG's left/up/up-left tie-breaking order.
+    const a: i16 = left;
+    const b: i16 = up;
+    const c: i16 = up_left;
+    const threshold = c * 3 - (a + b);
+    const low = @min(a, b);
+    const high = @max(a, b);
+    const first = if (high <= threshold) low else c;
+    return @intCast(if (threshold <= low) high else first);
 }
 
 fn absI32(value: i32) i32 {
@@ -10208,6 +10231,25 @@ test "png scanline reconstruction filters round trip" {
     try std.testing.expectError(error.CorruptFrame, reconstructPngScanline(5, filtered_payload[1..][0..row_len], null, bpp, &reconstructed[0]));
     try std.testing.expectError(error.CorruptFrame, reconstructPngScanline(0, filtered_payload[1..][0..row_len], null, 0, &reconstructed[0]));
     try std.testing.expectError(error.SizeMismatch, reconstructPngScanline(2, filtered_payload[1..][0..row_len], short_output[0..], bpp, &reconstructed[0]));
+}
+
+test "stb Paeth predictor matches PNG reference over the full byte domain" {
+    var left: usize = 0;
+    while (left < 256) : (left += 1) {
+        var up: usize = 0;
+        while (up < 256) : (up += 1) {
+            var up_left: usize = 0;
+            while (up_left < 256) : (up_left += 1) {
+                const a: u8 = @intCast(left);
+                const b: u8 = @intCast(up);
+                const c: u8 = @intCast(up_left);
+                try std.testing.expectEqual(
+                    pngPaethPredictorReference(a, b, c),
+                    pngPaethPredictorStbi(a, b, c),
+                );
+            }
+        }
+    }
 }
 
 test "png scanline reconstruction Paeth bpp1 supports in-place rows" {

@@ -1456,3 +1456,11 @@ architecture blindly.
   gzip file decode plus Vort file encode paths. The retained JSON/dashboard
   records and requires `large_file_payloads`, ensuring CI covers this transport
   branch instead of silently shrinking the corpus.
+
+- Switched x86_64 PNG Paeth reconstruction to the stb_image threshold
+  formulation used by Rust image-png while retaining the PNG specification
+  predictor as the portable reference. Exhaustive `256^3` predictor coverage
+  pins exact equivalence and tie-breaking. Isolated same-machine ReleaseFast
+  Kodak RGB reconstruction moved from a `560.43` MiB/s repeat3 median to
+  `1116.66` MiB/s (`+99.2%`), and the focused bpp=3 Paeth scanline gate now
+  protects the optimized path.
