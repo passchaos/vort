@@ -1525,10 +1525,13 @@ const DynamicDistanceDecoder = union(enum) {
 
 fn dynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
     if (parsed.literal_max_bits <= 9) return 9;
-    // Text-heavy dynamic blocks often contain a near-full literal alphabet with
-    // long cold symbols. A 12-bit table can avoid fallback scans on those blocks,
-    // while smaller alphabets keep the cheaper 11-bit setup cost.
-    return if (parsed.header.hlit >= 280 and parsed.literal_max_bits >= 12) 12 else 11;
+    // A 12-bit literal table avoids a handful of cold-symbol fallback scans, but
+    // real PNG/text payloads with near-full dynamic alphabets spend most time on
+    // successful literal lookups. Keeping the general dynamic table at 11 bits
+    // improves cache locality and cuts per-block setup cost; miss rates remain
+    // visible through `DynamicDecodeProfile` so the policy can be revisited if a
+    // future corpus shifts toward long-code-heavy blocks.
+    return 11;
 }
 
 fn makeDynamicDistanceDecoder(table: huffman.HuffmanTable(30)) DynamicDistanceDecoder {
@@ -5604,10 +5607,10 @@ const PngStreamingDynamicLiteralDecoder = union(enum) {
 
 fn pngStreamingDynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
     // Keep the PNG row-streaming policy in sync with the one-shot dynamic
-    // inflater: short alphabets use the smaller 9-bit table, while near-full
-    // long literal alphabets get a 12-bit table to avoid fallback scans. The
-    // real PNG IDAT profile now tracks lookup covered/size totals so this state
-    // tradeoff remains visible when the corpus shifts.
+    // inflater: short alphabets use the smaller 9-bit table, and all longer
+    // dynamic literal alphabets currently share the cache-friendlier 11-bit
+    // table. The real PNG IDAT profile tracks lookup covered/size totals so
+    // this state tradeoff remains visible when the corpus shifts.
     return dynamicLiteralLookupBits(parsed);
 }
 
@@ -12634,12 +12637,12 @@ test "dynamic literal lookup policy separates tiny and complex alphabets" {
     var complex = tiny;
     complex.header.hlit = 280;
     complex.literal_max_bits = 12;
-    try std.testing.expectEqual(@as(u4, 12), dynamicLiteralLookupBits(complex));
+    try std.testing.expectEqual(@as(u4, 11), dynamicLiteralLookupBits(complex));
 
     try std.testing.expectEqual(@as(u4, 9), pngStreamingDynamicLiteralLookupBits(tiny));
     try std.testing.expectEqual(@as(u4, 9), pngStreamingDynamicLiteralLookupBits(medium));
     try std.testing.expectEqual(@as(u4, 11), pngStreamingDynamicLiteralLookupBits(ten_bit));
-    try std.testing.expectEqual(@as(u4, 12), pngStreamingDynamicLiteralLookupBits(complex));
+    try std.testing.expectEqual(@as(u4, 11), pngStreamingDynamicLiteralLookupBits(complex));
 }
 
 test "dynamic decode profile counts literals and matches" {
