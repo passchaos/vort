@@ -694,7 +694,7 @@ pub fn decodeFixedLiteralFast(reader: anytype) Error!Symbol {
     const peek = reader.peekBitsPadded(u16, 9);
     const entry = fixed_literal_lookup[peek];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
-    if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+    if (!hasDecodedBits(reader, entry.bits)) return error.TruncatedFrame;
     reader.advanceBitsStagedAssumeAvailable(entry.bits);
     return .{ .value = entry.symbol, .bits = entry.bits };
 }
@@ -703,7 +703,7 @@ pub fn decodeFixedLiteralValueFast(reader: anytype) Error!u16 {
     const peek = reader.peekBitsPadded(u16, 9);
     const entry = fixed_literal_lookup[peek];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
-    if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+    if (!hasDecodedBits(reader, entry.bits)) return error.TruncatedFrame;
     reader.advanceBitsStagedAssumeAvailable(entry.bits);
     return entry.symbol;
 }
@@ -723,7 +723,7 @@ pub fn decodeFixedDistanceFast(reader: anytype) Error!Symbol {
     const peek = reader.peekBitsPadded(u16, 5);
     const entry = fixed_distance_lookup[peek];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
-    if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+    if (!hasDecodedBits(reader, entry.bits)) return error.TruncatedFrame;
     reader.advanceBitsStagedAssumeAvailable(entry.bits);
     return .{ .value = entry.symbol, .bits = entry.bits };
 }
@@ -732,7 +732,7 @@ pub fn decodeFixedDistanceValueFast(reader: anytype) Error!u16 {
     const peek = reader.peekBitsPadded(u16, 5);
     const entry = fixed_distance_lookup[peek];
     if (entry.bits == 0) return error.InvalidHuffmanCode;
-    if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+    if (!hasDecodedBits(reader, entry.bits)) return error.TruncatedFrame;
     reader.advanceBitsStagedAssumeAvailable(entry.bits);
     return entry.symbol;
 }

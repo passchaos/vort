@@ -1492,7 +1492,7 @@ const DynamicDistanceDecoder = union(enum) {
             .single => |entry| blk: {
                 const bits: u6 = entry.bits;
                 const code = reader.peekBitsPadded(u16, bits);
-                if (!reader.hasBits(entry.bits)) return error.TruncatedFrame;
+                if (!reader.hasStagedBits(entry.bits)) return error.TruncatedFrame;
                 if (code != entry.code) return error.InvalidHuffmanCode;
                 reader.advanceBitsStagedAssumeAvailable(bits);
                 break :blk entry.symbol;
@@ -2826,26 +2826,30 @@ fn decodeCompressedBlockIntoReaderNoDict(
     }
 }
 
-fn decodeLength(symbol: u16, reader: anytype) Error!usize {
+inline fn decodeLength(symbol: u16, reader: anytype) Error!usize {
     if (symbol < 257 or symbol > 285) return error.InvalidHuffmanCode;
     if (symbol <= 264) return symbol - 254;
     if (symbol == 285) return 258;
     const entry = length_table[symbol - 257];
-    return entry.base + try reader.readBits(u16, entry.extra_bits);
+    return entry.base + try readDeflateExtraBits(reader, entry.extra_bits);
 }
 
-fn decodeDistance(symbol: u16, reader: anytype) Error!usize {
+inline fn decodeDistance(symbol: u16, reader: anytype) Error!usize {
     if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
     if (symbol < 4) return symbol + 1;
     const entry = distance_table[symbol];
-    return entry.base + try readDistanceExtraBits(reader, entry.extra_bits);
+    return entry.base + try readDeflateExtraBits(reader, entry.extra_bits);
 }
 
-fn readDistanceExtraBits(reader: anytype, count: u6) Error!usize {
+inline fn readDeflateExtraBits(reader: anytype, count: u6) Error!usize {
     std.debug.assert(count <= 13);
     if (count == 0) return 0;
-    if (!reader.hasBits(count)) return error.TruncatedFrame;
     const extra = reader.peekBitsPadded(u16, count);
+    // `peekBitsPadded` already staged every byte available for this short
+    // extra-bit field. Checking that staged reservoir preserves strict
+    // truncation reporting without re-running the more expensive total
+    // remaining-bits calculation on every length/distance match.
+    if (!reader.hasStagedBits(count)) return error.TruncatedFrame;
     reader.advanceBitsStagedAssumeAvailable(count);
     return extra;
 }
