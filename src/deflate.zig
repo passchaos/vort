@@ -5684,12 +5684,13 @@ fn readPngStreamingFixedInflatedBytes(self: anytype, output: []u8) Error!usize {
 }
 
 fn readPngStreamingDynamicInflatedBytes(self: anytype, output: []u8, comptime lit_lookup_bits: u4) Error!usize {
+    const lit_decoder = if (comptime lit_lookup_bits == 9)
+        &self.dynamic_lit.fast9
+    else
+        &self.dynamic_lit.fast11;
     var out_i: usize = 0;
     while (out_i < output.len) {
-        const symbol = switch (lit_lookup_bits) {
-            9 => try self.dynamic_lit.decodeValue9(&self.reader),
-            else => try self.dynamic_lit.decodeValue11(&self.reader),
-        };
+        const symbol = try lit_decoder.decodeValue(&self.reader);
         if (symbol < 256) {
             @branchHint(.likely);
             output[out_i] = @intCast(symbol);
