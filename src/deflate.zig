@@ -3444,12 +3444,13 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
     initial_out_offset: usize,
     noalias decoder: *const SemanticDynamicDecoder,
 ) Error!usize {
-    var sink = LinearSemanticSink{
-        .output = output,
-        .pos = initial_out_offset,
-    };
-    try decodeSemanticDynamicBlockIntoSink(reader, &sink, decoder);
-    return sink.pos;
+    return decodeSemanticDynamicBlockIntoLinearMode(
+        false,
+        reader,
+        output,
+        initial_out_offset,
+        decoder,
+    );
 }
 
 noinline fn decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
@@ -3457,17 +3458,204 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
     noalias output: []u8,
     noalias decoder: *const SemanticDynamicDecoder,
 ) Error!usize {
-    var sink = LinearSemanticSink{
-        .output = output,
-        .pos = 0,
-    };
-    try decodeSemanticDynamicBlockIntoSinkMode(
+    return decodeSemanticDynamicBlockIntoLinearMode(
         true,
         reader,
-        &sink,
+        output,
+        0,
         decoder,
     );
-    return sink.pos;
+}
+
+noinline fn decodeSemanticDynamicBlockIntoLinearMode(
+    comptime single_distance: bool,
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!usize {
+    const input = reader.input;
+    var bit_buffer = reader.bit_buffer;
+    var bit_count = reader.bit_count;
+    var byte_index = reader.byte_index;
+    var consumed_bits = reader.consumed_bits;
+    var out_pos = initial_out_offset;
+
+    if (out_pos + 8 <= output.len and byte_index + 8 <= input.len) {
+        refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+    }
+    var entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+
+    while (out_pos + 8 <= output.len and byte_index + 8 <= input.len) {
+        var entry_bits: u6 = @truncate(entry);
+
+        if ((entry & SemanticDynamicDecoder.literal_flag) != 0) {
+            const entry2 = decoder.literal[
+                @as(usize, @intCast((bit_buffer >> @intCast(entry_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+            ];
+            const entry2_bits: u6 = @truncate(entry2);
+            const entry12_bits: u6 = entry_bits + entry2_bits;
+            const entry3 = decoder.literal[
+                @as(usize, @intCast((bit_buffer >> @intCast(entry12_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+            ];
+            const entry3_bits: u6 = @truncate(entry3);
+            const entry123_bits: u6 = entry12_bits + entry3_bits;
+            const entry4 = decoder.literal[
+                @as(usize, @intCast((bit_buffer >> @intCast(entry123_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+            ];
+
+            const advance1: usize = @intCast((entry >> 8) & 0xf);
+            output[out_pos] = @truncate(entry >> 16);
+            output[out_pos + 1] = @truncate(entry >> 24);
+            out_pos += advance1;
+
+            if ((entry2 & SemanticDynamicDecoder.literal_flag) != 0) {
+                const advance2: usize = @intCast((entry2 >> 8) & 0xf);
+                output[out_pos] = @truncate(entry2 >> 16);
+                output[out_pos + 1] = @truncate(entry2 >> 24);
+                out_pos += advance2;
+
+                if ((entry3 & SemanticDynamicDecoder.literal_flag) != 0) {
+                    const advance3: usize = @intCast((entry3 >> 8) & 0xf);
+                    output[out_pos] = @truncate(entry3 >> 16);
+                    output[out_pos + 1] = @truncate(entry3 >> 24);
+                    out_pos += advance3;
+
+                    bit_buffer >>= @intCast(entry123_bits);
+                    bit_count -= entry123_bits;
+                    consumed_bits += entry123_bits;
+                    entry = entry4;
+                    refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+                    continue;
+                }
+
+                bit_buffer >>= @intCast(entry12_bits);
+                bit_count -= entry12_bits;
+                consumed_bits += entry12_bits;
+                entry = entry3;
+                entry_bits = entry3_bits;
+            } else {
+                bit_buffer >>= @intCast(entry_bits);
+                bit_count -= entry_bits;
+                consumed_bits += entry_bits;
+                entry = entry2;
+                entry_bits = entry2_bits;
+            }
+        }
+
+        var length_base: usize = undefined;
+        var length_extra_bits: u6 = undefined;
+        if ((entry & SemanticDynamicDecoder.exceptional_flag) == 0) {
+            length_base = @intCast(entry >> 16);
+            length_extra_bits = @truncate(entry >> 8);
+        } else if ((entry & SemanticDynamicDecoder.secondary_flag) != 0) {
+            const start: usize = @intCast(entry >> 16);
+            const mask: usize = @intCast(entry & 0xff);
+            const secondary_index = start +
+                (@as(usize, @intCast(bit_buffer >> SemanticDynamicDecoder.literal_lookup_bits)) & mask);
+            if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
+            const secondary = decoder.literal_secondary[secondary_index];
+            const symbol: u16 = secondary >> 4;
+            entry_bits = @truncate(secondary & 0x0f);
+            if (symbol < 256) {
+                bit_buffer >>= @intCast(entry_bits);
+                bit_count -= entry_bits;
+                consumed_bits += entry_bits;
+                output[out_pos] = @truncate(symbol);
+                out_pos += 1;
+                refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+                entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+                continue;
+            }
+            if (symbol == 256) {
+                bit_buffer >>= @intCast(entry_bits);
+                bit_count -= entry_bits;
+                consumed_bits += entry_bits;
+                storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+                return out_pos;
+            }
+            if (symbol > 285) return error.InvalidHuffmanCode;
+            const metadata = length_table[symbol - 257];
+            length_base = metadata.base;
+            length_extra_bits = metadata.extra_bits;
+        } else {
+            if (entry_bits == 0) return error.InvalidHuffmanCode;
+            bit_buffer >>= @intCast(entry_bits);
+            bit_count -= entry_bits;
+            consumed_bits += entry_bits;
+            storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+            return out_pos;
+        }
+
+        var bits = bit_buffer >> @intCast(entry_bits);
+        const length_mask = (@as(u64, 1) << @intCast(length_extra_bits)) - 1;
+        const length = length_base + @as(usize, @intCast(bits & length_mask));
+        bits >>= @intCast(length_extra_bits);
+
+        const distance_entry = if (single_distance)
+            decoder.single_distance
+        else
+            decoder.distance[@as(usize, @intCast(bits & SemanticDynamicDecoder.distance_lookup_mask))];
+        var distance_base: usize = undefined;
+        var distance_extra_bits: u6 = undefined;
+        var distance_code_bits: u6 = @truncate(distance_entry);
+        if ((distance_entry & SemanticDynamicDecoder.literal_flag) != 0) {
+            distance_base = @intCast(distance_entry >> 16);
+            distance_extra_bits = @truncate(distance_entry >> 8);
+        } else if ((distance_entry & SemanticDynamicDecoder.secondary_flag) != 0) {
+            const start: usize = @intCast(distance_entry >> 16);
+            const mask: usize = @intCast(distance_entry & 0xff);
+            const secondary_index = start +
+                (@as(usize, @intCast(bits >> SemanticDynamicDecoder.distance_lookup_bits)) & mask);
+            if (secondary_index >= decoder.distance_secondary_len) return error.InvalidHuffmanCode;
+            const secondary = decoder.distance_secondary[secondary_index];
+            const symbol: u16 = secondary >> 4;
+            if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
+            distance_code_bits = @truncate(secondary & 0x0f);
+            const metadata = distance_table[symbol];
+            distance_base = metadata.base;
+            distance_extra_bits = metadata.extra_bits;
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+        if (single_distance and
+            (bits & ((@as(u64, 1) << @intCast(distance_code_bits)) - 1)) != 0)
+        {
+            return error.InvalidHuffmanCode;
+        }
+        bits >>= @intCast(distance_code_bits);
+        const distance_mask = (@as(u64, 1) << @intCast(distance_extra_bits)) - 1;
+        const distance = distance_base + @as(usize, @intCast(bits & distance_mask));
+        const total_bits: u6 = entry_bits + length_extra_bits + distance_code_bits + distance_extra_bits;
+
+        bit_buffer >>= @intCast(total_bits);
+        bit_count -= total_bits;
+        consumed_bits += total_bits;
+        refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+        entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+        try copyMatchAt(output, out_pos, length, distance);
+        out_pos += length;
+    }
+
+    storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+    while (true) {
+        const symbol = try decoder.compact_literal.decodeValue(reader);
+        if (symbol < 256) {
+            if (out_pos == output.len) return error.OutputTooSmall;
+            output[out_pos] = @truncate(symbol);
+            out_pos += 1;
+        } else if (symbol == 256) {
+            return out_pos;
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, reader);
+            const distance_symbol = try decoder.compact_distance.decodeValue(reader);
+            const distance = try decodeDistance(distance_symbol, reader);
+            try copyMatchAt(output, out_pos, length, distance);
+            out_pos += length;
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
 }
 
 noinline fn decodeSemanticDynamicBlockIntoSink(
