@@ -5737,11 +5737,25 @@ fn copyPngStreamingPendingMatch(self: anytype, output: []u8) Error!usize {
         @memset(dest, byte);
         self.recordInflatedBytes(dest);
     } else if (distance <= 4) {
+        const history_len = self.history.len;
         var pattern: [4]u8 = undefined;
-        var i: usize = 0;
-        while (i < distance) : (i += 1) {
-            const back = distance - i;
-            pattern[i] = self.history[wrapAddPowerOfTwo(self.history_pos, self.history.len - back, self.history.len)];
+        switch (distance) {
+            2 => {
+                pattern[0] = self.history[wrapAddPowerOfTwo(self.history_pos, history_len - 2, history_len)];
+                pattern[1] = self.history[wrapAddPowerOfTwo(self.history_pos, history_len - 1, history_len)];
+            },
+            3 => {
+                pattern[0] = self.history[wrapAddPowerOfTwo(self.history_pos, history_len - 3, history_len)];
+                pattern[1] = self.history[wrapAddPowerOfTwo(self.history_pos, history_len - 2, history_len)];
+                pattern[2] = self.history[wrapAddPowerOfTwo(self.history_pos, history_len - 1, history_len)];
+            },
+            4 => {
+                pattern[0] = self.history[wrapAddPowerOfTwo(self.history_pos, history_len - 4, history_len)];
+                pattern[1] = self.history[wrapAddPowerOfTwo(self.history_pos, history_len - 3, history_len)];
+                pattern[2] = self.history[wrapAddPowerOfTwo(self.history_pos, history_len - 2, history_len)];
+                pattern[3] = self.history[wrapAddPowerOfTwo(self.history_pos, history_len - 1, history_len)];
+            },
+            else => unreachable,
         }
         copySmallDistanceMatch(dest, pattern[0..distance], distance);
         self.recordInflatedBytes(dest);
