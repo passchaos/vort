@@ -652,6 +652,14 @@ pub const ChunkedSpanBitReader = struct {
             self.skipEmptySourceChunks();
             if (self.source_chunk_index >= self.chunks.len) break;
             const chunk = self.chunks[self.source_chunk_index];
+            if (self.bit_count <= 32 and chunk.len - self.source_local >= 4) {
+                const word = std.mem.readInt(u32, chunk[self.source_local..][0..4], .little);
+                self.bit_buffer |= @as(u64, word) << @intCast(self.bit_count);
+                self.bit_count += 32;
+                self.source_absolute += 4;
+                self.source_local += 4;
+                continue;
+            }
             while (self.bit_count < requested_bits and self.source_absolute < self.total_len and self.bit_count <= 56 and self.source_local < chunk.len) {
                 self.bit_buffer |= @as(u64, chunk[self.source_local]) << @intCast(self.bit_count);
                 self.bit_count += 8;
