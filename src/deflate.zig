@@ -3186,9 +3186,26 @@ const LinearSemanticSink = struct {
     }
 
     inline fn emitSemanticLiteralTriple(self: *LinearSemanticSink, first: u32, second: u32, third: u32) Error!void {
-        try self.emitSemanticLiteral(first);
-        try self.emitSemanticLiteral(second);
-        try self.emitSemanticLiteral(third);
+        const first_advance: usize = @intCast((first >> 8) & 0xf);
+        const second_advance: usize = @intCast((second >> 8) & 0xf);
+        const third_advance: usize = @intCast((third >> 8) & 0xf);
+        const second_offset = first_advance;
+        const third_offset = first_advance + second_advance;
+        const advance = third_offset + third_advance;
+        std.debug.assert(self.output.len - self.pos >= 6);
+
+        // Store the speculative second lane of every semantic entry just as
+        // the original dedicated linear loop did. Later entries overwrite
+        // those lanes when an entry contains one literal; six bytes of output
+        // headroom keeps all stores in bounds while retiring the three cursor
+        // advances as one dependency.
+        self.output[self.pos] = @truncate(first >> 16);
+        self.output[self.pos + 1] = @truncate(first >> 24);
+        self.output[self.pos + second_offset] = @truncate(second >> 16);
+        self.output[self.pos + second_offset + 1] = @truncate(second >> 24);
+        self.output[self.pos + third_offset] = @truncate(third >> 16);
+        self.output[self.pos + third_offset + 1] = @truncate(third >> 24);
+        self.pos += advance;
     }
 
     inline fn emitByte(self: *LinearSemanticSink, byte: u8) Error!void {
