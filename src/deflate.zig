@@ -5733,13 +5733,16 @@ fn copyPngStreamingPendingMatch(self: anytype, output: []u8) Error!usize {
     // pending DEFLATE match into the caller's row buffer while updating the same
     // rolling history and deferred Adler state that `emitByte` maintains.
     if (distance == 1) {
-        const byte = try self.historyByte(1);
+        const byte = self.history[wrapAddPowerOfTwo(self.history_pos, self.history.len - 1, self.history.len)];
         @memset(dest, byte);
         self.recordInflatedBytes(dest);
     } else if (distance <= 4) {
         var pattern: [4]u8 = undefined;
         var i: usize = 0;
-        while (i < distance) : (i += 1) pattern[i] = try self.historyByte(@intCast(distance - i));
+        while (i < distance) : (i += 1) {
+            const back = distance - i;
+            pattern[i] = self.history[wrapAddPowerOfTwo(self.history_pos, self.history.len - back, self.history.len)];
+        }
         copySmallDistanceMatch(dest, pattern[0..distance], distance);
         self.recordInflatedBytes(dest);
     } else if (distance >= dest.len) {
