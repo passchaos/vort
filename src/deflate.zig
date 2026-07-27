@@ -5657,6 +5657,7 @@ fn readPngStreamingFixedInflatedBytes(self: anytype, output: []u8) Error!usize {
     while (out_i < output.len) {
         const symbol = try huffman.decodeFixedLiteralValueFast(&self.reader);
         if (symbol < 256) {
+            @branchHint(.likely);
             output[out_i] = @intCast(symbol);
             out_i += 1;
             continue;
@@ -5690,6 +5691,7 @@ fn readPngStreamingDynamicInflatedBytes(self: anytype, output: []u8, comptime li
             else => try self.dynamic_lit.decodeValue11(&self.reader),
         };
         if (symbol < 256) {
+            @branchHint(.likely);
             output[out_i] = @intCast(symbol);
             out_i += 1;
             continue;
