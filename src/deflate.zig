@@ -3452,6 +3452,24 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
     return sink.pos;
 }
 
+noinline fn decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!usize {
+    var sink = LinearSemanticSink{
+        .output = output,
+        .pos = 0,
+    };
+    try decodeSemanticDynamicBlockIntoSinkMode(
+        true,
+        reader,
+        &sink,
+        decoder,
+    );
+    return sink.pos;
+}
+
 noinline fn decodeSemanticDynamicBlockIntoSink(
     noalias reader: *bitstream.BufferedBitReader,
     sink: anytype,
@@ -8554,6 +8572,65 @@ pub fn decodePngZlibImageParallelWithOptions(
 /// `UnsupportedDeflateFeature` for stored/fixed blocks, incomplete semantic
 /// Huffman tables, aliased input/output, or the first nonzero PNG filter byte;
 /// callers must then restart through the general PNG reconstruction path.
+// Typical split dynamic blocks from the PNG corpus decode to about 17--22 KiB.
+// A 24 KiB stack buffer keeps the linear fast path cache-resident; unusually
+// large blocks restore the reader and use the compact history-aware sink.
+const png_filter0_linear_block_scratch_len = 24 * 1024;
+
+fn appendPngFilter0LinearBlock(
+    sink: *PngFilter0SemanticSink,
+    block_output: []const u8,
+) Error!void {
+    var src: usize = 0;
+    while (src < block_output.len) {
+        if (sink.row_remaining == 0) {
+            if (block_output[src] != @intFromEnum(PngFilterMethod.none)) {
+                return error.UnsupportedDeflateFeature;
+            }
+            if (sink.virtual_pos == sink.expected_virtual_len) return error.OutputTooSmall;
+            sink.row_remaining = sink.row_len;
+            sink.virtual_pos += 1;
+            src += 1;
+            continue;
+        }
+
+        const count = @min(block_output.len - src, sink.row_remaining);
+        if (count > sink.output.len - sink.output_pos) return error.OutputTooSmall;
+        @memcpy(
+            sink.output[sink.output_pos..][0..count],
+            block_output[src..][0..count],
+        );
+        sink.advanceRowData(count);
+        src += count;
+    }
+}
+
+fn tryDecodePngFilter0LinearRleBlock(
+    reader: *bitstream.BufferedBitReader,
+    sink: *PngFilter0SemanticSink,
+    decoder: *const SemanticDynamicDecoder,
+    scratch: []u8,
+) Error!bool {
+    const saved_reader = reader.*;
+    const written = decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
+        reader,
+        scratch,
+        decoder,
+    ) catch |err| switch (err) {
+        // A block can begin with a distance-one match that refers to the
+        // preceding block, or can exceed the bounded stack scratch. Restore the
+        // exact reservoir and let the compact history-aware sink decode that
+        // uncommon block.
+        error.InvalidMatch, error.OutputTooSmall => {
+            reader.* = saved_reader;
+            return false;
+        },
+        else => return err,
+    };
+    try appendPngFilter0LinearBlock(sink, scratch[0..written]);
+    return true;
+}
+
 pub fn decodePngFilter0DynamicZlibImageWithOptions(
     input: []const u8,
     info: PngImageInfo,
@@ -8568,6 +8645,7 @@ pub fn decodePngFilter0DynamicZlibImageWithOptions(
     const zlib_header = try parseZlibHeader(input, null);
     var reader = bitstream.BufferedBitReader.init(input[zlib_header.data_offset..]);
     var sink = try PngFilter0SemanticSink.init(image_output, info);
+    var linear_block_scratch: [png_filter0_linear_block_scratch_len]u8 = undefined;
 
     while (true) {
         const header = try readBlockHeader(&reader);
@@ -8579,7 +8657,17 @@ pub fn decodePngFilter0DynamicZlibImageWithOptions(
         var decoder: SemanticDynamicDecoder = undefined;
         if (distance_table_.len == 1) {
             if (!decoder.initSingleDistance(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
-            try decodeSemanticDynamicBlockIntoSingleDistanceSink(&reader, &sink, &decoder);
+            const distance_entry = distance_table_.entries[0];
+            const used_linear_block = distance_entry.symbol == 0 and
+                try tryDecodePngFilter0LinearRleBlock(
+                    &reader,
+                    &sink,
+                    &decoder,
+                    &linear_block_scratch,
+                );
+            if (!used_linear_block) {
+                try decodeSemanticDynamicBlockIntoSingleDistanceSink(&reader, &sink, &decoder);
+            }
         } else {
             if (!decoder.init(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
             try decodeSemanticDynamicBlockIntoSink(&reader, &sink, &decoder);
@@ -8726,6 +8814,82 @@ test "png filter0 dynamic direct decode matches general reconstruction and rejec
         error.UnsupportedDeflateFeature,
         decodePngFilter0DynamicZlibImageWithOptions(fixed, info, .{}, &actual),
     );
+}
+
+test "png filter0 linear RLE block matches compact fallback and restores reader" {
+    const row_len = 7;
+    const row_count = 3;
+    const info = try pngImageInfo(row_len, row_count, 8, .grayscale);
+    const tokens = [_]lz77.Token{
+        .{ .literal = 0 },
+        .{ .match = .{ .length = row_count * (row_len + 1) - 1, .distance = 1 } },
+    };
+    const raw = try encodeRawDynamicTokensAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(raw);
+
+    var success_reader = bitstream.BufferedBitReader.init(raw);
+    const success_header = try readBlockHeader(&success_reader);
+    const success_parsed = try huffman.parseDynamicLengthsAfterHeader(success_header.final, &success_reader);
+    const success_literal_table = try huffman.HuffmanTable(286).init(
+        success_parsed.literal_lengths[0..success_parsed.header.hlit],
+    );
+    const single_distance_lengths = [_]u4{1};
+    const success_distance_table = try huffman.HuffmanTable(30).init(&single_distance_lengths);
+    try std.testing.expectEqual(@as(usize, 1), success_distance_table.len);
+    try std.testing.expectEqual(@as(u16, 0), success_distance_table.entries[0].symbol);
+    var success_decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(success_decoder.initSingleDistance(
+        &success_literal_table,
+        &success_distance_table,
+    ));
+
+    var success_output: [row_count * row_len]u8 = undefined;
+    var success_sink = try PngFilter0SemanticSink.init(&success_output, info);
+    var success_scratch: [row_count * (row_len + 1)]u8 = undefined;
+    try std.testing.expect(try tryDecodePngFilter0LinearRleBlock(
+        &success_reader,
+        &success_sink,
+        &success_decoder,
+        &success_scratch,
+    ));
+    try success_sink.finish();
+    try std.testing.expectEqualSlices(u8, &([_]u8{0} ** success_output.len), &success_output);
+
+    var fallback_reader = bitstream.BufferedBitReader.init(raw);
+    const fallback_header = try readBlockHeader(&fallback_reader);
+    const fallback_parsed = try huffman.parseDynamicLengthsAfterHeader(fallback_header.final, &fallback_reader);
+    const fallback_literal_table = try huffman.HuffmanTable(286).init(
+        fallback_parsed.literal_lengths[0..fallback_parsed.header.hlit],
+    );
+    const fallback_distance_table = try huffman.HuffmanTable(30).init(&single_distance_lengths);
+    var fallback_decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(fallback_decoder.initSingleDistance(
+        &fallback_literal_table,
+        &fallback_distance_table,
+    ));
+
+    var fallback_output: [row_count * row_len]u8 = undefined;
+    var fallback_sink = try PngFilter0SemanticSink.init(&fallback_output, info);
+    var too_small_scratch: [8]u8 = undefined;
+    const saved_reader = fallback_reader;
+    try std.testing.expect(!try tryDecodePngFilter0LinearRleBlock(
+        &fallback_reader,
+        &fallback_sink,
+        &fallback_decoder,
+        &too_small_scratch,
+    ));
+    try std.testing.expectEqual(saved_reader.byte_index, fallback_reader.byte_index);
+    try std.testing.expectEqual(saved_reader.bit_buffer, fallback_reader.bit_buffer);
+    try std.testing.expectEqual(saved_reader.bit_count, fallback_reader.bit_count);
+    try std.testing.expectEqual(saved_reader.consumed_bits, fallback_reader.consumed_bits);
+
+    try decodeSemanticDynamicBlockIntoSingleDistanceSink(
+        &fallback_reader,
+        &fallback_sink,
+        &fallback_decoder,
+    );
+    try fallback_sink.finish();
+    try std.testing.expectEqualSlices(u8, &success_output, &fallback_output);
 }
 
 test "png parallel reconstruction matches scalar mixed filters" {
