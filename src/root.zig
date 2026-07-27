@@ -23,6 +23,7 @@ pub const crc32Slice8 = checksum.crc32Slice8;
 pub const crc32Slice16 = checksum.crc32Slice16;
 pub const crc32Slice32 = checksum.crc32Slice32;
 pub const crc32Best = checksum.crc32Best;
+pub const crc32UpdateBest = checksum.crc32UpdateBest;
 pub const crc32Combine = checksum.crc32Combine;
 pub const checksumCpuFeatureReport = checksum.cpuFeatureReport;
 pub const crc32c = checksum.crc32c;

@@ -605,10 +605,11 @@ pub fn cpuFeatureReport() CpuFeatureReport {
         const x86 = std.Target.x86;
         report.x86_sse42 = x86.featureSetHas(builtin.cpu.features, .sse4_2);
         report.x86_pclmul = x86.featureSetHas(builtin.cpu.features, .pclmul);
-        // PCLMULQDQ can accelerate IEEE CRC-32 folding (implementation present, not yet validated for dispatch).
+        // The PCLMULQDQ folding path is differential-tested across lengths,
+        // alignments, and incremental updates before being selected here.
         report.ieee_crc32_pclmul_candidate = report.x86_pclmul;
         report.crc32c_hardware_candidate = report.x86_sse42;
-        report.ieee_crc32_uses_hardware = false;
+        report.ieee_crc32_uses_hardware = report.x86_pclmul;
     } else if (builtin.cpu.arch == .aarch64) {
         const aarch64 = std.Target.aarch64;
         report.arm_crc32 = aarch64.featureSetHas(builtin.cpu.features, .crc);
@@ -622,11 +623,9 @@ pub fn bestCrc32Dispatch() Crc32Dispatch {
     if (builtin.cpu.arch == .aarch64) {
         if (cpuFeatureReport().arm_crc32) return .hardware;
     }
-    // PCLMUL x86 path is implemented but not yet validated for dispatch;
-    // it must pass differential tests against scalar/slice paths before enabling.
-    // if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
-    //     if (cpuFeatureReport().x86_pclmul) return .hardware;
-    // }
+    if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
+        if (cpuFeatureReport().x86_pclmul) return .hardware;
+    }
     return .slice32;
 }
 
@@ -639,6 +638,72 @@ pub fn crc32Best(input: []const u8) u32 {
         .slice32 => crc32Slice32(input),
         .hardware => crc32Hardware(input),
     };
+}
+
+/// Continue an already-finalized IEEE CRC-32 digest over `input`.
+///
+/// `previous` uses the same representation returned by `crc32Best`, making the
+/// helper suitable for framed formats whose type bytes and payload bytes arrive
+/// as separate slices.
+pub fn crc32UpdateBest(previous: u32, input: []const u8) u32 {
+    if ((builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) and
+        cpuFeatureReport().x86_pclmul and input.len >= 128)
+    {
+        return crc32PclmulUpdate(previous, input);
+    }
+    return crc32Slice32Update(previous, input);
+}
+
+fn crc32Slice32Update(previous: u32, input: []const u8) u32 {
+    var crc = ~previous;
+    var index: usize = 0;
+    while (index + 32 <= input.len) : (index += 32) {
+        const word0 = std.mem.readInt(u32, input[index..][0..4], .little) ^ crc;
+        const word1 = std.mem.readInt(u32, input[index + 4 ..][0..4], .little);
+        const word2 = std.mem.readInt(u32, input[index + 8 ..][0..4], .little);
+        const word3 = std.mem.readInt(u32, input[index + 12 ..][0..4], .little);
+        const word4 = std.mem.readInt(u32, input[index + 16 ..][0..4], .little);
+        const word5 = std.mem.readInt(u32, input[index + 20 ..][0..4], .little);
+        const word6 = std.mem.readInt(u32, input[index + 24 ..][0..4], .little);
+        const word7 = std.mem.readInt(u32, input[index + 28 ..][0..4], .little);
+        crc = Crc32Slice32.tables[31][word0 & 0xff] ^
+            Crc32Slice32.tables[30][(word0 >> 8) & 0xff] ^
+            Crc32Slice32.tables[29][(word0 >> 16) & 0xff] ^
+            Crc32Slice32.tables[28][(word0 >> 24) & 0xff] ^
+            Crc32Slice32.tables[27][word1 & 0xff] ^
+            Crc32Slice32.tables[26][(word1 >> 8) & 0xff] ^
+            Crc32Slice32.tables[25][(word1 >> 16) & 0xff] ^
+            Crc32Slice32.tables[24][(word1 >> 24) & 0xff] ^
+            Crc32Slice32.tables[23][word2 & 0xff] ^
+            Crc32Slice32.tables[22][(word2 >> 8) & 0xff] ^
+            Crc32Slice32.tables[21][(word2 >> 16) & 0xff] ^
+            Crc32Slice32.tables[20][(word2 >> 24) & 0xff] ^
+            Crc32Slice32.tables[19][word3 & 0xff] ^
+            Crc32Slice32.tables[18][(word3 >> 8) & 0xff] ^
+            Crc32Slice32.tables[17][(word3 >> 16) & 0xff] ^
+            Crc32Slice32.tables[16][(word3 >> 24) & 0xff] ^
+            Crc32Slice32.tables[15][word4 & 0xff] ^
+            Crc32Slice32.tables[14][(word4 >> 8) & 0xff] ^
+            Crc32Slice32.tables[13][(word4 >> 16) & 0xff] ^
+            Crc32Slice32.tables[12][(word4 >> 24) & 0xff] ^
+            Crc32Slice32.tables[11][word5 & 0xff] ^
+            Crc32Slice32.tables[10][(word5 >> 8) & 0xff] ^
+            Crc32Slice32.tables[9][(word5 >> 16) & 0xff] ^
+            Crc32Slice32.tables[8][(word5 >> 24) & 0xff] ^
+            Crc32Slice32.tables[7][word6 & 0xff] ^
+            Crc32Slice32.tables[6][(word6 >> 8) & 0xff] ^
+            Crc32Slice32.tables[5][(word6 >> 16) & 0xff] ^
+            Crc32Slice32.tables[4][(word6 >> 24) & 0xff] ^
+            Crc32Slice32.tables[3][word7 & 0xff] ^
+            Crc32Slice32.tables[2][(word7 >> 8) & 0xff] ^
+            Crc32Slice32.tables[1][(word7 >> 16) & 0xff] ^
+            Crc32Slice32.tables[0][(word7 >> 24) & 0xff];
+    }
+    while (index < input.len) : (index += 1) {
+        const table_index: u8 = @truncate(crc ^ input[index]);
+        crc = Crc32.table[table_index] ^ (crc >> 8);
+    }
+    return ~crc;
 }
 
 /// Combine two already-finalized IEEE CRC-32 digests.
@@ -732,55 +797,80 @@ fn crc32IeeeArm8(acc: u32, value: u8) u32 {
     return result;
 }
 
-// x86 PCLMULQDQ folding for IEEE CRC-32.
-// Uses carry-less multiplication to fold the CRC state by 16-byte blocks.
-// For each 16-byte block: fold = PCLMULQDQ(state, K_FOLD_128, 0x01)
-//   new_state = state XOR fold XOR data
-
-const K_FOLD_128: u64 = 0x5bd7f464; // x^(128+32) mod P_reflected
+// x86 PCLMULQDQ folding for reflected IEEE CRC-32. Constants follow the
+// standard four-lane Intel folding algorithm and are independently checked
+// against the scalar/slicing implementations below.
+const crc32_k1: u64 = 0x154442bd4;
+const crc32_k2: u64 = 0x1c6e41596;
+const crc32_k3: u64 = 0x1751997d0;
+const crc32_k4: u64 = 0x0ccaa009e;
+const crc32_k5: u64 = 0x163cd6124;
+const crc32_poly: u64 = 0x1db710641;
+const crc32_mu: u64 = 0x1f7011641;
 
 pub fn crc32HardwareX86(input: []const u8) u32 {
     if (!(builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86)) return crc32Slice16(input);
     if (!cpuFeatureReport().x86_pclmul) return crc32Slice16(input);
+    return crc32PclmulUpdate(0, input);
+}
 
-    if (input.len < 64) return crc32Slice16(input);
+fn crc32PclmulUpdate(previous: u32, input: []const u8) u32 {
+    if (input.len < 128) return crc32Slice32Update(previous, input);
 
-    var crc: u32 = 0xffff_ffff;
     var index: usize = 0;
+    var x3 = std.mem.readInt(u128, input[index..][0..16], .little);
+    index += 16;
+    var x2 = std.mem.readInt(u128, input[index..][0..16], .little);
+    index += 16;
+    var x1 = std.mem.readInt(u128, input[index..][0..16], .little);
+    index += 16;
+    var x0 = std.mem.readInt(u128, input[index..][0..16], .little);
+    index += 16;
+    x3 ^= @as(u128, ~previous);
 
+    const k1k2 = (@as(u128, crc32_k2) << 64) | crc32_k1;
     while (index + 64 <= input.len) : (index += 64) {
-        const d0 = std.mem.readInt(u128, input[index..][0..16], .little);
-        const d1 = std.mem.readInt(u128, input[index + 16 ..][0..16], .little);
-        const d2 = std.mem.readInt(u128, input[index + 32 ..][0..16], .little);
-        const d3 = std.mem.readInt(u128, input[index + 48 ..][0..16], .little);
-
-        var state: u128 = d0 ^ @as(u128, crc);
-        state = pclmulFold(state, d1);
-        state = pclmulFold(state, d2);
-        state = pclmulFold(state, d3);
-        crc = @truncate(state);
+        x3 = crc32Reduce128(x3, std.mem.readInt(u128, input[index..][0..16], .little), k1k2);
+        x2 = crc32Reduce128(x2, std.mem.readInt(u128, input[index + 16 ..][0..16], .little), k1k2);
+        x1 = crc32Reduce128(x1, std.mem.readInt(u128, input[index + 32 ..][0..16], .little), k1k2);
+        x0 = crc32Reduce128(x0, std.mem.readInt(u128, input[index + 48 ..][0..16], .little), k1k2);
     }
 
+    const k3k4 = (@as(u128, crc32_k4) << 64) | crc32_k3;
+    var x = crc32Reduce128(x3, x2, k3k4);
+    x = crc32Reduce128(x, x1, k3k4);
+    x = crc32Reduce128(x, x0, k3k4);
     while (index + 16 <= input.len) : (index += 16) {
-        const d = std.mem.readInt(u128, input[index..][0..16], .little);
-        crc = @truncate(d ^ @as(u128, crc));
+        x = crc32Reduce128(x, std.mem.readInt(u128, input[index..][0..16], .little), k3k4);
     }
+
+    x = pclmul128(x, k3k4, 0x10) ^ (x >> 64);
+    const k5: u128 = crc32_k5;
+    x = pclmul128(x & 0xffff_ffff, k5, 0x00) ^ (x >> 32);
+
+    const poly_mu = (@as(u128, crc32_mu) << 64) | crc32_poly;
+    const t1 = pclmul128(x & 0xffff_ffff, poly_mu, 0x10);
+    const t2 = pclmul128(t1 & 0xffff_ffff, poly_mu, 0x00);
+    var crc: u32 = @truncate((x ^ t2) >> 32);
 
     while (index < input.len) : (index += 1) {
-        const ti: u8 = @truncate(crc ^ input[index]);
-        crc = Crc32.table[ti] ^ (crc >> 8);
+        const table_index: u8 = @truncate(crc ^ input[index]);
+        crc = Crc32.table[table_index] ^ (crc >> 8);
     }
     return ~crc;
 }
 
-fn pclmulFold(state: u128, data: u128) u128 {
-    var fold: u128 = state;
-    const k: u128 = K_FOLD_128;
-    asm volatile ("pclmulqdq $0x01, %[k], %[fold]"
-        : [fold] "+x" (fold),
-        : [k] "x" (k),
+inline fn crc32Reduce128(a: u128, b: u128, keys: u128) u128 {
+    return b ^ pclmul128(a, keys, 0x00) ^ pclmul128(a, keys, 0x11);
+}
+
+inline fn pclmul128(a: u128, b: u128, comptime immediate: u8) u128 {
+    var result = a;
+    asm volatile ("pclmulqdq $" ++ std.fmt.comptimePrint("0x{x}", .{immediate}) ++ ", %[key], %[value]"
+        : [value] "+x" (result),
+        : [key] "x" (b),
     );
-    return state ^ fold ^ data;
+    return result;
 }
 
 pub fn crc32Hardware(input: []const u8) u32 {
@@ -1158,22 +1248,51 @@ test "CRC combine is associative across block boundaries" {
 test "CRC-32 best dispatch matches scalar" {
     const input = "dispatch checksum" ** 31;
     try std.testing.expectEqual(crc32(input), crc32Best(input));
-    if (builtin.cpu.arch == .aarch64 and cpuFeatureReport().arm_crc32) {
+    const report = cpuFeatureReport();
+    if ((builtin.cpu.arch == .aarch64 and report.arm_crc32) or
+        ((builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) and report.x86_pclmul))
+    {
         try std.testing.expectEqual(Crc32Dispatch.hardware, bestCrc32Dispatch());
     } else {
         try std.testing.expectEqual(Crc32Dispatch.slice32, bestCrc32Dispatch());
     }
 }
 
-test "CPU feature report keeps IEEE CRC32 dispatch conservative" {
+test "CPU feature report selects validated IEEE CRC32 hardware paths" {
     const report = cpuFeatureReport();
     if (report.ieee_crc32_pclmul_candidate) try std.testing.expect(report.x86_pclmul);
     if (builtin.cpu.arch == .aarch64) {
         try std.testing.expectEqual(report.arm_crc32, report.ieee_crc32_uses_hardware);
+    } else if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
+        try std.testing.expectEqual(report.x86_pclmul, report.ieee_crc32_uses_hardware);
     } else {
         try std.testing.expect(!report.ieee_crc32_uses_hardware);
     }
     if (report.crc32c_hardware_candidate) try std.testing.expect(report.x86_sse42);
+}
+
+test "CRC-32 PCLMUL path matches slicing across lengths offsets and updates" {
+    if (!(builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86)) return;
+    if (!cpuFeatureReport().x86_pclmul) return;
+
+    var input: [8192 + 16]u8 = undefined;
+    var state: u32 = 7;
+    for (&input) |*byte| {
+        state = state *% 1664525 +% 1013904223;
+        byte.* = @truncate(state >> 24);
+    }
+
+    for (0..16) |offset| {
+        for (0..8193) |len| {
+            const bytes = input[offset..][0..len];
+            const expected = crc32Slice32(bytes);
+            try std.testing.expectEqual(expected, crc32HardwareX86(bytes));
+
+            const split = len / 3;
+            const incremental = crc32UpdateBest(crc32Slice32(bytes[0..split]), bytes[split..]);
+            try std.testing.expectEqual(expected, incremental);
+        }
+    }
 }
 
 test "CRC-32C hardware path matches table path" {

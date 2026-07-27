@@ -1647,6 +1647,220 @@ const FusedDynamicLiteralDecoder = struct {
     }
 };
 
+const SemanticDynamicDecoder = struct {
+    const literal_lookup_bits: u4 = 12;
+    const literal_lookup_len = @as(usize, 1) << literal_lookup_bits;
+    const literal_lookup_mask: u64 = literal_lookup_len - 1;
+    const distance_lookup_bits: u4 = 9;
+    const distance_lookup_len = @as(usize, 1) << distance_lookup_bits;
+    const distance_lookup_mask: u64 = distance_lookup_len - 1;
+    const literal_secondary_capacity = 4096;
+    const distance_secondary_capacity = 1024;
+
+    const literal_flag: u32 = 0x8000;
+    const exceptional_flag: u32 = 0x4000;
+    const secondary_flag: u32 = 0x2000;
+
+    literal: [literal_lookup_len]u32 = undefined,
+    literal_secondary: [literal_secondary_capacity]u16 = undefined,
+    literal_secondary_len: usize = 0,
+    distance: [distance_lookup_len]u32 = @splat(0),
+    distance_secondary: [distance_secondary_capacity]u16 = undefined,
+    distance_secondary_len: usize = 0,
+    compact_literal: *const huffman.HuffmanTable(286) = undefined,
+    compact_distance: *const huffman.HuffmanTable(30) = undefined,
+
+    const Self = @This();
+
+    fn init(self: *Self, literal_table: *const huffman.HuffmanTable(286), distance_table_: *const huffman.HuffmanTable(30)) bool {
+        if (!treeIsComplete(286, literal_table)) return false;
+
+        self.* = Self{
+            .compact_literal = literal_table,
+            .compact_distance = distance_table_,
+        };
+        if (!self.buildLiteralTable(literal_table)) return false;
+        if (!self.buildDistanceTable(distance_table_)) return false;
+        return true;
+    }
+
+    fn treeIsComplete(comptime symbol_count: usize, table: *const huffman.HuffmanTable(symbol_count)) bool {
+        if (table.max_bits == 0) return false;
+        var used: usize = 0;
+        var bits: usize = 1;
+        while (bits <= table.max_bits) : (bits += 1) {
+            used += @as(usize, table.count_by_bits[bits]) << @intCast(@as(usize, table.max_bits) - bits);
+        }
+        return used == (@as(usize, 1) << @intCast(table.max_bits));
+    }
+
+    fn buildLiteralTable(self: *Self, table: *const huffman.HuffmanTable(286)) bool {
+        // Build the primary table one code width at a time. After entries for a
+        // width are installed, duplicating the completed prefix table grows it
+        // to the next width. This writes each primary slot only O(1) times and
+        // lets double-literal pairs be inserted once at their combined width.
+        self.literal[0] = 0;
+        self.literal[1] = 0;
+        var total_bits: usize = 1;
+        while (total_bits <= literal_lookup_bits) : (total_bits += 1) {
+            const first = table.first_by_bits[total_bits];
+            const end = first + table.count_by_bits[total_bits];
+            for (table.entries[first..end]) |entry| {
+                self.literal[entry.code] = semanticLiteralEntry(entry.symbol, entry.bits);
+            }
+
+            var first_bits: usize = 1;
+            while (first_bits + 1 < total_bits) : (first_bits += 1) {
+                const second_bits = total_bits - first_bits;
+                const first_start = table.first_by_bits[first_bits];
+                const first_end = first_start + table.count_by_bits[first_bits];
+                const second_start = table.first_by_bits[second_bits];
+                const second_end = second_start + table.count_by_bits[second_bits];
+                for (table.entries[first_start..first_end]) |first_entry| {
+                    if (first_entry.symbol >= 256) continue;
+                    for (table.entries[second_start..second_end]) |second_entry| {
+                        if (second_entry.symbol >= 256) continue;
+                        const code = @as(usize, first_entry.code) |
+                            (@as(usize, second_entry.code) << @intCast(first_bits));
+                        self.literal[code] = (@as(u32, @intCast(total_bits)) & 0xf) |
+                            literal_flag |
+                            (2 << 8) |
+                            (@as(u32, first_entry.symbol) << 16) |
+                            (@as(u32, second_entry.symbol) << 24);
+                    }
+                }
+            }
+
+            if (total_bits < literal_lookup_bits) {
+                const current_len = @as(usize, 1) << @intCast(total_bits);
+                @memcpy(
+                    self.literal[current_len .. current_len * 2],
+                    self.literal[0..current_len],
+                );
+            }
+        }
+
+        var prefix_max_bits: [literal_lookup_len]u4 = @splat(0);
+        for (table.entries[0..table.len]) |entry| {
+            if (entry.bits > literal_lookup_bits) {
+                const prefix = @as(usize, entry.code) & (literal_lookup_len - 1);
+                prefix_max_bits[prefix] = @max(prefix_max_bits[prefix], entry.bits);
+            }
+        }
+
+        for (prefix_max_bits, 0..) |max_bits, prefix| {
+            if (max_bits == 0) continue;
+            const size = @as(usize, 1) << @intCast(max_bits - literal_lookup_bits);
+            if (self.literal_secondary_len + size > self.literal_secondary.len or size > 256) return false;
+            const start = self.literal_secondary_len;
+            self.literal_secondary_len += size;
+            self.literal[prefix] = (@as(u32, @intCast(start)) << 16) |
+                exceptional_flag |
+                secondary_flag |
+                @as(u32, @intCast(size - 1));
+        }
+
+        for (table.entries[0..table.len]) |entry| {
+            if (entry.bits <= literal_lookup_bits) continue;
+            const prefix = @as(usize, entry.code) & (literal_lookup_len - 1);
+            const primary = self.literal[prefix];
+            const start: usize = @intCast(primary >> 16);
+            const mask: usize = @intCast(primary & 0xff);
+            const suffix_bits: u4 = entry.bits - literal_lookup_bits;
+            const suffix = @as(usize, entry.code) >> literal_lookup_bits;
+            const fill = (mask + 1) >> suffix_bits;
+            var i: usize = 0;
+            while (i < fill) : (i += 1) {
+                const index = start + suffix + (i << suffix_bits);
+                self.literal_secondary[index] = (@as(u16, entry.symbol) << 4) | entry.bits;
+            }
+        }
+        return true;
+    }
+
+    fn buildDistanceTable(self: *Self, table: *const huffman.HuffmanTable(30)) bool {
+        var prefix_max_bits: [distance_lookup_len]u4 = @splat(0);
+        for (table.entries[0..table.len]) |entry| {
+            if (entry.bits <= distance_lookup_bits) {
+                fillPrimary(
+                    &self.distance,
+                    distance_lookup_bits,
+                    entry,
+                    semanticDistanceEntry(entry.symbol, entry.bits),
+                );
+            } else {
+                const prefix = @as(usize, entry.code) & (distance_lookup_len - 1);
+                prefix_max_bits[prefix] = @max(prefix_max_bits[prefix], entry.bits);
+            }
+        }
+
+        for (prefix_max_bits, 0..) |max_bits, prefix| {
+            if (max_bits == 0) continue;
+            const size = @as(usize, 1) << @intCast(max_bits - distance_lookup_bits);
+            if (self.distance_secondary_len + size > self.distance_secondary.len or size > 256) return false;
+            const start = self.distance_secondary_len;
+            self.distance_secondary_len += size;
+            self.distance[prefix] = (@as(u32, @intCast(start)) << 16) |
+                exceptional_flag |
+                secondary_flag |
+                @as(u32, @intCast(size - 1));
+        }
+
+        for (table.entries[0..table.len]) |entry| {
+            if (entry.bits <= distance_lookup_bits) continue;
+            const prefix = @as(usize, entry.code) & (distance_lookup_len - 1);
+            const primary = self.distance[prefix];
+            const start: usize = @intCast(primary >> 16);
+            const mask: usize = @intCast(primary & 0xff);
+            const suffix_bits: u4 = entry.bits - distance_lookup_bits;
+            const suffix = @as(usize, entry.code) >> distance_lookup_bits;
+            const fill = (mask + 1) >> suffix_bits;
+            var i: usize = 0;
+            while (i < fill) : (i += 1) {
+                const index = start + suffix + (i << suffix_bits);
+                self.distance_secondary[index] = (@as(u16, entry.symbol) << 4) | entry.bits;
+            }
+        }
+        return true;
+    }
+
+    fn fillPrimary(
+        primary: anytype,
+        comptime lookup_bits: u4,
+        entry: anytype,
+        semantic: u32,
+    ) void {
+        const fill = @as(usize, 1) << @intCast(lookup_bits - entry.bits);
+        var i: usize = 0;
+        while (i < fill) : (i += 1) {
+            primary[entry.code | (i << entry.bits)] = semantic;
+        }
+    }
+
+    fn semanticLiteralEntry(symbol: u16, bits: u4) u32 {
+        if (symbol < 256) {
+            return (@as(u32, symbol) << 16) | literal_flag | (1 << 8) | bits;
+        }
+        if (symbol == 256) return exceptional_flag | bits;
+        if (symbol <= 285) {
+            const metadata = length_table[symbol - 257];
+            return (@as(u32, metadata.base) << 16) |
+                (@as(u32, metadata.extra_bits) << 8) |
+                bits;
+        }
+        return exceptional_flag;
+    }
+
+    fn semanticDistanceEntry(symbol: u16, bits: u4) u32 {
+        if (symbol >= distance_table.len) return 0;
+        const metadata = distance_table[symbol];
+        return (@as(u32, metadata.base) << 16) |
+            (@as(u32, metadata.extra_bits) << 8) |
+            literal_flag |
+            bits;
+    }
+};
+
 fn dynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
     if (parsed.literal_max_bits <= 9) return 9;
     // A 12-bit literal table avoids a handful of cold-symbol fallback scans, but
@@ -2388,9 +2602,15 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                     try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
                 } else if (comptime Reader == bitstream.BufferedBitReader) {
-                    if (dictionary.len == 0) {
-                        const lit_decoder = FusedDynamicLiteralDecoder.init(&lit_table);
-                        try decodeFusedDynamicBlockIntoBufferedReader(reader, output, &out_offset, &lit_decoder, &dist_decoder);
+                    if (dictionary.len == 0 and !slicesOverlapForSemanticDecode(reader.input, output)) {
+                        const semantic_dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+                        var semantic_decoder: SemanticDynamicDecoder = undefined;
+                        if (semantic_decoder.init(&lit_table, &semantic_dist_table)) {
+                            out_offset = try decodeSemanticDynamicBlockIntoBufferedReader(reader, output, out_offset, &semantic_decoder);
+                        } else {
+                            const lit_decoder = FusedDynamicLiteralDecoder.init(&lit_table);
+                            try decodeFusedDynamicBlockIntoBufferedReader(reader, output, &out_offset, &lit_decoder, &dist_decoder);
+                        }
                     } else {
                         const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
                         try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
@@ -2922,6 +3142,213 @@ fn decodeCompressedBlockIntoReader(
             return error.InvalidHuffmanCode;
         }
     }
+}
+
+fn slicesOverlapForSemanticDecode(input: []const u8, output: []u8) bool {
+    if (input.len == 0 or output.len == 0) return false;
+    const input_start = @intFromPtr(input.ptr);
+    const output_start = @intFromPtr(output.ptr);
+    const input_end = input_start +| input.len;
+    const output_end = output_start +| output.len;
+    return input_start < output_end and output_start < input_end;
+}
+
+noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!usize {
+    const input = reader.input;
+    var bit_buffer = reader.bit_buffer;
+    var bit_count = reader.bit_count;
+    var byte_index = reader.byte_index;
+    var consumed_bits = reader.consumed_bits;
+    var out_pos = initial_out_offset;
+
+    if (out_pos + 8 <= output.len and byte_index + 8 <= input.len) {
+        refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+    }
+    var entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+
+    while (out_pos + 8 <= output.len and byte_index + 8 <= input.len) {
+        var entry_bits: u6 = @truncate(entry);
+
+        if ((entry & SemanticDynamicDecoder.literal_flag) != 0) {
+            const entry2 = decoder.literal[
+                @as(usize, @intCast((bit_buffer >> @intCast(entry_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+            ];
+            const entry2_bits: u6 = @truncate(entry2);
+            const entry12_bits: u6 = entry_bits + entry2_bits;
+            const entry3 = decoder.literal[
+                @as(usize, @intCast((bit_buffer >> @intCast(entry12_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+            ];
+            const entry3_bits: u6 = @truncate(entry3);
+            const entry123_bits: u6 = entry12_bits + entry3_bits;
+            // Load the following entry before retiring the current literals.
+            // The independent table load can overlap the output stores and the
+            // subsequent reservoir refill instead of starting the next loop's
+            // dependency chain from scratch.
+            const entry4 = decoder.literal[
+                @as(usize, @intCast((bit_buffer >> @intCast(entry123_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+            ];
+
+            const advance1: usize = @intCast((entry >> 8) & 0xf);
+            output[out_pos] = @truncate(entry >> 16);
+            output[out_pos + 1] = @truncate(entry >> 24);
+            out_pos += advance1;
+
+            if ((entry2 & SemanticDynamicDecoder.literal_flag) != 0) {
+                const advance2: usize = @intCast((entry2 >> 8) & 0xf);
+                output[out_pos] = @truncate(entry2 >> 16);
+                output[out_pos + 1] = @truncate(entry2 >> 24);
+                out_pos += advance2;
+
+                if ((entry3 & SemanticDynamicDecoder.literal_flag) != 0) {
+                    const advance3: usize = @intCast((entry3 >> 8) & 0xf);
+                    output[out_pos] = @truncate(entry3 >> 16);
+                    output[out_pos + 1] = @truncate(entry3 >> 24);
+                    out_pos += advance3;
+
+                    bit_buffer >>= @intCast(entry123_bits);
+                    bit_count -= entry123_bits;
+                    consumed_bits += entry123_bits;
+                    entry = entry4;
+                    refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+                    continue;
+                }
+
+                bit_buffer >>= @intCast(entry12_bits);
+                bit_count -= entry12_bits;
+                consumed_bits += entry12_bits;
+                entry = entry3;
+                entry_bits = entry3_bits;
+            } else {
+                bit_buffer >>= @intCast(entry_bits);
+                bit_count -= entry_bits;
+                consumed_bits += entry_bits;
+                entry = entry2;
+                entry_bits = entry2_bits;
+            }
+        }
+
+        var length_base: usize = undefined;
+        var length_extra_bits: u6 = undefined;
+        if ((entry & SemanticDynamicDecoder.exceptional_flag) == 0) {
+            length_base = @intCast(entry >> 16);
+            length_extra_bits = @truncate(entry >> 8);
+        } else if ((entry & SemanticDynamicDecoder.secondary_flag) != 0) {
+            const start: usize = @intCast(entry >> 16);
+            const mask: usize = @intCast(entry & 0xff);
+            const secondary_index = start +
+                (@as(usize, @intCast(bit_buffer >> SemanticDynamicDecoder.literal_lookup_bits)) & mask);
+            if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
+            const secondary = decoder.literal_secondary[secondary_index];
+            const symbol: u16 = secondary >> 4;
+            entry_bits = @truncate(secondary & 0x0f);
+            if (symbol < 256) {
+                bit_buffer >>= @intCast(entry_bits);
+                bit_count -= entry_bits;
+                consumed_bits += entry_bits;
+                output[out_pos] = @truncate(symbol);
+                out_pos += 1;
+                refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+                entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+                continue;
+            }
+            if (symbol == 256) {
+                bit_buffer >>= @intCast(entry_bits);
+                bit_count -= entry_bits;
+                consumed_bits += entry_bits;
+                storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+                return out_pos;
+            }
+            if (symbol > 285) return error.InvalidHuffmanCode;
+            const metadata = length_table[symbol - 257];
+            length_base = metadata.base;
+            length_extra_bits = metadata.extra_bits;
+        } else {
+            if (entry_bits == 0) return error.InvalidHuffmanCode;
+            bit_buffer >>= @intCast(entry_bits);
+            bit_count -= entry_bits;
+            consumed_bits += entry_bits;
+            storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+            return out_pos;
+        }
+
+        var bits = bit_buffer >> @intCast(entry_bits);
+        const length_mask = (@as(u64, 1) << @intCast(length_extra_bits)) - 1;
+        const length = length_base + @as(usize, @intCast(bits & length_mask));
+        bits >>= @intCast(length_extra_bits);
+
+        const distance_entry = decoder.distance[
+            @as(usize, @intCast(bits & SemanticDynamicDecoder.distance_lookup_mask))
+        ];
+        var distance_base: usize = undefined;
+        var distance_extra_bits: u6 = undefined;
+        var distance_code_bits: u6 = @truncate(distance_entry);
+        if ((distance_entry & SemanticDynamicDecoder.literal_flag) != 0) {
+            distance_base = @intCast(distance_entry >> 16);
+            distance_extra_bits = @truncate(distance_entry >> 8);
+        } else if ((distance_entry & SemanticDynamicDecoder.secondary_flag) != 0) {
+            const start: usize = @intCast(distance_entry >> 16);
+            const mask: usize = @intCast(distance_entry & 0xff);
+            const secondary_index = start +
+                (@as(usize, @intCast(bits >> SemanticDynamicDecoder.distance_lookup_bits)) & mask);
+            if (secondary_index >= decoder.distance_secondary_len) return error.InvalidHuffmanCode;
+            const secondary = decoder.distance_secondary[secondary_index];
+            const symbol: u16 = secondary >> 4;
+            if (symbol >= distance_table.len) return error.InvalidHuffmanCode;
+            distance_code_bits = @truncate(secondary & 0x0f);
+            const metadata = distance_table[symbol];
+            distance_base = metadata.base;
+            distance_extra_bits = metadata.extra_bits;
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+        bits >>= @intCast(distance_code_bits);
+        const distance_mask = (@as(u64, 1) << @intCast(distance_extra_bits)) - 1;
+        const distance = distance_base + @as(usize, @intCast(bits & distance_mask));
+        const total_bits: u6 = entry_bits + length_extra_bits + distance_code_bits + distance_extra_bits;
+
+        bit_buffer >>= @intCast(total_bits);
+        bit_count -= total_bits;
+        consumed_bits += total_bits;
+        refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+        entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+        try copyMatchAt(output, out_pos, length, distance);
+        out_pos += length;
+    }
+
+    storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+    // The semantic loop intentionally stops before boundary conditions.
+    // Decode the final handful of symbols through the compact reference tables.
+    while (true) {
+        const symbol = try decoder.compact_literal.decodeValue(reader);
+        if (symbol < 256) {
+            if (out_pos == output.len) return error.OutputTooSmall;
+            output[out_pos] = @truncate(symbol);
+            out_pos += 1;
+        } else if (symbol == 256) {
+            return out_pos;
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, reader);
+            const distance_symbol = try decoder.compact_distance.decodeValue(reader);
+            const distance = try decodeDistance(distance_symbol, reader);
+            try copyMatchAt(output, out_pos, length, distance);
+            out_pos += length;
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
+}
+
+inline fn refillSemanticBits(input: []const u8, byte_index: *usize, bit_buffer: *u64, bit_count: *usize) void {
+    if (bit_count.* >= 56) return;
+    const bytes_to_stage = (63 - bit_count.*) / 8;
+    bit_buffer.* |= std.mem.readInt(u64, input[byte_index.*..][0..8], .little) << @intCast(bit_count.*);
+    bit_count.* += bytes_to_stage * 8;
+    byte_index.* += bytes_to_stage;
 }
 
 fn decodeCompressedBlockIntoReaderNoDict(
@@ -4541,17 +4968,18 @@ fn pngPaethPredictorReference(left: u8, up: u8, up_left: u8) u8 {
 }
 
 fn pngPaethPredictorStbi(left: u8, up: u8, up_left: u8) u8 {
+    return pngPaethPredictorStbiI16(left, up, up_left);
+}
+
+inline fn pngPaethPredictorStbiI16(left: i16, up: i16, up_left: i16) u8 {
     // image-png uses this stb_image formulation on x86_64 because LLVM lowers
     // it to a less branchy dependency chain than the PNG specification's three
     // absolute-distance comparisons. The threshold form is exactly equivalent,
     // including PNG's left/up/up-left tie-breaking order.
-    const a: i16 = left;
-    const b: i16 = up;
-    const c: i16 = up_left;
-    const threshold = c * 3 - (a + b);
-    const low = @min(a, b);
-    const high = @max(a, b);
-    const first = if (high <= threshold) low else c;
+    const threshold = up_left * 3 - (left + up);
+    const low = @min(left, up);
+    const high = @max(left, up);
+    const first = if (high <= threshold) low else up_left;
     return @intCast(if (threshold <= low) high else first);
 }
 
@@ -4737,6 +5165,9 @@ fn reconstructPngPaethScanline(filtered: []const u8, previous: ?[]const u8, byte
 
 fn reconstructPngPaethFixedBppScanline(comptime bytes_per_pixel: usize, filtered: []const u8, previous: ?[]const u8, output: []u8) void {
     if (previous) |prev| {
+        if (comptime builtin.target.cpu.arch == .x86_64) {
+            return reconstructPngPaethFixedBppScanlineX86(bytes_per_pixel, filtered, prev, output);
+        }
         const prefix = @min(bytes_per_pixel, filtered.len);
         var i: usize = 0;
         while (i < prefix) : (i += 1) output[i] = filtered[i] +% prev[i];
@@ -4750,6 +5181,33 @@ fn reconstructPngPaethFixedBppScanline(comptime bytes_per_pixel: usize, filtered
         }
     } else {
         reconstructPngSubScanline(filtered, bytes_per_pixel, output);
+    }
+}
+
+fn reconstructPngPaethFixedBppScanlineX86(comptime bytes_per_pixel: usize, filtered: []const u8, previous: []const u8, output: []u8) void {
+    // Keep the previous reconstructed pixel (`left`) and previous-row pixel
+    // (`up_left`) in the i16 representation consumed by the x86 stb predictor.
+    // This mirrors image-png's scalar x86 kernel and removes one output reload
+    // plus two u8->i16 extensions per channel from the dependency-heavy loop.
+    var left: [bytes_per_pixel]i16 = @splat(0);
+    var up_left: [bytes_per_pixel]i16 = @splat(0);
+    var i: usize = 0;
+    while (i + bytes_per_pixel <= filtered.len) : (i += bytes_per_pixel) {
+        inline for (0..bytes_per_pixel) |lane| {
+            const up: i16 = previous[i + lane];
+            const value = filtered[i + lane] +% pngPaethPredictorStbiI16(left[lane], up, up_left[lane]);
+            output[i + lane] = value;
+            left[lane] = value;
+            up_left[lane] = up;
+        }
+    }
+    while (i < filtered.len) : (i += 1) {
+        const lane = i % bytes_per_pixel;
+        const up: i16 = previous[i];
+        const value = filtered[i] +% pngPaethPredictorStbiI16(left[lane], up, up_left[lane]);
+        output[i] = value;
+        left[lane] = value;
+        up_left[lane] = up;
     }
 }
 
