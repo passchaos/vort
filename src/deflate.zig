@@ -1664,9 +1664,10 @@ const SemanticDynamicDecoder = struct {
     literal: [literal_lookup_len]u32 = undefined,
     literal_secondary: [literal_secondary_capacity]u16 = undefined,
     literal_secondary_len: usize = 0,
-    distance: [distance_lookup_len]u32 = @splat(0),
+    distance: [distance_lookup_len]u32 = undefined,
     distance_secondary: [distance_secondary_capacity]u16 = undefined,
     distance_secondary_len: usize = 0,
+    single_distance: u32 = 0,
     compact_literal: *const huffman.HuffmanTable(286) = undefined,
     compact_distance: *const huffman.HuffmanTable(30) = undefined,
 
@@ -1676,12 +1677,26 @@ const SemanticDynamicDecoder = struct {
         if (!treeIsComplete(286, literal_table)) return false;
 
         self.* = Self{
+            .distance = @splat(0),
             .compact_literal = literal_table,
             .compact_distance = distance_table_,
         };
         if (!self.buildLiteralTable(literal_table)) return false;
         if (!self.buildDistanceTable(distance_table_)) return false;
         return true;
+    }
+
+    fn initSingleDistance(self: *Self, literal_table: *const huffman.HuffmanTable(286), distance_table_: *const huffman.HuffmanTable(30)) bool {
+        if (!treeIsComplete(286, literal_table) or distance_table_.len != 1) return false;
+        const entry = distance_table_.entries[0];
+        if (entry.code != 0 or entry.symbol >= distance_table.len) return false;
+
+        self.* = Self{
+            .single_distance = semanticDistanceEntry(entry.symbol, entry.bits),
+            .compact_literal = literal_table,
+            .compact_distance = distance_table_,
+        };
+        return self.buildLiteralTable(literal_table);
     }
 
     fn treeIsComplete(comptime symbol_count: usize, table: *const huffman.HuffmanTable(symbol_count)) bool {
@@ -3425,6 +3440,33 @@ noinline fn decodeSemanticDynamicBlockIntoSink(
     sink: anytype,
     noalias decoder: *const SemanticDynamicDecoder,
 ) Error!void {
+    return decodeSemanticDynamicBlockIntoSinkMode(
+        false,
+        reader,
+        sink,
+        decoder,
+    );
+}
+
+noinline fn decodeSemanticDynamicBlockIntoSingleDistanceSink(
+    noalias reader: *bitstream.BufferedBitReader,
+    sink: anytype,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!void {
+    return decodeSemanticDynamicBlockIntoSinkMode(
+        true,
+        reader,
+        sink,
+        decoder,
+    );
+}
+
+noinline fn decodeSemanticDynamicBlockIntoSinkMode(
+    comptime single_distance: bool,
+    noalias reader: *bitstream.BufferedBitReader,
+    sink: anytype,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!void {
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
@@ -3535,9 +3577,10 @@ noinline fn decodeSemanticDynamicBlockIntoSink(
         const length = length_base + @as(usize, @intCast(bits & length_mask));
         bits >>= @intCast(length_extra_bits);
 
-        const distance_entry = decoder.distance[
-            @as(usize, @intCast(bits & SemanticDynamicDecoder.distance_lookup_mask))
-        ];
+        const distance_entry = if (single_distance)
+            decoder.single_distance
+        else
+            decoder.distance[@as(usize, @intCast(bits & SemanticDynamicDecoder.distance_lookup_mask))];
         var distance_base: usize = undefined;
         var distance_extra_bits: u6 = undefined;
         var distance_code_bits: u6 = @truncate(distance_entry);
@@ -3558,6 +3601,11 @@ noinline fn decodeSemanticDynamicBlockIntoSink(
             distance_base = metadata.base;
             distance_extra_bits = metadata.extra_bits;
         } else {
+            return error.InvalidHuffmanCode;
+        }
+        if (single_distance and
+            (bits & ((@as(u64, 1) << @intCast(distance_code_bits)) - 1)) != 0)
+        {
             return error.InvalidHuffmanCode;
         }
         bits >>= @intCast(distance_code_bits);
@@ -8478,8 +8526,13 @@ pub fn decodePngFilter0DynamicZlibImageWithOptions(
         const literal_table_ = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
         const distance_table_ = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
         var decoder: SemanticDynamicDecoder = undefined;
-        if (!decoder.init(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
-        try decodeSemanticDynamicBlockIntoSink(&reader, &sink, &decoder);
+        if (distance_table_.len == 1) {
+            if (!decoder.initSingleDistance(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
+            try decodeSemanticDynamicBlockIntoSingleDistanceSink(&reader, &sink, &decoder);
+        } else {
+            if (!decoder.init(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
+            try decodeSemanticDynamicBlockIntoSink(&reader, &sink, &decoder);
+        }
         if (header.final) break;
     }
 
