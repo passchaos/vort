@@ -807,6 +807,7 @@ const crc32_k4: u64 = 0x0ccaa009e;
 const crc32_k5: u64 = 0x163cd6124;
 const crc32_poly: u64 = 0x1db710641;
 const crc32_mu: u64 = 0x1f7011641;
+const Crc32Fold128 = @Vector(2, u64);
 
 pub fn crc32HardwareX86(input: []const u8) u32 {
     if (!(builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86)) return crc32Slice16(input);
@@ -818,46 +819,64 @@ fn crc32PclmulUpdate(previous: u32, input: []const u8) u32 {
     if (input.len < 128) return crc32Slice32Update(previous, input);
 
     var index: usize = 0;
-    var x3 = std.mem.readInt(u128, input[index..][0..16], .little);
+    var x3: Crc32Fold128 = @bitCast(input[index..][0..16].*);
     index += 16;
-    var x2 = std.mem.readInt(u128, input[index..][0..16], .little);
+    var x2: Crc32Fold128 = @bitCast(input[index..][0..16].*);
     index += 16;
-    var x1 = std.mem.readInt(u128, input[index..][0..16], .little);
+    var x1: Crc32Fold128 = @bitCast(input[index..][0..16].*);
     index += 16;
-    var x0 = std.mem.readInt(u128, input[index..][0..16], .little);
+    var x0: Crc32Fold128 = @bitCast(input[index..][0..16].*);
     index += 16;
-    x3 ^= @as(u128, ~previous);
+    x3[0] ^= @as(u64, ~previous);
 
-    const k1k2 = (@as(u128, crc32_k2) << 64) | crc32_k1;
+    const k1k2 = Crc32Fold128{ crc32_k1, crc32_k2 };
     while (index + 64 <= input.len) : (index += 64) {
-        x3 = crc32Reduce128(x3, std.mem.readInt(u128, input[index..][0..16], .little), k1k2);
-        x2 = crc32Reduce128(x2, std.mem.readInt(u128, input[index + 16 ..][0..16], .little), k1k2);
-        x1 = crc32Reduce128(x1, std.mem.readInt(u128, input[index + 32 ..][0..16], .little), k1k2);
-        x0 = crc32Reduce128(x0, std.mem.readInt(u128, input[index + 48 ..][0..16], .little), k1k2);
+        x3 = crc32ReduceFold(x3, @bitCast(input[index..][0..16].*), k1k2);
+        x2 = crc32ReduceFold(x2, @bitCast(input[index + 16 ..][0..16].*), k1k2);
+        x1 = crc32ReduceFold(x1, @bitCast(input[index + 32 ..][0..16].*), k1k2);
+        x0 = crc32ReduceFold(x0, @bitCast(input[index + 48 ..][0..16].*), k1k2);
     }
 
-    const k3k4 = (@as(u128, crc32_k4) << 64) | crc32_k3;
-    var x = crc32Reduce128(x3, x2, k3k4);
-    x = crc32Reduce128(x, x1, k3k4);
-    x = crc32Reduce128(x, x0, k3k4);
+    const k3k4 = Crc32Fold128{ crc32_k3, crc32_k4 };
+    var x = crc32ReduceFold(x3, x2, k3k4);
+    x = crc32ReduceFold(x, x1, k3k4);
+    x = crc32ReduceFold(x, x0, k3k4);
     while (index + 16 <= input.len) : (index += 16) {
-        x = crc32Reduce128(x, std.mem.readInt(u128, input[index..][0..16], .little), k3k4);
+        x = crc32ReduceFold(x, @bitCast(input[index..][0..16].*), k3k4);
     }
 
-    x = pclmul128(x, k3k4, 0x10) ^ (x >> 64);
+    // The hot four-lane fold above remains in XMM registers. Convert once for
+    // the final scalar-shaped 128->64->32 Barrett reduction, where code size is
+    // more important than carrying another vector-specific representation.
+    var reduced: u128 = @bitCast(x);
+    const k3k4_scalar = (@as(u128, crc32_k4) << 64) | crc32_k3;
+    reduced = pclmul128(reduced, k3k4_scalar, 0x10) ^ (reduced >> 64);
     const k5: u128 = crc32_k5;
-    x = pclmul128(x & 0xffff_ffff, k5, 0x00) ^ (x >> 32);
+    reduced = pclmul128(reduced & 0xffff_ffff, k5, 0x00) ^ (reduced >> 32);
 
     const poly_mu = (@as(u128, crc32_mu) << 64) | crc32_poly;
-    const t1 = pclmul128(x & 0xffff_ffff, poly_mu, 0x10);
+    const t1 = pclmul128(reduced & 0xffff_ffff, poly_mu, 0x10);
     const t2 = pclmul128(t1 & 0xffff_ffff, poly_mu, 0x00);
-    var crc: u32 = @truncate((x ^ t2) >> 32);
+    var crc: u32 = @truncate((reduced ^ t2) >> 32);
 
     while (index < input.len) : (index += 1) {
         const table_index: u8 = @truncate(crc ^ input[index]);
         crc = Crc32.table[table_index] ^ (crc >> 8);
     }
     return ~crc;
+}
+
+inline fn crc32ReduceFold(a: Crc32Fold128, b: Crc32Fold128, keys: Crc32Fold128) Crc32Fold128 {
+    return b ^ pclmulFold(a, keys, 0x00) ^ pclmulFold(a, keys, 0x11);
+}
+
+inline fn pclmulFold(a: Crc32Fold128, b: Crc32Fold128, comptime immediate: u8) Crc32Fold128 {
+    var result = a;
+    asm volatile ("pclmulqdq $" ++ std.fmt.comptimePrint("0x{x}", .{immediate}) ++ ", %[key], %[value]"
+        : [value] "+x" (result),
+        : [key] "x" (b),
+    );
+    return result;
 }
 
 inline fn crc32Reduce128(a: u128, b: u128, keys: u128) u128 {

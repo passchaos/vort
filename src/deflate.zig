@@ -3500,12 +3500,13 @@ noinline fn decodeSemanticDynamicBlockIntoLinearMode(
     var consumed_bits = reader.consumed_bits;
     var out_pos = initial_out_offset;
 
-    if (out_pos + 8 <= output.len and byte_index + 8 <= input.len) {
+    const output_headroom: usize = 64;
+    if (out_pos + output_headroom <= output.len and byte_index + 8 <= input.len) {
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
     }
     var entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
 
-    while (out_pos + 8 <= output.len and byte_index + 8 <= input.len) {
+    while (out_pos + output_headroom <= output.len and byte_index + 8 <= input.len) {
         var entry_bits: u6 = @truncate(entry);
 
         if ((entry & SemanticDynamicDecoder.literal_flag) != 0) {
@@ -3627,17 +3628,7 @@ noinline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (out_pos == 0) return error.InvalidMatch;
             if (length > output.len - out_pos) return error.OutputTooSmall;
             const byte = output[out_pos - 1];
-            if (length <= 8) {
-                // The loop guarantees eight bytes of output headroom. Three
-                // quarters of Lohengrin's RLE matches are 3--8 bytes, so one
-                // unaligned repeated-byte store is cheaper than a dynamic
-                // memset call. The cursor advances by the true length and the
-                // following symbol overwrites the speculative suffix.
-                const repeated = @as(u64, byte) * 0x0101010101010101;
-                std.mem.writeInt(u64, output[out_pos..][0..8], repeated, .little);
-            } else {
-                @memset(output[out_pos..][0..length], byte);
-            }
+            fillLinearRle(output, out_pos, length, byte);
             out_pos += length;
             continue;
         }
@@ -3687,15 +3678,7 @@ noinline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (out_pos == 0) return error.InvalidMatch;
             if (length > output.len - out_pos) return error.OutputTooSmall;
             const byte = output[out_pos - 1];
-            if (length <= 8) {
-                // The linear loop guarantees eight bytes of output headroom.
-                // Retire common short RLE matches with one fixed-width store;
-                // the next symbol overwrites the speculative suffix.
-                const repeated = @as(u64, byte) * 0x0101010101010101;
-                std.mem.writeInt(u64, output[out_pos..][0..8], repeated, .little);
-            } else {
-                @memset(output[out_pos..][0..length], byte);
-            }
+            fillLinearRle(output, out_pos, length, byte);
         } else {
             try copyMatchAt(output, out_pos, length, distance);
         }
@@ -3720,6 +3703,27 @@ noinline fn decodeSemanticDynamicBlockIntoLinearMode(
         } else {
             return error.InvalidHuffmanCode;
         }
+    }
+}
+
+inline fn fillLinearRle(output: []u8, out_pos: usize, length: usize, byte: u8) void {
+    std.debug.assert(length != 0);
+    std.debug.assert(out_pos <= output.len and length <= output.len - out_pos);
+    const repeated: @Vector(64, u8) = @splat(byte);
+    var copied: usize = 0;
+    while (copied + 64 <= length) : (copied += 64) {
+        output[out_pos + copied ..][0..64].* = @bitCast(repeated);
+    }
+    if (copied == length) return;
+
+    const tail_pos = out_pos + copied;
+    if (output.len - tail_pos >= 64) {
+        // The next symbol overwrites bytes beyond the logical match. This keeps
+        // long runs on fixed-width vector stores instead of paying a dynamic
+        // memset call for every DEFLATE match.
+        output[tail_pos..][0..64].* = @bitCast(repeated);
+    } else {
+        @memset(output[tail_pos..][0 .. length - copied], byte);
     }
 }
 
