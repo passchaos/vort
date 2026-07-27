@@ -3446,6 +3446,7 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
 ) Error!usize {
     return decodeSemanticDynamicBlockIntoLinearMode(
         false,
+        false,
         reader,
         output,
         initial_out_offset,
@@ -3460,6 +3461,22 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
 ) Error!usize {
     return decodeSemanticDynamicBlockIntoLinearMode(
         true,
+        false,
+        reader,
+        output,
+        0,
+        decoder,
+    );
+}
+
+noinline fn decodeSemanticDynamicBlockIntoRle1BufferedReader(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!usize {
+    return decodeSemanticDynamicBlockIntoLinearMode(
+        true,
+        true,
         reader,
         output,
         0,
@@ -3469,11 +3486,13 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
 
 noinline fn decodeSemanticDynamicBlockIntoLinearMode(
     comptime single_distance: bool,
+    comptime rle1_distance: bool,
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
     initial_out_offset: usize,
     noalias decoder: *const SemanticDynamicDecoder,
 ) Error!usize {
+    comptime std.debug.assert(!rle1_distance or single_distance);
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
@@ -3591,6 +3610,37 @@ noinline fn decodeSemanticDynamicBlockIntoLinearMode(
         const length_mask = (@as(u64, 1) << @intCast(length_extra_bits)) - 1;
         const length = length_base + @as(usize, @intCast(bits & length_mask));
         bits >>= @intCast(length_extra_bits);
+
+        if (comptime rle1_distance) {
+            // The only distance symbol is zero with canonical code 0 and one
+            // code bit. Decode and copy the run directly so the hottest RLE
+            // loop avoids semantic-distance metadata and runtime match-class
+            // dispatch entirely.
+            if ((bits & 1) != 0) return error.InvalidHuffmanCode;
+            const total_bits: u6 = entry_bits + length_extra_bits + 1;
+            bit_buffer >>= @intCast(total_bits);
+            bit_count -= total_bits;
+            consumed_bits += total_bits;
+            refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+            entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+
+            if (out_pos == 0) return error.InvalidMatch;
+            if (length > output.len - out_pos) return error.OutputTooSmall;
+            const byte = output[out_pos - 1];
+            if (length <= 8) {
+                // The loop guarantees eight bytes of output headroom. Three
+                // quarters of Lohengrin's RLE matches are 3--8 bytes, so one
+                // unaligned repeated-byte store is cheaper than a dynamic
+                // memset call. The cursor advances by the true length and the
+                // following symbol overwrites the speculative suffix.
+                const repeated = @as(u64, byte) * 0x0101010101010101;
+                std.mem.writeInt(u64, output[out_pos..][0..8], repeated, .little);
+            } else {
+                @memset(output[out_pos..][0..length], byte);
+            }
+            out_pos += length;
+            continue;
+        }
 
         const distance_entry = if (single_distance)
             decoder.single_distance
@@ -8800,7 +8850,7 @@ fn tryDecodePngFilter0LinearRleBlock(
     scratch: []u8,
 ) Error!bool {
     const saved_reader = reader.*;
-    const written = decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
+    const written = decodeSemanticDynamicBlockIntoRle1BufferedReader(
         reader,
         scratch,
         decoder,
@@ -8847,6 +8897,7 @@ pub fn decodePngFilter0DynamicZlibImageWithOptions(
             if (!decoder.initSingleDistance(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
             const distance_entry = distance_table_.entries[0];
             const used_linear_block = distance_entry.symbol == 0 and
+                distance_entry.bits == 1 and
                 try tryDecodePngFilter0LinearRleBlock(
                     &reader,
                     &sink,
@@ -9005,12 +9056,17 @@ test "png filter0 dynamic direct decode matches general reconstruction and rejec
 }
 
 test "png filter0 linear RLE block matches compact fallback and restores reader" {
-    const row_len = 7;
-    const row_count = 3;
+    const row_len = 33;
+    const row_count = 1;
     const info = try pngImageInfo(row_len, row_count, 8, .grayscale);
     const tokens = [_]lz77.Token{
         .{ .literal = 0 },
-        .{ .match = .{ .length = row_count * (row_len + 1) - 1, .distance = 1 } },
+        .{ .match = .{ .length = 3, .distance = 1 } },
+        .{ .match = .{ .length = 4, .distance = 1 } },
+        .{ .match = .{ .length = 5, .distance = 1 } },
+        .{ .match = .{ .length = 6, .distance = 1 } },
+        .{ .match = .{ .length = 7, .distance = 1 } },
+        .{ .match = .{ .length = 8, .distance = 1 } },
     };
     const raw = try encodeRawDynamicTokensAlloc(std.testing.allocator, &tokens);
     defer std.testing.allocator.free(raw);
