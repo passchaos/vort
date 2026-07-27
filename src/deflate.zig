@@ -5735,7 +5735,7 @@ fn copyPngStreamingPendingMatch(self: anytype, output: []u8) Error!usize {
     if (distance == 1) {
         const byte = self.history[wrapAddPowerOfTwo(self.history_pos, self.history.len - 1, self.history.len)];
         @memset(dest, byte);
-        self.recordInflatedBytes(dest);
+        recordPngStreamingRepeatedByte(self, byte, dest.len);
     } else if (distance <= 4) {
         const history_len = self.history.len;
         var pattern: [4]u8 = undefined;
@@ -5768,6 +5768,12 @@ fn copyPngStreamingPendingMatch(self: anytype, output: []u8) Error!usize {
     }
     self.pending_match_remaining -= count;
     return count;
+}
+
+fn recordPngStreamingRepeatedByte(self: anytype, byte: u8, count: usize) void {
+    if (count == 0) return;
+    updatePngStreamingAdlerRepeatedByte(self, byte, count);
+    recordPngStreamingHistoryRepeatedByte(self, byte, count);
 }
 
 fn copyPngStreamingHistoryBytes(self: anytype, distance: usize, dest: []u8) Error!void {
@@ -5807,6 +5813,56 @@ fn copyPngStreamingOverlappingHistoryBytes(self: anytype, distance: usize, dest:
         @memcpy(dest[copied..][0..n], dest[0..n]);
         copied += n;
     }
+}
+
+fn updatePngStreamingAdlerRepeatedByte(self: anytype, byte: u8, count: usize) void {
+    if (self.options.ignore_adler) return;
+    var remaining = count;
+    const value: u64 = byte;
+    while (remaining != 0) {
+        if (self.adler_pending == checksum.adler32_nmax) self.reduceAdler();
+        const capacity = checksum.adler32_nmax - self.adler_pending;
+        const take = @min(remaining, capacity);
+        const a0: u64 = self.adler.a;
+        const b0: u64 = self.adler.b;
+        const n: u64 = @intCast(take);
+        const a = a0 + n * value;
+        // Fold a repeated byte run without rereading the row buffer we just
+        // memset. Adler-32's `b` sum observes the prefix after each byte:
+        //   b' = b + n*a + value * (1 + 2 + ... + n)
+        // Chunking at NMAX preserves the same deferred-reduction bound as the
+        // scalar `updateAdlerByte` path while using u64 temporaries for the
+        // triangular term.
+        const b = b0 + n * a0 + value * n * (n + 1) / 2;
+        self.adler_pending += take;
+        if (self.adler_pending == checksum.adler32_nmax) {
+            self.adler.a = @intCast(a % checksum.adler32_modulus);
+            self.adler.b = @intCast(b % checksum.adler32_modulus);
+            self.adler_pending = 0;
+        } else {
+            self.adler.a = @intCast(a);
+            self.adler.b = @intCast(b);
+        }
+        remaining -= take;
+    }
+}
+
+fn recordPngStreamingHistoryRepeatedByte(self: anytype, byte: u8, count: usize) void {
+    std.debug.assert(self.history.len != 0);
+    const history_len = self.history.len;
+    if (count >= history_len) {
+        @memset(self.history, byte);
+        self.history_pos = wrapAddPowerOfTwo(self.history_pos, count, history_len);
+        self.history_len = history_len;
+        return;
+    }
+
+    const first = @min(count, history_len - self.history_pos);
+    @memset(self.history[self.history_pos..][0..first], byte);
+    const second = count - first;
+    if (second != 0) @memset(self.history[0..second], byte);
+    self.history_pos = wrapAddPowerOfTwo(self.history_pos, count, history_len);
+    self.history_len = @min(self.history_len + count, history_len);
 }
 
 fn updatePngStreamingAdlerBytes(self: anytype, bytes: []const u8) void {
@@ -11434,6 +11490,26 @@ test "png streaming zlib decoder batches pending matches into row buffers" {
         try std.testing.expect(decoder.history_len >= case.history.len);
         try std.testing.expect(decoder.history_pos < decoder.history.len);
     }
+}
+
+test "png streaming repeated byte recording matches Adler and retained history" {
+    var history_scratch: [8]u8 = @splat(0);
+    var decoder = PngStreamingZlibScanlineDecoder{
+        .history = &history_scratch,
+        .history_pos = 3,
+        .history_len = 1,
+    };
+
+    var expected_bytes: [6000]u8 = @splat('Q');
+    recordPngStreamingRepeatedByte(&decoder, 'Q', expected_bytes.len);
+
+    var expected_adler = checksum.Adler32.init();
+    expected_adler.update(&expected_bytes);
+    decoder.reduceAdler();
+    try std.testing.expectEqual(expected_adler.digest(), decoder.adler.digest());
+    try std.testing.expectEqual(@as(usize, history_scratch.len), decoder.history_len);
+    try std.testing.expectEqual(@as(usize, (3 + expected_bytes.len) % history_scratch.len), decoder.history_pos);
+    for (history_scratch) |byte| try std.testing.expectEqual(@as(u8, 'Q'), byte);
 }
 
 test "png streaming history recording keeps only retained tail window" {
