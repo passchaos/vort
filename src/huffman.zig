@@ -273,21 +273,31 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             const entry = self.lookup[peek];
             if (entry.bits != 0) {
                 @branchHint(.likely);
-                if (!hasDecodedBits(reader, entry.bits)) return error.TruncatedFrame;
+                if (!hasDecodedBits(reader, entry.bits)) {
+                    @branchHint(.unlikely);
+                    return error.TruncatedFrame;
+                }
                 reader.advanceBitsStagedAssumeAvailable(entry.bits);
                 return entry.symbol;
+            } else {
+                @branchHint(.unlikely);
             }
-
             if (self.table.max_bits == 0) return error.InvalidHuffmanCode;
             if (self.table.max_bits <= lookup_bits) {
-                if (!hasDecodedBits(reader, self.table.max_bits)) return error.TruncatedFrame;
+                if (!hasDecodedBits(reader, self.table.max_bits)) {
+                    @branchHint(.unlikely);
+                    return error.TruncatedFrame;
+                }
                 return error.InvalidHuffmanCode;
             }
 
             var bits: u4 = lookup_bits + 1;
             while (bits <= self.table.max_bits) {
                 const code = reader.peekBitsPadded(u16, bits);
-                if (!hasDecodedBits(reader, bits)) return error.TruncatedFrame;
+                if (!hasDecodedBits(reader, bits)) {
+                    @branchHint(.unlikely);
+                    return error.TruncatedFrame;
+                }
                 const first = self.table.first_by_bits[bits];
                 const end = first + self.table.count_by_bits[bits];
                 for (self.table.entries[first..end]) |long_entry| {
@@ -307,29 +317,40 @@ pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {
             const entry = self.lookup[peek];
             if (entry.bits != 0) {
                 @branchHint(.likely);
-                if (!hasDecodedBits(reader, entry.bits)) return error.TruncatedFrame;
+                if (!hasDecodedBits(reader, entry.bits)) {
+                    @branchHint(.unlikely);
+                    return error.TruncatedFrame;
+                }
                 reader.advanceBitsStagedAssumeAvailable(entry.bits);
                 return .{ .value = entry.symbol, .bits = entry.bits };
+            } else {
+                // A fast-table miss already proves that no code of `lookup_bits`
+                // or fewer matches this prefix. Continue from the first possible
+                // long width instead of restarting the generic table decoder at
+                // one bit and rescanning short entries. Dynamic DEFLATE streams
+                // commonly put cold literals/distances behind long Huffman codes,
+                // so avoiding the redundant 1..lookup_bits work is a measurable
+                // win on text-heavy blocks while keeping the compact reference
+                // table representation.
+                @branchHint(.unlikely);
             }
 
-            // A fast-table miss already proves that no code of `lookup_bits`
-            // or fewer matches this prefix. Continue from the first possible
-            // long width instead of restarting the generic table decoder at
-            // one bit and rescanning short entries. Dynamic DEFLATE streams
-            // commonly put cold literals/distances behind long Huffman codes,
-            // so avoiding the redundant 1..lookup_bits work is a measurable
-            // win on text-heavy blocks while keeping the compact reference
-            // table representation.
             if (self.table.max_bits == 0) return error.InvalidHuffmanCode;
             if (self.table.max_bits <= lookup_bits) {
-                if (!hasDecodedBits(reader, self.table.max_bits)) return error.TruncatedFrame;
+                if (!hasDecodedBits(reader, self.table.max_bits)) {
+                    @branchHint(.unlikely);
+                    return error.TruncatedFrame;
+                }
                 return error.InvalidHuffmanCode;
             }
 
             var bits: u4 = lookup_bits + 1;
             while (bits <= self.table.max_bits) {
                 const code = reader.peekBitsPadded(u16, bits);
-                if (!hasDecodedBits(reader, bits)) return error.TruncatedFrame;
+                if (!hasDecodedBits(reader, bits)) {
+                    @branchHint(.unlikely);
+                    return error.TruncatedFrame;
+                }
                 const first = self.table.first_by_bits[bits];
                 const end = first + self.table.count_by_bits[bits];
                 for (self.table.entries[first..end]) |long_entry| {
