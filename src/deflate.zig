@@ -5721,6 +5721,7 @@ fn copyPngStreamingOverlappingHistoryBytes(self: anytype, distance: usize, dest:
 }
 
 fn updatePngStreamingAdlerBytes(self: anytype, bytes: []const u8) void {
+    if (self.options.ignore_adler) return;
     if (bytes.len >= 64) {
         if (self.adler_pending != 0) self.reduceAdler();
         self.adler.update(bytes);
@@ -5734,28 +5735,40 @@ fn recordPngStreamingHistoryBytes(self: anytype, bytes: []const u8) void {
     if (bytes.len == 0) return;
     std.debug.assert(self.history.len != 0);
 
+    const history_len = self.history.len;
     const original_len = bytes.len;
     var tail = bytes;
-    if (tail.len >= self.history.len) {
+    if (tail.len >= history_len) {
         // Only the final 32 KiB DEFLATE history window can be referenced by a
         // later match. Wide PNG scanlines and long RLE matches may hand us more
         // than that at once; copying the prefix into the ring is pure churn
         // because the suffix overwrites it before any later symbol can observe
         // the intermediate state. Advance the cursor as if the skipped prefix
         // had been written, then materialize just the retained tail window.
-        const skip = tail.len - self.history.len;
-        self.history_pos = (self.history_pos + skip % self.history.len) % self.history.len;
+        const skip = tail.len - history_len;
+        self.history_pos = wrapAddPowerOfTwo(self.history_pos, skip, history_len);
         tail = tail[skip..];
     }
 
     var index: usize = 0;
     while (index < tail.len) {
-        const first = @min(tail.len - index, self.history.len - self.history_pos);
+        const first = @min(tail.len - index, history_len - self.history_pos);
         @memcpy(self.history[self.history_pos..][0..first], tail[index..][0..first]);
-        self.history_pos = (self.history_pos + first) % self.history.len;
+        self.history_pos = wrapAddPowerOfTwo(self.history_pos, first, history_len);
         index += first;
     }
-    self.history_len = @min(self.history_len + original_len, self.history.len);
+    self.history_len = @min(self.history_len + original_len, history_len);
+}
+
+inline fn wrapAddPowerOfTwo(index: usize, addend: usize, modulus: usize) usize {
+    std.debug.assert(modulus != 0);
+    std.debug.assert(std.math.isPowerOfTwo(modulus));
+    // PNG streaming inflate always slices the caller history scratch to the
+    // DEFLATE 32 KiB window (and tests use smaller power-of-two windows). The
+    // ring cursor sits on the per-byte literal/match hot path, so use the
+    // power-of-two mask instead of a general integer remainder.
+    const mask = modulus - 1;
+    return (index +% (addend & mask)) & mask;
 }
 
 /// Incremental zlib/DEFLATE PNG row decoder for contiguous IDAT payloads.
@@ -6117,14 +6130,14 @@ pub const PngStreamingZlibScanlineDecoder = struct {
 
     fn historyByte(self: *const PngStreamingZlibScanlineDecoder, distance: usize) Error!u8 {
         if (distance == 0 or distance > self.history_len) return error.InvalidMatch;
-        const index = (self.history_pos + self.history.len - distance) % self.history.len;
+        const index = wrapAddPowerOfTwo(self.history_pos, self.history.len - distance, self.history.len);
         return self.history[index];
     }
 
     fn emitByte(self: *PngStreamingZlibScanlineDecoder, byte: u8) u8 {
         self.updateAdlerByte(byte);
         self.history[self.history_pos] = byte;
-        self.history_pos = (self.history_pos + 1) % self.history.len;
+        self.history_pos = wrapAddPowerOfTwo(self.history_pos, 1, self.history.len);
         self.history_len = @min(self.history_len + 1, self.history.len);
         return byte;
     }
@@ -6139,6 +6152,7 @@ pub const PngStreamingZlibScanlineDecoder = struct {
     }
 
     fn updateAdlerByte(self: *PngStreamingZlibScanlineDecoder, byte: u8) void {
+        if (self.options.ignore_adler) return;
         self.adler.a += byte;
         self.adler.b += self.adler.a;
         self.adler_pending += 1;
@@ -6164,8 +6178,11 @@ pub const PngStreamingZlibScanlineDecoder = struct {
         if (self.finished) return;
         if (try self.readInflatedByteOrEnd()) |_| return error.SizeMismatch;
         const footer_offset = self.raw_base_offset + self.reader.byteOffset();
-        self.reduceAdler();
-        try validateZlibFooterWithOptions(self.input, footer_offset, self.adler.digest(), self.options);
+        const actual_adler = if (self.options.ignore_adler) 0 else blk: {
+            self.reduceAdler();
+            break :blk self.adler.digest();
+        };
+        try validateZlibFooterWithOptions(self.input, footer_offset, actual_adler, self.options);
         self.finished_input_read = footer_offset + 4;
         self.finished = true;
     }
@@ -6532,14 +6549,14 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
 
     fn historyByte(self: *const PngStreamingZlibChunkedScanlineDecoder, distance: usize) Error!u8 {
         if (distance == 0 or distance > self.history_len) return error.InvalidMatch;
-        const index = (self.history_pos + self.history.len - distance) % self.history.len;
+        const index = wrapAddPowerOfTwo(self.history_pos, self.history.len - distance, self.history.len);
         return self.history[index];
     }
 
     fn emitByte(self: *PngStreamingZlibChunkedScanlineDecoder, byte: u8) u8 {
         self.updateAdlerByte(byte);
         self.history[self.history_pos] = byte;
-        self.history_pos = (self.history_pos + 1) % self.history.len;
+        self.history_pos = wrapAddPowerOfTwo(self.history_pos, 1, self.history.len);
         self.history_len = @min(self.history_len + 1, self.history.len);
         return byte;
     }
@@ -6554,6 +6571,7 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
     }
 
     fn updateAdlerByte(self: *PngStreamingZlibChunkedScanlineDecoder, byte: u8) void {
+        if (self.options.ignore_adler) return;
         self.adler.a += byte;
         self.adler.b += self.adler.a;
         self.adler_pending += 1;
@@ -6579,8 +6597,11 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
         if (self.finished) return;
         if (try self.readInflatedByteOrEnd()) |_| return error.SizeMismatch;
         const footer_offset = self.reader.byteOffset();
-        self.reduceAdler();
-        try validateZlibFooterChunksWithOptions(self.chunks, footer_offset, self.adler.digest(), self.options);
+        const actual_adler = if (self.options.ignore_adler) 0 else blk: {
+            self.reduceAdler();
+            break :blk self.adler.digest();
+        };
+        try validateZlibFooterChunksWithOptions(self.chunks, footer_offset, actual_adler, self.options);
         self.finished_input_read = footer_offset + 4;
         self.finished = true;
     }
