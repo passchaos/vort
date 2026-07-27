@@ -5512,6 +5512,7 @@ fn reconstructPngPaethFixedBppScanlineX86(comptime bytes_per_pixel: usize, filte
 fn reconstructPngSubScanline(filtered: []const u8, bytes_per_pixel: usize, output: []u8) void {
     switch (bytes_per_pixel) {
         1 => return reconstructPngSubBpp1Scanline(filtered, output),
+        3 => return reconstructPngSubBpp3Scanline(filtered, output),
         4 => return reconstructPngSubFixedBppScanline(4, filtered, output),
         8 => return reconstructPngSubFixedBppScanline(8, filtered, output),
         else => {},
@@ -5520,6 +5521,39 @@ fn reconstructPngSubScanline(filtered: []const u8, bytes_per_pixel: usize, outpu
     copyPossiblyAliasedBytes(output[0..prefix], filtered[0..prefix]);
     var i: usize = prefix;
     while (i < filtered.len) : (i += 1) output[i] = filtered[i] +% output[i - bytes_per_pixel];
+}
+
+fn reconstructPngSubBpp3Scanline(filtered: []const u8, output: []u8) void {
+    const prefix = @min(@as(usize, 3), filtered.len);
+    copyPossiblyAliasedBytes(output[0..prefix], filtered[0..prefix]);
+    if (filtered.len <= 3) return;
+
+    // A 3-lane Zig vector is widened and shuffled inefficiently by the x86
+    // backend. Keep the three RGB prefix sums in independent scalar registers
+    // instead: each channel remains a serial dependency, while the processor
+    // can advance all three channels in parallel without reloading the prior
+    // pixel from output.
+    var red = output[0];
+    var green = output[1];
+    var blue = output[2];
+    var i: usize = 3;
+    while (i + 3 <= filtered.len) : (i += 3) {
+        red +%= filtered[i];
+        green +%= filtered[i + 1];
+        blue +%= filtered[i + 2];
+        output[i] = red;
+        output[i + 1] = green;
+        output[i + 2] = blue;
+    }
+    if (i < filtered.len) {
+        red +%= filtered[i];
+        output[i] = red;
+        i += 1;
+    }
+    if (i < filtered.len) {
+        green +%= filtered[i];
+        output[i] = green;
+    }
 }
 
 fn reconstructPngSubFixedBppScanline(comptime bytes_per_pixel: usize, filtered: []const u8, output: []u8) void {
@@ -11874,7 +11908,7 @@ test "png scanline reconstruction Paeth bpp1 supports in-place rows" {
 }
 
 test "png scanline reconstruction Sub fixed bpp supports in-place rows" {
-    inline for (.{ 1, 4, 8 }) |bpp| {
+    inline for (.{ 1, 3, 4, 8 }) |bpp| {
         const row_len = 32;
         var row = pngReconstructionRow(row_len, bpp);
         var filtered: [row_len]u8 = undefined;
@@ -11883,6 +11917,31 @@ test "png scanline reconstruction Sub fixed bpp supports in-place rows" {
         var in_place = filtered;
         try std.testing.expectEqual(row_len, try reconstructPngScanline(1, &in_place, null, bpp, &in_place));
         try std.testing.expectEqualSlices(u8, &row, &in_place);
+    }
+}
+
+test "png scanline reconstruction Sub bpp3 matches scalar reference" {
+    var len: usize = 0;
+    while (len <= 257) : (len += 1) {
+        var filtered: [257]u8 = undefined;
+        for (0..len) |i| {
+            filtered[i] = @truncate(i *% 73 +% len *% 19 +% (i >> 2));
+        }
+
+        var optimized: [257]u8 = undefined;
+        var reference: [257]u8 = undefined;
+        for (0..len) |i| {
+            const left: u8 = if (i >= 3) reference[i - 3] else 0;
+            reference[i] = filtered[i] +% left;
+        }
+        reconstructPngSubBpp3Scanline(filtered[0..len], optimized[0..len]);
+        try std.testing.expectEqualSlices(u8, reference[0..len], optimized[0..len]);
+
+        // Direct row reconstruction permits input/output aliasing. Exercise
+        // every possible modulo-three tail while retaining the scalar result.
+        var in_place = filtered;
+        reconstructPngSubBpp3Scanline(in_place[0..len], in_place[0..len]);
+        try std.testing.expectEqualSlices(u8, reference[0..len], in_place[0..len]);
     }
 }
 
