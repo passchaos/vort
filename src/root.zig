@@ -379,6 +379,7 @@ pub const decodePngStreamingZlibImageFromChunksDirect = deflate.decodePngStreami
 pub const decodePngStreamingZlibImageFromChunksWithOptionsDirect = deflate.decodePngStreamingZlibImageFromChunksWithOptionsDirect;
 pub const decodePngZlibImage = deflate.decodePngZlibImage;
 pub const decodePngZlibImageWithOptions = deflate.decodePngZlibImageWithOptions;
+pub const decodePngFilter0DynamicZlibImageWithOptions = deflate.decodePngFilter0DynamicZlibImageWithOptions;
 pub const decodePngZlibImageFromChunks = deflate.decodePngZlibImageFromChunks;
 pub const decodePngZlibImageFromChunksDirect = deflate.decodePngZlibImageFromChunksDirect;
 pub const decodePngZlibImageFromChunksWithOptionsDirect = deflate.decodePngZlibImageFromChunksWithOptionsDirect;

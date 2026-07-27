@@ -3153,25 +3153,290 @@ fn slicesOverlapForSemanticDecode(input: []const u8, output: []u8) bool {
     return input_start < output_end and output_start < input_end;
 }
 
+const LinearSemanticSink = struct {
+    output: []u8,
+    pos: usize,
+
+    inline fn hasHeadroom(self: *const LinearSemanticSink, count: usize) bool {
+        return self.pos <= self.output.len and self.output.len - self.pos >= count;
+    }
+
+    inline fn emitSemanticLiteral(self: *LinearSemanticSink, entry: u32) Error!void {
+        const advance: usize = @intCast((entry >> 8) & 0xf);
+        std.debug.assert(advance == 1 or advance == 2);
+        std.debug.assert(self.output.len - self.pos >= 2);
+        self.output[self.pos] = @truncate(entry >> 16);
+        self.output[self.pos + 1] = @truncate(entry >> 24);
+        self.pos += advance;
+    }
+
+    inline fn emitSemanticLiteralTriple(self: *LinearSemanticSink, first: u32, second: u32, third: u32) Error!void {
+        try self.emitSemanticLiteral(first);
+        try self.emitSemanticLiteral(second);
+        try self.emitSemanticLiteral(third);
+    }
+
+    inline fn emitByte(self: *LinearSemanticSink, byte: u8) Error!void {
+        if (self.pos == self.output.len) return error.OutputTooSmall;
+        self.output[self.pos] = byte;
+        self.pos += 1;
+    }
+
+    inline fn copyMatch(self: *LinearSemanticSink, length: usize, distance: usize) Error!void {
+        try copyMatchAt(self.output, self.pos, length, distance);
+        self.pos += length;
+    }
+};
+
+/// DEFLATE sink for a non-interlaced PNG whose scanline filters are all None.
+///
+/// DEFLATE distances are expressed in the inflated stream's coordinate space,
+/// which includes one filter byte before every row. The final image buffer does
+/// not contain those bytes, so this sink preserves a virtual output position and
+/// treats row-leading zeroes as implicit history. Common RLE, small-distance,
+/// and non-overlapping matches remain batched; only uncommon overlapping spans
+/// that cross a row boundary fall back to byte-wise virtual-history replay.
+const PngFilter0SemanticSink = struct {
+    output: []u8,
+    row_len: usize,
+    stride: usize,
+    expected_virtual_len: usize,
+    virtual_pos: usize = 0,
+    output_pos: usize = 0,
+    row_remaining: usize = 0,
+
+    fn init(output: []u8, info: PngImageInfo) Error!PngFilter0SemanticSink {
+        const output_len = try pngImageOutputLen(info);
+        if (output.len < output_len) return error.OutputTooSmall;
+        return .{
+            .output = output[0..output_len],
+            .row_len = info.row_len,
+            .stride = std.math.add(usize, info.row_len, 1) catch return error.IntegerOverflow,
+            .expected_virtual_len = info.zlib_payload_len,
+        };
+    }
+
+    inline fn hasHeadroom(self: *const PngFilter0SemanticSink, count: usize) bool {
+        return self.virtual_pos <= self.expected_virtual_len and
+            self.expected_virtual_len - self.virtual_pos >= count;
+    }
+
+    inline fn emitSemanticLiteral(self: *PngFilter0SemanticSink, entry: u32) Error!void {
+        const advance: usize = @intCast((entry >> 8) & 0xf);
+        std.debug.assert(advance == 1 or advance == 2);
+        const first: u8 = @truncate(entry >> 16);
+        if (advance == 1) return self.emitByte(first);
+
+        const second: u8 = @truncate(entry >> 24);
+        if (self.row_remaining >= 2) {
+            self.output[self.output_pos] = first;
+            self.output[self.output_pos + 1] = second;
+            self.output_pos += 2;
+            self.virtual_pos += 2;
+            self.row_remaining -= 2;
+            return;
+        }
+        try self.emitByte(first);
+        try self.emitByte(second);
+    }
+
+    inline fn emitSemanticLiteralTriple(self: *PngFilter0SemanticSink, first: u32, second: u32, third: u32) Error!void {
+        if (self.row_remaining >= 6) {
+            const first_advance: usize = @intCast((first >> 8) & 0xf);
+            const second_advance: usize = @intCast((second >> 8) & 0xf);
+            const third_advance: usize = @intCast((third >> 8) & 0xf);
+            const second_offset = first_advance;
+            const third_offset = first_advance + second_advance;
+            const advance = third_offset + third_advance;
+
+            // Like the linear semantic loop, each entry stores two lanes even
+            // when it represents one literal. The following entry overwrites
+            // that harmless speculative lane, and six bytes of row headroom
+            // keeps every store inside the current scanline.
+            self.output[self.output_pos] = @truncate(first >> 16);
+            self.output[self.output_pos + 1] = @truncate(first >> 24);
+            self.output[self.output_pos + second_offset] = @truncate(second >> 16);
+            self.output[self.output_pos + second_offset + 1] = @truncate(second >> 24);
+            self.output[self.output_pos + third_offset] = @truncate(third >> 16);
+            self.output[self.output_pos + third_offset + 1] = @truncate(third >> 24);
+            self.advanceRowData(advance);
+            return;
+        }
+
+        try self.emitSemanticLiteral(first);
+        try self.emitSemanticLiteral(second);
+        try self.emitSemanticLiteral(third);
+    }
+
+    inline fn emitByte(self: *PngFilter0SemanticSink, byte: u8) Error!void {
+        if (self.virtual_pos == self.expected_virtual_len) return error.OutputTooSmall;
+        if (self.row_remaining == 0) {
+            // A nonzero row filter means this specialization is not applicable.
+            // The caller can restart through the general reconstruction path.
+            if (byte != @intFromEnum(PngFilterMethod.none)) return error.UnsupportedDeflateFeature;
+            self.row_remaining = self.row_len;
+            self.virtual_pos += 1;
+            return;
+        }
+        if (self.output_pos == self.output.len) return error.OutputTooSmall;
+        self.output[self.output_pos] = byte;
+        self.output_pos += 1;
+        self.virtual_pos += 1;
+        self.row_remaining -= 1;
+    }
+
+    fn copyMatch(self: *PngFilter0SemanticSink, length: usize, distance: usize) Error!void {
+        if (length == 0 or distance == 0 or distance > self.virtual_pos) return error.InvalidMatch;
+        if (length > self.expected_virtual_len - self.virtual_pos) return error.OutputTooSmall;
+        if (distance == 1) return self.copyRleMatch(length);
+        if (distance <= 4) return self.copySmallDistanceMatchVirtual(length, distance);
+        if (distance >= length) return self.copyNonOverlappingMatch(length, distance);
+
+        // Uncommon overlapping matches can observe both compact output bytes
+        // and implicit row-filter zeroes. Replaying from the virtual coordinate
+        // space is the simple reference fallback and is bounded by DEFLATE's
+        // maximum match length of 258 bytes.
+        var remaining = length;
+        while (remaining != 0) : (remaining -= 1) {
+            try self.emitByte(self.virtualByteAt(self.virtual_pos - distance));
+        }
+    }
+
+    fn copyRleMatch(self: *PngFilter0SemanticSink, length: usize) Error!void {
+        var byte = self.virtualByteAt(self.virtual_pos - 1);
+        var remaining = length;
+        while (remaining != 0) {
+            if (self.row_remaining == 0) {
+                try self.emitByte(byte);
+                // The just-emitted virtual byte is a validated filter zero and
+                // therefore becomes the distance-one source for the next byte.
+                byte = 0;
+                remaining -= 1;
+                continue;
+            }
+            const count = @min(remaining, self.row_remaining);
+            @memset(self.output[self.output_pos..][0..count], byte);
+            self.advanceRowData(count);
+            remaining -= count;
+        }
+    }
+
+    fn copySmallDistanceMatchVirtual(self: *PngFilter0SemanticSink, length: usize, distance: usize) Error!void {
+        var pattern: [4]u8 = undefined;
+        for (0..distance) |i| {
+            pattern[i] = self.virtualByteAt(self.virtual_pos - distance + i);
+        }
+
+        var remaining = length;
+        var phase: usize = 0;
+        while (remaining != 0) {
+            if (self.row_remaining == 0) {
+                try self.emitByte(pattern[phase]);
+                phase = (phase + 1) % distance;
+                remaining -= 1;
+                continue;
+            }
+
+            const count = @min(remaining, self.row_remaining);
+            var rotated: [4]u8 = undefined;
+            for (0..distance) |i| rotated[i] = pattern[(phase + i) % distance];
+            copySmallDistanceMatch(
+                self.output[self.output_pos..][0..count],
+                rotated[0..distance],
+                distance,
+            );
+            self.advanceRowData(count);
+            phase = (phase + count) % distance;
+            remaining -= count;
+        }
+    }
+
+    fn copyNonOverlappingMatch(self: *PngFilter0SemanticSink, length: usize, distance: usize) Error!void {
+        var remaining = length;
+        while (remaining != 0) {
+            const source_virtual = self.virtual_pos - distance;
+            const source_column = source_virtual % self.stride;
+
+            if (self.row_remaining == 0 or source_column == 0) {
+                try self.emitByte(self.virtualByteAt(source_virtual));
+                remaining -= 1;
+                continue;
+            }
+
+            const source_until_filter = self.stride - source_column;
+            const count = @min(remaining, @min(self.row_remaining, source_until_filter));
+            const source_output = self.compactIndexForData(source_virtual);
+            @memcpy(
+                self.output[self.output_pos..][0..count],
+                self.output[source_output..][0..count],
+            );
+            self.advanceRowData(count);
+            remaining -= count;
+        }
+    }
+
+    inline fn advanceRowData(self: *PngFilter0SemanticSink, count: usize) void {
+        std.debug.assert(count <= self.row_remaining);
+        std.debug.assert(count <= self.output.len - self.output_pos);
+        self.output_pos += count;
+        self.virtual_pos += count;
+        self.row_remaining -= count;
+    }
+
+    inline fn virtualByteAt(self: *const PngFilter0SemanticSink, virtual_index: usize) u8 {
+        std.debug.assert(virtual_index < self.virtual_pos);
+        if (virtual_index % self.stride == 0) return 0;
+        return self.output[self.compactIndexForData(virtual_index)];
+    }
+
+    inline fn compactIndexForData(self: *const PngFilter0SemanticSink, virtual_index: usize) usize {
+        const row = virtual_index / self.stride;
+        const column = virtual_index - row * self.stride;
+        std.debug.assert(column != 0);
+        return row * self.row_len + column - 1;
+    }
+
+    fn finish(self: *const PngFilter0SemanticSink) Error!void {
+        if (self.virtual_pos != self.expected_virtual_len or
+            self.output_pos != self.output.len or
+            self.row_remaining != 0)
+        {
+            return error.SizeMismatch;
+        }
+    }
+};
+
 noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
     initial_out_offset: usize,
     noalias decoder: *const SemanticDynamicDecoder,
 ) Error!usize {
+    var sink = LinearSemanticSink{
+        .output = output,
+        .pos = initial_out_offset,
+    };
+    try decodeSemanticDynamicBlockIntoSink(reader, &sink, decoder);
+    return sink.pos;
+}
+
+noinline fn decodeSemanticDynamicBlockIntoSink(
+    noalias reader: *bitstream.BufferedBitReader,
+    sink: anytype,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!void {
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
     var byte_index = reader.byte_index;
     var consumed_bits = reader.consumed_bits;
-    var out_pos = initial_out_offset;
 
-    if (out_pos + 8 <= output.len and byte_index + 8 <= input.len) {
+    if (sink.hasHeadroom(8) and byte_index + 8 <= input.len) {
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
     }
     var entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
 
-    while (out_pos + 8 <= output.len and byte_index + 8 <= input.len) {
+    while (sink.hasHeadroom(8) and byte_index + 8 <= input.len) {
         var entry_bits: u6 = @truncate(entry);
 
         if ((entry & SemanticDynamicDecoder.literal_flag) != 0) {
@@ -3193,22 +3458,9 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
                 @as(usize, @intCast((bit_buffer >> @intCast(entry123_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
             ];
 
-            const advance1: usize = @intCast((entry >> 8) & 0xf);
-            output[out_pos] = @truncate(entry >> 16);
-            output[out_pos + 1] = @truncate(entry >> 24);
-            out_pos += advance1;
-
             if ((entry2 & SemanticDynamicDecoder.literal_flag) != 0) {
-                const advance2: usize = @intCast((entry2 >> 8) & 0xf);
-                output[out_pos] = @truncate(entry2 >> 16);
-                output[out_pos + 1] = @truncate(entry2 >> 24);
-                out_pos += advance2;
-
                 if ((entry3 & SemanticDynamicDecoder.literal_flag) != 0) {
-                    const advance3: usize = @intCast((entry3 >> 8) & 0xf);
-                    output[out_pos] = @truncate(entry3 >> 16);
-                    output[out_pos + 1] = @truncate(entry3 >> 24);
-                    out_pos += advance3;
+                    try sink.emitSemanticLiteralTriple(entry, entry2, entry3);
 
                     bit_buffer >>= @intCast(entry123_bits);
                     bit_count -= entry123_bits;
@@ -3218,12 +3470,15 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
                     continue;
                 }
 
+                try sink.emitSemanticLiteral(entry);
+                try sink.emitSemanticLiteral(entry2);
                 bit_buffer >>= @intCast(entry12_bits);
                 bit_count -= entry12_bits;
                 consumed_bits += entry12_bits;
                 entry = entry3;
                 entry_bits = entry3_bits;
             } else {
+                try sink.emitSemanticLiteral(entry);
                 bit_buffer >>= @intCast(entry_bits);
                 bit_count -= entry_bits;
                 consumed_bits += entry_bits;
@@ -3250,8 +3505,7 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
                 bit_buffer >>= @intCast(entry_bits);
                 bit_count -= entry_bits;
                 consumed_bits += entry_bits;
-                output[out_pos] = @truncate(symbol);
-                out_pos += 1;
+                try sink.emitByte(@truncate(symbol));
                 refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
                 entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
                 continue;
@@ -3261,7 +3515,7 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
                 bit_count -= entry_bits;
                 consumed_bits += entry_bits;
                 storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
-                return out_pos;
+                return;
             }
             if (symbol > 285) return error.InvalidHuffmanCode;
             const metadata = length_table[symbol - 257];
@@ -3273,7 +3527,7 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
             bit_count -= entry_bits;
             consumed_bits += entry_bits;
             storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
-            return out_pos;
+            return;
         }
 
         var bits = bit_buffer >> @intCast(entry_bits);
@@ -3316,8 +3570,7 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
         consumed_bits += total_bits;
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
         entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
-        try copyMatchAt(output, out_pos, length, distance);
-        out_pos += length;
+        try sink.copyMatch(length, distance);
     }
 
     storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
@@ -3326,17 +3579,14 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
     while (true) {
         const symbol = try decoder.compact_literal.decodeValue(reader);
         if (symbol < 256) {
-            if (out_pos == output.len) return error.OutputTooSmall;
-            output[out_pos] = @truncate(symbol);
-            out_pos += 1;
+            try sink.emitByte(@truncate(symbol));
         } else if (symbol == 256) {
-            return out_pos;
+            return;
         } else if (symbol <= 285) {
             const length = try decodeLength(symbol, reader);
             const distance_symbol = try decoder.compact_distance.decodeValue(reader);
             const distance = try decodeDistance(distance_symbol, reader);
-            try copyMatchAt(output, out_pos, length, distance);
-            out_pos += length;
+            try sink.copyMatch(length, distance);
         } else {
             return error.InvalidHuffmanCode;
         }
@@ -8068,6 +8318,62 @@ pub fn decodePngZlibImageWithOptions(
     return drainPngZlibImage(&decoder, output[0..output_len]);
 }
 
+/// Decode an all-filter-None, dynamic-Huffman PNG zlib stream directly into
+/// compact image storage.
+///
+/// This is an explicitly narrow throughput specialization. It reports
+/// `UnsupportedDeflateFeature` for stored/fixed blocks, incomplete semantic
+/// Huffman tables, aliased input/output, or the first nonzero PNG filter byte;
+/// callers must then restart through the general PNG reconstruction path.
+pub fn decodePngFilter0DynamicZlibImageWithOptions(
+    input: []const u8,
+    info: PngImageInfo,
+    options: ZlibDecodeOptions,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    const output_len = try pngImageOutputLen(info);
+    if (output.len < output_len) return error.OutputTooSmall;
+    const image_output = output[0..output_len];
+    if (slicesOverlapForSemanticDecode(input, image_output)) return error.UnsupportedDeflateFeature;
+
+    const zlib_header = try parseZlibHeader(input, null);
+    var reader = bitstream.BufferedBitReader.init(input[zlib_header.data_offset..]);
+    var sink = try PngFilter0SemanticSink.init(image_output, info);
+
+    while (true) {
+        const header = try readBlockHeader(&reader);
+        if (header.block_type != 2) return error.UnsupportedDeflateFeature;
+
+        const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, &reader);
+        const literal_table_ = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
+        const distance_table_ = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+        var decoder: SemanticDynamicDecoder = undefined;
+        if (!decoder.init(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
+        try decodeSemanticDynamicBlockIntoSink(&reader, &sink, &decoder);
+        if (header.final) break;
+    }
+
+    try sink.finish();
+    const footer_offset = zlib_header.data_offset + reader.byteOffset();
+    const actual_adler = if (options.ignore_adler) 0 else pngFilter0Adler32(image_output, info);
+    try validateZlibFooterWithOptions(input, footer_offset, actual_adler, options);
+    return .{
+        .rows = info.height,
+        .output_written = output_len,
+        .zlib_input_read = footer_offset + 4,
+    };
+}
+
+fn pngFilter0Adler32(output: []const u8, info: PngImageInfo) u32 {
+    std.debug.assert(output.len == info.row_len * info.height);
+    var adler = checksum.Adler32.init();
+    for (0..info.height) |row| {
+        adler.update(&.{0});
+        adler.update(output[row * info.row_len ..][0..info.row_len]);
+    }
+    return adler.digest();
+}
+
 pub fn decodePngZlibImageFromChunks(
     chunks: []const []const u8,
     compressed_scratch: []u8,
@@ -8129,6 +8435,63 @@ fn drainPngZlibImage(decoder: *PngZlibScanlineDecoder, output: []u8) Error!PngIm
         .output_written = offset,
         .zlib_input_read = zlib_input_read,
     };
+}
+
+test "png filter0 dynamic direct decode matches general reconstruction and rejects fallback shapes" {
+    const row_len = 257;
+    const row_count = 37;
+    const info = try pngImageInfo(row_len, row_count, 8, .grayscale);
+    var filtered: [row_count * (row_len + 1)]u8 = undefined;
+    for (0..row_count) |row| {
+        const start = row * (row_len + 1);
+        filtered[start] = 0;
+        for (0..row_len) |column| {
+            filtered[start + 1 + column] = @truncate(
+                (row * 19 + column * 7 + (column / 13) * 29) ^
+                    (if (column > 96) @as(usize, filtered[start + 1 + column - 97]) else 0),
+            );
+        }
+    }
+
+    const encoded = try encodeZlibDynamicWithOptionsAlloc(std.testing.allocator, &filtered, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+
+    var expected: [row_count * row_len]u8 = undefined;
+    var zlib_scratch: [filtered.len]u8 = undefined;
+    var filtered_row: [row_len]u8 = undefined;
+    var previous_row: [row_len]u8 = undefined;
+    _ = try decodePngZlibImageWithOptions(
+        encoded,
+        &zlib_scratch,
+        &filtered_row,
+        &previous_row,
+        info,
+        .{},
+        &expected,
+    );
+
+    var actual: [row_count * row_len]u8 = undefined;
+    const result = try decodePngFilter0DynamicZlibImageWithOptions(encoded, info, .{}, &actual);
+    try std.testing.expectEqual(row_count, result.rows);
+    try std.testing.expectEqual(actual.len, result.output_written);
+    try std.testing.expectEqual(encoded.len, result.zlib_input_read);
+    try std.testing.expectEqualSlices(u8, &expected, &actual);
+
+    var malformed = filtered;
+    malformed[(row_len + 1) * 11] = 2;
+    const nonzero_filter = try encodeZlibDynamicWithOptionsAlloc(std.testing.allocator, &malformed, optionsForLevel(.default));
+    defer std.testing.allocator.free(nonzero_filter);
+    try std.testing.expectError(
+        error.UnsupportedDeflateFeature,
+        decodePngFilter0DynamicZlibImageWithOptions(nonzero_filter, info, .{}, &actual),
+    );
+
+    const fixed = try encodeZlibFixedWithOptionsAlloc(std.testing.allocator, &filtered, optionsForLevel(.default));
+    defer std.testing.allocator.free(fixed);
+    try std.testing.expectError(
+        error.UnsupportedDeflateFeature,
+        decodePngFilter0DynamicZlibImageWithOptions(fixed, info, .{}, &actual),
+    );
 }
 
 fn drainPngStreamingZlibImage(decoder: *PngStreamingZlibScanlineDecoder, output: []u8) Error!PngImageDecodeResult {
