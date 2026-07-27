@@ -3683,7 +3683,22 @@ noinline fn decodeSemanticDynamicBlockIntoLinearMode(
         consumed_bits += total_bits;
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
         entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
-        try copyMatchAt(output, out_pos, length, distance);
+        if (distance == 1) {
+            if (out_pos == 0) return error.InvalidMatch;
+            if (length > output.len - out_pos) return error.OutputTooSmall;
+            const byte = output[out_pos - 1];
+            if (length <= 8) {
+                // The linear loop guarantees eight bytes of output headroom.
+                // Retire common short RLE matches with one fixed-width store;
+                // the next symbol overwrites the speculative suffix.
+                const repeated = @as(u64, byte) * 0x0101010101010101;
+                std.mem.writeInt(u64, output[out_pos..][0..8], repeated, .little);
+            } else {
+                @memset(output[out_pos..][0..length], byte);
+            }
+        } else {
+            try copyMatchAt(output, out_pos, length, distance);
+        }
         out_pos += length;
     }
 
