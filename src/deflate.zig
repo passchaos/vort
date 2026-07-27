@@ -1460,9 +1460,6 @@ pub fn decodeRawDynamicAlloc(allocator: std.mem.Allocator, input: []const u8) !O
     if (lit_lookup_bits == 9) {
         const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
         try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
-    } else if (lit_lookup_bits == 12) {
-        const lit_decoder = huffman.FastDecoder(286, 12).init(lit_table);
-        try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
     } else {
         const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
         try decodeCompressedBlockFromReader(allocator, &reader, &out, "", null, &lit_decoder, &dist_decoder);
@@ -1573,7 +1570,6 @@ pub fn profileFirstDynamicDeflateBlock(input: []const u8) Error!DynamicDecodePro
     profile.dynamic_blocks = 1;
     switch (dynamicLiteralLookupBits(parsed)) {
         9 => try profileCompressedBlockInto(&reader, lit_table, dist_table, 9, &profile),
-        12 => try profileCompressedBlockInto(&reader, lit_table, dist_table, 12, &profile),
         else => try profileCompressedBlockInto(&reader, lit_table, dist_table, 11, &profile),
     }
     return profile;
@@ -1615,7 +1611,6 @@ fn profileDynamicBlockAfterHeader(reader: *bitstream.BufferedBitReader, final: b
     profile.dynamic_blocks += 1;
     switch (dynamicLiteralLookupBits(parsed)) {
         9 => try profileCompressedBlockInto(reader, lit_table, dist_table, 9, profile),
-        12 => try profileCompressedBlockInto(reader, lit_table, dist_table, 12, profile),
         else => try profileCompressedBlockInto(reader, lit_table, dist_table, 11, profile),
     }
 }
@@ -1897,9 +1892,6 @@ fn decodeRawAutoAllocPartialWithDictionary(allocator: std.mem.Allocator, input: 
                 if (lit_lookup_bits == 9) {
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                     try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
-                } else if (lit_lookup_bits == 12) {
-                    const lit_decoder = huffman.FastDecoder(286, 12).init(lit_table);
-                    try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
                 } else {
                     const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
                     try decodeCompressedBlockFromReader(allocator, &reader, &out, dictionary, max_output_len, &lit_decoder, &dist_decoder);
@@ -2076,9 +2068,6 @@ fn decodeRawAutoAppendPartialWithDictionaryFromReader(
                 const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
                 if (lit_lookup_bits == 9) {
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
-                    try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
-                } else if (lit_lookup_bits == 12) {
-                    const lit_decoder = huffman.FastDecoder(286, 12).init(lit_table);
                     try decodeCompressedBlockFromReaderFromBase(allocator, reader, out, dictionary, start_len, max_output_len, &lit_decoder, &dist_decoder);
                 } else {
                     const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
@@ -2266,9 +2255,6 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
                 const lit_lookup_bits = dynamicLiteralLookupBits(parsed);
                 if (lit_lookup_bits == 9) {
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
-                    try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
-                } else if (lit_lookup_bits == 12) {
-                    const lit_decoder = huffman.FastDecoder(286, 12).init(lit_table);
                     try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
                 } else {
                     const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
@@ -5586,12 +5572,10 @@ pub const PngZlibScanlineDecoder = struct {
 const PngStreamingDynamicLiteralDecoder = union(enum) {
     fast9: huffman.FastDecoder(286, 9),
     fast11: huffman.FastDecoder(286, 11),
-    fast12: huffman.FastDecoder(286, 12),
 
     inline fn initWithBits(lookup_bits: u4, table: huffman.HuffmanTable(286)) PngStreamingDynamicLiteralDecoder {
         return switch (lookup_bits) {
             9 => .{ .fast9 = huffman.FastDecoder(286, 9).init(table) },
-            12 => .{ .fast12 = huffman.FastDecoder(286, 12).init(table) },
             else => .{ .fast11 = huffman.FastDecoder(286, 11).init(table) },
         };
     }
@@ -5602,10 +5586,6 @@ const PngStreamingDynamicLiteralDecoder = union(enum) {
 
     inline fn decodeValue11(self: *const PngStreamingDynamicLiteralDecoder, reader: anytype) Error!u16 {
         return self.fast11.decodeValue(reader);
-    }
-
-    inline fn decodeValue12(self: *const PngStreamingDynamicLiteralDecoder, reader: anytype) Error!u16 {
-        return self.fast12.decodeValue(reader);
     }
 };
 
@@ -5621,7 +5601,6 @@ fn pngStreamingDynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
 inline fn readPngStreamingDynamicInflatedByte(self: anytype, comptime lit_lookup_bits: u4) Error!?u8 {
     const symbol = switch (lit_lookup_bits) {
         9 => try self.dynamic_lit.decodeValue9(&self.reader),
-        12 => try self.dynamic_lit.decodeValue12(&self.reader),
         else => try self.dynamic_lit.decodeValue11(&self.reader),
     };
     if (symbol < 256) return self.emitByte(@intCast(symbol));
@@ -5685,10 +5664,6 @@ fn readPngStreamingInflatedBytes(self: anytype, output: []u8) Error!void {
                 out_i += 1;
             },
             .dynamic11 => if (try readPngStreamingDynamicInflatedByte(self, 11)) |byte| {
-                output[out_i] = byte;
-                out_i += 1;
-            },
-            .dynamic12 => if (try readPngStreamingDynamicInflatedByte(self, 12)) |byte| {
                 output[out_i] = byte;
                 out_i += 1;
             },
@@ -5859,7 +5834,7 @@ pub const PngStreamingZlibScanlineDecoder = struct {
     last_error_name: []const u8 = "",
     last_recoverability_hint: ZlibDecoder.RecoverabilityHint = .none,
 
-    const BlockKind = enum { need_header, stored, fixed, dynamic9, dynamic11, dynamic12, done };
+    const BlockKind = enum { need_header, stored, fixed, dynamic9, dynamic11, done };
 
     pub const Snapshot = struct {
         row_len: usize,
@@ -6122,7 +6097,6 @@ pub const PngStreamingZlibScanlineDecoder = struct {
                 },
                 .dynamic9 => if (try readPngStreamingDynamicInflatedByte(self, 9)) |byte| return byte,
                 .dynamic11 => if (try readPngStreamingDynamicInflatedByte(self, 11)) |byte| return byte,
-                .dynamic12 => if (try readPngStreamingDynamicInflatedByte(self, 12)) |byte| return byte,
                 .done => return null,
             }
         }
@@ -6150,7 +6124,6 @@ pub const PngStreamingZlibScanlineDecoder = struct {
                 self.dynamic_dist = try makeDynamicDistanceDecoderFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
                 self.block_kind = switch (lit_lookup_bits) {
                     9 => .dynamic9,
-                    12 => .dynamic12,
                     else => .dynamic11,
                 };
             },
@@ -6275,7 +6248,7 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
     last_error_name: []const u8 = "",
     last_recoverability_hint: ZlibDecoder.RecoverabilityHint = .none,
 
-    const BlockKind = enum { need_header, stored, fixed, dynamic9, dynamic11, dynamic12, done };
+    const BlockKind = enum { need_header, stored, fixed, dynamic9, dynamic11, done };
 
     pub const Snapshot = struct {
         row_len: usize,
@@ -6541,7 +6514,6 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
                 },
                 .dynamic9 => if (try readPngStreamingDynamicInflatedByte(self, 9)) |byte| return byte,
                 .dynamic11 => if (try readPngStreamingDynamicInflatedByte(self, 11)) |byte| return byte,
-                .dynamic12 => if (try readPngStreamingDynamicInflatedByte(self, 12)) |byte| return byte,
                 .done => return null,
             }
         }
@@ -6569,7 +6541,6 @@ pub const PngStreamingZlibChunkedScanlineDecoder = struct {
                 self.dynamic_dist = try makeDynamicDistanceDecoderFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
                 self.block_kind = switch (lit_lookup_bits) {
                     9 => .dynamic9,
-                    12 => .dynamic12,
                     else => .dynamic11,
                 };
             },
