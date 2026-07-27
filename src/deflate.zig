@@ -8318,6 +8318,136 @@ pub fn decodePngZlibImageWithOptions(
     return drainPngZlibImage(&decoder, output[0..output_len]);
 }
 
+const max_png_reconstruct_workers = 8;
+
+const PngReconstructWorker = struct {
+    inflated: []const u8,
+    output: []u8,
+    info: PngImageInfo,
+    row_start: usize,
+    row_end: usize,
+    err: ?Error = null,
+
+    fn run(self: *PngReconstructWorker) void {
+        self.runInner() catch |err| {
+            self.err = err;
+        };
+    }
+
+    fn runInner(self: *PngReconstructWorker) Error!void {
+        const stride = self.info.row_len + 1;
+        for (self.row_start..self.row_end) |row_index| {
+            const inflated_offset = row_index * stride;
+            const output_offset = row_index * self.info.row_len;
+            const filter = self.inflated[inflated_offset];
+            const filtered = self.inflated[inflated_offset + 1 ..][0..self.info.row_len];
+            const row = self.output[output_offset..][0..self.info.row_len];
+            const previous = if (row_index == self.row_start)
+                null
+            else
+                self.output[output_offset - self.info.row_len ..][0..self.info.row_len];
+            _ = try reconstructPngScanline(filter, filtered, previous, self.info.bytes_per_pixel, row);
+        }
+    }
+};
+
+/// Inflate a PNG zlib payload once, then reconstruct independent row-dependency
+/// segments in parallel.
+///
+/// PNG filters None and Sub do not reference the previous row, so either one
+/// begins a dependency segment that can be reconstructed independently. Up,
+/// Average, and Paeth rows remain serial within their segment. If the image has
+/// no useful split points, or thread creation fails, this helper transparently
+/// executes the same scalar reconstruction without changing the result.
+pub fn decodePngZlibImageParallelWithOptions(
+    input: []const u8,
+    zlib_scratch: []u8,
+    info: PngImageInfo,
+    options: ZlibDecodeOptions,
+    max_workers: usize,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    const output_len = try pngImageOutputLen(info);
+    if (output.len < output_len) return error.OutputTooSmall;
+    const zlib = try ZlibDecoder.initWithOptionsExactSize(input, zlib_scratch, options, info.zlib_payload_len);
+    const inflated = zlib.decoded;
+    const image_output = output[0..output_len];
+
+    var requested_workers = @min(max_workers, max_png_reconstruct_workers);
+    requested_workers = @min(requested_workers, std.Thread.getCpuCount() catch 1);
+    requested_workers = @min(requested_workers, info.height);
+    if (requested_workers == 0) requested_workers = 1;
+
+    const stride = info.row_len + 1;
+    var cuts: [max_png_reconstruct_workers + 1]usize = @splat(info.height);
+    cuts[0] = 0;
+    var cut_count: usize = 1;
+    var split_index: usize = 1;
+    while (split_index < requested_workers) : (split_index += 1) {
+        const target = info.height * split_index / requested_workers;
+        var row = @max(target, cuts[cut_count - 1] + 1);
+        while (row < info.height) : (row += 1) {
+            const filter = inflated[row * stride];
+            if (filter > @intFromEnum(PngFilterMethod.paeth)) return error.CorruptFrame;
+            if (filter == @intFromEnum(PngFilterMethod.none) or
+                filter == @intFromEnum(PngFilterMethod.sub))
+            {
+                cuts[cut_count] = row;
+                cut_count += 1;
+                break;
+            }
+        }
+    }
+    cuts[cut_count] = info.height;
+
+    // Validate filters not visited while searching for cuts before any worker
+    // starts mutating output. This preserves deterministic corruption errors.
+    for (0..info.height) |row| {
+        if (inflated[row * stride] > @intFromEnum(PngFilterMethod.paeth)) return error.CorruptFrame;
+    }
+
+    var workers: [max_png_reconstruct_workers]PngReconstructWorker = undefined;
+    for (0..cut_count) |worker_index| {
+        workers[worker_index] = .{
+            .inflated = inflated,
+            .output = image_output,
+            .info = info,
+            .row_start = cuts[worker_index],
+            .row_end = cuts[worker_index + 1],
+        };
+    }
+
+    if (cut_count == 1) {
+        workers[0].run();
+    } else {
+        var threads: [max_png_reconstruct_workers - 1]std.Thread = undefined;
+        var spawned: usize = 0;
+        var worker_index: usize = 1;
+        while (worker_index < cut_count) : (worker_index += 1) {
+            threads[spawned] = std.Thread.spawn(.{}, PngReconstructWorker.run, .{&workers[worker_index]}) catch {
+                for (threads[0..spawned]) |thread| thread.join();
+                // Re-running completed segments is harmless and gives resource-
+                // constrained targets the same scalar result.
+                for (workers[0..cut_count]) |*worker| worker.run();
+                spawned = 0;
+                break;
+            };
+            spawned += 1;
+        }
+        if (spawned != 0) {
+            workers[0].run();
+            for (threads[0..spawned]) |thread| thread.join();
+        }
+    }
+    for (workers[0..cut_count]) |worker| if (worker.err) |err| return err;
+
+    return .{
+        .rows = info.height,
+        .output_written = output_len,
+        .zlib_input_read = input.len,
+    };
+}
+
 /// Decode an all-filter-None, dynamic-Huffman PNG zlib stream directly into
 /// compact image storage.
 ///
@@ -8492,6 +8622,66 @@ test "png filter0 dynamic direct decode matches general reconstruction and rejec
         error.UnsupportedDeflateFeature,
         decodePngFilter0DynamicZlibImageWithOptions(fixed, info, .{}, &actual),
     );
+}
+
+test "png parallel reconstruction matches scalar mixed filters" {
+    const row_len = 96;
+    const row_count = 32;
+    const bpp = 3;
+    const info = try pngImageInfo(row_len / bpp, row_count, 8, .truecolor);
+    var rows: [row_count][row_len]u8 = undefined;
+    var filtered_payload: [row_count * (row_len + 1)]u8 = undefined;
+    for (0..row_count) |row_index| {
+        for (0..row_len) |column| {
+            rows[row_index][column] = @truncate(row_index * 29 + column * 13 + (column / 3) * 7);
+        }
+        // Put independent None/Sub rows near worker boundaries while retaining
+        // Up/Average/Paeth chains inside each segment.
+        const filter: u8 = switch (row_index % 8) {
+            0 => 0,
+            4 => 1,
+            else => @intCast(2 + row_index % 3),
+        };
+        const offset = row_index * (row_len + 1);
+        filtered_payload[offset] = filter;
+        filterPngScanlineForTest(
+            filter,
+            &rows[row_index],
+            if (row_index == 0) null else &rows[row_index - 1],
+            bpp,
+            filtered_payload[offset + 1 ..][0..row_len],
+        );
+    }
+    const encoded = try encodeZlibDynamicWithOptionsAlloc(std.testing.allocator, &filtered_payload, optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+
+    var scalar_output: [row_count * row_len]u8 = undefined;
+    var scalar_scratch: [filtered_payload.len]u8 = undefined;
+    var filtered_row: [row_len]u8 = undefined;
+    var previous_row: [row_len]u8 = undefined;
+    _ = try decodePngZlibImageWithOptions(
+        encoded,
+        &scalar_scratch,
+        &filtered_row,
+        &previous_row,
+        info,
+        .{},
+        &scalar_output,
+    );
+
+    var parallel_output: [row_count * row_len]u8 = undefined;
+    var parallel_scratch: [filtered_payload.len]u8 = undefined;
+    const result = try decodePngZlibImageParallelWithOptions(
+        encoded,
+        &parallel_scratch,
+        info,
+        .{},
+        4,
+        &parallel_output,
+    );
+    try std.testing.expectEqual(row_count, result.rows);
+    try std.testing.expectEqual(parallel_output.len, result.output_written);
+    try std.testing.expectEqualSlices(u8, &scalar_output, &parallel_output);
 }
 
 fn drainPngStreamingZlibImage(decoder: *PngStreamingZlibScanlineDecoder, output: []u8) Error!PngImageDecodeResult {
