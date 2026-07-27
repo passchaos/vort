@@ -5677,6 +5677,7 @@ fn readPngStreamingFixedInflatedBytes(self: anytype, output: []u8) Error!usize {
         const distance_symbol = try huffman.decodeFixedDistanceValueFast(&self.reader);
         const distance = try decodeDistance(distance_symbol, &self.reader);
         try self.startPendingMatch(length, distance);
+        out_i += try copyPngStreamingPendingMatch(self, output[out_i..]);
         return out_i;
     }
     if (out_i != 0) self.recordInflatedBytes(output[0..out_i]);
@@ -5712,6 +5713,7 @@ fn readPngStreamingDynamicInflatedBytes(self: anytype, output: []u8, comptime li
         const distance_symbol = try self.dynamic_dist.decodeValue(&self.reader);
         const distance = try decodeDistance(distance_symbol, &self.reader);
         try self.startPendingMatch(length, distance);
+        out_i += try copyPngStreamingPendingMatch(self, output[out_i..]);
         return out_i;
     }
     if (out_i != 0) self.recordInflatedBytes(output[0..out_i]);
