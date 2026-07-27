@@ -5753,10 +5753,11 @@ fn copyPngStreamingPendingMatch(self: anytype, output: []u8) Error!usize {
 
 fn copyPngStreamingHistoryBytes(self: anytype, distance: usize, dest: []u8) Error!void {
     if (distance == 0 or distance > self.history_len) return error.InvalidMatch;
-    var src = (self.history_pos + self.history.len - distance) % self.history.len;
+    const history_len = self.history.len;
+    var src = wrapAddPowerOfTwo(self.history_pos, history_len - distance, history_len);
     var dest_i: usize = 0;
     while (dest_i < dest.len) {
-        const n = @min(dest.len - dest_i, self.history.len - src);
+        const n = @min(dest.len - dest_i, history_len - src);
         @memcpy(dest[dest_i..][0..n], self.history[src..][0..n]);
         dest_i += n;
         src = 0;
@@ -5773,10 +5774,11 @@ fn copyPngStreamingOverlappingHistoryBytes(self: anytype, distance: usize, dest:
     // rolling history after the full row span is safe because the destination
     // prefix already contains the bytes that byte-at-a-time DEFLATE replay would
     // have observed.
-    var src = (self.history_pos + self.history.len - distance) % self.history.len;
+    const history_len = self.history.len;
+    var src = wrapAddPowerOfTwo(self.history_pos, history_len - distance, history_len);
     var copied: usize = 0;
     while (copied < distance) {
-        const n = @min(distance - copied, self.history.len - src);
+        const n = @min(distance - copied, history_len - src);
         @memcpy(dest[copied..][0..n], self.history[src..][0..n]);
         copied += n;
         src = 0;
