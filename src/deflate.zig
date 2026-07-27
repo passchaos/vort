@@ -1520,6 +1520,133 @@ const DynamicDistanceDecoder = union(enum) {
     }
 };
 
+/// PNG-oriented dynamic literal/length table for the contiguous caller-buffer
+/// inflater. The generic Huffman decoder remains the scalar/reference path for
+/// long codes, chunked readers, dictionaries, and output tails.
+///
+/// A primary entry classifies the symbol and carries all metadata needed by the
+/// hot loop. Literal entries may contain two adjacent literals when both codes
+/// fit in the same 12-bit lookahead. This mirrors the useful part of
+/// fdeflate's table shape without changing Vort's public decoder contracts.
+const FusedDynamicLiteralDecoder = struct {
+    const lookup_bits: u4 = 12;
+    const lookup_len = @as(usize, 1) << lookup_bits;
+    const lookup_mask: u64 = lookup_len - 1;
+    const bits_mask: u32 = 0x0f;
+    const kind_mask: u32 = 0x30;
+    const invalid: u32 = 0x00;
+    const literal: u32 = 0x10;
+    const length: u32 = 0x20;
+    const end_of_block: u32 = 0x30;
+    const double_literal: u32 = 0x40;
+    const extra_bits_shift = 8;
+    const value_shift = 16;
+    const second_literal_shift = 24;
+
+    table: *const huffman.HuffmanTable(286),
+    lookup: [lookup_len]u32 = undefined,
+
+    const Self = @This();
+
+    fn init(table: *const huffman.HuffmanTable(286)) Self {
+        var decoder = Self{ .table = table };
+        // A complete tree whose longest code fits the primary lookup assigns
+        // every slot below. Avoid clearing 16 KiB for that overwhelmingly
+        // common dynamic-PNG shape; Lohengrin contains 571 unique blocks, so
+        // the otherwise redundant memset is visible in end-to-end profiles.
+        if (!primaryLookupIsComplete(table)) {
+            @memset(&decoder.lookup, invalid);
+        }
+
+        for (table.entries[0..table.len]) |entry| {
+            if (entry.bits > lookup_bits) continue;
+            const semantic = semanticEntry(entry.symbol, entry.bits);
+            const fill = @as(usize, 1) << @intCast(lookup_bits - entry.bits);
+            var i: usize = 0;
+            while (i < fill) : (i += 1) {
+                const index = entry.code | (i << entry.bits);
+                decoder.lookup[index] = semantic;
+            }
+        }
+
+        // Rewrite from high indexes to low indexes. The second-code lookup is
+        // `index >> first_bits`, which is always lower than `index` except for
+        // zero itself. Descending order therefore keeps that second slot in its
+        // original single-symbol form without a separate 8 KiB shadow table.
+        var index: usize = decoder.lookup.len;
+        while (index != 0) {
+            index -= 1;
+            const first = decoder.lookup[index];
+            if (entryKind(first) != literal or hasSecondLiteral(first)) continue;
+            const first_bits = entryBits(first);
+            const second = decoder.lookup[index >> @intCast(first_bits)];
+            if (entryKind(second) != literal or hasSecondLiteral(second)) continue;
+
+            const total_bits: u8 = @as(u8, first_bits) + @as(u8, entryBits(second));
+            if (total_bits > lookup_bits) continue;
+            decoder.lookup[index] = literal |
+                double_literal |
+                @as(u32, total_bits) |
+                (first & (@as(u32, 0xff) << value_shift)) |
+                (@as(u32, second >> value_shift) << second_literal_shift);
+        }
+        return decoder;
+    }
+
+    fn primaryLookupIsComplete(table: *const huffman.HuffmanTable(286)) bool {
+        if (table.max_bits > lookup_bits) return false;
+        var covered: usize = 0;
+        var bits: u4 = 1;
+        while (bits <= table.max_bits) : (bits += 1) {
+            covered += @as(usize, table.count_by_bits[bits]) << @intCast(lookup_bits - bits);
+        }
+        return covered == lookup_len;
+    }
+
+    inline fn semanticEntry(symbol: u16, bits: u4) u32 {
+        if (symbol < 256) {
+            return literal | @as(u32, bits) | (@as(u32, symbol) << value_shift);
+        }
+        if (symbol == 256) return end_of_block | @as(u32, bits);
+        if (symbol <= 285) {
+            const metadata = length_table[symbol - 257];
+            return length |
+                @as(u32, bits) |
+                (@as(u32, metadata.extra_bits) << extra_bits_shift) |
+                (@as(u32, metadata.base) << value_shift);
+        }
+        return invalid;
+    }
+
+    inline fn entryBits(entry: u32) u6 {
+        return @truncate(entry & bits_mask);
+    }
+
+    inline fn entryKind(entry: u32) u32 {
+        return entry & kind_mask;
+    }
+
+    inline fn hasSecondLiteral(entry: u32) bool {
+        return (entry & double_literal) != 0;
+    }
+
+    inline fn firstLiteral(entry: u32) u8 {
+        return @truncate(entry >> value_shift);
+    }
+
+    inline fn secondLiteral(entry: u32) u8 {
+        return @truncate(entry >> second_literal_shift);
+    }
+
+    inline fn lengthBase(entry: u32) usize {
+        return @intCast(entry >> value_shift);
+    }
+
+    inline fn lengthExtraBits(entry: u32) u6 {
+        return @truncate(entry >> extra_bits_shift);
+    }
+};
+
 fn dynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
     if (parsed.literal_max_bits <= 9) return 9;
     // A 12-bit literal table avoids a handful of cold-symbol fallback scans, but
@@ -2242,6 +2369,10 @@ pub fn decodeRawChunksWithDictionary(chunks: []const []const u8, compressed_scra
 }
 
 fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize, dictionary: []const u8, output: []u8) Error!DecodeResult {
+    const Reader = switch (@typeInfo(@TypeOf(reader))) {
+        .pointer => |pointer| pointer.child,
+        else => @TypeOf(reader),
+    };
     var out_offset: usize = 0;
     while (true) {
         const header = try readBlockHeader(reader);
@@ -2256,6 +2387,14 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
                 if (lit_lookup_bits == 9) {
                     const lit_decoder = huffman.FastDecoder(286, 9).init(lit_table);
                     try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
+                } else if (comptime Reader == bitstream.BufferedBitReader) {
+                    if (dictionary.len == 0) {
+                        const lit_decoder = FusedDynamicLiteralDecoder.init(&lit_table);
+                        try decodeFusedDynamicBlockIntoBufferedReader(reader, output, &out_offset, &lit_decoder, &dist_decoder);
+                    } else {
+                        const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
+                        try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
+                    }
                 } else {
                     const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
                     try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
@@ -2809,6 +2948,190 @@ fn decodeCompressedBlockIntoReaderNoDict(
         } else {
             return error.InvalidHuffmanCode;
         }
+    }
+}
+
+fn decodeFusedDynamicBlockIntoBufferedReader(
+    reader: *bitstream.BufferedBitReader,
+    output: []u8,
+    out_offset: *usize,
+    lit_decoder: *const FusedDynamicLiteralDecoder,
+    dist_decoder: *const DynamicDistanceDecoder,
+) Error!void {
+    const input = reader.input;
+    var bit_buffer = reader.bit_buffer;
+    var bit_count = reader.bit_count;
+    var byte_index = reader.byte_index;
+    var consumed_bits = reader.consumed_bits;
+    var out_pos = out_offset.*;
+
+    while (out_pos + 6 <= output.len) {
+        // Three 12-bit primary entries require at most 36 staged bits and can
+        // retire six literal bytes. Asking for 48 bits amortizes reservoir
+        // refill while leaving room for the next length/distance metadata read.
+        if (bit_count < 48 and byte_index < input.len) {
+            if (bit_count <= 55 and input.len - byte_index >= 8) {
+                const bytes_to_stage = (63 - bit_count) / 8;
+                bit_buffer |= std.mem.readInt(u64, input[byte_index..][0..8], .little) << @intCast(bit_count);
+                bit_count += bytes_to_stage * 8;
+                byte_index += bytes_to_stage;
+            }
+            while (bit_count < 48 and byte_index < input.len and bit_count <= 56) {
+                bit_buffer |= @as(u64, input[byte_index]) << @intCast(bit_count);
+                bit_count += 8;
+                byte_index += 1;
+            }
+        }
+        if (bit_count < 36) break;
+
+        const entry1 = lit_decoder.lookup[@intCast(bit_buffer & FusedDynamicLiteralDecoder.lookup_mask)];
+        if (FusedDynamicLiteralDecoder.entryKind(entry1) != FusedDynamicLiteralDecoder.literal) {
+            storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+            out_offset.* = out_pos;
+            if (try decodeFusedDynamicNonLiteral(reader, output, out_offset, lit_decoder, dist_decoder, entry1)) return;
+            bit_buffer = reader.bit_buffer;
+            bit_count = reader.bit_count;
+            byte_index = reader.byte_index;
+            consumed_bits = reader.consumed_bits;
+            out_pos = out_offset.*;
+            continue;
+        }
+        emitFusedLiteralAt(output, &out_pos, entry1);
+        const bits1 = FusedDynamicLiteralDecoder.entryBits(entry1);
+
+        const entry2 = lit_decoder.lookup[@intCast((bit_buffer >> @intCast(bits1)) & FusedDynamicLiteralDecoder.lookup_mask)];
+        if (FusedDynamicLiteralDecoder.entryKind(entry2) != FusedDynamicLiteralDecoder.literal) {
+            bit_buffer >>= @intCast(bits1);
+            bit_count -= bits1;
+            consumed_bits += bits1;
+            storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+            out_offset.* = out_pos;
+            if (try decodeFusedDynamicNonLiteral(reader, output, out_offset, lit_decoder, dist_decoder, entry2)) return;
+            bit_buffer = reader.bit_buffer;
+            bit_count = reader.bit_count;
+            byte_index = reader.byte_index;
+            consumed_bits = reader.consumed_bits;
+            out_pos = out_offset.*;
+            continue;
+        }
+        emitFusedLiteralAt(output, &out_pos, entry2);
+        const bits2 = FusedDynamicLiteralDecoder.entryBits(entry2);
+        const bits12: u6 = bits1 + bits2;
+
+        const entry3 = lit_decoder.lookup[@intCast((bit_buffer >> @intCast(bits12)) & FusedDynamicLiteralDecoder.lookup_mask)];
+        if (FusedDynamicLiteralDecoder.entryKind(entry3) != FusedDynamicLiteralDecoder.literal) {
+            bit_buffer >>= @intCast(bits12);
+            bit_count -= bits12;
+            consumed_bits += bits12;
+            storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+            out_offset.* = out_pos;
+            if (try decodeFusedDynamicNonLiteral(reader, output, out_offset, lit_decoder, dist_decoder, entry3)) return;
+            bit_buffer = reader.bit_buffer;
+            bit_count = reader.bit_count;
+            byte_index = reader.byte_index;
+            consumed_bits = reader.consumed_bits;
+            out_pos = out_offset.*;
+            continue;
+        }
+        emitFusedLiteralAt(output, &out_pos, entry3);
+        const consumed: u6 = bits12 + FusedDynamicLiteralDecoder.entryBits(entry3);
+        bit_buffer >>= @intCast(consumed);
+        bit_count -= consumed;
+        consumed_bits += consumed;
+    }
+
+    // The fused loop deliberately requires six bytes of output headroom.
+    // Preserve exact OutputTooSmall/truncation behavior at the final boundary
+    // by decoding the small tail through the scalar table.
+    storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+    out_offset.* = out_pos;
+    while (true) {
+        const symbol = try lit_decoder.table.decodeValue(reader);
+        if (symbol < 256) {
+            if (out_offset.* == output.len) return error.OutputTooSmall;
+            output[out_offset.*] = @intCast(symbol);
+            out_offset.* += 1;
+        } else if (symbol == 256) {
+            return;
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, reader);
+            const distance_symbol = try dist_decoder.decodeValue(reader);
+            const distance = try decodeDistance(distance_symbol, reader);
+            try copyMatchAt(output, out_offset.*, length, distance);
+            out_offset.* += length;
+        } else {
+            return error.InvalidHuffmanCode;
+        }
+    }
+}
+
+inline fn storeFusedReaderState(
+    reader: *bitstream.BufferedBitReader,
+    bit_buffer: u64,
+    bit_count: usize,
+    byte_index: usize,
+    consumed_bits: usize,
+) void {
+    reader.bit_buffer = bit_buffer;
+    reader.bit_count = bit_count;
+    reader.byte_index = byte_index;
+    reader.consumed_bits = consumed_bits;
+}
+
+inline fn emitFusedLiteralAt(output: []u8, out_pos: *usize, entry: u32) void {
+    // The fused loop has six bytes of destination headroom. Always store both
+    // lanes and advance by one or two without a data-dependent branch; a
+    // single-literal entry's second byte is harmless scratch that the next
+    // decoded symbol overwrites.
+    output[out_pos.*] = FusedDynamicLiteralDecoder.firstLiteral(entry);
+    output[out_pos.* + 1] = FusedDynamicLiteralDecoder.secondLiteral(entry);
+    out_pos.* += @as(usize, 1) + @intFromBool(FusedDynamicLiteralDecoder.hasSecondLiteral(entry));
+}
+
+fn decodeFusedDynamicNonLiteral(
+    reader: *bitstream.BufferedBitReader,
+    output: []u8,
+    out_offset: *usize,
+    lit_decoder: *const FusedDynamicLiteralDecoder,
+    dist_decoder: *const DynamicDistanceDecoder,
+    entry: u32,
+) Error!bool {
+    switch (FusedDynamicLiteralDecoder.entryKind(entry)) {
+        FusedDynamicLiteralDecoder.length => {
+            reader.advanceBitsStagedAssumeAvailable(FusedDynamicLiteralDecoder.entryBits(entry));
+            const length = FusedDynamicLiteralDecoder.lengthBase(entry) +
+                try readDeflateExtraBits(reader, FusedDynamicLiteralDecoder.lengthExtraBits(entry));
+            const distance_symbol = try dist_decoder.decodeValue(reader);
+            const distance = try decodeDistance(distance_symbol, reader);
+            try copyMatchAt(output, out_offset.*, length, distance);
+            out_offset.* += length;
+            return false;
+        },
+        FusedDynamicLiteralDecoder.end_of_block => {
+            reader.advanceBitsStagedAssumeAvailable(FusedDynamicLiteralDecoder.entryBits(entry));
+            return true;
+        },
+        else => {
+            // A zero primary entry is a valid prefix only for a code longer
+            // than 12 bits (or malformed input). Decode it with the compact
+            // reference table from the already-synchronized reader.
+            const symbol = try lit_decoder.table.decodeValue(reader);
+            if (symbol < 256) {
+                output[out_offset.*] = @intCast(symbol);
+                out_offset.* += 1;
+            } else if (symbol == 256) {
+                return true;
+            } else if (symbol <= 285) {
+                const length = try decodeLength(symbol, reader);
+                const distance_symbol = try dist_decoder.decodeValue(reader);
+                const distance = try decodeDistance(distance_symbol, reader);
+                try copyMatchAt(output, out_offset.*, length, distance);
+                out_offset.* += length;
+            } else {
+                return error.InvalidHuffmanCode;
+            }
+            return false;
+        },
     }
 }
 

@@ -234,17 +234,19 @@ pub const BufferedBitReader = struct {
         std.debug.assert(requested_bits <= 63);
         if (self.bit_count >= requested_bits or self.byte_index >= self.input.len) return;
 
-        // Huffman-heavy DEFLATE decode asks for 9-12 bits for almost every
-        // symbol. Stage a modest word-sized reservoir when possible instead of
-        // adding one byte per lookup; byteOffset()/consumed_bits still report
-        // only actually consumed bits, so staging ahead remains invisible to
-        // zlib footer and stored-block boundary accounting.
-        const target_bits: usize = @max(requested_bits, 32);
-        if (self.bit_count < target_bits and self.bit_count <= 32 and self.input.len - self.byte_index >= 4) {
-            const word = std.mem.readInt(u32, self.input[self.byte_index..][0..4], .little);
-            self.bit_buffer |= @as(u64, word) << @intCast(self.bit_count);
-            self.bit_count += 32;
-            self.byte_index += 4;
+        // Fill the reservoir with one unaligned word load, but advance only by
+        // the whole bytes that fit below bit 63. Bytes loaded into the truncated
+        // high end are intentionally not counted or consumed and will be
+        // reloaded by the next fill. This is the same invariant used by
+        // fdeflate: one load restores 56..63 valid staged bits without hidden
+        // over-consumption, which makes literal-heavy decode substantially less
+        // refill-bound than the previous u32/byte-at-a-time policy.
+        if (self.bit_count <= 55 and self.input.len - self.byte_index >= 8) {
+            const bytes_to_stage = (63 - self.bit_count) / 8;
+            const word = std.mem.readInt(u64, self.input[self.byte_index..][0..8], .little);
+            self.bit_buffer |= word << @intCast(self.bit_count);
+            self.bit_count += bytes_to_stage * 8;
+            self.byte_index += bytes_to_stage;
         }
         while (self.bit_count < requested_bits and self.byte_index < self.input.len and self.bit_count <= 56) {
             self.bit_buffer |= @as(u64, self.input[self.byte_index]) << @intCast(self.bit_count);
@@ -750,19 +752,19 @@ test "buffered bit reader word prefetch preserves logical offsets and tail reads
     var scalar = BitReader.init(&input);
     var buffered = BufferedBitReader.init(&input);
 
-    // A 12-bit Huffman-style peek stages a full word but must remain invisible
+    // A 12-bit Huffman-style peek stages seven bytes but must remain invisible
     // through the public consumed-bit and byte-offset accounting.
     try std.testing.expectEqual(
         scalar.peekBitsPadded(u16, 12),
         buffered.peekBitsPadded(u16, 12),
     );
-    try std.testing.expectEqual(@as(usize, 4), buffered.byte_index);
-    try std.testing.expectEqual(@as(usize, 32), buffered.bit_count);
+    try std.testing.expectEqual(@as(usize, 7), buffered.byte_index);
+    try std.testing.expectEqual(@as(usize, 56), buffered.bit_count);
     try std.testing.expectEqual(@as(usize, 0), buffered.bitPosition());
     try std.testing.expectEqual(@as(usize, 0), buffered.byteOffset());
 
-    // Cross the first prefetched word, trigger another word refill, and finish
-    // through the byte-at-a-time tail where fewer than four source bytes remain.
+    // Cross the first prefetched word and finish through the byte-at-a-time
+    // tail where fewer than eight source bytes remain.
     inline for (.{ 12, 11, 13, 9, 15, 8 }) |count| {
         try std.testing.expectEqual(
             try scalar.readBits(u16, count),
@@ -781,7 +783,7 @@ test "buffered bit reader aligned reads discard prefetched bytes without skippin
     var reader = BufferedBitReader.init(&input);
 
     try std.testing.expectEqual(@as(u5, 0b01101), try reader.readBits(u5, 5));
-    try std.testing.expectEqual(@as(usize, 4), reader.byte_index);
+    try std.testing.expectEqual(@as(usize, 1), reader.byte_index);
     reader.alignToByte();
     try std.testing.expectEqual(@as(usize, 1), reader.byteOffset());
 
