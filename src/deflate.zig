@@ -5643,33 +5643,76 @@ fn readPngStreamingInflatedBytes(self: anytype, output: []u8) Error!void {
                 if (self.stored_remaining == 0) self.finishCurrentBlock();
             },
             .fixed => {
-                const symbol = try huffman.decodeFixedLiteralValueFast(&self.reader);
-                if (symbol < 256) {
-                    output[out_i] = self.emitByte(@intCast(symbol));
-                    out_i += 1;
-                    continue;
-                }
-                if (symbol == 256) {
-                    self.finishCurrentBlock();
-                    continue;
-                }
-                if (symbol > 285) return error.InvalidHuffmanCode;
-                const length = try decodeLength(symbol, &self.reader);
-                const distance_symbol = try huffman.decodeFixedDistanceValueFast(&self.reader);
-                const distance = try decodeDistance(distance_symbol, &self.reader);
-                try self.startPendingMatch(length, distance);
+                out_i += try readPngStreamingFixedInflatedBytes(self, output[out_i..]);
             },
-            .dynamic9 => if (try readPngStreamingDynamicInflatedByte(self, 9)) |byte| {
-                output[out_i] = byte;
-                out_i += 1;
-            },
-            .dynamic11 => if (try readPngStreamingDynamicInflatedByte(self, 11)) |byte| {
-                output[out_i] = byte;
-                out_i += 1;
-            },
+            .dynamic9 => out_i += try readPngStreamingDynamicInflatedBytes(self, output[out_i..], 9),
+            .dynamic11 => out_i += try readPngStreamingDynamicInflatedBytes(self, output[out_i..], 11),
             .done => return error.SizeMismatch,
         }
     }
+}
+
+fn readPngStreamingFixedInflatedBytes(self: anytype, output: []u8) Error!usize {
+    var out_i: usize = 0;
+    while (out_i < output.len) {
+        const symbol = try huffman.decodeFixedLiteralValueFast(&self.reader);
+        if (symbol < 256) {
+            output[out_i] = @intCast(symbol);
+            out_i += 1;
+            continue;
+        }
+
+        // Literal-heavy PNG streams otherwise update Adler/history one byte at
+        // a time. A length/end marker is the first point where the already
+        // decoded literal run must become visible to DEFLATE history, so flush
+        // the run in one batch before handling that marker.
+        if (out_i != 0) self.recordInflatedBytes(output[0..out_i]);
+        if (symbol == 256) {
+            self.finishCurrentBlock();
+            return out_i;
+        }
+        if (symbol > 285) return error.InvalidHuffmanCode;
+        const length = try decodeLength(symbol, &self.reader);
+        const distance_symbol = try huffman.decodeFixedDistanceValueFast(&self.reader);
+        const distance = try decodeDistance(distance_symbol, &self.reader);
+        try self.startPendingMatch(length, distance);
+        return out_i;
+    }
+    if (out_i != 0) self.recordInflatedBytes(output[0..out_i]);
+    return out_i;
+}
+
+fn readPngStreamingDynamicInflatedBytes(self: anytype, output: []u8, comptime lit_lookup_bits: u4) Error!usize {
+    var out_i: usize = 0;
+    while (out_i < output.len) {
+        const symbol = switch (lit_lookup_bits) {
+            9 => try self.dynamic_lit.decodeValue9(&self.reader),
+            else => try self.dynamic_lit.decodeValue11(&self.reader),
+        };
+        if (symbol < 256) {
+            output[out_i] = @intCast(symbol);
+            out_i += 1;
+            continue;
+        }
+
+        // Dynamic PNG IDAT blocks are often literal dominated (notably the
+        // Lohengrin priority fixture). Batch the literal run into Adler/history
+        // once; this keeps later match distances correct without paying the
+        // per-byte `emitByte` overhead for every literal.
+        if (out_i != 0) self.recordInflatedBytes(output[0..out_i]);
+        if (symbol == 256) {
+            self.finishCurrentBlock();
+            return out_i;
+        }
+        if (symbol > 285) return error.InvalidHuffmanCode;
+        const length = try decodeLength(symbol, &self.reader);
+        const distance_symbol = try self.dynamic_dist.decodeValue(&self.reader);
+        const distance = try decodeDistance(distance_symbol, &self.reader);
+        try self.startPendingMatch(length, distance);
+        return out_i;
+    }
+    if (out_i != 0) self.recordInflatedBytes(output[0..out_i]);
+    return out_i;
 }
 
 fn copyPngStreamingPendingMatch(self: anytype, output: []u8) Error!usize {
