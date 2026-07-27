@@ -5645,8 +5645,55 @@ fn readPngStreamingInflatedBytes(self: anytype, output: []u8) Error!void {
             out_i += copied;
             continue;
         }
-        output[out_i] = (try self.readInflatedByteOrEnd()) orelse return error.SizeMismatch;
-        out_i += 1;
+
+        switch (self.block_kind) {
+            .need_header => {
+                try self.startNextBlock();
+            },
+            .stored => {
+                if (self.stored_remaining == 0) {
+                    self.finishCurrentBlock();
+                    continue;
+                }
+                const count = @min(output.len - out_i, self.stored_remaining);
+                const dest = output[out_i..][0..count];
+                try self.reader.readAlignedBytes(dest);
+                self.stored_remaining -= count;
+                self.recordInflatedBytes(dest);
+                out_i += count;
+                if (self.stored_remaining == 0) self.finishCurrentBlock();
+            },
+            .fixed => {
+                const symbol = try huffman.decodeFixedLiteralValueFast(&self.reader);
+                if (symbol < 256) {
+                    output[out_i] = self.emitByte(@intCast(symbol));
+                    out_i += 1;
+                    continue;
+                }
+                if (symbol == 256) {
+                    self.finishCurrentBlock();
+                    continue;
+                }
+                if (symbol > 285) return error.InvalidHuffmanCode;
+                const length = try decodeLength(symbol, &self.reader);
+                const distance_symbol = try huffman.decodeFixedDistanceValueFast(&self.reader);
+                const distance = try decodeDistance(distance_symbol, &self.reader);
+                try self.startPendingMatch(length, distance);
+            },
+            .dynamic9 => if (try readPngStreamingDynamicInflatedByte(self, 9)) |byte| {
+                output[out_i] = byte;
+                out_i += 1;
+            },
+            .dynamic11 => if (try readPngStreamingDynamicInflatedByte(self, 11)) |byte| {
+                output[out_i] = byte;
+                out_i += 1;
+            },
+            .dynamic12 => if (try readPngStreamingDynamicInflatedByte(self, 12)) |byte| {
+                output[out_i] = byte;
+                out_i += 1;
+            },
+            .done => return error.SizeMismatch,
+        }
     }
 }
 
