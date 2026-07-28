@@ -2333,7 +2333,9 @@ fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.Ar
     if (rleByte(block) != null) return false;
     const period = repeatedPatternPeriod(block) orelse return false;
     if (block.len <= period + 3) return false;
-    const match_len = block.len - period;
+    const tail_len = block.len % period;
+    const match_len = block.len - period - tail_len;
+    if (match_len < 3) return false;
 
     const literal_code = try sequenceCodeForValue(period, &ll_base, &ll_bits);
     const offset_code = try sequenceCodeForValue(period, &of_base, &of_bits);
@@ -2341,8 +2343,10 @@ fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.Ar
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    try emitLiteralsHeader(allocator, &payload, .raw, period);
+    const regenerated_literals = std.math.add(usize, period, tail_len) catch return error.IntegerOverflow;
+    try emitLiteralsHeader(allocator, &payload, .raw, regenerated_literals);
     try payload.appendSlice(allocator, block[0..period]);
+    try payload.appendSlice(allocator, block[block.len - tail_len ..]);
     try payload.append(allocator, 1); // one sequence.
     try payload.append(allocator, 0x54); // LL, OF, and ML use RLE_Mode.
     try payload.append(allocator, literal_code);
@@ -2399,7 +2403,6 @@ fn emitReverseBitstream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), f
 fn repeatedPatternPeriod(block: []const u8) ?usize {
     if (block.len < 8) return null;
     for (2..@min(block.len / 2, 8) + 1) |period| {
-        if (block.len % period != 0) continue;
         var i: usize = period;
         while (i < block.len and block[i] == block[i % period]) : (i += 1) {}
         if (i == block.len) return period;
@@ -3487,6 +3490,19 @@ test "zstd literal-only writer emits repeated-pattern sequence blocks" {
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
     try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer keeps repeated-pattern tail literals" {
+    const payload = ("abcd" ** 20) ++ "ab";
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
