@@ -113,10 +113,21 @@ pub const NativeFrameEncodeResult = struct {
 /// falling back to Zig std's streaming decoder for frames that cannot be bounded
 /// by the linked library.
 pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
+    return try decodeFrameAllocWithLimit(allocator, frame, null);
+}
+
+pub fn decodeFrameAllocLimited(allocator: std.mem.Allocator, frame: []const u8, max_output_len: usize) Error![]u8 {
+    return try decodeFrameAllocWithLimit(allocator, frame, max_output_len);
+}
+
+fn decodeFrameAllocWithLimit(allocator: std.mem.Allocator, frame: []const u8, max_output_len: ?usize) Error![]u8 {
     const content_size = ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
     if (content_size == zstd_content_size_error) return error.CorruptFrame;
     if (content_size != zstd_content_size_unknown) {
         const decoded_len = try checkedU64ToUsize(content_size);
+        if (max_output_len) |limit| {
+            if (decoded_len > limit) return error.OutputLimitExceeded;
+        }
         const out = try allocator.alloc(u8, decoded_len);
         errdefer allocator.free(out);
         const written = ZSTD_decompress(@ptrCast(out.ptr), out.len, @ptrCast(frame.ptr), frame.len);
@@ -127,15 +138,33 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
 
     const bound = ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
     if (bound != zstd_content_size_error) {
-        const capacity = try checkedU64ToUsize(bound);
+        const bound_capacity = try checkedU64ToUsize(bound);
+        const capacity = if (max_output_len) |limit| @min(bound_capacity, limit) else bound_capacity;
+        if (max_output_len) |limit| {
+            if (capacity > limit) return error.OutputLimitExceeded;
+        }
         const out = try allocator.alloc(u8, capacity);
         errdefer allocator.free(out);
         const written = ZSTD_decompress(@ptrCast(out.ptr), out.len, @ptrCast(frame.ptr), frame.len);
-        if (ZSTD_isError(written) != 0) return error.CorruptFrame;
+        if (ZSTD_isError(written) != 0) {
+            if (max_output_len != null and bound_capacity > capacity) return error.OutputLimitExceeded;
+            return error.CorruptFrame;
+        }
+        if (max_output_len) |limit| {
+            if (written > limit) return error.OutputLimitExceeded;
+        }
         if (allocator.remap(out, written)) |shrunk| return shrunk;
         const exact = try allocator.dupe(u8, out[0..written]);
         allocator.free(out);
         return exact;
+    }
+
+    if (max_output_len) |limit| {
+        const native = decodeRawOrRleFrameAllocLimited(allocator, frame, limit) catch |err| switch (err) {
+            error.UnsupportedZstdFeature => null,
+            else => return err,
+        };
+        if (native) |decoded| return decoded;
     }
 
     var input: std.Io.Reader = .fixed(frame);
@@ -144,9 +173,14 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
     errdefer output.deinit();
     _ = zstd_stream.reader.streamRemaining(&output.writer) catch return error.CorruptFrame;
     if (zstd_stream.err) |_| return error.CorruptFrame;
-    return output.toOwnedSlice() catch |err| switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
+    const decoded = output.toOwnedSlice() catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
     };
+    errdefer allocator.free(decoded);
+    if (max_output_len) |limit| {
+        if (decoded.len > limit) return error.OutputLimitExceeded;
+    }
+    return decoded;
 }
 
 /// Dependency-free Zstandard decoder for the raw/RLE frame subset emitted by
@@ -1759,6 +1793,24 @@ test "zstd lib encoder frame options omit content size" {
     const default_encoded = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, default_compression_level, .{});
     defer std.testing.allocator.free(default_encoded);
     try std.testing.expectEqual(@as(c_ulonglong, payload.len), ZSTD_getFrameContentSize(@ptrCast(default_encoded.ptr), default_encoded.len));
+}
+
+test "zstd lib decoder enforces allocation limits" {
+    const payload = "zstd limited decode payload" ** 8;
+
+    const known_size = try encodeFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(known_size);
+    const known_decoded = try decodeFrameAllocLimited(std.testing.allocator, known_size, payload.len);
+    defer std.testing.allocator.free(known_decoded);
+    try std.testing.expectEqualSlices(u8, payload, known_decoded);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeFrameAllocLimited(std.testing.allocator, known_size, payload.len - 1));
+
+    const no_size = try encodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{ .include_content_size = false });
+    defer std.testing.allocator.free(no_size);
+    const no_size_decoded = try decodeFrameAllocLimited(std.testing.allocator, no_size, payload.len);
+    defer std.testing.allocator.free(no_size_decoded);
+    try std.testing.expectEqualSlices(u8, payload, no_size_decoded);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeFrameAllocLimited(std.testing.allocator, no_size, payload.len - 1));
 }
 
 test "zstd raw/RLE frame writer round trips through std decompressor" {
