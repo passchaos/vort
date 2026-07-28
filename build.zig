@@ -9,11 +9,15 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    vort_mod.linkSystemLibrary("zstd", .{});
+    vort_mod.linkSystemLibrary("c", .{});
     const vort_mod_releasefast = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = .ReleaseFast,
     });
+    vort_mod_releasefast.linkSystemLibrary("zstd", .{});
+    vort_mod_releasefast.linkSystemLibrary("c", .{});
 
     const lib = b.addLibrary(.{
         .name = "vort",

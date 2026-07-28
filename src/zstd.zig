@@ -3,7 +3,14 @@ const core = @import("core.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
+pub const default_compression_level: c_int = 1;
+
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
+const min_rle_split_len = 12;
+
+extern fn ZSTD_compressBound(srcSize: usize) usize;
+extern fn ZSTD_compress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize, compressionLevel: c_int) usize;
+extern fn ZSTD_isError(code: usize) c_uint;
 
 /// Decode a Zstandard frame using Zig std's standards-compliant decoder.
 pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
@@ -18,12 +25,34 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
     };
 }
 
+/// Compress a complete Zstandard frame using the reference-compatible libzstd
+/// encoder linked by Vort's build. Keeping this call surface in Vort centralizes
+/// compression ownership for downstream formats such as MCAP while leaving room
+/// to replace the backend with a pure Zig implementation ported from
+/// `~/Work/zstd` internals later.
+pub fn encodeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return try encodeFrameWithLevelAlloc(allocator, input, default_compression_level);
+}
+
+pub fn encodeFrameWithLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: c_int) Error![]u8 {
+    const bound = ZSTD_compressBound(input.len);
+    if (ZSTD_isError(bound) != 0) return error.CorruptFrame;
+    var out = try allocator.alloc(u8, bound);
+    errdefer allocator.free(out);
+
+    const written = ZSTD_compress(@ptrCast(out.ptr), out.len, @ptrCast(input.ptr), input.len, level);
+    if (ZSTD_isError(written) != 0) return error.CorruptFrame;
+    if (allocator.remap(out, written)) |shrunk| return shrunk;
+    const exact = try allocator.dupe(u8, out[0..written]);
+    allocator.free(out);
+    return exact;
+}
+
 /// Emit a valid Zstandard frame composed of raw and RLE blocks.
 ///
-/// This keeps the encoder dependency-free while producing interoperable frames
-/// with content size and checksum. General entropy-coded sequence compression
-/// belongs behind this API in Vort and can be implemented from the reference
-/// material in ~/Work/zstd without changing MCAP callers.
+/// This dependency-free fallback remains useful for bootstrapping and for tiny
+/// repeated-byte payloads. General-purpose MCAP chunk writing uses
+/// `encodeFrameAlloc()` so it benefits from the full zstd entropy encoder.
 pub fn encodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -32,30 +61,23 @@ pub fn encodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, input: []const u8)
     var content_size: [8]u8 = undefined;
     std.mem.writeInt(u64, &content_size, try checkedUsizeToU64(input.len), .little);
     try out.appendSlice(allocator, &content_size);
-    var offset: usize = 0;
-    while (offset < input.len or input.len == 0) {
-        const remaining = input.len - offset;
-        const block_len = @min(remaining, std.compress.zstd.block_size_max);
-        const last = offset + block_len == input.len;
-        const block = input[offset..][0..block_len];
-        const rle_byte = rleByte(block);
-        const block_type: u32 = if (rle_byte == null) 0 else 1;
-        const header_value: u32 = (@as(u32, @intCast(block_len)) << 3) |
-            (block_type << 1) |
-            @as(u32, if (last) 1 else 0);
-        var header: [3]u8 = .{
-            @truncate(header_value),
-            @truncate(header_value >> 8),
-            @truncate(header_value >> 16),
-        };
-        try out.appendSlice(allocator, &header);
-        if (rle_byte) |byte| {
-            try out.append(allocator, byte);
-        } else {
-            try out.appendSlice(allocator, block);
+    if (input.len == 0) {
+        try emitBlock(allocator, &out, "", true);
+    } else {
+        var offset: usize = 0;
+        while (offset < input.len) {
+            const search_end = @min(input.len, offset + std.compress.zstd.block_size_max);
+            if (findRleRun(input[offset..search_end])) |run| {
+                const run_start = offset + run.start;
+                if (run_start > offset) try emitBlock(allocator, &out, input[offset..run_start], false);
+                const run_end = run_start + run.len;
+                try emitRleBlock(allocator, &out, input[run_start], run.len, run_end == input.len);
+                offset = run_end;
+            } else {
+                try emitBlock(allocator, &out, input[offset..search_end], search_end == input.len);
+                offset = search_end;
+            }
         }
-        offset += block_len;
-        if (last) break;
     }
     var checksum: [4]u8 = undefined;
     std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, input)), .little);
@@ -72,8 +94,68 @@ fn rleByte(block: []const u8) ?u8 {
     return first;
 }
 
+const RleRun = struct {
+    start: usize,
+    len: usize,
+};
+
+fn findRleRun(block: []const u8) ?RleRun {
+    var i: usize = 0;
+    while (i < block.len) {
+        const len = sameByteRunLen(block, i);
+        if (len >= min_rle_split_len) return .{ .start = i, .len = len };
+        i += @max(len, 1);
+    }
+    return null;
+}
+
+fn sameByteRunLen(block: []const u8, start: usize) usize {
+    const byte = block[start];
+    var end = start + 1;
+    while (end < block.len and block[end] == byte) : (end += 1) {}
+    return end - start;
+}
+
+fn emitBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
+    if (rleByte(block)) |byte| return try emitRleBlock(allocator, out, byte, block.len, last);
+    return try emitRawBlock(allocator, out, block, last);
+}
+
+fn emitRawBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
+    try emitBlockHeader(allocator, out, 0, block.len, last);
+    try out.appendSlice(allocator, block);
+}
+
+fn emitRleBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), byte: u8, len: usize, last: bool) Error!void {
+    try emitBlockHeader(allocator, out, 1, len, last);
+    try out.append(allocator, byte);
+}
+
+fn emitBlockHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block_type: u32, block_len: usize, last: bool) Error!void {
+    if (block_len > std.compress.zstd.block_size_max) return error.IntegerOverflow;
+    const header_value: u32 = (@as(u32, @intCast(block_len)) << 3) |
+        (block_type << 1) |
+        @as(u32, if (last) 1 else 0);
+    const header: [3]u8 = .{
+        @truncate(header_value),
+        @truncate(header_value >> 8),
+        @truncate(header_value >> 16),
+    };
+    try out.appendSlice(allocator, &header);
+}
+
 fn checkedUsizeToU64(value: usize) Error!u64 {
     return std.math.cast(u64, value) orelse error.IntegerOverflow;
+}
+
+test "zstd lib encoder round trips and compresses repeated payloads" {
+    const payload = "zstd payload zstd payload zstd payload zstd payload";
+    const encoded = try encodeFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
 }
 
 test "zstd raw/RLE frame writer round trips through std decompressor" {
