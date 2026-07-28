@@ -736,6 +736,7 @@ fn parseRawOrRleFrameHeader(frame: []const u8, offset: *usize) Error!RawOrRleFra
         else => 4,
     };
     if (frame.len - offset.* < dictionary_id_len) return error.TruncatedFrame;
+    if (dictionary_id_len != 0) return error.NeedDictionary;
     offset.* += dictionary_id_len;
 
     const content_size: ?u64 = if (single_segment or content_size_flag != 0) blk: {
@@ -1295,6 +1296,24 @@ test "zstd raw/RLE native decoder rejects corrupt frames" {
 
     try std.testing.expectError(error.TruncatedFrame, decodeRawOrRleFrameAlloc(std.testing.allocator, encoded[0 .. encoded.len - 1]));
     try std.testing.expectError(error.InvalidMagic, decodeRawOrRleFrameAlloc(std.testing.allocator, "not-zstd"));
+}
+
+test "zstd native decoder rejects dictionary id frames without a dictionary" {
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try frame.appendSlice(std.testing.allocator, &frame_magic);
+    try frame.append(std.testing.allocator, 0x21); // 1-byte dictionary id, single-segment, 1-byte content size.
+    try frame.append(std.testing.allocator, 7); // Dictionary_ID; native subset has no dictionary API yet.
+    try frame.append(std.testing.allocator, 3);
+    try emitRawBlock(std.testing.allocator, &frame, "abc", true);
+
+    try std.testing.expectError(error.NeedDictionary, decodeNativeFrameAlloc(std.testing.allocator, frame.items));
+
+    var output: [3]u8 = undefined;
+    try std.testing.expectError(error.NeedDictionary, decodeNativeFrameInto(frame.items, &output));
+    try std.testing.expectError(error.NeedDictionary, decodedRawOrRleFrameSize(frame.items));
+
+    try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameAlloc(std.testing.allocator, frame.items[0..5]));
 }
 
 test "zstd native raw/RLE decoder handles fallback frames and skippable frames" {
