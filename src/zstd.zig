@@ -111,11 +111,7 @@ pub fn encodeFrameWithLevelAlloc(allocator: std.mem.Allocator, input: []const u8
 pub fn encodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
-    try out.appendSlice(allocator, &frame_magic);
-    try out.append(allocator, 0xe4); // fcs=8 bytes, single segment, content checksum
-    var content_size: [8]u8 = undefined;
-    std.mem.writeInt(u64, &content_size, try checkedUsizeToU64(input.len), .little);
-    try out.appendSlice(allocator, &content_size);
+    try emitFrameHeader(allocator, &out, try checkedUsizeToU64(input.len));
     if (input.len == 0) {
         try emitBlock(allocator, &out, "", true);
     } else {
@@ -141,6 +137,34 @@ pub fn encodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, input: []const u8)
 }
 
 pub const encodeNativeFrameAlloc = encodeRawOrRleFrameAlloc;
+
+fn emitFrameHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), content_len: u64) Error!void {
+    try out.appendSlice(allocator, &frame_magic);
+
+    // Use the shortest single-segment Frame_Content_Size encoding permitted by
+    // the Zstandard format. The previous bootstrap writer always spent eight
+    // bytes here, which was easy to inspect but disproportionately expensive
+    // for the tiny raw/RLE frames this dependency-free path is meant to cover.
+    if (content_len <= 255) {
+        try out.append(allocator, 0x24); // fcs=1 byte, single segment, content checksum
+        try out.append(allocator, @intCast(content_len));
+    } else if (content_len <= 256 + std.math.maxInt(u16)) {
+        try out.append(allocator, 0x64); // fcs=2 bytes (+256), single segment, content checksum
+        var size_bytes: [2]u8 = undefined;
+        std.mem.writeInt(u16, &size_bytes, @intCast(content_len - 256), .little);
+        try out.appendSlice(allocator, &size_bytes);
+    } else if (content_len <= std.math.maxInt(u32)) {
+        try out.append(allocator, 0xa4); // fcs=4 bytes, single segment, content checksum
+        var size_bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &size_bytes, @intCast(content_len), .little);
+        try out.appendSlice(allocator, &size_bytes);
+    } else {
+        try out.append(allocator, 0xe4); // fcs=8 bytes, single segment, content checksum
+        var size_bytes: [8]u8 = undefined;
+        std.mem.writeInt(u64, &size_bytes, content_len, .little);
+        try out.appendSlice(allocator, &size_bytes);
+    }
+}
 
 const RawOrRleFrameHeader = struct {
     content_size: ?u64,
@@ -354,14 +378,16 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     const native_decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(native_decoded);
     try std.testing.expectEqualSlices(u8, payload, native_decoded);
-    try std.testing.expectEqual(@as(u8, 0xe4), encoded[4]);
-    try std.testing.expectEqual(@as(u64, payload.len), std.mem.readInt(u64, encoded[5..][0..8], .little));
+    try std.testing.expectEqual(@as(u8, 0x24), encoded[4]);
+    try std.testing.expectEqual(@as(u8, payload.len), encoded[5]);
 
     const repeated = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
     const rle_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, repeated);
     defer std.testing.allocator.free(rle_encoded);
     try std.testing.expect(rle_encoded.len < repeated.len);
-    const first_block_header = std.mem.readInt(u24, rle_encoded[13..][0..3], .little);
+    var rle_block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(rle_encoded, &rle_block_offset);
+    const first_block_header = std.mem.readInt(u24, rle_encoded[rle_block_offset..][0..3], .little);
     try std.testing.expectEqual(@as(u24, 1), (first_block_header >> 1) & 0x3);
     const rle_decoded = try decodeFrameAlloc(std.testing.allocator, rle_encoded);
     defer std.testing.allocator.free(rle_decoded);
@@ -412,7 +438,7 @@ test "zstd raw/RLE native decoder rejects corrupt frames" {
 
     var bad_size = try std.testing.allocator.dupe(u8, encoded);
     defer std.testing.allocator.free(bad_size);
-    std.mem.writeInt(u64, bad_size[5..][0..8], payload.len + 1, .little);
+    bad_size[5] = @intCast(payload.len + 1);
     try std.testing.expectError(error.SizeMismatch, decodeRawOrRleFrameAlloc(std.testing.allocator, bad_size));
 
     var bad_checksum = try std.testing.allocator.dupe(u8, encoded);
@@ -422,7 +448,7 @@ test "zstd raw/RLE native decoder rejects corrupt frames" {
 
     var compressed_block = try std.testing.allocator.dupe(u8, encoded);
     defer std.testing.allocator.free(compressed_block);
-    compressed_block[13] = (compressed_block[13] & ~@as(u8, 0x06)) | 0x04;
+    compressed_block[6] = (compressed_block[6] & ~@as(u8, 0x06)) | 0x04;
     try std.testing.expectError(error.UnsupportedZstdFeature, decodeRawOrRleFrameAlloc(std.testing.allocator, compressed_block));
 
     try std.testing.expectError(error.TruncatedFrame, decodeRawOrRleFrameAlloc(std.testing.allocator, encoded[0 .. encoded.len - 1]));
