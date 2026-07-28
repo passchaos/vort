@@ -8839,6 +8839,7 @@ const png_filter0_linear_block_scratch_len = 48 * 1024;
 fn appendPngFilter0LinearBlock(
     sink: *PngFilter0SemanticSink,
     block_output: []const u8,
+    adler: ?*checksum.Adler32,
 ) Error!void {
     var src: usize = 0;
     while (src < block_output.len) {
@@ -8849,16 +8850,19 @@ fn appendPngFilter0LinearBlock(
             if (sink.virtual_pos == sink.expected_virtual_len) return error.OutputTooSmall;
             sink.row_remaining = sink.row_len;
             sink.virtual_pos += 1;
+            if (adler) |state| state.update(&.{@intFromEnum(PngFilterMethod.none)});
             src += 1;
             continue;
         }
 
         const count = @min(block_output.len - src, sink.row_remaining);
         if (count > sink.output.len - sink.output_pos) return error.OutputTooSmall;
+        const part = block_output[src..][0..count];
         @memcpy(
             sink.output[sink.output_pos..][0..count],
-            block_output[src..][0..count],
+            part,
         );
+        if (adler) |state| state.update(part);
         sink.advanceRowData(count);
         src += count;
     }
@@ -8869,6 +8873,7 @@ fn tryDecodePngFilter0LinearRleBlock(
     sink: *PngFilter0SemanticSink,
     decoder: *const SemanticDynamicDecoder,
     scratch: []u8,
+    adler: ?*checksum.Adler32,
 ) Error!bool {
     const saved_reader = reader.*;
     const written = decodeSemanticDynamicBlockIntoRle1BufferedReader(
@@ -8886,7 +8891,7 @@ fn tryDecodePngFilter0LinearRleBlock(
         },
         else => return err,
     };
-    try appendPngFilter0LinearBlock(sink, scratch[0..written]);
+    try appendPngFilter0LinearBlock(sink, scratch[0..written], adler);
     return true;
 }
 
@@ -8905,6 +8910,13 @@ pub fn decodePngFilter0DynamicZlibImageWithOptions(
     var reader = bitstream.BufferedBitReader.init(input[zlib_header.data_offset..]);
     var sink = try PngFilter0SemanticSink.init(image_output, info);
     var linear_block_scratch: [png_filter0_linear_block_scratch_len]u8 = undefined;
+    // When every dynamic block stays on the bounded linear path, the scratch
+    // still contains the virtual PNG filter bytes. Fold Adler-32 from that
+    // stream while copying into compact output so strict decoding does not need
+    // a second full-image scan. If any block falls back to the history-aware
+    // sink, we keep correctness simple by reverting to the existing final scan.
+    var linear_adler = checksum.Adler32.init();
+    var can_use_linear_adler = !options.ignore_adler;
 
     while (true) {
         const header = try readBlockHeader(&reader);
@@ -8924,11 +8936,14 @@ pub fn decodePngFilter0DynamicZlibImageWithOptions(
                     &sink,
                     &decoder,
                     &linear_block_scratch,
+                    if (can_use_linear_adler) &linear_adler else null,
                 );
             if (!used_linear_block) {
+                can_use_linear_adler = false;
                 try decodeSemanticDynamicBlockIntoSingleDistanceSink(&reader, &sink, &decoder);
             }
         } else {
+            can_use_linear_adler = false;
             if (!decoder.init(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
             try decodeSemanticDynamicBlockIntoSink(&reader, &sink, &decoder);
         }
@@ -8937,7 +8952,10 @@ pub fn decodePngFilter0DynamicZlibImageWithOptions(
 
     try sink.finish();
     const footer_offset = zlib_header.data_offset + reader.byteOffset();
-    const actual_adler = if (options.ignore_adler) 0 else pngFilter0Adler32(image_output, info);
+    const actual_adler = if (options.ignore_adler) 0 else if (can_use_linear_adler)
+        linear_adler.digest()
+    else
+        pngFilter0Adler32(image_output, info);
     try validateZlibFooterWithOptions(input, footer_offset, actual_adler, options);
     return .{
         .rows = info.height,
@@ -9116,6 +9134,7 @@ test "png filter0 linear RLE block matches compact fallback and restores reader"
         &success_sink,
         &success_decoder,
         &success_scratch,
+        null,
     ));
     try success_sink.finish();
     try std.testing.expectEqualSlices(u8, &([_]u8{0} ** success_output.len), &success_output);
@@ -9142,6 +9161,7 @@ test "png filter0 linear RLE block matches compact fallback and restores reader"
         &fallback_sink,
         &fallback_decoder,
         &too_small_scratch,
+        null,
     ));
     try std.testing.expectEqual(saved_reader.byte_index, fallback_reader.byte_index);
     try std.testing.expectEqual(saved_reader.bit_buffer, fallback_reader.bit_buffer);
