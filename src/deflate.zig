@@ -9077,24 +9077,45 @@ pub fn decodePngZlibImageFromChunksWithOptionsDirect(
 }
 
 fn drainPngZlibImage(decoder: *PngZlibScanlineDecoder, output: []u8) Error!PngImageDecodeResult {
-    var offset: usize = 0;
-    var zlib_input_read: usize = 0;
-    for (0..decoder.row_count) |_| {
-        const row = output[offset..][0..decoder.row_len];
-        const previous = previousPngOutputRow(output, offset, decoder.row_len);
-        const step = try decoder.zlib.stepPngScanlineReconstructDirect(previous, decoder.bytes_per_pixel, row);
-        offset += step.row_bytes;
-        zlib_input_read += step.progress.input_read;
-        decoder.row_index += 1;
-    }
-    if (!decoder.snapshot().done) {
+    // Whole-image PNG drains have already materialized the exact filtered zlib
+    // payload. Iterate that payload directly instead of routing every row
+    // through the public step API, which has to rebuild progress structures and
+    // re-check decoded payload bounds for callers that may stop between rows.
+    const stride = decoder.row_len + 1;
+    if (decoder.zlib.decoded.len != stride * decoder.row_count) {
         decoder.zlib.recordError(error.SizeMismatch);
         return error.SizeMismatch;
     }
+    var offset: usize = 0;
+    var decoded_offset: usize = 0;
+    for (0..decoder.row_count) |_| {
+        const filter = decoder.zlib.decoded[decoded_offset];
+        if (filter > @intFromEnum(PngFilterMethod.paeth)) {
+            decoder.zlib.recordError(error.CorruptFrame);
+            return error.CorruptFrame;
+        }
+        decoded_offset += 1;
+        const filtered = decoder.zlib.decoded[decoded_offset..][0..decoder.row_len];
+        const row = output[offset..][0..decoder.row_len];
+        const previous = previousPngOutputRow(output, offset, decoder.row_len);
+        if (filter == @intFromEnum(PngFilterMethod.none)) {
+            @memcpy(row, filtered);
+        } else {
+            _ = reconstructPngScanline(filter, filtered, previous, decoder.bytes_per_pixel, row) catch |err| {
+                decoder.zlib.recordError(err);
+                return err;
+            };
+        }
+        decoded_offset += decoder.row_len;
+        offset += decoder.row_len;
+        decoder.row_index += 1;
+    }
+    decoder.zlib.offset = decoder.zlib.decoded.len;
+    decoder.zlib.done = true;
     return .{
         .rows = decoder.row_count,
         .output_written = offset,
-        .zlib_input_read = zlib_input_read,
+        .zlib_input_read = decoder.zlib.frame_len,
     };
 }
 
