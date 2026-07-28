@@ -3550,7 +3550,11 @@ noinline fn decodeSemanticDynamicBlockIntoLinearMode(
     var consumed_bits = reader.consumed_bits;
     var out_pos = initial_out_offset;
 
-    const output_headroom: usize = 64;
+    // The fast semantic loop only needs enough destination room for its
+    // speculative two-byte literal stores and bounded match writes. A smaller
+    // headroom keeps short PNG rows and dynamic-block tails out of the compact
+    // fallback decoder without changing the public OutputTooSmall boundary.
+    const output_headroom: usize = 16;
     if (out_pos + output_headroom <= output.len and byte_index + 8 <= input.len) {
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
     }
