@@ -186,6 +186,7 @@ zig build run-gzip-diff
 zig build run-python-zlib-diff
 zig build run-python-zlib-diff-dashboard
 zig build run-gzip-cli-diff
+zig build run-lz4-native-probe
 zig build run-zstd-native-cli-diff
 zig build run-zstd-native-probe
 zig build run-zstd-native-probe -- --path README.md --limit 4096

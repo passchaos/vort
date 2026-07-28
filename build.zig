@@ -787,6 +787,21 @@ pub fn build(b: *std.Build) void {
     const zstd_native_probe_step = b.step("run-zstd-native-probe", "Run bounded generated-corpus probe for native-subset zstd frames");
     zstd_native_probe_step.dependOn(&zstd_native_probe.step);
 
+    const lz4_native_probe_exe = b.addExecutable(.{
+        .name = "lz4-native-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/lz4_native_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_lz4_native_probe = b.addRunArtifact(lz4_native_probe_exe);
+    const lz4_native_probe_step = b.step("run-lz4-native-probe", "Run bounded generated-corpus probe for native LZ4 frames and blocks");
+    lz4_native_probe_step.dependOn(&run_lz4_native_probe.step);
+
     const header_inspect_smoke = b.addSystemCommand(&.{ "python3", "tools/header_inspect_smoke.py" });
     header_inspect_smoke.addArtifactArg(cli_exe);
     const header_inspect_smoke_step = b.step("run-header-inspect-smoke", "Run raw/zlib/gzip header inspection CLI smoke");
@@ -1792,6 +1807,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
+    ci_smoke_step.dependOn(lz4_native_probe_step);
     ci_smoke_step.dependOn(header_inspect_smoke_step);
     ci_smoke_step.dependOn(header_inspect_dashboard_step);
     ci_smoke_step.dependOn(zlib_family_diff_step);
