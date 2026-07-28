@@ -2332,7 +2332,7 @@ fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
 
 fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
     if (rleByte(block) != null) return false;
-    const match = findDuplicateMatch(block) orelse return false;
+    const match = try findBestDuplicateMatch(block) orelse return false;
     const literal_len = match.second_start;
     const offset = match.second_start - match.first_start;
     const tail_len = block.len - match.second_start - match.len;
@@ -2375,24 +2375,46 @@ const DuplicateMatch = struct {
     len: usize,
 };
 
-fn findDuplicateMatch(block: []const u8) ?DuplicateMatch {
+fn findBestDuplicateMatch(block: []const u8) Error!?DuplicateMatch {
     // This intentionally tiny O(n^2) finder is a bootstrap encoder slice, not a
     // production match finder. Cap the search so unusual incompressible blocks do
     // not pay a large planning cost before falling back to raw/RLE output.
     if (block.len < 24 or block.len > 4096) return null;
     var best: ?DuplicateMatch = null;
+    var best_payload_len: usize = std.math.maxInt(usize);
     var second: usize = 1;
     while (second + 8 <= block.len) : (second += 1) {
         var first: usize = 0;
         while (first < second) : (first += 1) {
             var len: usize = 0;
             while (second + len < block.len and block[first + len] == block[second + len]) : (len += 1) {}
-            if (len >= 8 and (best == null or len > best.?.len)) {
-                best = .{ .first_start = first, .second_start = second, .len = len };
+            if (len >= 8) {
+                const candidate: DuplicateMatch = .{ .first_start = first, .second_start = second, .len = len };
+                const candidate_payload_len = singleMatchPayloadLen(block, candidate) catch continue;
+                if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
+                    best = candidate;
+                    best_payload_len = candidate_payload_len;
+                }
             }
         }
     }
     return best;
+}
+
+fn singleMatchPayloadLen(block: []const u8, match: DuplicateMatch) Error!usize {
+    const literal_len = match.second_start;
+    const offset = match.second_start - match.first_start;
+    const tail_len = block.len - match.second_start - match.len;
+    const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
+    const offset_code = try sequenceCodeForValue(offset, &of_base, &of_bits);
+    const match_code = try sequenceCodeForValue(match.len, &ml_base, &ml_bits);
+    const regenerated_literals = std.math.add(usize, literal_len, tail_len) catch return error.IntegerOverflow;
+    const bit_count = @as(usize, ll_bits[literal_code]) + ml_bits[match_code] + of_bits[offset_code] + 1;
+    const bitstream_len = (bit_count + 7) / 8;
+    var len = try literalsHeaderLen(regenerated_literals);
+    len = std.math.add(usize, len, regenerated_literals) catch return error.IntegerOverflow;
+    len = std.math.add(usize, len, 1 + 1 + 3 + bitstream_len) catch return error.IntegerOverflow;
+    return len;
 }
 
 fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
@@ -3725,6 +3747,23 @@ test "zstd literal-only writer emits duplicate substring match" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer scores duplicate match extra bits" {
+    const payload = "0123456789abcdef--0123456789abcdef--tail";
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
