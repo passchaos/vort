@@ -720,6 +720,7 @@ fn decodeLiteralOnlyCompressedBlockIntoBuffer(
 ) Error!void {
     const section = try parseLiteralsSection(block, frame_state);
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
+    try validateSupportedLiteralSection(section);
     if (section.sequence_count != 0) return try decodeRleSequencesCompressedBlockIntoBuffer(block, section, output, written, frame_output_start, frame_state);
     if (section.sequence_payload_offset != block.len) return error.UnsupportedZstdFeature;
     try copyLiteralsFromSection(block, section, 0, output, written, section.regenerated_size);
@@ -738,6 +739,7 @@ fn copyLiteralsFromSection(
     }
     if (literal_len == 0) {
         if (section.kind == .compressed and literal_offset == section.regenerated_size) {
+            if (written.* > output.len) return error.OutputTooSmall;
             try copyHuffmanLiteralsFromSection(block, section, literal_offset, output[written.*..][0..0]);
         }
         return;
@@ -839,11 +841,23 @@ fn compressedLiteralOnlyBlockDecodedSize(
 ) Error!usize {
     const section = try parseLiteralsSection(block, frame_state);
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
+    try validateSupportedLiteralSection(section);
     if (section.sequence_count == 0) {
         if (section.sequence_payload_offset != block.len) return error.UnsupportedZstdFeature;
         return section.regenerated_size;
     }
     return try rleSequencesCompressedBlockDecodedSize(block, section, initial_output_len, frame_state);
+}
+
+fn validateSupportedLiteralSection(section: LiteralOnlySection) Error!void {
+    switch (section.kind) {
+        .raw, .rle => {},
+        .compressed => {
+            if (section.size_format != 0) return error.UnsupportedZstdFeature;
+            if (section.huffman_tree == null) return error.CorruptFrame;
+        },
+        .treeless => return error.UnsupportedZstdFeature,
+    }
 }
 
 fn compressedLiteralOnlyBlockDecodedSizeLimited(
@@ -890,6 +904,7 @@ fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Err
     var huffman_tree: ?StdZstdHuffmanTree = null;
     var huffman_stream_offset = literal_payload_offset;
     if (literal_header.kind == .compressed) {
+        if (literal_header.size_format != 0) return error.UnsupportedZstdFeature;
         const payload = block[literal_payload_offset..][0..literal_payload_len];
         var reader: std.Io.Reader = .fixed(payload);
         var remaining: std.Io.Limit = .limited(payload.len);
