@@ -1016,6 +1016,39 @@ test "zstd raw/RLE native decoder accepts no-size raw frames" {
     try std.testing.expectEqualSlices(u8, "abc", into_buffer[0..written]);
 }
 
+test "zstd native no-size writer chooses valid window descriptors" {
+    const cases = [_]struct {
+        len: usize,
+        expected_descriptor: u8,
+    }{
+        .{ .len = 0, .expected_descriptor = 0x00 },
+        .{ .len = 1024, .expected_descriptor = 0x00 },
+        .{ .len = 1025, .expected_descriptor = 0x01 },
+        .{ .len = 1152, .expected_descriptor = 0x01 },
+        .{ .len = 2048, .expected_descriptor = 0x08 },
+        .{ .len = 4096, .expected_descriptor = 0x10 },
+    };
+
+    for (cases) |case| {
+        const payload = try std.testing.allocator.alloc(u8, case.len);
+        defer std.testing.allocator.free(payload);
+        @memset(payload, 'w');
+
+        const encoded = try encodeRawOrRleFrameWithOptionsAlloc(
+            std.testing.allocator,
+            payload,
+            .{ .include_content_size = false, .content_checksum = false },
+        );
+        defer std.testing.allocator.free(encoded);
+        try std.testing.expectEqual(@as(u8, 0x00), encoded[4]);
+        try std.testing.expectEqual(case.expected_descriptor, encoded[5]);
+
+        const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+}
+
 test "zstd native decoder accepts literal-only compressed blocks" {
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
