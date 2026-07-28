@@ -28,6 +28,7 @@ pub const NativeFrameSelection = enum {
 
 pub const NativeFrameOptions = struct {
     content_checksum: bool = true,
+    include_content_size: bool = true,
     selection: NativeFrameSelection = .auto,
 };
 
@@ -296,6 +297,12 @@ fn emitFrameHeader(
 ) Error!void {
     try out.appendSlice(allocator, &frame_magic);
 
+    if (!options.include_content_size) {
+        try out.append(allocator, if (options.content_checksum) 0x04 else 0x00);
+        try emitWindowDescriptor(allocator, out, content_len);
+        return;
+    }
+
     // Use the shortest single-segment Frame_Content_Size encoding permitted by
     // the Zstandard format. The previous bootstrap writer always spent eight
     // bytes here, which was easy to inspect but disproportionately expensive
@@ -320,6 +327,22 @@ fn emitFrameHeader(
         std.mem.writeInt(u64, &size_bytes, content_len, .little);
         try out.appendSlice(allocator, &size_bytes);
     }
+}
+
+fn emitWindowDescriptor(allocator: std.mem.Allocator, out: *std.ArrayList(u8), content_len: u64) Error!void {
+    const window_size = @max(content_len, @as(u64, 1) << 10);
+    var exponent: u8 = 0;
+    while (exponent < 31) : (exponent += 1) {
+        const base = @as(u64, 1) << @intCast(10 + exponent);
+        const step = base / 8;
+        if (window_size <= base + step * 7) {
+            const delta = window_size - base;
+            const mantissa: u8 = @intCast((delta + step - 1) / step);
+            try out.append(allocator, (exponent << 3) | mantissa);
+            return;
+        }
+    }
+    return error.IntegerOverflow;
 }
 
 fn emitContentChecksum(
@@ -885,6 +908,12 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     const no_checksum_decoded = try decodeNativeFrameAlloc(std.testing.allocator, no_checksum);
     defer std.testing.allocator.free(no_checksum_decoded);
     try std.testing.expectEqualSlices(u8, payload, no_checksum_decoded);
+    const no_size = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{ .include_content_size = false });
+    defer std.testing.allocator.free(no_size);
+    try std.testing.expectEqual(@as(u8, 0x04), no_size[4]);
+    const no_size_decoded = try decodeNativeFrameAlloc(std.testing.allocator, no_size);
+    defer std.testing.allocator.free(no_size_decoded);
+    try std.testing.expectEqualSlices(u8, payload, no_size_decoded);
     const limited_decoded = try decodeRawOrRleFrameAllocLimited(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(limited_decoded);
     try std.testing.expectEqualSlices(u8, payload, limited_decoded);
@@ -1099,6 +1128,12 @@ test "zstd native frame writer chooses smallest fallback mode" {
     const no_checksum = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, literal_payload, .{ .content_checksum = false, .selection = .literal_only });
     defer std.testing.allocator.free(no_checksum.frame);
     try std.testing.expectEqual(@as(u8, 0x20), no_checksum.frame[4]);
+    const no_size = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, literal_payload, .{ .include_content_size = false, .selection = .literal_only });
+    defer std.testing.allocator.free(no_size.frame);
+    try std.testing.expectEqual(@as(u8, 0x04), no_size.frame[4]);
+    const no_size_decoded = try decodeNativeFrameAlloc(std.testing.allocator, no_size.frame);
+    defer std.testing.allocator.free(no_size_decoded);
+    try std.testing.expectEqualSlices(u8, literal_payload, no_size_decoded);
 }
 
 test "zstd raw/RLE native decoder rejects corrupt frames" {

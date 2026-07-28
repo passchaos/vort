@@ -64,6 +64,7 @@ pub const zstdEncodeRawOrRleFrameWithOptionsAlloc = zstd.encodeRawOrRleFrameWith
 pub const zstdEncodeLiteralOnlyFrameAlloc = zstd.encodeLiteralOnlyFrameAlloc;
 pub const zstdEncodeLiteralOnlyFrameWithOptionsAlloc = zstd.encodeLiteralOnlyFrameWithOptionsAlloc;
 pub const zstdEncodeSkippableFrameAlloc = zstd.encodeSkippableFrameAlloc;
+pub const ZstdNativeFrameOptions = zstd.NativeFrameOptions;
 pub const ZstdNativeFrameSelection = zstd.NativeFrameSelection;
 pub const ZstdNativeFrameMode = zstd.NativeFrameMode;
 pub const ZstdNativeFrameEncodeResult = zstd.NativeFrameEncodeResult;
@@ -643,6 +644,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodeLiteralOnlyFrameAlloc;
     _ = zstdEncodeLiteralOnlyFrameWithOptionsAlloc;
     _ = zstdEncodeSkippableFrameAlloc;
+    _ = ZstdNativeFrameOptions;
     _ = ZstdNativeFrameSelection;
     _ = ZstdNativeFrameMode;
     _ = ZstdNativeFrameEncodeResult;
