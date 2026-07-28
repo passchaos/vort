@@ -54,6 +54,18 @@ def assert_vort_native_decode(frame: bytes, expected: bytes) -> None:
             raise AssertionError(f"expected OutputLimitExceeded, got rc={failed.returncode} stderr={failed.stderr!r}")
 
 
+def assert_vort_native_decode_error(frame: bytes, max_output_len: int, error_name: str) -> None:
+    failed = subprocess.run(
+        [str(CLI), "decode-zstd-native-hex", frame.hex(), str(max_output_len)],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if failed.returncode == 0 or error_name not in failed.stderr:
+        raise AssertionError(f"expected {error_name}, got rc={failed.returncode} stderr={failed.stderr!r}")
+
+
 def main() -> int:
     if not ZSTD:
         print("zstd native CLI diff: zstd=missing")
@@ -98,6 +110,15 @@ def main() -> int:
     for payload in external_cases:
         assert_vort_native_decode(zstd_compress(payload, 1), payload)
 
+    # Keep a real high-compression frame in the smoke even before native Huffman
+    # literals are implemented. It should remain a clear UnsupportedZstdFeature
+    # boundary rather than being misdecoded by the partial sequence machinery.
+    unsupported_cases = [
+        (b'{"key":"value","number":123,"array":[1,2,3],"text":"abcdefg"}\n' * 100, 19),
+    ]
+    for payload, level in unsupported_cases:
+        assert_vort_native_decode_error(zstd_compress(payload, level), len(payload), "UnsupportedZstdFeature")
+
     with tempfile.TemporaryDirectory(prefix="vort-zstd-native-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         payload = b"file payload for zstd native smoke" * 4
@@ -110,7 +131,10 @@ def main() -> int:
         subprocess.run([ZSTD, "-dcq", str(frame_path), "-o", str(out_path)], check=True)
         assert out_path.read_bytes() == payload
 
-    print(f"zstd_native_cli_diff_ok cases={len(cases)} external_cases={len(external_cases)} zstd={pathlib.Path(ZSTD).name}")
+    print(
+        f"zstd_native_cli_diff_ok cases={len(cases)} external_cases={len(external_cases)} "
+        f"unsupported_cases={len(unsupported_cases)} zstd={pathlib.Path(ZSTD).name}"
+    )
     return 0
 
 
