@@ -2294,6 +2294,7 @@ fn emitBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []con
 
 fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
     if (try emitRepeatedPatternCompressedBlock(allocator, out, block, last)) return;
+    if (try emitSingleMatchCompressedBlock(allocator, out, block, last)) return;
 
     const literal_kind: LiteralsKind = if (rleByte(block) != null) .rle else .raw;
     const literal_payload_len: usize = switch (literal_kind) {
@@ -2327,6 +2328,71 @@ fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     try payload.append(allocator, 0); // sequence_count=0: the compressed block is literals-only.
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
+}
+
+fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
+    if (rleByte(block) != null) return false;
+    const match = findDuplicateMatch(block) orelse return false;
+    const literal_len = match.second_start;
+    const offset = match.second_start - match.first_start;
+    const tail_len = block.len - match.second_start - match.len;
+
+    const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
+    const offset_code = try sequenceCodeForValue(offset, &of_base, &of_bits);
+    const match_code = try sequenceCodeForValue(match.len, &ml_base, &ml_bits);
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    const regenerated_literals = std.math.add(usize, literal_len, tail_len) catch return error.IntegerOverflow;
+    try emitLiteralsHeader(allocator, &payload, .raw, regenerated_literals);
+    try payload.appendSlice(allocator, block[0..literal_len]);
+    try payload.appendSlice(allocator, block[match.second_start + match.len ..]);
+    try payload.append(allocator, 1);
+    try payload.append(allocator, 0x54); // LL, OF, and ML use RLE_Mode.
+    try payload.append(allocator, literal_code);
+    try payload.append(allocator, offset_code);
+    try payload.append(allocator, match_code);
+
+    var sequence_bits: std.ArrayList(u8) = .empty;
+    defer sequence_bits.deinit(allocator);
+    try emitReverseBitstream(allocator, &sequence_bits, &.{
+        .{ .value = literal_len - ll_base[literal_code], .bits = ll_bits[literal_code] },
+        .{ .value = match.len - ml_base[match_code], .bits = ml_bits[match_code] },
+        .{ .value = offset - of_base[offset_code], .bits = of_bits[offset_code] },
+    });
+    try payload.appendSlice(allocator, sequence_bits.items);
+
+    const raw_payload_len = std.math.add(usize, block.len, try literalsHeaderLen(block.len)) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_payload_len) return false;
+    try emitBlockHeader(allocator, out, 2, payload.items.len, last);
+    try out.appendSlice(allocator, payload.items);
+    return true;
+}
+
+const DuplicateMatch = struct {
+    first_start: usize,
+    second_start: usize,
+    len: usize,
+};
+
+fn findDuplicateMatch(block: []const u8) ?DuplicateMatch {
+    // This intentionally tiny O(n^2) finder is a bootstrap encoder slice, not a
+    // production match finder. Cap the search so unusual incompressible blocks do
+    // not pay a large planning cost before falling back to raw/RLE output.
+    if (block.len < 24 or block.len > 4096) return null;
+    var best: ?DuplicateMatch = null;
+    var second: usize = 1;
+    while (second + 8 <= block.len) : (second += 1) {
+        var first: usize = 0;
+        while (first < second) : (first += 1) {
+            var len: usize = 0;
+            while (second + len < block.len and block[first + len] == block[second + len]) : (len += 1) {}
+            if (len >= 8 and (best == null or len > best.?.len)) {
+                best = .{ .first_start = first, .second_start = second, .len = len };
+            }
+        }
+    }
+    return best;
 }
 
 fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
@@ -3634,6 +3700,31 @@ test "zstd literal-only writer emits repeated-pattern blocks after a prefix" {
     defer std.testing.allocator.free(encoded);
     const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(raw_encoded);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits duplicate substring match" {
+    const payload = "prefix-abcdefghijklmno-middle-abcdefghijklmno-tail";
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
