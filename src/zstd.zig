@@ -713,13 +713,20 @@ fn parseSequenceCount(block: []const u8, offset: *usize) Error!usize {
     return count;
 }
 
-const RleSequenceSpec = struct {
-    literal_base: usize,
-    literal_bits: u8,
-    match_base: usize,
-    match_bits: u8,
-    offset_base: usize,
-    offset_bits: u8,
+const SymbolMode = enum(u2) {
+    predefined = 0,
+    rle = 1,
+    compressed = 2,
+    repeat = 3,
+};
+
+const SequenceModeSpec = struct {
+    ll_mode: SymbolMode,
+    of_mode: SymbolMode,
+    ml_mode: SymbolMode,
+    literal_rle: ?SequenceSymbol,
+    offset_rle: ?SequenceSymbol,
+    match_rle: ?SequenceSymbol,
     bitstream_offset: usize,
 };
 
@@ -899,35 +906,47 @@ const default_ml_symbols = [_]SequenceSymbol{
     .{ .base = 1027, .additional_bits = 10, .next_state = 0, .state_bits = 6 },
 };
 
-fn parseRleSequenceSpec(block: []const u8, offset: *usize, sequence_count: usize) Error!RleSequenceSpec {
+fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usize) Error!SequenceModeSpec {
     if (sequence_count == 0) return error.CorruptFrame;
     if (block.len - offset.* < 1) return error.TruncatedFrame;
     const mode = block[offset.*];
     offset.* += 1;
     if ((mode & 0x03) != 0) return error.CorruptFrame;
-    const ll_mode = mode >> 6;
-    const of_mode = (mode >> 4) & 0x03;
-    const ml_mode = (mode >> 2) & 0x03;
-    if (ll_mode != 1 or of_mode != 1 or ml_mode != 1) return error.UnsupportedZstdFeature;
+    const ll_mode: SymbolMode = @enumFromInt(mode >> 6);
+    const of_mode: SymbolMode = @enumFromInt((mode >> 4) & 0x03);
+    const ml_mode: SymbolMode = @enumFromInt((mode >> 2) & 0x03);
 
-    if (block.len - offset.* < 3) return error.TruncatedFrame;
-    const ll_code = block[offset.*];
-    const of_code = block[offset.* + 1];
-    const ml_code = block[offset.* + 2];
-    offset.* += 3;
-    if (ll_code >= ll_base.len or of_code >= of_base.len or ml_code >= ml_base.len) return error.CorruptFrame;
+    const literal_rle = if (ll_mode == .rle) try readRleSymbolCode(block, offset, &ll_base, &ll_bits) else null;
+    const offset_rle = if (of_mode == .rle) try readRleSymbolCode(block, offset, &of_base, &of_bits) else null;
+    const match_rle = if (ml_mode == .rle) try readRleSymbolCode(block, offset, &ml_base, &ml_bits) else null;
+
+    if ((ll_mode == .compressed or ll_mode == .repeat) or
+        (of_mode == .compressed or of_mode == .repeat) or
+        (ml_mode == .compressed or ml_mode == .repeat))
+    {
+        return error.UnsupportedZstdFeature;
+    }
+
     const bitstream_offset = offset.*;
     if (bitstream_offset >= block.len) return error.TruncatedFrame;
     offset.* = block.len;
     return .{
-        .literal_base = ll_base[ll_code],
-        .literal_bits = ll_bits[ll_code],
-        .match_base = ml_base[ml_code],
-        .match_bits = ml_bits[ml_code],
-        .offset_base = of_base[of_code],
-        .offset_bits = of_bits[of_code],
+        .ll_mode = ll_mode,
+        .of_mode = of_mode,
+        .ml_mode = ml_mode,
+        .literal_rle = literal_rle,
+        .offset_rle = offset_rle,
+        .match_rle = match_rle,
         .bitstream_offset = bitstream_offset,
     };
+}
+
+fn readRleSymbolCode(block: []const u8, offset: *usize, bases: []const usize, bits: []const u8) Error!SequenceSymbol {
+    if (offset.* >= block.len) return error.TruncatedFrame;
+    const code = block[offset.*];
+    offset.* += 1;
+    if (code >= bases.len) return error.CorruptFrame;
+    return .{ .base = bases[code], .additional_bits = bits[code], .next_state = 0, .state_bits = 0 };
 }
 
 fn defaultLiteralLengthSymbol(state: usize) Error!SequenceSymbol {
@@ -1000,22 +1019,19 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     }
 
     var offset = section.sequence_payload_offset;
-    const spec = try parseRleSequenceSpec(block, &offset, section.sequence_count);
+    const spec = try parseSequenceModeSpec(block, &offset, section.sequence_count);
     if (offset != block.len) return error.UnsupportedZstdFeature;
-    var bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
+    const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
-    var repeated_offsets = initial_repeated_offsets;
+    var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader);
     var literal_offset: usize = 0;
-    var seq: usize = 0;
-    while (seq < section.sequence_count) : (seq += 1) {
-        const match_offset = try readRleOffset(&bit_reader, spec, &repeated_offsets);
-        const match_len = try readRleMatchLength(&bit_reader, spec);
-        const literal_len = try readRleLiteralLength(&bit_reader, spec);
+    while (state.remaining != 0) {
+        const sequence = try readModeSequence(&state);
+        const literal_len = sequence.literal_len;
         try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
         literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
-        try copyMatchFromOutputBuffer(output, written, match_offset, match_len);
+        try copyMatchFromOutputBuffer(output, written, sequence.match_offset, sequence.match_len);
     }
-    try bit_reader.expectEnd();
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     const last_literals = section.regenerated_size - literal_offset;
     try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
@@ -1031,28 +1047,25 @@ fn rleSequencesCompressedBlockDecodedSize(
     }
 
     var offset = section.sequence_payload_offset;
-    const spec = try parseRleSequenceSpec(block, &offset, section.sequence_count);
+    const spec = try parseSequenceModeSpec(block, &offset, section.sequence_count);
     if (offset != block.len) return error.UnsupportedZstdFeature;
-    var bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
+    const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
-    var repeated_offsets = initial_repeated_offsets;
+    var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader);
     var literal_offset: usize = 0;
     var produced: usize = 0;
-    var seq: usize = 0;
-    while (seq < section.sequence_count) : (seq += 1) {
-        const match_offset = try readRleOffset(&bit_reader, spec, &repeated_offsets);
-        const match_len = try readRleMatchLength(&bit_reader, spec);
-        const literal_len = try readRleLiteralLength(&bit_reader, spec);
+    while (state.remaining != 0) {
+        const sequence = try readModeSequence(&state);
+        const literal_len = sequence.literal_len;
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) {
             return error.CorruptFrame;
         }
         literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
         produced = std.math.add(usize, produced, literal_len) catch return error.IntegerOverflow;
         const available = std.math.add(usize, initial_output_len, produced) catch return error.IntegerOverflow;
-        if (match_offset == 0 or match_offset > available) return error.InvalidMatch;
-        produced = std.math.add(usize, produced, match_len) catch return error.IntegerOverflow;
+        if (sequence.match_offset == 0 or sequence.match_offset > available) return error.InvalidMatch;
+        produced = std.math.add(usize, produced, sequence.match_len) catch return error.IntegerOverflow;
     }
-    try bit_reader.expectEnd();
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     produced = std.math.add(usize, produced, section.regenerated_size - literal_offset) catch return error.IntegerOverflow;
     return produced;
@@ -1074,6 +1087,31 @@ const PredefinedSequenceState = struct {
     remaining: usize,
 };
 
+const SequenceDecodeState = struct {
+    spec: SequenceModeSpec,
+    reader: ReverseBitReader,
+    ll_state: usize = 0,
+    of_state: usize = 0,
+    ml_state: usize = 0,
+    repeated_offsets: [3]usize = initial_repeated_offsets,
+    remaining: usize,
+};
+
+fn initSequenceDecodeState(spec: SequenceModeSpec, sequence_count: usize, reader: ReverseBitReader) Error!SequenceDecodeState {
+    var initialized_reader = reader;
+    const ll_state = if (spec.ll_mode == .predefined) try initialized_reader.read(6) else 0;
+    const of_state = if (spec.of_mode == .predefined) try initialized_reader.read(5) else 0;
+    const ml_state = if (spec.ml_mode == .predefined) try initialized_reader.read(6) else 0;
+    return .{
+        .spec = spec,
+        .reader = initialized_reader,
+        .ll_state = ll_state,
+        .of_state = of_state,
+        .ml_state = ml_state,
+        .remaining = sequence_count,
+    };
+}
+
 fn initPredefinedSequenceState(block: []const u8, section: LiteralOnlySection) Error!PredefinedSequenceState {
     if (section.sequence_count == 0) return error.CorruptFrame;
     var offset = section.sequence_payload_offset;
@@ -1093,6 +1131,65 @@ fn initPredefinedSequenceState(block: []const u8, section: LiteralOnlySection) E
         .ml_state = ml_state,
         .remaining = section.sequence_count,
     };
+}
+
+fn readModeSequence(state: *SequenceDecodeState) Error!DecodedSequence {
+    if (state.remaining == 0) return error.CorruptFrame;
+
+    const ll_symbol = try currentLiteralSymbol(state.*);
+    const of_symbol = try currentOffsetSymbol(state.*);
+    const ml_symbol = try currentMatchSymbol(state.*);
+
+    const match_offset = try readSequenceOffset(&state.reader, of_symbol.base, of_symbol.additional_bits, ll_symbol.base, &state.repeated_offsets);
+    const match_len = std.math.add(usize, ml_symbol.base, try state.reader.read(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
+    const literal_len = std.math.add(usize, ll_symbol.base, try state.reader.read(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+
+    state.remaining -= 1;
+    if (state.remaining != 0) {
+        try updateLiteralState(state, ll_symbol);
+        try updateMatchState(state, ml_symbol);
+        try updateOffsetState(state, of_symbol);
+    } else {
+        try state.reader.expectEnd();
+    }
+
+    return .{ .literal_len = literal_len, .match_len = match_len, .match_offset = match_offset };
+}
+
+fn currentLiteralSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
+    return switch (state.spec.ll_mode) {
+        .predefined => try defaultLiteralLengthSymbol(state.ll_state),
+        .rle => state.spec.literal_rle orelse error.CorruptFrame,
+        else => error.UnsupportedZstdFeature,
+    };
+}
+
+fn currentOffsetSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
+    return switch (state.spec.of_mode) {
+        .predefined => try defaultOffsetSymbol(state.of_state),
+        .rle => state.spec.offset_rle orelse error.CorruptFrame,
+        else => error.UnsupportedZstdFeature,
+    };
+}
+
+fn currentMatchSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
+    return switch (state.spec.ml_mode) {
+        .predefined => try defaultMatchLengthSymbol(state.ml_state),
+        .rle => state.spec.match_rle orelse error.CorruptFrame,
+        else => error.UnsupportedZstdFeature,
+    };
+}
+
+fn updateLiteralState(state: *SequenceDecodeState, symbol: SequenceSymbol) Error!void {
+    if (state.spec.ll_mode == .predefined) state.ll_state = try nextPredefinedState(&state.reader, symbol);
+}
+
+fn updateOffsetState(state: *SequenceDecodeState, symbol: SequenceSymbol) Error!void {
+    if (state.spec.of_mode == .predefined) state.of_state = try nextPredefinedState(&state.reader, symbol);
+}
+
+fn updateMatchState(state: *SequenceDecodeState, symbol: SequenceSymbol) Error!void {
+    if (state.spec.ml_mode == .predefined) state.ml_state = try nextPredefinedState(&state.reader, symbol);
 }
 
 fn readPredefinedSequence(state: *PredefinedSequenceState) Error!DecodedSequence {
@@ -1168,10 +1265,6 @@ fn predefinedSequenceBlockDecodedSize(
     return std.math.add(usize, produced, section.regenerated_size - literal_offset) catch return error.IntegerOverflow;
 }
 
-fn readRleOffset(reader: *ReverseBitReader, spec: RleSequenceSpec, repeated_offsets: *[3]usize) Error!usize {
-    return try readSequenceOffset(reader, spec.offset_base, spec.offset_bits, spec.literal_base, repeated_offsets);
-}
-
 fn readSequenceOffset(
     reader: *ReverseBitReader,
     offset_base: usize,
@@ -1212,14 +1305,6 @@ fn readSequenceOffset(
     repeated_offsets[1] = repeated_offsets[0];
     repeated_offsets[0] = offset;
     return offset;
-}
-
-fn readRleMatchLength(reader: *ReverseBitReader, spec: RleSequenceSpec) Error!usize {
-    return std.math.add(usize, spec.match_base, try reader.read(spec.match_bits)) catch return error.IntegerOverflow;
-}
-
-fn readRleLiteralLength(reader: *ReverseBitReader, spec: RleSequenceSpec) Error!usize {
-    return std.math.add(usize, spec.literal_base, try reader.read(spec.literal_bits)) catch return error.IntegerOverflow;
 }
 
 fn copyMatchFromOutputBuffer(output: []u8, written: *usize, match_offset: usize, match_len: usize) Error!void {
@@ -1989,6 +2074,39 @@ test "zstd native decoder streams several predefined sequences" {
     try std.testing.expectEqual(payload.len, decoded_len);
 }
 
+test "zstd native decoder accepts mixed RLE and predefined sequence modes" {
+    const payload = "a" ** 132;
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{});
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 8, true);
+    try frame.append(std.testing.allocator, (1 << 3) | 1); // RLE literals: one literal byte before the match.
+    try frame.append(std.testing.allocator, 'a');
+    try frame.append(std.testing.allocator, 1);
+    try frame.append(std.testing.allocator, 0x50); // LL and offset use RLE_Mode; ML uses Predefined_Mode.
+    try frame.appendSlice(std.testing.allocator, &.{ 1, 0 }); // literal_len=1, repeated offset code 0.
+    try frame.appendSlice(std.testing.allocator, &.{ 0x00, 0x2a }); // ML predefined state 20 plus seven zero extra bits.
+    var checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, payload)), .little);
+    try frame.appendSlice(std.testing.allocator, &checksum);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const native_decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(native_decoded);
+    try std.testing.expectEqualSlices(u8, payload, native_decoded);
+
+    var into_buffer: [payload.len]u8 = undefined;
+    const written = try decodeNativeFrameInto(frame.items, &into_buffer);
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
+
+    const decoded_len = try decodedRawOrRleFrameSize(frame.items);
+    try std.testing.expectEqual(payload.len, decoded_len);
+}
+
 test "zstd literal-only compressed block rejects malformed sections" {
     var non_zero_sequences: std.ArrayList(u8) = .empty;
     defer non_zero_sequences.deinit(std.testing.allocator);
@@ -2000,7 +2118,7 @@ test "zstd literal-only compressed block rejects malformed sections" {
     var checksum: [4]u8 = undefined;
     std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, "abc")), .little);
     try non_zero_sequences.appendSlice(std.testing.allocator, &checksum);
-    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameAlloc(std.testing.allocator, non_zero_sequences.items));
+    try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameAlloc(std.testing.allocator, non_zero_sequences.items));
 
     var trailing_literal_payload: std.ArrayList(u8) = .empty;
     defer trailing_literal_payload.deinit(std.testing.allocator);
