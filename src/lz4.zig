@@ -51,6 +51,12 @@ pub const NativeFrameOptions = struct {
     content_checksum: bool = true,
     block_checksum: bool = false,
     block_size_id: BlockSizeId = .max4mb,
+    block_mode: BlockMode = .independent,
+};
+
+pub const BlockMode = enum {
+    independent,
+    linked,
 };
 
 pub const BlockSizeId = enum(u8) {
@@ -113,7 +119,8 @@ pub fn encodePureFrameWithOptionsAlloc(
     errdefer out.deinit(allocator);
     try out.appendSlice(allocator, &frame_magic);
     const descriptor_start = out.items.len;
-    var flg: u8 = 0x60; // version=01, independent blocks
+    var flg: u8 = 0x40; // version=01
+    if (options.block_mode == .independent) flg |= 0x20;
     if (options.block_checksum) flg |= 0x10;
     if (options.include_content_size) flg |= 0x08;
     if (options.content_checksum) flg |= 0x04;
@@ -153,6 +160,9 @@ pub fn encodePureFrameWithOptionsAlloc(
 
     var offset: usize = 0;
     const max_block_len = options.block_size_id.maxLen();
+    // Keep linked-mode state-machine coverage explicit in the frame metadata.
+    // Blocks are still encoded independently for now, so the decoder must be
+    // able to handle linked frames that do not actually need prior history.
     while (offset < input.len) {
         const block_len = @min(input.len - offset, max_block_len);
         var header: [4]u8 = undefined;
@@ -1038,6 +1048,17 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const with_options_decoded = try decodeNativeFrameAlloc(std.testing.allocator, with_options);
     defer std.testing.allocator.free(with_options_decoded);
     try std.testing.expectEqualSlices(u8, repeated, with_options_decoded);
+
+    const linked = try encodePureFrameWithOptionsAlloc(
+        std.testing.allocator,
+        repeated,
+        .{ .block_mode = .linked, .content_checksum = false },
+    );
+    defer std.testing.allocator.free(linked);
+    try std.testing.expectEqual(@as(u8, 0x48), linked[4]);
+    const linked_decoded = try decodeNativeFrameAlloc(std.testing.allocator, linked);
+    defer std.testing.allocator.free(linked_decoded);
+    try std.testing.expectEqualSlices(u8, repeated, linked_decoded);
 
     const block_cases = [_]struct {
         id: BlockSizeId,

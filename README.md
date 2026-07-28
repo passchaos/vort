@@ -15,7 +15,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - liblz4-backed LZ4 frame encoding plus pure Zig LZ4 frame/block
   decode/fallback encode with skippable/concatenated stream handling,
   optional content-size/checksum/block-checksum fields, configurable frame block
-  sizes, bounded allocation for single/concatenated streams, and caller-owned
+  sizes and block mode metadata, bounded allocation for single/concatenated
+  streams, and caller-owned
   decode-into APIs,
   libzstd-backed Zstandard frame encode/decode with a
   dependency-free raw/RLE and literal-only compressed-block fallback
