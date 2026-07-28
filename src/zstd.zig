@@ -2409,6 +2409,23 @@ test "zstd native decoder recognizes unsupported Huffman literals" {
     try std.testing.expectError(error.CorruptFrame, decodeNativeFrameAlloc(std.testing.allocator, treeless_first.items));
 }
 
+test "zstd native decoder rejects FSE compressed sequence tables" {
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, 4, .{ .content_checksum = false });
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 5, true);
+    try frame.append(std.testing.allocator, 1 << 3); // raw literals, one literal byte.
+    try frame.append(std.testing.allocator, 'a');
+    try frame.append(std.testing.allocator, 1); // one sequence.
+    try frame.append(std.testing.allocator, 0x80); // LL uses FSE_Compressed_Mode; OF/ML are predefined.
+    try frame.append(std.testing.allocator, 1);
+
+    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameAlloc(std.testing.allocator, frame.items));
+    var output: [4]u8 = undefined;
+    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameInto(frame.items, &output));
+    try std.testing.expectError(error.UnsupportedZstdFeature, decodedRawOrRleFrameSize(frame.items));
+}
+
 test "zstd literal-only frame writer falls back when compressed literals expand" {
     const payload = "literal-only zstd payload";
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
