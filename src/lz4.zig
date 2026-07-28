@@ -142,38 +142,12 @@ pub const encodeNativeFrameAlloc = encodePureFrameAlloc;
 /// Decode an LZ4 frame. Independent and linked blocks are supported; external
 /// dictionaries are not required for frames produced by `encodeFrameAlloc`.
 pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
-    if (frame.len < 7) return error.TruncatedFrame;
-    if (!std.mem.eql(u8, frame[0..4], &frame_magic)) return error.CorruptFrame;
-    const flg = frame[4];
-    const bd = frame[5];
-    const version = (flg >> 6) & 0x03;
-    if (version != 0x01) return error.UnsupportedVersion;
-    if ((flg & 0x02) != 0) return error.CorruptFrame;
-    const block_size_max = try blockSizeMaxFromDescriptor(bd);
-    const block_independent = (flg & 0x20) != 0;
-    const block_checksum = (flg & 0x10) != 0;
-    const content_size = (flg & 0x08) != 0;
-    const content_checksum = (flg & 0x04) != 0;
-    const dict_id = (flg & 0x01) != 0;
-
-    var offset: usize = 6;
-    const expected_content_size: ?u64 = if (content_size) blk: {
-        if (frame.len - offset < 8) return error.TruncatedFrame;
-        const value = std.mem.readInt(u64, frame[offset..][0..8], .little);
-        offset += 8;
-        break :blk value;
-    } else null;
-    if (dict_id) {
-        if (frame.len - offset < 4) return error.TruncatedFrame;
-        offset += 4;
-    }
-    if (offset >= frame.len) return error.TruncatedFrame;
-    if (frame[offset] != descriptorChecksum(frame[4..offset])) return error.ChecksumMismatch;
-    offset += 1;
+    const header = try parseFrameHeader(frame);
+    var offset = header.payload_offset;
 
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
-    if (expected_content_size) |size| try out.ensureTotalCapacity(allocator, try checkedU64ToUsize(size));
+    if (header.expected_content_size) |size| try out.ensureTotalCapacity(allocator, try checkedU64ToUsize(size));
     while (true) {
         if (frame.len - offset < 4) return error.TruncatedFrame;
         const block_header = std.mem.readInt(u32, frame[offset..][0..4], .little);
@@ -181,20 +155,20 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
         if (block_header == 0) break;
         const uncompressed_block = (block_header & 0x8000_0000) != 0;
         const block_len: usize = @intCast(block_header & 0x7fff_ffff);
-        if (block_len > block_size_max) return error.CorruptFrame;
+        if (block_len > header.block_size_max) return error.CorruptFrame;
         if (frame.len - offset < block_len) return error.TruncatedFrame;
         const block = frame[offset..][0..block_len];
         offset += block_len;
         if (uncompressed_block) {
             try out.appendSlice(allocator, block);
         } else {
-            const history = if (block_independent)
+            const history = if (header.block_independent)
                 &[_]u8{}
             else if (out.items.len <= 64 * 1024)
                 out.items
             else
                 out.items[out.items.len - 64 * 1024 ..];
-            if (block_independent) {
+            if (header.block_independent) {
                 try decodeBlockInto(allocator, &out, block, null, history);
             } else {
                 const decoded = try decodeBlockWithPrefixAlloc(allocator, block, null, history);
@@ -202,17 +176,17 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
                 try out.appendSlice(allocator, decoded);
             }
         }
-        if (block_checksum) {
+        if (header.block_checksum) {
             if (frame.len - offset < 4) return error.TruncatedFrame;
             const expected = std.mem.readInt(u32, frame[offset..][0..4], .little);
             if (std.hash.XxHash32.hash(0, block) != expected) return error.ChecksumMismatch;
             offset += 4;
         }
     }
-    if (expected_content_size) |size| {
+    if (header.expected_content_size) |size| {
         if (out.items.len != size) return error.SizeMismatch;
     }
-    if (content_checksum) {
+    if (header.content_checksum) {
         if (frame.len - offset < 4) return error.TruncatedFrame;
         const expected = std.mem.readInt(u32, frame[offset..][0..4], .little);
         if (std.hash.XxHash32.hash(0, out.items) != expected) return error.ChecksumMismatch;
@@ -223,6 +197,110 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
 }
 
 pub const decodeNativeFrameAlloc = decodeFrameAlloc;
+
+/// Decode an LZ4 frame directly into caller-owned storage. The returned length
+/// is the number of bytes written. This path shares the strict frame metadata,
+/// block-size, block-checksum, content-size, and content-checksum validation of
+/// `decodeFrameAlloc` while avoiding heap allocation for applications that can
+/// provide the output buffer up front.
+pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
+    const header = try parseFrameHeader(frame);
+    var offset = header.payload_offset;
+    var written: usize = 0;
+    if (header.expected_content_size) |size| {
+        if (output.len < try checkedU64ToUsize(size)) return error.OutputTooSmall;
+    }
+
+    while (true) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        const block_header = std.mem.readInt(u32, frame[offset..][0..4], .little);
+        offset += 4;
+        if (block_header == 0) break;
+        const uncompressed_block = (block_header & 0x8000_0000) != 0;
+        const block_len: usize = @intCast(block_header & 0x7fff_ffff);
+        if (block_len > header.block_size_max) return error.CorruptFrame;
+        if (frame.len - offset < block_len) return error.TruncatedFrame;
+        if (output.len - written < block_len and uncompressed_block) return error.OutputTooSmall;
+
+        const block = frame[offset..][0..block_len];
+        offset += block_len;
+        if (uncompressed_block) {
+            @memcpy(output[written..][0..block_len], block);
+            written += block_len;
+        } else {
+            const block_start = written;
+            const history_start = if (header.block_independent or block_start <= 64 * 1024)
+                if (header.block_independent) block_start else 0
+            else
+                block_start - 64 * 1024;
+            try decodeBlockIntoBuffer(block, output, &written, null, history_start);
+        }
+
+        if (header.block_checksum) {
+            if (frame.len - offset < 4) return error.TruncatedFrame;
+            const expected = std.mem.readInt(u32, frame[offset..][0..4], .little);
+            if (std.hash.XxHash32.hash(0, block) != expected) return error.ChecksumMismatch;
+            offset += 4;
+        }
+    }
+
+    if (header.expected_content_size) |size| {
+        if (written != size) return error.SizeMismatch;
+    }
+    if (header.content_checksum) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        const expected = std.mem.readInt(u32, frame[offset..][0..4], .little);
+        if (std.hash.XxHash32.hash(0, output[0..written]) != expected) return error.ChecksumMismatch;
+        offset += 4;
+    }
+    if (offset != frame.len) return error.TrailingData;
+    return written;
+}
+
+pub const decodeNativeFrameInto = decodeFrameInto;
+
+const FrameHeader = struct {
+    payload_offset: usize,
+    block_size_max: usize,
+    block_independent: bool,
+    block_checksum: bool,
+    content_checksum: bool,
+    expected_content_size: ?u64,
+};
+
+fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
+    if (frame.len < 7) return error.TruncatedFrame;
+    if (!std.mem.eql(u8, frame[0..4], &frame_magic)) return error.CorruptFrame;
+    const flg = frame[4];
+    const bd = frame[5];
+    const version = (flg >> 6) & 0x03;
+    if (version != 0x01) return error.UnsupportedVersion;
+    if ((flg & 0x02) != 0) return error.CorruptFrame;
+
+    var offset: usize = 6;
+    const expected_content_size: ?u64 = if ((flg & 0x08) != 0) blk: {
+        if (frame.len - offset < 8) return error.TruncatedFrame;
+        const value = std.mem.readInt(u64, frame[offset..][0..8], .little);
+        offset += 8;
+        break :blk value;
+    } else null;
+    if ((flg & 0x01) != 0) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        offset += 4;
+    }
+    if (offset >= frame.len) return error.TruncatedFrame;
+    if (frame[offset] != descriptorChecksum(frame[4..offset])) return error.ChecksumMismatch;
+    offset += 1;
+
+    return .{
+        .payload_offset = offset,
+        .block_size_max = try blockSizeMaxFromDescriptor(bd),
+        .block_independent = (flg & 0x20) != 0,
+        .block_checksum = (flg & 0x10) != 0,
+        .content_checksum = (flg & 0x04) != 0,
+        .expected_content_size = expected_content_size,
+    };
+}
 
 fn descriptorChecksum(descriptor: []const u8) u8 {
     return @truncate(std.hash.XxHash32.hash(0, descriptor) >> 8);
@@ -283,6 +361,12 @@ pub fn decodeBlockWithPrefixAlloc(allocator: std.mem.Allocator, input: []const u
     return out.toOwnedSlice(allocator);
 }
 
+pub fn decodeBlockIntoSlice(input: []const u8, output: []u8, expected_size: ?usize) Error!usize {
+    var written: usize = 0;
+    try decodeBlockIntoBuffer(input, output, &written, expected_size, 0);
+    return written;
+}
+
 fn decodeBlockInto(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -312,6 +396,71 @@ fn decodeBlockInto(
     }
     if (expected_size) |size| {
         if (out.items.len - block_start_len != size) return error.SizeMismatch;
+    }
+}
+
+fn decodeBlockIntoBuffer(
+    input: []const u8,
+    output: []u8,
+    written: *usize,
+    expected_size: ?usize,
+    history_start: usize,
+) Error!void {
+    const block_start_len = written.*;
+    if (history_start > block_start_len) return error.InvalidMatch;
+    if (expected_size) |size| {
+        if (output.len - written.* < size) return error.OutputTooSmall;
+    }
+
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const token = input[offset];
+        offset += 1;
+        var literal_len: usize = token >> 4;
+        if (literal_len == 15) literal_len = try checkedAdd(literal_len, try readLengthExtension(input, &offset));
+        if (input.len - offset < literal_len) return error.TruncatedFrame;
+        if (output.len - written.* < literal_len) return error.OutputTooSmall;
+        @memcpy(output[written.*..][0..literal_len], input[offset..][0..literal_len]);
+        written.* += literal_len;
+        offset += literal_len;
+        if (offset == input.len) break;
+
+        if (input.len - offset < 2) return error.TruncatedFrame;
+        const match_offset = std.mem.readInt(u16, input[offset..][0..2], .little);
+        offset += 2;
+        if (match_offset == 0 or match_offset > written.* - history_start) return error.InvalidMatch;
+        var match_len: usize = (token & 0x0f) + 4;
+        if ((token & 0x0f) == 15) match_len = try checkedAdd(match_len, try readLengthExtension(input, &offset));
+        if (output.len - written.* < match_len) return error.OutputTooSmall;
+
+        const repeat_start = written.* - match_offset;
+        appendMatchFromBuffer(output, written, repeat_start, match_len);
+    }
+
+    if (expected_size) |size| {
+        if (written.* - block_start_len != size) return error.SizeMismatch;
+    }
+}
+
+fn appendMatchFromBuffer(output: []u8, written: *usize, repeat_start: usize, match_len: usize) void {
+    // LZ4 matches are allowed to overlap the bytes being produced. Seed from
+    // already decoded history, then repeatedly copy from the destination span
+    // we just initialized. This preserves the byte-replay semantics while
+    // avoiding one-byte loops for common RLE-style offsets.
+    const initial_available = written.* - repeat_start;
+    const destination_start = written.*;
+    written.* += match_len;
+
+    var copied: usize = 0;
+    while (copied < match_len) {
+        const available = if (copied == 0) initial_available else copied;
+        const copy_len = @min(available, match_len - copied);
+        const source_start = if (copied == 0) repeat_start else destination_start;
+        @memcpy(
+            output[destination_start + copied ..][0..copy_len],
+            output[source_start..][0..copy_len],
+        );
+        copied += copy_len;
     }
 }
 
@@ -578,6 +727,10 @@ test "lz4 lib frame encoder round trips and compresses repetitive payloads" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, repeated, decoded);
+    var into_buffer: [repeated.len]u8 = undefined;
+    const into_written = try decodeFrameInto(encoded, &into_buffer);
+    try std.testing.expectEqual(repeated.len, into_written);
+    try std.testing.expectEqualSlices(u8, repeated, into_buffer[0..into_written]);
 }
 
 test "lz4 frame encoder compresses repetitive payloads and round trips" {
@@ -588,6 +741,12 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, repeated, decoded);
+
+    var into_buffer: [repeated.len]u8 = undefined;
+    const into_written = try decodeFrameInto(encoded, &into_buffer);
+    try std.testing.expectEqual(repeated.len, into_written);
+    try std.testing.expectEqualSlices(u8, repeated, into_buffer[0..into_written]);
+    try std.testing.expectError(error.OutputTooSmall, decodeFrameInto(encoded, into_buffer[0 .. into_buffer.len - 1]));
 }
 
 test "lz4 decoder handles independent frame and raw overlapping matches" {
@@ -611,6 +770,11 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
     const raw_decoded = try decodeBlockAlloc(std.testing.allocator, &raw_match, 10);
     defer std.testing.allocator.free(raw_decoded);
     try std.testing.expectEqualSlices(u8, "abcabcabca", raw_decoded);
+    var raw_into: [10]u8 = undefined;
+    const raw_into_written = try decodeBlockIntoSlice(&raw_match, &raw_into, 10);
+    try std.testing.expectEqual(@as(usize, 10), raw_into_written);
+    try std.testing.expectEqualSlices(u8, "abcabcabca", &raw_into);
+    try std.testing.expectError(error.OutputTooSmall, decodeBlockIntoSlice(&raw_match, raw_into[0..9], 10));
 
     var long_run: std.ArrayList(u8) = .empty;
     defer long_run.deinit(std.testing.allocator);
@@ -662,6 +826,10 @@ test "lz4 native frame decoder validates header, block checksum, and block size"
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, plain, decoded);
+    var into_buffer: [plain.len]u8 = undefined;
+    const into_written = try decodeNativeFrameInto(frame.items, &into_buffer);
+    try std.testing.expectEqual(plain.len, into_written);
+    try std.testing.expectEqualSlices(u8, plain, into_buffer[0..into_written]);
 
     var bad_header = try std.testing.allocator.dupe(u8, frame.items);
     defer std.testing.allocator.free(bad_header);
