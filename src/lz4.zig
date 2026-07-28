@@ -1039,21 +1039,33 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     defer std.testing.allocator.free(with_options_decoded);
     try std.testing.expectEqualSlices(u8, repeated, with_options_decoded);
 
-    const small_block_payload = try std.testing.allocator.alloc(u8, 70 * 1024);
-    defer std.testing.allocator.free(small_block_payload);
-    @memset(small_block_payload, 'q');
-    const small_blocks = try encodePureFrameWithOptionsAlloc(
-        std.testing.allocator,
-        small_block_payload,
-        .{ .block_size_id = .max64kb, .content_checksum = false },
-    );
-    defer std.testing.allocator.free(small_blocks);
-    try std.testing.expectEqual(@as(u8, 0x40), small_blocks[5]);
-    const first_block_len = std.mem.readInt(u32, small_blocks[7 + 8 ..][0..4], .little) & 0x7fff_ffff;
-    try std.testing.expect(first_block_len <= 64 * 1024);
-    const small_blocks_decoded = try decodeNativeFrameAlloc(std.testing.allocator, small_blocks);
-    defer std.testing.allocator.free(small_blocks_decoded);
-    try std.testing.expectEqualSlices(u8, small_block_payload, small_blocks_decoded);
+    const block_cases = [_]struct {
+        id: BlockSizeId,
+        bd: u8,
+        max_len: usize,
+    }{
+        .{ .id = .max64kb, .bd = 0x40, .max_len = 64 * 1024 },
+        .{ .id = .max256kb, .bd = 0x50, .max_len = 256 * 1024 },
+        .{ .id = .max1mb, .bd = 0x60, .max_len = 1024 * 1024 },
+        .{ .id = .max4mb, .bd = 0x70, .max_len = max_frame_block_len },
+    };
+    for (block_cases) |case| {
+        const payload = try std.testing.allocator.alloc(u8, case.max_len + 4096);
+        defer std.testing.allocator.free(payload);
+        @memset(payload, 'q');
+        const encoded_blocks = try encodePureFrameWithOptionsAlloc(
+            std.testing.allocator,
+            payload,
+            .{ .block_size_id = case.id, .content_checksum = false },
+        );
+        defer std.testing.allocator.free(encoded_blocks);
+        try std.testing.expectEqual(case.bd, encoded_blocks[5]);
+        const first_block_len = std.mem.readInt(u32, encoded_blocks[7 + 8 ..][0..4], .little) & 0x7fff_ffff;
+        try std.testing.expect(first_block_len <= case.max_len);
+        const decoded_blocks = try decodeNativeFrameAlloc(std.testing.allocator, encoded_blocks);
+        defer std.testing.allocator.free(decoded_blocks);
+        try std.testing.expectEqualSlices(u8, payload, decoded_blocks);
+    }
 
     var into_buffer: [repeated.len]u8 = undefined;
     const into_written = try decodeFrameInto(encoded, &into_buffer);
