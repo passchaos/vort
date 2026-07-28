@@ -47,13 +47,13 @@ def native_decode(cli: pathlib.Path, frame: bytes, expected: bytes) -> None:
     result = subprocess.run(
         [str(cli), "decode-zstd-native-hex", frame.hex(), str(len(expected))],
         cwd=ROOT,
-        text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
     if result.returncode != 0:
-        raise AssertionError(result.stderr.strip() or f"native decode rc={result.returncode}")
-    decoded_len, crc = parse_crc(result.stdout)
+        stderr = result.stderr.decode("utf-8", "replace").strip()
+        raise AssertionError(stderr or f"native decode rc={result.returncode}")
+    decoded_len, crc = parse_crc(result.stdout.decode("utf-8", "replace"))
     expected_crc = zlib.crc32(expected) & 0xFFFFFFFF
     if decoded_len != len(expected) or crc != expected_crc:
         raise AssertionError(
@@ -95,9 +95,19 @@ def generated_payloads() -> list[tuple[str, bytes]]:
     return cases
 
 
-def payloads(paths: list[pathlib.Path], limit: int) -> list[tuple[str, bytes]]:
+def discover_dir_payloads(dirs: list[pathlib.Path], max_files: int) -> list[pathlib.Path]:
+    files: list[pathlib.Path] = []
+    for directory in dirs:
+        for path in sorted(p for p in directory.rglob("*") if p.is_file()):
+            files.append(path)
+            if max_files > 0 and len(files) >= max_files:
+                return files
+    return files
+
+
+def payloads(paths: list[pathlib.Path], dirs: list[pathlib.Path], max_files: int, limit: int) -> list[tuple[str, bytes]]:
     cases = generated_payloads()
-    for path in paths:
+    for path in [*paths, *discover_dir_payloads(dirs, max_files)]:
         data = path.read_bytes()
         if limit > 0:
             data = data[:limit]
@@ -114,6 +124,19 @@ def parse_args() -> argparse.Namespace:
         type=pathlib.Path,
         default=[],
         help="Add a file payload to the generated probe set. May be repeated.",
+    )
+    parser.add_argument(
+        "--dir",
+        action="append",
+        type=pathlib.Path,
+        default=[],
+        help="Add files discovered recursively under a directory. May be repeated.",
+    )
+    parser.add_argument(
+        "--max-files",
+        type=int,
+        default=8,
+        help="Maximum files discovered across all --dir inputs; 0 means no limit.",
     )
     parser.add_argument(
         "--limit",
@@ -135,7 +158,7 @@ def main() -> int:
 
     levels = (1, 3, 6, 9, 12, 19)
     checked = 0
-    for name, payload in payloads(args.path, args.limit):
+    for name, payload in payloads(args.path, args.dir, args.max_files, args.limit):
         for level in levels:
             frame = zstd_compress(payload, level)
             try:
