@@ -19,7 +19,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   single/concatenated streams, and caller-owned decode-into APIs,
   libzstd-backed Zstandard frame encode/decode with a
   dependency-free raw/RLE, literal-only compressed-block, minimal RLE-sequence,
-  and first predefined-sequence compressed-block fallback encode/decode
+  and default predefined-sequence compressed-block fallback encode/decode
   (falling back to raw/RLE blocks when sequence-free compressed blocks would
   expand, for broad zstd CLI compatibility) plus deterministic smallest-mode
   native selection, optional content checksum/content-size header fields,

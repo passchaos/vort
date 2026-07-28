@@ -728,6 +728,175 @@ const SequenceSymbol = struct {
     additional_bits: u8,
 };
 
+const default_ll_symbols = [_]SequenceSymbol{
+    .{ .base = 0, .additional_bits = 0 },
+    .{ .base = 0, .additional_bits = 0 },
+    .{ .base = 1, .additional_bits = 0 },
+    .{ .base = 3, .additional_bits = 0 },
+    .{ .base = 4, .additional_bits = 0 },
+    .{ .base = 6, .additional_bits = 0 },
+    .{ .base = 7, .additional_bits = 0 },
+    .{ .base = 9, .additional_bits = 0 },
+    .{ .base = 10, .additional_bits = 0 },
+    .{ .base = 12, .additional_bits = 0 },
+    .{ .base = 14, .additional_bits = 0 },
+    .{ .base = 16, .additional_bits = 1 },
+    .{ .base = 20, .additional_bits = 1 },
+    .{ .base = 22, .additional_bits = 1 },
+    .{ .base = 28, .additional_bits = 2 },
+    .{ .base = 32, .additional_bits = 3 },
+    .{ .base = 48, .additional_bits = 4 },
+    .{ .base = 64, .additional_bits = 6 },
+    .{ .base = 128, .additional_bits = 7 },
+    .{ .base = 256, .additional_bits = 8 },
+    .{ .base = 1024, .additional_bits = 10 },
+    .{ .base = 4096, .additional_bits = 12 },
+    .{ .base = 0, .additional_bits = 0 },
+    .{ .base = 1, .additional_bits = 0 },
+    .{ .base = 2, .additional_bits = 0 },
+    .{ .base = 4, .additional_bits = 0 },
+    .{ .base = 5, .additional_bits = 0 },
+    .{ .base = 7, .additional_bits = 0 },
+    .{ .base = 8, .additional_bits = 0 },
+    .{ .base = 10, .additional_bits = 0 },
+    .{ .base = 11, .additional_bits = 0 },
+    .{ .base = 13, .additional_bits = 0 },
+    .{ .base = 16, .additional_bits = 1 },
+    .{ .base = 18, .additional_bits = 1 },
+    .{ .base = 22, .additional_bits = 1 },
+    .{ .base = 24, .additional_bits = 2 },
+    .{ .base = 32, .additional_bits = 3 },
+    .{ .base = 40, .additional_bits = 3 },
+    .{ .base = 64, .additional_bits = 6 },
+    .{ .base = 64, .additional_bits = 6 },
+    .{ .base = 128, .additional_bits = 7 },
+    .{ .base = 512, .additional_bits = 9 },
+    .{ .base = 2048, .additional_bits = 11 },
+    .{ .base = 0, .additional_bits = 0 },
+    .{ .base = 1, .additional_bits = 0 },
+    .{ .base = 2, .additional_bits = 0 },
+    .{ .base = 3, .additional_bits = 0 },
+    .{ .base = 5, .additional_bits = 0 },
+    .{ .base = 6, .additional_bits = 0 },
+    .{ .base = 8, .additional_bits = 0 },
+    .{ .base = 9, .additional_bits = 0 },
+    .{ .base = 11, .additional_bits = 0 },
+    .{ .base = 12, .additional_bits = 0 },
+    .{ .base = 15, .additional_bits = 0 },
+    .{ .base = 18, .additional_bits = 1 },
+    .{ .base = 20, .additional_bits = 1 },
+    .{ .base = 24, .additional_bits = 2 },
+    .{ .base = 28, .additional_bits = 2 },
+    .{ .base = 40, .additional_bits = 3 },
+    .{ .base = 48, .additional_bits = 4 },
+    .{ .base = 65536, .additional_bits = 16 },
+    .{ .base = 32768, .additional_bits = 15 },
+    .{ .base = 16384, .additional_bits = 14 },
+    .{ .base = 8192, .additional_bits = 13 },
+};
+
+const default_of_symbols = [_]SequenceSymbol{
+    .{ .base = 0, .additional_bits = 0 },
+    .{ .base = 61, .additional_bits = 6 },
+    .{ .base = 509, .additional_bits = 9 },
+    .{ .base = 32765, .additional_bits = 15 },
+    .{ .base = 2097149, .additional_bits = 21 },
+    .{ .base = 5, .additional_bits = 3 },
+    .{ .base = 125, .additional_bits = 7 },
+    .{ .base = 4093, .additional_bits = 12 },
+    .{ .base = 262141, .additional_bits = 18 },
+    .{ .base = 8388605, .additional_bits = 23 },
+    .{ .base = 29, .additional_bits = 5 },
+    .{ .base = 253, .additional_bits = 8 },
+    .{ .base = 16381, .additional_bits = 14 },
+    .{ .base = 1048573, .additional_bits = 20 },
+    .{ .base = 1, .additional_bits = 2 },
+    .{ .base = 125, .additional_bits = 7 },
+    .{ .base = 2045, .additional_bits = 11 },
+    .{ .base = 131069, .additional_bits = 17 },
+    .{ .base = 4194301, .additional_bits = 22 },
+    .{ .base = 13, .additional_bits = 4 },
+    .{ .base = 253, .additional_bits = 8 },
+    .{ .base = 8189, .additional_bits = 13 },
+    .{ .base = 524285, .additional_bits = 19 },
+    .{ .base = 1, .additional_bits = 1 },
+    .{ .base = 61, .additional_bits = 6 },
+    .{ .base = 1021, .additional_bits = 10 },
+    .{ .base = 65533, .additional_bits = 16 },
+    .{ .base = 268435453, .additional_bits = 28 },
+    .{ .base = 134217725, .additional_bits = 27 },
+    .{ .base = 67108861, .additional_bits = 26 },
+    .{ .base = 33554429, .additional_bits = 25 },
+    .{ .base = 16777213, .additional_bits = 24 },
+};
+
+const default_ml_symbols = [_]SequenceSymbol{
+    .{ .base = 3, .additional_bits = 0 },
+    .{ .base = 4, .additional_bits = 0 },
+    .{ .base = 5, .additional_bits = 0 },
+    .{ .base = 6, .additional_bits = 0 },
+    .{ .base = 8, .additional_bits = 0 },
+    .{ .base = 9, .additional_bits = 0 },
+    .{ .base = 11, .additional_bits = 0 },
+    .{ .base = 13, .additional_bits = 0 },
+    .{ .base = 16, .additional_bits = 0 },
+    .{ .base = 19, .additional_bits = 0 },
+    .{ .base = 22, .additional_bits = 0 },
+    .{ .base = 25, .additional_bits = 0 },
+    .{ .base = 28, .additional_bits = 0 },
+    .{ .base = 31, .additional_bits = 0 },
+    .{ .base = 34, .additional_bits = 0 },
+    .{ .base = 37, .additional_bits = 1 },
+    .{ .base = 41, .additional_bits = 1 },
+    .{ .base = 47, .additional_bits = 2 },
+    .{ .base = 59, .additional_bits = 3 },
+    .{ .base = 83, .additional_bits = 4 },
+    .{ .base = 131, .additional_bits = 7 },
+    .{ .base = 515, .additional_bits = 9 },
+    .{ .base = 4, .additional_bits = 0 },
+    .{ .base = 5, .additional_bits = 0 },
+    .{ .base = 6, .additional_bits = 0 },
+    .{ .base = 7, .additional_bits = 0 },
+    .{ .base = 9, .additional_bits = 0 },
+    .{ .base = 10, .additional_bits = 0 },
+    .{ .base = 12, .additional_bits = 0 },
+    .{ .base = 15, .additional_bits = 0 },
+    .{ .base = 18, .additional_bits = 0 },
+    .{ .base = 21, .additional_bits = 0 },
+    .{ .base = 24, .additional_bits = 0 },
+    .{ .base = 27, .additional_bits = 0 },
+    .{ .base = 30, .additional_bits = 0 },
+    .{ .base = 33, .additional_bits = 0 },
+    .{ .base = 35, .additional_bits = 1 },
+    .{ .base = 39, .additional_bits = 1 },
+    .{ .base = 43, .additional_bits = 2 },
+    .{ .base = 51, .additional_bits = 3 },
+    .{ .base = 67, .additional_bits = 4 },
+    .{ .base = 99, .additional_bits = 5 },
+    .{ .base = 259, .additional_bits = 8 },
+    .{ .base = 4, .additional_bits = 0 },
+    .{ .base = 4, .additional_bits = 0 },
+    .{ .base = 5, .additional_bits = 0 },
+    .{ .base = 7, .additional_bits = 0 },
+    .{ .base = 8, .additional_bits = 0 },
+    .{ .base = 10, .additional_bits = 0 },
+    .{ .base = 11, .additional_bits = 0 },
+    .{ .base = 14, .additional_bits = 0 },
+    .{ .base = 17, .additional_bits = 0 },
+    .{ .base = 20, .additional_bits = 0 },
+    .{ .base = 23, .additional_bits = 0 },
+    .{ .base = 26, .additional_bits = 0 },
+    .{ .base = 29, .additional_bits = 0 },
+    .{ .base = 32, .additional_bits = 0 },
+    .{ .base = 65539, .additional_bits = 16 },
+    .{ .base = 32771, .additional_bits = 15 },
+    .{ .base = 16387, .additional_bits = 14 },
+    .{ .base = 8195, .additional_bits = 13 },
+    .{ .base = 4099, .additional_bits = 12 },
+    .{ .base = 2051, .additional_bits = 11 },
+    .{ .base = 1027, .additional_bits = 10 },
+};
+
 fn parseRleSequenceSpec(block: []const u8, offset: *usize, sequence_count: usize) Error!RleSequenceSpec {
     if (sequence_count == 0) return error.CorruptFrame;
     if (block.len - offset.* < 1) return error.TruncatedFrame;
@@ -760,27 +929,18 @@ fn parseRleSequenceSpec(block: []const u8, offset: *usize, sequence_count: usize
 }
 
 fn defaultLiteralLengthSymbol(state: usize) Error!SequenceSymbol {
-    return switch (state) {
-        // Minimal predefined-table slice: enough to decode the first
-        // interoperable non-RLE sequence fixture. The table-driven shape keeps
-        // later expansion to the full default FSE tables localized.
-        2 => .{ .base = 1, .additional_bits = 0 },
-        else => error.UnsupportedZstdFeature,
-    };
+    if (state >= default_ll_symbols.len) return error.UnsupportedZstdFeature;
+    return default_ll_symbols[state];
 }
 
 fn defaultOffsetSymbol(state: usize) Error!SequenceSymbol {
-    return switch (state) {
-        0 => .{ .base = 0, .additional_bits = 0 },
-        else => error.UnsupportedZstdFeature,
-    };
+    if (state >= default_of_symbols.len) return error.UnsupportedZstdFeature;
+    return default_of_symbols[state];
 }
 
 fn defaultMatchLengthSymbol(state: usize) Error!SequenceSymbol {
-    return switch (state) {
-        20 => .{ .base = 131, .additional_bits = 7 },
-        else => error.UnsupportedZstdFeature,
-    };
+    if (state >= default_ml_symbols.len) return error.UnsupportedZstdFeature;
+    return default_ml_symbols[state];
 }
 
 const ReverseBitReader = struct {
@@ -1905,9 +2065,16 @@ test "zstd native raw/RLE decoder handles fallback frames and skippable frames" 
     try std.testing.expectEqualSlices(u8, raw ++ repeated, concatenated_decoded);
 }
 
-test "zstd native raw/RLE decoder rejects general compressed frames" {
+test "zstd native decoder accepts simple libzstd predefined frame" {
     const payload = "zstd payload zstd payload zstd payload zstd payload";
     const encoded = try encodeFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
-    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameAlloc(std.testing.allocator, encoded));
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var into_buffer: [payload.len]u8 = undefined;
+    const written = try decodeNativeFrameInto(encoded, &into_buffer);
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
 }
