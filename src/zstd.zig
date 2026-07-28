@@ -792,6 +792,35 @@ fn copyHuffmanLiteralsFromSection(
     if (end == section.regenerated_size) try cursor.expectEnd();
 }
 
+const HuffmanLiteralDecodeState = struct {
+    cursor: HuffmanLiteralCursor,
+    tree: StdZstdHuffmanTree,
+    decoded: usize = 0,
+};
+
+fn initHuffmanLiteralDecodeState(block: []const u8, section: LiteralOnlySection) Error!?HuffmanLiteralDecodeState {
+    if (section.kind != .compressed and section.kind != .treeless) return null;
+    return .{
+        .cursor = try initHuffmanLiteralCursor(block, section),
+        .tree = section.huffman_tree orelse return error.CorruptFrame,
+    };
+}
+
+fn copyLiteralsFromHuffmanState(
+    state: *HuffmanLiteralDecodeState,
+    section: LiteralOnlySection,
+    literal_offset: usize,
+    dest: []u8,
+) Error!void {
+    if (literal_offset != state.decoded) return error.CorruptFrame;
+    if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < dest.len) return error.CorruptFrame;
+    for (dest) |*out| {
+        out.* = try readHuffmanLiteralSymbolFromCursor(&state.cursor, state.tree);
+        state.decoded += 1;
+    }
+    if (state.decoded == section.regenerated_size) try state.cursor.expectEnd();
+}
+
 fn validateHuffmanLiteralsConsumed(block: []const u8, section: LiteralOnlySection) Error!void {
     if (section.kind != .compressed and section.kind != .treeless) return;
     const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
@@ -1824,17 +1853,30 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
     var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
+    var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
     while (state.remaining != 0) {
         const sequence = try readModeSequence(&state);
         const literal_len = sequence.literal_len;
-        try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
+        if (huffman_literals) |*huffman_state| {
+            if (output.len - written.* < literal_len) return error.OutputTooSmall;
+            try copyLiteralsFromHuffmanState(huffman_state, section, literal_offset, output[written.*..][0..literal_len]);
+            written.* += literal_len;
+        } else {
+            try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
+        }
         literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
         try copyMatchFromOutputBuffer(output, written, frame_output_start, sequence.match_offset, sequence.match_len);
     }
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     const last_literals = section.regenerated_size - literal_offset;
-    try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
+    if (huffman_literals) |*huffman_state| {
+        if (output.len - written.* < last_literals) return error.OutputTooSmall;
+        try copyLiteralsFromHuffmanState(huffman_state, section, literal_offset, output[written.*..][0..last_literals]);
+        written.* += last_literals;
+    } else {
+        try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
+    }
     frame_state.previous_tables = spec.tables();
     frame_state.repeated_offsets = state.repeated_offsets;
 }
@@ -3220,6 +3262,23 @@ test "zstd native decoder preserves previous offsets for direct offsets" {
     const written = try decodeNativeFrameInto(encoded, into_buffer);
     try std.testing.expectEqual(payload.items.len, written);
     try std.testing.expectEqualSlices(u8, payload.items, into_buffer[0..written]);
+}
+
+test "zstd native decoder streams many Huffman literal runs without replay" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    try payload.ensureTotalCapacity(std.testing.allocator, 80_000);
+    const alphabet = "ACGTN";
+    for (0..80_000) |i| {
+        try payload.append(std.testing.allocator, alphabet[(i * 17 + i / 7 + i / 31) % alphabet.len]);
+    }
+
+    const encoded = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 1);
+    defer std.testing.allocator.free(encoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
 }
 
 test "zstd native decoder rejects malformed FSE compressed sequence tables" {
