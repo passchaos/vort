@@ -10,6 +10,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     vort_mod.linkSystemLibrary("zstd", .{});
+    vort_mod.linkSystemLibrary("lz4", .{});
     vort_mod.linkSystemLibrary("c", .{});
     const vort_mod_releasefast = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
@@ -17,6 +18,7 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseFast,
     });
     vort_mod_releasefast.linkSystemLibrary("zstd", .{});
+    vort_mod_releasefast.linkSystemLibrary("lz4", .{});
     vort_mod_releasefast.linkSystemLibrary("c", .{});
 
     const lib = b.addLibrary(.{

@@ -3,6 +3,8 @@ const core = @import("core.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
+pub const default_compression_level: c_int = 10;
+
 const frame_magic = [_]u8{ 0x04, 0x22, 0x4d, 0x18 };
 const max_frame_block_len = 4 * 1024 * 1024;
 const hash_table_len = 64 * 1024;
@@ -14,17 +16,65 @@ const max_chain_depth = 8;
 const good_match_len = 64;
 const lazy_extra_gain = 1;
 
+const Lz4FrameInfo = extern struct {
+    blockSizeID: c_int = 7, // LZ4F_max4MB
+    blockMode: c_int = 0, // LZ4F_blockLinked; better ratio than independent blocks.
+    contentChecksumFlag: c_int = 1,
+    frameType: c_int = 0,
+    contentSize: c_ulonglong = 0,
+    dictID: c_uint = 0,
+    blockChecksumFlag: c_int = 0,
+};
+
+const Lz4Preferences = extern struct {
+    frameInfo: Lz4FrameInfo = .{},
+    compressionLevel: c_int = default_compression_level,
+    autoFlush: c_uint = 0,
+    favorDecSpeed: c_uint = 0,
+    reserved: [3]c_uint = .{ 0, 0, 0 },
+};
+
+extern fn LZ4F_compressFrameBound(srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
+extern fn LZ4F_compressFrame(dstBuffer: *anyopaque, dstCapacity: usize, srcBuffer: *const anyopaque, srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
+extern fn LZ4F_isError(code: usize) c_uint;
+
 const Match = struct {
     start: usize = 0,
     len: usize = 0,
 };
 
-/// Encode a complete interoperable LZ4 frame with independent blocks.
-///
-/// The frame includes content size and content checksum. Blocks use a bounded
-/// hash-chain parser with one-byte lazy matching, and fall back to uncompressed
-/// block storage whenever compression would expand the input.
+/// Encode a complete interoperable LZ4 frame using liblz4's high-compression
+/// frame encoder. The default level starts at LZ4HC_CLEVEL_OPT_MIN (10)
+/// because it closes the C++ reference ratio gap on MCAP chunk workloads while
+/// retaining competitive write time. Vort owns this dependency so downstream
+/// formats such as MCAP can use tuned LZ4 without carrying compression code
+/// themselves.
 pub fn encodeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return try encodeFrameWithLevelAlloc(allocator, input, default_compression_level);
+}
+
+pub fn encodeFrameWithLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: c_int) Error![]u8 {
+    var preferences = Lz4Preferences{
+        .frameInfo = .{ .contentSize = try checkedUsizeToU64(input.len) },
+        .compressionLevel = level,
+    };
+    const bound = LZ4F_compressFrameBound(input.len, &preferences);
+    if (LZ4F_isError(bound) != 0) return error.CorruptFrame;
+    var out = try allocator.alloc(u8, bound);
+    errdefer allocator.free(out);
+    const written = LZ4F_compressFrame(@ptrCast(out.ptr), out.len, @ptrCast(input.ptr), input.len, &preferences);
+    if (LZ4F_isError(written) != 0) return error.CorruptFrame;
+    if (allocator.remap(out, written)) |shrunk| return shrunk;
+    const exact = try allocator.dupe(u8, out[0..written]);
+    allocator.free(out);
+    return exact;
+}
+
+/// Dependency-free pure Zig LZ4 frame encoder retained for bootstrapping and
+/// differential testing. Blocks use a bounded hash-chain parser with one-byte
+/// lazy matching, and fall back to uncompressed storage when compression expands
+/// the input.
+pub fn encodePureFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     try out.appendSlice(allocator, &frame_magic);
@@ -496,9 +546,19 @@ fn checkedUsizeToU64(value: usize) Error!u64 {
     return std.math.cast(u64, value) orelse error.IntegerOverflow;
 }
 
+test "lz4 lib frame encoder round trips and compresses repetitive payloads" {
+    const repeated = "payload payload payload payload payload payload payload payload";
+    const encoded = try encodeFrameAlloc(std.testing.allocator, repeated);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len < repeated.len);
+    const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, repeated, decoded);
+}
+
 test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const repeated = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const encoded = try encodeFrameAlloc(std.testing.allocator, repeated);
+    const encoded = try encodePureFrameAlloc(std.testing.allocator, repeated);
     defer std.testing.allocator.free(encoded);
     try std.testing.expect(encoded.len < repeated.len);
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
