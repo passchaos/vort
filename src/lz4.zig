@@ -687,6 +687,10 @@ pub fn decodeBlockIntoSlice(input: []const u8, output: []u8, expected_size: ?usi
     return written;
 }
 
+pub fn decodedBlockSize(input: []const u8) Error!usize {
+    return try compressedBlockDecodedSizeLimited(input, 0, std.math.maxInt(usize));
+}
+
 fn decodeBlockInto(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -1216,6 +1220,7 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
     const raw_decoded = try decodeBlockAlloc(std.testing.allocator, &raw_match, 10);
     defer std.testing.allocator.free(raw_decoded);
     try std.testing.expectEqualSlices(u8, "abcabcabca", raw_decoded);
+    try std.testing.expectEqual(@as(usize, 10), try decodedBlockSize(&raw_match));
     var raw_into: [10]u8 = undefined;
     const raw_into_written = try decodeBlockIntoSlice(&raw_match, &raw_into, 10);
     try std.testing.expectEqual(@as(usize, 10), raw_into_written);
