@@ -19,9 +19,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   single/concatenated streams, and caller-owned decode-into APIs,
   libzstd-backed Zstandard frame encode/decode with a
   dependency-free raw/RLE and literal-only compressed-block fallback
-  encode/decode plus deterministic smallest-mode native selection, optional
-  content checksum/content-size header fields, skippable frame writer,
-  decoded-size preflight, bounded allocation, and caller-owned decode-into API,
+  encode/decode (falling back to raw/RLE blocks when sequence-free compressed
+  blocks would expand, for broad zstd CLI compatibility) plus deterministic
+  smallest-mode native selection, optional content checksum/content-size header
+  fields, skippable frame writer, decoded-size preflight, bounded allocation,
+  and caller-owned decode-into API,
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;

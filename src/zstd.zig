@@ -814,11 +814,30 @@ fn emitBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []con
 }
 
 fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
+    const literal_kind: LiteralsKind = if (rleByte(block) != null) .rle else .raw;
+    const literal_payload_len: usize = switch (literal_kind) {
+        .raw => block.len,
+        .rle => 1,
+    };
+    const header_len = try literalsHeaderLen(block.len);
+    const payload_prefix_len = std.math.add(usize, header_len, literal_payload_len) catch return error.IntegerOverflow;
+    const payload_len = std.math.add(
+        usize,
+        payload_prefix_len,
+        1, // sequence_count=0: the compressed block is literals-only.
+    ) catch return error.IntegerOverflow;
+    // The reference encoder avoids compressed blocks when entropy/literal
+    // section headers erase the size win. Requiring an actual size reduction
+    // also sidesteps deployed zstd CLI/lib builds that reject some
+    // sequence-free compressed blocks once Block_Size exceeds the regenerated
+    // block size.
+    if (payload_len >= block.len) return try emitBlock(allocator, out, block, last);
+
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    if (rleByte(block)) |byte| {
+    if (literal_kind == .rle) {
         try emitLiteralsHeader(allocator, &payload, .rle, block.len);
-        try payload.append(allocator, byte);
+        try payload.append(allocator, block[0]);
     } else {
         try emitLiteralsHeader(allocator, &payload, .raw, block.len);
         try payload.appendSlice(allocator, block);
@@ -829,7 +848,7 @@ fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
 }
 
 fn emitLiteralsHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), kind: LiteralsKind, regenerated_size: usize) Error!void {
-    if (regenerated_size > std.math.maxInt(u20)) return error.IntegerOverflow;
+    _ = try literalsHeaderLen(regenerated_size);
     const kind_bits: u8 = switch (kind) {
         .raw => 0,
         .rle => 1,
@@ -849,6 +868,13 @@ fn emitLiteralsHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), kin
         try out.append(allocator, mid);
         try out.append(allocator, high);
     }
+}
+
+fn literalsHeaderLen(regenerated_size: usize) Error!usize {
+    if (regenerated_size > std.math.maxInt(u20)) return error.IntegerOverflow;
+    if (regenerated_size <= 31) return 1;
+    if (regenerated_size <= 4095) return 2;
+    return 3;
 }
 
 fn emitRawBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
@@ -1077,32 +1103,32 @@ test "zstd native no-size writer chooses valid window descriptors" {
 test "zstd native decoder accepts literal-only compressed blocks" {
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
-    try emitFrameHeader(std.testing.allocator, &frame, 3, .{});
-    try emitBlockHeader(std.testing.allocator, &frame, 2, 5, true);
-    try frame.append(std.testing.allocator, 3 << 3); // raw literals, one-byte size field, regenerated size=3
-    try frame.appendSlice(std.testing.allocator, "abc");
+    try emitFrameHeader(std.testing.allocator, &frame, 4, .{});
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 3, true);
+    try frame.append(std.testing.allocator, (4 << 3) | 1); // RLE literals, one-byte size field, regenerated size=4
+    try frame.append(std.testing.allocator, 'z');
     try frame.append(std.testing.allocator, 0); // sequence_count=0, so the block is literals-only
     var checksum: [4]u8 = undefined;
-    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, "abc")), .little);
+    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, "zzzz")), .little);
     try frame.appendSlice(std.testing.allocator, &checksum);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(std_decoded);
-    try std.testing.expectEqualSlices(u8, "abc", std_decoded);
+    try std.testing.expectEqualSlices(u8, "zzzz", std_decoded);
 
     const native_decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(native_decoded);
-    try std.testing.expectEqualSlices(u8, "abc", native_decoded);
+    try std.testing.expectEqualSlices(u8, "zzzz", native_decoded);
 
-    var into_buffer: [3]u8 = undefined;
+    var into_buffer: [4]u8 = undefined;
     const written = try decodeNativeFrameInto(frame.items, &into_buffer);
-    try std.testing.expectEqual(@as(usize, 3), written);
-    try std.testing.expectEqualSlices(u8, "abc", into_buffer[0..written]);
+    try std.testing.expectEqual(@as(usize, 4), written);
+    try std.testing.expectEqualSlices(u8, "zzzz", into_buffer[0..written]);
 
-    const limited = try decodeNativeFrameAllocLimited(std.testing.allocator, frame.items, 3);
+    const limited = try decodeNativeFrameAllocLimited(std.testing.allocator, frame.items, 4);
     defer std.testing.allocator.free(limited);
-    try std.testing.expectEqualSlices(u8, "abc", limited);
-    try std.testing.expectError(error.OutputLimitExceeded, decodeNativeFrameAllocLimited(std.testing.allocator, frame.items, 2));
+    try std.testing.expectEqualSlices(u8, "zzzz", limited);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeNativeFrameAllocLimited(std.testing.allocator, frame.items, 3));
 }
 
 test "zstd literal-only compressed block rejects malformed sections" {
@@ -1138,7 +1164,7 @@ test "zstd literal-only compressed block rejects malformed sections" {
     try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameAlloc(std.testing.allocator, missing_literal_byte.items));
 }
 
-test "zstd literal-only frame writer round trips through std and native decoders" {
+test "zstd literal-only frame writer falls back when compressed literals expand" {
     const payload = "literal-only zstd payload";
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
@@ -1146,7 +1172,7 @@ test "zstd literal-only frame writer round trips through std and native decoders
     var block_offset: usize = 4;
     _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
     const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
-    try std.testing.expectEqual(@as(u24, 2), (block_header >> 1) & 0x3);
+    try std.testing.expectEqual(@as(u24, 0), (block_header >> 1) & 0x3);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);

@@ -39,8 +39,11 @@ def main() -> int:
         raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
 
     # The system zstd CLI is used as an interoperability oracle for the native
-    # raw/RLE frame subset. Vort's literal-only compressed-block subset is kept
-    # under Zig std + native unit coverage until the sequence/FSE path matures.
+    # raw/RLE frames and for literal-only requests. Literal-only requests may
+    # deliberately fall back to raw/RLE blocks when the sequence-free compressed
+    # block payload would not be smaller than the regenerated block. That keeps
+    # output compatible with deployed zstd builds that reject expanded
+    # compressed blocks even though newer format wording allows them.
     cases = [
         ("", "raw_or_rle", "true", "true"),
         ("hello", "raw_or_rle", "true", "true"),
@@ -48,6 +51,8 @@ def main() -> int:
         ("raw block without checksum", "raw_or_rle", "false", "true"),
         ("raw block without size", "raw_or_rle", "true", "false"),
         ("raw block minimal header", "raw_or_rle", "false", "false"),
+        ("literal-only zstd payload", "literal_only", "true", "true"),
+        ("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "literal_only", "true", "true"),
     ]
     for text, mode, checksum, content_size in cases:
         encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum, content_size)
