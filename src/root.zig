@@ -11,6 +11,8 @@ pub const lz77 = @import("lz77.zig");
 pub const dictionary = @import("dictionary.zig");
 pub const long_distance = @import("long_distance.zig");
 pub const planner = @import("planner.zig");
+pub const lz4 = @import("lz4.zig");
+pub const zstd = @import("zstd.zig");
 
 pub const Adler32 = checksum.Adler32;
 pub const Crc32 = checksum.Crc32;
