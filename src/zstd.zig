@@ -78,6 +78,8 @@ const zstd_content_size_error = std.math.maxInt(c_ulonglong) - 1;
 const zstd_c_compression_level: c_int = 100;
 const zstd_c_content_size_flag: c_int = 200;
 const zstd_c_checksum_flag: c_int = 201;
+const StdZstdLiteralsSection = std.compress.zstd.Decompress.LiteralsSection;
+const StdZstdHuffmanTree = StdZstdLiteralsSection.HuffmanTree;
 
 pub const LibFrameOptions = struct {
     include_content_size: bool = true,
@@ -230,11 +232,11 @@ fn decodeFrameAllocWithLimit(allocator: std.mem.Allocator, frame: []const u8, ma
 }
 
 /// Dependency-free Zstandard decoder for the raw/RLE frame subset emitted by
-/// `encodeRawOrRleFrameAlloc`, plus literal-only compressed blocks. It accepts
-/// concatenated supported frames and skippable frames, validates frame content
-/// sizes and optional content checksums, and deliberately rejects unsupported
-/// sequence/FSE payloads instead of silently falling back to a partial
-/// implementation.
+/// `encodeRawOrRleFrameAlloc`, plus the growing native compressed-block subset
+/// used by compatibility smoke tests. It accepts concatenated supported frames
+/// and skippable frames, validates frame content sizes and optional content
+/// checksums, and deliberately rejects unsupported sequence/FSE payloads instead
+/// of silently falling back to a partial implementation.
 pub fn decodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -731,9 +733,14 @@ fn copyLiteralsFromSection(
     written: *usize,
     literal_len: usize,
 ) Error!void {
-    if (literal_len == 0) return;
     if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) {
         return error.CorruptFrame;
+    }
+    if (literal_len == 0) {
+        if (section.kind == .compressed and literal_offset == section.regenerated_size) {
+            try copyHuffmanLiteralsFromSection(block, section, literal_offset, output[written.*..][0..0]);
+        }
+        return;
     }
     if (output.len - written.* < literal_len) return error.OutputTooSmall;
     switch (section.kind) {
@@ -747,9 +754,81 @@ fn copyLiteralsFromSection(
             if (section.regenerated_size == 0) return error.CorruptFrame;
             @memset(output[written.*..][0..literal_len], block[section.literal_payload_offset]);
         },
-        .compressed, .treeless => return error.UnsupportedZstdFeature,
+        .compressed => try copyHuffmanLiteralsFromSection(
+            block,
+            section,
+            literal_offset,
+            output[written.*..][0..literal_len],
+        ),
+        .treeless => return error.UnsupportedZstdFeature,
     }
     written.* += literal_len;
+}
+
+fn copyHuffmanLiteralsFromSection(
+    block: []const u8,
+    section: LiteralOnlySection,
+    literal_offset: usize,
+    dest: []u8,
+) Error!void {
+    if (section.size_format != 0) return error.UnsupportedZstdFeature;
+    const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
+    const stream_end = std.math.add(usize, section.literal_payload_offset, section.compressed_size) catch return error.IntegerOverflow;
+    if (section.huffman_stream_offset > stream_end or stream_end > block.len) return error.CorruptFrame;
+
+    // Literal copies are requested in sequence order, but the current minimal
+    // slice keeps no per-section cursor so preflight and decode can share the
+    // same immutable `LiteralOnlySection`. Re-reading from the start is slower
+    // for many small literal runs, yet it preserves exact behavior while this
+    // native Zstd path is still correctness-first and sequence/FSE support is
+    // incomplete.
+    var reader = try ReverseBitReader.init(block[section.huffman_stream_offset..stream_end]);
+    const end = std.math.add(usize, literal_offset, dest.len) catch return error.IntegerOverflow;
+    var decoded_index: usize = 0;
+    var output_index: usize = 0;
+    while (decoded_index < end) : (decoded_index += 1) {
+        const symbol = try readHuffmanLiteralSymbol(&reader, huffman_tree);
+        if (decoded_index >= literal_offset) {
+            dest[output_index] = symbol;
+            output_index += 1;
+        }
+    }
+    if (end == section.regenerated_size) try reader.expectEnd();
+}
+
+fn readHuffmanLiteralSymbol(reader: *ReverseBitReader, huffman_tree: StdZstdHuffmanTree) Error!u8 {
+    const max_bit_count = huffman_tree.max_bit_count;
+    const starting_bit_count = StdZstdHuffmanTree.weightToBitCount(
+        huffman_tree.nodes[huffman_tree.symbol_count_minus_one].weight,
+        max_bit_count,
+    );
+    var bits_read: u4 = 0;
+    var huffman_tree_index: usize = huffman_tree.symbol_count_minus_one;
+    var bit_count_to_read = starting_bit_count;
+    var prefix: u16 = 0;
+    while (true) {
+        const new_bits = reader.read(bit_count_to_read) catch |err| switch (err) {
+            error.TruncatedFrame => return error.CorruptFrame,
+            else => |e| return e,
+        };
+        prefix <<= bit_count_to_read;
+        prefix |= @intCast(new_bits);
+        bits_read += bit_count_to_read;
+        const result = huffman_tree.query(huffman_tree_index, prefix) catch return error.CorruptFrame;
+
+        switch (result) {
+            .symbol => |symbol| return symbol,
+            .index => |index| {
+                huffman_tree_index = index;
+                const bit_count = StdZstdHuffmanTree.weightToBitCount(
+                    huffman_tree.nodes[index].weight,
+                    max_bit_count,
+                );
+                if (bit_count <= bits_read) return error.CorruptFrame;
+                bit_count_to_read = bit_count - bits_read;
+            },
+        }
+    }
 }
 
 fn compressedLiteralOnlyBlockDecodedSize(
@@ -784,11 +863,14 @@ const LiteralsKind = enum { raw, rle, compressed, treeless };
 
 const LiteralOnlySection = struct {
     kind: LiteralsKind,
+    size_format: u2,
     regenerated_size: usize,
     literal_payload_offset: usize,
+    huffman_stream_offset: usize,
     compressed_size: usize = 0,
     sequence_count: usize,
     sequence_payload_offset: usize,
+    huffman_tree: ?StdZstdHuffmanTree = null,
 };
 
 fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Error!LiteralOnlySection {
@@ -805,23 +887,40 @@ fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Err
     if (literal_header.kind == .treeless and !frame_state.has_huffman_literals) {
         return error.CorruptFrame;
     }
-    if (literal_header.kind == .compressed) frame_state.has_huffman_literals = true;
-    if (literal_header.kind == .compressed or literal_header.kind == .treeless) {
-        return error.UnsupportedZstdFeature;
+    var huffman_tree: ?StdZstdHuffmanTree = null;
+    var huffman_stream_offset = literal_payload_offset;
+    if (literal_header.kind == .compressed) {
+        const payload = block[literal_payload_offset..][0..literal_payload_len];
+        var reader: std.Io.Reader = .fixed(payload);
+        var remaining: std.Io.Limit = .limited(payload.len);
+        // Zig std's Zstandard Huffman table builder is public and tracks the
+        // same canonical tree invariants we need here. Keep the local code
+        // focused on frame integration and bitstream traversal instead of
+        // carrying a forked copy of the FSE/direct tree parser.
+        huffman_tree = decodeStdZstdHuffmanTree(&reader, &remaining) catch |err| switch (err) {
+            error.EndOfStream => return error.TruncatedFrame,
+            else => return error.CorruptFrame,
+        };
+        huffman_stream_offset += reader.seek;
+        frame_state.has_huffman_literals = true;
     }
     const sequence_count = try parseSequenceCount(block, &offset);
     return .{
         .kind = literal_header.kind,
+        .size_format = literal_header.size_format,
         .regenerated_size = literal_header.regenerated_size,
         .literal_payload_offset = literal_payload_offset,
+        .huffman_stream_offset = huffman_stream_offset,
         .compressed_size = literal_header.compressed_size,
         .sequence_count = sequence_count,
         .sequence_payload_offset = offset,
+        .huffman_tree = huffman_tree,
     };
 }
 
 const LiteralsHeaderInfo = struct {
     kind: LiteralsKind,
+    size_format: u2,
     regenerated_size: usize,
     compressed_size: usize = 0,
 };
@@ -831,7 +930,7 @@ fn parseLiteralsHeader(block: []const u8, offset: *usize) Error!LiteralsHeaderIn
     const byte0 = block[offset.*];
     offset.* += 1;
     const block_type = byte0 & 0x03;
-    const size_format = (byte0 >> 2) & 0x03;
+    const size_format: u2 = @intCast((byte0 >> 2) & 0x03);
     const kind: LiteralsKind = switch (block_type) {
         0 => .raw,
         1 => .rle,
@@ -859,14 +958,14 @@ fn parseLiteralsHeader(block: []const u8, offset: *usize) Error!LiteralsHeaderIn
             break :blk @as(usize, byte0 >> 4) + (@as(usize, byte1) << 4) + (@as(usize, byte2) << 12);
         },
     };
-    return .{ .kind = kind, .regenerated_size = regenerated_size };
+    return .{ .kind = kind, .size_format = size_format, .regenerated_size = regenerated_size };
 }
 
 fn parseHuffmanLiteralsHeader(
     block: []const u8,
     offset: *usize,
     byte0: u8,
-    size_format: u8,
+    size_format: u2,
     kind: LiteralsKind,
 ) Error!LiteralsHeaderInfo {
     return switch (size_format) {
@@ -882,7 +981,7 @@ fn parseHuffmanLiteralsHeader(
             const compressed_size = (value >> 10) & 0x3ff;
             if (compressed_size == 0) return error.CorruptFrame;
             if (size_format == 1 and compressed_size < 10) return error.CorruptFrame;
-            break :blk .{ .kind = kind, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
+            break :blk .{ .kind = kind, .size_format = size_format, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
         },
         2 => blk: {
             if (block.len - offset.* < 3) return error.TruncatedFrame;
@@ -897,7 +996,7 @@ fn parseHuffmanLiteralsHeader(
             const regenerated_size = value & 0x3fff;
             const compressed_size = (value >> 14) & 0x3fff;
             if (compressed_size < 10) return error.CorruptFrame;
-            break :blk .{ .kind = kind, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
+            break :blk .{ .kind = kind, .size_format = size_format, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
         },
         else => blk: {
             if (block.len - offset.* < 4) return error.TruncatedFrame;
@@ -914,9 +1013,16 @@ fn parseHuffmanLiteralsHeader(
             const regenerated_size = value & 0x3ffff;
             const compressed_size = (value >> 18) & 0x3ffff;
             if (compressed_size < 10) return error.CorruptFrame;
-            break :blk .{ .kind = kind, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
+            break :blk .{ .kind = kind, .size_format = size_format, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
         },
     };
+}
+
+fn decodeStdZstdHuffmanTree(
+    reader: *std.Io.Reader,
+    remaining: *std.Io.Limit,
+) StdZstdHuffmanTree.DecodeError!StdZstdHuffmanTree {
+    return try StdZstdHuffmanTree.decode(reader, remaining);
 }
 
 fn parseSequenceCount(block: []const u8, offset: *usize) Error!usize {
@@ -2497,17 +2603,17 @@ test "zstd literal-only compressed block rejects malformed sections" {
     try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameAlloc(std.testing.allocator, missing_literal_byte.items));
 }
 
-test "zstd native decoder recognizes unsupported Huffman literals" {
+test "zstd native decoder rejects malformed Huffman literals" {
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
     try emitFrameHeader(std.testing.allocator, &frame, 3, .{ .content_checksum = false });
     try emitBlockHeader(std.testing.allocator, &frame, 2, 4, true);
     try frame.appendSlice(std.testing.allocator, &.{ 0x32, 0x40, 0x00 }); // compressed literals: regenerated=3, compressed=1.
     try frame.append(std.testing.allocator, 1);
-    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameAlloc(std.testing.allocator, frame.items));
+    try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameAlloc(std.testing.allocator, frame.items));
     var output: [3]u8 = undefined;
-    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameInto(frame.items, &output));
-    try std.testing.expectError(error.UnsupportedZstdFeature, decodedRawOrRleFrameSize(frame.items));
+    try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameInto(frame.items, &output));
+    try std.testing.expectError(error.TruncatedFrame, decodedRawOrRleFrameSize(frame.items));
 
     var zero_size: std.ArrayList(u8) = .empty;
     defer zero_size.deinit(std.testing.allocator);
@@ -2523,6 +2629,34 @@ test "zstd native decoder recognizes unsupported Huffman literals" {
     try treeless_first.appendSlice(std.testing.allocator, &.{ 0x33, 0x40, 0x00 }); // treeless literals before any Huffman tree.
     try treeless_first.append(std.testing.allocator, 1);
     try std.testing.expectError(error.CorruptFrame, decodeNativeFrameAlloc(std.testing.allocator, treeless_first.items));
+}
+
+test "zstd native decoder accepts single-stream Huffman literals" {
+    const unit = "{\"key\":\"value\",\"number\":123,\"array\":[1,2,3],\"text\":\"abcdefg\"}\n";
+    const payload = unit ** 100;
+    const frame_hex =
+        "28b52ffd04680d0200e2c30d1290cf016c3325f0fdb0cddd2ce10b3339ce4e20b" ++
+        "fb1a5123a279f76cdb7192d3a14f27ba43cef2102b95c08d2f8fea2efd493d" ++
+        "fe58e0301007e7f411fa095c60c5d";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, &frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var into_buffer: [payload.len]u8 = undefined;
+    const written = try decodeNativeFrameInto(&frame, &into_buffer);
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
+
+    const limited = try decodeNativeFrameAllocLimited(std.testing.allocator, &frame, payload.len);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, payload, limited);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeNativeFrameAllocLimited(std.testing.allocator, &frame, payload.len - 1));
+
+    const decoded_len = try decodedRawOrRleFrameSize(&frame);
+    try std.testing.expectEqual(payload.len, decoded_len);
 }
 
 test "zstd native decoder rejects FSE compressed sequence tables" {
