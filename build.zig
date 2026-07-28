@@ -27,13 +27,18 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(lib);
 
+    const tests_mod = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tests_mod.linkSystemLibrary("zstd", .{});
+    tests_mod.linkSystemLibrary("lz4", .{});
+    tests_mod.linkSystemLibrary("c", .{});
+
     const tests = b.addTest(.{
         .name = "vort-tests",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/root.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = tests_mod,
     });
     const run_tests = b.addRunArtifact(tests);
 

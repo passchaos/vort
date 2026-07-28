@@ -566,6 +566,8 @@ test {
     _ = dictionary;
     _ = long_distance;
     _ = planner;
+    _ = lz4;
+    _ = zstd;
 }
 
 test "root exports chunked compatibility decode helpers" {
