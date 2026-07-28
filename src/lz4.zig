@@ -137,6 +137,8 @@ pub fn encodePureFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Err
     return out.toOwnedSlice(allocator);
 }
 
+pub const encodeNativeFrameAlloc = encodePureFrameAlloc;
+
 /// Decode an LZ4 frame. Independent and linked blocks are supported; external
 /// dictionaries are not required for frames produced by `encodeFrameAlloc`.
 pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
@@ -144,9 +146,10 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
     if (!std.mem.eql(u8, frame[0..4], &frame_magic)) return error.CorruptFrame;
     const flg = frame[4];
     const bd = frame[5];
-    _ = bd;
     const version = (flg >> 6) & 0x03;
     if (version != 0x01) return error.UnsupportedVersion;
+    if ((flg & 0x02) != 0) return error.CorruptFrame;
+    const block_size_max = try blockSizeMaxFromDescriptor(bd);
     const block_independent = (flg & 0x20) != 0;
     const block_checksum = (flg & 0x10) != 0;
     const content_size = (flg & 0x08) != 0;
@@ -165,7 +168,8 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
         offset += 4;
     }
     if (offset >= frame.len) return error.TruncatedFrame;
-    offset += 1; // header checksum
+    if (frame[offset] != descriptorChecksum(frame[4..offset])) return error.ChecksumMismatch;
+    offset += 1;
 
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -177,6 +181,7 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
         if (block_header == 0) break;
         const uncompressed_block = (block_header & 0x8000_0000) != 0;
         const block_len: usize = @intCast(block_header & 0x7fff_ffff);
+        if (block_len > block_size_max) return error.CorruptFrame;
         if (frame.len - offset < block_len) return error.TruncatedFrame;
         const block = frame[offset..][0..block_len];
         offset += block_len;
@@ -199,6 +204,8 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
         }
         if (block_checksum) {
             if (frame.len - offset < 4) return error.TruncatedFrame;
+            const expected = std.mem.readInt(u32, frame[offset..][0..4], .little);
+            if (std.hash.XxHash32.hash(0, block) != expected) return error.ChecksumMismatch;
             offset += 4;
         }
     }
@@ -213,6 +220,23 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
     }
     if (offset != frame.len) return error.TrailingData;
     return out.toOwnedSlice(allocator);
+}
+
+pub const decodeNativeFrameAlloc = decodeFrameAlloc;
+
+fn descriptorChecksum(descriptor: []const u8) u8 {
+    return @truncate(std.hash.XxHash32.hash(0, descriptor) >> 8);
+}
+
+fn blockSizeMaxFromDescriptor(bd: u8) Error!usize {
+    if ((bd & 0x8f) != 0) return error.CorruptFrame;
+    return switch ((bd >> 4) & 0x07) {
+        4 => 64 * 1024,
+        5 => 256 * 1024,
+        6 => 1024 * 1024,
+        7 => max_frame_block_len,
+        else => error.CorruptFrame,
+    };
 }
 
 pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
@@ -571,7 +595,8 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
     try frame.appendSlice(std.testing.allocator, &frame_magic);
-    try frame.appendSlice(std.testing.allocator, &.{ 0x60, 0x40, 0x00 });
+    try frame.appendSlice(std.testing.allocator, &.{ 0x60, 0x40 });
+    try frame.append(std.testing.allocator, descriptorChecksum(frame.items[4..]));
     var block_header: [4]u8 = undefined;
     std.mem.writeInt(u32, &block_header, 0x8000_0000 | @as(u32, @intCast(plain.len)), .little);
     try frame.appendSlice(std.testing.allocator, &block_header);
@@ -610,10 +635,46 @@ test "lz4 frame decoder rejects size and checksum mismatches" {
     var bad_size = try std.testing.allocator.dupe(u8, encoded);
     defer std.testing.allocator.free(bad_size);
     std.mem.writeInt(u64, bad_size[6..][0..8], input.len + 1, .little);
-    try std.testing.expectError(error.SizeMismatch, decodeFrameAlloc(std.testing.allocator, bad_size));
+    try std.testing.expectError(error.ChecksumMismatch, decodeFrameAlloc(std.testing.allocator, bad_size));
 
     var bad_checksum = try std.testing.allocator.dupe(u8, encoded);
     defer std.testing.allocator.free(bad_checksum);
     bad_checksum[bad_checksum.len - 1] ^= 0x01;
     try std.testing.expectError(error.ChecksumMismatch, decodeFrameAlloc(std.testing.allocator, bad_checksum));
+}
+
+test "lz4 native frame decoder validates header, block checksum, and block size" {
+    const plain = "hello-lz4-native-block";
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try frame.appendSlice(std.testing.allocator, &frame_magic);
+    try frame.appendSlice(std.testing.allocator, &.{ 0x70, 0x40 }); // independent blocks + block checksum, 64 KiB max
+    try frame.append(std.testing.allocator, descriptorChecksum(frame.items[4..]));
+    var block_header: [4]u8 = undefined;
+    std.mem.writeInt(u32, &block_header, 0x8000_0000 | @as(u32, @intCast(plain.len)), .little);
+    try frame.appendSlice(std.testing.allocator, &block_header);
+    try frame.appendSlice(std.testing.allocator, plain);
+    var block_checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &block_checksum, std.hash.XxHash32.hash(0, plain), .little);
+    try frame.appendSlice(std.testing.allocator, &block_checksum);
+    try frame.appendSlice(std.testing.allocator, &.{ 0, 0, 0, 0 });
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, plain, decoded);
+
+    var bad_header = try std.testing.allocator.dupe(u8, frame.items);
+    defer std.testing.allocator.free(bad_header);
+    bad_header[4] ^= 0x08;
+    try std.testing.expectError(error.ChecksumMismatch, decodeNativeFrameAlloc(std.testing.allocator, bad_header));
+
+    var bad_block_checksum = try std.testing.allocator.dupe(u8, frame.items);
+    defer std.testing.allocator.free(bad_block_checksum);
+    bad_block_checksum[bad_block_checksum.len - 5] ^= 0x01;
+    try std.testing.expectError(error.ChecksumMismatch, decodeNativeFrameAlloc(std.testing.allocator, bad_block_checksum));
+
+    var bad_block_size = try std.testing.allocator.dupe(u8, frame.items);
+    defer std.testing.allocator.free(bad_block_size);
+    std.mem.writeInt(u32, bad_block_size[7..][0..4], 0x8000_0000 | (64 * 1024 + 1), .little);
+    try std.testing.expectError(error.CorruptFrame, decodeNativeFrameAlloc(std.testing.allocator, bad_block_size));
 }

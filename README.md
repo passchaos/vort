@@ -13,7 +13,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - portable slice-by-4/slice-by-8/slice-by-16 IEEE CRC-32, slice-by-32 IEEE CRC-32, and slice-by-8/slice-by-16/slice-by-32 CRC-32C fast paths, checksum dispatch reporting, and Adler-32/CRC-32/CRC-32C combine helpers for block/parallel checksum composition;
 - shared progress/error/frame metadata types;
 - liblz4-backed LZ4 frame encoding plus pure Zig LZ4 frame/block
-  decode/fallback encode, libzstd-backed Zstandard frame encode/decode with a
+  decode/fallback encode with frame/block checksum validation,
+  libzstd-backed Zstandard frame encode/decode with a
   dependency-free raw/RLE fallback, used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;
