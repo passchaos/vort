@@ -1189,6 +1189,38 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
     try std.testing.expectEqualSlices(u8, "mnopmnop", prefixed);
 }
 
+test "lz4 linked frame decoder replays matches across block boundary" {
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try frame.appendSlice(std.testing.allocator, &frame_magic);
+    try frame.appendSlice(std.testing.allocator, &.{ 0x40, 0x40 }); // version=01, linked blocks, 64 KiB max
+    try frame.append(std.testing.allocator, descriptorChecksum(frame.items[4..]));
+
+    const first_block = "abcdefghijklmnop";
+    var block_header: [4]u8 = undefined;
+    std.mem.writeInt(u32, &block_header, 0x8000_0000 | @as(u32, first_block.len), .little);
+    try frame.appendSlice(std.testing.allocator, &block_header);
+    try frame.appendSlice(std.testing.allocator, first_block);
+
+    // The second block has no literals and one match with offset 4, so it must
+    // copy `mnop` from the linked frame history supplied by the first block.
+    const linked_match_block = [_]u8{ 0x04, 4, 0 };
+    std.mem.writeInt(u32, &block_header, linked_match_block.len, .little);
+    try frame.appendSlice(std.testing.allocator, &block_header);
+    try frame.appendSlice(std.testing.allocator, &linked_match_block);
+    try frame.appendSlice(std.testing.allocator, &.{ 0, 0, 0, 0 });
+
+    const expected = first_block ++ "mnopmnop";
+    const decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+
+    var into_buffer: [expected.len]u8 = undefined;
+    const written = try decodeFrameInto(frame.items, &into_buffer);
+    try std.testing.expectEqual(@as(usize, expected.len), written);
+    try std.testing.expectEqualSlices(u8, expected, into_buffer[0..written]);
+}
+
 test "lz4 frame decoder rejects size and checksum mismatches" {
     const input = "payload payload payload";
     const encoded = try encodeFrameAlloc(std.testing.allocator, input);
