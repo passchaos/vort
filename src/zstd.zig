@@ -20,8 +20,25 @@ extern fn ZSTD_isError(code: usize) c_uint;
 const zstd_content_size_unknown = std.math.maxInt(c_ulonglong);
 const zstd_content_size_error = std.math.maxInt(c_ulonglong) - 1;
 
+pub const NativeFrameSelection = enum {
+    auto,
+    raw_or_rle,
+    literal_only,
+};
+
 pub const NativeFrameOptions = struct {
     content_checksum: bool = true,
+    selection: NativeFrameSelection = .auto,
+};
+
+pub const NativeFrameMode = enum {
+    raw_or_rle,
+    literal_only,
+};
+
+pub const NativeFrameEncodeResult = struct {
+    frame: []u8,
+    mode: NativeFrameMode,
 };
 
 /// Decode a Zstandard frame. Prefer libzstd's one-shot decoder when the
@@ -231,7 +248,45 @@ pub fn encodeSkippableFrameAlloc(allocator: std.mem.Allocator, skippable_id: u4,
     return out.toOwnedSlice(allocator);
 }
 
-pub const encodeNativeFrameAlloc = encodeRawOrRleFrameAlloc;
+pub fn encodeNativeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, .{});
+    return result.frame;
+}
+
+pub fn encodeNativeFrameWithOptionsAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+) Error!NativeFrameEncodeResult {
+    switch (options.selection) {
+        .raw_or_rle => return .{
+            .frame = try encodeRawOrRleFrameWithOptionsAlloc(allocator, input, options),
+            .mode = .raw_or_rle,
+        },
+        .literal_only => return .{
+            .frame = try encodeLiteralOnlyFrameWithOptionsAlloc(allocator, input, options),
+            .mode = .literal_only,
+        },
+        .auto => {},
+    }
+
+    const raw_or_rle = try encodeRawOrRleFrameWithOptionsAlloc(allocator, input, options);
+    errdefer allocator.free(raw_or_rle);
+    const literal_only = try encodeLiteralOnlyFrameWithOptionsAlloc(allocator, input, options);
+    errdefer allocator.free(literal_only);
+
+    // Keep this selector deliberately simple and deterministic while the native
+    // Zstd implementation is still a bootstrap subset. It lets callers use one
+    // native API and still benefit if a future literal-only compressed mode beats
+    // raw/RLE framing, without hiding which mode was selected from tests/reports.
+    if (literal_only.len < raw_or_rle.len) {
+        allocator.free(raw_or_rle);
+        return .{ .frame = literal_only, .mode = .literal_only };
+    }
+
+    allocator.free(literal_only);
+    return .{ .frame = raw_or_rle, .mode = .raw_or_rle };
+}
 
 fn emitFrameHeader(
     allocator: std.mem.Allocator,
@@ -1015,6 +1070,35 @@ test "zstd literal-only writer uses RLE literals for repeated blocks" {
     const written = try decodeNativeFrameInto(encoded, &into_buffer);
     try std.testing.expectEqual(payload.len, written);
     try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
+}
+
+test "zstd native frame writer chooses smallest fallback mode" {
+    const repeated = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
+    const repeated_result = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, repeated, .{});
+    defer std.testing.allocator.free(repeated_result.frame);
+    try std.testing.expectEqual(NativeFrameMode.raw_or_rle, repeated_result.mode);
+    const repeated_decoded = try decodeNativeFrameAlloc(std.testing.allocator, repeated_result.frame);
+    defer std.testing.allocator.free(repeated_decoded);
+    try std.testing.expectEqualSlices(u8, repeated, repeated_decoded);
+
+    const literal_payload = "literal-only zstd payload";
+    const auto_result = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, literal_payload, .{});
+    defer std.testing.allocator.free(auto_result.frame);
+    const forced_literal = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, literal_payload, .{ .selection = .literal_only });
+    defer std.testing.allocator.free(forced_literal.frame);
+    try std.testing.expect(auto_result.frame.len <= forced_literal.frame.len);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, forced_literal.mode);
+    const literal_decoded = try decodeNativeFrameAlloc(std.testing.allocator, forced_literal.frame);
+    defer std.testing.allocator.free(literal_decoded);
+    try std.testing.expectEqualSlices(u8, literal_payload, literal_decoded);
+
+    const forced_raw = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, literal_payload, .{ .selection = .raw_or_rle });
+    defer std.testing.allocator.free(forced_raw.frame);
+    try std.testing.expectEqual(NativeFrameMode.raw_or_rle, forced_raw.mode);
+
+    const no_checksum = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, literal_payload, .{ .content_checksum = false, .selection = .literal_only });
+    defer std.testing.allocator.free(no_checksum.frame);
+    try std.testing.expectEqual(@as(u8, 0x20), no_checksum.frame[4]);
 }
 
 test "zstd raw/RLE native decoder rejects corrupt frames" {
