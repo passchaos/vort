@@ -37,6 +37,14 @@ const Lz4Preferences = extern struct {
     reserved: [3]c_uint = .{ 0, 0, 0 },
 };
 
+pub const LibFrameOptions = struct {
+    include_content_size: bool = true,
+    content_checksum: bool = true,
+    block_checksum: bool = false,
+    block_size_id: BlockSizeId = .max4mb,
+    block_mode: BlockMode = .linked,
+};
+
 extern fn LZ4F_compressFrameBound(srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
 extern fn LZ4F_compressFrame(dstBuffer: *anyopaque, dstCapacity: usize, srcBuffer: *const anyopaque, srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
 extern fn LZ4F_isError(code: usize) c_uint;
@@ -86,8 +94,30 @@ pub fn encodeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![
 }
 
 pub fn encodeFrameWithLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: c_int) Error![]u8 {
+    return try encodeFrameWithLevelAndOptionsAlloc(allocator, input, level, .{});
+}
+
+pub fn encodeFrameWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: LibFrameOptions) Error![]u8 {
+    return try encodeFrameWithLevelAndOptionsAlloc(allocator, input, default_compression_level, options);
+}
+
+pub fn encodeFrameWithLevelAndOptionsAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    level: c_int,
+    options: LibFrameOptions,
+) Error![]u8 {
     var preferences = Lz4Preferences{
-        .frameInfo = .{ .contentSize = try checkedUsizeToU64(input.len) },
+        .frameInfo = .{
+            .blockSizeID = @intFromEnum(options.block_size_id),
+            .blockMode = switch (options.block_mode) {
+                .linked => 0,
+                .independent => 1,
+            },
+            .contentChecksumFlag = if (options.content_checksum) 1 else 0,
+            .contentSize = if (options.include_content_size) try checkedUsizeToU64(input.len) else 0,
+            .blockChecksumFlag = if (options.block_checksum) 1 else 0,
+        },
         .compressionLevel = level,
     };
     const bound = LZ4F_compressFrameBound(input.len, &preferences);
@@ -1036,6 +1066,24 @@ test "lz4 lib frame encoder round trips and compresses repetitive payloads" {
     const into_written = try decodeFrameInto(encoded, &into_buffer);
     try std.testing.expectEqual(repeated.len, into_written);
     try std.testing.expectEqualSlices(u8, repeated, into_buffer[0..into_written]);
+
+    const no_content_fields = try encodeFrameWithLevelAndOptionsAlloc(
+        std.testing.allocator,
+        repeated,
+        4,
+        .{
+            .include_content_size = false,
+            .content_checksum = false,
+            .block_size_id = .max64kb,
+        },
+    );
+    defer std.testing.allocator.free(no_content_fields);
+    try std.testing.expectEqual(@as(u8, 0x60), no_content_fields[4]);
+    try std.testing.expectEqual(@as(u8, 0x40), no_content_fields[5]);
+    const no_content_decoded = try decodeFrameAlloc(std.testing.allocator, no_content_fields);
+    defer std.testing.allocator.free(no_content_decoded);
+    try std.testing.expectEqualSlices(u8, repeated, no_content_decoded);
+    try std.testing.expectEqual(repeated.len, try decodedFrameSize(no_content_fields));
 }
 
 test "lz4 frame encoder compresses repetitive payloads and round trips" {
