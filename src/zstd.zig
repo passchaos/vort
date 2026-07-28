@@ -117,6 +117,10 @@ pub fn decodeRawOrRleFrameAllocLimited(
     return out;
 }
 
+pub fn decodedRawOrRleFrameSize(frame: []const u8) Error!usize {
+    return try rawOrRleDecodedSizeLimited(frame, std.math.maxInt(usize));
+}
+
 /// Decode the raw/RLE Zstandard subset directly into caller-owned storage.
 /// The returned length is the number of bytes written across all concatenated
 /// non-skippable frames. This mirrors the allocator-returning fallback but lets
@@ -902,6 +906,7 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     const native_decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(native_decoded);
     try std.testing.expectEqualSlices(u8, payload, native_decoded);
+    try std.testing.expectEqual(payload.len, try decodedRawOrRleFrameSize(encoded));
     const no_checksum = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{ .content_checksum = false });
     defer std.testing.allocator.free(no_checksum);
     try std.testing.expectEqual(@as(u8, 0x20), no_checksum[4]);

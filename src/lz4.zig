@@ -284,6 +284,10 @@ pub fn decodeFrameAllocLimited(
     return out;
 }
 
+pub fn decodedFrameSize(frame: []const u8) Error!usize {
+    return try frameDecodedSizeLimited(frame, std.math.maxInt(usize));
+}
+
 pub const decodeNativeFrameAlloc = decodeFrameAlloc;
 pub const decodeNativeFrameAllocLimited = decodeFrameAllocLimited;
 
@@ -311,6 +315,10 @@ pub fn decodeConcatenatedFrameAllocLimited(
     };
     if (written != decoded_len) return error.SizeMismatch;
     return out;
+}
+
+pub fn decodedConcatenatedFrameSize(frames: []const u8) Error!usize {
+    return try concatenatedFrameDecodedSizeLimited(frames, std.math.maxInt(usize));
 }
 
 pub fn decodeConcatenatedFrameInto(frames: []const u8, output: []u8) Error!usize {
@@ -1019,6 +1027,7 @@ test "lz4 lib frame encoder round trips and compresses repetitive payloads" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, repeated, decoded);
+    try std.testing.expectEqual(repeated.len, try decodedFrameSize(encoded));
     const limited_decoded = try decodeFrameAllocLimited(std.testing.allocator, encoded, repeated.len);
     defer std.testing.allocator.free(limited_decoded);
     try std.testing.expectEqualSlices(u8, repeated, limited_decoded);
@@ -1116,6 +1125,7 @@ test "lz4 skippable frame writer composes with concatenated native streams" {
     const decoded = try decodeConcatenatedFrameAlloc(std.testing.allocator, stream.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "firstsecond", decoded);
+    try std.testing.expectEqual(@as(usize, "firstsecond".len), try decodedConcatenatedFrameSize(stream.items));
 
     const limited_decoded = try decodeConcatenatedFrameAllocLimited(std.testing.allocator, stream.items, "firstsecond".len);
     defer std.testing.allocator.free(limited_decoded);
