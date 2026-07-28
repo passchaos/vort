@@ -2331,22 +2331,21 @@ fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
 
 fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
     if (rleByte(block) != null) return false;
-    const period = repeatedPatternPeriod(block) orelse return false;
-    if (block.len <= period + 3) return false;
-    const tail_len = block.len % period;
-    const match_len = block.len - period - tail_len;
+    const pattern = findRepeatedPatternSegment(block) orelse return false;
+    const literal_len = pattern.start + pattern.period;
+    const match_len = pattern.match_len;
     if (match_len < 3) return false;
 
-    const literal_code = try sequenceCodeForValue(period, &ll_base, &ll_bits);
-    const offset_code = try sequenceCodeForValue(period, &of_base, &of_bits);
+    const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
+    const offset_code = try sequenceCodeForValue(pattern.period, &of_base, &of_bits);
     const match_code = try sequenceCodeForValue(match_len, &ml_base, &ml_bits);
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    const regenerated_literals = std.math.add(usize, period, tail_len) catch return error.IntegerOverflow;
+    const regenerated_literals = std.math.add(usize, literal_len, pattern.tail_len) catch return error.IntegerOverflow;
     try emitLiteralsHeader(allocator, &payload, .raw, regenerated_literals);
-    try payload.appendSlice(allocator, block[0..period]);
-    try payload.appendSlice(allocator, block[block.len - tail_len ..]);
+    try payload.appendSlice(allocator, block[0..literal_len]);
+    try payload.appendSlice(allocator, block[block.len - pattern.tail_len ..]);
     try payload.append(allocator, 1); // one sequence.
     try payload.append(allocator, 0x54); // LL, OF, and ML use RLE_Mode.
     try payload.append(allocator, literal_code);
@@ -2359,9 +2358,9 @@ fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.Ar
     // fields in the opposite order of the sequence reader so offset extra bits
     // sit closest to the marker and are read first.
     try emitReverseBitstream(allocator, &sequence_bits, &.{
-        .{ .value = period - ll_base[literal_code], .bits = ll_bits[literal_code] },
+        .{ .value = literal_len - ll_base[literal_code], .bits = ll_bits[literal_code] },
         .{ .value = match_len - ml_base[match_code], .bits = ml_bits[match_code] },
-        .{ .value = period - of_base[offset_code], .bits = of_bits[offset_code] },
+        .{ .value = pattern.period - of_base[offset_code], .bits = of_bits[offset_code] },
     });
     try payload.appendSlice(allocator, sequence_bits.items);
 
@@ -2371,6 +2370,13 @@ fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.Ar
     try out.appendSlice(allocator, payload.items);
     return true;
 }
+
+const RepeatedPatternSegment = struct {
+    start: usize,
+    period: usize,
+    match_len: usize,
+    tail_len: usize,
+};
 
 const BitField = struct {
     value: usize,
@@ -2400,14 +2406,24 @@ fn emitReverseBitstream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), f
     }
 }
 
-fn repeatedPatternPeriod(block: []const u8) ?usize {
+fn findRepeatedPatternSegment(block: []const u8) ?RepeatedPatternSegment {
     if (block.len < 8) return null;
-    for (2..@min(block.len / 2, 8) + 1) |period| {
-        var i: usize = period;
-        while (i < block.len and block[i] == block[i % period]) : (i += 1) {}
-        if (i == block.len) return period;
+    const max_start = @min(block.len / 2, 16);
+    var best: ?RepeatedPatternSegment = null;
+    for (0..max_start + 1) |start| {
+        if (block.len - start < 8) break;
+        for (2..@min((block.len - start) / 2, 8) + 1) |period| {
+            var i = start + period;
+            while (i < block.len and block[i] == block[start + ((i - start) % period)]) : (i += 1) {}
+            const repeated_len = i - start;
+            const match_len = repeated_len - period;
+            if (match_len < 3) continue;
+            const tail_len = block.len - i;
+            const candidate: RepeatedPatternSegment = .{ .start = start, .period = period, .match_len = match_len, .tail_len = tail_len };
+            if (best == null or candidate.match_len > best.?.match_len) best = candidate;
+        }
     }
-    return null;
+    return best;
 }
 
 fn sequenceCodeForValue(value: usize, bases: []const usize, bits: []const u8) Error!u8 {
@@ -3498,11 +3514,32 @@ test "zstd literal-only writer emits repeated-pattern sequence blocks" {
 }
 
 test "zstd literal-only writer keeps repeated-pattern tail literals" {
-    const payload = ("abcd" ** 20) ++ "ab";
+    const payload = ("abcd" ** 20) ++ "xy";
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
     const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(raw_encoded);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits repeated-pattern blocks after a prefix" {
+    const payload = "header:" ++ ("xyz" ** 24) ++ "xy";
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
