@@ -620,7 +620,7 @@ fn decodeLiteralOnlyCompressedBlockIntoBuffer(
     frame_output_start: usize,
     frame_state: *SequenceFrameState,
 ) Error!void {
-    const section = try parseLiteralsSection(block);
+    const section = try parseLiteralsSection(block, frame_state);
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
     if (section.sequence_count != 0) return try decodeRleSequencesCompressedBlockIntoBuffer(block, section, output, written, frame_output_start, frame_state);
     if (section.sequence_payload_offset != block.len) return error.UnsupportedZstdFeature;
@@ -662,7 +662,7 @@ fn compressedLiteralOnlyBlockDecodedSize(
     initial_output_len: usize,
     frame_state: *SequenceFrameState,
 ) Error!usize {
-    const section = try parseLiteralsSection(block);
+    const section = try parseLiteralsSection(block, frame_state);
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
     if (section.sequence_count == 0) {
         if (section.sequence_payload_offset != block.len) return error.UnsupportedZstdFeature;
@@ -695,7 +695,7 @@ const LiteralOnlySection = struct {
     sequence_payload_offset: usize,
 };
 
-fn parseLiteralsSection(block: []const u8) Error!LiteralOnlySection {
+fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Error!LiteralOnlySection {
     var offset: usize = 0;
     const literal_header = try parseLiteralsHeader(block, &offset);
     const literal_payload_offset = offset;
@@ -706,6 +706,10 @@ fn parseLiteralsSection(block: []const u8) Error!LiteralOnlySection {
     };
     if (block.len - offset < literal_payload_len) return error.TruncatedFrame;
     offset += literal_payload_len;
+    if (literal_header.kind == .treeless and !frame_state.has_huffman_literals) {
+        return error.CorruptFrame;
+    }
+    if (literal_header.kind == .compressed) frame_state.has_huffman_literals = true;
     if (literal_header.kind == .compressed or literal_header.kind == .treeless) {
         return error.UnsupportedZstdFeature;
     }
@@ -890,6 +894,7 @@ const SequenceFrameState = struct {
     // decoder closer to the spec without hiding unsupported FSE tables.
     previous_tables: ?SequenceTables = null,
     repeated_offsets: [3]usize = initial_repeated_offsets,
+    has_huffman_literals: bool = false,
 };
 
 const ResolvedSymbolTable = struct {
@@ -2378,6 +2383,14 @@ test "zstd native decoder recognizes unsupported Huffman literals" {
     try emitBlockHeader(std.testing.allocator, &zero_size, 2, 3, true);
     try zero_size.appendSlice(std.testing.allocator, &.{ 0x32, 0x00, 0x00 });
     try std.testing.expectError(error.CorruptFrame, decodeNativeFrameAlloc(std.testing.allocator, zero_size.items));
+
+    var treeless_first: std.ArrayList(u8) = .empty;
+    defer treeless_first.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &treeless_first, 3, .{ .content_checksum = false });
+    try emitBlockHeader(std.testing.allocator, &treeless_first, 2, 4, true);
+    try treeless_first.appendSlice(std.testing.allocator, &.{ 0x33, 0x40, 0x00 }); // treeless literals before any Huffman tree.
+    try treeless_first.append(std.testing.allocator, 1);
+    try std.testing.expectError(error.CorruptFrame, decodeNativeFrameAlloc(std.testing.allocator, treeless_first.items));
 }
 
 test "zstd literal-only frame writer falls back when compressed literals expand" {
@@ -2425,7 +2438,8 @@ test "zstd literal-only writer uses RLE literals for repeated blocks" {
     const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
     const block_len: usize = @intCast(block_header >> 3);
     try std.testing.expectEqual(@as(u24, 2), (block_header >> 1) & 0x3);
-    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len]);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
     try std.testing.expectEqual(LiteralsKind.rle, section.kind);
 
     var into_buffer: [payload.len]u8 = undefined;

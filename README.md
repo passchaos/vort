@@ -22,7 +22,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   dependency-free raw/RLE, literal-only compressed-block, minimal RLE-sequence,
   mixed RLE/predefined sequence, repeated sequence-table, and streaming default
   predefined-sequence compressed-block fallback encode/decode with explicit
-  Huffman-literals boundary errors
+  Huffman-/treeless-literals boundary errors
   (falling back to raw/RLE blocks when sequence-free compressed blocks would
   expand, for broad zstd CLI compatibility) plus deterministic smallest-mode
   native selection, optional content checksum/content-size header fields,
