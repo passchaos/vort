@@ -88,6 +88,9 @@ def main() -> int:
         ("raw block minimal header", "raw_or_rle", "false", "false"),
         ("literal-only zstd payload", "literal_only", "true", "true"),
         ("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "literal_only", "true", "true"),
+        ("abc" * 24, "literal_only", "true", "true"),
+        ("prefix-abcdefghijklmno-middle-abcdefghijklmno-tail", "literal_only", "true", "true"),
+        ("abcdefghijabcdefghijklmnopqrstklmnopqrst", "literal_only", "true", "true"),
     ]
     for text, mode, checksum, content_size in cases:
         encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum, content_size)
