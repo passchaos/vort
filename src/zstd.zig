@@ -20,6 +20,10 @@ extern fn ZSTD_isError(code: usize) c_uint;
 const zstd_content_size_unknown = std.math.maxInt(c_ulonglong);
 const zstd_content_size_error = std.math.maxInt(c_ulonglong) - 1;
 
+pub const NativeFrameOptions = struct {
+    content_checksum: bool = true,
+};
+
 /// Decode a Zstandard frame. Prefer libzstd's one-shot decoder when the
 /// content size is present, because MCAP chunks always advertise their decoded
 /// size and the one-shot path avoids streaming allocator overhead. Frames with
@@ -155,9 +159,17 @@ pub fn encodeFrameWithLevelAlloc(allocator: std.mem.Allocator, input: []const u8
 /// repeated-byte payloads. General-purpose MCAP chunk writing uses
 /// `encodeFrameAlloc()` so it benefits from the full zstd entropy encoder.
 pub fn encodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return try encodeRawOrRleFrameWithOptionsAlloc(allocator, input, .{});
+}
+
+pub fn encodeRawOrRleFrameWithOptionsAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
-    try emitFrameHeader(allocator, &out, try checkedUsizeToU64(input.len));
+    try emitFrameHeader(allocator, &out, try checkedUsizeToU64(input.len), options);
     if (input.len == 0) {
         try emitBlock(allocator, &out, "", true);
     } else {
@@ -176,16 +188,22 @@ pub fn encodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, input: []const u8)
             }
         }
     }
-    var checksum: [4]u8 = undefined;
-    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, input)), .little);
-    try out.appendSlice(allocator, &checksum);
+    try emitContentChecksum(allocator, &out, input, options);
     return out.toOwnedSlice(allocator);
 }
 
 pub fn encodeLiteralOnlyFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return try encodeLiteralOnlyFrameWithOptionsAlloc(allocator, input, .{});
+}
+
+pub fn encodeLiteralOnlyFrameWithOptionsAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
-    try emitFrameHeader(allocator, &out, try checkedUsizeToU64(input.len));
+    try emitFrameHeader(allocator, &out, try checkedUsizeToU64(input.len), options);
 
     var offset: usize = 0;
     if (input.len == 0) {
@@ -198,9 +216,7 @@ pub fn encodeLiteralOnlyFrameAlloc(allocator: std.mem.Allocator, input: []const 
         }
     }
 
-    var checksum: [4]u8 = undefined;
-    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, input)), .little);
-    try out.appendSlice(allocator, &checksum);
+    try emitContentChecksum(allocator, &out, input, options);
     return out.toOwnedSlice(allocator);
 }
 
@@ -217,32 +233,50 @@ pub fn encodeSkippableFrameAlloc(allocator: std.mem.Allocator, skippable_id: u4,
 
 pub const encodeNativeFrameAlloc = encodeRawOrRleFrameAlloc;
 
-fn emitFrameHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), content_len: u64) Error!void {
+fn emitFrameHeader(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    content_len: u64,
+    options: NativeFrameOptions,
+) Error!void {
     try out.appendSlice(allocator, &frame_magic);
 
     // Use the shortest single-segment Frame_Content_Size encoding permitted by
     // the Zstandard format. The previous bootstrap writer always spent eight
     // bytes here, which was easy to inspect but disproportionately expensive
     // for the tiny raw/RLE frames this dependency-free path is meant to cover.
+    const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
     if (content_len <= 255) {
-        try out.append(allocator, 0x24); // fcs=1 byte, single segment, content checksum
+        try out.append(allocator, 0x20 | checksum_flag); // fcs=1 byte, single segment
         try out.append(allocator, @intCast(content_len));
     } else if (content_len <= 256 + std.math.maxInt(u16)) {
-        try out.append(allocator, 0x64); // fcs=2 bytes (+256), single segment, content checksum
+        try out.append(allocator, 0x60 | checksum_flag); // fcs=2 bytes (+256), single segment
         var size_bytes: [2]u8 = undefined;
         std.mem.writeInt(u16, &size_bytes, @intCast(content_len - 256), .little);
         try out.appendSlice(allocator, &size_bytes);
     } else if (content_len <= std.math.maxInt(u32)) {
-        try out.append(allocator, 0xa4); // fcs=4 bytes, single segment, content checksum
+        try out.append(allocator, 0xa0 | checksum_flag); // fcs=4 bytes, single segment
         var size_bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &size_bytes, @intCast(content_len), .little);
         try out.appendSlice(allocator, &size_bytes);
     } else {
-        try out.append(allocator, 0xe4); // fcs=8 bytes, single segment, content checksum
+        try out.append(allocator, 0xe0 | checksum_flag); // fcs=8 bytes, single segment
         var size_bytes: [8]u8 = undefined;
         std.mem.writeInt(u64, &size_bytes, content_len, .little);
         try out.appendSlice(allocator, &size_bytes);
     }
+}
+
+fn emitContentChecksum(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: NativeFrameOptions,
+) Error!void {
+    if (!options.content_checksum) return;
+    var checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, input)), .little);
+    try out.appendSlice(allocator, &checksum);
 }
 
 const RawOrRleFrameHeader = struct {
@@ -790,6 +824,12 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     const native_decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(native_decoded);
     try std.testing.expectEqualSlices(u8, payload, native_decoded);
+    const no_checksum = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{ .content_checksum = false });
+    defer std.testing.allocator.free(no_checksum);
+    try std.testing.expectEqual(@as(u8, 0x20), no_checksum[4]);
+    const no_checksum_decoded = try decodeNativeFrameAlloc(std.testing.allocator, no_checksum);
+    defer std.testing.allocator.free(no_checksum_decoded);
+    try std.testing.expectEqualSlices(u8, payload, no_checksum_decoded);
     const limited_decoded = try decodeRawOrRleFrameAllocLimited(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(limited_decoded);
     try std.testing.expectEqualSlices(u8, payload, limited_decoded);
@@ -895,7 +935,7 @@ test "zstd raw/RLE native decoder accepts no-size raw frames" {
 test "zstd native decoder accepts literal-only compressed blocks" {
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
-    try emitFrameHeader(std.testing.allocator, &frame, 3);
+    try emitFrameHeader(std.testing.allocator, &frame, 3, .{});
     try emitBlockHeader(std.testing.allocator, &frame, 2, 5, true);
     try frame.append(std.testing.allocator, 3 << 3); // raw literals, one-byte size field, regenerated size=3
     try frame.appendSlice(std.testing.allocator, "abc");
@@ -949,6 +989,13 @@ test "zstd literal-only frame writer round trips through std and native decoders
     const limited = try decodeNativeFrameAllocLimited(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(limited);
     try std.testing.expectEqualSlices(u8, payload, limited);
+
+    const no_checksum = try encodeLiteralOnlyFrameWithOptionsAlloc(std.testing.allocator, payload, .{ .content_checksum = false });
+    defer std.testing.allocator.free(no_checksum);
+    try std.testing.expectEqual(@as(u8, 0x20), no_checksum[4]);
+    const no_checksum_decoded = try decodeNativeFrameAlloc(std.testing.allocator, no_checksum);
+    defer std.testing.allocator.free(no_checksum_decoded);
+    try std.testing.expectEqualSlices(u8, payload, no_checksum_decoded);
 }
 
 test "zstd literal-only writer uses RLE literals for repeated blocks" {
