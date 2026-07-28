@@ -1755,6 +1755,12 @@ const SemanticDynamicDecoder = struct {
             }
         }
 
+        // When every literal/length code fits in the primary semantic lookup,
+        // the secondary table is provably unused. Many PNG dynamic blocks have
+        // this shape (for example small icons and several Kodak images), so
+        // avoid scanning and zero-checking the 2 KiB prefix map on every block.
+        if (table.max_bits <= literal_lookup_bits) return true;
+
         var prefix_max_bits: [literal_lookup_len]u4 = @splat(0);
         for (table.entries[0..table.len]) |entry| {
             if (entry.bits > literal_lookup_bits) {
@@ -1794,6 +1800,21 @@ const SemanticDynamicDecoder = struct {
     }
 
     fn buildDistanceTable(self: *Self, table: *const huffman.HuffmanTable(30)) bool {
+        // Same primary-only shortcut for distance codes. This keeps the fast
+        // path identical while removing secondary-prefix setup for blocks whose
+        // distance alphabet already fits in the 8-bit table.
+        if (table.max_bits <= distance_lookup_bits) {
+            for (table.entries[0..table.len]) |entry| {
+                fillPrimary(
+                    &self.distance,
+                    distance_lookup_bits,
+                    entry,
+                    semanticDistanceEntry(entry.symbol, entry.bits),
+                );
+            }
+            return true;
+        }
+
         var prefix_max_bits: [distance_lookup_len]u4 = @splat(0);
         for (table.entries[0..table.len]) |entry| {
             if (entry.bits <= distance_lookup_bits) {
