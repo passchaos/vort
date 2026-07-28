@@ -3988,6 +3988,14 @@ test "zstd native frame writer chooses smallest fallback mode" {
     const no_size_decoded = try decodeNativeFrameAlloc(std.testing.allocator, no_size.frame);
     defer std.testing.allocator.free(no_size_decoded);
     try std.testing.expectEqualSlices(u8, literal_payload, no_size_decoded);
+
+    const duplicate_payload = "prefix-abcdefghijklmno-middle-abcdefghijklmno-tail";
+    const duplicate_result = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, duplicate_payload, .{});
+    defer std.testing.allocator.free(duplicate_result.frame);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, duplicate_result.mode);
+    const duplicate_decoded = try decodeNativeFrameAlloc(std.testing.allocator, duplicate_result.frame);
+    defer std.testing.allocator.free(duplicate_decoded);
+    try std.testing.expectEqualSlices(u8, duplicate_payload, duplicate_decoded);
 }
 
 test "zstd raw/RLE native decoder rejects corrupt frames" {
