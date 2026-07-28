@@ -1648,7 +1648,7 @@ const FusedDynamicLiteralDecoder = struct {
 };
 
 const SemanticDynamicDecoder = struct {
-    const literal_lookup_bits: u4 = 12;
+    const literal_lookup_bits: u4 = 11;
     const literal_lookup_len = @as(usize, 1) << literal_lookup_bits;
     const literal_lookup_mask: u64 = literal_lookup_len - 1;
     const distance_lookup_bits: u4 = 9;
