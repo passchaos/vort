@@ -6,6 +6,9 @@ pub const Error = core.Error || std.mem.Allocator.Error;
 pub const default_compression_level: c_int = 10;
 
 const frame_magic = [_]u8{ 0x04, 0x22, 0x4d, 0x18 };
+const frame_magic_u32: u32 = 0x184d2204;
+const skippable_magic_min: u32 = 0x184d2a50;
+const skippable_magic_max: u32 = 0x184d2a5f;
 const max_frame_block_len = 4 * 1024 * 1024;
 const hash_table_len = 64 * 1024;
 const hash_occupancy_words = hash_table_len / @bitSizeOf(u64);
@@ -139,6 +142,17 @@ pub fn encodePureFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Err
 
 pub const encodeNativeFrameAlloc = encodePureFrameAlloc;
 
+pub fn encodeSkippableFrameAlloc(allocator: std.mem.Allocator, skippable_id: u4, payload: []const u8) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var header: [8]u8 = undefined;
+    std.mem.writeInt(u32, header[0..4], skippable_magic_min + @as(u32, skippable_id), .little);
+    std.mem.writeInt(u32, header[4..8], try checkedUsizeToU32(payload.len), .little);
+    try out.appendSlice(allocator, &header);
+    try out.appendSlice(allocator, payload);
+    return out.toOwnedSlice(allocator);
+}
+
 /// Decode an LZ4 frame. Independent and linked blocks are supported; external
 /// dictionaries are not required for frames produced by `encodeFrameAlloc`.
 pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
@@ -215,6 +229,28 @@ pub fn decodeFrameAllocLimited(
 pub const decodeNativeFrameAlloc = decodeFrameAlloc;
 pub const decodeNativeFrameAllocLimited = decodeFrameAllocLimited;
 
+pub fn decodeConcatenatedFrameAlloc(allocator: std.mem.Allocator, frames: []const u8) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var offset: usize = 0;
+    while (offset < frames.len) {
+        try decodeNextFrameIntoList(allocator, &out, frames, &offset);
+    }
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn decodeConcatenatedFrameInto(frames: []const u8, output: []u8) Error!usize {
+    var offset: usize = 0;
+    var written: usize = 0;
+    while (offset < frames.len) {
+        try decodeNextFrameIntoBuffer(frames, &offset, output, &written);
+    }
+    return written;
+}
+
+pub const decodeNativeConcatenatedFrameAlloc = decodeConcatenatedFrameAlloc;
+pub const decodeNativeConcatenatedFrameInto = decodeConcatenatedFrameInto;
+
 /// Decode an LZ4 frame directly into caller-owned storage. The returned length
 /// is the number of bytes written. This path shares the strict frame metadata,
 /// block-size, block-checksum, content-size, and content-checksum validation of
@@ -276,6 +312,54 @@ pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
 
 pub const decodeNativeFrameInto = decodeFrameInto;
 
+fn decodeNextFrameIntoList(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    frames: []const u8,
+    offset: *usize,
+) Error!void {
+    if (frames.len - offset.* < 4) return error.TruncatedFrame;
+    const magic = std.mem.readInt(u32, frames[offset.*..][0..4], .little);
+    if (magic == frame_magic_u32) {
+        const start = offset.*;
+        const end = try findFrameEnd(frames, offset);
+        const decoded = try decodeFrameAlloc(allocator, frames[start..end]);
+        defer allocator.free(decoded);
+        try out.appendSlice(allocator, decoded);
+    } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+        try skipSkippableFrame(frames, offset);
+    } else {
+        return error.CorruptFrame;
+    }
+}
+
+fn decodeNextFrameIntoBuffer(
+    frames: []const u8,
+    offset: *usize,
+    output: []u8,
+    written: *usize,
+) Error!void {
+    if (frames.len - offset.* < 4) return error.TruncatedFrame;
+    const magic = std.mem.readInt(u32, frames[offset.*..][0..4], .little);
+    if (magic == frame_magic_u32) {
+        const start = offset.*;
+        const end = try findFrameEnd(frames, offset);
+        written.* += try decodeFrameInto(frames[start..end], output[written.*..]);
+    } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+        try skipSkippableFrame(frames, offset);
+    } else {
+        return error.CorruptFrame;
+    }
+}
+
+fn skipSkippableFrame(frames: []const u8, offset: *usize) Error!void {
+    if (frames.len - offset.* < 8) return error.TruncatedFrame;
+    const skip_len: usize = @intCast(std.mem.readInt(u32, frames[offset.* + 4 ..][0..4], .little));
+    offset.* += 8;
+    if (frames.len - offset.* < skip_len) return error.TruncatedFrame;
+    offset.* += skip_len;
+}
+
 const FrameHeader = struct {
     payload_offset: usize,
     block_size_max: usize,
@@ -317,6 +401,31 @@ fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
         .content_checksum = (flg & 0x04) != 0,
         .expected_content_size = expected_content_size,
     };
+}
+
+fn findFrameEnd(frames: []const u8, offset: *usize) Error!usize {
+    const header = try parseFrameHeader(frames[offset.*..]);
+    var local = header.payload_offset;
+    while (true) {
+        if (frames.len - offset.* - local < 4) return error.TruncatedFrame;
+        const block_header = std.mem.readInt(u32, frames[offset.* + local ..][0..4], .little);
+        local += 4;
+        if (block_header == 0) break;
+        const block_len: usize = @intCast(block_header & 0x7fff_ffff);
+        if (block_len > header.block_size_max) return error.CorruptFrame;
+        if (frames.len - offset.* - local < block_len) return error.TruncatedFrame;
+        local += block_len;
+        if (header.block_checksum) {
+            if (frames.len - offset.* - local < 4) return error.TruncatedFrame;
+            local += 4;
+        }
+    }
+    if (header.content_checksum) {
+        if (frames.len - offset.* - local < 4) return error.TruncatedFrame;
+        local += 4;
+    }
+    offset.* += local;
+    return offset.*;
 }
 
 fn frameDecodedSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {
@@ -799,6 +908,10 @@ fn checkedU64ToUsize(value: u64) Error!usize {
     return std.math.cast(usize, value) orelse error.IntegerOverflow;
 }
 
+fn checkedUsizeToU32(value: usize) Error!u32 {
+    return std.math.cast(u32, value) orelse error.IntegerOverflow;
+}
+
 fn checkedUsizeToU64(value: usize) Error!u64 {
     return std.math.cast(u64, value) orelse error.IntegerOverflow;
 }
@@ -835,6 +948,40 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     try std.testing.expectEqual(repeated.len, into_written);
     try std.testing.expectEqualSlices(u8, repeated, into_buffer[0..into_written]);
     try std.testing.expectError(error.OutputTooSmall, decodeFrameInto(encoded, into_buffer[0 .. into_buffer.len - 1]));
+}
+
+test "lz4 skippable frame writer composes with concatenated native streams" {
+    const first = try encodePureFrameAlloc(std.testing.allocator, "first");
+    defer std.testing.allocator.free(first);
+    const skip = try encodeSkippableFrameAlloc(std.testing.allocator, 11, "metadata");
+    defer std.testing.allocator.free(skip);
+    const second = try encodePureFrameAlloc(std.testing.allocator, "second");
+    defer std.testing.allocator.free(second);
+
+    try std.testing.expectEqual(skippable_magic_min + 11, std.mem.readInt(u32, skip[0..4], .little));
+    try std.testing.expectEqual(@as(u32, "metadata".len), std.mem.readInt(u32, skip[4..8], .little));
+    try std.testing.expectEqualSlices(u8, "metadata", skip[8..]);
+
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, first);
+    try stream.appendSlice(std.testing.allocator, skip);
+    try stream.appendSlice(std.testing.allocator, second);
+
+    const decoded = try decodeConcatenatedFrameAlloc(std.testing.allocator, stream.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "firstsecond", decoded);
+
+    var into_buffer: ["firstsecond".len]u8 = undefined;
+    const written = try decodeNativeConcatenatedFrameInto(stream.items, &into_buffer);
+    try std.testing.expectEqual(@as(usize, "firstsecond".len), written);
+    try std.testing.expectEqualSlices(u8, "firstsecond", into_buffer[0..written]);
+    try std.testing.expectError(error.OutputTooSmall, decodeConcatenatedFrameInto(stream.items, into_buffer[0 .. into_buffer.len - 1]));
+
+    var truncated_skip = try std.testing.allocator.dupe(u8, skip);
+    defer std.testing.allocator.free(truncated_skip);
+    std.mem.writeInt(u32, truncated_skip[4..8], "metadata".len + 1, .little);
+    try std.testing.expectError(error.TruncatedFrame, decodeConcatenatedFrameAlloc(std.testing.allocator, truncated_skip));
 }
 
 test "lz4 decoder handles independent frame and raw overlapping matches" {
