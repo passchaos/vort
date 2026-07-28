@@ -42,18 +42,20 @@ def main() -> int:
     # raw/RLE frame subset. Vort's literal-only compressed-block subset is kept
     # under Zig std + native unit coverage until the sequence/FSE path matures.
     cases = [
-        ("", "raw_or_rle", "true"),
-        ("hello", "raw_or_rle", "true"),
-        ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "raw_or_rle", "true"),
-        ("raw block without checksum", "raw_or_rle", "false"),
+        ("", "raw_or_rle", "true", "true"),
+        ("hello", "raw_or_rle", "true", "true"),
+        ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "raw_or_rle", "true", "true"),
+        ("raw block without checksum", "raw_or_rle", "false", "true"),
+        ("raw block without size", "raw_or_rle", "true", "false"),
+        ("raw block minimal header", "raw_or_rle", "false", "false"),
     ]
-    for text, mode, checksum in cases:
-        encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum)
+    for text, mode, checksum, content_size in cases:
+        encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum, content_size)
         frame = bytes.fromhex(encoded_hex)
         decoded = zstd_decompress(frame)
         expected = text.encode()
         if decoded != expected:
-            raise AssertionError((text, mode, checksum, decoded, expected))
+            raise AssertionError((text, mode, checksum, content_size, decoded, expected))
         out = run_cli("decode-zstd-native-hex", encoded_hex, str(len(expected)))
         assert int(parse_field(out, "decoded_bytes")) == len(expected), out
         assert int(parse_field(out, "crc32")) == (zlib.crc32(expected) & 0xFFFFFFFF), out

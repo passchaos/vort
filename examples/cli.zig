@@ -487,9 +487,11 @@ pub fn main(init: std.process.Init) !void {
         const payload = args.next() orelse "";
         const selection = try parseZstdNativeSelection(args.next());
         const checksum = try parseOptionalBool(args.next(), true);
+        const content_size = try parseOptionalBool(args.next(), true);
         const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
             .selection = selection,
             .content_checksum = checksum,
+            .include_content_size = content_size,
         });
         defer init.gpa.free(result.frame);
         try printHex(stdout, result.frame);
@@ -1179,7 +1181,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\compatibility formats:
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
-        \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only] [true|false]
+        \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only] [checksum] [content_size]
         \\                              Encode text as dependency-free native-subset Zstandard hex
         \\  decode-zstd-native-hex [hex] [max_output]
         \\                              Decode dependency-free native-subset Zstandard hex
