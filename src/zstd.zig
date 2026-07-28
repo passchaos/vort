@@ -10,6 +10,57 @@ const frame_magic_u32: u32 = 0xfd2fb528;
 const skippable_magic_min: u32 = 0x184d2a50;
 const skippable_magic_max: u32 = 0x184d2a5f;
 const min_rle_split_len = 12;
+const initial_repeated_offsets = [3]usize{ 1, 4, 8 };
+
+const ll_base = [_]usize{
+    0,      1,      2,      3,       4,     5,     6,     7,
+    8,      9,      10,     11,      12,    13,    14,    15,
+    16,     18,     20,     22,      24,    28,    32,    40,
+    48,     64,     0x80,   0x100,   0x200, 0x400, 0x800, 0x1000,
+    0x2000, 0x4000, 0x8000, 0x10000,
+};
+
+const ll_bits = [_]u8{
+    0,  0,  0,  0,  0, 0,  0,  0,
+    0,  0,  0,  0,  0, 0,  0,  0,
+    1,  1,  1,  1,  2, 2,  3,  3,
+    4,  6,  7,  8,  9, 10, 11, 12,
+    13, 14, 15, 16,
+};
+
+const ml_base = [_]usize{
+    3,      4,      5,      6,      7,       8,     9,     10,
+    11,     12,     13,     14,     15,      16,    17,    18,
+    19,     20,     21,     22,     23,      24,    25,    26,
+    27,     28,     29,     30,     31,      32,    33,    34,
+    35,     37,     39,     41,     43,      47,    51,    59,
+    67,     83,     99,     0x83,   0x103,   0x203, 0x403, 0x803,
+    0x1003, 0x2003, 0x4003, 0x8003, 0x10003,
+};
+
+const ml_bits = [_]u8{
+    0,  0,  0,  0,  0,  0, 0,  0,
+    0,  0,  0,  0,  0,  0, 0,  0,
+    0,  0,  0,  0,  0,  0, 0,  0,
+    0,  0,  0,  0,  0,  0, 0,  0,
+    1,  1,  1,  1,  2,  2, 3,  3,
+    4,  4,  5,  7,  8,  9, 10, 11,
+    12, 13, 14, 15, 16,
+};
+
+const of_base = [_]usize{
+    0,        1,         1,         5,         0xD,       0x1D,       0x3D,       0x7D,
+    0xFD,     0x1FD,     0x3FD,     0x7FD,     0xFFD,     0x1FFD,     0x3FFD,     0x7FFD,
+    0xFFFD,   0x1FFFD,   0x3FFFD,   0x7FFFD,   0xFFFFD,   0x1FFFFD,   0x3FFFFD,   0x7FFFFD,
+    0xFFFFFD, 0x1FFFFFD, 0x3FFFFFD, 0x7FFFFFD, 0xFFFFFFD, 0x1FFFFFFD, 0x3FFFFFFD, 0x7FFFFFFD,
+};
+
+const of_bits = [_]u8{
+    0,  1,  2,  3,  4,  5,  6,  7,
+    8,  9,  10, 11, 12, 13, 14, 15,
+    16, 17, 18, 19, 20, 21, 22, 23,
+    24, 25, 26, 27, 28, 29, 30, 31,
+};
 
 extern fn ZSTD_compressBound(srcSize: usize) usize;
 extern fn ZSTD_compress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize, compressionLevel: c_int) usize;
@@ -73,8 +124,8 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
 /// Dependency-free Zstandard decoder for the raw/RLE frame subset emitted by
 /// `encodeRawOrRleFrameAlloc`, plus literal-only compressed blocks. It accepts
 /// concatenated supported frames and skippable frames, validates frame content
-/// sizes and optional content checksums, and deliberately rejects compressed
-/// sequence payloads instead of silently falling back to a partial
+/// sizes and optional content checksums, and deliberately rejects unsupported
+/// sequence/FSE payloads instead of silently falling back to a partial
 /// implementation.
 pub fn decodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
@@ -507,7 +558,7 @@ fn decodeLiteralOnlyCompressedBlockInto(
     block_size_max: usize,
 ) Error!void {
     const start = out.items.len;
-    const decoded_len = try compressedLiteralOnlyBlockDecodedSize(block, block_size_max);
+    const decoded_len = try compressedLiteralOnlyBlockDecodedSize(block, block_size_max, out.items.len);
     try out.ensureUnusedCapacity(allocator, decoded_len);
     var written = out.items.len;
     try decodeLiteralOnlyCompressedBlockIntoBuffer(block, out.items.ptr[0..out.capacity], &written, block_size_max);
@@ -522,28 +573,48 @@ fn decodeLiteralOnlyCompressedBlockIntoBuffer(
     block_size_max: usize,
 ) Error!void {
     const section = try parseLiteralsSection(block);
-    if (section.sequence_count != 0) return error.UnsupportedZstdFeature;
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
-    if (output.len - written.* < section.regenerated_size) return error.OutputTooSmall;
+    if (section.sequence_count != 0) return try decodeRleSequencesCompressedBlockIntoBuffer(block, section, output, written);
+    if (section.sequence_payload_offset != block.len) return error.UnsupportedZstdFeature;
+    try copyLiteralsFromSection(block, section, 0, output, written, section.regenerated_size);
+}
 
+fn copyLiteralsFromSection(
+    block: []const u8,
+    section: LiteralOnlySection,
+    literal_offset: usize,
+    output: []u8,
+    written: *usize,
+    literal_len: usize,
+) Error!void {
+    if (literal_len == 0) return;
+    if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) {
+        return error.CorruptFrame;
+    }
+    if (output.len - written.* < literal_len) return error.OutputTooSmall;
     switch (section.kind) {
         .raw => {
-            @memcpy(output[written.*..][0..section.regenerated_size], block[section.literal_payload_offset..][0..section.regenerated_size]);
-            written.* += section.regenerated_size;
+            @memcpy(
+                output[written.*..][0..literal_len],
+                block[section.literal_payload_offset + literal_offset ..][0..literal_len],
+            );
         },
         .rle => {
             if (section.regenerated_size == 0) return error.CorruptFrame;
-            @memset(output[written.*..][0..section.regenerated_size], block[section.literal_payload_offset]);
-            written.* += section.regenerated_size;
+            @memset(output[written.*..][0..literal_len], block[section.literal_payload_offset]);
         },
     }
+    written.* += literal_len;
 }
 
-fn compressedLiteralOnlyBlockDecodedSize(block: []const u8, block_size_max: usize) Error!usize {
+fn compressedLiteralOnlyBlockDecodedSize(block: []const u8, block_size_max: usize, initial_output_len: usize) Error!usize {
     const section = try parseLiteralsSection(block);
-    if (section.sequence_count != 0) return error.UnsupportedZstdFeature;
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
-    return section.regenerated_size;
+    if (section.sequence_count == 0) {
+        if (section.sequence_payload_offset != block.len) return error.UnsupportedZstdFeature;
+        return section.regenerated_size;
+    }
+    return try rleSequencesCompressedBlockDecodedSize(block, section, initial_output_len);
 }
 
 fn compressedLiteralOnlyBlockDecodedSizeLimited(
@@ -552,7 +623,7 @@ fn compressedLiteralOnlyBlockDecodedSizeLimited(
     max_output_len: usize,
     block_size_max: usize,
 ) Error!usize {
-    const decoded_len = try compressedLiteralOnlyBlockDecodedSize(block, block_size_max);
+    const decoded_len = try compressedLiteralOnlyBlockDecodedSize(block, block_size_max, total);
     return checkedAddWithinLimit(total, decoded_len, max_output_len);
 }
 
@@ -563,6 +634,7 @@ const LiteralOnlySection = struct {
     regenerated_size: usize,
     literal_payload_offset: usize,
     sequence_count: usize,
+    sequence_payload_offset: usize,
 };
 
 fn parseLiteralsSection(block: []const u8) Error!LiteralOnlySection {
@@ -576,12 +648,12 @@ fn parseLiteralsSection(block: []const u8) Error!LiteralOnlySection {
     if (block.len - offset < literal_payload_len) return error.TruncatedFrame;
     offset += literal_payload_len;
     const sequence_count = try parseSequenceCount(block, &offset);
-    if (offset != block.len) return error.UnsupportedZstdFeature;
     return .{
         .kind = literal_header.kind,
         .regenerated_size = literal_header.regenerated_size,
         .literal_payload_offset = literal_payload_offset,
         .sequence_count = sequence_count,
+        .sequence_payload_offset = offset,
     };
 }
 
@@ -639,6 +711,126 @@ fn parseSequenceCount(block: []const u8, offset: *usize) Error!usize {
     const count = @as(usize, block[offset.*]) + (@as(usize, block[offset.* + 1]) << 8) + 0x7f00;
     offset.* += 2;
     return count;
+}
+
+const RleSequenceSpec = struct {
+    literal_len: usize,
+    match_len: usize,
+    offset_code: u8,
+};
+
+fn parseRleSequenceSpec(block: []const u8, offset: *usize, sequence_count: usize) Error!RleSequenceSpec {
+    if (sequence_count == 0) return error.CorruptFrame;
+    if (block.len - offset.* < 1) return error.TruncatedFrame;
+    const mode = block[offset.*];
+    offset.* += 1;
+    if ((mode & 0x03) != 0) return error.CorruptFrame;
+    const ll_mode = mode >> 6;
+    const of_mode = (mode >> 4) & 0x03;
+    const ml_mode = (mode >> 2) & 0x03;
+    if (ll_mode != 1 or of_mode != 1 or ml_mode != 1) return error.UnsupportedZstdFeature;
+
+    if (block.len - offset.* < 3) return error.TruncatedFrame;
+    const ll_code = block[offset.*];
+    const of_code = block[offset.* + 1];
+    const ml_code = block[offset.* + 2];
+    offset.* += 3;
+    if (ll_code >= ll_base.len or of_code >= of_base.len or ml_code >= ml_base.len) return error.CorruptFrame;
+    if (ll_bits[ll_code] != 0 or of_bits[of_code] != 0 or ml_bits[ml_code] != 0) return error.UnsupportedZstdFeature;
+    if (block.len - offset.* != 1) return error.UnsupportedZstdFeature;
+    if (block[offset.*] != 1) return error.UnsupportedZstdFeature;
+    offset.* += 1;
+    return .{
+        .literal_len = ll_base[ll_code],
+        .match_len = ml_base[ml_code],
+        .offset_code = of_code,
+    };
+}
+
+fn decodeRleSequencesCompressedBlockIntoBuffer(
+    block: []const u8,
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+) Error!void {
+    var offset = section.sequence_payload_offset;
+    const spec = try parseRleSequenceSpec(block, &offset, section.sequence_count);
+    if (offset != block.len) return error.UnsupportedZstdFeature;
+
+    var repeated_offsets = initial_repeated_offsets;
+    var literal_offset: usize = 0;
+    var seq: usize = 0;
+    while (seq < section.sequence_count) : (seq += 1) {
+        try copyLiteralsFromSection(block, section, literal_offset, output, written, spec.literal_len);
+        literal_offset = std.math.add(usize, literal_offset, spec.literal_len) catch return error.IntegerOverflow;
+        const match_offset = resolveRepeatedOffset(spec.offset_code, spec.literal_len, &repeated_offsets) orelse return error.UnsupportedZstdFeature;
+        try copyMatchFromOutputBuffer(output, written, match_offset, spec.match_len);
+    }
+    if (section.regenerated_size < literal_offset) return error.CorruptFrame;
+    const last_literals = section.regenerated_size - literal_offset;
+    try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
+}
+
+fn rleSequencesCompressedBlockDecodedSize(
+    block: []const u8,
+    section: LiteralOnlySection,
+    initial_output_len: usize,
+) Error!usize {
+    var offset = section.sequence_payload_offset;
+    const spec = try parseRleSequenceSpec(block, &offset, section.sequence_count);
+    if (offset != block.len) return error.UnsupportedZstdFeature;
+
+    var repeated_offsets = initial_repeated_offsets;
+    var literal_offset: usize = 0;
+    var produced: usize = 0;
+    var seq: usize = 0;
+    while (seq < section.sequence_count) : (seq += 1) {
+        if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < spec.literal_len) {
+            return error.CorruptFrame;
+        }
+        literal_offset = std.math.add(usize, literal_offset, spec.literal_len) catch return error.IntegerOverflow;
+        produced = std.math.add(usize, produced, spec.literal_len) catch return error.IntegerOverflow;
+        const match_offset = resolveRepeatedOffset(spec.offset_code, spec.literal_len, &repeated_offsets) orelse return error.UnsupportedZstdFeature;
+        const available = std.math.add(usize, initial_output_len, produced) catch return error.IntegerOverflow;
+        if (match_offset == 0 or match_offset > available) return error.InvalidMatch;
+        produced = std.math.add(usize, produced, spec.match_len) catch return error.IntegerOverflow;
+    }
+    if (section.regenerated_size < literal_offset) return error.CorruptFrame;
+    produced = std.math.add(usize, produced, section.regenerated_size - literal_offset) catch return error.IntegerOverflow;
+    return produced;
+}
+
+fn resolveRepeatedOffset(offset_code: u8, literal_len: usize, repeated_offsets: *[3]usize) ?usize {
+    if (offset_code != 0) return null;
+    const ll0 = literal_len == 0;
+    const offset = if (ll0) repeated_offsets[1] else repeated_offsets[0];
+    repeated_offsets[1] = repeated_offsets[if (ll0) 0 else 1];
+    repeated_offsets[0] = offset;
+    return offset;
+}
+
+fn copyMatchFromOutputBuffer(output: []u8, written: *usize, match_offset: usize, match_len: usize) Error!void {
+    if (match_offset == 0 or match_offset > written.*) return error.InvalidMatch;
+    if (output.len - written.* < match_len) return error.OutputTooSmall;
+    const repeat_start = written.* - match_offset;
+    appendRepeatedMatch(output, written, repeat_start, match_len);
+}
+
+fn appendRepeatedMatch(output: []u8, written: *usize, repeat_start: usize, match_len: usize) void {
+    const initial_available = written.* - repeat_start;
+    const destination_start = written.*;
+    written.* += match_len;
+    var copied: usize = 0;
+    while (copied < match_len) {
+        const available = if (copied == 0) initial_available else copied;
+        const copy_len = @min(available, match_len - copied);
+        const source_start = if (copied == 0) repeat_start else destination_start;
+        @memcpy(
+            output[destination_start + copied ..][0..copy_len],
+            output[source_start..][0..copy_len],
+        );
+        copied += copy_len;
+    }
 }
 
 fn rawOrRleDecodedSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {
@@ -1150,6 +1342,39 @@ test "zstd native decoder accepts extended zero sequence counts" {
 
     const decoded_len = try decodedRawOrRleFrameSize(frame.items);
     try std.testing.expectEqual(@as(usize, 5), decoded_len);
+}
+
+test "zstd native decoder accepts RLE sequence compressed blocks" {
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, 14, .{});
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 8, true);
+    try frame.append(std.testing.allocator, (1 << 3) | 1); // RLE literals: one literal byte seeds the repeated match.
+    try frame.append(std.testing.allocator, 'a');
+    try frame.append(std.testing.allocator, 1); // one sequence.
+    try frame.append(std.testing.allocator, 0x54); // LL, offset, and ML all use RLE_Mode.
+    try frame.appendSlice(std.testing.allocator, &.{ 1, 0, 10 }); // literal_len=1, repeated offset code 0, match_len=13.
+    try frame.append(std.testing.allocator, 1); // Minimal reverse bitstream end mark; RLE modes need no payload bits.
+    var checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, "aaaaaaaaaaaaaa")), .little);
+    try frame.appendSlice(std.testing.allocator, &checksum);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, "aaaaaaaaaaaaaa", std_decoded);
+
+    const native_decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(native_decoded);
+    try std.testing.expectEqualSlices(u8, "aaaaaaaaaaaaaa", native_decoded);
+
+    var into_buffer: [14]u8 = undefined;
+    const written = try decodeNativeFrameInto(frame.items, &into_buffer);
+    try std.testing.expectEqual(@as(usize, 14), written);
+    try std.testing.expectEqualSlices(u8, "aaaaaaaaaaaaaa", into_buffer[0..written]);
+
+    const decoded_len = try decodedRawOrRleFrameSize(frame.items);
+    try std.testing.expectEqual(@as(usize, 14), decoded_len);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeNativeFrameAllocLimited(std.testing.allocator, frame.items, 13));
 }
 
 test "zstd literal-only compressed block rejects malformed sections" {
