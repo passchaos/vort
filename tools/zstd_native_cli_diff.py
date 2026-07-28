@@ -31,6 +31,29 @@ def zstd_decompress(frame: bytes) -> bytes:
     return result.stdout
 
 
+def zstd_compress(payload: bytes, level: int = 1) -> bytes:
+    if not ZSTD:
+        raise RuntimeError("zstd missing")
+    return subprocess.run([ZSTD, f"-{level}", "-cq"], input=payload, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True).stdout
+
+
+def assert_vort_native_decode(frame: bytes, expected: bytes) -> None:
+    encoded_hex = frame.hex()
+    out = run_cli("decode-zstd-native-hex", encoded_hex, str(len(expected)))
+    assert int(parse_field(out, "decoded_bytes")) == len(expected), out
+    assert int(parse_field(out, "crc32")) == (zlib.crc32(expected) & 0xFFFFFFFF), out
+    if expected:
+        failed = subprocess.run(
+            [str(CLI), "decode-zstd-native-hex", encoded_hex, str(len(expected) - 1)],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if failed.returncode == 0 or "OutputLimitExceeded" not in failed.stderr:
+            raise AssertionError(f"expected OutputLimitExceeded, got rc={failed.returncode} stderr={failed.stderr!r}")
+
+
 def main() -> int:
     if not ZSTD:
         print("zstd native CLI diff: zstd=missing")
@@ -61,19 +84,19 @@ def main() -> int:
         expected = text.encode()
         if decoded != expected:
             raise AssertionError((text, mode, checksum, content_size, decoded, expected))
-        out = run_cli("decode-zstd-native-hex", encoded_hex, str(len(expected)))
-        assert int(parse_field(out, "decoded_bytes")) == len(expected), out
-        assert int(parse_field(out, "crc32")) == (zlib.crc32(expected) & 0xFFFFFFFF), out
-        if expected:
-            failed = subprocess.run(
-                [str(CLI), "decode-zstd-native-hex", encoded_hex, str(len(expected) - 1)],
-                cwd=ROOT,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            if failed.returncode == 0 or "OutputLimitExceeded" not in failed.stderr:
-                raise AssertionError(f"expected OutputLimitExceeded, got rc={failed.returncode} stderr={failed.stderr!r}")
+        assert_vort_native_decode(frame, expected)
+
+    # Protect the growing native decoder against real system-zstd output, not
+    # only frames emitted by Vort's bootstrap writer. These payloads exercise the
+    # simple predefined/mixed sequence paths that are still far short of full
+    # zstd, but are now intentionally supported by the native decoder.
+    external_cases = [
+        b"zstd payload zstd payload zstd payload zstd payload",
+        b"abcdefghijklmnopqrstuvwxyz" * 8,
+        (b'{"key":"value","number":123,"array":[1,2,3],"text":"abcdefg"}\n' * 20),
+    ]
+    for payload in external_cases:
+        assert_vort_native_decode(zstd_compress(payload, 1), payload)
 
     with tempfile.TemporaryDirectory(prefix="vort-zstd-native-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
@@ -87,7 +110,7 @@ def main() -> int:
         subprocess.run([ZSTD, "-dcq", str(frame_path), "-o", str(out_path)], check=True)
         assert out_path.read_bytes() == payload
 
-    print(f"zstd_native_cli_diff_ok cases={len(cases)} zstd={pathlib.Path(ZSTD).name}")
+    print(f"zstd_native_cli_diff_ok cases={len(cases)} external_cases={len(external_cases)} zstd={pathlib.Path(ZSTD).name}")
     return 0
 
 
