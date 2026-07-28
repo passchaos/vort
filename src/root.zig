@@ -68,6 +68,7 @@ pub const lz4DecodeBlockWithPrefixAlloc = lz4.decodeBlockWithPrefixAlloc;
 pub const lz4DecodeBlockIntoSlice = lz4.decodeBlockIntoSlice;
 pub const lz4DecodedBlockSize = lz4.decodedBlockSize;
 pub const lz4DecodedBlockSizeLimited = lz4.decodedBlockSizeLimited;
+pub const lz4EncodedBlockBound = lz4.encodedBlockBound;
 
 pub const zstdEncodeFrameAlloc = zstd.encodeFrameAlloc;
 pub const zstdEncodeFrameWithLevelAlloc = zstd.encodeFrameWithLevelAlloc;
@@ -666,6 +667,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeBlockIntoSlice;
     _ = lz4DecodedBlockSize;
     _ = lz4DecodedBlockSizeLimited;
+    _ = lz4EncodedBlockBound;
 
     _ = zstdEncodeFrameAlloc;
     _ = zstdEncodeFrameWithLevelAlloc;
@@ -712,6 +714,7 @@ test "root lz4 lib frame options round trip" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 
     const raw_match = [_]u8{ 0x33, 'a', 'b', 'c', 3, 0 };
+    try std.testing.expect(raw_match.len <= try lz4EncodedBlockBound(10));
     try std.testing.expectEqual(@as(usize, 10), try lz4DecodedBlockSize(&raw_match));
     try std.testing.expectEqual(@as(usize, 10), try lz4DecodedBlockSizeLimited(&raw_match, 10));
     try std.testing.expectError(error.OutputLimitExceeded, lz4DecodedBlockSizeLimited(&raw_match, 9));

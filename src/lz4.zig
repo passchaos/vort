@@ -236,6 +236,10 @@ pub fn encodePureFrameWithOptionsAlloc(
 
 pub const encodeNativeFrameAlloc = encodePureFrameAlloc;
 
+pub fn encodedBlockBound(input_len: usize) Error!usize {
+    return try maxCompressedLen(input_len);
+}
+
 fn emitBlockChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8) Error!void {
     var checksum: [4]u8 = undefined;
     std.mem.writeInt(u32, &checksum, std.hash.XxHash32.hash(0, block), .little);
@@ -1280,6 +1284,8 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
     try std.testing.expectEqualSlices(u8, plain, decoded);
 
     const raw_match = [_]u8{ 0x33, 'a', 'b', 'c', 3, 0 };
+    const raw_match_bound = try encodedBlockBound("abcabcabca".len);
+    try std.testing.expect(raw_match.len <= raw_match_bound);
     const raw_decoded = try decodeBlockAlloc(std.testing.allocator, &raw_match, 10);
     defer std.testing.allocator.free(raw_decoded);
     try std.testing.expectEqualSlices(u8, "abcabcabca", raw_decoded);
