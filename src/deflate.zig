@@ -2642,7 +2642,15 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
                         const semantic_dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                         var semantic_decoder: SemanticDynamicDecoder = undefined;
                         if (semantic_decoder.init(&lit_table, &semantic_dist_table)) {
-                            out_offset = try decodeSemanticDynamicBlockIntoBufferedReader(reader, output, out_offset, &semantic_decoder);
+                            // Deep distance alphabets in the PNG corpus are dominated by
+                            // non-overlapping matches (for example kodim17). Use a separate
+                            // semantic loop for that shape so the common copy case can be
+                            // inlined without changing codegen for small icons or RLE-heavy
+                            // text/screenshot streams.
+                            out_offset = if (parsed.distance_max_bits >= 12)
+                                try decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline(reader, output, out_offset, &semantic_decoder)
+                            else
+                                try decodeSemanticDynamicBlockIntoBufferedReader(reader, output, out_offset, &semantic_decoder);
                         } else {
                             const lit_decoder = FusedDynamicLiteralDecoder.init(&lit_table);
                             try decodeFusedDynamicBlockIntoBufferedReader(reader, output, &out_offset, &lit_decoder, &dist_decoder);
@@ -3468,6 +3476,24 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
     return decodeSemanticDynamicBlockIntoLinearMode(
         false,
         false,
+        false,
+        reader,
+        output,
+        initial_out_offset,
+        decoder,
+    );
+}
+
+noinline fn decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!usize {
+    return decodeSemanticDynamicBlockIntoLinearMode(
+        false,
+        false,
+        true,
         reader,
         output,
         initial_out_offset,
@@ -3482,6 +3508,7 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
 ) Error!usize {
     return decodeSemanticDynamicBlockIntoLinearMode(
         true,
+        false,
         false,
         reader,
         output,
@@ -3498,6 +3525,7 @@ noinline fn decodeSemanticDynamicBlockIntoRle1BufferedReader(
     return decodeSemanticDynamicBlockIntoLinearMode(
         true,
         true,
+        false,
         reader,
         output,
         0,
@@ -3508,6 +3536,7 @@ noinline fn decodeSemanticDynamicBlockIntoRle1BufferedReader(
 noinline fn decodeSemanticDynamicBlockIntoLinearMode(
     comptime single_distance: bool,
     comptime rle1_distance: bool,
+    comptime inline_non_overlap: bool,
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
     initial_out_offset: usize,
@@ -3700,6 +3729,17 @@ noinline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (length > output.len - out_pos) return error.OutputTooSmall;
             const byte = output[out_pos - 1];
             fillLinearRle(output, out_pos, length, byte);
+        } else if (comptime inline_non_overlap) {
+            // This specialization is selected only for match-heavy blocks whose
+            // distance alphabet is deep enough to justify a separate loop. Keep
+            // the generic semantic loop small for all other PNGs.
+            if (distance >= length) {
+                if (distance > out_pos) return error.InvalidMatch;
+                if (length > output.len - out_pos) return error.OutputTooSmall;
+                @memcpy(output[out_pos..][0..length], output[out_pos - distance ..][0..length]);
+            } else {
+                try copyMatchAt(output, out_pos, length, distance);
+            }
         } else {
             try copyMatchAt(output, out_pos, length, distance);
         }
