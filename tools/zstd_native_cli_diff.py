@@ -120,6 +120,27 @@ def main() -> int:
     for payload, level in huffman_cases:
         assert_vort_native_decode(zstd_compress(payload, level), payload)
 
+    # Keep a compact four-stream fixture because those sections need explicit
+    # stream-table parsing beyond the high-compression single-stream case above.
+    four_stream_cases = [
+        (
+            bytes.fromhex(
+                "28b52ffd20f86d0500864f2a1290cf016c3325f0fdb0cddd2ce10b3339ce4e"
+                "24002400240020bfb1a5123a279f76cdb7192d3a14f27ba43cef2102b95c"
+                "08d2f8fea2efd493dfe58e0320bfb1a5123a279f76cdb7192d3a14f27b"
+                "a43cef2102b95c08d2f8fea2efd493dfe58e0320bfb1a5123a279f76cdb"
+                "7192d3a14f27ba43cef2102b95c08d2f8fea2efd493dfe58e0320bfb1a5"
+                "123a279f76cdb7192d3a14f27ba43cef2102b95c08d2f8fea2efd493dfe"
+                "58e0300"
+            ),
+            b'{"key":"value","number":123,"array":[1,2,3],"text":"abcdefg"}\n' * 4,
+        ),
+    ]
+    for frame, payload in four_stream_cases:
+        if zstd_decompress(frame) != payload:
+            raise AssertionError("four-stream fixture failed system zstd decode")
+        assert_vort_native_decode(frame, payload)
+
     # System zstd does not reliably emit a tiny treeless-literals fixture on
     # demand, so keep one handcrafted two-block frame here. The second block
     # omits the Huffman tree and reuses the first block's tree, exercising the
@@ -157,8 +178,9 @@ def main() -> int:
 
     print(
         f"zstd_native_cli_diff_ok cases={len(cases)} external_cases={len(external_cases)} "
-        f"huffman_cases={len(huffman_cases)} treeless_cases={len(treeless_cases)} "
-        f"unsupported_cases={len(unsupported_cases)} zstd={pathlib.Path(ZSTD).name}"
+        f"huffman_cases={len(huffman_cases)} four_stream_cases={len(four_stream_cases)} "
+        f"treeless_cases={len(treeless_cases)} unsupported_cases={len(unsupported_cases)} "
+        f"zstd={pathlib.Path(ZSTD).name}"
     )
     return 0
 

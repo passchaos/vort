@@ -772,7 +772,6 @@ fn copyHuffmanLiteralsFromSection(
     literal_offset: usize,
     dest: []u8,
 ) Error!void {
-    if (section.size_format != 0) return error.UnsupportedZstdFeature;
     // Literal copies are requested in sequence order, but the current minimal
     // slice keeps no per-section cursor so preflight and decode can share the
     // same immutable `LiteralOnlySection`. Re-reading from the start is slower
@@ -780,28 +779,27 @@ fn copyHuffmanLiteralsFromSection(
     // native Zstd path is still correctness-first and sequence/FSE support is
     // incomplete.
     const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
-    var reader = try huffmanLiteralStreamReader(block, section);
     const end = std.math.add(usize, literal_offset, dest.len) catch return error.IntegerOverflow;
     var decoded_index: usize = 0;
     var output_index: usize = 0;
-    while (decoded_index < end) : (decoded_index += 1) {
-        const symbol = try readHuffmanLiteralSymbol(&reader, huffman_tree);
-        if (decoded_index >= literal_offset) {
-            dest[output_index] = symbol;
-            output_index += 1;
-        }
+    var cursor = try initHuffmanLiteralCursor(block, section);
+    while (decoded_index < end) {
+        const symbol = try readHuffmanLiteralSymbolFromCursor(&cursor, huffman_tree);
+        if (decoded_index >= literal_offset) dest[output_index] = symbol;
+        if (decoded_index >= literal_offset) output_index += 1;
+        decoded_index += 1;
     }
-    if (end == section.regenerated_size) try reader.expectEnd();
+    if (end == section.regenerated_size) try cursor.expectEnd();
 }
 
 fn validateHuffmanLiteralsConsumed(block: []const u8, section: LiteralOnlySection) Error!void {
     if (section.kind != .compressed and section.kind != .treeless) return;
     const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
-    var reader = try huffmanLiteralStreamReader(block, section);
+    var cursor = try initHuffmanLiteralCursor(block, section);
     for (0..section.regenerated_size) |_| {
-        _ = try readHuffmanLiteralSymbol(&reader, huffman_tree);
+        _ = try readHuffmanLiteralSymbolFromCursor(&cursor, huffman_tree);
     }
-    try reader.expectEnd();
+    try cursor.expectEnd();
 }
 
 fn huffmanLiteralStreamReader(block: []const u8, section: LiteralOnlySection) Error!ReverseBitReader {
@@ -810,7 +808,55 @@ fn huffmanLiteralStreamReader(block: []const u8, section: LiteralOnlySection) Er
     return try ReverseBitReader.init(block[section.huffman_stream_offset..stream_end]);
 }
 
-fn readHuffmanLiteralSymbol(reader: *ReverseBitReader, huffman_tree: StdZstdHuffmanTree) Error!u8 {
+const HuffmanLiteralCursor = struct {
+    streams: HuffmanLiteralStreams,
+    stream_index: usize = 0,
+    reader: ReverseBitReader,
+
+    fn read(self: *HuffmanLiteralCursor, bit_count: u4) Error!usize {
+        return self.reader.read(bit_count) catch |err| switch (err) {
+            error.TruncatedFrame => {
+                if (self.streams == .four and self.stream_index < 3) {
+                    self.stream_index += 1;
+                    self.reader = try ReverseBitReader.init(self.streams.four[self.stream_index]);
+                    return self.reader.read(bit_count) catch |next_err| switch (next_err) {
+                        error.TruncatedFrame => return error.CorruptFrame,
+                        else => |e| return e,
+                    };
+                }
+                return error.CorruptFrame;
+            },
+            else => |e| return e,
+        };
+    }
+
+    fn expectEnd(self: *HuffmanLiteralCursor) Error!void {
+        switch (self.streams) {
+            .one => try self.reader.expectEnd(),
+            .four => {
+                if (self.stream_index != 3) return error.CorruptFrame;
+                try self.reader.expectEnd();
+            },
+            .none => return error.CorruptFrame,
+        }
+    }
+};
+
+fn initHuffmanLiteralCursor(block: []const u8, section: LiteralOnlySection) Error!HuffmanLiteralCursor {
+    switch (section.huffman_streams) {
+        .one => return .{
+            .streams = .one,
+            .reader = try huffmanLiteralStreamReader(block, section),
+        },
+        .four => |streams| return .{
+            .streams = .{ .four = streams },
+            .reader = try ReverseBitReader.init(streams[0]),
+        },
+        .none => return error.CorruptFrame,
+    }
+}
+
+fn readHuffmanLiteralSymbolFromCursor(cursor: *HuffmanLiteralCursor, huffman_tree: StdZstdHuffmanTree) Error!u8 {
     const max_bit_count = huffman_tree.max_bit_count;
     const starting_bit_count = StdZstdHuffmanTree.weightToBitCount(
         huffman_tree.nodes[huffman_tree.symbol_count_minus_one].weight,
@@ -821,10 +867,7 @@ fn readHuffmanLiteralSymbol(reader: *ReverseBitReader, huffman_tree: StdZstdHuff
     var bit_count_to_read = starting_bit_count;
     var prefix: u16 = 0;
     while (true) {
-        const new_bits = reader.read(bit_count_to_read) catch |err| switch (err) {
-            error.TruncatedFrame => return error.CorruptFrame,
-            else => |e| return e,
-        };
+        const new_bits = try cursor.read(bit_count_to_read);
         prefix <<= bit_count_to_read;
         prefix |= @intCast(new_bits);
         bits_read += bit_count_to_read;
@@ -866,12 +909,12 @@ fn validateSupportedLiteralSection(section: LiteralOnlySection) Error!void {
     switch (section.kind) {
         .raw, .rle => {},
         .compressed => {
-            if (section.size_format != 0) return error.UnsupportedZstdFeature;
             if (section.huffman_tree == null) return error.CorruptFrame;
+            if (section.huffman_streams == .none) return error.CorruptFrame;
         },
         .treeless => {
-            if (section.size_format != 0) return error.UnsupportedZstdFeature;
             if (section.huffman_tree == null) return error.CorruptFrame;
+            if (section.huffman_streams == .none) return error.CorruptFrame;
         },
     }
 }
@@ -897,10 +940,17 @@ const LiteralOnlySection = struct {
     regenerated_size: usize,
     literal_payload_offset: usize,
     huffman_stream_offset: usize,
+    huffman_streams: HuffmanLiteralStreams,
     compressed_size: usize = 0,
     sequence_count: usize,
     sequence_payload_offset: usize,
     huffman_tree: ?StdZstdHuffmanTree = null,
+};
+
+const HuffmanLiteralStreams = union(enum) {
+    none,
+    one,
+    four: [4][]const u8,
 };
 
 fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Error!LiteralOnlySection {
@@ -919,9 +969,9 @@ fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Err
     }
     var huffman_tree: ?StdZstdHuffmanTree = null;
     var huffman_stream_offset = literal_payload_offset;
+    var huffman_streams: HuffmanLiteralStreams = .none;
     switch (literal_header.kind) {
         .compressed => {
-            if (literal_header.size_format != 0) return error.UnsupportedZstdFeature;
             const payload = block[literal_payload_offset..][0..literal_payload_len];
             var reader: std.Io.Reader = .fixed(payload);
             var remaining: std.Io.Limit = .limited(payload.len);
@@ -935,10 +985,11 @@ fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Err
             };
             huffman_stream_offset += reader.seek;
             frame_state.previous_huffman_tree = huffman_tree;
+            huffman_streams = try parseHuffmanLiteralStreams(block, literal_header.size_format, literal_payload_offset, huffman_stream_offset, literal_header.compressed_size);
         },
         .treeless => {
-            if (literal_header.size_format != 0) return error.UnsupportedZstdFeature;
             huffman_tree = frame_state.previous_huffman_tree.?;
+            huffman_streams = try parseHuffmanLiteralStreams(block, literal_header.size_format, literal_payload_offset, huffman_stream_offset, literal_header.compressed_size);
         },
         .raw, .rle => {},
     }
@@ -949,11 +1000,40 @@ fn parseLiteralsSection(block: []const u8, frame_state: *SequenceFrameState) Err
         .regenerated_size = literal_header.regenerated_size,
         .literal_payload_offset = literal_payload_offset,
         .huffman_stream_offset = huffman_stream_offset,
+        .huffman_streams = huffman_streams,
         .compressed_size = literal_header.compressed_size,
         .sequence_count = sequence_count,
         .sequence_payload_offset = offset,
         .huffman_tree = huffman_tree,
     };
+}
+
+fn parseHuffmanLiteralStreams(
+    block: []const u8,
+    size_format: u2,
+    literal_payload_offset: usize,
+    huffman_stream_offset: usize,
+    compressed_size: usize,
+) Error!HuffmanLiteralStreams {
+    const stream_data_end = std.math.add(usize, literal_payload_offset, compressed_size) catch return error.IntegerOverflow;
+    if (huffman_stream_offset > stream_data_end or stream_data_end > block.len) return error.CorruptFrame;
+    const stream_data = block[huffman_stream_offset..stream_data_end];
+    if (size_format == 0) return .one;
+    if (stream_data.len < 6) return error.CorruptFrame;
+    const stream_1_length: usize = std.mem.readInt(u16, stream_data[0..2], .little);
+    const stream_2_length: usize = std.mem.readInt(u16, stream_data[2..4], .little);
+    const stream_3_length: usize = std.mem.readInt(u16, stream_data[4..6], .little);
+    const stream_1_start: usize = 6;
+    const stream_2_start = std.math.add(usize, stream_1_start, stream_1_length) catch return error.IntegerOverflow;
+    const stream_3_start = std.math.add(usize, stream_2_start, stream_2_length) catch return error.IntegerOverflow;
+    const stream_4_start = std.math.add(usize, stream_3_start, stream_3_length) catch return error.IntegerOverflow;
+    if (stream_4_start > stream_data.len) return error.CorruptFrame;
+    return .{ .four = .{
+        stream_data[stream_1_start..stream_2_start],
+        stream_data[stream_2_start..stream_3_start],
+        stream_data[stream_3_start..stream_4_start],
+        stream_data[stream_4_start..],
+    } };
 }
 
 const LiteralsHeaderInfo = struct {
@@ -2694,6 +2774,37 @@ test "zstd native decoder accepts single-stream Huffman literals" {
     defer std.testing.allocator.free(limited);
     try std.testing.expectEqualSlices(u8, payload, limited);
     try std.testing.expectError(error.OutputLimitExceeded, decodeNativeFrameAllocLimited(std.testing.allocator, &frame, payload.len - 1));
+
+    const decoded_len = try decodedRawOrRleFrameSize(&frame);
+    try std.testing.expectEqual(payload.len, decoded_len);
+}
+
+test "zstd native decoder accepts four-stream Huffman literals" {
+    const unit = "{\"key\":\"value\",\"number\":123,\"array\":[1,2,3],\"text\":\"abcdefg\"}\n";
+    const payload = unit ** 4;
+    const frame_hex =
+        "28b52ffd20f86d0500864f2a1290cf016c3325f0fdb0cddd2ce10b3339ce4e" ++
+        "24002400240020bfb1a5123a279f76cdb7192d3a14f27ba43cef2102b95c" ++
+        "08d2f8fea2efd493dfe58e0320bfb1a5123a279f76cdb7192d3a14f27b" ++
+        "a43cef2102b95c08d2f8fea2efd493dfe58e0320bfb1a5123a279f76cdb" ++
+        "7192d3a14f27ba43cef2102b95c08d2f8fea2efd493dfe58e0320bfb1a5" ++
+        "123a279f76cdb7192d3a14f27ba43cef2102b95c08d2f8fea2efd493dfe" ++
+        "58e0300";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, &frame);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, &frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var into_buffer: [payload.len]u8 = undefined;
+    const written = try decodeNativeFrameInto(&frame, &into_buffer);
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
 
     const decoded_len = try decodedRawOrRleFrameSize(&frame);
     try std.testing.expectEqual(payload.len, decoded_len);
