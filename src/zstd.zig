@@ -78,7 +78,35 @@ pub fn decodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, frame: []const u8)
     return out.toOwnedSlice(allocator);
 }
 
+/// Decode the raw/RLE Zstandard subset directly into caller-owned storage.
+/// The returned length is the number of bytes written across all concatenated
+/// non-skippable frames. This mirrors the allocator-returning fallback but lets
+/// embedded/streaming callers preflight capacity and stay allocation-free while
+/// still receiving exact checksum, size, and unsupported-feature errors.
+pub fn decodeRawOrRleFrameInto(frame: []const u8, output: []u8) Error!usize {
+    var offset: usize = 0;
+    var written: usize = 0;
+    while (offset < frame.len) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        const magic = std.mem.readInt(u32, frame[offset..][0..4], .little);
+        offset += 4;
+        if (magic == frame_magic_u32) {
+            try decodeRawOrRleZstandardFrameIntoBuffer(frame, &offset, output, &written);
+        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+            if (frame.len - offset < 4) return error.TruncatedFrame;
+            const skip_len: usize = @intCast(std.mem.readInt(u32, frame[offset..][0..4], .little));
+            offset += 4;
+            if (frame.len - offset < skip_len) return error.TruncatedFrame;
+            offset += skip_len;
+        } else {
+            return error.InvalidMagic;
+        }
+    }
+    return written;
+}
+
 pub const decodeNativeFrameAlloc = decodeRawOrRleFrameAlloc;
+pub const decodeNativeFrameInto = decodeRawOrRleFrameInto;
 
 /// Compress a complete Zstandard frame using the reference-compatible libzstd
 /// encoder linked by Vort's build. Keeping this call surface in Vort centralizes
@@ -212,6 +240,65 @@ fn decodeRawOrRleZstandardFrameInto(
     }
 
     const decoded = out.items[frame_out_start..];
+    if (header.content_size) |size| {
+        if (try checkedUsizeToU64(decoded.len) != size) return error.SizeMismatch;
+    }
+
+    if (header.has_checksum) {
+        if (frame.len - offset.* < 4) return error.TruncatedFrame;
+        const expected = std.mem.readInt(u32, frame[offset.*..][0..4], .little);
+        const actual: u32 = @truncate(std.hash.XxHash64.hash(0, decoded));
+        if (actual != expected) return error.ChecksumMismatch;
+        offset.* += 4;
+    }
+}
+
+fn decodeRawOrRleZstandardFrameIntoBuffer(
+    frame: []const u8,
+    offset: *usize,
+    output: []u8,
+    written: *usize,
+) Error!void {
+    const header = try parseRawOrRleFrameHeader(frame, offset);
+    const frame_out_start = written.*;
+    if (header.content_size) |size| {
+        const needed = try checkedU64ToUsize(size);
+        if (output.len - written.* < needed) return error.OutputTooSmall;
+    }
+
+    while (true) {
+        if (frame.len - offset.* < 3) return error.TruncatedFrame;
+        const block_header = std.mem.readInt(u24, frame[offset.*..][0..3], .little);
+        offset.* += 3;
+        const last = (block_header & 0x1) != 0;
+        const block_type = (block_header >> 1) & 0x3;
+        const block_len: usize = @intCast(block_header >> 3);
+        if (block_len > header.block_size_max) return error.CorruptFrame;
+        if (output.len - written.* < block_len) return error.OutputTooSmall;
+
+        switch (block_type) {
+            0 => {
+                if (frame.len - offset.* < block_len) return error.TruncatedFrame;
+                @memcpy(output[written.*..][0..block_len], frame[offset.*..][0..block_len]);
+                written.* += block_len;
+                offset.* += block_len;
+            },
+            1 => {
+                if (block_len == 0) return error.CorruptFrame;
+                if (frame.len - offset.* < 1) return error.TruncatedFrame;
+                const byte = frame[offset.*];
+                offset.* += 1;
+                @memset(output[written.*..][0..block_len], byte);
+                written.* += block_len;
+            },
+            2 => return error.UnsupportedZstdFeature,
+            else => return error.CorruptFrame,
+        }
+
+        if (last) break;
+    }
+
+    const decoded = output[frame_out_start..written.*];
     if (header.content_size) |size| {
         if (try checkedUsizeToU64(decoded.len) != size) return error.SizeMismatch;
     }
@@ -378,6 +465,11 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     const native_decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(native_decoded);
     try std.testing.expectEqualSlices(u8, payload, native_decoded);
+    var into_buffer: [payload.len]u8 = undefined;
+    const into_written = try decodeRawOrRleFrameInto(encoded, &into_buffer);
+    try std.testing.expectEqual(payload.len, into_written);
+    try std.testing.expectEqualSlices(u8, payload, into_buffer[0..into_written]);
+    try std.testing.expectError(error.OutputTooSmall, decodeRawOrRleFrameInto(encoded, into_buffer[0 .. into_buffer.len - 1]));
     try std.testing.expectEqual(@as(u8, 0x24), encoded[4]);
     try std.testing.expectEqual(@as(u8, payload.len), encoded[5]);
 
@@ -395,6 +487,10 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     const native_rle_decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, rle_encoded);
     defer std.testing.allocator.free(native_rle_decoded);
     try std.testing.expectEqualSlices(u8, repeated, native_rle_decoded);
+    var rle_into_buffer: [repeated.len]u8 = undefined;
+    const rle_into_written = try decodeNativeFrameInto(rle_encoded, &rle_into_buffer);
+    try std.testing.expectEqual(repeated.len, rle_into_written);
+    try std.testing.expectEqualSlices(u8, repeated, rle_into_buffer[0..rle_into_written]);
 }
 
 test "zstd raw/RLE native decoder handles skippable and concatenated frames" {
@@ -416,6 +512,11 @@ test "zstd raw/RLE native decoder handles skippable and concatenated frames" {
     const decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, stream.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "firstsecond", decoded);
+
+    var into_buffer: ["firstsecond".len]u8 = undefined;
+    const written = try decodeRawOrRleFrameInto(stream.items, &into_buffer);
+    try std.testing.expectEqual(@as(usize, "firstsecond".len), written);
+    try std.testing.expectEqualSlices(u8, "firstsecond", into_buffer[0..written]);
 }
 
 test "zstd raw/RLE native decoder accepts no-size raw frames" {
@@ -429,6 +530,11 @@ test "zstd raw/RLE native decoder accepts no-size raw frames" {
     const decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "abc", decoded);
+
+    var into_buffer: [3]u8 = undefined;
+    const written = try decodeRawOrRleFrameInto(frame.items, &into_buffer);
+    try std.testing.expectEqual(@as(usize, 3), written);
+    try std.testing.expectEqualSlices(u8, "abc", into_buffer[0..written]);
 }
 
 test "zstd raw/RLE native decoder rejects corrupt frames" {
