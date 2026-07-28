@@ -20,8 +20,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   encode-into/decoded-size preflight, and caller-owned decode-into APIs,
   libzstd-backed Zstandard frame encode/bounded/caller-owned decode with header
   options and decoded-size preflight, a
-  dependency-free raw/RLE, literal-only compressed-block, single-stream
-  Huffman-literals, minimal RLE-sequence, mixed RLE/predefined sequence,
+  dependency-free raw/RLE, literal-only compressed-block, single-stream and
+  treeless repeat Huffman-literals, minimal RLE-sequence, mixed RLE/predefined sequence,
   repeated sequence-table, and streaming default predefined-sequence
   compressed-block fallback encode/decode with explicit treeless-literals and
   FSE sequence-table boundary errors

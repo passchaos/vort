@@ -120,6 +120,27 @@ def main() -> int:
     for payload, level in huffman_cases:
         assert_vort_native_decode(zstd_compress(payload, level), payload)
 
+    # System zstd does not reliably emit a tiny treeless-literals fixture on
+    # demand, so keep one handcrafted two-block frame here. The second block
+    # omits the Huffman tree and reuses the first block's tree, exercising the
+    # native frame-state path through the CLI surface while still checking the
+    # bytes against the system zstd decoder.
+    treeless_cases = [
+        (
+            bytes.fromhex(
+                "28b52ffd00680c0200e2c30d1290cf016c3325f0fdb0cddd2ce10b3339ce4e20b"
+                "fb1a5123a279f76cdb7192d3a14f27ba43cef2102b95c08d2f8fea2efd493d"
+                "fe58e0301007e7f411fa0750100e3030920bfb1a5123a279f76cdb7192d3a"
+                "14f27ba43cef2102b95c08d2f8fea2efd493dfe58e0301007e7f411fa0"
+            ),
+            b'{"key":"value","number":123,"array":[1,2,3],"text":"abcdefg"}\n' * 200,
+        ),
+    ]
+    for frame, payload in treeless_cases:
+        if zstd_decompress(frame) != payload:
+            raise AssertionError("treeless fixture failed system zstd decode")
+        assert_vort_native_decode(frame, payload)
+
     unsupported_cases = []
 
     with tempfile.TemporaryDirectory(prefix="vort-zstd-native-", dir=ROOT / ".zig-cache") as tmpdir:
@@ -136,7 +157,8 @@ def main() -> int:
 
     print(
         f"zstd_native_cli_diff_ok cases={len(cases)} external_cases={len(external_cases)} "
-        f"huffman_cases={len(huffman_cases)} unsupported_cases={len(unsupported_cases)} zstd={pathlib.Path(ZSTD).name}"
+        f"huffman_cases={len(huffman_cases)} treeless_cases={len(treeless_cases)} "
+        f"unsupported_cases={len(unsupported_cases)} zstd={pathlib.Path(ZSTD).name}"
     )
     return 0
 
