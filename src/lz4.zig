@@ -37,6 +37,13 @@ const Lz4Preferences = extern struct {
     reserved: [3]c_uint = .{ 0, 0, 0 },
 };
 
+const Lz4DecompressOptions = extern struct {
+    stableDst: c_uint = 0,
+    skipChecksums: c_uint = 0,
+    reserved1: c_uint = 0,
+    reserved0: c_uint = 0,
+};
+
 pub const LibFrameOptions = struct {
     include_content_size: bool = true,
     content_checksum: bool = true,
@@ -48,6 +55,11 @@ pub const LibFrameOptions = struct {
 extern fn LZ4F_compressFrameBound(srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
 extern fn LZ4F_compressFrame(dstBuffer: *anyopaque, dstCapacity: usize, srcBuffer: *const anyopaque, srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
 extern fn LZ4F_isError(code: usize) c_uint;
+extern fn LZ4F_createDecompressionContext(dctxPtr: *?*anyopaque, version: c_uint) usize;
+extern fn LZ4F_freeDecompressionContext(dctx: ?*anyopaque) usize;
+extern fn LZ4F_decompress(dctx: *anyopaque, dstBuffer: *anyopaque, dstSizePtr: *usize, srcBuffer: *const anyopaque, srcSizePtr: *usize, dOptPtr: ?*const Lz4DecompressOptions) usize;
+
+const lz4f_version: c_uint = 100;
 
 const Match = struct {
     start: usize = 0,
@@ -370,6 +382,53 @@ pub const decodeNativeConcatenatedFrameInto = decodeConcatenatedFrameInto;
 /// `decodeFrameAlloc` while avoiding heap allocation for applications that can
 /// provide the output buffer up front.
 pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
+    return decodeFrameIntoLib(frame, output) catch |err| switch (err) {
+        // Keep the pure Zig path as a detailed validator and bootstrap fallback
+        // when the linked liblz4 decoder rejects a frame. The lib path is the
+        // hot path for normal interoperable frames and avoids the per-block
+        // Zig decoder overhead in caller-owned-buffer integrations such as
+        // MCAP's bounded standard chunk fast path.
+        error.CorruptFrame => try decodeFrameIntoPure(frame, output),
+        else => err,
+    };
+}
+
+fn decodeFrameIntoLib(frame: []const u8, output: []u8) Error!usize {
+    var context: ?*anyopaque = null;
+    const create_code = LZ4F_createDecompressionContext(&context, lz4f_version);
+    if (LZ4F_isError(create_code) != 0) return error.CorruptFrame;
+    defer _ = LZ4F_freeDecompressionContext(context);
+
+    var src_offset: usize = 0;
+    var dst_offset: usize = 0;
+    var options = Lz4DecompressOptions{ .stableDst = 1 };
+    while (true) {
+        if (src_offset >= frame.len) return error.TruncatedFrame;
+
+        var src_size = frame.len - src_offset;
+        var dst_size = output.len - dst_offset;
+        const hint = LZ4F_decompress(
+            context.?,
+            @ptrCast(output[dst_offset..].ptr),
+            &dst_size,
+            @ptrCast(frame[src_offset..].ptr),
+            &src_size,
+            &options,
+        );
+        if (LZ4F_isError(hint) != 0) return error.CorruptFrame;
+        src_offset += src_size;
+        dst_offset += dst_size;
+        if (hint == 0) break;
+        if (src_size == 0 and dst_size == 0) {
+            if (dst_offset == output.len) return error.OutputTooSmall;
+            return error.TruncatedFrame;
+        }
+    }
+    if (src_offset != frame.len) return error.TrailingData;
+    return dst_offset;
+}
+
+fn decodeFrameIntoPure(frame: []const u8, output: []u8) Error!usize {
     const header = try parseFrameHeader(frame);
     var offset = header.payload_offset;
     var written: usize = 0;
