@@ -69,6 +69,7 @@ extern fn ZSTD_freeCCtx(cctx: ?*anyopaque) usize;
 extern fn ZSTD_CCtx_setParameter(cctx: *anyopaque, param: c_int, value: c_int) usize;
 extern fn ZSTD_compress2(cctx: *anyopaque, dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize) usize;
 extern fn ZSTD_getFrameContentSize(src: *const anyopaque, srcSize: usize) c_ulonglong;
+extern fn ZSTD_decompressBound(src: *const anyopaque, srcSize: usize) c_ulonglong;
 extern fn ZSTD_decompress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, compressedSize: usize) usize;
 extern fn ZSTD_isError(code: usize) c_uint;
 
@@ -105,10 +106,12 @@ pub const NativeFrameEncodeResult = struct {
     mode: NativeFrameMode,
 };
 
-/// Decode a Zstandard frame. Prefer libzstd's one-shot decoder when the
-/// content size is present, because MCAP chunks always advertise their decoded
-/// size and the one-shot path avoids streaming allocator overhead. Frames with
-/// unknown content size still fall back to Zig std's streaming decoder.
+/// Decode a Zstandard frame. Prefer libzstd's one-shot decoder because MCAP and
+/// similar containers often know the decoded chunk size out-of-band and because
+/// the one-shot path avoids Zig streaming allocator overhead. When the frame
+/// omits its content size, use libzstd's conservative decompressed bound before
+/// falling back to Zig std's streaming decoder for frames that cannot be bounded
+/// by the linked library.
 pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
     const content_size = ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
     if (content_size == zstd_content_size_error) return error.CorruptFrame;
@@ -120,6 +123,19 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
         if (ZSTD_isError(written) != 0) return error.CorruptFrame;
         if (written != decoded_len) return error.SizeMismatch;
         return out;
+    }
+
+    const bound = ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
+    if (bound != zstd_content_size_error) {
+        const capacity = try checkedU64ToUsize(bound);
+        const out = try allocator.alloc(u8, capacity);
+        errdefer allocator.free(out);
+        const written = ZSTD_decompress(@ptrCast(out.ptr), out.len, @ptrCast(frame.ptr), frame.len);
+        if (ZSTD_isError(written) != 0) return error.CorruptFrame;
+        if (allocator.remap(out, written)) |shrunk| return shrunk;
+        const exact = try allocator.dupe(u8, out[0..written]);
+        allocator.free(out);
+        return exact;
     }
 
     var input: std.Io.Reader = .fixed(frame);
