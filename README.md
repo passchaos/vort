@@ -186,6 +186,8 @@ zig build run-gzip-diff
 zig build run-python-zlib-diff
 zig build run-python-zlib-diff-dashboard
 zig build run-gzip-cli-diff
+zig build run-zstd-native-cli-diff
+zig build run-zstd-native-probe
 zig build run-header-inspect-smoke
 zig build run-header-inspect-dashboard
 zig build run-dashboard-category-smoke

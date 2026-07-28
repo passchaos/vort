@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Bounded differential probe for Vort's native-subset Zstandard decoder.
+
+This is intentionally a smoke/probe rather than a full corpus runner: it keeps
+payload sizes small enough for the existing `decode-zstd-native-hex` CLI surface
+while covering multiple data shapes and zstd levels that have historically
+exposed parser, FSE-table, repeat-offset, and Huffman-literal bugs.
+"""
+
+from __future__ import annotations
+
+import pathlib
+import random
+import re
+import shutil
+import subprocess
+import sys
+import zlib
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+CLI = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "zig-out" / "bin" / "vort"
+ZSTD = shutil.which("zstd")
+
+
+def zstd_compress(payload: bytes, level: int) -> bytes:
+    if not ZSTD:
+        raise RuntimeError("zstd missing")
+    return subprocess.run(
+        [ZSTD, f"-{level}", "-cq"],
+        input=payload,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    ).stdout
+
+
+def parse_crc(output: str) -> tuple[int, int]:
+    decoded = re.search(r"(?:^| )decoded_bytes=([0-9]+)", output)
+    crc = re.search(r"(?:^| )crc32=([0-9]+)", output)
+    if not decoded or not crc:
+        raise AssertionError(f"missing decode fields in {output!r}")
+    return int(decoded.group(1)), int(crc.group(1))
+
+
+def native_decode(frame: bytes, expected: bytes) -> None:
+    result = subprocess.run(
+        [str(CLI), "decode-zstd-native-hex", frame.hex(), str(len(expected))],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        raise AssertionError(result.stderr.strip() or f"native decode rc={result.returncode}")
+    decoded_len, crc = parse_crc(result.stdout)
+    expected_crc = zlib.crc32(expected) & 0xFFFFFFFF
+    if decoded_len != len(expected) or crc != expected_crc:
+        raise AssertionError(
+            f"decoded_len={decoded_len} expected_len={len(expected)} "
+            f"crc={crc} expected_crc={expected_crc}"
+        )
+
+
+def payloads() -> list[tuple[str, bytes]]:
+    rng = random.Random(0x51D)
+    printable = bytes(range(32, 127))
+    englishish = (
+        b"eeeeeeeeeeeeeeeeee tttttttttaaaaaaaaooooooiiiiinnnssrrddllccuumm"
+        b"wfgypbvkjxqz.,0123456789"
+    )
+    json_unit = b'{"key":"value","number":123,"array":[1,2,3],"text":"abcdefg"}\n'
+
+    cases: list[tuple[str, bytes]] = [
+        ("empty", b""),
+        ("tiny", b"hello"),
+        ("json100", json_unit * 100),
+        ("alphabet200", printable * 200),
+        (
+            "structured-lines",
+            b"".join(
+                b'{"k":"%04d","n":%d,"txt":"abcdefghijklmnopqrstuvwxyz0123456789"}\n' % (i, i)
+                for i in range(80)
+            ),
+        ),
+    ]
+    for n in (257, 1024, 4096, 16_384):
+        cases.append((f"dna{n}", bytes(rng.choice(b"ACGTN") for _ in range(n))))
+        cases.append((f"print{n}", bytes(rng.choice(printable) for _ in range(n))))
+        cases.append((f"english{n}", bytes(rng.choice(englishish) for _ in range(n))))
+    # Deterministic larger shapes that previously found native decoder bugs but
+    # still fit safely under the CLI hex argument limits.
+    cases.append(("dna-direct-offset", bytes(b"ACGTN"[(i * 17 + i // 7 + i // 31) % 5] for i in range(4200))))
+    cases.append(("print-mixed-tables", bytes(((i * 37 + i // 11 + i // 101) % 95) + 32 for i in range(24_000))))
+    return cases
+
+
+def main() -> int:
+    if not ZSTD:
+        print("zstd_native_probe: zstd=missing")
+        return 0
+    if not CLI.exists():
+        raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
+
+    levels = (1, 3, 6, 9, 12, 19)
+    checked = 0
+    for name, payload in payloads():
+        for level in levels:
+            frame = zstd_compress(payload, level)
+            try:
+                native_decode(frame, payload)
+            except AssertionError as exc:
+                print(
+                    f"zstd_native_probe_fail case={name} level={level} "
+                    f"input_bytes={len(payload)} frame_bytes={len(frame)} error={exc}"
+                )
+                print(frame.hex()[:800])
+                return 1
+            checked += 1
+
+    print(f"zstd_native_probe_ok cases={checked} zstd={pathlib.Path(ZSTD).name}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

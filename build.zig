@@ -781,6 +781,11 @@ pub fn build(b: *std.Build) void {
     const zstd_native_cli_diff_step = b.step("run-zstd-native-cli-diff", "Run black-box smoke for native-subset zstd frames against system zstd CLI");
     zstd_native_cli_diff_step.dependOn(&zstd_native_cli_diff.step);
 
+    const zstd_native_probe = b.addSystemCommand(&.{ "python3", "tools/zstd_native_probe.py" });
+    zstd_native_probe.addArtifactArg(cli_exe);
+    const zstd_native_probe_step = b.step("run-zstd-native-probe", "Run bounded generated-corpus probe for native-subset zstd frames");
+    zstd_native_probe_step.dependOn(&zstd_native_probe.step);
+
     const header_inspect_smoke = b.addSystemCommand(&.{ "python3", "tools/header_inspect_smoke.py" });
     header_inspect_smoke.addArtifactArg(cli_exe);
     const header_inspect_smoke_step = b.step("run-header-inspect-smoke", "Run raw/zlib/gzip header inspection CLI smoke");
