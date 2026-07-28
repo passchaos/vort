@@ -63,6 +63,7 @@ pub const lz4DecodeNativeConcatenatedFrameAlloc = lz4.decodeNativeConcatenatedFr
 pub const lz4DecodeNativeConcatenatedFrameAllocLimited = lz4.decodeNativeConcatenatedFrameAllocLimited;
 pub const lz4DecodeNativeConcatenatedFrameInto = lz4.decodeNativeConcatenatedFrameInto;
 pub const lz4EncodeBlockAlloc = lz4.encodeBlockAlloc;
+pub const lz4EncodeBlockIntoSlice = lz4.encodeBlockIntoSlice;
 pub const lz4DecodeBlockAlloc = lz4.decodeBlockAlloc;
 pub const lz4DecodeBlockWithPrefixAlloc = lz4.decodeBlockWithPrefixAlloc;
 pub const lz4DecodeBlockIntoSlice = lz4.decodeBlockIntoSlice;
@@ -663,6 +664,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeNativeConcatenatedFrameAllocLimited;
     _ = lz4DecodeNativeConcatenatedFrameInto;
     _ = lz4EncodeBlockAlloc;
+    _ = lz4EncodeBlockIntoSlice;
     _ = lz4DecodeBlockAlloc;
     _ = lz4DecodeBlockWithPrefixAlloc;
     _ = lz4DecodeBlockIntoSlice;
@@ -720,6 +722,9 @@ test "root lz4 lib frame options round trip" {
     try std.testing.expectEqual(@as(usize, 10), try lz4DecodedBlockSize(&raw_match));
     try std.testing.expectEqual(@as(usize, 10), try lz4DecodedBlockSizeLimited(&raw_match, 10));
     try std.testing.expectError(error.OutputLimitExceeded, lz4DecodedBlockSizeLimited(&raw_match, 9));
+    var raw_encoded_into: [16]u8 = undefined;
+    const raw_written = try lz4EncodeBlockIntoSlice(std.testing.allocator, "abcabcabca", &raw_encoded_into);
+    try std.testing.expect(raw_written <= try lz4EncodedBlockBound(10));
 }
 
 test "root zstd lib frame options round trip" {

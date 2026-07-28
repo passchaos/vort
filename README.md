@@ -17,7 +17,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   optional content-size/checksum/block-checksum fields, configurable frame block
   sizes and block mode metadata, encoded-block bounds, decoded-size preflight,
   bounded allocation for single/concatenated streams, bounded raw-block
-  decoded-size preflight, and caller-owned decode-into APIs,
+  encode-into/decoded-size preflight, and caller-owned decode-into APIs,
   libzstd-backed Zstandard frame encode/bounded/caller-owned decode with header
   options and decoded-size preflight, a
   dependency-free raw/RLE, literal-only compressed-block, minimal RLE-sequence,
