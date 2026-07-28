@@ -35,6 +35,28 @@ pub const crc32cSlice32 = checksum.crc32cSlice32;
 pub const crc32cBest = checksum.crc32cBest;
 pub const crc32cCombine = checksum.crc32cCombine;
 
+pub const lz4EncodeFrameAlloc = lz4.encodeFrameAlloc;
+pub const lz4EncodeFrameWithLevelAlloc = lz4.encodeFrameWithLevelAlloc;
+pub const lz4EncodeNativeFrameAlloc = lz4.encodeNativeFrameAlloc;
+pub const lz4DecodeFrameAlloc = lz4.decodeFrameAlloc;
+pub const lz4DecodeFrameInto = lz4.decodeFrameInto;
+pub const lz4DecodeNativeFrameAlloc = lz4.decodeNativeFrameAlloc;
+pub const lz4DecodeNativeFrameInto = lz4.decodeNativeFrameInto;
+pub const lz4EncodeBlockAlloc = lz4.encodeBlockAlloc;
+pub const lz4DecodeBlockAlloc = lz4.decodeBlockAlloc;
+pub const lz4DecodeBlockWithPrefixAlloc = lz4.decodeBlockWithPrefixAlloc;
+pub const lz4DecodeBlockIntoSlice = lz4.decodeBlockIntoSlice;
+
+pub const zstdEncodeFrameAlloc = zstd.encodeFrameAlloc;
+pub const zstdEncodeFrameWithLevelAlloc = zstd.encodeFrameWithLevelAlloc;
+pub const zstdDecodeFrameAlloc = zstd.decodeFrameAlloc;
+pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
+pub const zstdDecodeRawOrRleFrameAlloc = zstd.decodeRawOrRleFrameAlloc;
+pub const zstdDecodeRawOrRleFrameInto = zstd.decodeRawOrRleFrameInto;
+pub const zstdEncodeNativeFrameAlloc = zstd.encodeNativeFrameAlloc;
+pub const zstdDecodeNativeFrameAlloc = zstd.decodeNativeFrameAlloc;
+pub const zstdDecodeNativeFrameInto = zstd.decodeNativeFrameInto;
+
 pub const Error = core.Error;
 pub const FrameInfo = core.FrameInfo;
 pub const Progress = core.Progress;
@@ -568,6 +590,32 @@ test {
     _ = planner;
     _ = lz4;
     _ = zstd;
+}
+
+test "root exports lz4 and zstd codec helpers" {
+    // The codec modules remain available as namespaces, while these aliases keep
+    // the one-shot and caller-owned native surfaces discoverable from `vort`.
+    _ = lz4EncodeFrameAlloc;
+    _ = lz4EncodeFrameWithLevelAlloc;
+    _ = lz4EncodeNativeFrameAlloc;
+    _ = lz4DecodeFrameAlloc;
+    _ = lz4DecodeFrameInto;
+    _ = lz4DecodeNativeFrameAlloc;
+    _ = lz4DecodeNativeFrameInto;
+    _ = lz4EncodeBlockAlloc;
+    _ = lz4DecodeBlockAlloc;
+    _ = lz4DecodeBlockWithPrefixAlloc;
+    _ = lz4DecodeBlockIntoSlice;
+
+    _ = zstdEncodeFrameAlloc;
+    _ = zstdEncodeFrameWithLevelAlloc;
+    _ = zstdDecodeFrameAlloc;
+    _ = zstdEncodeRawOrRleFrameAlloc;
+    _ = zstdDecodeRawOrRleFrameAlloc;
+    _ = zstdDecodeRawOrRleFrameInto;
+    _ = zstdEncodeNativeFrameAlloc;
+    _ = zstdDecodeNativeFrameAlloc;
+    _ = zstdDecodeNativeFrameInto;
 }
 
 test "root exports chunked compatibility decode helpers" {
