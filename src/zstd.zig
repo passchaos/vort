@@ -1105,6 +1105,39 @@ test "zstd native decoder accepts literal-only compressed blocks" {
     try std.testing.expectError(error.OutputLimitExceeded, decodeNativeFrameAllocLimited(std.testing.allocator, frame.items, 2));
 }
 
+test "zstd literal-only compressed block rejects malformed sections" {
+    var non_zero_sequences: std.ArrayList(u8) = .empty;
+    defer non_zero_sequences.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &non_zero_sequences, 3, .{});
+    try emitBlockHeader(std.testing.allocator, &non_zero_sequences, 2, 6, true);
+    try non_zero_sequences.append(std.testing.allocator, 3 << 3);
+    try non_zero_sequences.appendSlice(std.testing.allocator, "abc");
+    try non_zero_sequences.appendSlice(std.testing.allocator, &.{ 1, 0 }); // one sequence, predefined mode byte
+    var checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, "abc")), .little);
+    try non_zero_sequences.appendSlice(std.testing.allocator, &checksum);
+    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameAlloc(std.testing.allocator, non_zero_sequences.items));
+
+    var trailing_literal_payload: std.ArrayList(u8) = .empty;
+    defer trailing_literal_payload.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &trailing_literal_payload, 3, .{});
+    try emitBlockHeader(std.testing.allocator, &trailing_literal_payload, 2, 6, true);
+    try trailing_literal_payload.append(std.testing.allocator, 3 << 3);
+    try trailing_literal_payload.appendSlice(std.testing.allocator, "abcd");
+    try trailing_literal_payload.append(std.testing.allocator, 0);
+    try trailing_literal_payload.appendSlice(std.testing.allocator, &checksum);
+    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameAlloc(std.testing.allocator, trailing_literal_payload.items));
+
+    var missing_literal_byte: std.ArrayList(u8) = .empty;
+    defer missing_literal_byte.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &missing_literal_byte, 3, .{});
+    try emitBlockHeader(std.testing.allocator, &missing_literal_byte, 2, 2, true);
+    try missing_literal_byte.append(std.testing.allocator, (3 << 3) | 1); // RLE literals need one payload byte.
+    try missing_literal_byte.append(std.testing.allocator, 0);
+    try missing_literal_byte.appendSlice(std.testing.allocator, &checksum);
+    try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameAlloc(std.testing.allocator, missing_literal_byte.items));
+}
+
 test "zstd literal-only frame writer round trips through std and native decoders" {
     const payload = "literal-only zstd payload";
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
