@@ -774,17 +774,14 @@ fn copyHuffmanLiteralsFromSection(
     dest: []u8,
 ) Error!void {
     if (section.size_format != 0) return error.UnsupportedZstdFeature;
-    const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
-    const stream_end = std.math.add(usize, section.literal_payload_offset, section.compressed_size) catch return error.IntegerOverflow;
-    if (section.huffman_stream_offset > stream_end or stream_end > block.len) return error.CorruptFrame;
-
     // Literal copies are requested in sequence order, but the current minimal
     // slice keeps no per-section cursor so preflight and decode can share the
     // same immutable `LiteralOnlySection`. Re-reading from the start is slower
     // for many small literal runs, yet it preserves exact behavior while this
     // native Zstd path is still correctness-first and sequence/FSE support is
     // incomplete.
-    var reader = try ReverseBitReader.init(block[section.huffman_stream_offset..stream_end]);
+    const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
+    var reader = try huffmanLiteralStreamReader(block, section);
     const end = std.math.add(usize, literal_offset, dest.len) catch return error.IntegerOverflow;
     var decoded_index: usize = 0;
     var output_index: usize = 0;
@@ -796,6 +793,22 @@ fn copyHuffmanLiteralsFromSection(
         }
     }
     if (end == section.regenerated_size) try reader.expectEnd();
+}
+
+fn validateHuffmanLiteralsConsumed(block: []const u8, section: LiteralOnlySection) Error!void {
+    if (section.kind != .compressed) return;
+    const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
+    var reader = try huffmanLiteralStreamReader(block, section);
+    for (0..section.regenerated_size) |_| {
+        _ = try readHuffmanLiteralSymbol(&reader, huffman_tree);
+    }
+    try reader.expectEnd();
+}
+
+fn huffmanLiteralStreamReader(block: []const u8, section: LiteralOnlySection) Error!ReverseBitReader {
+    const stream_end = std.math.add(usize, section.literal_payload_offset, section.compressed_size) catch return error.IntegerOverflow;
+    if (section.huffman_stream_offset > stream_end or stream_end > block.len) return error.CorruptFrame;
+    return try ReverseBitReader.init(block[section.huffman_stream_offset..stream_end]);
 }
 
 fn readHuffmanLiteralSymbol(reader: *ReverseBitReader, huffman_tree: StdZstdHuffmanTree) Error!u8 {
@@ -844,6 +857,7 @@ fn compressedLiteralOnlyBlockDecodedSize(
     try validateSupportedLiteralSection(section);
     if (section.sequence_count == 0) {
         if (section.sequence_payload_offset != block.len) return error.UnsupportedZstdFeature;
+        try validateHuffmanLiteralsConsumed(block, section);
         return section.regenerated_size;
     }
     return try rleSequencesCompressedBlockDecodedSize(block, section, initial_output_len, frame_state);
@@ -1481,6 +1495,7 @@ fn rleSequencesCompressedBlockDecodedSize(
     }
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     produced = std.math.add(usize, produced, section.regenerated_size - literal_offset) catch return error.IntegerOverflow;
+    try validateHuffmanLiteralsConsumed(block, section);
     frame_state.previous_tables = spec.tables();
     frame_state.repeated_offsets = state.repeated_offsets;
     return produced;
