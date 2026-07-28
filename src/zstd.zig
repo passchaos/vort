@@ -2294,6 +2294,7 @@ fn emitBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []con
 
 fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
     if (try emitRepeatedPatternCompressedBlock(allocator, out, block, last)) return;
+    if (try emitMultiDuplicateMatchCompressedBlock(allocator, out, block, last)) return;
     if (try emitSingleMatchCompressedBlock(allocator, out, block, last)) return;
 
     const literal_kind: LiteralsKind = if (rleByte(block) != null) .rle else .raw;
@@ -2369,6 +2370,77 @@ fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     return true;
 }
 
+fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
+    if (rleByte(block) != null or block.len < 32 or block.len > 4096) return false;
+    var matches: [8]DuplicateMatch = undefined;
+    var literal_lens: [8]usize = undefined;
+    var count: usize = 0;
+    var literal_start: usize = 0;
+    while (count < matches.len and literal_start < block.len) {
+        const match = try findBestDuplicateMatchIn(block, literal_start) orelse break;
+        const literal_len = match.second_start - literal_start;
+        if (literal_len > 64) break;
+        matches[count] = match;
+        literal_lens[count] = literal_len;
+        count += 1;
+        literal_start = match.second_start + match.len;
+    }
+    if (count < 2) return false;
+    const tail_len = block.len - literal_start;
+
+    const literal_code = try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits);
+    const offset_code = try sequenceCodeForValue(matches[0].second_start - matches[0].first_start, &of_base, &of_bits);
+    const match_code = try sequenceCodeForValue(matches[0].len, &ml_base, &ml_bits);
+    for (1..count) |i| {
+        if (try sequenceCodeForValue(literal_lens[i], &ll_base, &ll_bits) != literal_code) return false;
+        if (try sequenceCodeForValue(matches[i].second_start - matches[i].first_start, &of_base, &of_bits) != offset_code) return false;
+        if (try sequenceCodeForValue(matches[i].len, &ml_base, &ml_bits) != match_code) return false;
+    }
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    var regenerated_literals = tail_len;
+    for (literal_lens[0..count]) |literal_len| {
+        regenerated_literals = std.math.add(usize, regenerated_literals, literal_len) catch return error.IntegerOverflow;
+    }
+    try emitLiteralsHeader(allocator, &payload, .raw, regenerated_literals);
+    literal_start = 0;
+    for (matches[0..count], 0..) |match, i| {
+        try payload.appendSlice(allocator, block[literal_start..][0..literal_lens[i]]);
+        literal_start = match.second_start + match.len;
+    }
+    try payload.appendSlice(allocator, block[literal_start..]);
+    try emitSequenceCount(allocator, &payload, count);
+    try payload.append(allocator, 0x54);
+    try payload.append(allocator, literal_code);
+    try payload.append(allocator, offset_code);
+    try payload.append(allocator, match_code);
+
+    var fields: [8 * 3]BitField = undefined;
+    var field_count: usize = 0;
+    var i = count;
+    while (i > 0) {
+        i -= 1;
+        const offset = matches[i].second_start - matches[i].first_start;
+        fields[field_count] = .{ .value = literal_lens[i] - ll_base[literal_code], .bits = ll_bits[literal_code] };
+        field_count += 1;
+        fields[field_count] = .{ .value = matches[i].len - ml_base[match_code], .bits = ml_bits[match_code] };
+        field_count += 1;
+        fields[field_count] = .{ .value = offset - of_base[offset_code], .bits = of_bits[offset_code] };
+        field_count += 1;
+    }
+    var sequence_bits: std.ArrayList(u8) = .empty;
+    defer sequence_bits.deinit(allocator);
+    try emitReverseBitstream(allocator, &sequence_bits, fields[0..field_count]);
+    try payload.appendSlice(allocator, sequence_bits.items);
+
+    const raw_payload_len = std.math.add(usize, block.len, try literalsHeaderLen(block.len)) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_payload_len) return false;
+    try emitBlockHeader(allocator, out, 2, payload.items.len, last);
+    try out.appendSlice(allocator, payload.items);
+    return true;
+}
+
 const DuplicateMatch = struct {
     first_start: usize,
     second_start: usize,
@@ -2376,21 +2448,25 @@ const DuplicateMatch = struct {
 };
 
 fn findBestDuplicateMatch(block: []const u8) Error!?DuplicateMatch {
+    return try findBestDuplicateMatchIn(block, 0);
+}
+
+fn findBestDuplicateMatchIn(block: []const u8, start_min: usize) Error!?DuplicateMatch {
     // This intentionally tiny O(n^2) finder is a bootstrap encoder slice, not a
     // production match finder. Cap the search so unusual incompressible blocks do
     // not pay a large planning cost before falling back to raw/RLE output.
-    if (block.len < 24 or block.len > 4096) return null;
+    if (block.len < 24 or block.len > 4096 or start_min + 16 > block.len) return null;
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
-    var second: usize = 1;
+    var second: usize = start_min + 1;
     while (second + 8 <= block.len) : (second += 1) {
-        var first: usize = 0;
+        var first: usize = start_min;
         while (first < second) : (first += 1) {
             var len: usize = 0;
             while (second + len < block.len and block[first + len] == block[second + len]) : (len += 1) {}
             if (len >= 8) {
                 const candidate: DuplicateMatch = .{ .first_start = first, .second_start = second, .len = len };
-                const candidate_payload_len = singleMatchPayloadLen(block, candidate) catch continue;
+                const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
                 if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
                     best = candidate;
                     best_payload_len = candidate_payload_len;
@@ -2402,7 +2478,11 @@ fn findBestDuplicateMatch(block: []const u8) Error!?DuplicateMatch {
 }
 
 fn singleMatchPayloadLen(block: []const u8, match: DuplicateMatch) Error!usize {
-    const literal_len = match.second_start;
+    return singleMatchPayloadLenFrom(block, match, 0);
+}
+
+fn singleMatchPayloadLenFrom(block: []const u8, match: DuplicateMatch, literal_start: usize) Error!usize {
+    const literal_len = match.second_start - literal_start;
     const offset = match.second_start - match.first_start;
     const tail_len = block.len - match.second_start - match.len;
     const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
@@ -3747,6 +3827,31 @@ test "zstd literal-only writer emits duplicate substring match" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits multiple duplicate matches" {
+    const payload = "abcdefghijabcdefghijklmnopqrstklmnopqrst";
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
