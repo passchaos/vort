@@ -1177,6 +1177,9 @@ const SequenceModeSpec = struct {
     literal_rle: ?SequenceSymbol,
     offset_rle: ?SequenceSymbol,
     match_rle: ?SequenceSymbol,
+    literal_fse: SequenceFseTable = .{},
+    offset_fse: SequenceFseTable = .{},
+    match_fse: SequenceFseTable = .{},
     bitstream_offset: usize,
 
     fn tables(self: SequenceModeSpec) SequenceTables {
@@ -1187,6 +1190,9 @@ const SequenceModeSpec = struct {
             .literal_rle = self.literal_rle,
             .offset_rle = self.offset_rle,
             .match_rle = self.match_rle,
+            .literal_fse = self.literal_fse,
+            .offset_fse = self.offset_fse,
+            .match_fse = self.match_fse,
         };
     }
 };
@@ -1198,6 +1204,31 @@ const SequenceSymbol = struct {
     state_bits: u8,
 };
 
+const max_sequence_fse_table_size = 1 << 9;
+
+const SequenceFseTable = struct {
+    entries: [max_sequence_fse_table_size]SequenceSymbol = undefined,
+    len: usize = 0,
+    accuracy_log: u8 = 0,
+
+    fn symbol(self: SequenceFseTable, state: usize) Error!SequenceSymbol {
+        if (state >= self.len) return error.CorruptFrame;
+        return self.entries[state];
+    }
+};
+
+const sequence_table_accuracy_log_max = struct {
+    const literal: u4 = 9;
+    const match: u4 = 9;
+    const offset: u4 = 8;
+};
+
+const sequence_table_symbol_count_max = struct {
+    const literal = 36;
+    const match = 53;
+    const offset = 32;
+};
+
 const SequenceTables = struct {
     ll_mode: SymbolMode,
     of_mode: SymbolMode,
@@ -1205,6 +1236,9 @@ const SequenceTables = struct {
     literal_rle: ?SequenceSymbol,
     offset_rle: ?SequenceSymbol,
     match_rle: ?SequenceSymbol,
+    literal_fse: SequenceFseTable = .{},
+    offset_fse: SequenceFseTable = .{},
+    match_fse: SequenceFseTable = .{},
 };
 
 const SequenceFrameState = struct {
@@ -1221,6 +1255,7 @@ const SequenceFrameState = struct {
 const ResolvedSymbolTable = struct {
     mode: SymbolMode,
     rle: ?SequenceSymbol,
+    fse: SequenceFseTable = .{},
 };
 
 const default_ll_symbols = [_]SequenceSymbol{
@@ -1406,9 +1441,18 @@ fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usiz
     const offset_rle = if (of_mode == .rle) try readRleSymbolCode(block, offset, &of_base, &of_bits) else null;
     const match_rle = if (ml_mode == .rle) try readRleSymbolCode(block, offset, &ml_base, &ml_bits) else null;
 
-    if (ll_mode == .compressed or of_mode == .compressed or ml_mode == .compressed) {
-        return error.UnsupportedZstdFeature;
-    }
+    const literal_fse = if (ll_mode == .compressed)
+        try readFseSequenceTable(block, offset, &ll_base, &ll_bits, sequence_table_symbol_count_max.literal, sequence_table_accuracy_log_max.literal)
+    else
+        SequenceFseTable{};
+    const offset_fse = if (of_mode == .compressed)
+        try readFseSequenceTable(block, offset, &of_base, &of_bits, sequence_table_symbol_count_max.offset, sequence_table_accuracy_log_max.offset)
+    else
+        SequenceFseTable{};
+    const match_fse = if (ml_mode == .compressed)
+        try readFseSequenceTable(block, offset, &ml_base, &ml_bits, sequence_table_symbol_count_max.match, sequence_table_accuracy_log_max.match)
+    else
+        SequenceFseTable{};
 
     const bitstream_offset = offset.*;
     if (bitstream_offset >= block.len) return error.TruncatedFrame;
@@ -1420,6 +1464,9 @@ fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usiz
         .literal_rle = literal_rle,
         .offset_rle = offset_rle,
         .match_rle = match_rle,
+        .literal_fse = literal_fse,
+        .offset_fse = offset_fse,
+        .match_fse = match_fse,
         .bitstream_offset = bitstream_offset,
     };
 }
@@ -1427,6 +1474,7 @@ fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usiz
 fn resolveSymbolTable(
     mode: SymbolMode,
     rle: ?SequenceSymbol,
+    fse: SequenceFseTable,
     previous: ?SequenceTables,
     selector: enum { ll, of, ml },
 ) Error!ResolvedSymbolTable {
@@ -1434,19 +1482,19 @@ fn resolveSymbolTable(
         .repeat => blk: {
             const tables = previous orelse return error.CorruptFrame;
             break :blk switch (selector) {
-                .ll => .{ .mode = tables.ll_mode, .rle = tables.literal_rle },
-                .of => .{ .mode = tables.of_mode, .rle = tables.offset_rle },
-                .ml => .{ .mode = tables.ml_mode, .rle = tables.match_rle },
+                .ll => .{ .mode = tables.ll_mode, .rle = tables.literal_rle, .fse = tables.literal_fse },
+                .of => .{ .mode = tables.of_mode, .rle = tables.offset_rle, .fse = tables.offset_fse },
+                .ml => .{ .mode = tables.ml_mode, .rle = tables.match_rle, .fse = tables.match_fse },
             };
         },
-        else => .{ .mode = mode, .rle = rle },
+        else => .{ .mode = mode, .rle = rle, .fse = fse },
     };
 }
 
 fn resolveSequenceModeSpec(spec: SequenceModeSpec, previous: ?SequenceTables) Error!SequenceModeSpec {
-    const ll = try resolveSymbolTable(spec.ll_mode, spec.literal_rle, previous, .ll);
-    const of = try resolveSymbolTable(spec.of_mode, spec.offset_rle, previous, .of);
-    const ml = try resolveSymbolTable(spec.ml_mode, spec.match_rle, previous, .ml);
+    const ll = try resolveSymbolTable(spec.ll_mode, spec.literal_rle, spec.literal_fse, previous, .ll);
+    const of = try resolveSymbolTable(spec.of_mode, spec.offset_rle, spec.offset_fse, previous, .of);
+    const ml = try resolveSymbolTable(spec.ml_mode, spec.match_rle, spec.match_fse, previous, .ml);
     return .{
         .ll_mode = ll.mode,
         .of_mode = of.mode,
@@ -1454,6 +1502,9 @@ fn resolveSequenceModeSpec(spec: SequenceModeSpec, previous: ?SequenceTables) Er
         .literal_rle = ll.rle,
         .offset_rle = of.rle,
         .match_rle = ml.rle,
+        .literal_fse = ll.fse,
+        .offset_fse = of.fse,
+        .match_fse = ml.fse,
         .bitstream_offset = spec.bitstream_offset,
     };
 }
@@ -1464,6 +1515,150 @@ fn readRleSymbolCode(block: []const u8, offset: *usize, bases: []const usize, bi
     offset.* += 1;
     if (code >= bases.len) return error.CorruptFrame;
     return .{ .base = bases[code], .additional_bits = bits[code], .next_state = 0, .state_bits = 0 };
+}
+
+fn readFseSequenceTable(
+    block: []const u8,
+    offset: *usize,
+    bases: []const usize,
+    bits: []const u8,
+    expected_symbol_count: usize,
+    max_accuracy_log: u4,
+) Error!SequenceFseTable {
+    if (offset.* >= block.len) return error.TruncatedFrame;
+    var reader: ForwardBitReader = .{ .bytes = block[offset.*..] };
+    var raw_entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
+    const table_len = try decodeFseTable(&reader, expected_symbol_count, max_accuracy_log, &raw_entries);
+    offset.* = std.math.add(usize, offset.*, reader.byteIndex()) catch return error.IntegerOverflow;
+    if (offset.* > block.len) return error.TruncatedFrame;
+
+    var table: SequenceFseTable = .{
+        .len = table_len,
+        .accuracy_log = @intCast(std.math.log2_int(usize, table_len)),
+    };
+    for (raw_entries[0..table_len], 0..) |entry, i| {
+        const code = entry.symbol;
+        if (code >= bases.len or code >= bits.len) return error.CorruptFrame;
+        table.entries[i] = .{
+            .base = bases[code],
+            .additional_bits = bits[code],
+            .next_state = entry.baseline,
+            .state_bits = entry.bits,
+        };
+    }
+    return table;
+}
+
+const FseTableEntry = struct {
+    symbol: u8,
+    baseline: usize,
+    bits: u8,
+};
+
+fn decodeFseTable(
+    reader: *ForwardBitReader,
+    expected_symbol_count: usize,
+    max_accuracy_log: u4,
+    entries: *[max_sequence_fse_table_size]FseTableEntry,
+) Error!usize {
+    const accuracy_log_biased = try reader.readBits(u4, 4);
+    if (accuracy_log_biased > max_accuracy_log -| 5) return error.CorruptFrame;
+    const accuracy_log = accuracy_log_biased + 5;
+
+    var values: [256]u16 = undefined;
+    var value_count: usize = 0;
+
+    const total_probability = @as(u16, 1) << accuracy_log;
+    var accumulated_probability: u16 = 0;
+    while (accumulated_probability < total_probability) {
+        const max_bits = std.math.log2_int(u16, total_probability - accumulated_probability + 1) + 1;
+        const small = try reader.readBits(u16, max_bits - 1);
+        const cutoff = (@as(u16, 1) << @intCast(max_bits)) - 1 - (total_probability - accumulated_probability + 1);
+        const value = if (small < cutoff)
+            small
+        else value: {
+            const value_read = small + ((try reader.readBits(u16, 1)) << @intCast(max_bits - 1));
+            break :value if (value_read < @as(u16, 1) << @intCast(max_bits - 1))
+                value_read
+            else
+                value_read - cutoff;
+        };
+
+        accumulated_probability += if (value != 0) value - 1 else 1;
+        values[value_count] = value;
+        value_count += 1;
+
+        if (value == 1) {
+            while (true) {
+                const repeat_flag: usize = try reader.readBits(u2, 2);
+                if (repeat_flag + value_count > values.len) return error.CorruptFrame;
+                for (0..repeat_flag) |_| {
+                    values[value_count] = 1;
+                    value_count += 1;
+                }
+                if (repeat_flag < 3) break;
+            }
+        }
+        if (value_count == values.len) break;
+    }
+    reader.alignToByte();
+
+    if (value_count < 2) return error.CorruptFrame;
+    if (accumulated_probability != total_probability) return error.CorruptFrame;
+    if (value_count > expected_symbol_count) return error.CorruptFrame;
+    const table_len: usize = @as(usize, 1) << @intCast(accuracy_log);
+    try buildFseTable(values[0..value_count], entries[0..table_len]);
+    return table_len;
+}
+
+fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {
+    const total_probability: u16 = @intCast(entries.len);
+    const accuracy_log = std.math.log2_int(u16, total_probability);
+    var less_than_one_count: usize = 0;
+    for (values, 0..) |value, symbol| {
+        if (value == 0) {
+            entries[entries.len - 1 - less_than_one_count] = .{
+                .symbol = @intCast(symbol),
+                .baseline = 0,
+                .bits = accuracy_log,
+            };
+            less_than_one_count += 1;
+        }
+    }
+
+    var position: usize = 0;
+    var temp_states: [max_sequence_fse_table_size]u16 = undefined;
+    for (values, 0..) |value, symbol| {
+        if (value == 0 or value == 1) continue;
+        const probability = value - 1;
+        const state_share_dividend = std.math.ceilPowerOfTwo(u16, probability) catch return error.CorruptFrame;
+        const share_size = @divExact(total_probability, state_share_dividend);
+        const double_state_count = state_share_dividend - probability;
+        const single_state_count = probability - double_state_count;
+        const share_size_log = std.math.log2_int(u16, share_size);
+
+        for (0..probability) |i| {
+            temp_states[i] = @intCast(position);
+            position += (entries.len >> 1) + (entries.len >> 3) + 3;
+            position &= entries.len - 1;
+            while (position >= entries.len - less_than_one_count) {
+                position += (entries.len >> 1) + (entries.len >> 3) + 3;
+                position &= entries.len - 1;
+            }
+        }
+        std.mem.sort(u16, temp_states[0..probability], {}, std.sort.asc(u16));
+        for (0..probability) |i| {
+            entries[temp_states[i]] = if (i < double_state_count) .{
+                .symbol = @intCast(symbol),
+                .bits = @intCast(share_size_log + 1),
+                .baseline = single_state_count * share_size + @as(u16, @intCast(i)) * 2 * share_size,
+            } else .{
+                .symbol = @intCast(symbol),
+                .bits = @intCast(share_size_log),
+                .baseline = (@as(u16, @intCast(i)) - double_state_count) * share_size,
+            };
+        }
+    }
 }
 
 fn defaultLiteralLengthSymbol(state: usize) Error!SequenceSymbol {
@@ -1513,6 +1708,94 @@ const ReverseBitReader = struct {
 
     fn expectEnd(self: ReverseBitReader) Error!void {
         if (self.remaining_bits != 0) return error.CorruptFrame;
+    }
+};
+
+const low_bit_mask = [9]u8{
+    0b00000000,
+    0b00000001,
+    0b00000011,
+    0b00000111,
+    0b00001111,
+    0b00011111,
+    0b00111111,
+    0b01111111,
+    0b11111111,
+};
+
+fn ReadBitsResult(comptime T: type) type {
+    return struct { T, u16 };
+}
+
+const ForwardBitReader = struct {
+    bytes: []const u8,
+    index: usize = 0,
+    bits: u8 = 0,
+    count: u4 = 0,
+
+    fn readBits(self: *ForwardBitReader, comptime T: type, num: u16) Error!T {
+        const value, const read_count = try self.readBitsTuple(T, num);
+        if (read_count < num) return error.TruncatedFrame;
+        return value;
+    }
+
+    fn readBitsTuple(self: *ForwardBitReader, comptime T: type, num: u16) Error!ReadBitsResult(T) {
+        const UT = std.meta.Int(.unsigned, @bitSizeOf(T));
+        const U = if (@bitSizeOf(T) < 8) u8 else UT;
+
+        if (num <= self.count) return initReadBitsResult(T, self.removeBits(@intCast(num)), num);
+
+        var out_count: u16 = self.count;
+        var out: U = self.removeBits(self.count);
+        const full_bytes_left = (num - out_count) / 8;
+        for (0..full_bytes_left) |_| {
+            const byte = self.takeByte() catch return initReadBitsResult(T, out, out_count);
+            out |= @as(U, byte) << @intCast(out_count);
+            out_count += 8;
+        }
+
+        const bits_left = num - out_count;
+        const keep = 8 - bits_left;
+        if (bits_left == 0) return initReadBitsResult(T, out, out_count);
+
+        const final_byte = self.takeByte() catch return initReadBitsResult(T, out, out_count);
+        out |= @as(U, final_byte & low_bit_mask[bits_left]) << @intCast(out_count);
+        self.bits = final_byte >> @intCast(bits_left);
+        self.count = @intCast(keep);
+        return initReadBitsResult(T, out, num);
+    }
+
+    fn takeByte(self: *ForwardBitReader) error{EndOfStream}!u8 {
+        if (self.index >= self.bytes.len) return error.EndOfStream;
+        const result = self.bytes[self.index];
+        self.index += 1;
+        return result;
+    }
+
+    fn removeBits(self: *ForwardBitReader, num: u4) u8 {
+        if (num == 8) {
+            self.count = 0;
+            return self.bits;
+        }
+        const keep = self.count - num;
+        const bits = self.bits & low_bit_mask[num];
+        self.bits >>= @intCast(num);
+        self.count = keep;
+        return bits;
+    }
+
+    fn alignToByte(self: *ForwardBitReader) void {
+        self.bits = 0;
+        self.count = 0;
+    }
+
+    fn byteIndex(self: ForwardBitReader) usize {
+        return self.index;
+    }
+
+    fn initReadBitsResult(comptime T: type, out: anytype, num: u16) ReadBitsResult(T) {
+        const UT = std.meta.Int(.unsigned, @bitSizeOf(T));
+        return .{ @bitCast(@as(UT, @intCast(out))), num };
     }
 };
 
@@ -1608,9 +1891,9 @@ fn initSequenceDecodeState(
     repeated_offsets: [3]usize,
 ) Error!SequenceDecodeState {
     var initialized_reader = reader;
-    const ll_state = if (spec.ll_mode == .predefined) try initialized_reader.read(6) else 0;
-    const of_state = if (spec.of_mode == .predefined) try initialized_reader.read(5) else 0;
-    const ml_state = if (spec.ml_mode == .predefined) try initialized_reader.read(6) else 0;
+    const ll_state = try readInitialSequenceState(&initialized_reader, spec.ll_mode, spec.literal_fse.accuracy_log, 6);
+    const of_state = try readInitialSequenceState(&initialized_reader, spec.of_mode, spec.offset_fse.accuracy_log, 5);
+    const ml_state = try readInitialSequenceState(&initialized_reader, spec.ml_mode, spec.match_fse.accuracy_log, 6);
     return .{
         .spec = spec,
         .reader = initialized_reader,
@@ -1619,6 +1902,15 @@ fn initSequenceDecodeState(
         .ml_state = ml_state,
         .repeated_offsets = repeated_offsets,
         .remaining = sequence_count,
+    };
+}
+
+fn readInitialSequenceState(reader: *ReverseBitReader, mode: SymbolMode, fse_accuracy_log: u8, predefined_accuracy_log: u8) Error!usize {
+    return switch (mode) {
+        .predefined => try reader.read(predefined_accuracy_log),
+        .compressed => try reader.read(fse_accuracy_log),
+        .rle => 0,
+        .repeat => unreachable,
     };
 }
 
@@ -1649,7 +1941,8 @@ fn currentLiteralSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
     return switch (state.spec.ll_mode) {
         .predefined => try defaultLiteralLengthSymbol(state.ll_state),
         .rle => state.spec.literal_rle orelse error.CorruptFrame,
-        else => error.UnsupportedZstdFeature,
+        .compressed => try state.spec.literal_fse.symbol(state.ll_state),
+        .repeat => unreachable,
     };
 }
 
@@ -1657,7 +1950,8 @@ fn currentOffsetSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
     return switch (state.spec.of_mode) {
         .predefined => try defaultOffsetSymbol(state.of_state),
         .rle => state.spec.offset_rle orelse error.CorruptFrame,
-        else => error.UnsupportedZstdFeature,
+        .compressed => try state.spec.offset_fse.symbol(state.of_state),
+        .repeat => unreachable,
     };
 }
 
@@ -1665,20 +1959,21 @@ fn currentMatchSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
     return switch (state.spec.ml_mode) {
         .predefined => try defaultMatchLengthSymbol(state.ml_state),
         .rle => state.spec.match_rle orelse error.CorruptFrame,
-        else => error.UnsupportedZstdFeature,
+        .compressed => try state.spec.match_fse.symbol(state.ml_state),
+        .repeat => unreachable,
     };
 }
 
 fn updateLiteralState(state: *SequenceDecodeState, symbol: SequenceSymbol) Error!void {
-    if (state.spec.ll_mode == .predefined) state.ll_state = try nextPredefinedState(&state.reader, symbol);
+    if (state.spec.ll_mode == .predefined or state.spec.ll_mode == .compressed) state.ll_state = try nextSequenceState(&state.reader, symbol);
 }
 
 fn updateOffsetState(state: *SequenceDecodeState, symbol: SequenceSymbol) Error!void {
-    if (state.spec.of_mode == .predefined) state.of_state = try nextPredefinedState(&state.reader, symbol);
+    if (state.spec.of_mode == .predefined or state.spec.of_mode == .compressed) state.of_state = try nextSequenceState(&state.reader, symbol);
 }
 
 fn updateMatchState(state: *SequenceDecodeState, symbol: SequenceSymbol) Error!void {
-    if (state.spec.ml_mode == .predefined) state.ml_state = try nextPredefinedState(&state.reader, symbol);
+    if (state.spec.ml_mode == .predefined or state.spec.ml_mode == .compressed) state.ml_state = try nextSequenceState(&state.reader, symbol);
 }
 
 const DecodedSequence = struct {
@@ -1687,7 +1982,7 @@ const DecodedSequence = struct {
     match_offset: usize,
 };
 
-fn nextPredefinedState(reader: *ReverseBitReader, symbol: SequenceSymbol) Error!usize {
+fn nextSequenceState(reader: *ReverseBitReader, symbol: SequenceSymbol) Error!usize {
     return std.math.add(usize, symbol.next_state, try reader.read(symbol.state_bits)) catch return error.IntegerOverflow;
 }
 
@@ -2838,7 +3133,64 @@ test "zstd native decoder reuses Huffman tree for treeless literals" {
     try std.testing.expectEqual(payload.len, decoded_len);
 }
 
-test "zstd native decoder rejects FSE compressed sequence tables" {
+fn appendNumberedJsonPayload(allocator: std.mem.Allocator, out: *std.ArrayList(u8), count: usize) !void {
+    for (0..count) |i| {
+        const line = try std.fmt.allocPrint(
+            allocator,
+            "{{\"k\":\"{d:0>4}\",\"n\":{d},\"txt\":\"abcdefghijklmnopqrstuvwxyz0123456789\"}}\n",
+            .{ i, i },
+        );
+        defer allocator.free(line);
+        try out.appendSlice(allocator, line);
+    }
+}
+
+test "zstd native decoder accepts FSE compressed sequence tables" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    try appendNumberedJsonPayload(std.testing.allocator, &payload, 20);
+
+    const offset_fse_hex =
+        "28b52ffd04480d05008246171b604fda9c7c0c3be3e2e30209a920082d844864" ++
+        "7777ec670a42a39c2921d4cdbcab9a89786767971242ddccbbaa99887780cc13" ++
+        "6a5e4d3cbb582a94896445200f47e3612c1c4502713014080341e0eaabb2de" ++
+        "98faf3e6666657778e092720f0750344c9ae87b9d2732eeb11f77a982b7dce" ++
+        "653de25e0f73a5e7dc65254ec31a8f60d7c330e97318eb11ec7a18263d87" ++
+        "b11ec1ae0ec3a4e70833602852141ad6cc48";
+    var offset_fse_frame: [offset_fse_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&offset_fse_frame, offset_fse_hex);
+
+    const all_fse_hex =
+        "28b52ffd0458bd04006286161d404fd4010c12709f71cdcb65012b8aa20c2b" ++
+        "adb44686e60ccbf0189303ffffffff9fbfe75c6b8cada5544a083d20d3e71" ++
+        "a5b2aa1f362a950269218813c1c8d87b1701409c4c150200c0481c2c64a6" ++
+        "c93b04f9b666616d6292627a831ecebff6790734a0f1118396384ffff1d1f" ++
+        "351a6514ea22a98a124d541551a887841a1aa91692544238998e4eabd5ea" ++
+        "745a261a1840a4061ad6cc48";
+    var all_fse_frame: [all_fse_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&all_fse_frame, all_fse_hex);
+
+    for ([_][]const u8{ &offset_fse_frame, &all_fse_frame }) |frame| {
+        const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame);
+        defer std.testing.allocator.free(std_decoded);
+        try std.testing.expectEqualSlices(u8, payload.items, std_decoded);
+
+        const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload.items, decoded);
+
+        const into_buffer = try std.testing.allocator.alloc(u8, payload.items.len);
+        defer std.testing.allocator.free(into_buffer);
+        const written = try decodeNativeFrameInto(frame, into_buffer);
+        try std.testing.expectEqual(payload.items.len, written);
+        try std.testing.expectEqualSlices(u8, payload.items, into_buffer[0..written]);
+
+        const decoded_len = try decodedRawOrRleFrameSize(frame);
+        try std.testing.expectEqual(payload.items.len, decoded_len);
+    }
+}
+
+test "zstd native decoder rejects malformed FSE compressed sequence tables" {
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
     try emitFrameHeader(std.testing.allocator, &frame, 4, .{ .content_checksum = false });
@@ -2849,10 +3201,10 @@ test "zstd native decoder rejects FSE compressed sequence tables" {
     try frame.append(std.testing.allocator, 0x80); // LL uses FSE_Compressed_Mode; OF/ML are predefined.
     try frame.append(std.testing.allocator, 1);
 
-    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameAlloc(std.testing.allocator, frame.items));
+    try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameAlloc(std.testing.allocator, frame.items));
     var output: [4]u8 = undefined;
-    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameInto(frame.items, &output));
-    try std.testing.expectError(error.UnsupportedZstdFeature, decodedRawOrRleFrameSize(frame.items));
+    try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameInto(frame.items, &output));
+    try std.testing.expectError(error.TruncatedFrame, decodedRawOrRleFrameSize(frame.items));
 }
 
 test "zstd literal-only frame writer falls back when compressed literals expand" {

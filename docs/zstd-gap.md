@@ -106,9 +106,9 @@ Current interpretation:
   **not** measure library-level decompression speed, memory use, full binary
   corpora, or zstd's higher compression levels.
 - The compatibility decoder now covers single-stream and four-stream
-  Huffman-literals sections and can reuse that tree for treeless repeat-literals
-  blocks, but it still lacks FSE-compressed sequence tables and a native
-  encoder-side entropy mode. The broader gap remains open until Vort has
+  Huffman-literals sections, can reuse that tree for treeless repeat-literals
+  blocks, and decodes FSE-compressed sequence tables for the currently supported
+  sequence execution path. The broader gap remains open until Vort has
   a native frame entropy mode, dictionary training integrated with the native
   format, long-distance matching in the encoder/decoder pipeline, corpus
   throughput/ratio dashboards, and repeatable same-machine comparisons against
