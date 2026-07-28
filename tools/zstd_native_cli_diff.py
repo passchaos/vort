@@ -173,6 +173,14 @@ def main() -> int:
     for payload, level in fse_cases:
         assert_vort_native_decode(zstd_compress(payload, level), payload)
 
+    # A DNA-like alphabet exposes long direct offsets interleaved with repeated
+    # offsets. This protects the native decoder from corrupting the previous
+    # offset ring while installing a direct offset from the sequence stream.
+    dna_payload = bytes(b"ACGTN"[(i * 17 + i // 7 + i // 31) % 5] for i in range(4200))
+    direct_offset_cases = [(dna_payload, 3)]
+    for payload, level in direct_offset_cases:
+        assert_vort_native_decode(zstd_compress(payload, level), payload)
+
     unsupported_cases = []
 
     with tempfile.TemporaryDirectory(prefix="vort-zstd-native-", dir=ROOT / ".zig-cache") as tmpdir:
@@ -191,7 +199,8 @@ def main() -> int:
         f"zstd_native_cli_diff_ok cases={len(cases)} external_cases={len(external_cases)} "
         f"huffman_cases={len(huffman_cases)} four_stream_cases={len(four_stream_cases)} "
         f"treeless_cases={len(treeless_cases)} fse_cases={len(fse_cases)} "
-        f"unsupported_cases={len(unsupported_cases)} zstd={pathlib.Path(ZSTD).name}"
+        f"direct_offset_cases={len(direct_offset_cases)} unsupported_cases={len(unsupported_cases)} "
+        f"zstd={pathlib.Path(ZSTD).name}"
     )
     return 0
 
