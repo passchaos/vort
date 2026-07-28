@@ -1,5 +1,7 @@
 //! Vort: next-generation compression experiments and compatibility-oriented primitives.
 
+const std = @import("std");
+
 pub const checksum = @import("checksum.zig");
 pub const core = @import("core.zig");
 pub const store = @import("store.zig");
@@ -37,9 +39,12 @@ pub const crc32cCombine = checksum.crc32cCombine;
 
 pub const lz4EncodeFrameAlloc = lz4.encodeFrameAlloc;
 pub const lz4EncodeFrameWithLevelAlloc = lz4.encodeFrameWithLevelAlloc;
+pub const lz4EncodeFrameWithOptionsAlloc = lz4.encodeFrameWithOptionsAlloc;
+pub const lz4EncodeFrameWithLevelAndOptionsAlloc = lz4.encodeFrameWithLevelAndOptionsAlloc;
 pub const lz4EncodeNativeFrameAlloc = lz4.encodeNativeFrameAlloc;
 pub const lz4EncodeNativeFrameWithOptionsAlloc = lz4.encodePureFrameWithOptionsAlloc;
 pub const lz4EncodeSkippableFrameAlloc = lz4.encodeSkippableFrameAlloc;
+pub const Lz4LibFrameOptions = lz4.LibFrameOptions;
 pub const Lz4NativeFrameOptions = lz4.NativeFrameOptions;
 pub const Lz4BlockSizeId = lz4.BlockSizeId;
 pub const Lz4BlockMode = lz4.BlockMode;
@@ -624,9 +629,12 @@ test "root exports lz4 and zstd codec helpers" {
     // the one-shot and caller-owned native surfaces discoverable from `vort`.
     _ = lz4EncodeFrameAlloc;
     _ = lz4EncodeFrameWithLevelAlloc;
+    _ = lz4EncodeFrameWithOptionsAlloc;
+    _ = lz4EncodeFrameWithLevelAndOptionsAlloc;
     _ = lz4EncodeNativeFrameAlloc;
     _ = lz4EncodeNativeFrameWithOptionsAlloc;
     _ = lz4EncodeSkippableFrameAlloc;
+    _ = Lz4LibFrameOptions;
     _ = Lz4NativeFrameOptions;
     _ = Lz4BlockSizeId;
     _ = Lz4BlockMode;
@@ -670,6 +678,22 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeNativeFrameAlloc;
     _ = zstdDecodeNativeFrameAllocLimited;
     _ = zstdDecodeNativeFrameInto;
+}
+
+test "root lz4 lib frame options round trip" {
+    const payload = "root lz4 lib frame options payload" ** 2;
+    const encoded = try lz4EncodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .include_content_size = false,
+        .content_checksum = false,
+        .block_checksum = true,
+        .block_size_id = .max64kb,
+        .block_mode = .independent,
+    });
+    defer std.testing.allocator.free(encoded);
+
+    const decoded = try lz4DecodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "root exports chunked compatibility decode helpers" {
