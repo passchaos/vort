@@ -113,6 +113,10 @@ Current interpretation:
   format, long-distance matching in the encoder/decoder pipeline, corpus
   throughput/ratio dashboards, and repeatable same-machine comparisons against
   zstd CLI/library modes.
+- `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
+  a bounded generated-corpus differential probe over multiple zstd levels and
+  data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug
+  classes visible without requiring a full external corpus checkout.
 
 Recommended next comparison steps:
 
