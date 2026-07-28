@@ -783,6 +783,7 @@ pub fn build(b: *std.Build) void {
 
     const zstd_native_probe = b.addSystemCommand(&.{ "python3", "tools/zstd_native_probe.py" });
     zstd_native_probe.addArtifactArg(cli_exe);
+    if (b.args) |args| zstd_native_probe.addArgs(args);
     const zstd_native_probe_step = b.step("run-zstd-native-probe", "Run bounded generated-corpus probe for native-subset zstd frames");
     zstd_native_probe_step.dependOn(&zstd_native_probe.step);
 

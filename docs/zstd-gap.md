@@ -116,7 +116,9 @@ Current interpretation:
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug
-  classes visible without requiring a full external corpus checkout.
+  classes visible without requiring a full external corpus checkout. The probe
+  also accepts repeated `--path` arguments with an optional `--limit` for focused
+  file payloads when investigating real corpus failures.
 
 Recommended next comparison steps:
 

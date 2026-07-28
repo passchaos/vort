@@ -188,6 +188,7 @@ zig build run-python-zlib-diff-dashboard
 zig build run-gzip-cli-diff
 zig build run-zstd-native-cli-diff
 zig build run-zstd-native-probe
+zig build run-zstd-native-probe -- --path README.md --limit 4096
 zig build run-header-inspect-smoke
 zig build run-header-inspect-dashboard
 zig build run-dashboard-category-smoke

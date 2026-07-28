@@ -9,6 +9,7 @@ exposed parser, FSE-table, repeat-offset, and Huffman-literal bugs.
 
 from __future__ import annotations
 
+import argparse
 import pathlib
 import random
 import re
@@ -19,7 +20,6 @@ import zlib
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-CLI = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "zig-out" / "bin" / "vort"
 ZSTD = shutil.which("zstd")
 
 
@@ -43,9 +43,9 @@ def parse_crc(output: str) -> tuple[int, int]:
     return int(decoded.group(1)), int(crc.group(1))
 
 
-def native_decode(frame: bytes, expected: bytes) -> None:
+def native_decode(cli: pathlib.Path, frame: bytes, expected: bytes) -> None:
     result = subprocess.run(
-        [str(CLI), "decode-zstd-native-hex", frame.hex(), str(len(expected))],
+        [str(cli), "decode-zstd-native-hex", frame.hex(), str(len(expected))],
         cwd=ROOT,
         text=True,
         stdout=subprocess.PIPE,
@@ -62,7 +62,7 @@ def native_decode(frame: bytes, expected: bytes) -> None:
         )
 
 
-def payloads() -> list[tuple[str, bytes]]:
+def generated_payloads() -> list[tuple[str, bytes]]:
     rng = random.Random(0x51D)
     printable = bytes(range(32, 127))
     englishish = (
@@ -95,20 +95,51 @@ def payloads() -> list[tuple[str, bytes]]:
     return cases
 
 
+def payloads(paths: list[pathlib.Path], limit: int) -> list[tuple[str, bytes]]:
+    cases = generated_payloads()
+    for path in paths:
+        data = path.read_bytes()
+        if limit > 0:
+            data = data[:limit]
+        cases.append((f"file:{path}", data))
+    return cases
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("cli", nargs="?", type=pathlib.Path, default=ROOT / "zig-out" / "bin" / "vort")
+    parser.add_argument(
+        "--path",
+        action="append",
+        type=pathlib.Path,
+        default=[],
+        help="Add a file payload to the generated probe set. May be repeated.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=24_000,
+        help="Maximum bytes read from each --path payload; 0 means no truncation.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
+    cli = args.cli
     if not ZSTD:
         print("zstd_native_probe: zstd=missing")
         return 0
-    if not CLI.exists():
-        raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
+    if not cli.exists():
+        raise SystemExit(f"missing built CLI at {cli}; run `zig build` first")
 
     levels = (1, 3, 6, 9, 12, 19)
     checked = 0
-    for name, payload in payloads():
+    for name, payload in payloads(args.path, args.limit):
         for level in levels:
             frame = zstd_compress(payload, level)
             try:
-                native_decode(frame, payload)
+                native_decode(cli, frame, payload)
             except AssertionError as exc:
                 print(
                     f"zstd_native_probe_fail case={name} level={level} "
