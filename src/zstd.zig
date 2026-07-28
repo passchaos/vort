@@ -627,19 +627,17 @@ fn parseSequenceCount(block: []const u8, offset: *usize) Error!usize {
     offset.* += 1;
     if (byte0 == 0) return 0;
     if (byte0 < 128) {
-        if (block.len - offset.* < 1) return error.TruncatedFrame;
-        offset.* += 1;
         return byte0;
     }
     if (byte0 < 255) {
-        if (block.len - offset.* < 2) return error.TruncatedFrame;
+        if (block.len - offset.* < 1) return error.TruncatedFrame;
         const count = (@as(usize, byte0 - 128) << 8) + block[offset.*];
-        offset.* += 2;
+        offset.* += 1;
         return count;
     }
-    if (block.len - offset.* < 3) return error.TruncatedFrame;
+    if (block.len - offset.* < 2) return error.TruncatedFrame;
     const count = @as(usize, block[offset.*]) + (@as(usize, block[offset.* + 1]) << 8) + 0x7f00;
-    offset.* += 3;
+    offset.* += 2;
     return count;
 }
 
@@ -1129,6 +1127,28 @@ test "zstd native decoder accepts literal-only compressed blocks" {
     defer std.testing.allocator.free(limited);
     try std.testing.expectEqualSlices(u8, "zzzz", limited);
     try std.testing.expectError(error.OutputLimitExceeded, decodeNativeFrameAllocLimited(std.testing.allocator, frame.items, 3));
+}
+
+test "zstd native decoder accepts extended zero sequence counts" {
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, 5, .{ .content_checksum = false });
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 4, true);
+    try frame.append(std.testing.allocator, (5 << 3) | 1); // RLE literals, regenerated size=5.
+    try frame.append(std.testing.allocator, 'z');
+    try frame.appendSlice(std.testing.allocator, &.{ 0x80, 0x00 }); // two-byte encoding of sequence_count=0.
+
+    const native_decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(native_decoded);
+    try std.testing.expectEqualSlices(u8, "zzzzz", native_decoded);
+
+    var into_buffer: [5]u8 = undefined;
+    const written = try decodeNativeFrameInto(frame.items, &into_buffer);
+    try std.testing.expectEqual(@as(usize, 5), written);
+    try std.testing.expectEqualSlices(u8, "zzzzz", into_buffer[0..written]);
+
+    const decoded_len = try decodedRawOrRleFrameSize(frame.items);
+    try std.testing.expectEqual(@as(usize, 5), decoded_len);
 }
 
 test "zstd literal-only compressed block rejects malformed sections" {
