@@ -799,6 +799,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_lz4_native_probe = b.addRunArtifact(lz4_native_probe_exe);
+    if (b.args) |args| run_lz4_native_probe.addArgs(args);
     const lz4_native_probe_step = b.step("run-lz4-native-probe", "Run bounded generated-corpus probe for native LZ4 frames and blocks");
     lz4_native_probe_step.dependOn(&run_lz4_native_probe.step);
 

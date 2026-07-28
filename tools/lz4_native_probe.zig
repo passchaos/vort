@@ -6,12 +6,19 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
+    defer args.deinit();
+    _ = args.next();
+    const options = try parseOptions(init.gpa, &args);
+    defer options.deinit(init.gpa);
+
     var cases = std.ArrayList(Case).empty;
     defer {
         for (cases.items) |case| init.gpa.free(case.payload);
         cases.deinit(init.gpa);
     }
     try addGeneratedCases(init.gpa, &cases);
+    try addFileCases(init.io, init.gpa, &cases, options);
 
     var checked: usize = 0;
     for (cases.items) |case| {
@@ -29,6 +36,33 @@ const Case = struct {
     payload: []u8,
 };
 
+const Options = struct {
+    paths: std.ArrayList([]const u8) = .empty,
+    limit: usize = 24 * 1024,
+
+    fn deinit(self: Options, allocator: std.mem.Allocator) void {
+        for (self.paths.items) |path| allocator.free(path);
+        var paths = self.paths;
+        paths.deinit(allocator);
+    }
+};
+
+fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) !Options {
+    var options: Options = .{};
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--path")) {
+            const path = args.next() orelse return error.MissingPath;
+            try options.paths.append(allocator, try allocator.dupe(u8, path));
+        } else if (std.mem.eql(u8, arg, "--limit")) {
+            const text = args.next() orelse return error.MissingLimit;
+            options.limit = try std.fmt.parseInt(usize, text, 10);
+        } else {
+            return error.UnknownArgument;
+        }
+    }
+    return options;
+}
+
 fn addGeneratedCases(allocator: std.mem.Allocator, cases: *std.ArrayList(Case)) !void {
     try cases.append(allocator, .{ .name = "empty", .payload = try allocator.dupe(u8, "") });
     try cases.append(allocator, .{ .name = "tiny", .payload = try allocator.dupe(u8, "hello") });
@@ -38,6 +72,19 @@ fn addGeneratedCases(allocator: std.mem.Allocator, cases: *std.ArrayList(Case)) 
     var rng = std.Random.DefaultPrng.init(0x4c5a34);
     try cases.append(allocator, .{ .name = "printable", .payload = try randomFromAlphabet(allocator, &rng, 4096, printable_alphabet) });
     try cases.append(allocator, .{ .name = "dna", .payload = try randomFromAlphabet(allocator, &rng, 8192, "ACGTN") });
+}
+
+fn addFileCases(io: std.Io, allocator: std.mem.Allocator, cases: *std.ArrayList(Case), options: Options) !void {
+    for (options.paths.items) |path| {
+        const full_payload = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(128 * 1024 * 1024));
+        errdefer allocator.free(full_payload);
+        const payload = if (options.limit != 0 and full_payload.len > options.limit) blk: {
+            const truncated = try allocator.dupe(u8, full_payload[0..options.limit]);
+            allocator.free(full_payload);
+            break :blk truncated;
+        } else full_payload;
+        try cases.append(allocator, .{ .name = path, .payload = payload });
+    }
 }
 
 const printable_alphabet =
