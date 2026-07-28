@@ -50,6 +50,23 @@ pub const NativeFrameOptions = struct {
     include_content_size: bool = true,
     content_checksum: bool = true,
     block_checksum: bool = false,
+    block_size_id: BlockSizeId = .max4mb,
+};
+
+pub const BlockSizeId = enum(u8) {
+    max64kb = 4,
+    max256kb = 5,
+    max1mb = 6,
+    max4mb = 7,
+
+    fn maxLen(self: BlockSizeId) usize {
+        return switch (self) {
+            .max64kb => 64 * 1024,
+            .max256kb => 256 * 1024,
+            .max1mb => 1024 * 1024,
+            .max4mb => max_frame_block_len,
+        };
+    }
 };
 
 /// Encode a complete interoperable LZ4 frame using liblz4's high-compression
@@ -101,7 +118,7 @@ pub fn encodePureFrameWithOptionsAlloc(
     if (options.include_content_size) flg |= 0x08;
     if (options.content_checksum) flg |= 0x04;
     try out.append(allocator, flg);
-    try out.append(allocator, 0x70); // max block size 4 MiB
+    try out.append(allocator, @intFromEnum(options.block_size_id) << 4);
     if (options.include_content_size) {
         var content_size: [8]u8 = undefined;
         std.mem.writeInt(u64, &content_size, try checkedUsizeToU64(input.len), .little);
@@ -135,8 +152,9 @@ pub fn encodePureFrameWithOptionsAlloc(
     }
 
     var offset: usize = 0;
+    const max_block_len = options.block_size_id.maxLen();
     while (offset < input.len) {
-        const block_len = @min(input.len - offset, max_frame_block_len);
+        const block_len = @min(input.len - offset, max_block_len);
         var header: [4]u8 = undefined;
         const block = input[offset..][0..block_len];
         const header_start = out.items.len;
@@ -1020,6 +1038,22 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const with_options_decoded = try decodeNativeFrameAlloc(std.testing.allocator, with_options);
     defer std.testing.allocator.free(with_options_decoded);
     try std.testing.expectEqualSlices(u8, repeated, with_options_decoded);
+
+    const small_block_payload = try std.testing.allocator.alloc(u8, 70 * 1024);
+    defer std.testing.allocator.free(small_block_payload);
+    @memset(small_block_payload, 'q');
+    const small_blocks = try encodePureFrameWithOptionsAlloc(
+        std.testing.allocator,
+        small_block_payload,
+        .{ .block_size_id = .max64kb, .content_checksum = false },
+    );
+    defer std.testing.allocator.free(small_blocks);
+    try std.testing.expectEqual(@as(u8, 0x40), small_blocks[5]);
+    const first_block_len = std.mem.readInt(u32, small_blocks[7 + 8 ..][0..4], .little) & 0x7fff_ffff;
+    try std.testing.expect(first_block_len <= 64 * 1024);
+    const small_blocks_decoded = try decodeNativeFrameAlloc(std.testing.allocator, small_blocks);
+    defer std.testing.allocator.free(small_blocks_decoded);
+    try std.testing.expectEqualSlices(u8, small_block_payload, small_blocks_decoded);
 
     var into_buffer: [repeated.len]u8 = undefined;
     const into_written = try decodeFrameInto(encoded, &into_buffer);
