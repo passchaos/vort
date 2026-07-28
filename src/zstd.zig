@@ -204,6 +204,17 @@ pub fn encodeLiteralOnlyFrameAlloc(allocator: std.mem.Allocator, input: []const 
     return out.toOwnedSlice(allocator);
 }
 
+pub fn encodeSkippableFrameAlloc(allocator: std.mem.Allocator, skippable_id: u4, payload: []const u8) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var header: [8]u8 = undefined;
+    std.mem.writeInt(u32, header[0..4], skippable_magic_min + @as(u32, skippable_id), .little);
+    std.mem.writeInt(u32, header[4..8], try checkedUsizeToU32(payload.len), .little);
+    try out.appendSlice(allocator, &header);
+    try out.appendSlice(allocator, payload);
+    return out.toOwnedSlice(allocator);
+}
+
 pub const encodeNativeFrameAlloc = encodeRawOrRleFrameAlloc;
 
 fn emitFrameHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), content_len: u64) Error!void {
@@ -751,6 +762,10 @@ fn checkedUsizeToU64(value: usize) Error!u64 {
     return std.math.cast(u64, value) orelse error.IntegerOverflow;
 }
 
+fn checkedUsizeToU32(value: usize) Error!u32 {
+    return std.math.cast(u32, value) orelse error.IntegerOverflow;
+}
+
 fn checkedU64ToUsize(value: u64) Error!usize {
     return std.math.cast(usize, value) orelse error.IntegerOverflow;
 }
@@ -834,6 +849,29 @@ test "zstd raw/RLE native decoder handles skippable and concatenated frames" {
     const written = try decodeRawOrRleFrameInto(stream.items, &into_buffer);
     try std.testing.expectEqual(@as(usize, "firstsecond".len), written);
     try std.testing.expectEqualSlices(u8, "firstsecond", into_buffer[0..written]);
+}
+
+test "zstd skippable frame writer composes with native streams" {
+    const first = try encodeRawOrRleFrameAlloc(std.testing.allocator, "first");
+    defer std.testing.allocator.free(first);
+    const skip = try encodeSkippableFrameAlloc(std.testing.allocator, 9, "metadata");
+    defer std.testing.allocator.free(skip);
+    const second = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, "second");
+    defer std.testing.allocator.free(second);
+
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, first);
+    try stream.appendSlice(std.testing.allocator, skip);
+    try stream.appendSlice(std.testing.allocator, second);
+
+    try std.testing.expectEqual(skippable_magic_min + 9, std.mem.readInt(u32, skip[0..4], .little));
+    try std.testing.expectEqual(@as(u32, "metadata".len), std.mem.readInt(u32, skip[4..8], .little));
+    try std.testing.expectEqualSlices(u8, "metadata", skip[8..]);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, stream.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "firstsecond", decoded);
 }
 
 test "zstd raw/RLE native decoder accepts no-size raw frames" {
