@@ -1027,6 +1027,8 @@ test "zstd native no-size writer chooses valid window descriptors" {
         .{ .len = 1152, .expected_descriptor = 0x01 },
         .{ .len = 2048, .expected_descriptor = 0x08 },
         .{ .len = 4096, .expected_descriptor = 0x10 },
+        .{ .len = 128 * 1024, .expected_descriptor = 0x38 },
+        .{ .len = 132 * 1024, .expected_descriptor = 0x39 },
     };
 
     for (cases) |case| {
@@ -1047,6 +1049,24 @@ test "zstd native no-size writer chooses valid window descriptors" {
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, payload, decoded);
     }
+
+    const multi_block_payload = try std.testing.allocator.alloc(u8, std.compress.zstd.block_size_max + 4096);
+    defer std.testing.allocator.free(multi_block_payload);
+    @memset(multi_block_payload, 'm');
+    const multi_block = try encodeRawOrRleFrameWithOptionsAlloc(
+        std.testing.allocator,
+        multi_block_payload,
+        .{ .include_content_size = false, .content_checksum = false },
+    );
+    defer std.testing.allocator.free(multi_block);
+    try std.testing.expectEqual(@as(u8, 0x00), multi_block[4]);
+    try std.testing.expectEqual(@as(u8, 0x39), multi_block[5]);
+    const first_block_header = std.mem.readInt(u24, multi_block[6..][0..3], .little);
+    try std.testing.expectEqual(@as(u24, std.compress.zstd.block_size_max), first_block_header >> 3);
+    try std.testing.expectEqual(false, (first_block_header & 1) != 0);
+    const decoded_multi = try decodeNativeFrameAlloc(std.testing.allocator, multi_block);
+    defer std.testing.allocator.free(decoded_multi);
+    try std.testing.expectEqualSlices(u8, multi_block_payload, decoded_multi);
 }
 
 test "zstd native decoder accepts literal-only compressed blocks" {
