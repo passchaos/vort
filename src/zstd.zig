@@ -1828,6 +1828,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     while (state.remaining != 0) {
         const sequence = try readModeSequence(&state);
         const literal_len = sequence.literal_len;
+        if (written.* >= 4000) std.debug.print("seq rem={} written={} lit_off={} lit={} off={} ml={} reps={any}\n", .{ state.remaining, written.*, literal_offset, literal_len, sequence.match_offset, sequence.match_len, state.repeated_offsets });
         try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
         literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
         try copyMatchFromOutputBuffer(output, written, frame_output_start, sequence.match_offset, sequence.match_len);
@@ -1921,9 +1922,15 @@ fn readModeSequence(state: *SequenceDecodeState) Error!DecodedSequence {
     const of_symbol = try currentOffsetSymbol(state.*);
     const ml_symbol = try currentMatchSymbol(state.*);
 
-    const match_offset = try readSequenceOffset(&state.reader, of_symbol.base, of_symbol.additional_bits, ll_symbol.base, &state.repeated_offsets);
+    // Zstandard stores the offset extra bits before match/literal extra bits,
+    // but repeat-offset selection depends on the *fully decoded* literal
+    // length, not merely the literal-length symbol base. Keep the bit-read order
+    // intact while delaying repeat-offset mutation until the literal extra bits
+    // are known.
+    const offset_extra = try state.reader.read(of_symbol.additional_bits);
     const match_len = std.math.add(usize, ml_symbol.base, try state.reader.read(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
     const literal_len = std.math.add(usize, ll_symbol.base, try state.reader.read(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+    const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
 
     state.remaining -= 1;
     if (state.remaining != 0) {
@@ -1986,32 +1993,32 @@ fn nextSequenceState(reader: *ReverseBitReader, symbol: SequenceSymbol) Error!us
     return std.math.add(usize, symbol.next_state, try reader.read(symbol.state_bits)) catch return error.IntegerOverflow;
 }
 
-fn readSequenceOffset(
-    reader: *ReverseBitReader,
+fn resolveSequenceOffset(
     offset_base: usize,
     offset_bits: u8,
-    literal_base: usize,
+    offset_extra: usize,
+    literal_len: usize,
     repeated_offsets: *[3]usize,
 ) Error!usize {
     if (offset_bits > 1) {
-        const offset = std.math.add(usize, offset_base, try reader.read(offset_bits)) catch return error.IntegerOverflow;
+        const offset = std.math.add(usize, offset_base, offset_extra) catch return error.IntegerOverflow;
         repeated_offsets.* = .{ offset, repeated_offsets[0], repeated_offsets[1] };
         return offset;
     }
 
-    const literal_base_is_zero = literal_base == 0;
+    const literal_len_is_zero = literal_len == 0;
     if (offset_bits == 0) {
-        const offset = if (literal_base_is_zero) repeated_offsets[1] else repeated_offsets[0];
-        repeated_offsets[1] = repeated_offsets[if (literal_base_is_zero) 0 else 1];
+        const offset = if (literal_len_is_zero) repeated_offsets[1] else repeated_offsets[0];
+        repeated_offsets[1] = repeated_offsets[if (literal_len_is_zero) 0 else 1];
         repeated_offsets[0] = offset;
         return offset;
     }
 
-    const raw_base = std.math.add(usize, offset_base, if (literal_base_is_zero) 1 else 0) catch return error.IntegerOverflow;
+    const raw_base = std.math.add(usize, offset_base, if (literal_len_is_zero) 1 else 0) catch return error.IntegerOverflow;
     const raw_offset = std.math.add(
         usize,
         raw_base,
-        try reader.read(1),
+        offset_extra,
     ) catch return error.IntegerOverflow;
     const offset = if (raw_offset == 3) blk: {
         if (repeated_offsets[0] == 0) return error.InvalidMatch;
