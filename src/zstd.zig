@@ -64,12 +64,24 @@ const of_bits = [_]u8{
 
 extern fn ZSTD_compressBound(srcSize: usize) usize;
 extern fn ZSTD_compress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize, compressionLevel: c_int) usize;
+extern fn ZSTD_createCCtx() ?*anyopaque;
+extern fn ZSTD_freeCCtx(cctx: ?*anyopaque) usize;
+extern fn ZSTD_CCtx_setParameter(cctx: *anyopaque, param: c_int, value: c_int) usize;
+extern fn ZSTD_compress2(cctx: *anyopaque, dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize) usize;
 extern fn ZSTD_getFrameContentSize(src: *const anyopaque, srcSize: usize) c_ulonglong;
 extern fn ZSTD_decompress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, compressedSize: usize) usize;
 extern fn ZSTD_isError(code: usize) c_uint;
 
 const zstd_content_size_unknown = std.math.maxInt(c_ulonglong);
 const zstd_content_size_error = std.math.maxInt(c_ulonglong) - 1;
+const zstd_c_compression_level: c_int = 100;
+const zstd_c_content_size_flag: c_int = 200;
+const zstd_c_checksum_flag: c_int = 201;
+
+pub const LibFrameOptions = struct {
+    include_content_size: bool = true,
+    content_checksum: bool = false,
+};
 
 pub const NativeFrameSelection = enum {
     auto,
@@ -213,12 +225,36 @@ pub fn encodeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![
 }
 
 pub fn encodeFrameWithLevelAlloc(allocator: std.mem.Allocator, input: []const u8, level: c_int) Error![]u8 {
+    return try encodeFrameWithLevelAndOptionsAlloc(allocator, input, level, .{});
+}
+
+pub fn encodeFrameWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: LibFrameOptions) Error![]u8 {
+    return try encodeFrameWithLevelAndOptionsAlloc(allocator, input, default_compression_level, options);
+}
+
+pub fn encodeFrameWithLevelAndOptionsAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    level: c_int,
+    options: LibFrameOptions,
+) Error![]u8 {
     const bound = ZSTD_compressBound(input.len);
     if (ZSTD_isError(bound) != 0) return error.CorruptFrame;
     var out = try allocator.alloc(u8, bound);
     errdefer allocator.free(out);
 
-    const written = ZSTD_compress(@ptrCast(out.ptr), out.len, @ptrCast(input.ptr), input.len, level);
+    const cctx = ZSTD_createCCtx() orelse return error.OutOfMemory;
+    defer _ = ZSTD_freeCCtx(cctx);
+
+    // Use the advanced one-shot API only when callers need frame policy
+    // control. The default options preserve the historical ZSTD_compress()
+    // behavior while allowing downstream containers such as MCAP to avoid
+    // duplicating metadata they already carry at the format layer.
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, zstd_c_compression_level, level)) != 0) return error.CorruptFrame;
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, zstd_c_content_size_flag, if (options.include_content_size) 1 else 0)) != 0) return error.CorruptFrame;
+    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, zstd_c_checksum_flag, if (options.content_checksum) 1 else 0)) != 0) return error.CorruptFrame;
+
+    const written = ZSTD_compress2(cctx, @ptrCast(out.ptr), out.len, @ptrCast(input.ptr), input.len);
     if (ZSTD_isError(written) != 0) return error.CorruptFrame;
     if (allocator.remap(out, written)) |shrunk| return shrunk;
     const exact = try allocator.dupe(u8, out[0..written]);
@@ -615,6 +651,7 @@ fn copyLiteralsFromSection(
             if (section.regenerated_size == 0) return error.CorruptFrame;
             @memset(output[written.*..][0..literal_len], block[section.literal_payload_offset]);
         },
+        .compressed, .treeless => return error.UnsupportedZstdFeature,
     }
     written.* += literal_len;
 }
@@ -647,12 +684,13 @@ fn compressedLiteralOnlyBlockDecodedSizeLimited(
     return checkedAddWithinLimit(total, decoded_len, max_output_len);
 }
 
-const LiteralsKind = enum { raw, rle };
+const LiteralsKind = enum { raw, rle, compressed, treeless };
 
 const LiteralOnlySection = struct {
     kind: LiteralsKind,
     regenerated_size: usize,
     literal_payload_offset: usize,
+    compressed_size: usize = 0,
     sequence_count: usize,
     sequence_payload_offset: usize,
 };
@@ -664,14 +702,19 @@ fn parseLiteralsSection(block: []const u8) Error!LiteralOnlySection {
     const literal_payload_len: usize = switch (literal_header.kind) {
         .raw => literal_header.regenerated_size,
         .rle => 1,
+        .compressed, .treeless => literal_header.compressed_size,
     };
     if (block.len - offset < literal_payload_len) return error.TruncatedFrame;
     offset += literal_payload_len;
+    if (literal_header.kind == .compressed or literal_header.kind == .treeless) {
+        return error.UnsupportedZstdFeature;
+    }
     const sequence_count = try parseSequenceCount(block, &offset);
     return .{
         .kind = literal_header.kind,
         .regenerated_size = literal_header.regenerated_size,
         .literal_payload_offset = literal_payload_offset,
+        .compressed_size = literal_header.compressed_size,
         .sequence_count = sequence_count,
         .sequence_payload_offset = offset,
     };
@@ -680,6 +723,7 @@ fn parseLiteralsSection(block: []const u8) Error!LiteralOnlySection {
 const LiteralsHeaderInfo = struct {
     kind: LiteralsKind,
     regenerated_size: usize,
+    compressed_size: usize = 0,
 };
 
 fn parseLiteralsHeader(block: []const u8, offset: *usize) Error!LiteralsHeaderInfo {
@@ -691,8 +735,13 @@ fn parseLiteralsHeader(block: []const u8, offset: *usize) Error!LiteralsHeaderIn
     const kind: LiteralsKind = switch (block_type) {
         0 => .raw,
         1 => .rle,
-        else => return error.UnsupportedZstdFeature,
+        2 => .compressed,
+        else => .treeless,
     };
+
+    if (kind == .compressed or kind == .treeless) {
+        return try parseHuffmanLiteralsHeader(block, offset, byte0, size_format, kind);
+    }
 
     const regenerated_size: usize = switch (size_format) {
         0, 2 => byte0 >> 3,
@@ -711,6 +760,63 @@ fn parseLiteralsHeader(block: []const u8, offset: *usize) Error!LiteralsHeaderIn
         },
     };
     return .{ .kind = kind, .regenerated_size = regenerated_size };
+}
+
+fn parseHuffmanLiteralsHeader(
+    block: []const u8,
+    offset: *usize,
+    byte0: u8,
+    size_format: u8,
+    kind: LiteralsKind,
+) Error!LiteralsHeaderInfo {
+    return switch (size_format) {
+        0, 1 => blk: {
+            if (block.len - offset.* < 2) return error.TruncatedFrame;
+            const byte1 = block[offset.*];
+            const byte2 = block[offset.* + 1];
+            offset.* += 2;
+            const value = @as(usize, byte0 >> 4) |
+                (@as(usize, byte1) << 4) |
+                (@as(usize, byte2) << 12);
+            const regenerated_size = value & 0x3ff;
+            const compressed_size = (value >> 10) & 0x3ff;
+            if (compressed_size == 0) return error.CorruptFrame;
+            if (size_format == 1 and compressed_size < 10) return error.CorruptFrame;
+            break :blk .{ .kind = kind, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
+        },
+        2 => blk: {
+            if (block.len - offset.* < 3) return error.TruncatedFrame;
+            const byte1 = block[offset.*];
+            const byte2 = block[offset.* + 1];
+            const byte3 = block[offset.* + 2];
+            offset.* += 3;
+            const value = @as(usize, byte0 >> 4) |
+                (@as(usize, byte1) << 4) |
+                (@as(usize, byte2) << 12) |
+                (@as(usize, byte3) << 20);
+            const regenerated_size = value & 0x3fff;
+            const compressed_size = (value >> 14) & 0x3fff;
+            if (compressed_size < 10) return error.CorruptFrame;
+            break :blk .{ .kind = kind, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
+        },
+        else => blk: {
+            if (block.len - offset.* < 4) return error.TruncatedFrame;
+            const byte1 = block[offset.*];
+            const byte2 = block[offset.* + 1];
+            const byte3 = block[offset.* + 2];
+            const byte4 = block[offset.* + 3];
+            offset.* += 4;
+            const value = @as(usize, byte0 >> 4) |
+                (@as(usize, byte1) << 4) |
+                (@as(usize, byte2) << 12) |
+                (@as(usize, byte3) << 20) |
+                (@as(usize, byte4) << 28);
+            const regenerated_size = value & 0x3ffff;
+            const compressed_size = (value >> 18) & 0x3ffff;
+            if (compressed_size < 10) return error.CorruptFrame;
+            break :blk .{ .kind = kind, .regenerated_size = regenerated_size, .compressed_size = compressed_size };
+        },
+    };
 }
 
 fn parseSequenceCount(block: []const u8, offset: *usize) Error!usize {
@@ -1509,6 +1615,7 @@ fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     const literal_payload_len: usize = switch (literal_kind) {
         .raw => block.len,
         .rle => 1,
+        .compressed, .treeless => unreachable,
     };
     const header_len = try literalsHeaderLen(block.len);
     const payload_prefix_len = std.math.add(usize, header_len, literal_payload_len) catch return error.IntegerOverflow;
@@ -1543,6 +1650,7 @@ fn emitLiteralsHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), kin
     const kind_bits: u8 = switch (kind) {
         .raw => 0,
         .rle => 1,
+        .compressed, .treeless => return error.UnsupportedZstdFeature,
     };
     if (regenerated_size <= 31) {
         try out.append(allocator, kind_bits | @as(u8, @intCast(regenerated_size << 3)));
@@ -1611,6 +1719,25 @@ test "zstd lib encoder round trips and compresses repeated payloads" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < payload.len);
+}
+
+test "zstd lib encoder frame options omit content size" {
+    const payload = "zstd lib frame options payload" ** 8;
+    const encoded = try encodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .include_content_size = false,
+        .content_checksum = true,
+    });
+    defer std.testing.allocator.free(encoded);
+
+    try std.testing.expectEqual(zstd_content_size_unknown, ZSTD_getFrameContentSize(@ptrCast(encoded.ptr), encoded.len));
+
+    const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const default_encoded = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, default_compression_level, .{});
+    defer std.testing.allocator.free(default_encoded);
+    try std.testing.expectEqual(@as(c_ulonglong, payload.len), ZSTD_getFrameContentSize(@ptrCast(default_encoded.ptr), default_encoded.len));
 }
 
 test "zstd raw/RLE frame writer round trips through std decompressor" {
@@ -2233,6 +2360,26 @@ test "zstd literal-only compressed block rejects malformed sections" {
     try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameAlloc(std.testing.allocator, missing_literal_byte.items));
 }
 
+test "zstd native decoder recognizes unsupported Huffman literals" {
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, 3, .{ .content_checksum = false });
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 4, true);
+    try frame.appendSlice(std.testing.allocator, &.{ 0x32, 0x40, 0x00 }); // compressed literals: regenerated=3, compressed=1.
+    try frame.append(std.testing.allocator, 1);
+    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameAlloc(std.testing.allocator, frame.items));
+    var output: [3]u8 = undefined;
+    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameInto(frame.items, &output));
+    try std.testing.expectError(error.UnsupportedZstdFeature, decodedRawOrRleFrameSize(frame.items));
+
+    var zero_size: std.ArrayList(u8) = .empty;
+    defer zero_size.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &zero_size, 3, .{ .content_checksum = false });
+    try emitBlockHeader(std.testing.allocator, &zero_size, 2, 3, true);
+    try zero_size.appendSlice(std.testing.allocator, &.{ 0x32, 0x00, 0x00 });
+    try std.testing.expectError(error.CorruptFrame, decodeNativeFrameAlloc(std.testing.allocator, zero_size.items));
+}
+
 test "zstd literal-only frame writer falls back when compressed literals expand" {
     const payload = "literal-only zstd payload";
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
@@ -2340,7 +2487,7 @@ test "zstd raw/RLE native decoder rejects corrupt frames" {
     var compressed_block = try std.testing.allocator.dupe(u8, encoded);
     defer std.testing.allocator.free(compressed_block);
     compressed_block[6] = (compressed_block[6] & ~@as(u8, 0x06)) | 0x04;
-    try std.testing.expectError(error.UnsupportedZstdFeature, decodeRawOrRleFrameAlloc(std.testing.allocator, compressed_block));
+    try std.testing.expectError(error.TruncatedFrame, decodeRawOrRleFrameAlloc(std.testing.allocator, compressed_block));
 
     try std.testing.expectError(error.TruncatedFrame, decodeRawOrRleFrameAlloc(std.testing.allocator, encoded[0 .. encoded.len - 1]));
     try std.testing.expectError(error.InvalidMagic, decodeRawOrRleFrameAlloc(std.testing.allocator, "not-zstd"));

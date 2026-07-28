@@ -71,7 +71,10 @@ pub const lz4DecodedBlockSizeLimited = lz4.decodedBlockSizeLimited;
 
 pub const zstdEncodeFrameAlloc = zstd.encodeFrameAlloc;
 pub const zstdEncodeFrameWithLevelAlloc = zstd.encodeFrameWithLevelAlloc;
+pub const zstdEncodeFrameWithOptionsAlloc = zstd.encodeFrameWithOptionsAlloc;
+pub const zstdEncodeFrameWithLevelAndOptionsAlloc = zstd.encodeFrameWithLevelAndOptionsAlloc;
 pub const zstdDecodeFrameAlloc = zstd.decodeFrameAlloc;
+pub const ZstdLibFrameOptions = zstd.LibFrameOptions;
 pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
 pub const zstdEncodeRawOrRleFrameWithOptionsAlloc = zstd.encodeRawOrRleFrameWithOptionsAlloc;
 pub const zstdEncodeLiteralOnlyFrameAlloc = zstd.encodeLiteralOnlyFrameAlloc;
@@ -663,7 +666,10 @@ test "root exports lz4 and zstd codec helpers" {
 
     _ = zstdEncodeFrameAlloc;
     _ = zstdEncodeFrameWithLevelAlloc;
+    _ = zstdEncodeFrameWithOptionsAlloc;
+    _ = zstdEncodeFrameWithLevelAndOptionsAlloc;
     _ = zstdDecodeFrameAlloc;
+    _ = ZstdLibFrameOptions;
     _ = zstdEncodeRawOrRleFrameAlloc;
     _ = zstdEncodeRawOrRleFrameWithOptionsAlloc;
     _ = zstdEncodeLiteralOnlyFrameAlloc;
@@ -703,6 +709,19 @@ test "root lz4 lib frame options round trip" {
     try std.testing.expectEqual(@as(usize, 10), try lz4DecodedBlockSize(&raw_match));
     try std.testing.expectEqual(@as(usize, 10), try lz4DecodedBlockSizeLimited(&raw_match, 10));
     try std.testing.expectError(error.OutputLimitExceeded, lz4DecodedBlockSizeLimited(&raw_match, 9));
+}
+
+test "root zstd lib frame options round trip" {
+    const payload = "root zstd lib frame options payload" ** 4;
+    const encoded = try zstdEncodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, zstd.default_compression_level, .{
+        .include_content_size = false,
+        .content_checksum = true,
+    });
+    defer std.testing.allocator.free(encoded);
+
+    const decoded = try zstdDecodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "root exports chunked compatibility decode helpers" {
