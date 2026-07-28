@@ -8829,10 +8829,12 @@ pub fn decodePngZlibImageParallelWithOptions(
 /// `UnsupportedDeflateFeature` for stored/fixed blocks, incomplete semantic
 /// Huffman tables, aliased input/output, or the first nonzero PNG filter byte;
 /// callers must then restart through the general PNG reconstruction path.
-// Typical split dynamic blocks from the PNG corpus decode to about 17--22 KiB.
-// A 24 KiB stack buffer keeps the linear fast path cache-resident; unusually
-// large blocks restore the reader and use the compact history-aware sink.
-const png_filter0_linear_block_scratch_len = 24 * 1024;
+// Typical split dynamic blocks from the PNG corpus decode to about 17--22 KiB,
+// but larger filter-0/RLE-heavy blocks (notably Lohengrin-style text scans)
+// still fit comfortably in L2 with a 48 KiB scratch. Keeping those blocks on
+// the linear fast path avoids falling back to the virtual-history sink while
+// preserving a bounded stack allocation for unusually large blocks.
+const png_filter0_linear_block_scratch_len = 48 * 1024;
 
 fn appendPngFilter0LinearBlock(
     sink: *PngFilter0SemanticSink,
