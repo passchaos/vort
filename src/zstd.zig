@@ -718,7 +718,8 @@ const RleSequenceSpec = struct {
     literal_bits: u8,
     match_base: usize,
     match_bits: u8,
-    offset_code: u8,
+    offset_base: usize,
+    offset_bits: u8,
     bitstream_offset: usize,
 };
 
@@ -739,7 +740,6 @@ fn parseRleSequenceSpec(block: []const u8, offset: *usize, sequence_count: usize
     const ml_code = block[offset.* + 2];
     offset.* += 3;
     if (ll_code >= ll_base.len or of_code >= of_base.len or ml_code >= ml_base.len) return error.CorruptFrame;
-    if (of_bits[of_code] != 0) return error.UnsupportedZstdFeature;
     const bitstream_offset = offset.*;
     if (bitstream_offset >= block.len) return error.TruncatedFrame;
     offset.* = block.len;
@@ -748,7 +748,8 @@ fn parseRleSequenceSpec(block: []const u8, offset: *usize, sequence_count: usize
         .literal_bits = ll_bits[ll_code],
         .match_base = ml_base[ml_code],
         .match_bits = ml_bits[ml_code],
-        .offset_code = of_code,
+        .offset_base = of_base[of_code],
+        .offset_bits = of_bits[of_code],
         .bitstream_offset = bitstream_offset,
     };
 }
@@ -814,11 +815,11 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     var literal_offset: usize = 0;
     var seq: usize = 0;
     while (seq < section.sequence_count) : (seq += 1) {
+        const match_offset = try readRleOffset(&bit_reader, spec, &repeated_offsets);
         const match_len = try readRleMatchLength(&bit_reader, spec);
         const literal_len = try readRleLiteralLength(&bit_reader, spec);
         try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
         literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
-        const match_offset = resolveRepeatedOffset(spec.offset_code, literal_len, &repeated_offsets) orelse return error.UnsupportedZstdFeature;
         try copyMatchFromOutputBuffer(output, written, match_offset, match_len);
     }
     try bit_reader.expectEnd();
@@ -842,6 +843,7 @@ fn rleSequencesCompressedBlockDecodedSize(
     var produced: usize = 0;
     var seq: usize = 0;
     while (seq < section.sequence_count) : (seq += 1) {
+        const match_offset = try readRleOffset(&bit_reader, spec, &repeated_offsets);
         const match_len = try readRleMatchLength(&bit_reader, spec);
         const literal_len = try readRleLiteralLength(&bit_reader, spec);
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) {
@@ -849,7 +851,6 @@ fn rleSequencesCompressedBlockDecodedSize(
         }
         literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
         produced = std.math.add(usize, produced, literal_len) catch return error.IntegerOverflow;
-        const match_offset = resolveRepeatedOffset(spec.offset_code, literal_len, &repeated_offsets) orelse return error.UnsupportedZstdFeature;
         const available = std.math.add(usize, initial_output_len, produced) catch return error.IntegerOverflow;
         if (match_offset == 0 or match_offset > available) return error.InvalidMatch;
         produced = std.math.add(usize, produced, match_len) catch return error.IntegerOverflow;
@@ -860,21 +861,48 @@ fn rleSequencesCompressedBlockDecodedSize(
     return produced;
 }
 
+fn readRleOffset(reader: *ReverseBitReader, spec: RleSequenceSpec, repeated_offsets: *[3]usize) Error!usize {
+    if (spec.offset_bits > 1) {
+        const offset = std.math.add(usize, spec.offset_base, try reader.read(spec.offset_bits)) catch return error.IntegerOverflow;
+        repeated_offsets.* = .{ offset, repeated_offsets[0], repeated_offsets[1] };
+        return offset;
+    }
+
+    const literal_base_is_zero = spec.literal_base == 0;
+    if (spec.offset_bits == 0) {
+        const offset = if (literal_base_is_zero) repeated_offsets[1] else repeated_offsets[0];
+        repeated_offsets[1] = repeated_offsets[if (literal_base_is_zero) 0 else 1];
+        repeated_offsets[0] = offset;
+        return offset;
+    }
+
+    const raw_base = std.math.add(usize, spec.offset_base, if (literal_base_is_zero) 1 else 0) catch return error.IntegerOverflow;
+    const raw_offset = std.math.add(
+        usize,
+        raw_base,
+        try reader.read(1),
+    ) catch return error.IntegerOverflow;
+    const offset = if (raw_offset == 3) blk: {
+        if (repeated_offsets[0] == 0) return error.InvalidMatch;
+        break :blk repeated_offsets[0] - 1;
+    } else if (raw_offset < repeated_offsets.len) blk: {
+        break :blk repeated_offsets[raw_offset];
+    } else {
+        return error.UnsupportedZstdFeature;
+    };
+    if (offset == 0) return error.InvalidMatch;
+    if (raw_offset != 1) repeated_offsets[2] = repeated_offsets[1];
+    repeated_offsets[1] = repeated_offsets[0];
+    repeated_offsets[0] = offset;
+    return offset;
+}
+
 fn readRleMatchLength(reader: *ReverseBitReader, spec: RleSequenceSpec) Error!usize {
     return std.math.add(usize, spec.match_base, try reader.read(spec.match_bits)) catch return error.IntegerOverflow;
 }
 
 fn readRleLiteralLength(reader: *ReverseBitReader, spec: RleSequenceSpec) Error!usize {
     return std.math.add(usize, spec.literal_base, try reader.read(spec.literal_bits)) catch return error.IntegerOverflow;
-}
-
-fn resolveRepeatedOffset(offset_code: u8, literal_len: usize, repeated_offsets: *[3]usize) ?usize {
-    if (offset_code != 0) return null;
-    const ll0 = literal_len == 0;
-    const offset = if (ll0) repeated_offsets[1] else repeated_offsets[0];
-    repeated_offsets[1] = repeated_offsets[if (ll0) 0 else 1];
-    repeated_offsets[0] = offset;
-    return offset;
 }
 
 fn copyMatchFromOutputBuffer(output: []u8, written: *usize, match_offset: usize, match_len: usize) Error!void {
@@ -1457,6 +1485,36 @@ test "zstd native decoder reads RLE sequence additional bits" {
     try frame.append(std.testing.allocator, 0x54); // LL, offset, and ML all use RLE_Mode.
     try frame.appendSlice(std.testing.allocator, &.{ 1, 0, 32 }); // ML code 32 has one additional bit over base length 35.
     try frame.append(std.testing.allocator, 0x03); // Reverse bitstream: payload bit=1 followed by the end mark.
+    var checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, payload)), .little);
+    try frame.appendSlice(std.testing.allocator, &checksum);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const native_decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(native_decoded);
+    try std.testing.expectEqualSlices(u8, payload, native_decoded);
+
+    var into_buffer: [payload.len]u8 = undefined;
+    const written = try decodeNativeFrameInto(frame.items, &into_buffer);
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
+}
+
+test "zstd native decoder reads RLE offset additional bits" {
+    const payload = "a" ** 14;
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{});
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 8, true);
+    try frame.append(std.testing.allocator, (1 << 3) | 1); // RLE literals: one byte of history is enough for offset=1.
+    try frame.append(std.testing.allocator, 'a');
+    try frame.append(std.testing.allocator, 1);
+    try frame.append(std.testing.allocator, 0x54); // LL, offset, and ML all use RLE_Mode.
+    try frame.appendSlice(std.testing.allocator, &.{ 1, 2, 10 }); // Offset code 2 consumes two additional bits.
+    try frame.append(std.testing.allocator, 0x04); // Reverse bitstream: offset extra bits=0, then end mark.
     var checksum: [4]u8 = undefined;
     std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, payload)), .little);
     try frame.appendSlice(std.testing.allocator, &checksum);
