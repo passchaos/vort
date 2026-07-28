@@ -1790,6 +1790,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
+    ci_smoke_step.dependOn(zstd_native_probe_step);
     ci_smoke_step.dependOn(header_inspect_smoke_step);
     ci_smoke_step.dependOn(header_inspect_dashboard_step);
     ci_smoke_step.dependOn(zlib_family_diff_step);
