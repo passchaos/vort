@@ -10,10 +10,30 @@ const min_rle_split_len = 12;
 
 extern fn ZSTD_compressBound(srcSize: usize) usize;
 extern fn ZSTD_compress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize, compressionLevel: c_int) usize;
+extern fn ZSTD_getFrameContentSize(src: *const anyopaque, srcSize: usize) c_ulonglong;
+extern fn ZSTD_decompress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, compressedSize: usize) usize;
 extern fn ZSTD_isError(code: usize) c_uint;
 
-/// Decode a Zstandard frame using Zig std's standards-compliant decoder.
+const zstd_content_size_unknown = std.math.maxInt(c_ulonglong);
+const zstd_content_size_error = std.math.maxInt(c_ulonglong) - 1;
+
+/// Decode a Zstandard frame. Prefer libzstd's one-shot decoder when the
+/// content size is present, because MCAP chunks always advertise their decoded
+/// size and the one-shot path avoids streaming allocator overhead. Frames with
+/// unknown content size still fall back to Zig std's streaming decoder.
 pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
+    const content_size = ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
+    if (content_size == zstd_content_size_error) return error.CorruptFrame;
+    if (content_size != zstd_content_size_unknown) {
+        const decoded_len = try checkedU64ToUsize(content_size);
+        const out = try allocator.alloc(u8, decoded_len);
+        errdefer allocator.free(out);
+        const written = ZSTD_decompress(@ptrCast(out.ptr), out.len, @ptrCast(frame.ptr), frame.len);
+        if (ZSTD_isError(written) != 0) return error.CorruptFrame;
+        if (written != decoded_len) return error.SizeMismatch;
+        return out;
+    }
+
     var input: std.Io.Reader = .fixed(frame);
     var zstd_stream: std.compress.zstd.Decompress = .init(&input, &.{}, .{});
     var output: std.Io.Writer.Allocating = .init(allocator);
@@ -146,6 +166,10 @@ fn emitBlockHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block_
 
 fn checkedUsizeToU64(value: usize) Error!u64 {
     return std.math.cast(u64, value) orelse error.IntegerOverflow;
+}
+
+fn checkedU64ToUsize(value: u64) Error!usize {
+    return std.math.cast(usize, value) orelse error.IntegerOverflow;
 }
 
 test "zstd lib encoder round trips and compresses repeated payloads" {
