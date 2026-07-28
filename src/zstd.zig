@@ -1828,7 +1828,6 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     while (state.remaining != 0) {
         const sequence = try readModeSequence(&state);
         const literal_len = sequence.literal_len;
-        if (written.* >= 4000) std.debug.print("seq rem={} written={} lit_off={} lit={} off={} ml={} reps={any}\n", .{ state.remaining, written.*, literal_offset, literal_len, sequence.match_offset, sequence.match_len, state.repeated_offsets });
         try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
         literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
         try copyMatchFromOutputBuffer(output, written, frame_output_start, sequence.match_offset, sequence.match_len);
@@ -2002,7 +2001,9 @@ fn resolveSequenceOffset(
 ) Error!usize {
     if (offset_bits > 1) {
         const offset = std.math.add(usize, offset_base, offset_extra) catch return error.IntegerOverflow;
-        repeated_offsets.* = .{ offset, repeated_offsets[0], repeated_offsets[1] };
+        const previous_0 = repeated_offsets[0];
+        const previous_1 = repeated_offsets[1];
+        repeated_offsets.* = .{ offset, previous_0, previous_1 };
         return offset;
     }
 
@@ -3195,6 +3196,30 @@ test "zstd native decoder accepts FSE compressed sequence tables" {
         const decoded_len = try decodedRawOrRleFrameSize(frame);
         try std.testing.expectEqual(payload.items.len, decoded_len);
     }
+}
+
+test "zstd native decoder preserves previous offsets for direct offsets" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    try payload.ensureTotalCapacity(std.testing.allocator, 4200);
+    var rng = std.Random.DefaultPrng.init(99);
+    const alphabet = "ACGTN";
+    for (0..4200) |_| {
+        try payload.append(std.testing.allocator, alphabet[rng.random().uintLessThan(usize, alphabet.len)]);
+    }
+
+    const encoded = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 3);
+    defer std.testing.allocator.free(encoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+
+    const into_buffer = try std.testing.allocator.alloc(u8, payload.items.len);
+    defer std.testing.allocator.free(into_buffer);
+    const written = try decodeNativeFrameInto(encoded, into_buffer);
+    try std.testing.expectEqual(payload.items.len, written);
+    try std.testing.expectEqualSlices(u8, payload.items, into_buffer[0..written]);
 }
 
 test "zstd native decoder rejects malformed FSE compressed sequence tables" {
