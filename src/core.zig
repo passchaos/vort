@@ -18,6 +18,7 @@ pub const Error = error{
     NeedDictionary,
     InvalidHuffmanCode,
     UnsupportedDeflateFeature,
+    UnsupportedZstdFeature,
     InvalidMatch,
     InvalidDynamicBlockHeader,
     InvalidBlockPlan,

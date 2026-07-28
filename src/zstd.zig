@@ -6,6 +6,9 @@ pub const Error = core.Error || std.mem.Allocator.Error;
 pub const default_compression_level: c_int = 1;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
+const frame_magic_u32: u32 = 0xfd2fb528;
+const skippable_magic_min: u32 = 0x184d2a50;
+const skippable_magic_max: u32 = 0x184d2a5f;
 const min_rle_split_len = 12;
 
 extern fn ZSTD_compressBound(srcSize: usize) usize;
@@ -44,6 +47,38 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
         error.OutOfMemory => error.OutOfMemory,
     };
 }
+
+/// Dependency-free Zstandard decoder for the raw/RLE frame subset emitted by
+/// `encodeRawOrRleFrameAlloc`. It accepts concatenated raw/RLE frames and
+/// skippable frames, validates frame content sizes and optional content
+/// checksums, and deliberately rejects compressed blocks instead of silently
+/// falling back to a partial implementation.
+pub fn decodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+
+    var offset: usize = 0;
+    while (offset < frame.len) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        const magic = std.mem.readInt(u32, frame[offset..][0..4], .little);
+        offset += 4;
+        if (magic == frame_magic_u32) {
+            try decodeRawOrRleZstandardFrameInto(allocator, &out, frame, &offset);
+        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+            if (frame.len - offset < 4) return error.TruncatedFrame;
+            const skip_len: usize = @intCast(std.mem.readInt(u32, frame[offset..][0..4], .little));
+            offset += 4;
+            if (frame.len - offset < skip_len) return error.TruncatedFrame;
+            offset += skip_len;
+        } else {
+            return error.InvalidMagic;
+        }
+    }
+
+    return out.toOwnedSlice(allocator);
+}
+
+pub const decodeNativeFrameAlloc = decodeRawOrRleFrameAlloc;
 
 /// Compress a complete Zstandard frame using the reference-compatible libzstd
 /// encoder linked by Vort's build. Keeping this call surface in Vort centralizes
@@ -103,6 +138,133 @@ pub fn encodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, input: []const u8)
     std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, input)), .little);
     try out.appendSlice(allocator, &checksum);
     return out.toOwnedSlice(allocator);
+}
+
+pub const encodeNativeFrameAlloc = encodeRawOrRleFrameAlloc;
+
+const RawOrRleFrameHeader = struct {
+    content_size: ?u64,
+    has_checksum: bool,
+    block_size_max: usize,
+};
+
+fn decodeRawOrRleZstandardFrameInto(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    frame: []const u8,
+    offset: *usize,
+) Error!void {
+    const header = try parseRawOrRleFrameHeader(frame, offset);
+    const frame_out_start = out.items.len;
+    if (header.content_size) |size| try out.ensureUnusedCapacity(allocator, try checkedU64ToUsize(size));
+
+    while (true) {
+        if (frame.len - offset.* < 3) return error.TruncatedFrame;
+        const block_header = std.mem.readInt(u24, frame[offset.*..][0..3], .little);
+        offset.* += 3;
+        const last = (block_header & 0x1) != 0;
+        const block_type = (block_header >> 1) & 0x3;
+        const block_len: usize = @intCast(block_header >> 3);
+        if (block_len > header.block_size_max) return error.CorruptFrame;
+
+        switch (block_type) {
+            0 => {
+                if (frame.len - offset.* < block_len) return error.TruncatedFrame;
+                try out.appendSlice(allocator, frame[offset.*..][0..block_len]);
+                offset.* += block_len;
+            },
+            1 => {
+                if (block_len == 0) return error.CorruptFrame;
+                if (frame.len - offset.* < 1) return error.TruncatedFrame;
+                const byte = frame[offset.*];
+                offset.* += 1;
+                try out.appendNTimes(allocator, byte, block_len);
+            },
+            2 => return error.UnsupportedZstdFeature,
+            else => return error.CorruptFrame,
+        }
+
+        if (last) break;
+    }
+
+    const decoded = out.items[frame_out_start..];
+    if (header.content_size) |size| {
+        if (try checkedUsizeToU64(decoded.len) != size) return error.SizeMismatch;
+    }
+
+    if (header.has_checksum) {
+        if (frame.len - offset.* < 4) return error.TruncatedFrame;
+        const expected = std.mem.readInt(u32, frame[offset.*..][0..4], .little);
+        const actual: u32 = @truncate(std.hash.XxHash64.hash(0, decoded));
+        if (actual != expected) return error.ChecksumMismatch;
+        offset.* += 4;
+    }
+}
+
+fn parseRawOrRleFrameHeader(frame: []const u8, offset: *usize) Error!RawOrRleFrameHeader {
+    if (frame.len - offset.* < 1) return error.TruncatedFrame;
+    const descriptor = frame[offset.*];
+    offset.* += 1;
+
+    if ((descriptor & 0x08) != 0) return error.CorruptFrame;
+    if ((descriptor & 0x10) != 0) return error.UnsupportedZstdFeature;
+
+    const dictionary_id_flag = descriptor & 0x03;
+    const has_checksum = (descriptor & 0x04) != 0;
+    const single_segment = (descriptor & 0x20) != 0;
+    const content_size_flag = descriptor >> 6;
+
+    const window_size = if (single_segment) null else blk: {
+        if (frame.len - offset.* < 1) return error.TruncatedFrame;
+        const window_descriptor = frame[offset.*];
+        offset.* += 1;
+        break :blk decodeWindowSize(window_descriptor);
+    };
+
+    const dictionary_id_len: usize = switch (dictionary_id_flag) {
+        0 => 0,
+        1 => 1,
+        2 => 2,
+        else => 4,
+    };
+    if (frame.len - offset.* < dictionary_id_len) return error.TruncatedFrame;
+    offset.* += dictionary_id_len;
+
+    const content_size: ?u64 = if (single_segment or content_size_flag != 0) blk: {
+        const field_size: usize = @as(usize, 1) << @intCast(content_size_flag);
+        const encoded_size = try readU64Field(frame, offset, field_size);
+        break :blk if (field_size == 2) encoded_size + 256 else encoded_size;
+    } else null;
+
+    const effective_window = if (single_segment) content_size.? else window_size.?;
+    const block_size_max = @min(
+        std.compress.zstd.block_size_max,
+        try checkedU64ToUsize(effective_window),
+    );
+
+    return .{
+        .content_size = content_size,
+        .has_checksum = has_checksum,
+        .block_size_max = block_size_max,
+    };
+}
+
+fn decodeWindowSize(descriptor: u8) u64 {
+    const exponent = (descriptor & 0b1111_1000) >> 3;
+    const mantissa = descriptor & 0b0000_0111;
+    const window_log = 10 + @as(u6, @intCast(exponent));
+    const window_base = @as(u64, 1) << window_log;
+    return window_base + (window_base / 8) * mantissa;
+}
+
+fn readU64Field(frame: []const u8, offset: *usize, field_size: usize) Error!u64 {
+    if (frame.len - offset.* < field_size) return error.TruncatedFrame;
+    var value: u64 = 0;
+    for (frame[offset.*..][0..field_size], 0..) |byte, i| {
+        value |= @as(u64, byte) << @as(u6, @intCast(i * 8));
+    }
+    offset.* += field_size;
+    return value;
 }
 
 fn rleByte(block: []const u8) ?u8 {
@@ -189,6 +351,9 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+    const native_decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(native_decoded);
+    try std.testing.expectEqualSlices(u8, payload, native_decoded);
     try std.testing.expectEqual(@as(u8, 0xe4), encoded[4]);
     try std.testing.expectEqual(@as(u64, payload.len), std.mem.readInt(u64, encoded[5..][0..8], .little));
 
@@ -201,4 +366,101 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     const rle_decoded = try decodeFrameAlloc(std.testing.allocator, rle_encoded);
     defer std.testing.allocator.free(rle_decoded);
     try std.testing.expectEqualSlices(u8, repeated, rle_decoded);
+    const native_rle_decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, rle_encoded);
+    defer std.testing.allocator.free(native_rle_decoded);
+    try std.testing.expectEqualSlices(u8, repeated, native_rle_decoded);
+}
+
+test "zstd raw/RLE native decoder handles skippable and concatenated frames" {
+    const first = try encodeRawOrRleFrameAlloc(std.testing.allocator, "first");
+    defer std.testing.allocator.free(first);
+    const second = try encodeRawOrRleFrameAlloc(std.testing.allocator, "second");
+    defer std.testing.allocator.free(second);
+
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, first);
+    var skippable_header: [8]u8 = undefined;
+    std.mem.writeInt(u32, skippable_header[0..4], skippable_magic_min + 3, .little);
+    std.mem.writeInt(u32, skippable_header[4..8], 5, .little);
+    try stream.appendSlice(std.testing.allocator, &skippable_header);
+    try stream.appendSlice(std.testing.allocator, "noise");
+    try stream.appendSlice(std.testing.allocator, second);
+
+    const decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, stream.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "firstsecond", decoded);
+}
+
+test "zstd raw/RLE native decoder accepts no-size raw frames" {
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try frame.appendSlice(std.testing.allocator, &frame_magic);
+    try frame.append(std.testing.allocator, 0x00); // no checksum, no content size, window descriptor follows
+    try frame.append(std.testing.allocator, 0x00); // 1 KiB window, enough for the small raw block
+    try emitRawBlock(std.testing.allocator, &frame, "abc", true);
+
+    const decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "abc", decoded);
+}
+
+test "zstd raw/RLE native decoder rejects corrupt frames" {
+    const payload = "zstd raw/rle corrupt frame payload";
+    const encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+
+    var bad_size = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_size);
+    std.mem.writeInt(u64, bad_size[5..][0..8], payload.len + 1, .little);
+    try std.testing.expectError(error.SizeMismatch, decodeRawOrRleFrameAlloc(std.testing.allocator, bad_size));
+
+    var bad_checksum = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_checksum);
+    bad_checksum[bad_checksum.len - 1] ^= 0x01;
+    try std.testing.expectError(error.ChecksumMismatch, decodeRawOrRleFrameAlloc(std.testing.allocator, bad_checksum));
+
+    var compressed_block = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(compressed_block);
+    compressed_block[13] = (compressed_block[13] & ~@as(u8, 0x06)) | 0x04;
+    try std.testing.expectError(error.UnsupportedZstdFeature, decodeRawOrRleFrameAlloc(std.testing.allocator, compressed_block));
+
+    try std.testing.expectError(error.TruncatedFrame, decodeRawOrRleFrameAlloc(std.testing.allocator, encoded[0 .. encoded.len - 1]));
+    try std.testing.expectError(error.InvalidMagic, decodeRawOrRleFrameAlloc(std.testing.allocator, "not-zstd"));
+}
+
+test "zstd native raw/RLE decoder handles fallback frames and skippable frames" {
+    const raw = "raw block payload";
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, raw);
+    defer std.testing.allocator.free(raw_encoded);
+    const raw_decoded = try decodeNativeFrameAlloc(std.testing.allocator, raw_encoded);
+    defer std.testing.allocator.free(raw_decoded);
+    try std.testing.expectEqualSlices(u8, raw, raw_decoded);
+
+    const repeated = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
+    const rle_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, repeated);
+    defer std.testing.allocator.free(rle_encoded);
+    const rle_decoded = try decodeNativeFrameAlloc(std.testing.allocator, rle_encoded);
+    defer std.testing.allocator.free(rle_decoded);
+    try std.testing.expectEqualSlices(u8, repeated, rle_decoded);
+
+    var concatenated: std.ArrayList(u8) = .empty;
+    defer concatenated.deinit(std.testing.allocator);
+    try concatenated.appendSlice(std.testing.allocator, raw_encoded);
+    try concatenated.appendSlice(std.testing.allocator, &.{ 0x50, 0x2a, 0x4d, 0x18 });
+    var skippable_len: [4]u8 = undefined;
+    std.mem.writeInt(u32, &skippable_len, 3, .little);
+    try concatenated.appendSlice(std.testing.allocator, &skippable_len);
+    try concatenated.appendSlice(std.testing.allocator, "pad");
+    try concatenated.appendSlice(std.testing.allocator, rle_encoded);
+    const concatenated_decoded = try decodeNativeFrameAlloc(std.testing.allocator, concatenated.items);
+    defer std.testing.allocator.free(concatenated_decoded);
+    try std.testing.expectEqualSlices(u8, raw ++ repeated, concatenated_decoded);
+}
+
+test "zstd native raw/RLE decoder rejects general compressed frames" {
+    const payload = "zstd payload zstd payload zstd payload zstd payload";
+    const encoded = try encodeFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectError(error.UnsupportedZstdFeature, decodeNativeFrameAlloc(std.testing.allocator, encoded));
 }
