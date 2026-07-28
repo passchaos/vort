@@ -1533,6 +1533,39 @@ test "zstd native decoder reads RLE offset additional bits" {
     try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
 }
 
+test "zstd native decoder accepts multiple RLE sequences" {
+    const payload = "a" ** 8;
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{});
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 8, true);
+    try frame.append(std.testing.allocator, (2 << 3) | 1); // Two regenerated RLE literals; each sequence consumes one.
+    try frame.append(std.testing.allocator, 'a');
+    try frame.append(std.testing.allocator, 2); // two sequences using the same RLE-coded symbol values.
+    try frame.append(std.testing.allocator, 0x54); // LL, offset, and ML all use RLE_Mode.
+    try frame.appendSlice(std.testing.allocator, &.{ 1, 0, 0 }); // literal_len=1, repeated offset code 0, match_len=3.
+    try frame.append(std.testing.allocator, 1);
+    var checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, payload)), .little);
+    try frame.appendSlice(std.testing.allocator, &checksum);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const native_decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(native_decoded);
+    try std.testing.expectEqualSlices(u8, payload, native_decoded);
+
+    var into_buffer: [payload.len]u8 = undefined;
+    const written = try decodeNativeFrameInto(frame.items, &into_buffer);
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
+
+    const decoded_len = try decodedRawOrRleFrameSize(frame.items);
+    try std.testing.expectEqual(payload.len, decoded_len);
+}
+
 test "zstd literal-only compressed block rejects malformed sections" {
     var non_zero_sequences: std.ArrayList(u8) = .empty;
     defer non_zero_sequences.deinit(std.testing.allocator);
