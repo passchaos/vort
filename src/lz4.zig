@@ -239,6 +239,22 @@ pub fn decodeConcatenatedFrameAlloc(allocator: std.mem.Allocator, frames: []cons
     return out.toOwnedSlice(allocator);
 }
 
+pub fn decodeConcatenatedFrameAllocLimited(
+    allocator: std.mem.Allocator,
+    frames: []const u8,
+    max_output_len: usize,
+) Error![]u8 {
+    const decoded_len = try concatenatedFrameDecodedSizeLimited(frames, max_output_len);
+    const out = try allocator.alloc(u8, decoded_len);
+    errdefer allocator.free(out);
+    const written = decodeConcatenatedFrameInto(frames, out) catch |err| switch (err) {
+        error.OutputTooSmall => return error.OutputLimitExceeded,
+        else => return err,
+    };
+    if (written != decoded_len) return error.SizeMismatch;
+    return out;
+}
+
 pub fn decodeConcatenatedFrameInto(frames: []const u8, output: []u8) Error!usize {
     var offset: usize = 0;
     var written: usize = 0;
@@ -249,6 +265,7 @@ pub fn decodeConcatenatedFrameInto(frames: []const u8, output: []u8) Error!usize
 }
 
 pub const decodeNativeConcatenatedFrameAlloc = decodeConcatenatedFrameAlloc;
+pub const decodeNativeConcatenatedFrameAllocLimited = decodeConcatenatedFrameAllocLimited;
 pub const decodeNativeConcatenatedFrameInto = decodeConcatenatedFrameInto;
 
 /// Decode an LZ4 frame directly into caller-owned storage. The returned length
@@ -358,6 +375,26 @@ fn skipSkippableFrame(frames: []const u8, offset: *usize) Error!void {
     offset.* += 8;
     if (frames.len - offset.* < skip_len) return error.TruncatedFrame;
     offset.* += skip_len;
+}
+
+fn concatenatedFrameDecodedSizeLimited(frames: []const u8, max_output_len: usize) Error!usize {
+    var offset: usize = 0;
+    var total: usize = 0;
+    while (offset < frames.len) {
+        if (frames.len - offset < 4) return error.TruncatedFrame;
+        const magic = std.mem.readInt(u32, frames[offset..][0..4], .little);
+        if (magic == frame_magic_u32) {
+            const start = offset;
+            const end = try findFrameEnd(frames, &offset);
+            const frame_len = try frameDecodedSizeLimited(frames[start..end], max_output_len - total);
+            total = try checkedAddWithinLimit(total, frame_len, max_output_len);
+        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+            try skipSkippableFrame(frames, &offset);
+        } else {
+            return error.CorruptFrame;
+        }
+    }
+    return total;
 }
 
 const FrameHeader = struct {
@@ -971,6 +1008,14 @@ test "lz4 skippable frame writer composes with concatenated native streams" {
     const decoded = try decodeConcatenatedFrameAlloc(std.testing.allocator, stream.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "firstsecond", decoded);
+
+    const limited_decoded = try decodeConcatenatedFrameAllocLimited(std.testing.allocator, stream.items, "firstsecond".len);
+    defer std.testing.allocator.free(limited_decoded);
+    try std.testing.expectEqualSlices(u8, "firstsecond", limited_decoded);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        decodeConcatenatedFrameAllocLimited(std.testing.allocator, stream.items, "firstsecond".len - 1),
+    );
 
     var into_buffer: ["firstsecond".len]u8 = undefined;
     const written = try decodeNativeConcatenatedFrameInto(stream.items, &into_buffer);
