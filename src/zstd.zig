@@ -120,6 +120,34 @@ pub fn decodeFrameAllocLimited(allocator: std.mem.Allocator, frame: []const u8, 
     return try decodeFrameAllocWithLimit(allocator, frame, max_output_len);
 }
 
+pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
+    const content_size = ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
+    if (content_size == zstd_content_size_error) return error.CorruptFrame;
+    if (content_size != zstd_content_size_unknown) {
+        const decoded_len = try checkedU64ToUsize(content_size);
+        if (output.len < decoded_len) return error.OutputTooSmall;
+        const written = ZSTD_decompress(@ptrCast(output.ptr), output.len, @ptrCast(frame.ptr), frame.len);
+        if (ZSTD_isError(written) != 0) return error.CorruptFrame;
+        if (written != decoded_len) return error.SizeMismatch;
+        return written;
+    }
+
+    const bound = ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
+    if (bound == zstd_content_size_error) return error.UnsupportedZstdFeature;
+    const capacity = try checkedU64ToUsize(bound);
+    const written = ZSTD_decompress(@ptrCast(output.ptr), output.len, @ptrCast(frame.ptr), frame.len);
+    if (ZSTD_isError(written) != 0) {
+        // The bound is intentionally conservative when the frame omits content
+        // size. A caller buffer smaller than the bound might still be large
+        // enough, so only classify an actual libzstd failure as OutputTooSmall
+        // when the advertised upper bound proves the buffer was not generous.
+        if (output.len < capacity) return error.OutputTooSmall;
+        return error.CorruptFrame;
+    }
+    if (written > output.len) return error.OutputTooSmall;
+    return written;
+}
+
 pub fn decodedFrameSize(frame: []const u8) Error!usize {
     return try decodedFrameSizeLimited(frame, std.math.maxInt(usize));
 }
@@ -1825,6 +1853,11 @@ test "zstd lib decoder enforces allocation limits" {
     defer std.testing.allocator.free(known_decoded);
     try std.testing.expectEqualSlices(u8, payload, known_decoded);
     try std.testing.expectError(error.OutputLimitExceeded, decodeFrameAllocLimited(std.testing.allocator, known_size, payload.len - 1));
+    var known_into_buffer: [payload.len]u8 = undefined;
+    const known_written = try decodeFrameInto(known_size, &known_into_buffer);
+    try std.testing.expectEqual(payload.len, known_written);
+    try std.testing.expectEqualSlices(u8, payload, known_into_buffer[0..known_written]);
+    try std.testing.expectError(error.OutputTooSmall, decodeFrameInto(known_size, known_into_buffer[0 .. known_into_buffer.len - 1]));
 
     const no_size = try encodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{ .include_content_size = false });
     defer std.testing.allocator.free(no_size);
@@ -1836,6 +1869,12 @@ test "zstd lib decoder enforces allocation limits" {
     defer std.testing.allocator.free(no_size_decoded);
     try std.testing.expectEqualSlices(u8, payload, no_size_decoded);
     try std.testing.expectError(error.OutputLimitExceeded, decodeFrameAllocLimited(std.testing.allocator, no_size, payload.len - 1));
+    const no_size_into_buffer = try std.testing.allocator.alloc(u8, no_size_bound);
+    defer std.testing.allocator.free(no_size_into_buffer);
+    const no_size_written = try decodeFrameInto(no_size, no_size_into_buffer);
+    try std.testing.expectEqual(payload.len, no_size_written);
+    try std.testing.expectEqualSlices(u8, payload, no_size_into_buffer[0..no_size_written]);
+    try std.testing.expectError(error.OutputTooSmall, decodeFrameInto(no_size, no_size_into_buffer[0 .. payload.len - 1]));
 }
 
 test "zstd raw/RLE frame writer round trips through std decompressor" {
