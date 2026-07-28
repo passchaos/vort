@@ -723,6 +723,11 @@ const RleSequenceSpec = struct {
     bitstream_offset: usize,
 };
 
+const SequenceSymbol = struct {
+    base: usize,
+    additional_bits: u8,
+};
+
 fn parseRleSequenceSpec(block: []const u8, offset: *usize, sequence_count: usize) Error!RleSequenceSpec {
     if (sequence_count == 0) return error.CorruptFrame;
     if (block.len - offset.* < 1) return error.TruncatedFrame;
@@ -751,6 +756,30 @@ fn parseRleSequenceSpec(block: []const u8, offset: *usize, sequence_count: usize
         .offset_base = of_base[of_code],
         .offset_bits = of_bits[of_code],
         .bitstream_offset = bitstream_offset,
+    };
+}
+
+fn defaultLiteralLengthSymbol(state: usize) Error!SequenceSymbol {
+    return switch (state) {
+        // Minimal predefined-table slice: enough to decode the first
+        // interoperable non-RLE sequence fixture. The table-driven shape keeps
+        // later expansion to the full default FSE tables localized.
+        2 => .{ .base = 1, .additional_bits = 0 },
+        else => error.UnsupportedZstdFeature,
+    };
+}
+
+fn defaultOffsetSymbol(state: usize) Error!SequenceSymbol {
+    return switch (state) {
+        0 => .{ .base = 0, .additional_bits = 0 },
+        else => error.UnsupportedZstdFeature,
+    };
+}
+
+fn defaultMatchLengthSymbol(state: usize) Error!SequenceSymbol {
+    return switch (state) {
+        20 => .{ .base = 131, .additional_bits = 7 },
+        else => error.UnsupportedZstdFeature,
     };
 }
 
@@ -806,6 +835,10 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     output: []u8,
     written: *usize,
 ) Error!void {
+    if (try usesPredefinedSequenceMode(block, section.sequence_payload_offset)) {
+        return try decodePredefinedSingleSequenceBlockIntoBuffer(block, section, output, written);
+    }
+
     var offset = section.sequence_payload_offset;
     const spec = try parseRleSequenceSpec(block, &offset, section.sequence_count);
     if (offset != block.len) return error.UnsupportedZstdFeature;
@@ -833,6 +866,10 @@ fn rleSequencesCompressedBlockDecodedSize(
     section: LiteralOnlySection,
     initial_output_len: usize,
 ) Error!usize {
+    if (try usesPredefinedSequenceMode(block, section.sequence_payload_offset)) {
+        return try predefinedSingleSequenceBlockDecodedSize(block, section, initial_output_len);
+    }
+
     var offset = section.sequence_payload_offset;
     const spec = try parseRleSequenceSpec(block, &offset, section.sequence_count);
     if (offset != block.len) return error.UnsupportedZstdFeature;
@@ -861,22 +898,96 @@ fn rleSequencesCompressedBlockDecodedSize(
     return produced;
 }
 
+fn usesPredefinedSequenceMode(block: []const u8, offset: usize) Error!bool {
+    if (offset >= block.len) return error.TruncatedFrame;
+    const mode = block[offset];
+    if ((mode & 0x03) != 0) return error.CorruptFrame;
+    return mode == 0;
+}
+
+const DecodedSequence = struct {
+    literal_len: usize,
+    match_len: usize,
+    match_offset: usize,
+};
+
+fn decodePredefinedSingleSequence(block: []const u8, section: LiteralOnlySection) Error!DecodedSequence {
+    if (section.sequence_count != 1) return error.UnsupportedZstdFeature;
+    var offset = section.sequence_payload_offset;
+    if (offset >= block.len) return error.TruncatedFrame;
+    const mode = block[offset];
+    offset += 1;
+    if (mode != 0) return error.UnsupportedZstdFeature;
+
+    var reader = try ReverseBitReader.init(block[offset..]);
+    const ll_symbol = try defaultLiteralLengthSymbol(try reader.read(6));
+    const of_symbol = try defaultOffsetSymbol(try reader.read(5));
+    const ml_symbol = try defaultMatchLengthSymbol(try reader.read(6));
+
+    var repeated_offsets = initial_repeated_offsets;
+    const match_offset = try readSequenceOffset(&reader, of_symbol.base, of_symbol.additional_bits, ll_symbol.base, &repeated_offsets);
+    const match_len = std.math.add(usize, ml_symbol.base, try reader.read(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
+    const literal_len = std.math.add(usize, ll_symbol.base, try reader.read(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+    try reader.expectEnd();
+    return .{
+        .literal_len = literal_len,
+        .match_len = match_len,
+        .match_offset = match_offset,
+    };
+}
+
+fn decodePredefinedSingleSequenceBlockIntoBuffer(
+    block: []const u8,
+    section: LiteralOnlySection,
+    output: []u8,
+    written: *usize,
+) Error!void {
+    const sequence = try decodePredefinedSingleSequence(block, section);
+    try copyLiteralsFromSection(block, section, 0, output, written, sequence.literal_len);
+    try copyMatchFromOutputBuffer(output, written, sequence.match_offset, sequence.match_len);
+    if (section.regenerated_size < sequence.literal_len) return error.CorruptFrame;
+    try copyLiteralsFromSection(block, section, sequence.literal_len, output, written, section.regenerated_size - sequence.literal_len);
+}
+
+fn predefinedSingleSequenceBlockDecodedSize(
+    block: []const u8,
+    section: LiteralOnlySection,
+    initial_output_len: usize,
+) Error!usize {
+    const sequence = try decodePredefinedSingleSequence(block, section);
+    if (section.regenerated_size < sequence.literal_len) return error.CorruptFrame;
+    const available = std.math.add(usize, initial_output_len, sequence.literal_len) catch return error.IntegerOverflow;
+    if (sequence.match_offset == 0 or sequence.match_offset > available) return error.InvalidMatch;
+    const with_match = std.math.add(usize, sequence.literal_len, sequence.match_len) catch return error.IntegerOverflow;
+    return std.math.add(usize, with_match, section.regenerated_size - sequence.literal_len) catch return error.IntegerOverflow;
+}
+
 fn readRleOffset(reader: *ReverseBitReader, spec: RleSequenceSpec, repeated_offsets: *[3]usize) Error!usize {
-    if (spec.offset_bits > 1) {
-        const offset = std.math.add(usize, spec.offset_base, try reader.read(spec.offset_bits)) catch return error.IntegerOverflow;
+    return try readSequenceOffset(reader, spec.offset_base, spec.offset_bits, spec.literal_base, repeated_offsets);
+}
+
+fn readSequenceOffset(
+    reader: *ReverseBitReader,
+    offset_base: usize,
+    offset_bits: u8,
+    literal_base: usize,
+    repeated_offsets: *[3]usize,
+) Error!usize {
+    if (offset_bits > 1) {
+        const offset = std.math.add(usize, offset_base, try reader.read(offset_bits)) catch return error.IntegerOverflow;
         repeated_offsets.* = .{ offset, repeated_offsets[0], repeated_offsets[1] };
         return offset;
     }
 
-    const literal_base_is_zero = spec.literal_base == 0;
-    if (spec.offset_bits == 0) {
+    const literal_base_is_zero = literal_base == 0;
+    if (offset_bits == 0) {
         const offset = if (literal_base_is_zero) repeated_offsets[1] else repeated_offsets[0];
         repeated_offsets[1] = repeated_offsets[if (literal_base_is_zero) 0 else 1];
         repeated_offsets[0] = offset;
         return offset;
     }
 
-    const raw_base = std.math.add(usize, spec.offset_base, if (literal_base_is_zero) 1 else 0) catch return error.IntegerOverflow;
+    const raw_base = std.math.add(usize, offset_base, if (literal_base_is_zero) 1 else 0) catch return error.IntegerOverflow;
     const raw_offset = std.math.add(
         usize,
         raw_base,
@@ -1566,6 +1677,41 @@ test "zstd native decoder accepts multiple RLE sequences" {
     try std.testing.expectEqual(payload.len, decoded_len);
 }
 
+test "zstd native decoder accepts minimal predefined sequence block" {
+    const payload = "a" ** 132;
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{});
+    try emitBlockHeader(std.testing.allocator, &frame, 2, 8, true);
+    try frame.append(std.testing.allocator, (1 << 3) | 1); // RLE literals: one literal byte before the match.
+    try frame.append(std.testing.allocator, 'a');
+    try frame.append(std.testing.allocator, 1); // one sequence.
+    try frame.append(std.testing.allocator, 0); // LL, offset, and ML all use Predefined_Mode.
+    // Reverse bitstream layout: LL state=2, OF state=0, ML state=20, then
+    // seven zero ML extra bits and the end mark. This is intentionally the
+    // smallest predefined-table slice Vort recognizes before full FSE support.
+    try frame.appendSlice(std.testing.allocator, &.{ 0x00, 0x0a, 0x08, 0x01 });
+    var checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, payload)), .little);
+    try frame.appendSlice(std.testing.allocator, &checksum);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const native_decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(native_decoded);
+    try std.testing.expectEqualSlices(u8, payload, native_decoded);
+
+    var into_buffer: [payload.len]u8 = undefined;
+    const written = try decodeNativeFrameInto(frame.items, &into_buffer);
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
+
+    const decoded_len = try decodedRawOrRleFrameSize(frame.items);
+    try std.testing.expectEqual(payload.len, decoded_len);
+}
+
 test "zstd literal-only compressed block rejects malformed sections" {
     var non_zero_sequences: std.ArrayList(u8) = .empty;
     defer non_zero_sequences.deinit(std.testing.allocator);
@@ -1573,7 +1719,7 @@ test "zstd literal-only compressed block rejects malformed sections" {
     try emitBlockHeader(std.testing.allocator, &non_zero_sequences, 2, 6, true);
     try non_zero_sequences.append(std.testing.allocator, 3 << 3);
     try non_zero_sequences.appendSlice(std.testing.allocator, "abc");
-    try non_zero_sequences.appendSlice(std.testing.allocator, &.{ 1, 0 }); // one sequence, predefined mode byte
+    try non_zero_sequences.appendSlice(std.testing.allocator, &.{ 1, 0x40 }); // one sequence, unsupported mixed mode byte
     var checksum: [4]u8 = undefined;
     std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, "abc")), .little);
     try non_zero_sequences.appendSlice(std.testing.allocator, &checksum);
