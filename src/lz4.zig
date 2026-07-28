@@ -196,7 +196,24 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
     return out.toOwnedSlice(allocator);
 }
 
+pub fn decodeFrameAllocLimited(
+    allocator: std.mem.Allocator,
+    frame: []const u8,
+    max_output_len: usize,
+) Error![]u8 {
+    const decoded_len = try frameDecodedSizeLimited(frame, max_output_len);
+    const out = try allocator.alloc(u8, decoded_len);
+    errdefer allocator.free(out);
+    const written = decodeFrameInto(frame, out) catch |err| switch (err) {
+        error.OutputTooSmall => return error.OutputLimitExceeded,
+        else => return err,
+    };
+    if (written != decoded_len) return error.SizeMismatch;
+    return out;
+}
+
 pub const decodeNativeFrameAlloc = decodeFrameAlloc;
+pub const decodeNativeFrameAllocLimited = decodeFrameAllocLimited;
 
 /// Decode an LZ4 frame directly into caller-owned storage. The returned length
 /// is the number of bytes written. This path shares the strict frame metadata,
@@ -300,6 +317,67 @@ fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
         .content_checksum = (flg & 0x04) != 0,
         .expected_content_size = expected_content_size,
     };
+}
+
+fn frameDecodedSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {
+    const header = try parseFrameHeader(frame);
+    var offset = header.payload_offset;
+    var total: usize = 0;
+    while (true) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        const block_header = std.mem.readInt(u32, frame[offset..][0..4], .little);
+        offset += 4;
+        if (block_header == 0) break;
+        const uncompressed_block = (block_header & 0x8000_0000) != 0;
+        const block_len: usize = @intCast(block_header & 0x7fff_ffff);
+        if (block_len > header.block_size_max) return error.CorruptFrame;
+        if (frame.len - offset < block_len) return error.TruncatedFrame;
+        const block = frame[offset..][0..block_len];
+        offset += block_len;
+
+        if (uncompressed_block) {
+            total = try checkedAddWithinLimit(total, block_len, max_output_len);
+        } else {
+            total = try compressedBlockDecodedSizeLimited(block, total, max_output_len);
+        }
+
+        if (header.block_checksum) {
+            if (frame.len - offset < 4) return error.TruncatedFrame;
+            offset += 4;
+        }
+    }
+
+    if (header.expected_content_size) |size| {
+        if (total != size) return error.SizeMismatch;
+    }
+    if (header.content_checksum) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        offset += 4;
+    }
+    if (offset != frame.len) return error.TrailingData;
+    return total;
+}
+
+fn compressedBlockDecodedSizeLimited(block: []const u8, initial_len: usize, max_output_len: usize) Error!usize {
+    var offset: usize = 0;
+    var total = initial_len;
+    while (offset < block.len) {
+        const token = block[offset];
+        offset += 1;
+        var literal_len: usize = token >> 4;
+        if (literal_len == 15) literal_len = try checkedAdd(literal_len, try readLengthExtension(block, &offset));
+        if (block.len - offset < literal_len) return error.TruncatedFrame;
+        total = try checkedAddWithinLimit(total, literal_len, max_output_len);
+        offset += literal_len;
+        if (offset == block.len) break;
+
+        if (block.len - offset < 2) return error.TruncatedFrame;
+        offset += 2;
+        var match_len: usize = (token & 0x0f) + 4;
+        if ((token & 0x0f) == 15) match_len = try checkedAdd(match_len, try readLengthExtension(block, &offset));
+        total = try checkedAddWithinLimit(total, match_len, max_output_len);
+    }
+    return total;
 }
 
 fn descriptorChecksum(descriptor: []const u8) u8 {
@@ -711,6 +789,12 @@ fn checkedAdd(a: usize, b: usize) Error!usize {
     return std.math.add(usize, a, b) catch return error.IntegerOverflow;
 }
 
+fn checkedAddWithinLimit(current: usize, additional: usize, max: usize) Error!usize {
+    const next = std.math.add(usize, current, additional) catch return error.IntegerOverflow;
+    if (next > max) return error.OutputLimitExceeded;
+    return next;
+}
+
 fn checkedU64ToUsize(value: u64) Error!usize {
     return std.math.cast(usize, value) orelse error.IntegerOverflow;
 }
@@ -727,6 +811,10 @@ test "lz4 lib frame encoder round trips and compresses repetitive payloads" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, repeated, decoded);
+    const limited_decoded = try decodeFrameAllocLimited(std.testing.allocator, encoded, repeated.len);
+    defer std.testing.allocator.free(limited_decoded);
+    try std.testing.expectEqualSlices(u8, repeated, limited_decoded);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeFrameAllocLimited(std.testing.allocator, encoded, repeated.len - 1));
     var into_buffer: [repeated.len]u8 = undefined;
     const into_written = try decodeFrameInto(encoded, &into_buffer);
     try std.testing.expectEqual(repeated.len, into_written);
