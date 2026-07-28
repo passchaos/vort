@@ -78,6 +78,22 @@ pub fn decodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, frame: []const u8)
     return out.toOwnedSlice(allocator);
 }
 
+pub fn decodeRawOrRleFrameAllocLimited(
+    allocator: std.mem.Allocator,
+    frame: []const u8,
+    max_output_len: usize,
+) Error![]u8 {
+    const decoded_len = try rawOrRleDecodedSizeLimited(frame, max_output_len);
+    const out = try allocator.alloc(u8, decoded_len);
+    errdefer allocator.free(out);
+    const written = decodeRawOrRleFrameInto(frame, out) catch |err| switch (err) {
+        error.OutputTooSmall => return error.OutputLimitExceeded,
+        else => return err,
+    };
+    if (written != decoded_len) return error.SizeMismatch;
+    return out;
+}
+
 /// Decode the raw/RLE Zstandard subset directly into caller-owned storage.
 /// The returned length is the number of bytes written across all concatenated
 /// non-skippable frames. This mirrors the allocator-returning fallback but lets
@@ -106,6 +122,7 @@ pub fn decodeRawOrRleFrameInto(frame: []const u8, output: []u8) Error!usize {
 }
 
 pub const decodeNativeFrameAlloc = decodeRawOrRleFrameAlloc;
+pub const decodeNativeFrameAllocLimited = decodeRawOrRleFrameAllocLimited;
 pub const decodeNativeFrameInto = decodeRawOrRleFrameInto;
 
 /// Compress a complete Zstandard frame using the reference-compatible libzstd
@@ -312,6 +329,69 @@ fn decodeRawOrRleZstandardFrameIntoBuffer(
     }
 }
 
+fn rawOrRleDecodedSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {
+    var offset: usize = 0;
+    var total: usize = 0;
+    while (offset < frame.len) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        const magic = std.mem.readInt(u32, frame[offset..][0..4], .little);
+        offset += 4;
+        if (magic == frame_magic_u32) {
+            const header = try parseRawOrRleFrameHeader(frame, &offset);
+            const frame_start = total;
+            while (true) {
+                if (frame.len - offset < 3) return error.TruncatedFrame;
+                const block_header = std.mem.readInt(u24, frame[offset..][0..3], .little);
+                offset += 3;
+                const last = (block_header & 0x1) != 0;
+                const block_type = (block_header >> 1) & 0x3;
+                const block_len: usize = @intCast(block_header >> 3);
+                if (block_len > header.block_size_max) return error.CorruptFrame;
+
+                switch (block_type) {
+                    0 => {
+                        if (frame.len - offset < block_len) return error.TruncatedFrame;
+                        offset += block_len;
+                    },
+                    1 => {
+                        if (block_len == 0) return error.CorruptFrame;
+                        if (frame.len - offset < 1) return error.TruncatedFrame;
+                        offset += 1;
+                    },
+                    2 => return error.UnsupportedZstdFeature,
+                    else => return error.CorruptFrame,
+                }
+                total = try checkedAddWithinLimit(total, block_len, max_output_len);
+                if (last) break;
+            }
+
+            const frame_decoded_len = total - frame_start;
+            if (header.content_size) |size| {
+                if (try checkedUsizeToU64(frame_decoded_len) != size) return error.SizeMismatch;
+            }
+            if (header.has_checksum) {
+                if (frame.len - offset < 4) return error.TruncatedFrame;
+                offset += 4;
+            }
+        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+            if (frame.len - offset < 4) return error.TruncatedFrame;
+            const skip_len: usize = @intCast(std.mem.readInt(u32, frame[offset..][0..4], .little));
+            offset += 4;
+            if (frame.len - offset < skip_len) return error.TruncatedFrame;
+            offset += skip_len;
+        } else {
+            return error.InvalidMagic;
+        }
+    }
+    return total;
+}
+
+fn checkedAddWithinLimit(current: usize, additional: usize, max: usize) Error!usize {
+    const next = std.math.add(usize, current, additional) catch return error.IntegerOverflow;
+    if (next > max) return error.OutputLimitExceeded;
+    return next;
+}
+
 fn parseRawOrRleFrameHeader(frame: []const u8, offset: *usize) Error!RawOrRleFrameHeader {
     if (frame.len - offset.* < 1) return error.TruncatedFrame;
     const descriptor = frame[offset.*];
@@ -465,6 +545,13 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     const native_decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(native_decoded);
     try std.testing.expectEqualSlices(u8, payload, native_decoded);
+    const limited_decoded = try decodeRawOrRleFrameAllocLimited(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(limited_decoded);
+    try std.testing.expectEqualSlices(u8, payload, limited_decoded);
+    try std.testing.expectError(
+        error.OutputLimitExceeded,
+        decodeRawOrRleFrameAllocLimited(std.testing.allocator, encoded, payload.len - 1),
+    );
     var into_buffer: [payload.len]u8 = undefined;
     const into_written = try decodeRawOrRleFrameInto(encoded, &into_buffer);
     try std.testing.expectEqual(payload.len, into_written);

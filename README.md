@@ -16,7 +16,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   decode/fallback encode with frame/block checksum validation and caller-owned
   decode-into APIs,
   libzstd-backed Zstandard frame encode/decode with a
-  dependency-free raw/RLE fallback and caller-owned decode-into API, used by downstream
+  dependency-free raw/RLE fallback, bounded allocation, and caller-owned
+  decode-into API, used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;

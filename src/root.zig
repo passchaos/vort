@@ -52,9 +52,11 @@ pub const zstdEncodeFrameWithLevelAlloc = zstd.encodeFrameWithLevelAlloc;
 pub const zstdDecodeFrameAlloc = zstd.decodeFrameAlloc;
 pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
 pub const zstdDecodeRawOrRleFrameAlloc = zstd.decodeRawOrRleFrameAlloc;
+pub const zstdDecodeRawOrRleFrameAllocLimited = zstd.decodeRawOrRleFrameAllocLimited;
 pub const zstdDecodeRawOrRleFrameInto = zstd.decodeRawOrRleFrameInto;
 pub const zstdEncodeNativeFrameAlloc = zstd.encodeNativeFrameAlloc;
 pub const zstdDecodeNativeFrameAlloc = zstd.decodeNativeFrameAlloc;
+pub const zstdDecodeNativeFrameAllocLimited = zstd.decodeNativeFrameAllocLimited;
 pub const zstdDecodeNativeFrameInto = zstd.decodeNativeFrameInto;
 
 pub const Error = core.Error;
@@ -612,9 +614,11 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeFrameAlloc;
     _ = zstdEncodeRawOrRleFrameAlloc;
     _ = zstdDecodeRawOrRleFrameAlloc;
+    _ = zstdDecodeRawOrRleFrameAllocLimited;
     _ = zstdDecodeRawOrRleFrameInto;
     _ = zstdEncodeNativeFrameAlloc;
     _ = zstdDecodeNativeFrameAlloc;
+    _ = zstdDecodeNativeFrameAllocLimited;
     _ = zstdDecodeNativeFrameInto;
 }
 
