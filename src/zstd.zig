@@ -1466,22 +1466,32 @@ fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usiz
     const of_mode: SymbolMode = @enumFromInt((mode >> 4) & 0x03);
     const ml_mode: SymbolMode = @enumFromInt((mode >> 2) & 0x03);
 
-    const literal_rle = if (ll_mode == .rle) try readRleSymbolCode(block, offset, &ll_base, &ll_bits) else null;
-    const offset_rle = if (of_mode == .rle) try readRleSymbolCode(block, offset, &of_base, &of_bits) else null;
-    const match_rle = if (ml_mode == .rle) try readRleSymbolCode(block, offset, &ml_base, &ml_bits) else null;
+    var literal_rle: ?SequenceSymbol = null;
+    var offset_rle: ?SequenceSymbol = null;
+    var match_rle: ?SequenceSymbol = null;
+    var literal_fse: SequenceFseTable = .{};
+    var offset_fse: SequenceFseTable = .{};
+    var match_fse: SequenceFseTable = .{};
 
-    const literal_fse = if (ll_mode == .compressed)
-        try readFseSequenceTable(block, offset, &ll_base, &ll_bits, sequence_table_symbol_count_max.literal, sequence_table_accuracy_log_max.literal)
-    else
-        SequenceFseTable{};
-    const offset_fse = if (of_mode == .compressed)
-        try readFseSequenceTable(block, offset, &of_base, &of_bits, sequence_table_symbol_count_max.offset, sequence_table_accuracy_log_max.offset)
-    else
-        SequenceFseTable{};
-    const match_fse = if (ml_mode == .compressed)
-        try readFseSequenceTable(block, offset, &ml_base, &ml_bits, sequence_table_symbol_count_max.match, sequence_table_accuracy_log_max.match)
-    else
-        SequenceFseTable{};
+    // Sequence table payloads are serialized in LL, OF, ML order. Each table's
+    // mode decides whether the next bytes are a one-byte RLE symbol or a full
+    // FSE table. Reading all RLE bytes before all FSE tables corrupts mixed
+    // mode blocks such as LL=FSE, OF=FSE, ML=RLE.
+    switch (ll_mode) {
+        .rle => literal_rle = try readRleSymbolCode(block, offset, &ll_base, &ll_bits),
+        .compressed => literal_fse = try readFseSequenceTable(block, offset, &ll_base, &ll_bits, sequence_table_symbol_count_max.literal, sequence_table_accuracy_log_max.literal),
+        .predefined, .repeat => {},
+    }
+    switch (of_mode) {
+        .rle => offset_rle = try readRleSymbolCode(block, offset, &of_base, &of_bits),
+        .compressed => offset_fse = try readFseSequenceTable(block, offset, &of_base, &of_bits, sequence_table_symbol_count_max.offset, sequence_table_accuracy_log_max.offset),
+        .predefined, .repeat => {},
+    }
+    switch (ml_mode) {
+        .rle => match_rle = try readRleSymbolCode(block, offset, &ml_base, &ml_bits),
+        .compressed => match_fse = try readFseSequenceTable(block, offset, &ml_base, &ml_bits, sequence_table_symbol_count_max.match, sequence_table_accuracy_log_max.match),
+        .predefined, .repeat => {},
+    }
 
     const bitstream_offset = offset.*;
     if (bitstream_offset >= block.len) return error.TruncatedFrame;
@@ -3277,6 +3287,23 @@ test "zstd native decoder streams many Huffman literal runs without replay" {
     defer std.testing.allocator.free(encoded);
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+}
+
+test "zstd native decoder reads mixed FSE tables in serialized order" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    try payload.ensureTotalCapacity(std.testing.allocator, 200_000);
+    var rng = std.Random.DefaultPrng.init(31);
+    for (0..200_000) |_| {
+        try payload.append(std.testing.allocator, @intCast(rng.random().uintLessThan(u8, 95) + 32));
+    }
+
+    const encoded = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 19);
+    defer std.testing.allocator.free(encoded);
+
+    const decoded = try decodeNativeFrameAllocLimited(std.testing.allocator, encoded, payload.items.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
 }
