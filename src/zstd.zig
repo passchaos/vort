@@ -120,6 +120,24 @@ pub fn decodeFrameAllocLimited(allocator: std.mem.Allocator, frame: []const u8, 
     return try decodeFrameAllocWithLimit(allocator, frame, max_output_len);
 }
 
+pub fn decodedFrameSize(frame: []const u8) Error!usize {
+    return try decodedFrameSizeLimited(frame, std.math.maxInt(usize));
+}
+
+pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {
+    const content_size = ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
+    if (content_size == zstd_content_size_error) return error.CorruptFrame;
+    const decoded_len = if (content_size != zstd_content_size_unknown)
+        try checkedU64ToUsize(content_size)
+    else blk: {
+        const bound = ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
+        if (bound == zstd_content_size_error) return error.UnsupportedZstdFeature;
+        break :blk try checkedU64ToUsize(bound);
+    };
+    if (decoded_len > max_output_len) return error.OutputLimitExceeded;
+    return decoded_len;
+}
+
 fn decodeFrameAllocWithLimit(allocator: std.mem.Allocator, frame: []const u8, max_output_len: ?usize) Error![]u8 {
     const content_size = ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
     if (content_size == zstd_content_size_error) return error.CorruptFrame;
@@ -1800,6 +1818,9 @@ test "zstd lib decoder enforces allocation limits" {
 
     const known_size = try encodeFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(known_size);
+    try std.testing.expectEqual(payload.len, try decodedFrameSize(known_size));
+    try std.testing.expectEqual(payload.len, try decodedFrameSizeLimited(known_size, payload.len));
+    try std.testing.expectError(error.OutputLimitExceeded, decodedFrameSizeLimited(known_size, payload.len - 1));
     const known_decoded = try decodeFrameAllocLimited(std.testing.allocator, known_size, payload.len);
     defer std.testing.allocator.free(known_decoded);
     try std.testing.expectEqualSlices(u8, payload, known_decoded);
@@ -1807,6 +1828,10 @@ test "zstd lib decoder enforces allocation limits" {
 
     const no_size = try encodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{ .include_content_size = false });
     defer std.testing.allocator.free(no_size);
+    const no_size_bound = try decodedFrameSize(no_size);
+    try std.testing.expect(no_size_bound >= payload.len);
+    try std.testing.expectEqual(no_size_bound, try decodedFrameSizeLimited(no_size, no_size_bound));
+    try std.testing.expectError(error.OutputLimitExceeded, decodedFrameSizeLimited(no_size, no_size_bound - 1));
     const no_size_decoded = try decodeFrameAllocLimited(std.testing.allocator, no_size, payload.len);
     defer std.testing.allocator.free(no_size_decoded);
     try std.testing.expectEqualSlices(u8, payload, no_size_decoded);

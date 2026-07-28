@@ -75,6 +75,8 @@ pub const zstdEncodeFrameWithOptionsAlloc = zstd.encodeFrameWithOptionsAlloc;
 pub const zstdEncodeFrameWithLevelAndOptionsAlloc = zstd.encodeFrameWithLevelAndOptionsAlloc;
 pub const zstdDecodeFrameAlloc = zstd.decodeFrameAlloc;
 pub const zstdDecodeFrameAllocLimited = zstd.decodeFrameAllocLimited;
+pub const zstdDecodedFrameSize = zstd.decodedFrameSize;
+pub const zstdDecodedFrameSizeLimited = zstd.decodedFrameSizeLimited;
 pub const ZstdLibFrameOptions = zstd.LibFrameOptions;
 pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
 pub const zstdEncodeRawOrRleFrameWithOptionsAlloc = zstd.encodeRawOrRleFrameWithOptionsAlloc;
@@ -671,6 +673,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodeFrameWithLevelAndOptionsAlloc;
     _ = zstdDecodeFrameAlloc;
     _ = zstdDecodeFrameAllocLimited;
+    _ = zstdDecodedFrameSize;
+    _ = zstdDecodedFrameSizeLimited;
     _ = ZstdLibFrameOptions;
     _ = zstdEncodeRawOrRleFrameAlloc;
     _ = zstdEncodeRawOrRleFrameWithOptionsAlloc;
@@ -724,6 +728,10 @@ test "root zstd lib frame options round trip" {
     const decoded = try zstdDecodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+    const bound = try zstdDecodedFrameSize(encoded);
+    try std.testing.expect(bound >= payload.len);
+    try std.testing.expectEqual(bound, try zstdDecodedFrameSizeLimited(encoded, bound));
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedFrameSizeLimited(encoded, bound - 1));
 }
 
 test "root exports chunked compatibility decode helpers" {
