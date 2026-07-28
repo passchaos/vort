@@ -1686,6 +1686,27 @@ const SemanticDynamicDecoder = struct {
         return true;
     }
 
+    fn initWithDynamicDistanceDecoder(
+        self: *Self,
+        literal_table: *const huffman.HuffmanTable(286),
+        dist_decoder: *const DynamicDistanceDecoder,
+    ) bool {
+        if (!treeIsComplete(286, literal_table)) return false;
+        const distance_table_ = switch (dist_decoder.*) {
+            .single => return false,
+            .fast8 => |*decoder| &decoder.table,
+        };
+
+        self.* = Self{
+            .distance = @splat(0),
+            .compact_literal = literal_table,
+            .compact_distance = distance_table_,
+        };
+        if (!self.buildLiteralTable(literal_table)) return false;
+        if (!self.buildDistanceTable(distance_table_)) return false;
+        return true;
+    }
+
     fn initSingleDistance(self: *Self, literal_table: *const huffman.HuffmanTable(286), distance_table_: *const huffman.HuffmanTable(30)) bool {
         if (!treeIsComplete(286, literal_table) or distance_table_.len != 1) return false;
         const entry = distance_table_.entries[0];
@@ -2639,9 +2660,8 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
                     try decodeCompressedBlockIntoReader(reader, output, &out_offset, dictionary, &lit_decoder, &dist_decoder);
                 } else if (comptime Reader == bitstream.BufferedBitReader) {
                     if (dictionary.len == 0 and !slicesOverlapForSemanticDecode(reader.input, output)) {
-                        const semantic_dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                         var semantic_decoder: SemanticDynamicDecoder = undefined;
-                        if (semantic_decoder.init(&lit_table, &semantic_dist_table)) {
+                        if (semantic_decoder.initWithDynamicDistanceDecoder(&lit_table, &dist_decoder)) {
                             // Deep distance alphabets in the PNG corpus are dominated by
                             // non-overlapping matches (for example kodim17). Use a separate
                             // semantic loop for that shape so the common copy case can be
@@ -2652,8 +2672,16 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
                             else
                                 try decodeSemanticDynamicBlockIntoBufferedReader(reader, output, out_offset, &semantic_decoder);
                         } else {
-                            const lit_decoder = FusedDynamicLiteralDecoder.init(&lit_table);
-                            try decodeFusedDynamicBlockIntoBufferedReader(reader, output, &out_offset, &lit_decoder, &dist_decoder);
+                            const semantic_dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+                            if (semantic_decoder.init(&lit_table, &semantic_dist_table)) {
+                                out_offset = if (parsed.distance_max_bits >= 12)
+                                    try decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline(reader, output, out_offset, &semantic_decoder)
+                                else
+                                    try decodeSemanticDynamicBlockIntoBufferedReader(reader, output, out_offset, &semantic_decoder);
+                            } else {
+                                const lit_decoder = FusedDynamicLiteralDecoder.init(&lit_table);
+                                try decodeFusedDynamicBlockIntoBufferedReader(reader, output, &out_offset, &lit_decoder, &dist_decoder);
+                            }
                         }
                     } else {
                         const lit_decoder = huffman.FastDecoder(286, 11).init(lit_table);
