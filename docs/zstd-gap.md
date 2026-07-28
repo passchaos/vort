@@ -117,8 +117,9 @@ Current interpretation:
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug
   classes visible without requiring a full external corpus checkout. The probe
-  also accepts repeated `--path` arguments with an optional `--limit` for focused
-  file payloads when investigating real corpus failures.
+  also accepts repeated `--path` arguments or bounded recursive `--dir`
+  discovery with an optional `--limit` for focused file payloads when
+  investigating real corpus failures.
 
 Recommended next comparison steps:
 
