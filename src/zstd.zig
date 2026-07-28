@@ -182,6 +182,28 @@ pub fn encodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, input: []const u8)
     return out.toOwnedSlice(allocator);
 }
 
+pub fn encodeLiteralOnlyFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try emitFrameHeader(allocator, &out, try checkedUsizeToU64(input.len));
+
+    var offset: usize = 0;
+    if (input.len == 0) {
+        try emitLiteralOnlyCompressedBlock(allocator, &out, "", true);
+    } else {
+        while (offset < input.len) {
+            const block_end = @min(input.len, offset + std.compress.zstd.block_size_max);
+            try emitLiteralOnlyCompressedBlock(allocator, &out, input[offset..block_end], block_end == input.len);
+            offset = block_end;
+        }
+    }
+
+    var checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &checksum, @truncate(std.hash.XxHash64.hash(0, input)), .little);
+    try out.appendSlice(allocator, &checksum);
+    return out.toOwnedSlice(allocator);
+}
+
 pub const encodeNativeFrameAlloc = encodeRawOrRleFrameAlloc;
 
 fn emitFrameHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), content_len: u64) Error!void {
@@ -664,6 +686,44 @@ fn emitBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []con
     return try emitRawBlock(allocator, out, block, last);
 }
 
+fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    if (rleByte(block)) |byte| {
+        try emitLiteralsHeader(allocator, &payload, .rle, block.len);
+        try payload.append(allocator, byte);
+    } else {
+        try emitLiteralsHeader(allocator, &payload, .raw, block.len);
+        try payload.appendSlice(allocator, block);
+    }
+    try payload.append(allocator, 0); // sequence_count=0: the compressed block is literals-only.
+    try emitBlockHeader(allocator, out, 2, payload.items.len, last);
+    try out.appendSlice(allocator, payload.items);
+}
+
+fn emitLiteralsHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), kind: LiteralsKind, regenerated_size: usize) Error!void {
+    if (regenerated_size > std.math.maxInt(u20)) return error.IntegerOverflow;
+    const kind_bits: u8 = switch (kind) {
+        .raw => 0,
+        .rle => 1,
+    };
+    if (regenerated_size <= 31) {
+        try out.append(allocator, kind_bits | @as(u8, @intCast(regenerated_size << 3)));
+    } else if (regenerated_size <= 4095) {
+        const low: u8 = @intCast(regenerated_size & 0x0f);
+        const high: u8 = @intCast(regenerated_size >> 4);
+        try out.append(allocator, kind_bits | (1 << 2) | (low << 4));
+        try out.append(allocator, high);
+    } else {
+        const low: u8 = @intCast(regenerated_size & 0x0f);
+        const mid: u8 = @intCast((regenerated_size >> 4) & 0xff);
+        const high: u8 = @intCast(regenerated_size >> 12);
+        try out.append(allocator, kind_bits | (3 << 2) | (low << 4));
+        try out.append(allocator, mid);
+        try out.append(allocator, high);
+    }
+}
+
 fn emitRawBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
     try emitBlockHeader(allocator, out, 0, block.len, last);
     try out.appendSlice(allocator, block);
@@ -823,6 +883,53 @@ test "zstd native decoder accepts literal-only compressed blocks" {
     defer std.testing.allocator.free(limited);
     try std.testing.expectEqualSlices(u8, "abc", limited);
     try std.testing.expectError(error.OutputLimitExceeded, decodeNativeFrameAllocLimited(std.testing.allocator, frame.items, 2));
+}
+
+test "zstd literal-only frame writer round trips through std and native decoders" {
+    const payload = "literal-only zstd payload";
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    try std.testing.expectEqual(@as(u24, 2), (block_header >> 1) & 0x3);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const native_decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(native_decoded);
+    try std.testing.expectEqualSlices(u8, payload, native_decoded);
+
+    var into_buffer: [payload.len]u8 = undefined;
+    const written = try decodeNativeFrameInto(encoded, &into_buffer);
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
+
+    const limited = try decodeNativeFrameAllocLimited(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(limited);
+    try std.testing.expectEqualSlices(u8, payload, limited);
+}
+
+test "zstd literal-only writer uses RLE literals for repeated blocks" {
+    const payload = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    try std.testing.expectEqual(@as(u24, 2), (block_header >> 1) & 0x3);
+    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len]);
+    try std.testing.expectEqual(LiteralsKind.rle, section.kind);
+
+    var into_buffer: [payload.len]u8 = undefined;
+    const written = try decodeNativeFrameInto(encoded, &into_buffer);
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
 }
 
 test "zstd raw/RLE native decoder rejects corrupt frames" {

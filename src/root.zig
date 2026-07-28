@@ -53,6 +53,7 @@ pub const zstdEncodeFrameAlloc = zstd.encodeFrameAlloc;
 pub const zstdEncodeFrameWithLevelAlloc = zstd.encodeFrameWithLevelAlloc;
 pub const zstdDecodeFrameAlloc = zstd.decodeFrameAlloc;
 pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
+pub const zstdEncodeLiteralOnlyFrameAlloc = zstd.encodeLiteralOnlyFrameAlloc;
 pub const zstdDecodeRawOrRleFrameAlloc = zstd.decodeRawOrRleFrameAlloc;
 pub const zstdDecodeRawOrRleFrameAllocLimited = zstd.decodeRawOrRleFrameAllocLimited;
 pub const zstdDecodeRawOrRleFrameInto = zstd.decodeRawOrRleFrameInto;
@@ -617,6 +618,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodeFrameWithLevelAlloc;
     _ = zstdDecodeFrameAlloc;
     _ = zstdEncodeRawOrRleFrameAlloc;
+    _ = zstdEncodeLiteralOnlyFrameAlloc;
     _ = zstdDecodeRawOrRleFrameAlloc;
     _ = zstdDecodeRawOrRleFrameAllocLimited;
     _ = zstdDecodeRawOrRleFrameInto;
