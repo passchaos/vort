@@ -110,14 +110,17 @@ def main() -> int:
     for payload in external_cases:
         assert_vort_native_decode(zstd_compress(payload, 1), payload)
 
-    # Keep a real high-compression frame in the smoke even before native Huffman
-    # literals are implemented. It should remain a clear UnsupportedZstdFeature
-    # boundary rather than being misdecoded by the partial sequence machinery.
-    unsupported_cases = [
+    # This high-compression case carries a single-stream Huffman literals
+    # section followed by predefined sequence decoding. It used to mark the
+    # native decoder's Huffman boundary; keep it as a real system-zstd smoke now
+    # that the first Huffman literal slice is supported.
+    huffman_cases = [
         (b'{"key":"value","number":123,"array":[1,2,3],"text":"abcdefg"}\n' * 100, 19),
     ]
-    for payload, level in unsupported_cases:
-        assert_vort_native_decode_error(zstd_compress(payload, level), len(payload), "UnsupportedZstdFeature")
+    for payload, level in huffman_cases:
+        assert_vort_native_decode(zstd_compress(payload, level), payload)
+
+    unsupported_cases = []
 
     with tempfile.TemporaryDirectory(prefix="vort-zstd-native-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
@@ -133,7 +136,7 @@ def main() -> int:
 
     print(
         f"zstd_native_cli_diff_ok cases={len(cases)} external_cases={len(external_cases)} "
-        f"unsupported_cases={len(unsupported_cases)} zstd={pathlib.Path(ZSTD).name}"
+        f"huffman_cases={len(huffman_cases)} unsupported_cases={len(unsupported_cases)} zstd={pathlib.Path(ZSTD).name}"
     )
     return 0
 
