@@ -3751,24 +3751,80 @@ noinline fn decodeSemanticDynamicBlockIntoLinearMode(
     }
 
     storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+    // Keep the boundary/tail path on the same semantic primary tables as the
+    // hot loop. The older compact Huffman-table fallback was simple but left
+    // dynamic-block tails and short PNG rows on a slower decoder shape.
     while (true) {
-        const symbol = try decoder.compact_literal.decodeValue(reader);
-        if (symbol < 256) {
-            if (out_pos == output.len) return error.OutputTooSmall;
-            output[out_pos] = @truncate(symbol);
-            out_pos += 1;
-        } else if (symbol == 256) {
-            return out_pos;
-        } else if (symbol <= 285) {
-            const length = try decodeLength(symbol, reader);
-            const distance_symbol = try decoder.compact_distance.decodeValue(reader);
-            const distance = try decodeDistance(distance_symbol, reader);
-            try copyMatchAt(output, out_pos, length, distance);
-            out_pos += length;
-        } else {
-            return error.InvalidHuffmanCode;
+        switch (try decodeSemanticTailSymbol(reader, decoder)) {
+            .literal => |literal| {
+                if (out_pos == output.len) return error.OutputTooSmall;
+                output[out_pos] = literal;
+                out_pos += 1;
+            },
+            .double_literal => |literal_pair| {
+                if (output.len - out_pos < 2) return error.OutputTooSmall;
+                output[out_pos] = literal_pair[0];
+                output[out_pos + 1] = literal_pair[1];
+                out_pos += 2;
+            },
+            .length => |length_info| {
+                const length = length_info.base + try readDeflateExtraBits(reader, length_info.extra_bits);
+                const distance_symbol = try decoder.compact_distance.decodeValue(reader);
+                const distance = try decodeDistance(distance_symbol, reader);
+                try copyMatchAt(output, out_pos, length, distance);
+                out_pos += length;
+            },
+            .eob => return out_pos,
         }
     }
+}
+
+const SemanticTailSymbol = union(enum) {
+    literal: u8,
+    double_literal: [2]u8,
+    length: struct { base: usize, extra_bits: u6 },
+    eob,
+};
+
+fn decodeSemanticTailSymbol(reader: *bitstream.BufferedBitReader, decoder: *const SemanticDynamicDecoder) Error!SemanticTailSymbol {
+    const peek = reader.peekBitsPadded(u16, SemanticDynamicDecoder.literal_lookup_bits);
+    const entry = decoder.literal[peek];
+    var entry_bits: u6 = @truncate(entry);
+    if ((entry & SemanticDynamicDecoder.literal_flag) != 0) {
+        const literal_count: usize = @intCast((entry >> 8) & 0xf);
+        if (!reader.hasStagedBits(entry_bits)) return error.TruncatedFrame;
+        reader.advanceBitsStagedAssumeAvailable(entry_bits);
+        if (literal_count == 2) return .{ .double_literal = .{ @truncate(entry >> 16), @truncate(entry >> 24) } };
+        return .{ .literal = @truncate(entry >> 16) };
+    }
+
+    if ((entry & SemanticDynamicDecoder.exceptional_flag) != 0 and (entry & SemanticDynamicDecoder.secondary_flag) != 0) {
+        const start: usize = @intCast(entry >> 16);
+        const mask: usize = @intCast(entry & 0xff);
+        const secondary_index = start + (@as(usize, @intCast(reader.peekBitsPadded(u16, 15) >> SemanticDynamicDecoder.literal_lookup_bits)) & mask);
+        if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
+        const secondary = decoder.literal_secondary[secondary_index];
+        const symbol: u16 = secondary >> 4;
+        entry_bits = @truncate(secondary & 0x0f);
+        if (!reader.hasStagedBits(entry_bits)) return error.TruncatedFrame;
+        reader.advanceBitsStagedAssumeAvailable(entry_bits);
+        if (symbol < 256) return .{ .literal = @truncate(symbol) };
+        if (symbol == 256) return .eob;
+        if (symbol > 285) return error.InvalidHuffmanCode;
+        const metadata = length_table[symbol - 257];
+        return .{ .length = .{ .base = metadata.base, .extra_bits = metadata.extra_bits } };
+    }
+
+    if ((entry & SemanticDynamicDecoder.exceptional_flag) == 0) {
+        if (!reader.hasStagedBits(entry_bits)) return error.TruncatedFrame;
+        reader.advanceBitsStagedAssumeAvailable(entry_bits);
+        return .{ .length = .{ .base = @intCast(entry >> 16), .extra_bits = @truncate(entry >> 8) } };
+    }
+
+    if (entry_bits == 0) return error.InvalidHuffmanCode;
+    if (!reader.hasStagedBits(entry_bits)) return error.TruncatedFrame;
+    reader.advanceBitsStagedAssumeAvailable(entry_bits);
+    return .eob;
 }
 
 inline fn fillLinearRle(output: []u8, out_pos: usize, length: usize, byte: u8) void {
