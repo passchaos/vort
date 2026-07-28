@@ -483,6 +483,27 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.encodeGzipDynamicWithOptionsAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-zstd-native-hex")) {
+        const payload = args.next() orelse "";
+        const selection = try parseZstdNativeSelection(args.next());
+        const checksum = try parseOptionalBool(args.next(), true);
+        const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
+            .selection = selection,
+            .content_checksum = checksum,
+        });
+        defer init.gpa.free(result.frame);
+        try printHex(stdout, result.frame);
+    } else if (std.mem.eql(u8, command, "decode-zstd-native-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.zstdDecodeNativeFrameAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.zstdDecodeNativeFrameAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try printDecoded(stdout, "zstd_native", compressed.len, decoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-best-file-hex")) {
         const path = args.next() orelse return error.MissingCorpusPath;
         const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
@@ -1158,6 +1179,10 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\compatibility formats:
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
+        \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only] [true|false]
+        \\                              Encode text as dependency-free native-subset Zstandard hex
+        \\  decode-zstd-native-hex [hex] [max_output]
+        \\                              Decode dependency-free native-subset Zstandard hex
         \\  decode-raw-hex [hex] [max_output]
         \\                              Decode raw deflate hex to text
         \\  decode-raw-dict-hex [hex] [dict] [max_output]
@@ -1926,4 +1951,19 @@ fn parseCompressionOptions(text: ?[]const u8) vort.CompressionOptions {
     if (std.mem.eql(u8, value, "lazy")) return .{ .parser = .lazy };
     if (std.mem.eql(u8, value, "optimal")) return .{ .parser = .optimal };
     return vort.optionsForCompressionLevel(.default);
+}
+
+fn parseZstdNativeSelection(text: ?[]const u8) !vort.ZstdNativeFrameSelection {
+    const value = text orelse return .auto;
+    if (std.mem.eql(u8, value, "auto")) return .auto;
+    if (std.mem.eql(u8, value, "raw_or_rle") or std.mem.eql(u8, value, "raw-rle")) return .raw_or_rle;
+    if (std.mem.eql(u8, value, "literal_only") or std.mem.eql(u8, value, "literal-only")) return .literal_only;
+    return error.InvalidZstdNativeSelection;
+}
+
+fn parseOptionalBool(text: ?[]const u8, default: bool) !bool {
+    const value = text orelse return default;
+    if (std.mem.eql(u8, value, "true") or std.mem.eql(u8, value, "1") or std.mem.eql(u8, value, "yes")) return true;
+    if (std.mem.eql(u8, value, "false") or std.mem.eql(u8, value, "0") or std.mem.eql(u8, value, "no")) return false;
+    return error.InvalidBoolean;
 }

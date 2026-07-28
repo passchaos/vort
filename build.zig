@@ -776,6 +776,11 @@ pub fn build(b: *std.Build) void {
     const gzip_cli_diff_step = b.step("run-gzip-cli-diff", "Run black-box differential smoke against system gzip CLI");
     gzip_cli_diff_step.dependOn(&gzip_cli_diff.step);
 
+    const zstd_native_cli_diff = b.addSystemCommand(&.{ "python3", "tools/zstd_native_cli_diff.py" });
+    zstd_native_cli_diff.addArtifactArg(cli_exe);
+    const zstd_native_cli_diff_step = b.step("run-zstd-native-cli-diff", "Run black-box smoke for native-subset zstd frames against system zstd CLI");
+    zstd_native_cli_diff_step.dependOn(&zstd_native_cli_diff.step);
+
     const header_inspect_smoke = b.addSystemCommand(&.{ "python3", "tools/header_inspect_smoke.py" });
     header_inspect_smoke.addArtifactArg(cli_exe);
     const header_inspect_smoke_step = b.step("run-header-inspect-smoke", "Run raw/zlib/gzip header inspection CLI smoke");
@@ -1779,6 +1784,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(python_zlib_diff_step);
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
+    ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(header_inspect_smoke_step);
     ci_smoke_step.dependOn(header_inspect_dashboard_step);
     ci_smoke_step.dependOn(zlib_family_diff_step);

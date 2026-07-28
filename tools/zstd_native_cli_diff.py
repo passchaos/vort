@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""Black-box smoke for Vort native-subset Zstandard frames against zstd CLI."""
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import zlib
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+CLI = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "zig-out" / "bin" / "vort"
+ZSTD = shutil.which("zstd")
+
+
+def run_cli(*args: str) -> str:
+    return subprocess.run([str(CLI), *args], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
+
+
+def parse_field(output: str, name: str) -> str:
+    match = re.search(rf"(?:^| ){re.escape(name)}=([^ ]*)", output)
+    if not match:
+        raise AssertionError(f"missing {name!r} in {output!r}")
+    return match.group(1)
+
+
+def zstd_decompress(frame: bytes) -> bytes:
+    if not ZSTD:
+        raise RuntimeError("zstd missing")
+    result = subprocess.run([ZSTD, "-dcq"], input=frame, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    return result.stdout
+
+
+def main() -> int:
+    if not ZSTD:
+        print("zstd native CLI diff: zstd=missing")
+        return 0
+    if not CLI.exists():
+        raise SystemExit(f"missing built CLI at {CLI}; run `zig build` first")
+
+    # The system zstd CLI is used as an interoperability oracle for the native
+    # raw/RLE frame subset. Vort's literal-only compressed-block subset is kept
+    # under Zig std + native unit coverage until the sequence/FSE path matures.
+    cases = [
+        ("", "raw_or_rle", "true"),
+        ("hello", "raw_or_rle", "true"),
+        ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "raw_or_rle", "true"),
+        ("raw block without checksum", "raw_or_rle", "false"),
+    ]
+    for text, mode, checksum in cases:
+        encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum)
+        frame = bytes.fromhex(encoded_hex)
+        decoded = zstd_decompress(frame)
+        expected = text.encode()
+        if decoded != expected:
+            raise AssertionError((text, mode, checksum, decoded, expected))
+        out = run_cli("decode-zstd-native-hex", encoded_hex, str(len(expected)))
+        assert int(parse_field(out, "decoded_bytes")) == len(expected), out
+        assert int(parse_field(out, "crc32")) == (zlib.crc32(expected) & 0xFFFFFFFF), out
+        if expected:
+            failed = subprocess.run(
+                [str(CLI), "decode-zstd-native-hex", encoded_hex, str(len(expected) - 1)],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            if failed.returncode == 0 or "OutputLimitExceeded" not in failed.stderr:
+                raise AssertionError(f"expected OutputLimitExceeded, got rc={failed.returncode} stderr={failed.stderr!r}")
+
+    with tempfile.TemporaryDirectory(prefix="vort-zstd-native-", dir=ROOT / ".zig-cache") as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        payload = b"file payload for zstd native smoke" * 4
+        # Keep one file-system smoke around the CLI invocation/decompression path
+        # without adding more public Vort file commands yet.
+        frame = bytes.fromhex(run_cli("encode-zstd-native-hex", payload.decode(), "raw_or_rle", "true"))
+        frame_path = tmp / "sample.zst"
+        out_path = tmp / "sample.out"
+        frame_path.write_bytes(frame)
+        subprocess.run([ZSTD, "-dcq", str(frame_path), "-o", str(out_path)], check=True)
+        assert out_path.read_bytes() == payload
+
+    print(f"zstd_native_cli_diff_ok cases={len(cases)} zstd={pathlib.Path(ZSTD).name}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
