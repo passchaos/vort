@@ -11,6 +11,9 @@ const skippable_magic_min: u32 = 0x184d2a50;
 const skippable_magic_max: u32 = 0x184d2a5f;
 const min_rle_split_len = 12;
 const initial_repeated_offsets = [3]usize{ 1, 4, 8 };
+const duplicate_hash_bits = 15;
+const duplicate_hash_table_len = 1 << duplicate_hash_bits;
+const duplicate_hash_invalid = std.math.maxInt(u32);
 
 const ll_base = [_]usize{
     0,      1,      2,      3,       4,     5,     6,     7,
@@ -2455,7 +2458,8 @@ fn findBestDuplicateMatchIn(block: []const u8, start_min: usize) Error!?Duplicat
     // This intentionally tiny O(n^2) finder is a bootstrap encoder slice, not a
     // production match finder. Cap the search so unusual incompressible blocks do
     // not pay a large planning cost before falling back to raw/RLE output.
-    if (block.len < 24 or block.len > 4096 or start_min + 16 > block.len) return null;
+    if (block.len < 24 or start_min + 16 > block.len) return null;
+    if (block.len > 4096) return try findBestDuplicateMatchHashed(block, start_min);
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
     var second: usize = start_min + 1;
@@ -2475,6 +2479,46 @@ fn findBestDuplicateMatchIn(block: []const u8, start_min: usize) Error!?Duplicat
         }
     }
     return best;
+}
+
+fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?DuplicateMatch {
+    if (block.len > std.math.maxInt(u32)) return null;
+
+    var table: [duplicate_hash_table_len]u32 = undefined;
+    @memset(table[0..], duplicate_hash_invalid);
+
+    var best: ?DuplicateMatch = null;
+    var best_payload_len: usize = std.math.maxInt(usize);
+    var index = start_min;
+    while (index + 8 <= block.len) : (index += 1) {
+        const hash = duplicateHash8(block[index..][0..8]);
+        const candidate_index = table[hash];
+        table[hash] = @intCast(index);
+        if (candidate_index == duplicate_hash_invalid) continue;
+        const candidate_start: usize = @intCast(candidate_index);
+        if (candidate_start < start_min or candidate_start >= index) continue;
+        if (best) |current_best| {
+            if (block.len - index <= current_best.len) continue;
+        }
+
+        var len: usize = 0;
+        while (index + len < block.len and block[candidate_start + len] == block[index + len]) : (len += 1) {}
+        if (len < 8) continue;
+
+        const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
+        const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
+        if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
+            best = candidate;
+            best_payload_len = candidate_payload_len;
+        }
+    }
+    return best;
+}
+
+fn duplicateHash8(bytes: *const [8]u8) usize {
+    const value = std.mem.readInt(u64, bytes, .little);
+    const shift: u6 = @intCast(64 - duplicate_hash_bits);
+    return @intCast((value *% 11_400_714_819_323_198_485) >> shift);
 }
 
 fn singleMatchPayloadLen(block: []const u8, match: DuplicateMatch) Error!usize {
@@ -3824,6 +3868,43 @@ test "zstd literal-only writer emits duplicate substring match" {
     _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
     const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
     const block_len: usize = @intCast(block_header >> 3);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits large duplicate substring match" {
+    const half_len = 8 * 1024;
+    const payload = try std.testing.allocator.alloc(u8, half_len * 2 + 9);
+    defer std.testing.allocator.free(payload);
+
+    var state: u32 = 0x9e37_79b9;
+    for (payload[0..half_len]) |*byte| {
+        state = state *% 1_103_515_245 +% 12_345;
+        byte.* = @truncate((state >> 16) ^ (state >> 24));
+    }
+    @memcpy(payload[half_len..][0..half_len], payload[0..half_len]);
+    @memcpy(payload[half_len * 2 ..], "tail-data");
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    try std.testing.expectEqual(@as(u24, 2), (block_header >> 1) & 0x3);
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
