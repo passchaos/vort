@@ -859,6 +859,14 @@ pub const NativeFrameEncoder = struct {
         try self.encodeAppend(&out, input, options);
         return out.toOwnedSlice(self.block_encoder.allocator);
     }
+
+    pub fn encodeIntoSlice(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, output: []u8) Error!usize {
+        const encoded = try self.encodeAlloc(input, options);
+        defer self.block_encoder.allocator.free(encoded);
+        if (output.len < encoded.len) return error.OutputTooSmall;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
 };
 
 pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
@@ -1633,6 +1641,11 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     try reusable_frame_encoder.encodeAppend(&reusable_frame, repeated, .{});
     try std.testing.expectEqualSlices(u8, encoded, reusable_frame.items);
     const frame_bound = try encodedNativeFrameBound(repeated.len);
+    const reusable_into = try std.testing.allocator.alloc(u8, frame_bound);
+    defer std.testing.allocator.free(reusable_into);
+    const reusable_into_written = try reusable_frame_encoder.encodeIntoSlice(repeated, .{}, reusable_into);
+    try std.testing.expectEqualSlices(u8, encoded, reusable_into[0..reusable_into_written]);
+    try std.testing.expectError(error.OutputTooSmall, reusable_frame_encoder.encodeIntoSlice(repeated, .{}, reusable_into[0 .. reusable_into_written - 1]));
     const encoded_into = try std.testing.allocator.alloc(u8, frame_bound);
     defer std.testing.allocator.free(encoded_into);
     const frame_written = try encodeNativeFrameIntoSlice(std.testing.allocator, repeated, .{}, encoded_into);
