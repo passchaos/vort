@@ -133,6 +133,11 @@ def generated_payloads() -> list[tuple[str, bytes]]:
             ^ (two_symbol_state >> 4)
         ) & 1
         two_symbol_state = (two_symbol_state >> 1) | (feedback << 7)
+    four_symbol_state = 1
+    four_symbol_huffman = bytearray()
+    for _ in range(192):
+        four_symbol_state = (four_symbol_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        four_symbol_huffman.append(b"ABCD"[(four_symbol_state >> 30) & 3])
 
     cases: list[tuple[str, bytes]] = [
         ("empty", b""),
@@ -140,6 +145,7 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         ("json100", json_unit * 100),
         ("alphabet200", printable * 200),
         ("two-symbol-huffman", bytes(two_symbol_huffman)),
+        ("four-symbol-huffman", bytes(four_symbol_huffman)),
         (
             "structured-lines",
             b"".join(

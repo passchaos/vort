@@ -2301,7 +2301,7 @@ fn emitBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []con
 }
 
 fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
-    if (try emitTwoSymbolHuffmanLiteralBlock(allocator, out, block, last)) return;
+    if (try emitSmallHuffmanLiteralBlock(allocator, out, block, last)) return;
     if (try emitRepeatedPatternCompressedBlock(allocator, out, block, last)) return;
     if (try emitMultiDuplicateMatchCompressedBlock(allocator, out, block, last)) return;
     if (try emitSingleMatchCompressedBlock(allocator, out, block, last)) return;
@@ -2543,29 +2543,31 @@ fn emitMultiSequencePredefinedCompressedBlock(
     return true;
 }
 
-const TwoSymbolHuffmanPlan = struct {
-    low: u8,
-    high: u8,
+const SmallHuffmanLiteralPlan = struct {
+    symbols: [4]u8 = undefined,
+    len: usize = 0,
+    max_symbol: u8 = 0,
+    weight: u4 = 0,
 };
 
-fn emitTwoSymbolHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
-    const plan = twoSymbolHuffmanPlan(block) orelse return false;
+fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
+    const plan = smallHuffmanLiteralPlan(block) orelse return false;
     if (findRepeatedPatternSegment(block)) |pattern| {
         if (pattern.match_len * 2 >= block.len) return false;
     }
 
     var literal_payload: std.ArrayList(u8) = .empty;
     defer literal_payload.deinit(allocator);
-    try literal_payload.append(allocator, 127 + plan.high); // direct Huffman weights for symbols 0..high-1.
-    const weights_byte_count: usize = (@as(usize, plan.high) + 1) / 2;
+    try literal_payload.append(allocator, 127 + plan.max_symbol); // direct Huffman weights for symbols 0..max_symbol-1.
+    const weights_byte_count: usize = (@as(usize, plan.max_symbol) + 1) / 2;
     for (0..weights_byte_count) |i| {
         const even_symbol: u8 = @intCast(i * 2);
         const odd_symbol: u8 = @intCast(i * 2 + 1);
-        const even_weight: u8 = if (even_symbol == plan.low) 1 else 0;
-        const odd_weight: u8 = if (odd_symbol == plan.low) 1 else 0;
+        const even_weight: u8 = if (smallHuffmanExplicitWeight(plan, even_symbol)) plan.weight else 0;
+        const odd_weight: u8 = if (smallHuffmanExplicitWeight(plan, odd_symbol)) plan.weight else 0;
         try literal_payload.append(allocator, (even_weight << 4) | odd_weight);
     }
-    try emitTwoSymbolHuffmanStream(allocator, &literal_payload, block, plan);
+    try emitSmallHuffmanStream(allocator, &literal_payload, block, plan);
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
@@ -2579,38 +2581,74 @@ fn emitTwoSymbolHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.Arra
     return true;
 }
 
-fn twoSymbolHuffmanPlan(block: []const u8) ?TwoSymbolHuffmanPlan {
+fn smallHuffmanLiteralPlan(block: []const u8) ?SmallHuffmanLiteralPlan {
     if (block.len < 64 or block.len > 1023) return null;
-    var first: ?u8 = null;
-    var second: ?u8 = null;
+    var plan: SmallHuffmanLiteralPlan = .{};
     for (block) |byte| {
-        if (first == null) {
-            first = byte;
-        } else if (byte == first.?) {
-            continue;
-        } else if (second == null) {
-            second = byte;
-        } else if (byte != second.?) {
-            return null;
-        }
+        if (smallHuffmanSymbolIndex(plan, byte) != null) continue;
+        if (plan.len == plan.symbols.len) return null;
+        plan.symbols[plan.len] = byte;
+        plan.len += 1;
+        plan.max_symbol = @max(plan.max_symbol, byte);
     }
-    const a = first orelse return null;
-    const b = second orelse return null;
-    const low = @min(a, b);
-    const high = @max(a, b);
-    if (high > 128) return null;
-    return .{ .low = low, .high = high };
+    if (plan.len < 2 or plan.len > 4) return null;
+    if (plan.max_symbol > 128) return null;
+    std.mem.sort(u8, plan.symbols[0..plan.len], {}, std.sort.asc(u8));
+    plan.max_symbol = plan.symbols[plan.len - 1];
+    plan.weight = switch (plan.len) {
+        2 => 1,
+        3, 4 => 1,
+        else => return null,
+    };
+    return plan;
 }
 
-fn emitTwoSymbolHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: TwoSymbolHuffmanPlan) Error!void {
+fn smallHuffmanExplicitWeight(plan: SmallHuffmanLiteralPlan, symbol: u8) bool {
+    return symbol != plan.max_symbol and smallHuffmanSymbolIndex(plan, symbol) != null;
+}
+
+fn smallHuffmanSymbolIndex(plan: SmallHuffmanLiteralPlan, symbol: u8) ?usize {
+    for (plan.symbols[0..plan.len], 0..) |candidate, i| {
+        if (candidate == symbol) return i;
+    }
+    return null;
+}
+
+fn smallHuffmanCode(plan: SmallHuffmanLiteralPlan, symbol: u8) ?usize {
+    const index = smallHuffmanSymbolIndex(plan, symbol) orelse return null;
+    return switch (plan.len) {
+        2 => index,
+        3 => switch (index) {
+            0 => 0b00,
+            1 => 0b01,
+            2 => 0b1,
+            else => unreachable,
+        },
+        4 => index,
+        else => null,
+    };
+}
+
+fn smallHuffmanBitCount(plan: SmallHuffmanLiteralPlan, symbol: u8) ?u8 {
+    const index = smallHuffmanSymbolIndex(plan, symbol) orelse return null;
+    return switch (plan.len) {
+        2 => 1,
+        3 => if (index == 2) 1 else 2,
+        4 => 2,
+        else => null,
+    };
+}
+
+fn emitSmallHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: SmallHuffmanLiteralPlan) Error!void {
     var accumulator: usize = 0;
     var bit_count: u6 = 0;
     var i = block.len;
     while (i > 0) {
         i -= 1;
-        const bit: usize = if (block[i] == plan.high) 1 else 0;
-        accumulator |= bit << bit_count;
-        bit_count += 1;
+        const bits = smallHuffmanBitCount(plan, block[i]) orelse return error.CorruptFrame;
+        const code = smallHuffmanCode(plan, block[i]) orelse return error.CorruptFrame;
+        accumulator |= code << bit_count;
+        bit_count += @intCast(bits);
         while (bit_count >= 8) {
             try out.append(allocator, @truncate(accumulator));
             accumulator >>= 8;
@@ -4234,13 +4272,46 @@ test "zstd literal-only writer emits duplicate substring match" {
     try std.testing.expect(encoded.len < raw_encoded.len);
 }
 
-test "zstd literal-only writer emits two-symbol Huffman literals" {
+test "zstd literal-only writer emits small Huffman literals" {
     var payload: [192]u8 = undefined;
     var state: u8 = 1;
     for (&payload) |*byte| {
         byte.* = if ((state & 1) == 0) 'A' else 'B';
         const feedback: u8 = ((state >> 0) ^ (state >> 2) ^ (state >> 3) ^ (state >> 4)) & 1;
         state = (state >> 1) | (feedback << 7);
+    }
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits four-symbol Huffman literals" {
+    var payload: [192]u8 = undefined;
+    var state: u32 = 1;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = "ABCD"[(state >> 30) & 3];
     }
 
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
