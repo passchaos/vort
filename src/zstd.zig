@@ -2530,8 +2530,8 @@ fn parseRawOrRleFrameHeader(frame: []const u8, offset: *usize) Error!RawOrRleFra
         else => 4,
     };
     if (frame.len - offset.* < dictionary_id_len) return error.TruncatedFrame;
-    if (dictionary_id_len != 0) return error.NeedDictionary;
-    offset.* += dictionary_id_len;
+    const dictionary_id = try readU64Field(frame, offset, dictionary_id_len);
+    if (dictionary_id != 0) return error.NeedDictionary;
 
     const content_size: ?u64 = if (single_segment or content_size_flag != 0) blk: {
         const field_size: usize = @as(usize, 1) << @intCast(content_size_flag);
@@ -5800,6 +5800,23 @@ test "zstd native decoder rejects dictionary id frames without a dictionary" {
     try std.testing.expectError(error.NeedDictionary, decodedRawOrRleFrameSize(frame.items));
 
     try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameAlloc(std.testing.allocator, frame.items[0..5]));
+
+    var zero_dict_frame: std.ArrayList(u8) = .empty;
+    defer zero_dict_frame.deinit(std.testing.allocator);
+    try zero_dict_frame.appendSlice(std.testing.allocator, &frame_magic);
+    try zero_dict_frame.append(std.testing.allocator, 0x21); // 1-byte dictionary id field, single segment, 1-byte content size.
+    try zero_dict_frame.append(std.testing.allocator, 0); // Dictionary_ID value 0 means no actual preset dictionary.
+    try zero_dict_frame.append(std.testing.allocator, 3);
+    try emitRawBlock(std.testing.allocator, &zero_dict_frame, "abc", true);
+
+    const zero_dict_decoded = try decodeNativeFrameAlloc(std.testing.allocator, zero_dict_frame.items);
+    defer std.testing.allocator.free(zero_dict_decoded);
+    try std.testing.expectEqualSlices(u8, "abc", zero_dict_decoded);
+    var zero_dict_output: [3]u8 = undefined;
+    const zero_dict_written = try decodeNativeFrameInto(zero_dict_frame.items, &zero_dict_output);
+    try std.testing.expectEqual(@as(usize, 3), zero_dict_written);
+    try std.testing.expectEqualSlices(u8, "abc", &zero_dict_output);
+    try std.testing.expectEqual(@as(usize, 3), try decodedRawOrRleFrameSize(zero_dict_frame.items));
 }
 
 test "zstd native raw/RLE decoder handles fallback frames and skippable frames" {
