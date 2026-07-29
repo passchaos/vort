@@ -856,6 +856,14 @@ pub const NativeFrameEncoder = struct {
     }
 
     pub fn encodeAlloc(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions) Error![]u8 {
+        return try self.encodeWithOptionsAlloc(input, options);
+    }
+
+    pub fn encodeDefaultAlloc(self: *NativeFrameEncoder, input: []const u8) Error![]u8 {
+        return try self.encodeWithOptionsAlloc(input, .{});
+    }
+
+    pub fn encodeWithOptionsAlloc(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions) Error![]u8 {
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.block_encoder.allocator);
         try self.encodeAppend(&out, input, options);
@@ -1642,6 +1650,9 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     defer reusable_frame.deinit(std.testing.allocator);
     try reusable_frame_encoder.encodeAppend(&reusable_frame, repeated, .{});
     try std.testing.expectEqualSlices(u8, encoded, reusable_frame.items);
+    const reusable_owned = try reusable_frame_encoder.encodeWithOptionsAlloc(repeated, .{});
+    defer std.testing.allocator.free(reusable_owned);
+    try std.testing.expectEqualSlices(u8, encoded, reusable_owned);
     const frame_bound = try encodedNativeFrameBound(repeated.len);
     const reusable_into = try std.testing.allocator.alloc(u8, frame_bound);
     defer std.testing.allocator.free(reusable_into);
