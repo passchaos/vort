@@ -332,9 +332,12 @@ def main() -> int:
         )
         frame_path = tmp / "sample.zst"
         out_path = tmp / "sample.out"
+        vort_out_path = tmp / "sample.vort.out"
         frame_path.write_bytes(frame)
         subprocess.run([ZSTD, "-dcq", str(frame_path), "-o", str(out_path)], check=True)
         assert out_path.read_bytes() == payload
+        run_cli("decode-zstd-native-file-to", str(frame_path), str(vort_out_path), str(len(payload)))
+        assert vort_out_path.read_bytes() == payload
         assert_vort_native_decode(frame, payload)
 
     print(
