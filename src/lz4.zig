@@ -670,6 +670,65 @@ fn blockSizeMaxFromDescriptor(bd: u8) Error!usize {
     };
 }
 
+pub const BlockEncoder = struct {
+    allocator: std.mem.Allocator,
+    hash_table: []u32,
+    occupancy_bits: []u64,
+    chain_table: []u32,
+
+    pub fn init(allocator: std.mem.Allocator) Error!BlockEncoder {
+        const table = try allocator.alloc(u32, hash_table_len);
+        errdefer allocator.free(table);
+        const bits = try allocator.alloc(u64, hash_occupancy_words);
+        errdefer allocator.free(bits);
+        const chain = try allocator.alloc(u32, chain_table_len);
+        return .{
+            .allocator = allocator,
+            .hash_table = table,
+            .occupancy_bits = bits,
+            .chain_table = chain,
+        };
+    }
+
+    pub fn deinit(self: *BlockEncoder) void {
+        self.allocator.free(self.chain_table);
+        self.allocator.free(self.occupancy_bits);
+        self.allocator.free(self.hash_table);
+        self.* = undefined;
+    }
+
+    pub fn encodeAlloc(self: *BlockEncoder, input: []const u8) Error![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        _ = try encodeBlockInto(self.allocator, &out, input, self.hash_table, self.occupancy_bits, self.chain_table);
+        return out.toOwnedSlice(self.allocator);
+    }
+
+    pub fn encodeWithPrefixAlloc(self: *BlockEncoder, input: []const u8, prefix: []const u8) Error![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        const history = prefix[if (prefix.len > max_match_offset) prefix.len - max_match_offset else 0..];
+        _ = try encodeLinkedBlockInto(self.allocator, &out, history, input, self.hash_table, self.occupancy_bits, self.chain_table);
+        return out.toOwnedSlice(self.allocator);
+    }
+
+    pub fn encodeIntoSlice(self: *BlockEncoder, input: []const u8, output: []u8) Error!usize {
+        const encoded = try self.encodeAlloc(input);
+        defer self.allocator.free(encoded);
+        if (output.len < encoded.len) return error.OutputTooSmall;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
+
+    pub fn encodeWithPrefixIntoSlice(self: *BlockEncoder, input: []const u8, prefix: []const u8, output: []u8) Error!usize {
+        const encoded = try self.encodeWithPrefixAlloc(input, prefix);
+        defer self.allocator.free(encoded);
+        if (output.len < encoded.len) return error.OutputTooSmall;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
+};
+
 pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -1587,6 +1646,17 @@ test "lz4 block encoder uses caller prefix history" {
         error.OutputTooSmall,
         encodeBlockWithPrefixIntoSlice(std.testing.allocator, block, prefix, into[0 .. written - 1]),
     );
+
+    var reusable = try BlockEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    const reusable_encoded = try reusable.encodeWithPrefixAlloc(block, prefix);
+    defer std.testing.allocator.free(reusable_encoded);
+    try std.testing.expectEqualSlices(u8, encoded, reusable_encoded);
+    const reusable_plain = try reusable.encodeAlloc("abcabcabca");
+    defer std.testing.allocator.free(reusable_plain);
+    const reusable_decoded = try decodeBlockAlloc(std.testing.allocator, reusable_plain, "abcabcabca".len);
+    defer std.testing.allocator.free(reusable_decoded);
+    try std.testing.expectEqualSlices(u8, "abcabcabca", reusable_decoded);
 }
 
 test "lz4 skippable frame writer composes with concatenated native streams" {

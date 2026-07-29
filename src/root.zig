@@ -48,6 +48,7 @@ pub const Lz4LibFrameOptions = lz4.LibFrameOptions;
 pub const Lz4NativeFrameOptions = lz4.NativeFrameOptions;
 pub const Lz4BlockSizeId = lz4.BlockSizeId;
 pub const Lz4BlockMode = lz4.BlockMode;
+pub const Lz4BlockEncoder = lz4.BlockEncoder;
 pub const lz4DecodeFrameAlloc = lz4.decodeFrameAlloc;
 pub const lz4DecodeFrameAllocLimited = lz4.decodeFrameAllocLimited;
 pub const lz4DecodedFrameSize = lz4.decodedFrameSize;
@@ -658,6 +659,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = Lz4NativeFrameOptions;
     _ = Lz4BlockSizeId;
     _ = Lz4BlockMode;
+    _ = Lz4BlockEncoder;
     _ = lz4DecodeFrameAlloc;
     _ = lz4DecodeFrameAllocLimited;
     _ = lz4DecodedFrameSize;
