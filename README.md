@@ -33,8 +33,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   with periods up to 32 bytes, raw-block-cost-aware compressed-block selection
   (falling back to raw/RLE blocks when compressed blocks would expand, for
   broad zstd CLI compatibility), plus deterministic smallest-mode
-  native selection, optional content checksum/content-size header fields,
-  skippable frame append/encode-into writer, decoded-size preflight, bounded
+  native selection, configurable native block size, optional content
+  checksum/content-size header fields, skippable frame append/encode-into writer,
+  decoded-size preflight, bounded
   allocation, and caller-owned encode/decode-into/append plus reusable scratch
   encoder/decoder API,
   used by downstream

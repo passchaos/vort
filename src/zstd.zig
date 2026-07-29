@@ -102,6 +102,7 @@ pub const NativeFrameOptions = struct {
     content_checksum: bool = true,
     include_content_size: bool = true,
     selection: NativeFrameSelection = .auto,
+    block_size_max: usize = std.compress.zstd.block_size_max,
 };
 
 pub const NativeFrameMode = enum {
@@ -129,6 +130,7 @@ pub fn encodedNativeFrameBound(input_len: usize) Error!usize {
 }
 
 pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrameOptions) Error!usize {
+    const block_size_max = try nativeBlockSizeMax(options);
     const frame_header_len: usize = if (options.include_content_size)
         4 + 1 + 8
     else
@@ -136,7 +138,7 @@ pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrame
     const block_count = if (input_len == 0)
         1
     else
-        (input_len + std.compress.zstd.block_size_max - 1) / std.compress.zstd.block_size_max;
+        (input_len + block_size_max - 1) / block_size_max;
     var bound = frame_header_len;
     bound = std.math.add(usize, bound, input_len) catch return error.IntegerOverflow;
     const block_header_bytes = std.math.mul(usize, block_count, 3) catch return error.IntegerOverflow;
@@ -203,6 +205,11 @@ pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!u
     };
     if (decoded_len > max_output_len) return error.OutputLimitExceeded;
     return decoded_len;
+}
+
+fn nativeBlockSizeMax(options: NativeFrameOptions) Error!usize {
+    if (options.block_size_max == 0 or options.block_size_max > std.compress.zstd.block_size_max) return error.InvalidBlockPlan;
+    return options.block_size_max;
 }
 
 fn decodeFrameAllocWithLimit(allocator: std.mem.Allocator, frame: []const u8, max_output_len: ?usize) Error![]u8 {
@@ -520,12 +527,13 @@ pub fn encodeRawOrRleFrameAppend(
     options: NativeFrameOptions,
 ) Error!void {
     try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), options);
+    const block_size_max = try nativeBlockSizeMax(options);
     if (input.len == 0) {
         try emitBlock(allocator, out, "", true);
     } else {
         var offset: usize = 0;
         while (offset < input.len) {
-            const search_end = @min(input.len, offset + std.compress.zstd.block_size_max);
+            const search_end = @min(input.len, offset + block_size_max);
             if (findRleRun(input[offset..search_end])) |run| {
                 const run_start = offset + run.start;
                 if (run_start > offset) try emitBlock(allocator, out, input[offset..run_start], false);
@@ -577,12 +585,13 @@ pub fn encodeLiteralOnlyFrameAppend(
     try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), options);
 
     var offset: usize = 0;
+    const block_size_max = try nativeBlockSizeMax(options);
     var encoder_state: LiteralOnlyEncoderState = .{};
     if (input.len == 0) {
         try emitLiteralOnlyCompressedBlock(allocator, out, "", true, &encoder_state);
     } else {
         while (offset < input.len) {
-            const block_end = @min(input.len, offset + std.compress.zstd.block_size_max);
+            const block_end = @min(input.len, offset + block_size_max);
             try emitLiteralOnlyCompressedBlock(allocator, out, input[offset..block_end], block_end == input.len, &encoder_state);
             offset = block_end;
         }
@@ -3901,6 +3910,25 @@ test "zstd native no-size writer chooses valid window descriptors" {
     const decoded_multi = try decodeNativeFrameAlloc(std.testing.allocator, multi_block);
     defer std.testing.allocator.free(decoded_multi);
     try std.testing.expectEqualSlices(u8, multi_block_payload, decoded_multi);
+
+    const small_block_payload = "0123456789abcdef" ** 8;
+    const small_block = try encodeRawOrRleFrameWithOptionsAlloc(
+        std.testing.allocator,
+        small_block_payload,
+        .{ .content_checksum = false, .block_size_max = 32 },
+    );
+    defer std.testing.allocator.free(small_block);
+    try std.testing.expect(small_block.len <= try encodedNativeFrameBoundWithOptions(small_block_payload.len, .{ .content_checksum = false, .block_size_max = 32 }));
+    var small_block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(small_block, &small_block_offset);
+    const small_first_header = std.mem.readInt(u24, small_block[small_block_offset..][0..3], .little);
+    try std.testing.expectEqual(@as(u24, 32), small_first_header >> 3);
+    try std.testing.expectEqual(false, (small_first_header & 1) != 0);
+    const small_decoded = try decodeNativeFrameAlloc(std.testing.allocator, small_block);
+    defer std.testing.allocator.free(small_decoded);
+    try std.testing.expectEqualSlices(u8, small_block_payload, small_decoded);
+    try std.testing.expectError(error.InvalidBlockPlan, encodedNativeFrameBoundWithOptions(1, .{ .block_size_max = 0 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, "x", .{ .block_size_max = std.compress.zstd.block_size_max + 1 }));
 }
 
 test "zstd native decoder accepts literal-only compressed blocks" {

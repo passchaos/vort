@@ -124,7 +124,9 @@ Current interpretation:
   case, raw-block-cost-aware sequence selection, plus a file-backed multi-block
   treeless Huffman writer case, then checks
   both system zstd decode and Vort native decode, with `size-zstd-native-hex`
-  preflight checked before each native decode. The probe accepts repeated `--path`
+  preflight checked before each native decode. The native writer also exposes a
+  block-size option so future latency/ratio sweeps can share the same library
+  API rather than relying on CLI-specific chunking. The probe accepts repeated `--path`
   arguments or bounded recursive `--dir` discovery with an optional `--limit`
   for focused file payloads when investigating real corpus failures.
 
