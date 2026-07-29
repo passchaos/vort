@@ -561,6 +561,19 @@ pub fn main(init: std.process.Init) !void {
             try vort.zstdDecodeNativeFrameAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "zstd_native", compressed.len, decoded);
+    } else if (std.mem.eql(u8, command, "decode-zstd-native-file-to")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.zstdDecodeNativeFrameAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.zstdDecodeNativeFrameAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
     } else if (std.mem.eql(u8, command, "size-zstd-native-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1308,6 +1321,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode dependency-free native-subset Zstandard hex
         \\  decode-zstd-native-file [path] [max_output]
         \\                              Decode dependency-free native-subset Zstandard file
+        \\  decode-zstd-native-file-to <in> <out> [max_output]
+        \\                              Decode dependency-free native-subset Zstandard file to output
         \\  size-zstd-native-hex [hex] [max_output]
         \\                              Preflight dependency-free native-subset Zstandard decoded size
         \\  size-zstd-native-file [path] [max_output]
