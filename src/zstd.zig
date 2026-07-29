@@ -14,6 +14,8 @@ const initial_repeated_offsets = [3]usize{ 1, 4, 8 };
 const duplicate_hash_bits = 15;
 const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
+const max_bootstrap_sequence_count = 8;
+const max_predefined_sequence_states = 64;
 
 const ll_base = [_]usize{
     0,      1,      2,      3,       4,     5,     6,     7,
@@ -2375,8 +2377,8 @@ fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
 
 fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
     if (rleByte(block) != null or block.len < 32) return false;
-    var matches: [8]DuplicateMatch = undefined;
-    var literal_lens: [8]usize = undefined;
+    var matches: [max_bootstrap_sequence_count]DuplicateMatch = undefined;
+    var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
     var count: usize = 0;
     var literal_start: usize = 0;
     while (count < matches.len and literal_start < block.len) {
@@ -2389,14 +2391,21 @@ fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *st
     }
     if (count < 2) return false;
     const tail_len = block.len - literal_start;
+    const tail_start = literal_start;
 
     const literal_code = try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits);
     const offset_code = try sequenceCodeForValue(matches[0].second_start - matches[0].first_start, &of_base, &of_bits);
     const match_code = try sequenceCodeForValue(matches[0].len, &ml_base, &ml_bits);
     for (1..count) |i| {
-        if (try sequenceCodeForValue(literal_lens[i], &ll_base, &ll_bits) != literal_code) return false;
-        if (try sequenceCodeForValue(matches[i].second_start - matches[i].first_start, &of_base, &of_bits) != offset_code) return false;
-        if (try sequenceCodeForValue(matches[i].len, &ml_base, &ml_bits) != match_code) return false;
+        if (try sequenceCodeForValue(literal_lens[i], &ll_base, &ll_bits) != literal_code) {
+            return try emitMultiDuplicateMatchPredefinedCompressedBlock(allocator, out, block, last, matches[0..count], literal_lens[0..count], tail_start);
+        }
+        if (try sequenceCodeForValue(matches[i].second_start - matches[i].first_start, &of_base, &of_bits) != offset_code) {
+            return try emitMultiDuplicateMatchPredefinedCompressedBlock(allocator, out, block, last, matches[0..count], literal_lens[0..count], tail_start);
+        }
+        if (try sequenceCodeForValue(matches[i].len, &ml_base, &ml_bits) != match_code) {
+            return try emitMultiDuplicateMatchPredefinedCompressedBlock(allocator, out, block, last, matches[0..count], literal_lens[0..count], tail_start);
+        }
     }
 
     var payload: std.ArrayList(u8) = .empty;
@@ -2434,6 +2443,64 @@ fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *st
     var sequence_bits: std.ArrayList(u8) = .empty;
     defer sequence_bits.deinit(allocator);
     try emitReverseBitstream(allocator, &sequence_bits, fields[0..field_count]);
+    try payload.appendSlice(allocator, sequence_bits.items);
+
+    const raw_payload_len = std.math.add(usize, block.len, try literalsHeaderLen(block.len)) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_payload_len) return false;
+    try emitBlockHeader(allocator, out, 2, payload.items.len, last);
+    try out.appendSlice(allocator, payload.items);
+    return true;
+}
+
+fn emitMultiDuplicateMatchPredefinedCompressedBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    matches: []const DuplicateMatch,
+    literal_lens: []const usize,
+    tail_start: usize,
+) Error!bool {
+    if (matches.len != literal_lens.len or matches.len < 2 or matches.len > max_bootstrap_sequence_count) return false;
+
+    var offsets: [max_bootstrap_sequence_count]usize = undefined;
+    var match_lens: [max_bootstrap_sequence_count]usize = undefined;
+    for (matches, 0..) |match, i| {
+        offsets[i] = match.second_start - match.first_start;
+        match_lens[i] = match.len;
+    }
+
+    const literal_plan = (try planPredefinedSequenceValues(literal_lens, &default_ll_symbols, 0)) orelse return false;
+    const offset_plan = (try planPredefinedSequenceValues(offsets[0..matches.len], &default_of_symbols, 2)) orelse return false;
+    const match_plan = (try planPredefinedSequenceValues(match_lens[0..matches.len], &default_ml_symbols, 0)) orelse return false;
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    var regenerated_literals = block.len - tail_start;
+    for (literal_lens) |literal_len| {
+        regenerated_literals = std.math.add(usize, regenerated_literals, literal_len) catch return error.IntegerOverflow;
+    }
+    try emitLiteralsHeader(allocator, &payload, .raw, regenerated_literals);
+    var literal_start: usize = 0;
+    for (matches, 0..) |match, i| {
+        try payload.appendSlice(allocator, block[literal_start..][0..literal_lens[i]]);
+        literal_start = match.second_start + match.len;
+    }
+    try payload.appendSlice(allocator, block[tail_start..]);
+    try emitSequenceCount(allocator, &payload, matches.len);
+    try payload.append(allocator, 0x00); // LL, OF, and ML all use Predefined_Mode.
+
+    var read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    const read_field_count = try predefinedSequenceReadFields(
+        read_fields[0..],
+        literal_plan,
+        offset_plan,
+        match_plan,
+    );
+
+    var sequence_bits: std.ArrayList(u8) = .empty;
+    defer sequence_bits.deinit(allocator);
+    try emitReverseBitstreamFromReadOrder(allocator, &sequence_bits, read_fields[0..read_field_count]);
     try payload.appendSlice(allocator, sequence_bits.items);
 
     const raw_payload_len = std.math.add(usize, block.len, try literalsHeaderLen(block.len)) catch return error.IntegerOverflow;
@@ -2686,6 +2753,124 @@ const BitField = struct {
     value: usize,
     bits: u8,
 };
+
+const PredefinedSequencePlan = struct {
+    len: usize = 0,
+    states: [max_bootstrap_sequence_count]usize = undefined,
+    values: [max_bootstrap_sequence_count]usize = undefined,
+};
+
+fn planPredefinedSequenceValues(values: []const usize, symbols: []const SequenceSymbol, min_additional_bits: u8) Error!?PredefinedSequencePlan {
+    if (values.len == 0 or values.len > max_bootstrap_sequence_count) return null;
+    if (symbols.len > max_predefined_sequence_states) return error.UnsupportedZstdFeature;
+
+    var next_choice: [max_bootstrap_sequence_count][max_predefined_sequence_states]usize = undefined;
+    for (&next_choice) |*row| @memset(row[0..], max_predefined_sequence_states);
+
+    var viable_next: [max_predefined_sequence_states]bool = undefined;
+    @memset(viable_next[0..], false);
+
+    var pos = values.len;
+    while (pos > 0) {
+        pos -= 1;
+        var viable_current: [max_predefined_sequence_states]bool = undefined;
+        @memset(viable_current[0..], false);
+
+        for (symbols, 0..) |symbol, state| {
+            if (!predefinedSymbolCanEncode(symbol, values[pos], min_additional_bits)) continue;
+            if (pos == values.len - 1) {
+                viable_current[state] = true;
+                continue;
+            }
+
+            const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
+            var bits: usize = 0;
+            while (bits < transition_count) : (bits += 1) {
+                const next_state = symbol.next_state + bits;
+                if (next_state >= symbols.len) continue;
+                if (!viable_next[next_state]) continue;
+                viable_current[state] = true;
+                next_choice[pos][state] = next_state;
+                break;
+            }
+        }
+
+        viable_next = viable_current;
+    }
+
+    var first_state: ?usize = null;
+    for (viable_next[0..symbols.len], 0..) |viable, state| {
+        if (viable) {
+            first_state = state;
+            break;
+        }
+    }
+    const initial_state = first_state orelse return null;
+
+    var plan: PredefinedSequencePlan = .{ .len = values.len };
+    @memcpy(plan.values[0..values.len], values);
+    plan.states[0] = initial_state;
+    for (0..values.len - 1) |i| {
+        plan.states[i + 1] = next_choice[i][plan.states[i]];
+        if (plan.states[i + 1] >= symbols.len) return null;
+    }
+    return plan;
+}
+
+fn predefinedSymbolCanEncode(symbol: SequenceSymbol, value: usize, min_additional_bits: u8) bool {
+    if (symbol.additional_bits < min_additional_bits) return false;
+    if (value < symbol.base) return false;
+    const span: usize = @as(usize, 1) << @intCast(symbol.additional_bits);
+    return value - symbol.base < span;
+}
+
+fn predefinedSequenceReadFields(
+    out: []BitField,
+    literal_plan: PredefinedSequencePlan,
+    offset_plan: PredefinedSequencePlan,
+    match_plan: PredefinedSequencePlan,
+) Error!usize {
+    if (literal_plan.len != offset_plan.len or literal_plan.len != match_plan.len) return error.CorruptFrame;
+    const needed = 3 + literal_plan.len * 3 + (literal_plan.len - 1) * 3;
+    if (out.len < needed) return error.OutputTooSmall;
+
+    var count: usize = 0;
+    try appendBitField(out, &count, literal_plan.states[0], 6);
+    try appendBitField(out, &count, offset_plan.states[0], 5);
+    try appendBitField(out, &count, match_plan.states[0], 6);
+
+    for (0..literal_plan.len) |i| {
+        const literal_symbol = default_ll_symbols[literal_plan.states[i]];
+        const offset_symbol = default_of_symbols[offset_plan.states[i]];
+        const match_symbol = default_ml_symbols[match_plan.states[i]];
+
+        try appendBitField(out, &count, offset_plan.values[i] - offset_symbol.base, offset_symbol.additional_bits);
+        try appendBitField(out, &count, match_plan.values[i] - match_symbol.base, match_symbol.additional_bits);
+        try appendBitField(out, &count, literal_plan.values[i] - literal_symbol.base, literal_symbol.additional_bits);
+
+        if (i + 1 < literal_plan.len) {
+            try appendBitField(out, &count, literal_plan.states[i + 1] - literal_symbol.next_state, literal_symbol.state_bits);
+            try appendBitField(out, &count, match_plan.states[i + 1] - match_symbol.next_state, match_symbol.state_bits);
+            try appendBitField(out, &count, offset_plan.states[i + 1] - offset_symbol.next_state, offset_symbol.state_bits);
+        }
+    }
+    return count;
+}
+
+fn appendBitField(out: []BitField, count: *usize, value: usize, bits: u8) Error!void {
+    if (count.* >= out.len) return error.OutputTooSmall;
+    out[count.*] = .{ .value = value, .bits = bits };
+    count.* += 1;
+}
+
+fn emitReverseBitstreamFromReadOrder(allocator: std.mem.Allocator, out: *std.ArrayList(u8), read_fields: []const BitField) Error!void {
+    var reversed: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    if (read_fields.len > reversed.len) return error.OutputTooSmall;
+    for (read_fields, 0..) |field, i| {
+        reversed[read_fields.len - 1 - i] = field;
+    }
+    try emitReverseBitstream(allocator, out, reversed[0..read_fields.len]);
+}
 
 fn emitReverseBitstream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), fields: []const BitField) Error!void {
     var accumulator: usize = 0;
@@ -3953,6 +4138,54 @@ test "zstd literal-only writer emits multiple large duplicate matches" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
     try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits predefined multi duplicate matches" {
+    const large_len = 8 * 1024;
+    const small_len = 257;
+    const tail = "tail-data";
+    const payload = try std.testing.allocator.alloc(u8, large_len * 2 + small_len * 2 + tail.len);
+    defer std.testing.allocator.free(payload);
+
+    var state: u32 = 0x4528_21e6;
+    for (payload[0..large_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[large_len..][0..large_len], payload[0..large_len]);
+
+    const small_start = large_len * 2;
+    state = 0x38d0_13f7;
+    for (payload[small_start..][0..small_len]) |*byte| {
+        state = state *% 22_695_477 +% 1;
+        byte.* = @truncate(state >> 16);
+    }
+    @memcpy(payload[small_start + small_len ..][0..small_len], payload[small_start..][0..small_len]);
+    @memcpy(payload[small_start + small_len * 2 ..], tail);
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+    try std.testing.expectEqual(@as(u8, 0x00), block[section.sequence_payload_offset]); // LL/OF/ML all use Predefined_Mode.
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
