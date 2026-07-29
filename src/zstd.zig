@@ -384,27 +384,36 @@ pub fn encodeRawOrRleFrameWithOptionsAlloc(
 ) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
-    try emitFrameHeader(allocator, &out, try checkedUsizeToU64(input.len), options);
+    try encodeRawOrRleFrameAppend(allocator, &out, input, options);
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn encodeRawOrRleFrameAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: NativeFrameOptions,
+) Error!void {
+    try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), options);
     if (input.len == 0) {
-        try emitBlock(allocator, &out, "", true);
+        try emitBlock(allocator, out, "", true);
     } else {
         var offset: usize = 0;
         while (offset < input.len) {
             const search_end = @min(input.len, offset + std.compress.zstd.block_size_max);
             if (findRleRun(input[offset..search_end])) |run| {
                 const run_start = offset + run.start;
-                if (run_start > offset) try emitBlock(allocator, &out, input[offset..run_start], false);
+                if (run_start > offset) try emitBlock(allocator, out, input[offset..run_start], false);
                 const run_end = run_start + run.len;
-                try emitRleBlock(allocator, &out, input[run_start], run.len, run_end == input.len);
+                try emitRleBlock(allocator, out, input[run_start], run.len, run_end == input.len);
                 offset = run_end;
             } else {
-                try emitBlock(allocator, &out, input[offset..search_end], search_end == input.len);
+                try emitBlock(allocator, out, input[offset..search_end], search_end == input.len);
                 offset = search_end;
             }
         }
     }
-    try emitContentChecksum(allocator, &out, input, options);
-    return out.toOwnedSlice(allocator);
+    try emitContentChecksum(allocator, out, input, options);
 }
 
 pub fn encodeLiteralOnlyFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
@@ -418,21 +427,30 @@ pub fn encodeLiteralOnlyFrameWithOptionsAlloc(
 ) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
-    try emitFrameHeader(allocator, &out, try checkedUsizeToU64(input.len), options);
+    try encodeLiteralOnlyFrameAppend(allocator, &out, input, options);
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn encodeLiteralOnlyFrameAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: NativeFrameOptions,
+) Error!void {
+    try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), options);
 
     var offset: usize = 0;
     if (input.len == 0) {
-        try emitLiteralOnlyCompressedBlock(allocator, &out, "", true);
+        try emitLiteralOnlyCompressedBlock(allocator, out, "", true);
     } else {
         while (offset < input.len) {
             const block_end = @min(input.len, offset + std.compress.zstd.block_size_max);
-            try emitLiteralOnlyCompressedBlock(allocator, &out, input[offset..block_end], block_end == input.len);
+            try emitLiteralOnlyCompressedBlock(allocator, out, input[offset..block_end], block_end == input.len);
             offset = block_end;
         }
     }
 
-    try emitContentChecksum(allocator, &out, input, options);
-    return out.toOwnedSlice(allocator);
+    try emitContentChecksum(allocator, out, input, options);
 }
 
 pub fn encodeSkippableFrameAlloc(allocator: std.mem.Allocator, skippable_id: u4, payload: []const u8) Error![]u8 {
@@ -492,6 +510,17 @@ pub fn encodeNativeFrameAppend(
     input: []const u8,
     options: NativeFrameOptions,
 ) Error!NativeFrameMode {
+    switch (options.selection) {
+        .raw_or_rle => {
+            try encodeRawOrRleFrameAppend(allocator, out, input, options);
+            return .raw_or_rle;
+        },
+        .literal_only => {
+            try encodeLiteralOnlyFrameAppend(allocator, out, input, options);
+            return .literal_only;
+        },
+        .auto => {},
+    }
     const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, options);
     defer allocator.free(result.frame);
     try out.appendSlice(allocator, result.frame);
@@ -5093,6 +5122,21 @@ test "zstd native frame writer chooses smallest fallback mode" {
     const forced_raw = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, literal_payload, .{ .selection = .raw_or_rle });
     defer std.testing.allocator.free(forced_raw.frame);
     try std.testing.expectEqual(NativeFrameMode.raw_or_rle, forced_raw.mode);
+    var forced_raw_append: std.ArrayList(u8) = .empty;
+    defer forced_raw_append.deinit(std.testing.allocator);
+    try encodeRawOrRleFrameAppend(std.testing.allocator, &forced_raw_append, literal_payload, .{ .selection = .raw_or_rle });
+    try std.testing.expectEqualSlices(u8, forced_raw.frame, forced_raw_append.items);
+
+    var forced_literal_append: std.ArrayList(u8) = .empty;
+    defer forced_literal_append.deinit(std.testing.allocator);
+    const forced_literal_mode = try encodeNativeFrameAppend(
+        std.testing.allocator,
+        &forced_literal_append,
+        literal_payload,
+        .{ .selection = .literal_only },
+    );
+    try std.testing.expectEqual(NativeFrameMode.literal_only, forced_literal_mode);
+    try std.testing.expectEqualSlices(u8, forced_literal.frame, forced_literal_append.items);
 
     const no_checksum = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, literal_payload, .{ .content_checksum = false, .selection = .literal_only });
     defer std.testing.allocator.free(no_checksum.frame);
