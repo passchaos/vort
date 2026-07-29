@@ -722,6 +722,22 @@ pub fn decodeBlockIntoSlice(input: []const u8, output: []u8, expected_size: ?usi
     return written;
 }
 
+pub fn decodeBlockWithPrefixIntoSlice(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    output: []u8,
+    expected_size: ?usize,
+    prefix: []const u8,
+) Error!usize {
+    const decoded_len = try decodedBlockSizeWithPrefix(input, prefix);
+    if (output.len < decoded_len) return error.OutputTooSmall;
+    const decoded = try decodeBlockWithPrefixAlloc(allocator, input, expected_size, prefix);
+    defer allocator.free(decoded);
+    if (decoded.len != decoded_len) return error.SizeMismatch;
+    @memcpy(output[0..decoded.len], decoded);
+    return decoded.len;
+}
+
 pub fn decodedBlockSize(input: []const u8) Error!usize {
     return try compressedBlockDecodedSizeLimited(input, 0, std.math.maxInt(usize));
 }
@@ -1511,6 +1527,14 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
     try std.testing.expectEqual(@as(usize, 8), try decodedBlockSizeWithPrefix(&prefix_match, "abcdefghijklmnop"));
     try std.testing.expectEqual(@as(usize, 8), try decodedBlockSizeWithPrefixLimited(&prefix_match, "abcdefghijklmnop", 8));
     try std.testing.expectError(error.OutputLimitExceeded, decodedBlockSizeWithPrefixLimited(&prefix_match, "abcdefghijklmnop", 7));
+    var prefix_into: [8]u8 = undefined;
+    const prefix_into_written = try decodeBlockWithPrefixIntoSlice(std.testing.allocator, &prefix_match, &prefix_into, 8, "abcdefghijklmnop");
+    try std.testing.expectEqual(@as(usize, 8), prefix_into_written);
+    try std.testing.expectEqualSlices(u8, "mnopmnop", &prefix_into);
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        decodeBlockWithPrefixIntoSlice(std.testing.allocator, &prefix_match, prefix_into[0..7], 8, "abcdefghijklmnop"),
+    );
     const prefixed = try decodeBlockWithPrefixAlloc(std.testing.allocator, &prefix_match, 8, "abcdefghijklmnop");
     defer std.testing.allocator.free(prefixed);
     try std.testing.expectEqualSlices(u8, "mnopmnop", prefixed);
