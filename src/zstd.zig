@@ -2304,6 +2304,7 @@ fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     if (try emitRepeatedPatternCompressedBlock(allocator, out, block, last)) return;
     if (try emitMultiDuplicateMatchCompressedBlock(allocator, out, block, last)) return;
     if (try emitSingleMatchCompressedBlock(allocator, out, block, last)) return;
+    if (try emitTwoSymbolHuffmanLiteralBlock(allocator, out, block, last)) return;
 
     const literal_kind: LiteralsKind = if (rleByte(block) != null) .rle else .raw;
     const literal_payload_len: usize = switch (literal_kind) {
@@ -2540,6 +2541,87 @@ fn emitMultiSequencePredefinedCompressedBlock(
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
     return true;
+}
+
+const TwoSymbolHuffmanPlan = struct {
+    low: u8,
+    high: u8,
+};
+
+fn emitTwoSymbolHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
+    const plan = twoSymbolHuffmanPlan(block) orelse return false;
+
+    var literal_payload: std.ArrayList(u8) = .empty;
+    defer literal_payload.deinit(allocator);
+    try literal_payload.append(allocator, 127 + plan.high); // direct Huffman weights for symbols 0..high-1.
+    const weights_byte_count: usize = (@as(usize, plan.high) + 1) / 2;
+    for (0..weights_byte_count) |i| {
+        const even_symbol: u8 = @intCast(i * 2);
+        const odd_symbol: u8 = @intCast(i * 2 + 1);
+        const even_weight: u8 = if (even_symbol == plan.low) 1 else 0;
+        const odd_weight: u8 = if (odd_symbol == plan.low) 1 else 0;
+        try literal_payload.append(allocator, (even_weight << 4) | odd_weight);
+    }
+    try emitTwoSymbolHuffmanStream(allocator, &literal_payload, block, plan);
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    try emitCompressedLiteralsHeader(allocator, &payload, block.len, literal_payload.items.len);
+    try payload.appendSlice(allocator, literal_payload.items);
+    try payload.append(allocator, 0); // sequence_count=0: this block is literals-only.
+
+    if (payload.items.len >= block.len) return false;
+    try emitBlockHeader(allocator, out, 2, payload.items.len, last);
+    try out.appendSlice(allocator, payload.items);
+    return true;
+}
+
+fn twoSymbolHuffmanPlan(block: []const u8) ?TwoSymbolHuffmanPlan {
+    if (block.len < 64 or block.len > 1023) return null;
+    var first: ?u8 = null;
+    var second: ?u8 = null;
+    for (block) |byte| {
+        if (first == null) {
+            first = byte;
+        } else if (byte == first.?) {
+            continue;
+        } else if (second == null) {
+            second = byte;
+        } else if (byte != second.?) {
+            return null;
+        }
+    }
+    const a = first orelse return null;
+    const b = second orelse return null;
+    const low = @min(a, b);
+    const high = @max(a, b);
+    if (high > 128) return null;
+    return .{ .low = low, .high = high };
+}
+
+fn emitTwoSymbolHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: TwoSymbolHuffmanPlan) Error!void {
+    var accumulator: usize = 0;
+    var bit_count: u6 = 0;
+    var i = block.len;
+    while (i > 0) {
+        i -= 1;
+        const bit: usize = if (block[i] == plan.high) 1 else 0;
+        accumulator |= bit << bit_count;
+        bit_count += 1;
+        while (bit_count >= 8) {
+            try out.append(allocator, @truncate(accumulator));
+            accumulator >>= 8;
+            bit_count -= 8;
+        }
+    }
+    accumulator |= @as(usize, 1) << bit_count;
+    bit_count += 1;
+    while (bit_count > 0) {
+        try out.append(allocator, @truncate(accumulator));
+        if (bit_count <= 8) break;
+        accumulator >>= 8;
+        bit_count -= 8;
+    }
 }
 
 const DuplicateMatch = struct {
@@ -3031,6 +3113,19 @@ fn literalsHeaderLen(regenerated_size: usize) Error!usize {
     if (regenerated_size <= 31) return 1;
     if (regenerated_size <= 4095) return 2;
     return 3;
+}
+
+fn emitCompressedLiteralsHeader(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    regenerated_size: usize,
+    compressed_size: usize,
+) Error!void {
+    if (regenerated_size > 0x3ff or compressed_size == 0 or compressed_size > 0x3ff) return error.UnsupportedZstdFeature;
+    const value = regenerated_size | (compressed_size << 10);
+    try out.append(allocator, 0x02 | (@as(u8, @intCast(value & 0x0f)) << 4));
+    try out.append(allocator, @truncate(value >> 4));
+    try out.append(allocator, @truncate(value >> 12));
 }
 
 fn emitRawBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
@@ -4134,6 +4229,43 @@ test "zstd literal-only writer emits duplicate substring match" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits two-symbol Huffman literals" {
+    var payload: [192]u8 = undefined;
+    var state: u8 = 1;
+    for (&payload) |*byte| {
+        byte.* = if ((state & 1) == 0) 'A' else 'B';
+        const feedback: u8 = ((state >> 0) ^ (state >> 2) ^ (state >> 3) ^ (state >> 4)) & 1;
+        state = (state >> 1) | (feedback << 7);
+    }
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{});
+    try std.testing.expect(try emitTwoSymbolHuffmanLiteralBlock(std.testing.allocator, &frame, &payload, true));
+    try emitContentChecksum(std.testing.allocator, &frame, &payload, .{});
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(frame.items, &block_offset);
+    const block_header = std.mem.readInt(u24, frame.items[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    const block = frame.items[block_offset + 3 ..][0..block_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+    try std.testing.expect(frame.items.len < raw_encoded.len);
 }
 
 test "zstd literal-only writer emits large duplicate substring match" {
