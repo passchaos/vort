@@ -590,7 +590,12 @@ fn frameDecodedSizeLimited(frame: []const u8, max_output_len: usize) Error!usize
         if (uncompressed_block) {
             total = try checkedAddWithinLimit(total, block_len, max_output_len);
         } else {
-            total = try compressedBlockDecodedSizeLimited(block, total, max_output_len);
+            const block_start = total;
+            const history_start = if (header.block_independent or block_start <= max_block_history_len)
+                if (header.block_independent) block_start else 0
+            else
+                block_start - max_block_history_len;
+            total = try compressedBlockDecodedSizeLimitedWithHistory(block, total, history_start, max_output_len);
         }
 
         if (header.block_checksum) {
@@ -611,6 +616,16 @@ fn frameDecodedSizeLimited(frame: []const u8, max_output_len: usize) Error!usize
 }
 
 fn compressedBlockDecodedSizeLimited(block: []const u8, initial_len: usize, max_output_len: usize) Error!usize {
+    return try compressedBlockDecodedSizeLimitedWithHistory(block, initial_len, initial_len, max_output_len);
+}
+
+fn compressedBlockDecodedSizeLimitedWithHistory(
+    block: []const u8,
+    initial_len: usize,
+    history_start: usize,
+    max_output_len: usize,
+) Error!usize {
+    if (history_start > initial_len) return error.InvalidMatch;
     var offset: usize = 0;
     var total = initial_len;
     while (offset < block.len) {
@@ -624,7 +639,9 @@ fn compressedBlockDecodedSizeLimited(block: []const u8, initial_len: usize, max_
         if (offset == block.len) break;
 
         if (block.len - offset < 2) return error.TruncatedFrame;
+        const match_offset = std.mem.readInt(u16, block[offset..][0..2], .little);
         offset += 2;
+        if (match_offset == 0 or match_offset > total - history_start) return error.InvalidMatch;
         var match_len: usize = (token & 0x0f) + 4;
         if ((token & 0x0f) == 15) match_len = try checkedAdd(match_len, try readLengthExtension(block, &offset));
         total = try checkedAddWithinLimit(total, match_len, max_output_len);
@@ -1476,6 +1493,7 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
     for (long_run_decoded) |byte| try std.testing.expectEqual(@as(u8, 'a'), byte);
 
     const prefix_match = [_]u8{ 0x04, 4, 0 };
+    try std.testing.expectError(error.InvalidMatch, decodedBlockSize(&prefix_match));
     const prefixed = try decodeBlockWithPrefixAlloc(std.testing.allocator, &prefix_match, 8, "abcdefghijklmnop");
     defer std.testing.allocator.free(prefixed);
     try std.testing.expectEqualSlices(u8, "mnopmnop", prefixed);
@@ -1506,6 +1524,7 @@ test "lz4 linked frame decoder replays matches across block boundary" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, expected, decoded);
+    try std.testing.expectEqual(@as(usize, expected.len), try decodedFrameSize(frame.items));
 
     var into_buffer: [expected.len]u8 = undefined;
     const written = try decodeFrameInto(frame.items, &into_buffer);
