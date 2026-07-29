@@ -116,10 +116,12 @@ Current interpretation:
 - `zig build run-zstd-native-probe` now complements the black-box CLI smoke with
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug
-  classes visible without requiring a full external corpus checkout. The probe
-  also accepts repeated `--path` arguments or bounded recursive `--dir`
-  discovery with an optional `--limit` for focused file payloads when
-  investigating real corpus failures.
+  classes visible without requiring a full external corpus checkout. It also
+  validates Vort's dependency-free native encoder on the same generated/file
+  byte payloads through `encode-zstd-native-bytes-hex`, then checks both system
+  zstd decode and Vort native decode. The probe accepts repeated `--path`
+  arguments or bounded recursive `--dir` discovery with an optional `--limit`
+  for focused file payloads when investigating real corpus failures.
 
 Recommended next comparison steps:
 

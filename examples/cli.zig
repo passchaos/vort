@@ -495,6 +495,20 @@ pub fn main(init: std.process.Init) !void {
         });
         defer init.gpa.free(result.frame);
         try printHex(stdout, result.frame);
+    } else if (std.mem.eql(u8, command, "encode-zstd-native-bytes-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const payload = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(payload);
+        const selection = try parseZstdNativeSelection(args.next());
+        const checksum = try parseOptionalBool(args.next(), true);
+        const content_size = try parseOptionalBool(args.next(), true);
+        const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
+            .selection = selection,
+            .content_checksum = checksum,
+            .include_content_size = content_size,
+        });
+        defer init.gpa.free(result.frame);
+        try printHex(stdout, result.frame);
     } else if (std.mem.eql(u8, command, "decode-zstd-native-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1183,6 +1197,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
         \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only] [checksum] [content_size]
         \\                              Encode text as dependency-free native-subset Zstandard hex
+        \\  encode-zstd-native-bytes-hex [hex] [auto|raw_or_rle|literal_only] [checksum] [content_size]
+        \\                              Encode bytes as dependency-free native-subset Zstandard hex
         \\  decode-zstd-native-hex [hex] [max_output]
         \\                              Decode dependency-free native-subset Zstandard hex
         \\  decode-raw-hex [hex] [max_output]
