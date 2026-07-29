@@ -232,6 +232,13 @@ def main() -> int:
         treeless_writer_huffman_state = (treeless_writer_huffman_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         treeless_writer_huffman_chars.append(chr(32 + ((treeless_writer_huffman_state >> 24) % 95)))
     treeless_writer_huffman_text = "".join(treeless_writer_huffman_chars)
+
+    older_candidate_state = 0x6A09_E667
+    older_candidate_chars = []
+    for _ in range(8 * 1024):
+        older_candidate_state = (older_candidate_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        older_candidate_chars.append(chr(older_candidate_state >> 24))
+    older_candidate_text = "".join(older_candidate_chars + older_candidate_chars[:64] + older_candidate_chars + list("tail-data"))
     non_divisible_four_stream_huffman_state = 0x1618_0339
     non_divisible_four_stream_huffman_chars = []
     for _ in range(5190):
@@ -417,6 +424,18 @@ def main() -> int:
         assert treeless_vort_out_path.read_bytes() == treeless_payload
         size_out = run_cli("size-zstd-native-file", str(treeless_frame_path), str(len(treeless_payload)))
         assert int(parse_field(size_out, "decoded_bytes")) == len(treeless_payload)
+
+        older_candidate_payload = older_candidate_text.encode("latin1")
+        older_candidate_frame = bytes.fromhex(
+            run_cli("encode-zstd-native-bytes-hex", older_candidate_payload.hex(), "literal_only", "true", "true")
+        )
+        if zstd_decompress(older_candidate_frame) != older_candidate_payload:
+            raise AssertionError("older duplicate candidate frame failed system zstd decode")
+        older_candidate_frame_path = tmp / "older-candidate.zst"
+        older_candidate_out_path = tmp / "older-candidate.vort.out"
+        older_candidate_frame_path.write_bytes(older_candidate_frame)
+        run_cli("decode-zstd-native-file-to", str(older_candidate_frame_path), str(older_candidate_out_path), str(len(older_candidate_payload)))
+        assert older_candidate_out_path.read_bytes() == older_candidate_payload
 
     print(
         f"zstd_native_cli_diff_ok cases={len(cases)} external_cases={len(external_cases)} "

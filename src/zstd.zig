@@ -14,6 +14,7 @@ const initial_repeated_offsets = [3]usize{ 1, 4, 8 };
 const duplicate_hash_bits = 15;
 const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
+const duplicate_hash_candidates = 4;
 const max_bootstrap_sequence_count = 16;
 const max_predefined_sequence_states = 64;
 const repeated_pattern_period_max = 32;
@@ -3072,32 +3073,39 @@ fn findBestDuplicateMatchIn(block: []const u8, start_min: usize) Error!?Duplicat
 fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?DuplicateMatch {
     if (block.len > std.math.maxInt(u32)) return null;
 
-    var table: [duplicate_hash_table_len]u32 = undefined;
-    @memset(table[0..], duplicate_hash_invalid);
+    var table: [duplicate_hash_table_len][duplicate_hash_candidates]u32 = undefined;
+    for (&table) |*bucket| @memset(bucket[0..], duplicate_hash_invalid);
 
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
     var index = start_min;
     while (index + 8 <= block.len) : (index += 1) {
         const hash = duplicateHash8(block[index..][0..8]);
-        const candidate_index = table[hash];
-        table[hash] = @intCast(index);
-        if (candidate_index == duplicate_hash_invalid) continue;
-        const candidate_start: usize = @intCast(candidate_index);
-        if (candidate_start < start_min or candidate_start >= index) continue;
-        if (best) |current_best| {
-            if (block.len - index <= current_best.len) continue;
+        const bucket = &table[hash];
+        defer {
+            var slot: usize = duplicate_hash_candidates - 1;
+            while (slot > 0) : (slot -= 1) bucket[slot] = bucket[slot - 1];
+            bucket[0] = @intCast(index);
         }
 
-        var len: usize = 0;
-        while (index + len < block.len and block[candidate_start + len] == block[index + len]) : (len += 1) {}
-        if (len < 8) continue;
+        for (bucket[0..]) |candidate_index| {
+            if (candidate_index == duplicate_hash_invalid) continue;
+            const candidate_start: usize = @intCast(candidate_index);
+            if (candidate_start < start_min or candidate_start >= index) continue;
+            if (best) |current_best| {
+                if (block.len - index <= current_best.len) continue;
+            }
 
-        const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
-        const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
-        if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
-            best = candidate;
-            best_payload_len = candidate_payload_len;
+            var len: usize = 0;
+            while (index + len < block.len and block[candidate_start + len] == block[index + len]) : (len += 1) {}
+            if (len < 8) continue;
+
+            const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
+            const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
+            if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
+                best = candidate;
+                best_payload_len = candidate_payload_len;
+            }
         }
     }
     return best;
@@ -5271,6 +5279,46 @@ test "zstd literal-only writer emits large duplicate substring match" {
     }
     @memcpy(payload[half_len..][0..half_len], payload[0..half_len]);
     @memcpy(payload[half_len * 2 ..], "tail-data");
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    try std.testing.expectEqual(@as(u24, 2), (block_header >> 1) & 0x3);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer finds older large duplicate candidate" {
+    const prefix_len = 8 * 1024;
+    const short_len = 64;
+    const tail = "tail-data";
+    const payload = try std.testing.allocator.alloc(u8, prefix_len + short_len + prefix_len + tail.len);
+    defer std.testing.allocator.free(payload);
+
+    var state: u32 = 0x6a09_e667;
+    for (payload[0..prefix_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[prefix_len..][0..short_len], payload[0..short_len]);
+    @memcpy(payload[prefix_len + short_len ..][0..prefix_len], payload[0..prefix_len]);
+    @memcpy(payload[prefix_len + short_len + prefix_len ..], tail);
 
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);

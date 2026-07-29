@@ -28,7 +28,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   default predefined-sequence compressed-block fallback encode/decode with
   up-to-128-symbol single-/four-stream direct Huffman literal emission
   (including non-4-divisible four-stream splits and treeless repeat trees across
-  blocks), hash-probed large duplicate plus
+  blocks), small-depth hash-chain large duplicate plus
   RLE/predefined-table multi-duplicate and repeated-pattern match emission
   with periods up to 32 bytes, raw-block-cost-aware compressed-block selection
   (falling back to raw/RLE blocks when compressed blocks would expand, for

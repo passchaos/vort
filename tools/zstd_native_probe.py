@@ -245,6 +245,13 @@ def generated_payloads() -> list[tuple[str, bytes]]:
     for _ in range((1 << 17) + 4096):
         treeless_writer_huffman_state = (treeless_writer_huffman_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         treeless_writer_huffman.append(32 + ((treeless_writer_huffman_state >> 24) % 95))
+
+    older_candidate_state = 0x6A09_E667
+    older_candidate_prefix = bytearray()
+    for _ in range(8 * 1024):
+        older_candidate_state = (older_candidate_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        older_candidate_prefix.append(older_candidate_state >> 24)
+    older_candidate_payload = bytes(older_candidate_prefix + older_candidate_prefix[:64] + older_candidate_prefix + b"tail-data")
     one_twenty_eight_symbol_state = 0x1357_9BDF
     one_twenty_eight_symbol_huffman = bytearray()
     for _ in range(896):
@@ -269,6 +276,7 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         ("non-divisible-four-stream-huffman", bytes(non_divisible_four_stream_huffman)),
         ("large-four-stream-huffman", bytes(large_four_stream_huffman)),
         ("treeless-writer-huffman", bytes(treeless_writer_huffman)),
+        ("older-duplicate-candidate", older_candidate_payload),
         ("one-twenty-eight-symbol-huffman", bytes(one_twenty_eight_symbol_huffman)),
         (
             "structured-lines",
