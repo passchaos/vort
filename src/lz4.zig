@@ -275,6 +275,11 @@ pub fn encodedBlockBound(input_len: usize) Error!usize {
     return try maxCompressedLen(input_len);
 }
 
+pub fn encodedSkippableFrameBound(payload_len: usize) Error!usize {
+    _ = try checkedUsizeToU32(payload_len);
+    return try checkedAdd(8, payload_len);
+}
+
 fn emitBlockChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8) Error!void {
     var checksum: [4]u8 = undefined;
     std.mem.writeInt(u32, &checksum, std.hash.XxHash32.hash(0, block), .little);
@@ -284,12 +289,27 @@ fn emitBlockChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), bloc
 pub fn encodeSkippableFrameAlloc(allocator: std.mem.Allocator, skippable_id: u4, payload: []const u8) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
+    try encodeSkippableFrameAppend(allocator, &out, skippable_id, payload);
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn encodeSkippableFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), skippable_id: u4, payload: []const u8) Error!void {
     var header: [8]u8 = undefined;
     std.mem.writeInt(u32, header[0..4], skippable_magic_min + @as(u32, skippable_id), .little);
     std.mem.writeInt(u32, header[4..8], try checkedUsizeToU32(payload.len), .little);
     try out.appendSlice(allocator, &header);
     try out.appendSlice(allocator, payload);
-    return out.toOwnedSlice(allocator);
+}
+
+pub fn encodeSkippableFrameIntoSlice(skippable_id: u4, payload: []const u8, output: []u8) Error!usize {
+    const written = try encodedSkippableFrameBound(payload.len);
+    if (output.len < written) return error.OutputTooSmall;
+    var header: [8]u8 = undefined;
+    std.mem.writeInt(u32, header[0..4], skippable_magic_min + @as(u32, skippable_id), .little);
+    std.mem.writeInt(u32, header[4..8], try checkedUsizeToU32(payload.len), .little);
+    @memcpy(output[0..8], &header);
+    @memcpy(output[8..][0..payload.len], payload);
+    return written;
 }
 
 /// Decode an LZ4 frame. Independent and linked blocks are supported; external
@@ -1874,6 +1894,16 @@ test "lz4 skippable frame writer composes with concatenated native streams" {
     try std.testing.expectEqual(skippable_magic_min + 11, std.mem.readInt(u32, skip[0..4], .little));
     try std.testing.expectEqual(@as(u32, "metadata".len), std.mem.readInt(u32, skip[4..8], .little));
     try std.testing.expectEqualSlices(u8, "metadata", skip[8..]);
+    try std.testing.expectEqual(skip.len, try encodedSkippableFrameBound("metadata".len));
+    var skip_appended: std.ArrayList(u8) = .empty;
+    defer skip_appended.deinit(std.testing.allocator);
+    try encodeSkippableFrameAppend(std.testing.allocator, &skip_appended, 11, "metadata");
+    try std.testing.expectEqualSlices(u8, skip, skip_appended.items);
+    var skip_into: [8 + "metadata".len]u8 = undefined;
+    const skip_into_written = try encodeSkippableFrameIntoSlice(11, "metadata", &skip_into);
+    try std.testing.expectEqual(skip.len, skip_into_written);
+    try std.testing.expectEqualSlices(u8, skip, skip_into[0..skip_into_written]);
+    try std.testing.expectError(error.OutputTooSmall, encodeSkippableFrameIntoSlice(11, "metadata", skip_into[0 .. skip_into.len - 1]));
 
     var stream: std.ArrayList(u8) = .empty;
     defer stream.deinit(std.testing.allocator);
