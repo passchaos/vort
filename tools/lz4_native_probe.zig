@@ -31,6 +31,8 @@ pub fn main(init: std.process.Init) !void {
     }
     try checkPrefixPreflight(init.gpa);
     checked += 1;
+    try checkPrefixEncoder(init.gpa);
+    checked += 1;
 
     try stdout.print("lz4_native_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -227,6 +229,45 @@ fn checkPrefixPreflight(allocator: std.mem.Allocator) !void {
     if (written != into_buffer.len) return error.Lz4ProbeSizeMismatch;
     if (!std.mem.eql(u8, "mnopmnop", &into_buffer)) return error.Lz4ProbeMismatch;
     if (vort.lz4DecodeBlockWithPrefixIntoSlice(allocator, &prefix_match, into_buffer[0..7], 8, prefix)) |_| {
+        return error.Lz4ProbeExpectedOutputLimit;
+    } else |err| switch (err) {
+        error.OutputTooSmall => {},
+        else => return err,
+    }
+}
+
+fn checkPrefixEncoder(allocator: std.mem.Allocator) !void {
+    const prefix_len = 64 * 1024;
+    const block_len = 4 * 1024;
+    const prefix = try allocator.alloc(u8, prefix_len);
+    defer allocator.free(prefix);
+    const payload = try allocator.alloc(u8, block_len);
+    defer allocator.free(payload);
+
+    var state: u32 = 0x51ed_1234;
+    for (prefix) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload, prefix[prefix.len - payload.len ..]);
+
+    const encoded = try vort.lz4EncodeBlockWithPrefixAlloc(allocator, payload, prefix);
+    defer allocator.free(encoded);
+    if (encoded.len >= payload.len) return error.Lz4ProbeSizeMismatch;
+    if (try vort.lz4DecodedBlockSizeWithPrefix(encoded, prefix) != payload.len) {
+        return error.Lz4ProbeSizeMismatch;
+    }
+
+    const decoded = try vort.lz4DecodeBlockWithPrefixAlloc(allocator, encoded, payload.len, prefix);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, payload, decoded)) return error.Lz4ProbeMismatch;
+
+    const block_bound = try vort.lz4EncodedBlockBound(payload.len);
+    const encoded_into = try allocator.alloc(u8, block_bound);
+    defer allocator.free(encoded_into);
+    const written = try vort.lz4EncodeBlockWithPrefixIntoSlice(allocator, payload, prefix, encoded_into);
+    if (!std.mem.eql(u8, encoded, encoded_into[0..written])) return error.Lz4ProbeMismatch;
+    if (vort.lz4EncodeBlockWithPrefixIntoSlice(allocator, payload, prefix, encoded_into[0 .. written - 1])) |_| {
         return error.Lz4ProbeExpectedOutputLimit;
     } else |err| switch (err) {
         error.OutputTooSmall => {},
