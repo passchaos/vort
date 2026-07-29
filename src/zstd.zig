@@ -2557,23 +2557,51 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
         if (pattern.match_len >= 16) return false;
     }
 
-    var literal_payload: std.ArrayList(u8) = .empty;
-    defer literal_payload.deinit(allocator);
-    try literal_payload.append(allocator, 127 + plan.max_symbol); // direct Huffman weights for symbols 0..max_symbol-1.
-    const weights_byte_count: usize = (@as(usize, plan.max_symbol) + 1) / 2;
-    for (0..weights_byte_count) |i| {
-        const even_symbol: u8 = @intCast(i * 2);
-        const odd_symbol: u8 = @intCast(i * 2 + 1);
-        const even_weight: u8 = smallHuffmanExplicitWeight(plan, even_symbol);
-        const odd_weight: u8 = smallHuffmanExplicitWeight(plan, odd_symbol);
-        try literal_payload.append(allocator, (even_weight << 4) | odd_weight);
-    }
-    try emitSmallHuffmanStream(allocator, &literal_payload, block, plan);
+    var huffman_tree: std.ArrayList(u8) = .empty;
+    defer huffman_tree.deinit(allocator);
+    try emitSmallHuffmanTree(allocator, &huffman_tree, plan);
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    try emitCompressedLiteralsHeader(allocator, &payload, block.len, literal_payload.items.len);
-    try payload.appendSlice(allocator, literal_payload.items);
+    if (block.len <= 1023) {
+        var stream: std.ArrayList(u8) = .empty;
+        defer stream.deinit(allocator);
+        try emitSmallHuffmanStream(allocator, &stream, block, plan);
+        const compressed_size = huffman_tree.items.len + stream.items.len;
+        try emitCompressedLiteralsHeader(allocator, &payload, block.len, compressed_size);
+        try payload.appendSlice(allocator, huffman_tree.items);
+        try payload.appendSlice(allocator, stream.items);
+    } else {
+        if (block.len % 4 != 0) return false;
+        var streams: [4]std.ArrayList(u8) = .{ .empty, .empty, .empty, .empty };
+        defer for (&streams) |*stream| stream.deinit(allocator);
+        const segment_len = block.len / 4;
+        const segment_1_end = segment_len;
+        const segment_2_end = segment_len * 2;
+        const segment_3_end = segment_len * 3;
+        const segments = [_][]const u8{
+            block[0..segment_1_end],
+            block[segment_1_end..segment_2_end],
+            block[segment_2_end..segment_3_end],
+            block[segment_3_end..],
+        };
+        for (&streams, segments) |*stream, segment| {
+            try emitSmallHuffmanStream(allocator, stream, segment, plan);
+        }
+        const compressed_size = huffman_tree.items.len + 6 +
+            streams[0].items.len + streams[1].items.len + streams[2].items.len + streams[3].items.len;
+        if (streams[0].items.len > std.math.maxInt(u16) or
+            streams[1].items.len > std.math.maxInt(u16) or
+            streams[2].items.len > std.math.maxInt(u16)) return false;
+        try emitCompressedLiteralsHeader(allocator, &payload, block.len, compressed_size);
+        try payload.appendSlice(allocator, huffman_tree.items);
+        var stream_lengths: [6]u8 = undefined;
+        std.mem.writeInt(u16, stream_lengths[0..2], @intCast(streams[0].items.len), .little);
+        std.mem.writeInt(u16, stream_lengths[2..4], @intCast(streams[1].items.len), .little);
+        std.mem.writeInt(u16, stream_lengths[4..6], @intCast(streams[2].items.len), .little);
+        try payload.appendSlice(allocator, &stream_lengths);
+        for (&streams) |*stream| try payload.appendSlice(allocator, stream.items);
+    }
     try payload.append(allocator, 0); // sequence_count=0: this block is literals-only.
 
     if (payload.items.len >= block.len) return false;
@@ -2583,7 +2611,7 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
 }
 
 fn smallHuffmanLiteralPlan(block: []const u8) ?SmallHuffmanLiteralPlan {
-    if (block.len < 64 or block.len > 1023) return null;
+    if (block.len < 64 or block.len > 0x3fff) return null;
     var plan: SmallHuffmanLiteralPlan = .{};
     for (block) |byte| {
         if (smallHuffmanSymbolIndex(plan, byte) != null) continue;
@@ -2608,6 +2636,18 @@ fn fillSmallHuffmanWeights(plan: *SmallHuffmanLiteralPlan) ?void {
     for (plan.weights[0..plan.len], 0..) |*weight, i| {
         const bit_count = if (i < long_code_count) plan.max_bit_count else plan.max_bit_count - 1;
         weight.* = plan.max_bit_count + 1 - bit_count;
+    }
+}
+
+fn emitSmallHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: SmallHuffmanLiteralPlan) Error!void {
+    try out.append(allocator, 127 + plan.max_symbol); // direct Huffman weights for symbols 0..max_symbol-1.
+    const weights_byte_count: usize = (@as(usize, plan.max_symbol) + 1) / 2;
+    for (0..weights_byte_count) |i| {
+        const even_symbol: u8 = @intCast(i * 2);
+        const odd_symbol: u8 = @intCast(i * 2 + 1);
+        const even_weight: u8 = smallHuffmanExplicitWeight(plan, even_symbol);
+        const odd_weight: u8 = smallHuffmanExplicitWeight(plan, odd_symbol);
+        try out.append(allocator, (even_weight << 4) | odd_weight);
     }
 }
 
@@ -3167,11 +3207,21 @@ fn emitCompressedLiteralsHeader(
     regenerated_size: usize,
     compressed_size: usize,
 ) Error!void {
-    if (regenerated_size > 0x3ff or compressed_size == 0 or compressed_size > 0x3ff) return error.UnsupportedZstdFeature;
-    const value = regenerated_size | (compressed_size << 10);
-    try out.append(allocator, 0x02 | (@as(u8, @intCast(value & 0x0f)) << 4));
-    try out.append(allocator, @truncate(value >> 4));
-    try out.append(allocator, @truncate(value >> 12));
+    if (compressed_size == 0) return error.UnsupportedZstdFeature;
+    if (regenerated_size <= 0x3ff and compressed_size <= 0x3ff) {
+        const value = regenerated_size | (compressed_size << 10);
+        try out.append(allocator, 0x02 | (@as(u8, @intCast(value & 0x0f)) << 4));
+        try out.append(allocator, @truncate(value >> 4));
+        try out.append(allocator, @truncate(value >> 12));
+    } else if (regenerated_size <= 0x3fff and compressed_size <= 0x3fff) {
+        const value = regenerated_size | (compressed_size << 14);
+        try out.append(allocator, 0x0a | (@as(u8, @intCast(value & 0x0f)) << 4));
+        try out.append(allocator, @truncate(value >> 4));
+        try out.append(allocator, @truncate(value >> 12));
+        try out.append(allocator, @truncate(value >> 20));
+    } else {
+        return error.UnsupportedZstdFeature;
+    }
 }
 
 fn emitRawBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
@@ -4531,6 +4581,40 @@ test "zstd literal-only writer emits printable Huffman literals" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits four-stream Huffman literals" {
+    var payload: [4096]u8 = undefined;
+    var state: u32 = 0x1618_0339;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast(32 + ((state >> 24) % 95));
+    }
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(HuffmanLiteralStreams.four, std.meta.activeTag(section.huffman_streams));
     try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);

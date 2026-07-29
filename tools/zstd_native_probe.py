@@ -169,6 +169,11 @@ def generated_payloads() -> list[tuple[str, bytes]]:
     for _ in range(768):
         printable_huffman_state = (printable_huffman_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         printable_huffman.append(32 + ((printable_huffman_state >> 24) % 95))
+    four_stream_huffman_state = 0x1618_0339
+    four_stream_huffman = bytearray()
+    for _ in range(4096):
+        four_stream_huffman_state = (four_stream_huffman_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        four_stream_huffman.append(32 + ((four_stream_huffman_state >> 24) % 95))
     one_twenty_eight_symbol_state = 0x1357_9BDF
     one_twenty_eight_symbol_huffman = bytearray()
     for _ in range(896):
@@ -188,6 +193,7 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         ("thirty-two-symbol-huffman", bytes(thirty_two_symbol_huffman)),
         ("sixty-four-symbol-huffman", bytes(sixty_four_symbol_huffman)),
         ("printable-huffman", bytes(printable_huffman)),
+        ("four-stream-huffman", bytes(four_stream_huffman)),
         ("one-twenty-eight-symbol-huffman", bytes(one_twenty_eight_symbol_huffman)),
         (
             "structured-lines",
