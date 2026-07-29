@@ -491,8 +491,9 @@ pub fn encodeSkippableFrameAlloc(allocator: std.mem.Allocator, skippable_id: u4,
 }
 
 pub fn encodeNativeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
-    const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, .{});
-    return result.frame;
+    var encoder = NativeFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return try encoder.encodeAlloc(input);
 }
 
 pub fn encodeNativeFrameWithOptionsAlloc(
@@ -500,34 +501,9 @@ pub fn encodeNativeFrameWithOptionsAlloc(
     input: []const u8,
     options: NativeFrameOptions,
 ) Error!NativeFrameEncodeResult {
-    switch (options.selection) {
-        .raw_or_rle => return .{
-            .frame = try encodeRawOrRleFrameWithOptionsAlloc(allocator, input, options),
-            .mode = .raw_or_rle,
-        },
-        .literal_only => return .{
-            .frame = try encodeLiteralOnlyFrameWithOptionsAlloc(allocator, input, options),
-            .mode = .literal_only,
-        },
-        .auto => {},
-    }
-
-    const raw_or_rle = try encodeRawOrRleFrameWithOptionsAlloc(allocator, input, options);
-    errdefer allocator.free(raw_or_rle);
-    const literal_only = try encodeLiteralOnlyFrameWithOptionsAlloc(allocator, input, options);
-    errdefer allocator.free(literal_only);
-
-    // Keep this selector deliberately simple and deterministic while the native
-    // Zstd implementation is still a bootstrap subset. It lets callers use one
-    // native API and still benefit if a future literal-only compressed mode beats
-    // raw/RLE framing, without hiding which mode was selected from tests/reports.
-    if (literal_only.len < raw_or_rle.len) {
-        allocator.free(raw_or_rle);
-        return .{ .frame = literal_only, .mode = .literal_only };
-    }
-
-    allocator.free(literal_only);
-    return .{ .frame = raw_or_rle, .mode = .raw_or_rle };
+    var encoder = NativeFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return try encoder.encodeWithOptionsAlloc(input, options);
 }
 
 pub fn encodeNativeFrameAppend(
@@ -536,21 +512,9 @@ pub fn encodeNativeFrameAppend(
     input: []const u8,
     options: NativeFrameOptions,
 ) Error!NativeFrameMode {
-    switch (options.selection) {
-        .raw_or_rle => {
-            try encodeRawOrRleFrameAppend(allocator, out, input, options);
-            return .raw_or_rle;
-        },
-        .literal_only => {
-            try encodeLiteralOnlyFrameAppend(allocator, out, input, options);
-            return .literal_only;
-        },
-        .auto => {},
-    }
-    const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, options);
-    defer allocator.free(result.frame);
-    try out.appendSlice(allocator, result.frame);
-    return result.mode;
+    var encoder = NativeFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return try encoder.encodeAppend(out, input, options);
 }
 
 pub fn encodeNativeFrameIntoSlice(
@@ -639,6 +603,11 @@ pub const NativeFrameEncoder = struct {
         try encodeRawOrRleFrameAppend(self.allocator, &self.raw_scratch, input, options);
         try encodeLiteralOnlyFrameAppend(self.allocator, &self.literal_scratch, input, options);
 
+        // Keep the bootstrap selector deterministic and transparent: both
+        // supported native encoders run against reusable scratch buffers, then
+        // the shorter interoperable frame is appended to the caller's output.
+        // This avoids the one-shot APIs allocating a complete winner frame only
+        // to copy it again, while preserving the public mode report.
         if (self.literal_scratch.items.len < self.raw_scratch.items.len) {
             try out.appendSlice(self.allocator, self.literal_scratch.items);
             return .literal_only;
