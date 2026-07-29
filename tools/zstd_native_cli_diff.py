@@ -79,7 +79,17 @@ def main() -> int:
     # block payload would not be smaller than the regenerated block. That keeps
     # output compatible with deployed zstd builds that reject expanded
     # compressed blocks even though newer format wording allows them.
-    large_duplicate_text = "".join(chr(((i * 1103515245 + 12345) >> 16) % 26 + 65) for i in range(8192))
+    def deterministic_text(seed: int, size: int) -> str:
+        state = seed
+        out = []
+        for _ in range(size):
+            state = (state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+            out.append(chr((state >> 24) % 26 + 65))
+        return "".join(out)
+
+    large_duplicate_text = deterministic_text(0x9E37_79B9, 8192)
+    large_multi_a = deterministic_text(0x243F_6A88, 4096)
+    large_multi_b = deterministic_text(0xB7E1_5162, 4096)
     cases = [
         ("", "raw_or_rle", "true", "true"),
         ("hello", "raw_or_rle", "true", "true"),
@@ -93,6 +103,7 @@ def main() -> int:
         ("prefix-abcdefghijklmno-middle-abcdefghijklmno-tail", "literal_only", "true", "true"),
         ("abcdefghijabcdefghijklmnopqrstklmnopqrst", "literal_only", "true", "true"),
         (large_duplicate_text * 2 + "tail-data", "literal_only", "true", "true"),
+        (large_multi_a * 2 + large_multi_b * 2 + "tail-data", "literal_only", "true", "true"),
     ]
     for text, mode, checksum, content_size in cases:
         encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum, content_size)
