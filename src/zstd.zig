@@ -2374,7 +2374,7 @@ fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
 }
 
 fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
-    if (rleByte(block) != null or block.len < 32 or block.len > 4096) return false;
+    if (rleByte(block) != null or block.len < 32) return false;
     var matches: [8]DuplicateMatch = undefined;
     var literal_lens: [8]usize = undefined;
     var count: usize = 0;
@@ -2382,7 +2382,6 @@ fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *st
     while (count < matches.len and literal_start < block.len) {
         const match = try findBestDuplicateMatchIn(block, literal_start) orelse break;
         const literal_len = match.second_start - literal_start;
-        if (literal_len > 64) break;
         matches[count] = match;
         literal_lens[count] = literal_len;
         count += 1;
@@ -3908,6 +3907,52 @@ test "zstd literal-only writer emits large duplicate substring match" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits multiple large duplicate matches" {
+    const segment_len = 4 * 1024;
+    const tail = "tail-data";
+    const payload = try std.testing.allocator.alloc(u8, segment_len * 4 + tail.len);
+    defer std.testing.allocator.free(payload);
+
+    var state: u32 = 0x243f_6a88;
+    for (payload[0..segment_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[segment_len..][0..segment_len], payload[0..segment_len]);
+
+    state = 0xb7e1_5162;
+    const second_literal_start = segment_len * 2;
+    for (payload[second_literal_start..][0..segment_len]) |*byte| {
+        state = state *% 22_695_477 +% 1;
+        byte.* = @truncate(state >> 16);
+    }
+    @memcpy(payload[segment_len * 3 ..][0..segment_len], payload[second_literal_start..][0..segment_len]);
+    @memcpy(payload[segment_len * 4 ..], tail);
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    try std.testing.expectEqual(@as(u24, 2), (block_header >> 1) & 0x3);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
