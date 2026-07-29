@@ -107,6 +107,7 @@ def main() -> int:
         (large_duplicate_text * 2 + "tail-data", "literal_only", "true", "true"),
         (large_multi_a * 2 + large_multi_b * 2 + "tail-data", "literal_only", "true", "true"),
         (predefined_multi_large * 2 + predefined_multi_small * 2 + "tail-data", "literal_only", "true", "true"),
+        ("ab" * 12 + "cdef" * 20 + "tail", "literal_only", "true", "true"),
     ]
     for text, mode, checksum, content_size in cases:
         encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum, content_size)
