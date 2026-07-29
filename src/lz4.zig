@@ -10,9 +10,11 @@ const frame_magic_u32: u32 = 0x184d2204;
 const skippable_magic_min: u32 = 0x184d2a50;
 const skippable_magic_max: u32 = 0x184d2a5f;
 const max_frame_block_len = 4 * 1024 * 1024;
-const hash_table_len = 64 * 1024;
+const max_block_history_len = 64 * 1024;
+const max_match_offset = std.math.maxInt(u16);
+const hash_table_len = max_block_history_len;
 const hash_occupancy_words = hash_table_len / @bitSizeOf(u64);
-const chain_table_len = 64 * 1024;
+const chain_table_len = max_block_history_len;
 const chain_table_mask = chain_table_len - 1;
 const invalid_pos = std.math.maxInt(u32);
 const max_chain_depth = 8;
@@ -74,7 +76,7 @@ pub const BlockSizeId = enum(u8) {
 
     fn maxLen(self: BlockSizeId) usize {
         return switch (self) {
-            .max64kb => 64 * 1024,
+            .max64kb => max_block_history_len,
             .max256kb => 256 * 1024,
             .max1mb => 1024 * 1024,
             .max4mb => max_frame_block_len,
@@ -133,8 +135,9 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
 
 /// Dependency-free pure Zig LZ4 frame encoder retained for bootstrapping and
 /// differential testing. Blocks use a bounded hash-chain parser with one-byte
-/// lazy matching, and fall back to uncompressed storage when compression expands
-/// the input.
+/// lazy matching, linked frames seed the parser from the previous 64 KiB of
+/// decoded history, and all blocks fall back to uncompressed storage when
+/// compression expands the input.
 pub fn encodePureFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return try encodePureFrameWithOptionsAlloc(allocator, input, .{});
 }
@@ -189,17 +192,21 @@ pub fn encodePureFrameWithOptionsAlloc(
 
     var offset: usize = 0;
     const max_block_len = options.block_size_id.maxLen();
-    // Keep linked-mode state-machine coverage explicit in the frame metadata.
-    // Blocks are still encoded independently for now, so the decoder must be
-    // able to handle linked frames that do not actually need prior history.
     while (offset < input.len) {
         const block_len = @min(input.len - offset, max_block_len);
         var header: [4]u8 = undefined;
         const block = input[offset..][0..block_len];
+        const history = if (options.block_mode == .linked)
+            input[if (offset > max_match_offset) offset - max_match_offset else 0..offset]
+        else
+            &[_]u8{};
         const header_start = out.items.len;
         try out.appendNTimes(allocator, 0, 4);
         const encoded_start = out.items.len;
-        const compressed_len = try encodeBlockInto(allocator, &out, block, hash_table, occupancy_bits, chain_table);
+        const compressed_len = if (history.len == 0)
+            try encodeBlockInto(allocator, &out, block, hash_table, occupancy_bits, chain_table)
+        else
+            try encodeLinkedBlockInto(allocator, &out, history, block, hash_table, occupancy_bits, chain_table);
         if (compressed_len < block.len) {
             std.mem.writeInt(u32, out.items[header_start..][0..4], @intCast(compressed_len), .little);
             if (options.block_checksum) try emitBlockChecksum(allocator, &out, out.items[encoded_start..][0..compressed_len]);
@@ -269,10 +276,10 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
         } else {
             const history = if (header.block_independent)
                 &[_]u8{}
-            else if (out.items.len <= 64 * 1024)
+            else if (out.items.len <= max_block_history_len)
                 out.items
             else
-                out.items[out.items.len - 64 * 1024 ..];
+                out.items[out.items.len - max_block_history_len ..];
             if (header.block_independent) {
                 try decodeBlockInto(allocator, &out, block, null, history);
             } else {
@@ -398,10 +405,10 @@ pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
             written += block_len;
         } else {
             const block_start = written;
-            const history_start = if (header.block_independent or block_start <= 64 * 1024)
+            const history_start = if (header.block_independent or block_start <= max_block_history_len)
                 if (header.block_independent) block_start else 0
             else
-                block_start - 64 * 1024;
+                block_start - max_block_history_len;
             try decodeBlockIntoBuffer(block, output, &written, null, history_start);
         }
 
@@ -632,7 +639,7 @@ fn descriptorChecksum(descriptor: []const u8) u8 {
 fn blockSizeMaxFromDescriptor(bd: u8) Error!usize {
     if ((bd & 0x8f) != 0) return error.CorruptFrame;
     return switch ((bd >> 4) & 0x07) {
-        4 => 64 * 1024,
+        4 => max_block_history_len,
         5 => 256 * 1024,
         6 => 1024 * 1024,
         7 => max_frame_block_len,
@@ -913,6 +920,89 @@ fn encodeBlockInto(
     return out.items.len - out_start;
 }
 
+fn encodeLinkedBlockInto(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    history: []const u8,
+    input: []const u8,
+    table: []u32,
+    occupancy_bits: []u64,
+    chain_table: []u32,
+) Error!usize {
+    const out_start = out.items.len;
+    if (input.len == 0) return 0;
+    const block_start = history.len;
+    const virtual_len = try checkedAdd(history.len, input.len);
+    if (table.len < hash_table_len or
+        occupancy_bits.len < hash_occupancy_words or
+        chain_table.len < chain_table_len or
+        virtual_len > std.math.maxInt(u32))
+    {
+        return error.IntegerOverflow;
+    }
+
+    @memset(occupancy_bits[0..hash_occupancy_words], 0);
+    try out.ensureUnusedCapacity(allocator, try maxCompressedLen(input.len));
+
+    // Linked LZ4 blocks may reference the previous 64 KiB of decoded frame
+    // history. Seed that prefix into the same bounded hash-chain tables used by
+    // independent blocks, then emit only sequences whose literals live in the
+    // current block. Candidate positions near the history/block boundary are
+    // intentionally allowed to hash across the boundary: the decoder can replay
+    // such matches by copying the history bytes first and then overlapping with
+    // the output it just produced.
+    var seed: usize = 0;
+    while (seed < block_start and seed + 4 <= virtual_len) : (seed += 1) {
+        _ = insertLinkedHash(history, input, seed, table, occupancy_bits, chain_table);
+    }
+
+    var anchor: usize = block_start;
+    var index: usize = block_start;
+    while (index + 12 <= virtual_len) {
+        var match_index = index;
+        var best = insertAndFindBestLinked(history, input, index, table, occupancy_bits, chain_table);
+        if (best.len != 0 and index + 13 <= virtual_len and best.len < good_match_len) {
+            const next = insertAndFindBestLinked(history, input, index + 1, table, occupancy_bits, chain_table);
+            if (next.len > best.len + lazy_extra_gain) {
+                match_index = index + 1;
+                best = next;
+            }
+        }
+
+        if (best.len != 0) {
+            var match_start = match_index;
+            var candidate_start = best.start;
+            var match_len = best.len;
+            while (match_start > anchor and candidate_start > 0 and linkedByteAt(history, input, match_start - 1) == linkedByteAt(history, input, candidate_start - 1)) {
+                match_start -= 1;
+                candidate_start -= 1;
+                match_len += 1;
+            }
+            const literal_start = anchor - block_start;
+            const literal_end = match_start - block_start;
+            try emitSequence(
+                allocator,
+                out,
+                input[literal_start..literal_end],
+                @intCast(match_start - candidate_start),
+                match_len,
+            );
+            index = match_start + match_len;
+            anchor = index;
+            if (index >= virtual_len) break;
+            seed = match_start + 1;
+            while (seed < index and seed + 4 <= virtual_len) : (seed += 1) {
+                _ = insertLinkedHash(history, input, seed, table, occupancy_bits, chain_table);
+            }
+        } else {
+            index += 1;
+        }
+    }
+
+    try emitLastLiteral(allocator, out, input[anchor - block_start ..]);
+    return out.items.len - out_start;
+}
+
 fn insertAndFindBest(
     input: []const u8,
     index: usize,
@@ -928,7 +1018,7 @@ fn insertAndFindBest(
     while (candidate != invalid_pos and depth < max_chain_depth) : (depth += 1) {
         const candidate_start: usize = @intCast(candidate);
         if (candidate_start >= index) break;
-        if (index - candidate_start > std.math.maxInt(u16)) break;
+        if (index - candidate_start > max_match_offset) break;
         if (input[candidate_start] == input[index] and
             input[candidate_start + 1] == input[index + 1] and
             input[candidate_start + 2] == input[index + 2] and
@@ -936,6 +1026,43 @@ fn insertAndFindBest(
         {
             var match_len: usize = 4;
             while (index + match_len < input.len and input[candidate_start + match_len] == input[index + match_len]) {
+                match_len += 1;
+            }
+            if (match_len > best.len) {
+                best = .{ .start = candidate_start, .len = match_len };
+                if (match_len >= good_match_len) break;
+            }
+        }
+        candidate = chain_table[candidate_start & chain_table_mask];
+    }
+    return best;
+}
+
+fn insertAndFindBestLinked(
+    history: []const u8,
+    input: []const u8,
+    index: usize,
+    table: []u32,
+    occupancy_bits: []u64,
+    chain_table: []u32,
+) Match {
+    const virtual_len = history.len + input.len;
+    const candidate_entry = insertLinkedHash(history, input, index, table, occupancy_bits, chain_table);
+
+    var best: Match = .{};
+    var candidate = candidate_entry;
+    var depth: usize = 0;
+    while (candidate != invalid_pos and depth < max_chain_depth) : (depth += 1) {
+        const candidate_start: usize = @intCast(candidate);
+        if (candidate_start >= index) break;
+        if (index - candidate_start > max_match_offset) break;
+        if (linkedByteAt(history, input, candidate_start) == linkedByteAt(history, input, index) and
+            linkedByteAt(history, input, candidate_start + 1) == linkedByteAt(history, input, index + 1) and
+            linkedByteAt(history, input, candidate_start + 2) == linkedByteAt(history, input, index + 2) and
+            linkedByteAt(history, input, candidate_start + 3) == linkedByteAt(history, input, index + 3))
+        {
+            var match_len: usize = 4;
+            while (index + match_len < virtual_len and linkedByteAt(history, input, candidate_start + match_len) == linkedByteAt(history, input, index + match_len)) {
                 match_len += 1;
             }
             if (match_len > best.len) {
@@ -970,6 +1097,26 @@ fn insertHash(
     return candidate_entry;
 }
 
+fn insertLinkedHash(
+    history: []const u8,
+    input: []const u8,
+    index: usize,
+    table: []u32,
+    occupancy_bits: []u64,
+    chain_table: []u32,
+) u32 {
+    const h = hashLinked4(history, input, index);
+    const candidate_seen = hashOccupied(occupancy_bits, h);
+    const candidate_entry = if (candidate_seen) table[h] else invalid_pos;
+    markHashOccupied(occupancy_bits, h);
+
+    if (candidate_entry == index) return chain_table[index & chain_table_mask];
+
+    table[h] = @intCast(index);
+    chain_table[index & chain_table_mask] = candidate_entry;
+    return candidate_entry;
+}
+
 fn maxCompressedLen(input_len: usize) Error!usize {
     return try checkedAdd(try checkedAdd(input_len, input_len / 255), 16);
 }
@@ -989,6 +1136,16 @@ fn markHashOccupied(occupancy_bits: []u64, hash: usize) void {
 fn hash4(bytes: *const [4]u8) usize {
     const value = std.mem.readInt(u32, bytes, .little);
     return @intCast((value *% 2654435761) >> 16);
+}
+
+fn hashLinked4(history: []const u8, input: []const u8, index: usize) usize {
+    var bytes: [4]u8 = undefined;
+    inline for (0..4) |i| bytes[i] = linkedByteAt(history, input, index + i);
+    return hash4(&bytes);
+}
+
+fn linkedByteAt(history: []const u8, input: []const u8, index: usize) u8 {
+    return if (index < history.len) history[index] else input[index - history.len];
 }
 
 fn emitSequence(allocator: std.mem.Allocator, out: *std.ArrayList(u8), literal: []const u8, match_offset: u16, match_len: usize) Error!void {
@@ -1151,7 +1308,7 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
         bd: u8,
         max_len: usize,
     }{
-        .{ .id = .max64kb, .bd = 0x40, .max_len = 64 * 1024 },
+        .{ .id = .max64kb, .bd = 0x40, .max_len = max_block_history_len },
         .{ .id = .max256kb, .bd = 0x50, .max_len = 256 * 1024 },
         .{ .id = .max1mb, .bd = 0x60, .max_len = 1024 * 1024 },
         .{ .id = .max4mb, .bd = 0x70, .max_len = max_frame_block_len },
@@ -1179,6 +1336,59 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     try std.testing.expectEqual(repeated.len, into_written);
     try std.testing.expectEqualSlices(u8, repeated, into_buffer[0..into_written]);
     try std.testing.expectError(error.OutputTooSmall, decodeFrameInto(encoded, into_buffer[0 .. into_buffer.len - 1]));
+}
+
+test "lz4 linked frame encoder uses previous block history" {
+    const first_block_len = max_block_history_len;
+    const second_block_len = 4 * 1024;
+    const payload = try std.testing.allocator.alloc(u8, first_block_len + second_block_len);
+    defer std.testing.allocator.free(payload);
+
+    var state: u32 = 0x1234_5678;
+    for (payload[0..first_block_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[first_block_len..], payload[first_block_len - second_block_len .. first_block_len]);
+
+    const linked = try encodePureFrameWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{
+            .block_size_id = .max64kb,
+            .block_mode = .linked,
+            .content_checksum = false,
+        },
+    );
+    defer std.testing.allocator.free(linked);
+
+    const independent = try encodePureFrameWithOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        .{
+            .block_size_id = .max64kb,
+            .block_mode = .independent,
+            .content_checksum = false,
+        },
+    );
+    defer std.testing.allocator.free(independent);
+
+    // The second block is a copy of the previous block tail. Independent LZ4
+    // has no history to reference, while linked mode should encode it as a
+    // small match-only block rather than store another 4 KiB literal payload.
+    try std.testing.expect(linked.len < independent.len);
+    const header = try parseFrameHeader(linked);
+    try std.testing.expect(!header.block_independent);
+    var offset = header.payload_offset;
+    const first_header = std.mem.readInt(u32, linked[offset..][0..4], .little);
+    offset += 4 + @as(usize, @intCast(first_header & 0x7fff_ffff));
+    const second_header = std.mem.readInt(u32, linked[offset..][0..4], .little);
+    try std.testing.expect((second_header & 0x8000_0000) == 0);
+    try std.testing.expect((second_header & 0x7fff_ffff) < second_block_len / 8);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, linked);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "lz4 skippable frame writer composes with concatenated native streams" {
@@ -1355,6 +1565,6 @@ test "lz4 native frame decoder validates header, block checksum, and block size"
 
     var bad_block_size = try std.testing.allocator.dupe(u8, frame.items);
     defer std.testing.allocator.free(bad_block_size);
-    std.mem.writeInt(u32, bad_block_size[7..][0..4], 0x8000_0000 | (64 * 1024 + 1), .little);
+    std.mem.writeInt(u32, bad_block_size[7..][0..4], 0x8000_0000 | (max_block_history_len + 1), .little);
     try std.testing.expectError(error.CorruptFrame, decodeNativeFrameAlloc(std.testing.allocator, bad_block_size));
 }
