@@ -696,8 +696,47 @@ pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![
     return out.toOwnedSlice(allocator);
 }
 
+pub fn encodeBlockWithPrefixAlloc(allocator: std.mem.Allocator, input: []const u8, prefix: []const u8) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var occupancy_bits: []u64 = &.{};
+    var hash_table: []u32 = &.{};
+    var chain_table: []u32 = &.{};
+    if (input.len != 0) {
+        const table = try allocator.alloc(u32, hash_table_len);
+        const bits = allocator.alloc(u64, hash_occupancy_words) catch |err| {
+            allocator.free(table);
+            return err;
+        };
+        const chain = allocator.alloc(u32, chain_table_len) catch |err| {
+            allocator.free(bits);
+            allocator.free(table);
+            return err;
+        };
+        hash_table = table;
+        occupancy_bits = bits;
+        chain_table = chain;
+    }
+    defer {
+        if (chain_table.len != 0) allocator.free(chain_table);
+        if (occupancy_bits.len != 0) allocator.free(occupancy_bits);
+        if (hash_table.len != 0) allocator.free(hash_table);
+    }
+    const history = prefix[if (prefix.len > max_match_offset) prefix.len - max_match_offset else 0..];
+    _ = try encodeLinkedBlockInto(allocator, &out, history, input, hash_table, occupancy_bits, chain_table);
+    return out.toOwnedSlice(allocator);
+}
+
 pub fn encodeBlockIntoSlice(allocator: std.mem.Allocator, input: []const u8, output: []u8) Error!usize {
     const encoded = try encodeBlockAlloc(allocator, input);
+    defer allocator.free(encoded);
+    if (output.len < encoded.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
+}
+
+pub fn encodeBlockWithPrefixIntoSlice(allocator: std.mem.Allocator, input: []const u8, prefix: []const u8, output: []u8) Error!usize {
+    const encoded = try encodeBlockWithPrefixAlloc(allocator, input, prefix);
     defer allocator.free(encoded);
     if (output.len < encoded.len) return error.OutputTooSmall;
     @memcpy(output[0..encoded.len], encoded);
@@ -1509,6 +1548,41 @@ test "lz4 linked frame encoder uses previous block history" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, linked);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "lz4 block encoder uses caller prefix history" {
+    const prefix_len = max_block_history_len;
+    const block_len = 4 * 1024;
+    const prefix = try std.testing.allocator.alloc(u8, prefix_len);
+    defer std.testing.allocator.free(prefix);
+    const block = try std.testing.allocator.alloc(u8, block_len);
+    defer std.testing.allocator.free(block);
+
+    var state: u32 = 0x51ed_1234;
+    for (prefix) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(block, prefix[prefix.len - block.len ..]);
+
+    const encoded = try encodeBlockWithPrefixAlloc(std.testing.allocator, block, prefix);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len < block.len);
+    try std.testing.expectEqual(block.len, try decodedBlockSizeWithPrefix(encoded, prefix));
+
+    const decoded = try decodeBlockWithPrefixAlloc(std.testing.allocator, encoded, block.len, prefix);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, block, decoded);
+
+    const bound = try encodedBlockBound(block.len);
+    const into = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(into);
+    const written = try encodeBlockWithPrefixIntoSlice(std.testing.allocator, block, prefix, into);
+    try std.testing.expectEqualSlices(u8, encoded, into[0..written]);
+    try std.testing.expectError(
+        error.OutputTooSmall,
+        encodeBlockWithPrefixIntoSlice(std.testing.allocator, block, prefix, into[0 .. written - 1]),
+    );
 }
 
 test "lz4 skippable frame writer composes with concatenated native streams" {
