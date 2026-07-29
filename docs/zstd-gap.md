@@ -120,10 +120,10 @@ Current interpretation:
   validates Vort's dependency-free native encoder on the same generated/file
   byte payloads through `encode-zstd-native-bytes-hex` in `auto`, `raw_or_rle`,
   and `literal_only` modes, including both 4-divisible and non-4-divisible
-  four-stream Huffman literal payloads plus a file-backed multi-block treeless
-  Huffman writer case, then checks both system zstd decode and Vort native
-  decode, with `size-zstd-native-hex` preflight checked before each native
-  decode. The probe accepts repeated `--path`
+  four-stream Huffman literal payloads, a long-period repeated-pattern writer
+  case, plus a file-backed multi-block treeless Huffman writer case, then checks
+  both system zstd decode and Vort native decode, with `size-zstd-native-hex`
+  preflight checked before each native decode. The probe accepts repeated `--path`
   arguments or bounded recursive `--dir` discovery with an optional `--limit`
   for focused file payloads when investigating real corpus failures.
 

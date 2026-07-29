@@ -30,8 +30,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   (including non-4-divisible four-stream splits and treeless repeat trees across
   blocks), hash-probed large duplicate plus
   RLE/predefined-table multi-duplicate and repeated-pattern match emission
-  (falling back to raw/RLE blocks when sequence-free compressed blocks would
-  expand, for broad zstd CLI compatibility) plus deterministic smallest-mode
+  with periods up to 32 bytes (falling back to raw/RLE blocks when
+  sequence-free compressed blocks would expand, for broad zstd CLI
+  compatibility) plus deterministic smallest-mode
   native selection, optional content checksum/content-size header fields,
   skippable frame append/encode-into writer, decoded-size preflight, bounded
   allocation, and caller-owned encode/decode-into/append plus reusable scratch

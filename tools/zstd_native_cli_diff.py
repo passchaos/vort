@@ -254,6 +254,7 @@ def main() -> int:
         (large_multi_a * 2 + large_multi_b * 2 + "tail-data", "literal_only", "true", "true"),
         (predefined_multi_large * 2 + predefined_multi_small * 2 + "tail-data", "literal_only", "true", "true"),
         ("ab" * 12 + "cdef" * 20 + "tail", "literal_only", "true", "true"),
+        ("abcdefghijklmnop" * 24, "literal_only", "true", "true"),
         (two_symbol_huffman_text, "literal_only", "true", "true"),
         (four_symbol_huffman_text, "literal_only", "true", "true"),
         (six_symbol_huffman_text, "literal_only", "true", "true"),

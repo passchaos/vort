@@ -16,6 +16,7 @@ const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
 const max_bootstrap_sequence_count = 16;
 const max_predefined_sequence_states = 64;
+const repeated_pattern_period_max = 32;
 
 const ll_base = [_]usize{
     0,      1,      2,      3,       4,     5,     6,     7,
@@ -3456,7 +3457,7 @@ fn findRepeatedPatternSegmentIn(block: []const u8, start_min: usize, end: usize)
     var best: ?RepeatedPatternSegment = null;
     for (start_min..max_start + 1) |start| {
         if (end - start < 8) break;
-        for (2..@min((end - start) / 2, 8) + 1) |period| {
+        for (2..@min((end - start) / 2, repeated_pattern_period_max) + 1) |period| {
             var i = start + period;
             while (i < end and block[i] == block[start + ((i - start) % period)]) : (i += 1) {}
             const repeated_len = i - start;
@@ -5196,6 +5197,33 @@ test "zstd literal-only writer keeps two-symbol repeated pattern matches" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits long-period repeated pattern match" {
+    const pattern = "abcdefghijklmnop";
+    const payload = pattern ** 24;
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);

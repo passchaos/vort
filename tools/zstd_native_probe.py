@@ -256,6 +256,7 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         ("tiny", b"hello"),
         ("json100", json_unit * 100),
         ("alphabet200", printable * 200),
+        ("long-period-pattern", b"abcdefghijklmnop" * 24),
         ("two-symbol-huffman", bytes(two_symbol_huffman)),
         ("four-symbol-huffman", bytes(four_symbol_huffman)),
         ("six-symbol-huffman", bytes(six_symbol_huffman)),
