@@ -110,6 +110,12 @@ def main() -> int:
         four_symbol_state = (four_symbol_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         four_symbol_huffman_chars.append("ABCD"[(four_symbol_state >> 30) & 3])
     four_symbol_huffman_text = "".join(four_symbol_huffman_chars)
+    six_symbol_state = 0x0BAD_F00D
+    six_symbol_huffman_chars = []
+    for _ in range(256):
+        six_symbol_state = (six_symbol_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        six_symbol_huffman_chars.append("ABCDEF"[(six_symbol_state >> 29) % 6])
+    six_symbol_huffman_text = "".join(six_symbol_huffman_chars)
     eight_symbol_state = 0x1234_5678
     eight_symbol_huffman_chars = []
     for _ in range(256):
@@ -140,6 +146,7 @@ def main() -> int:
         ("ab" * 12 + "cdef" * 20 + "tail", "literal_only", "true", "true"),
         (two_symbol_huffman_text, "literal_only", "true", "true"),
         (four_symbol_huffman_text, "literal_only", "true", "true"),
+        (six_symbol_huffman_text, "literal_only", "true", "true"),
         (eight_symbol_huffman_text, "literal_only", "true", "true"),
         (sixteen_symbol_huffman_text, "literal_only", "true", "true"),
     ]
