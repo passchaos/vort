@@ -523,6 +523,22 @@ pub fn main(init: std.process.Init) !void {
         });
         defer init.gpa.free(result.frame);
         try printHex(stdout, result.frame);
+    } else if (std.mem.eql(u8, command, "encode-zstd-native-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(payload);
+        const selection = try parseZstdNativeSelection(args.next());
+        const checksum = try parseOptionalBool(args.next(), true);
+        const content_size = try parseOptionalBool(args.next(), true);
+        const result = try vort.zstdEncodeNativeFrameWithOptionsAlloc(init.gpa, payload, .{
+            .selection = selection,
+            .content_checksum = checksum,
+            .include_content_size = content_size,
+        });
+        defer init.gpa.free(result.frame);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = result.frame });
+        try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ result.frame.len, payload.len, output_path });
     } else if (std.mem.eql(u8, command, "decode-zstd-native-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1286,6 +1302,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode bytes as dependency-free native-subset Zstandard hex
         \\  encode-zstd-native-file-hex [path] [auto|raw_or_rle|literal_only] [checksum] [content_size]
         \\                              Encode file bytes as dependency-free native-subset Zstandard hex
+        \\  encode-zstd-native-file <in> <out> [auto|raw_or_rle|literal_only] [checksum] [content_size]
+        \\                              Encode file bytes as dependency-free native-subset Zstandard file
         \\  decode-zstd-native-hex [hex] [max_output]
         \\                              Decode dependency-free native-subset Zstandard hex
         \\  decode-zstd-native-file [path] [max_output]
