@@ -2866,10 +2866,14 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
         try payload.appendSlice(allocator, huffman_tree.items);
         try payload.appendSlice(allocator, stream.items);
     } else {
-        if (block.len % 4 != 0) return false;
         var streams: [4]std.ArrayList(u8) = .{ .empty, .empty, .empty, .empty };
         defer for (&streams) |*stream| stream.deinit(allocator);
-        const segment_len = block.len / 4;
+        // Zstandard four-stream literals split regenerated output with the first
+        // three streams covering ceil(size / 4) bytes and the fourth stream
+        // covering the remainder. Matching that layout lets the decoder switch
+        // streams exactly when each reverse bitstream reaches its end mark,
+        // including for non-4-divisible literal counts.
+        const segment_len = (block.len + 3) / 4;
         const segment_1_end = segment_len;
         const segment_2_end = segment_len * 2;
         const segment_3_end = segment_len * 3;
@@ -5042,7 +5046,7 @@ test "zstd literal-only writer emits large four-stream Huffman literals" {
     try std.testing.expect(encoded.len < raw_encoded.len);
 }
 
-test "zstd literal-only writer avoids non-divisible four-stream Huffman" {
+test "zstd literal-only writer emits non-divisible four-stream Huffman" {
     var payload: [5190]u8 = undefined;
     var state: u32 = 0x1618_0339;
     for (&payload) |*byte| {
@@ -5060,9 +5064,9 @@ test "zstd literal-only writer avoids non-divisible four-stream Huffman" {
     const block = encoded[block_offset + 3 ..][0..block_len];
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
-    if (section.kind == .compressed) {
-        try std.testing.expect(std.meta.activeTag(section.huffman_streams) != .four);
-    }
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(HuffmanLiteralStreams.four, std.meta.activeTag(section.huffman_streams));
+    try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
