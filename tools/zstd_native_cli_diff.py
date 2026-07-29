@@ -141,6 +141,12 @@ def main() -> int:
         sixty_four_symbol_state = (sixty_four_symbol_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         sixty_four_symbol_huffman_chars.append(chr(32 + ((sixty_four_symbol_state >> 26) & 63)))
     sixty_four_symbol_huffman_text = "".join(sixty_four_symbol_huffman_chars)
+    printable_huffman_state = 0x2718_2818
+    printable_huffman_chars = []
+    for _ in range(768):
+        printable_huffman_state = (printable_huffman_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        printable_huffman_chars.append(chr(32 + ((printable_huffman_state >> 24) % 95)))
+    printable_huffman_text = "".join(printable_huffman_chars)
     cases = [
         ("", "raw_or_rle", "true", "true"),
         ("hello", "raw_or_rle", "true", "true"),
@@ -164,6 +170,7 @@ def main() -> int:
         (sixteen_symbol_huffman_text, "literal_only", "true", "true"),
         (thirty_two_symbol_huffman_text, "literal_only", "true", "true"),
         (sixty_four_symbol_huffman_text, "literal_only", "true", "true"),
+        (printable_huffman_text, "literal_only", "true", "true"),
     ]
     for text, mode, checksum, content_size in cases:
         encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum, content_size)
