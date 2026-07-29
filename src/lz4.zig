@@ -730,6 +730,20 @@ pub fn decodedBlockSizeLimited(input: []const u8, max_output_len: usize) Error!u
     return try compressedBlockDecodedSizeLimited(input, 0, max_output_len);
 }
 
+pub fn decodedBlockSizeWithPrefix(input: []const u8, prefix: []const u8) Error!usize {
+    return try decodedBlockSizeWithPrefixLimited(input, prefix, std.math.maxInt(usize));
+}
+
+pub fn decodedBlockSizeWithPrefixLimited(input: []const u8, prefix: []const u8, max_output_len: usize) Error!usize {
+    const capped_prefix_len = @min(prefix.len, max_block_history_len);
+    const total_limit = if (max_output_len == std.math.maxInt(usize))
+        std.math.maxInt(usize)
+    else
+        std.math.add(usize, capped_prefix_len, max_output_len) catch return error.IntegerOverflow;
+    const total = try compressedBlockDecodedSizeLimitedWithHistory(input, capped_prefix_len, 0, total_limit);
+    return total - capped_prefix_len;
+}
+
 fn decodeBlockInto(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -1494,6 +1508,9 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
 
     const prefix_match = [_]u8{ 0x04, 4, 0 };
     try std.testing.expectError(error.InvalidMatch, decodedBlockSize(&prefix_match));
+    try std.testing.expectEqual(@as(usize, 8), try decodedBlockSizeWithPrefix(&prefix_match, "abcdefghijklmnop"));
+    try std.testing.expectEqual(@as(usize, 8), try decodedBlockSizeWithPrefixLimited(&prefix_match, "abcdefghijklmnop", 8));
+    try std.testing.expectError(error.OutputLimitExceeded, decodedBlockSizeWithPrefixLimited(&prefix_match, "abcdefghijklmnop", 7));
     const prefixed = try decodeBlockWithPrefixAlloc(std.testing.allocator, &prefix_match, 8, "abcdefghijklmnop");
     defer std.testing.allocator.free(prefixed);
     try std.testing.expectEqualSlices(u8, "mnopmnop", prefixed);
