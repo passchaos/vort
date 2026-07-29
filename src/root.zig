@@ -99,6 +99,8 @@ pub const zstdEncodeNativeFrameAlloc = zstd.encodeNativeFrameAlloc;
 pub const zstdDecodeNativeFrameAlloc = zstd.decodeNativeFrameAlloc;
 pub const zstdDecodeNativeFrameAllocLimited = zstd.decodeNativeFrameAllocLimited;
 pub const zstdDecodeNativeFrameInto = zstd.decodeNativeFrameInto;
+pub const zstdDecodedNativeFrameSize = zstd.decodedNativeFrameSize;
+pub const zstdDecodedNativeFrameSizeLimited = zstd.decodedNativeFrameSizeLimited;
 
 pub const Error = core.Error;
 pub const FrameInfo = core.FrameInfo;
@@ -700,6 +702,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeNativeFrameAlloc;
     _ = zstdDecodeNativeFrameAllocLimited;
     _ = zstdDecodeNativeFrameInto;
+    _ = zstdDecodedNativeFrameSize;
+    _ = zstdDecodedNativeFrameSizeLimited;
 }
 
 test "root lz4 lib frame options round trip" {
@@ -747,6 +751,19 @@ test "root zstd lib frame options round trip" {
     try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
     try std.testing.expectEqual(bound, try zstdDecodedFrameSizeLimited(encoded, bound));
     try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedFrameSizeLimited(encoded, bound - 1));
+}
+
+test "root zstd native size preflight covers compressed blocks" {
+    const payload = ("ab" ** 12) ++ ("cdef" ** 20) ++ "tail";
+    const encoded = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+    });
+    defer std.testing.allocator.free(encoded.frame);
+
+    const decoded_len = try zstdDecodedNativeFrameSize(encoded.frame);
+    try std.testing.expectEqual(payload.len, decoded_len);
+    try std.testing.expectEqual(payload.len, try zstdDecodedNativeFrameSizeLimited(encoded.frame, payload.len));
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedNativeFrameSizeLimited(encoded.frame, payload.len - 1));
 }
 
 test "root exports chunked compatibility decode helpers" {

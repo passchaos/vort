@@ -287,6 +287,9 @@ pub fn decodedRawOrRleFrameSize(frame: []const u8) Error!usize {
     return try rawOrRleDecodedSizeLimited(frame, std.math.maxInt(usize));
 }
 
+pub const decodedNativeFrameSize = decodedRawOrRleFrameSize;
+pub const decodedNativeFrameSizeLimited = rawOrRleDecodedSizeLimited;
+
 /// Decode the raw/RLE Zstandard subset directly into caller-owned storage.
 /// The returned length is the number of bytes written across all concatenated
 /// non-skippable frames. This mirrors the allocator-returning fallback but lets
