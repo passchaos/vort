@@ -64,6 +64,8 @@ pub const lz4DecodeConcatenatedFrameInto = lz4.decodeConcatenatedFrameInto;
 pub const lz4DecodeNativeConcatenatedFrameAlloc = lz4.decodeNativeConcatenatedFrameAlloc;
 pub const lz4DecodeNativeConcatenatedFrameAllocLimited = lz4.decodeNativeConcatenatedFrameAllocLimited;
 pub const lz4DecodeNativeConcatenatedFrameInto = lz4.decodeNativeConcatenatedFrameInto;
+pub const lz4EncodedNativeFrameBound = lz4.encodedNativeFrameBound;
+pub const lz4EncodedNativeFrameBoundWithOptions = lz4.encodedNativeFrameBoundWithOptions;
 pub const lz4EncodeBlockAlloc = lz4.encodeBlockAlloc;
 pub const lz4EncodeBlockWithPrefixAlloc = lz4.encodeBlockWithPrefixAlloc;
 pub const lz4EncodeBlockIntoSlice = lz4.encodeBlockIntoSlice;
@@ -682,6 +684,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeNativeConcatenatedFrameAlloc;
     _ = lz4DecodeNativeConcatenatedFrameAllocLimited;
     _ = lz4DecodeNativeConcatenatedFrameInto;
+    _ = lz4EncodedNativeFrameBound;
+    _ = lz4EncodedNativeFrameBoundWithOptions;
     _ = lz4EncodeBlockAlloc;
     _ = lz4EncodeBlockWithPrefixAlloc;
     _ = lz4EncodeBlockIntoSlice;
@@ -752,6 +756,13 @@ test "root lz4 lib frame options round trip" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expectEqual(payload.len, try lz4DecodedFrameSizeLimited(encoded, payload.len));
     try std.testing.expectError(error.OutputLimitExceeded, lz4DecodedFrameSizeLimited(encoded, payload.len - 1));
+    const native_encoded = try lz4EncodeNativeFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(native_encoded);
+    try std.testing.expect(native_encoded.len <= try lz4EncodedNativeFrameBound(payload.len));
+    try std.testing.expect(native_encoded.len <= try lz4EncodedNativeFrameBoundWithOptions(payload.len, .{
+        .block_size_id = .max64kb,
+        .block_checksum = true,
+    }));
 
     const raw_match = [_]u8{ 0x33, 'a', 'b', 'c', 3, 0 };
     try std.testing.expect(raw_match.len <= try lz4EncodedBlockBound(10));

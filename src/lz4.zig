@@ -84,6 +84,26 @@ pub const BlockSizeId = enum(u8) {
     }
 };
 
+pub fn encodedNativeFrameBound(input_len: usize) Error!usize {
+    return try encodedNativeFrameBoundWithOptions(input_len, .{});
+}
+
+pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrameOptions) Error!usize {
+    var bound: usize = 4 + 2 + 1; // magic + FLG/BD + descriptor checksum
+    if (options.include_content_size) bound = std.math.add(usize, bound, 8) catch return error.IntegerOverflow;
+    if (input_len != 0) {
+        const max_block_len = options.block_size_id.maxLen();
+        const block_count = (input_len + max_block_len - 1) / max_block_len;
+        bound = std.math.add(usize, bound, input_len) catch return error.IntegerOverflow;
+        const per_block_overhead = 4 + if (options.block_checksum) @as(usize, 4) else 0;
+        const block_overhead = std.math.mul(usize, block_count, per_block_overhead) catch return error.IntegerOverflow;
+        bound = std.math.add(usize, bound, block_overhead) catch return error.IntegerOverflow;
+    }
+    bound = std.math.add(usize, bound, 4) catch return error.IntegerOverflow; // end mark
+    if (options.content_checksum) bound = std.math.add(usize, bound, 4) catch return error.IntegerOverflow;
+    return bound;
+}
+
 /// Encode a complete interoperable LZ4 frame using liblz4's high-compression
 /// frame encoder. The default level starts at LZ4HC_CLEVEL_OPT_MIN (10)
 /// because it closes the C++ reference ratio gap on MCAP chunk workloads while
@@ -1497,6 +1517,7 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const encoded = try encodePureFrameAlloc(std.testing.allocator, repeated);
     defer std.testing.allocator.free(encoded);
     try std.testing.expect(encoded.len < repeated.len);
+    try std.testing.expect(encoded.len <= try encodedNativeFrameBound(repeated.len));
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, repeated, decoded);
@@ -1518,6 +1539,11 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     );
     defer std.testing.allocator.free(with_options);
     try std.testing.expectEqual(@as(u8, 0x70), with_options[4]);
+    try std.testing.expect(with_options.len <= try encodedNativeFrameBoundWithOptions(repeated.len, .{
+        .include_content_size = false,
+        .content_checksum = false,
+        .block_checksum = true,
+    }));
     const with_options_decoded = try decodeNativeFrameAlloc(std.testing.allocator, with_options);
     defer std.testing.allocator.free(with_options_decoded);
     try std.testing.expectEqualSlices(u8, repeated, with_options_decoded);
