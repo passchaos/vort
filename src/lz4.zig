@@ -266,11 +266,9 @@ pub fn encodeNativeFrameIntoSlice(
     options: NativeFrameOptions,
     output: []u8,
 ) Error!usize {
-    const encoded = try encodePureFrameWithOptionsAlloc(allocator, input, options);
-    defer allocator.free(encoded);
-    if (output.len < encoded.len) return error.OutputTooSmall;
-    @memcpy(output[0..encoded.len], encoded);
-    return encoded.len;
+    var encoder = try NativeFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return try encoder.encodeIntoSlice(input, options, output);
 }
 
 pub fn encodedBlockBound(input_len: usize) Error!usize {
