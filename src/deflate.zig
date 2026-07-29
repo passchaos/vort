@@ -9044,6 +9044,31 @@ fn tryDecodePngFilter0LinearRleBlock(
     return true;
 }
 
+fn makeSingleDistanceTableFromLengths(lengths: []const u4) ?huffman.HuffmanTable(30) {
+    var symbol: u16 = 0;
+    var bits: u4 = 0;
+    var count: usize = 0;
+    for (lengths, 0..) |length, index| {
+        if (length == 0) continue;
+        symbol = @intCast(index);
+        bits = length;
+        count += 1;
+    }
+    if (count != 1) return null;
+    var table = huffman.HuffmanTable(30){
+        .len = 1,
+        .max_bits = bits,
+    };
+    table.entries[0] = .{
+        .symbol = symbol,
+        .code = 0,
+        .bits = bits,
+    };
+    table.first_by_bits[bits] = 0;
+    table.count_by_bits[bits] = 1;
+    return table;
+}
+
 pub fn decodePngFilter0DynamicZlibImageWithOptions(
     input: []const u8,
     info: PngImageInfo,
@@ -9073,7 +9098,9 @@ pub fn decodePngFilter0DynamicZlibImageWithOptions(
 
         const parsed = try huffman.parseDynamicLengthsAfterHeader(header.final, &reader);
         const literal_table_ = try huffman.HuffmanTable(286).init(parsed.literal_lengths[0..parsed.header.hlit]);
-        const distance_table_ = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
+        const single_distance_table = makeSingleDistanceTableFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
+        const distance_table_ = single_distance_table orelse
+            try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
         var decoder: SemanticDynamicDecoder = undefined;
         if (distance_table_.len == 1) {
             if (!decoder.initSingleDistance(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
