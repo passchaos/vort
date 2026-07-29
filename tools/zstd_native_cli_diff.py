@@ -93,6 +93,52 @@ def assert_vort_native_huffman_literals(frame: bytes) -> None:
         raise AssertionError("expected compressed Huffman literals")
 
 
+def zstd_frame_payload_offset(frame: bytes) -> int:
+    if frame[:4] != bytes.fromhex("28b52ffd"):
+        raise AssertionError("missing zstd magic")
+    descriptor = frame[4]
+    if descriptor & 0x08:
+        raise AssertionError("reserved frame bit set")
+    offset = 5
+    single_segment = bool(descriptor & 0x20)
+    if not single_segment:
+        offset += 1
+    offset += (0, 1, 2, 4)[descriptor & 0x03]
+    fcs_flag = descriptor >> 6
+    if single_segment or fcs_flag != 0:
+        offset += 1 << fcs_flag
+    return offset
+
+
+def assert_vort_native_treeless_second_block(frame: bytes) -> None:
+    offset = zstd_frame_payload_offset(frame)
+    if len(frame) - offset < 3:
+        raise AssertionError("missing first block header")
+    first_header = int.from_bytes(frame[offset : offset + 3], "little")
+    first_type = (first_header >> 1) & 0x03
+    first_len = first_header >> 3
+    if first_type != 2:
+        raise AssertionError("expected first block to be compressed")
+    if first_header & 0x01:
+        raise AssertionError("expected more than one block")
+    first_literals_offset = offset + 3
+    if first_literals_offset >= len(frame) or (frame[first_literals_offset] & 0x03) != 2:
+        raise AssertionError("expected first block compressed Huffman literals")
+    offset += 3 + first_len
+    if len(frame) - offset < 3:
+        raise AssertionError("missing second block header")
+    second_header = int.from_bytes(frame[offset : offset + 3], "little")
+    second_type = (second_header >> 1) & 0x03
+    second_len = second_header >> 3
+    if second_type != 2:
+        raise AssertionError("expected second block to be compressed")
+    second_literals_offset = offset + 3
+    if second_len == 0 or second_literals_offset >= len(frame):
+        raise AssertionError("missing second literals header")
+    if (frame[second_literals_offset] & 0x03) != 3:
+        raise AssertionError("expected second block treeless Huffman literals")
+
+
 def main() -> int:
     if not ZSTD:
         print("zstd native CLI diff: zstd=missing")
@@ -180,6 +226,12 @@ def main() -> int:
         four_stream_huffman_state = (four_stream_huffman_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         four_stream_huffman_chars.append(chr(32 + ((four_stream_huffman_state >> 24) % 95)))
     four_stream_huffman_text = "".join(four_stream_huffman_chars)
+    treeless_writer_huffman_state = 0x577D_F00D
+    treeless_writer_huffman_chars = []
+    for _ in range((1 << 17) + 4096):
+        treeless_writer_huffman_state = (treeless_writer_huffman_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        treeless_writer_huffman_chars.append(chr(32 + ((treeless_writer_huffman_state >> 24) % 95)))
+    treeless_writer_huffman_text = "".join(treeless_writer_huffman_chars)
     non_divisible_four_stream_huffman_state = 0x1618_0339
     non_divisible_four_stream_huffman_chars = []
     for _ in range(5190):
@@ -347,6 +399,23 @@ def main() -> int:
         run_cli("decode-zstd-native-file-to", str(frame_path), str(vort_out_path), str(len(payload)))
         assert vort_out_path.read_bytes() == payload
         assert_vort_native_decode(frame, payload)
+
+        treeless_payload = treeless_writer_huffman_text.encode()
+        treeless_payload_path = tmp / "treeless-writer.payload"
+        treeless_payload_path.write_bytes(treeless_payload)
+        treeless_frame = bytes.fromhex(
+            run_cli("encode-zstd-native-file-hex", str(treeless_payload_path), "literal_only", "true", "true")
+        )
+        assert_vort_native_treeless_second_block(treeless_frame)
+        if zstd_decompress(treeless_frame) != treeless_payload:
+            raise AssertionError("treeless writer frame failed system zstd decode")
+        treeless_frame_path = tmp / "treeless-writer.zst"
+        treeless_vort_out_path = tmp / "treeless-writer.vort.out"
+        treeless_frame_path.write_bytes(treeless_frame)
+        run_cli("decode-zstd-native-file-to", str(treeless_frame_path), str(treeless_vort_out_path), str(len(treeless_payload)))
+        assert treeless_vort_out_path.read_bytes() == treeless_payload
+        size_out = run_cli("size-zstd-native-file", str(treeless_frame_path), str(len(treeless_payload)))
+        assert int(parse_field(size_out, "decoded_bytes")) == len(treeless_payload)
 
     print(
         f"zstd_native_cli_diff_ok cases={len(cases)} external_cases={len(external_cases)} "

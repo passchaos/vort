@@ -27,7 +27,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   RLE/predefined/FSE sequence-table, repeated sequence-table, and streaming
   default predefined-sequence compressed-block fallback encode/decode with
   up-to-128-symbol single-/four-stream direct Huffman literal emission
-  (including non-4-divisible four-stream splits), hash-probed large duplicate plus
+  (including non-4-divisible four-stream splits and treeless repeat trees across
+  blocks), hash-probed large duplicate plus
   RLE/predefined-table multi-duplicate and repeated-pattern match emission
   (falling back to raw/RLE blocks when sequence-free compressed blocks would
   expand, for broad zstd CLI compatibility) plus deterministic smallest-mode

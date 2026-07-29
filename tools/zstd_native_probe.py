@@ -240,6 +240,11 @@ def generated_payloads() -> list[tuple[str, bytes]]:
     for _ in range(64 * 1024):
         large_four_stream_huffman_state = (large_four_stream_huffman_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         large_four_stream_huffman.append(32 + ((large_four_stream_huffman_state >> 24) % 95))
+    treeless_writer_huffman_state = 0x577D_F00D
+    treeless_writer_huffman = bytearray()
+    for _ in range((1 << 17) + 4096):
+        treeless_writer_huffman_state = (treeless_writer_huffman_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        treeless_writer_huffman.append(32 + ((treeless_writer_huffman_state >> 24) % 95))
     one_twenty_eight_symbol_state = 0x1357_9BDF
     one_twenty_eight_symbol_huffman = bytearray()
     for _ in range(896):
@@ -262,6 +267,7 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         ("four-stream-huffman", bytes(four_stream_huffman)),
         ("non-divisible-four-stream-huffman", bytes(non_divisible_four_stream_huffman)),
         ("large-four-stream-huffman", bytes(large_four_stream_huffman)),
+        ("treeless-writer-huffman", bytes(treeless_writer_huffman)),
         ("one-twenty-eight-symbol-huffman", bytes(one_twenty_eight_symbol_huffman)),
         (
             "structured-lines",

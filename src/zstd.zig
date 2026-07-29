@@ -576,12 +576,13 @@ pub fn encodeLiteralOnlyFrameAppend(
     try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), options);
 
     var offset: usize = 0;
+    var encoder_state: LiteralOnlyEncoderState = .{};
     if (input.len == 0) {
-        try emitLiteralOnlyCompressedBlock(allocator, out, "", true);
+        try emitLiteralOnlyCompressedBlock(allocator, out, "", true, &encoder_state);
     } else {
         while (offset < input.len) {
             const block_end = @min(input.len, offset + std.compress.zstd.block_size_max);
-            try emitLiteralOnlyCompressedBlock(allocator, out, input[offset..block_end], block_end == input.len);
+            try emitLiteralOnlyCompressedBlock(allocator, out, input[offset..block_end], block_end == input.len, &encoder_state);
             offset = block_end;
         }
     }
@@ -2594,8 +2595,9 @@ fn emitBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []con
     return try emitRawBlock(allocator, out, block, last);
 }
 
-fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
-    if (try emitSmallHuffmanLiteralBlock(allocator, out, block, last)) return;
+fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *LiteralOnlyEncoderState) Error!void {
+    if (try emitSmallHuffmanLiteralBlock(allocator, out, block, last, state)) return;
+    state.previous_huffman_plan = null;
     if (try emitRepeatedPatternCompressedBlock(allocator, out, block, last)) return;
     if (try emitMultiDuplicateMatchCompressedBlock(allocator, out, block, last)) return;
     if (try emitSingleMatchCompressedBlock(allocator, out, block, last)) return;
@@ -2845,15 +2847,16 @@ const SmallHuffmanLiteralPlan = struct {
     max_bit_count: u4 = 0,
 };
 
-fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
+fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *LiteralOnlyEncoderState) Error!bool {
     const plan = smallHuffmanLiteralPlan(block) orelse return false;
     if (findRepeatedPatternSegment(block)) |pattern| {
         if (pattern.match_len >= 16) return false;
     }
 
+    const reuse_previous_tree = if (state.previous_huffman_plan) |previous| smallHuffmanPlansEqual(previous, plan) else false;
     var huffman_tree: std.ArrayList(u8) = .empty;
     defer huffman_tree.deinit(allocator);
-    try emitSmallHuffmanTree(allocator, &huffman_tree, plan);
+    if (!reuse_previous_tree) try emitSmallHuffmanTree(allocator, &huffman_tree, plan);
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
@@ -2862,7 +2865,7 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
         defer stream.deinit(allocator);
         try emitSmallHuffmanStream(allocator, &stream, block, plan);
         const compressed_size = huffman_tree.items.len + stream.items.len;
-        try emitCompressedLiteralsHeader(allocator, &payload, block.len, compressed_size);
+        try emitHuffmanLiteralsHeader(allocator, &payload, block.len, compressed_size, reuse_previous_tree);
         try payload.appendSlice(allocator, huffman_tree.items);
         try payload.appendSlice(allocator, stream.items);
     } else {
@@ -2891,7 +2894,7 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
         if (streams[0].items.len > std.math.maxInt(u16) or
             streams[1].items.len > std.math.maxInt(u16) or
             streams[2].items.len > std.math.maxInt(u16)) return false;
-        try emitCompressedLiteralsHeader(allocator, &payload, block.len, compressed_size);
+        try emitHuffmanLiteralsHeader(allocator, &payload, block.len, compressed_size, reuse_previous_tree);
         try payload.appendSlice(allocator, huffman_tree.items);
         var stream_lengths: [6]u8 = undefined;
         std.mem.writeInt(u16, stream_lengths[0..2], @intCast(streams[0].items.len), .little);
@@ -2905,7 +2908,18 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
     if (payload.items.len >= block.len) return false;
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
+    state.previous_huffman_plan = plan;
     return true;
+}
+
+const LiteralOnlyEncoderState = struct {
+    previous_huffman_plan: ?SmallHuffmanLiteralPlan = null,
+};
+
+fn smallHuffmanPlansEqual(a: SmallHuffmanLiteralPlan, b: SmallHuffmanLiteralPlan) bool {
+    if (a.len != b.len or a.max_symbol != b.max_symbol or a.max_bit_count != b.max_bit_count) return false;
+    return std.mem.eql(u8, a.symbols[0..a.len], b.symbols[0..b.len]) and
+        std.mem.eql(u4, a.weights[0..a.len], b.weights[0..b.len]);
 }
 
 fn smallHuffmanLiteralPlan(block: []const u8) ?SmallHuffmanLiteralPlan {
@@ -3499,27 +3513,29 @@ fn literalsHeaderLen(regenerated_size: usize) Error!usize {
     return 3;
 }
 
-fn emitCompressedLiteralsHeader(
+fn emitHuffmanLiteralsHeader(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     regenerated_size: usize,
     compressed_size: usize,
+    treeless: bool,
 ) Error!void {
     if (compressed_size == 0) return error.UnsupportedZstdFeature;
+    const kind_bits: u8 = if (treeless) 0x03 else 0x02;
     if (regenerated_size <= 0x3ff and compressed_size <= 0x3ff) {
         const value = regenerated_size | (compressed_size << 10);
-        try out.append(allocator, 0x02 | (@as(u8, @intCast(value & 0x0f)) << 4));
+        try out.append(allocator, kind_bits | (@as(u8, @intCast(value & 0x0f)) << 4));
         try out.append(allocator, @truncate(value >> 4));
         try out.append(allocator, @truncate(value >> 12));
     } else if (regenerated_size <= 0x3fff and compressed_size <= 0x3fff) {
         const value = regenerated_size | (compressed_size << 14);
-        try out.append(allocator, 0x0a | (@as(u8, @intCast(value & 0x0f)) << 4));
+        try out.append(allocator, kind_bits | (2 << 2) | (@as(u8, @intCast(value & 0x0f)) << 4));
         try out.append(allocator, @truncate(value >> 4));
         try out.append(allocator, @truncate(value >> 12));
         try out.append(allocator, @truncate(value >> 20));
     } else if (regenerated_size <= 0x3ffff and compressed_size <= 0x3ffff) {
         const value = regenerated_size | (compressed_size << 18);
-        try out.append(allocator, 0x0e | (@as(u8, @intCast(value & 0x0f)) << 4));
+        try out.append(allocator, kind_bits | (3 << 2) | (@as(u8, @intCast(value & 0x0f)) << 4));
         try out.append(allocator, @truncate(value >> 4));
         try out.append(allocator, @truncate(value >> 12));
         try out.append(allocator, @truncate(value >> 20));
@@ -3527,6 +3543,15 @@ fn emitCompressedLiteralsHeader(
     } else {
         return error.UnsupportedZstdFeature;
     }
+}
+
+fn emitCompressedLiteralsHeader(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    regenerated_size: usize,
+    compressed_size: usize,
+) Error!void {
+    return try emitHuffmanLiteralsHeader(allocator, out, regenerated_size, compressed_size, false);
 }
 
 fn emitRawBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
@@ -5035,6 +5060,52 @@ test "zstd literal-only writer emits large four-stream Huffman literals" {
     try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
     try std.testing.expectEqual(HuffmanLiteralStreams.four, std.meta.activeTag(section.huffman_streams));
     try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer reuses Huffman tree across blocks" {
+    const payload = try std.testing.allocator.alloc(u8, std.compress.zstd.block_size_max + 4096);
+    defer std.testing.allocator.free(payload);
+    var state: u32 = 0x577d_f00d;
+    for (payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast(32 + ((state >> 24) % 95));
+    }
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const first_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    try std.testing.expectEqual(@as(u24, 2), (first_header >> 1) & 0x3);
+    try std.testing.expectEqual(false, (first_header & 1) != 0);
+    const first_block_len: usize = @intCast(first_header >> 3);
+    var frame_state: SequenceFrameState = .{};
+    const first_section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..first_block_len], &frame_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, first_section.kind);
+    try std.testing.expectEqual(HuffmanLiteralStreams.four, std.meta.activeTag(first_section.huffman_streams));
+    try std.testing.expectEqual(@as(usize, 0), first_section.sequence_count);
+
+    block_offset += 3 + first_block_len;
+    const second_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    try std.testing.expectEqual(@as(u24, 2), (second_header >> 1) & 0x3);
+    try std.testing.expectEqual(true, (second_header & 1) != 0);
+    const second_block_len: usize = @intCast(second_header >> 3);
+    const second_section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..second_block_len], &frame_state);
+    try std.testing.expectEqual(LiteralsKind.treeless, second_section.kind);
+    try std.testing.expectEqual(HuffmanLiteralStreams.four, std.meta.activeTag(second_section.huffman_streams));
+    try std.testing.expectEqual(@as(usize, 0), second_section.sequence_count);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
