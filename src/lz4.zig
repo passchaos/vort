@@ -328,6 +328,10 @@ pub fn decodedFrameSize(frame: []const u8) Error!usize {
     return try frameDecodedSizeLimited(frame, std.math.maxInt(usize));
 }
 
+pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {
+    return try frameDecodedSizeLimited(frame, max_output_len);
+}
+
 pub const decodeNativeFrameAlloc = decodeFrameAlloc;
 pub const decodeNativeFrameAllocLimited = decodeFrameAllocLimited;
 

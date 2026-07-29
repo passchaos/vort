@@ -51,6 +51,7 @@ pub const Lz4BlockMode = lz4.BlockMode;
 pub const lz4DecodeFrameAlloc = lz4.decodeFrameAlloc;
 pub const lz4DecodeFrameAllocLimited = lz4.decodeFrameAllocLimited;
 pub const lz4DecodedFrameSize = lz4.decodedFrameSize;
+pub const lz4DecodedFrameSizeLimited = lz4.decodedFrameSizeLimited;
 pub const lz4DecodeFrameInto = lz4.decodeFrameInto;
 pub const lz4DecodeNativeFrameAlloc = lz4.decodeNativeFrameAlloc;
 pub const lz4DecodeNativeFrameAllocLimited = lz4.decodeNativeFrameAllocLimited;
@@ -660,6 +661,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeFrameAlloc;
     _ = lz4DecodeFrameAllocLimited;
     _ = lz4DecodedFrameSize;
+    _ = lz4DecodedFrameSizeLimited;
     _ = lz4DecodeFrameInto;
     _ = lz4DecodeNativeFrameAlloc;
     _ = lz4DecodeNativeFrameAllocLimited;
@@ -732,6 +734,8 @@ test "root lz4 lib frame options round trip" {
     const decoded = try lz4DecodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectEqual(payload.len, try lz4DecodedFrameSizeLimited(encoded, payload.len));
+    try std.testing.expectError(error.OutputLimitExceeded, lz4DecodedFrameSizeLimited(encoded, payload.len - 1));
 
     const raw_match = [_]u8{ 0x33, 'a', 'b', 'c', 3, 0 };
     try std.testing.expect(raw_match.len <= try lz4EncodedBlockBound(10));

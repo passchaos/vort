@@ -594,6 +594,38 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.zstdDecodedNativeFrameSize(compressed);
         try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "encode-lz4-native-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(payload);
+        const frame = try vort.lz4EncodeNativeFrameAlloc(init.gpa, payload);
+        defer init.gpa.free(frame);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = frame });
+        try stdout.print("lz4_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ frame.len, payload.len, output_path });
+    } else if (std.mem.eql(u8, command, "size-lz4-native-file")) {
+        const path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(frame);
+        const decoded_len = if (max_output_len) |limit|
+            try vort.lz4DecodedFrameSizeLimited(frame, limit)
+        else
+            try vort.lz4DecodedFrameSize(frame);
+        try stdout.print("lz4_native_compressed_bytes={d} decoded_bytes={d}\n", .{ frame.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "decode-lz4-native-file-to")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(frame);
+        const decoded = if (max_output_len) |limit|
+            try vort.lz4DecodeNativeFrameAllocLimited(init.gpa, frame, limit)
+        else
+            try vort.lz4DecodeNativeFrameAlloc(init.gpa, frame);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("lz4_native_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ frame.len, decoded.len, output_path });
     } else if (std.mem.eql(u8, command, "size-lz4-block-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1358,6 +1390,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight dependency-free native-subset Zstandard decoded size
         \\  size-zstd-native-file [path] [max_output]
         \\                              Preflight dependency-free native-subset Zstandard file decoded size
+        \\  encode-lz4-native-file <in> <out>
+        \\                              Encode file bytes as dependency-free native LZ4 frame
+        \\  size-lz4-native-file [path] [max_output]
+        \\                              Preflight dependency-free native LZ4 frame decoded size
+        \\  decode-lz4-native-file-to <in> <out> [max_output]
+        \\                              Decode dependency-free native LZ4 frame to output
         \\  size-lz4-block-hex [hex] [max_output]
         \\                              Preflight LZ4 block decoded size
         \\  encode-lz4-block-hex [hex]
