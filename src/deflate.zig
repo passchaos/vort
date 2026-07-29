@@ -3883,6 +3883,7 @@ noinline fn decodeSemanticDynamicBlockIntoSink(
 ) Error!void {
     return decodeSemanticDynamicBlockIntoSinkMode(
         false,
+        false,
         reader,
         sink,
         decoder,
@@ -3896,6 +3897,21 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceSink(
 ) Error!void {
     return decodeSemanticDynamicBlockIntoSinkMode(
         true,
+        false,
+        reader,
+        sink,
+        decoder,
+    );
+}
+
+noinline fn decodeSemanticDynamicBlockIntoRle1Sink(
+    noalias reader: *bitstream.BufferedBitReader,
+    sink: anytype,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!void {
+    return decodeSemanticDynamicBlockIntoSinkMode(
+        true,
+        true,
         reader,
         sink,
         decoder,
@@ -3904,10 +3920,12 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceSink(
 
 noinline fn decodeSemanticDynamicBlockIntoSinkMode(
     comptime single_distance: bool,
+    comptime rle1_distance: bool,
     noalias reader: *bitstream.BufferedBitReader,
     sink: anytype,
     noalias decoder: *const SemanticDynamicDecoder,
 ) Error!void {
+    comptime std.debug.assert(!rle1_distance or single_distance);
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
@@ -4017,6 +4035,18 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
         const length_mask = (@as(u64, 1) << @intCast(length_extra_bits)) - 1;
         const length = length_base + @as(usize, @intCast(bits & length_mask));
         bits >>= @intCast(length_extra_bits);
+
+        if (comptime rle1_distance) {
+            if ((bits & 1) != 0) return error.InvalidHuffmanCode;
+            const total_bits: u6 = entry_bits + length_extra_bits + 1;
+            bit_buffer >>= @intCast(total_bits);
+            bit_count -= total_bits;
+            consumed_bits += total_bits;
+            refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+            entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+            try sink.copyMatch(length, 1);
+            continue;
+        }
 
         const distance_entry = if (single_distance)
             decoder.single_distance
@@ -9116,7 +9146,10 @@ pub fn decodePngFilter0DynamicZlibImageWithOptions(
                 );
             if (!used_linear_block) {
                 can_use_linear_adler = false;
-                try decodeSemanticDynamicBlockIntoSingleDistanceSink(&reader, &sink, &decoder);
+                if (distance_entry.symbol == 0 and distance_entry.bits == 1)
+                    try decodeSemanticDynamicBlockIntoRle1Sink(&reader, &sink, &decoder)
+                else
+                    try decodeSemanticDynamicBlockIntoSingleDistanceSink(&reader, &sink, &decoder);
             }
         } else {
             can_use_linear_adler = false;
