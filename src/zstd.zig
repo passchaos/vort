@@ -113,6 +113,11 @@ pub const NativeFrameEncodeResult = struct {
     mode: NativeFrameMode,
 };
 
+pub const NativeFrameEncodeIntoResult = struct {
+    written: usize,
+    mode: NativeFrameMode,
+};
+
 /// Decode a Zstandard frame. Prefer libzstd's one-shot decoder because MCAP and
 /// similar containers often know the decoded chunk size out-of-band and because
 /// the one-shot path avoids Zig streaming allocator overhead. When the frame
@@ -531,12 +536,14 @@ pub const NativeFrameEncoder = struct {
     allocator: std.mem.Allocator,
     raw_scratch: std.ArrayList(u8) = .empty,
     literal_scratch: std.ArrayList(u8) = .empty,
+    output_scratch: std.ArrayList(u8) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) NativeFrameEncoder {
         return .{ .allocator = allocator };
     }
 
     pub fn deinit(self: *NativeFrameEncoder) void {
+        self.output_scratch.deinit(self.allocator);
         self.literal_scratch.deinit(self.allocator);
         self.raw_scratch.deinit(self.allocator);
         self.* = undefined;
@@ -557,6 +564,22 @@ pub const NativeFrameEncoder = struct {
         const mode = try self.encodeAppend(&out, input, options);
         return .{
             .frame = try out.toOwnedSlice(self.allocator),
+            .mode = mode,
+        };
+    }
+
+    pub fn encodeIntoSlice(
+        self: *NativeFrameEncoder,
+        input: []const u8,
+        options: NativeFrameOptions,
+        output: []u8,
+    ) Error!NativeFrameEncodeIntoResult {
+        self.output_scratch.clearRetainingCapacity();
+        const mode = try self.encodeAppend(&self.output_scratch, input, options);
+        if (output.len < self.output_scratch.items.len) return error.OutputTooSmall;
+        @memcpy(output[0..self.output_scratch.items.len], self.output_scratch.items);
+        return .{
+            .written = self.output_scratch.items.len,
             .mode = mode,
         };
     }
@@ -5242,6 +5265,13 @@ test "zstd native frame writer chooses smallest fallback mode" {
     defer std.testing.allocator.free(reusable_owned.frame);
     try std.testing.expectEqual(duplicate_result.mode, reusable_owned.mode);
     try std.testing.expectEqualSlices(u8, duplicate_result.frame, reusable_owned.frame);
+    const into_buffer = try std.testing.allocator.alloc(u8, duplicate_result.frame.len);
+    defer std.testing.allocator.free(into_buffer);
+    const into_result = try reusable.encodeIntoSlice(duplicate_payload, .{}, into_buffer);
+    try std.testing.expectEqual(duplicate_result.mode, into_result.mode);
+    try std.testing.expectEqual(duplicate_result.frame.len, into_result.written);
+    try std.testing.expectEqualSlices(u8, duplicate_result.frame, into_buffer[0..into_result.written]);
+    try std.testing.expectError(error.OutputTooSmall, reusable.encodeIntoSlice(duplicate_payload, .{}, into_buffer[0 .. into_buffer.len - 1]));
     reusable_out.clearRetainingCapacity();
     const reusable_raw_mode = try reusable.encodeAppend(&reusable_out, repeated, .{ .selection = .raw_or_rle });
     try std.testing.expectEqual(NativeFrameMode.raw_or_rle, reusable_raw_mode);
