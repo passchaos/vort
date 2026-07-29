@@ -293,6 +293,22 @@ pub fn decodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, frame: []const u8)
     return out.toOwnedSlice(allocator);
 }
 
+pub fn decodeRawOrRleFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8) Error!usize {
+    const decoded_len = try decodedRawOrRleFrameSize(frame);
+    try out.ensureUnusedCapacity(allocator, decoded_len);
+    const start = out.items.len;
+    const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
+    const written = decodeRawOrRleFrameInto(frame, slot) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != decoded_len) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
 pub fn decodeRawOrRleFrameAllocLimited(
     allocator: std.mem.Allocator,
     frame: []const u8,
@@ -344,6 +360,7 @@ pub fn decodeRawOrRleFrameInto(frame: []const u8, output: []u8) Error!usize {
 }
 
 pub const decodeNativeFrameAlloc = decodeRawOrRleFrameAlloc;
+pub const decodeNativeFrameAppend = decodeRawOrRleFrameAppend;
 pub const decodeNativeFrameAllocLimited = decodeRawOrRleFrameAllocLimited;
 pub const decodeNativeFrameInto = decodeRawOrRleFrameInto;
 
@@ -3523,6 +3540,13 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     defer std.testing.allocator.free(native_decoded);
     try std.testing.expectEqualSlices(u8, payload, native_decoded);
     try std.testing.expectEqual(payload.len, try decodedRawOrRleFrameSize(encoded));
+    var native_appended: std.ArrayList(u8) = .empty;
+    defer native_appended.deinit(std.testing.allocator);
+    try native_appended.appendSlice(std.testing.allocator, "prefix:");
+    const native_appended_written = try decodeNativeFrameAppend(std.testing.allocator, &native_appended, encoded);
+    try std.testing.expectEqual(payload.len, native_appended_written);
+    try std.testing.expectEqualSlices(u8, "prefix:", native_appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, payload, native_appended.items["prefix:".len..]);
     const no_checksum = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{ .content_checksum = false });
     defer std.testing.allocator.free(no_checksum);
     try std.testing.expectEqual(@as(u8, 0x20), no_checksum[4]);
@@ -3595,6 +3619,12 @@ test "zstd raw/RLE native decoder handles skippable and concatenated frames" {
     const decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, stream.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "firstsecond", decoded);
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    const appended_written = try decodeRawOrRleFrameAppend(std.testing.allocator, &appended, stream.items);
+    try std.testing.expectEqual(@as(usize, "firstsecond".len), appended_written);
+    try std.testing.expectEqualSlices(u8, "prefix:firstsecond", appended.items);
 
     var into_buffer: ["firstsecond".len]u8 = undefined;
     const written = try decodeRawOrRleFrameInto(stream.items, &into_buffer);
@@ -5324,6 +5354,13 @@ test "zstd native frame writer chooses smallest fallback mode" {
     const duplicate_decoded = try decodeNativeFrameAlloc(std.testing.allocator, duplicate_result.frame);
     defer std.testing.allocator.free(duplicate_decoded);
     try std.testing.expectEqualSlices(u8, duplicate_payload, duplicate_decoded);
+    var duplicate_appended: std.ArrayList(u8) = .empty;
+    defer duplicate_appended.deinit(std.testing.allocator);
+    try duplicate_appended.appendSlice(std.testing.allocator, "prefix:");
+    const duplicate_appended_written = try decodeNativeFrameAppend(std.testing.allocator, &duplicate_appended, duplicate_result.frame);
+    try std.testing.expectEqual(duplicate_payload.len, duplicate_appended_written);
+    try std.testing.expectEqualSlices(u8, "prefix:", duplicate_appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, duplicate_payload, duplicate_appended.items["prefix:".len..]);
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(std.testing.allocator);
