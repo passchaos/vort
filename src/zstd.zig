@@ -14,7 +14,7 @@ const initial_repeated_offsets = [3]usize{ 1, 4, 8 };
 const duplicate_hash_bits = 15;
 const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
-const max_bootstrap_sequence_count = 8;
+const max_bootstrap_sequence_count = 16;
 const max_predefined_sequence_states = 64;
 
 const ll_base = [_]usize{
@@ -2430,7 +2430,7 @@ fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *st
     try payload.append(allocator, offset_code);
     try payload.append(allocator, match_code);
 
-    var fields: [8 * 3]BitField = undefined;
+    var fields: [max_bootstrap_sequence_count * 3]BitField = undefined;
     var field_count: usize = 0;
     var i = count;
     while (i > 0) {
@@ -2683,8 +2683,8 @@ fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.Ar
 }
 
 fn emitMultiRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
-    var segments: [8]RepeatedPatternSegment = undefined;
-    var literal_lens: [8]usize = undefined;
+    var segments: [max_bootstrap_sequence_count]RepeatedPatternSegment = undefined;
+    var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
     var count: usize = 0;
     var search_start: usize = 0;
     while (count < segments.len and search_start < block.len) {
@@ -2742,7 +2742,7 @@ fn emitMultiRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *s
 
     var sequence_bits: std.ArrayList(u8) = .empty;
     defer sequence_bits.deinit(allocator);
-    var bit_fields: [8 * 3]BitField = undefined;
+    var bit_fields: [max_bootstrap_sequence_count * 3]BitField = undefined;
     var field_count: usize = 0;
     var i = count;
     while (i > 0) {
@@ -4375,6 +4375,34 @@ test "zstd literal-only writer emits several repeated-pattern sequences" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
     try std.testing.expectEqual(@as(usize, 3), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits many repeated-pattern sequences" {
+    const payload =
+        ("ab" ** 12) ++ ("cd" ** 12) ++ ("ef" ** 12) ++ ("gh" ** 12) ++
+        ("ij" ** 12) ++ ("kl" ** 12) ++ ("mn" ** 12) ++ ("op" ** 12) ++
+        ("qr" ** 12) ++ ("st" ** 12);
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 10), section.sequence_count);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
