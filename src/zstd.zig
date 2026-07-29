@@ -2544,8 +2544,8 @@ fn emitMultiSequencePredefinedCompressedBlock(
 }
 
 const SmallHuffmanLiteralPlan = struct {
-    symbols: [32]u8 = undefined,
-    weights: [32]u4 = undefined,
+    symbols: [64]u8 = undefined,
+    weights: [64]u4 = undefined,
     len: usize = 0,
     max_symbol: u8 = 0,
     max_bit_count: u4 = 0,
@@ -4450,6 +4450,39 @@ test "zstd literal-only writer emits thirty-two-symbol Huffman literals" {
     for (&payload) |*byte| {
         state = state *% 1_664_525 +% 1_013_904_223;
         byte.* = alphabet[(state >> 27) & 31];
+    }
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits sixty-four-symbol Huffman literals" {
+    var payload: [512]u8 = undefined;
+    var state: u32 = 0x3141_5926;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast(32 + ((state >> 26) & 63));
     }
 
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
