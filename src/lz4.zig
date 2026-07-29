@@ -782,12 +782,14 @@ pub const BlockEncoder = struct {
 
 pub const NativeFrameEncoder = struct {
     block_encoder: BlockEncoder,
+    output_scratch: std.ArrayList(u8) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) Error!NativeFrameEncoder {
         return .{ .block_encoder = try BlockEncoder.init(allocator) };
     }
 
     pub fn deinit(self: *NativeFrameEncoder) void {
+        self.output_scratch.deinit(self.block_encoder.allocator);
         self.block_encoder.deinit();
         self.* = undefined;
     }
@@ -861,11 +863,11 @@ pub const NativeFrameEncoder = struct {
     }
 
     pub fn encodeIntoSlice(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, output: []u8) Error!usize {
-        const encoded = try self.encodeAlloc(input, options);
-        defer self.block_encoder.allocator.free(encoded);
-        if (output.len < encoded.len) return error.OutputTooSmall;
-        @memcpy(output[0..encoded.len], encoded);
-        return encoded.len;
+        self.output_scratch.clearRetainingCapacity();
+        try self.encodeAppend(&self.output_scratch, input, options);
+        if (output.len < self.output_scratch.items.len) return error.OutputTooSmall;
+        @memcpy(output[0..self.output_scratch.items.len], self.output_scratch.items);
+        return self.output_scratch.items.len;
     }
 };
 
