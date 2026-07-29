@@ -543,6 +543,16 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.lz4DecodedBlockSizeWithPrefix(block, prefix);
         try stdout.print("lz4_block_prefix_compressed_bytes={d} prefix_bytes={d} decoded_bytes={d}\n", .{ block.len, prefix.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "encode-lz4-block-prefix-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const prefix_hex = args.next() orelse return error.MissingHexInput;
+        const payload = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(payload);
+        const prefix = try hexToOwnedBytes(init.gpa, prefix_hex);
+        defer init.gpa.free(prefix);
+        const encoded = try vort.lz4EncodeBlockWithPrefixAlloc(init.gpa, payload, prefix);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "decode-lz4-block-prefix-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const prefix_hex = args.next() orelse return error.MissingHexInput;
@@ -1245,6 +1255,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight dependency-free native-subset Zstandard decoded size
         \\  size-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
         \\                              Preflight LZ4 block decoded size with prefix history
+        \\  encode-lz4-block-prefix-hex [hex] [prefix_hex]
+        \\                              Encode LZ4 block with prefix history
         \\  decode-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
         \\                              Decode LZ4 block with prefix history
         \\  decode-raw-hex [hex] [max_output]
