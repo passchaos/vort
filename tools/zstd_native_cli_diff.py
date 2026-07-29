@@ -92,6 +92,18 @@ def main() -> int:
     large_multi_b = deterministic_text(0xB7E1_5162, 4096)
     predefined_multi_large = deterministic_text(0x4528_21E6, 8192)
     predefined_multi_small = deterministic_text(0x38D0_13F7, 257)
+    two_symbol_state = 1
+    two_symbol_huffman_chars = []
+    for _ in range(192):
+        two_symbol_huffman_chars.append("B" if (two_symbol_state & 1) else "A")
+        feedback = (
+            (two_symbol_state >> 0)
+            ^ (two_symbol_state >> 2)
+            ^ (two_symbol_state >> 3)
+            ^ (two_symbol_state >> 4)
+        ) & 1
+        two_symbol_state = (two_symbol_state >> 1) | (feedback << 7)
+    two_symbol_huffman_text = "".join(two_symbol_huffman_chars)
     cases = [
         ("", "raw_or_rle", "true", "true"),
         ("hello", "raw_or_rle", "true", "true"),
@@ -108,6 +120,7 @@ def main() -> int:
         (large_multi_a * 2 + large_multi_b * 2 + "tail-data", "literal_only", "true", "true"),
         (predefined_multi_large * 2 + predefined_multi_small * 2 + "tail-data", "literal_only", "true", "true"),
         ("ab" * 12 + "cdef" * 20 + "tail", "literal_only", "true", "true"),
+        (two_symbol_huffman_text, "literal_only", "true", "true"),
     ]
     for text, mode, checksum, content_size in cases:
         encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum, content_size)

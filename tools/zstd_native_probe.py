@@ -122,12 +122,24 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         b"wfgypbvkjxqz.,0123456789"
     )
     json_unit = b'{"key":"value","number":123,"array":[1,2,3],"text":"abcdefg"}\n'
+    two_symbol_state = 1
+    two_symbol_huffman = bytearray()
+    for _ in range(192):
+        two_symbol_huffman.append(ord("B") if (two_symbol_state & 1) else ord("A"))
+        feedback = (
+            (two_symbol_state >> 0)
+            ^ (two_symbol_state >> 2)
+            ^ (two_symbol_state >> 3)
+            ^ (two_symbol_state >> 4)
+        ) & 1
+        two_symbol_state = (two_symbol_state >> 1) | (feedback << 7)
 
     cases: list[tuple[str, bytes]] = [
         ("empty", b""),
         ("tiny", b"hello"),
         ("json100", json_unit * 100),
         ("alphabet200", printable * 200),
+        ("two-symbol-huffman", bytes(two_symbol_huffman)),
         (
             "structured-lines",
             b"".join(
