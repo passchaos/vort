@@ -393,6 +393,39 @@ pub const decodeNativeFrameAppendLimited = decodeRawOrRleFrameAppendLimited;
 pub const decodeNativeFrameAllocLimited = decodeRawOrRleFrameAllocLimited;
 pub const decodeNativeFrameInto = decodeRawOrRleFrameInto;
 
+pub const NativeFrameDecoder = struct {
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator) NativeFrameDecoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *NativeFrameDecoder) void {
+        self.* = undefined;
+    }
+
+    pub fn decodeAlloc(self: *NativeFrameDecoder, frame: []const u8) Error![]u8 {
+        return try decodeRawOrRleFrameAlloc(self.allocator, frame);
+    }
+
+    pub fn decodeAllocLimited(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize) Error![]u8 {
+        return try decodeRawOrRleFrameAllocLimited(self.allocator, frame, max_output_len);
+    }
+
+    pub fn decodeAppend(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8) Error!usize {
+        return try decodeRawOrRleFrameAppend(self.allocator, out, frame);
+    }
+
+    pub fn decodeAppendLimited(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, max_output_len: usize) Error!usize {
+        return try decodeRawOrRleFrameAppendLimited(self.allocator, out, frame, max_output_len);
+    }
+
+    pub fn decodeIntoSlice(self: *NativeFrameDecoder, frame: []const u8, output: []u8) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameInto(frame, output);
+    }
+};
+
 /// Compress a complete Zstandard frame using the reference-compatible libzstd
 /// encoder linked by Vort's build. Keeping this call surface in Vort centralizes
 /// compression ownership for downstream formats such as MCAP while leaving room
@@ -3588,6 +3621,20 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     try native_appended.appendSlice(std.testing.allocator, "prefix:");
     try std.testing.expectError(error.OutputLimitExceeded, decodeNativeFrameAppendLimited(std.testing.allocator, &native_appended, encoded, payload.len - 1));
     try std.testing.expectEqualSlices(u8, "prefix:", native_appended.items);
+    var reusable_decoder = NativeFrameDecoder.init(std.testing.allocator);
+    defer reusable_decoder.deinit();
+    const reusable_decoded = try reusable_decoder.decodeAlloc(encoded);
+    defer std.testing.allocator.free(reusable_decoded);
+    try std.testing.expectEqualSlices(u8, payload, reusable_decoded);
+    native_appended.clearRetainingCapacity();
+    try native_appended.appendSlice(std.testing.allocator, "prefix:");
+    const reusable_append_written = try reusable_decoder.decodeAppendLimited(&native_appended, encoded, payload.len);
+    try std.testing.expectEqual(payload.len, reusable_append_written);
+    try std.testing.expectEqualSlices(u8, payload, native_appended.items["prefix:".len..]);
+    var reusable_decode_into: [payload.len]u8 = undefined;
+    const reusable_decode_into_written = try reusable_decoder.decodeIntoSlice(encoded, &reusable_decode_into);
+    try std.testing.expectEqual(payload.len, reusable_decode_into_written);
+    try std.testing.expectEqualSlices(u8, payload, &reusable_decode_into);
     const no_checksum = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{ .content_checksum = false });
     defer std.testing.allocator.free(no_checksum);
     try std.testing.expectEqual(@as(u8, 0x20), no_checksum[4]);
@@ -5421,6 +5468,24 @@ test "zstd native frame writer chooses smallest fallback mode" {
     try duplicate_appended.appendSlice(std.testing.allocator, "prefix:");
     try std.testing.expectError(error.OutputLimitExceeded, decodeNativeFrameAppendLimited(std.testing.allocator, &duplicate_appended, duplicate_result.frame, duplicate_payload.len - 1));
     try std.testing.expectEqualSlices(u8, "prefix:", duplicate_appended.items);
+    var reusable_decoder = NativeFrameDecoder.init(std.testing.allocator);
+    defer reusable_decoder.deinit();
+    const reusable_decoded = try reusable_decoder.decodeAlloc(duplicate_result.frame);
+    defer std.testing.allocator.free(reusable_decoded);
+    try std.testing.expectEqualSlices(u8, duplicate_payload, reusable_decoded);
+    duplicate_appended.clearRetainingCapacity();
+    try duplicate_appended.appendSlice(std.testing.allocator, "prefix:");
+    const reusable_append_written = try reusable_decoder.decodeAppendLimited(&duplicate_appended, duplicate_result.frame, duplicate_payload.len);
+    try std.testing.expectEqual(duplicate_payload.len, reusable_append_written);
+    try std.testing.expectEqualSlices(u8, duplicate_payload, duplicate_appended.items["prefix:".len..]);
+    const reusable_alloc_limited = try reusable_decoder.decodeAllocLimited(duplicate_result.frame, duplicate_payload.len);
+    defer std.testing.allocator.free(reusable_alloc_limited);
+    try std.testing.expectEqualSlices(u8, duplicate_payload, reusable_alloc_limited);
+    const reusable_into = try std.testing.allocator.alloc(u8, duplicate_payload.len);
+    defer std.testing.allocator.free(reusable_into);
+    const reusable_into_written = try reusable_decoder.decodeIntoSlice(duplicate_result.frame, reusable_into);
+    try std.testing.expectEqual(duplicate_payload.len, reusable_into_written);
+    try std.testing.expectEqualSlices(u8, duplicate_payload, reusable_into);
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(std.testing.allocator);
