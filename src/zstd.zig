@@ -527,6 +527,53 @@ pub fn encodeNativeFrameAppend(
     return result.mode;
 }
 
+pub const NativeFrameEncoder = struct {
+    allocator: std.mem.Allocator,
+    raw_scratch: std.ArrayList(u8) = .empty,
+    literal_scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) NativeFrameEncoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *NativeFrameEncoder) void {
+        self.literal_scratch.deinit(self.allocator);
+        self.raw_scratch.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn encodeAppend(
+        self: *NativeFrameEncoder,
+        out: *std.ArrayList(u8),
+        input: []const u8,
+        options: NativeFrameOptions,
+    ) Error!NativeFrameMode {
+        switch (options.selection) {
+            .raw_or_rle => {
+                try encodeRawOrRleFrameAppend(self.allocator, out, input, options);
+                return .raw_or_rle;
+            },
+            .literal_only => {
+                try encodeLiteralOnlyFrameAppend(self.allocator, out, input, options);
+                return .literal_only;
+            },
+            .auto => {},
+        }
+
+        self.raw_scratch.clearRetainingCapacity();
+        self.literal_scratch.clearRetainingCapacity();
+        try encodeRawOrRleFrameAppend(self.allocator, &self.raw_scratch, input, options);
+        try encodeLiteralOnlyFrameAppend(self.allocator, &self.literal_scratch, input, options);
+
+        if (self.literal_scratch.items.len < self.raw_scratch.items.len) {
+            try out.appendSlice(self.allocator, self.literal_scratch.items);
+            return .literal_only;
+        }
+        try out.appendSlice(self.allocator, self.raw_scratch.items);
+        return .raw_or_rle;
+    }
+};
+
 fn emitFrameHeader(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -5164,6 +5211,20 @@ test "zstd native frame writer chooses smallest fallback mode" {
     const appended_decoded = try decodeNativeFrameAlloc(std.testing.allocator, appended.items);
     defer std.testing.allocator.free(appended_decoded);
     try std.testing.expectEqualSlices(u8, duplicate_payload, appended_decoded);
+
+    var reusable = NativeFrameEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    var reusable_out: std.ArrayList(u8) = .empty;
+    defer reusable_out.deinit(std.testing.allocator);
+    const reusable_mode = try reusable.encodeAppend(&reusable_out, duplicate_payload, .{});
+    try std.testing.expectEqual(duplicate_result.mode, reusable_mode);
+    try std.testing.expectEqualSlices(u8, duplicate_result.frame, reusable_out.items);
+    reusable_out.clearRetainingCapacity();
+    const reusable_raw_mode = try reusable.encodeAppend(&reusable_out, repeated, .{ .selection = .raw_or_rle });
+    try std.testing.expectEqual(NativeFrameMode.raw_or_rle, reusable_raw_mode);
+    const reusable_raw_decoded = try decodeNativeFrameAlloc(std.testing.allocator, reusable_out.items);
+    defer std.testing.allocator.free(reusable_raw_decoded);
+    try std.testing.expectEqualSlices(u8, repeated, reusable_raw_decoded);
 }
 
 test "zstd raw/RLE native decoder rejects corrupt frames" {
