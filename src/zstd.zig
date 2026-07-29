@@ -2611,7 +2611,7 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
 }
 
 fn smallHuffmanLiteralPlan(block: []const u8) ?SmallHuffmanLiteralPlan {
-    if (block.len < 64 or block.len > 0x3fff) return null;
+    if (block.len < 64 or block.len > 0x3ffff) return null;
     var plan: SmallHuffmanLiteralPlan = .{};
     for (block) |byte| {
         if (smallHuffmanSymbolIndex(plan, byte) != null) continue;
@@ -3219,6 +3219,13 @@ fn emitCompressedLiteralsHeader(
         try out.append(allocator, @truncate(value >> 4));
         try out.append(allocator, @truncate(value >> 12));
         try out.append(allocator, @truncate(value >> 20));
+    } else if (regenerated_size <= 0x3ffff and compressed_size <= 0x3ffff) {
+        const value = regenerated_size | (compressed_size << 18);
+        try out.append(allocator, 0x0e | (@as(u8, @intCast(value & 0x0f)) << 4));
+        try out.append(allocator, @truncate(value >> 4));
+        try out.append(allocator, @truncate(value >> 12));
+        try out.append(allocator, @truncate(value >> 20));
+        try out.append(allocator, @truncate(value >> 28));
     } else {
         return error.UnsupportedZstdFeature;
     }
@@ -4624,6 +4631,41 @@ test "zstd literal-only writer emits four-stream Huffman literals" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits large four-stream Huffman literals" {
+    const payload = try std.testing.allocator.alloc(u8, 64 * 1024);
+    defer std.testing.allocator.free(payload);
+    var state: u32 = 0x577d_f00d;
+    for (payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast(32 + ((state >> 24) % 95));
+    }
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(HuffmanLiteralStreams.four, std.meta.activeTag(section.huffman_streams));
+    try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
 }
 
