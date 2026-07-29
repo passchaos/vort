@@ -700,16 +700,24 @@ pub const BlockEncoder = struct {
     pub fn encodeAlloc(self: *BlockEncoder, input: []const u8) Error![]u8 {
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
-        _ = try encodeBlockInto(self.allocator, &out, input, self.hash_table, self.occupancy_bits, self.chain_table);
+        _ = try self.append(&out, input);
         return out.toOwnedSlice(self.allocator);
     }
 
     pub fn encodeWithPrefixAlloc(self: *BlockEncoder, input: []const u8, prefix: []const u8) Error![]u8 {
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
-        const history = prefix[if (prefix.len > max_match_offset) prefix.len - max_match_offset else 0..];
-        _ = try encodeLinkedBlockInto(self.allocator, &out, history, input, self.hash_table, self.occupancy_bits, self.chain_table);
+        _ = try self.appendWithPrefix(&out, input, prefix);
         return out.toOwnedSlice(self.allocator);
+    }
+
+    pub fn append(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8) Error!usize {
+        return try encodeBlockInto(self.allocator, out, input, self.hash_table, self.occupancy_bits, self.chain_table);
+    }
+
+    pub fn appendWithPrefix(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, prefix: []const u8) Error!usize {
+        const history = prefix[if (prefix.len > max_match_offset) prefix.len - max_match_offset else 0..];
+        return try encodeLinkedBlockInto(self.allocator, out, history, input, self.hash_table, self.occupancy_bits, self.chain_table);
     }
 
     pub fn encodeIntoSlice(self: *BlockEncoder, input: []const u8, output: []u8) Error!usize {
@@ -1649,11 +1657,20 @@ test "lz4 block encoder uses caller prefix history" {
 
     var reusable = try BlockEncoder.init(std.testing.allocator);
     defer reusable.deinit();
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    const appended_len = try reusable.appendWithPrefix(&appended, block, prefix);
+    try std.testing.expectEqual(encoded.len, appended_len);
+    try std.testing.expectEqualSlices(u8, encoded, appended.items);
     const reusable_encoded = try reusable.encodeWithPrefixAlloc(block, prefix);
     defer std.testing.allocator.free(reusable_encoded);
     try std.testing.expectEqualSlices(u8, encoded, reusable_encoded);
+    appended.clearRetainingCapacity();
+    const appended_plain_len = try reusable.append(&appended, "abcabcabca");
+    try std.testing.expectEqual(appended.items.len, appended_plain_len);
     const reusable_plain = try reusable.encodeAlloc("abcabcabca");
     defer std.testing.allocator.free(reusable_plain);
+    try std.testing.expectEqualSlices(u8, reusable_plain, appended.items);
     const reusable_decoded = try decodeBlockAlloc(std.testing.allocator, reusable_plain, "abcabcabca".len);
     defer std.testing.allocator.free(reusable_decoded);
     try std.testing.expectEqualSlices(u8, "abcabcabca", reusable_decoded);
