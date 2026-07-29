@@ -729,13 +729,75 @@ pub fn decodeBlockWithPrefixIntoSlice(
     expected_size: ?usize,
     prefix: []const u8,
 ) Error!usize {
+    _ = allocator;
     const decoded_len = try decodedBlockSizeWithPrefix(input, prefix);
     if (output.len < decoded_len) return error.OutputTooSmall;
-    const decoded = try decodeBlockWithPrefixAlloc(allocator, input, expected_size, prefix);
-    defer allocator.free(decoded);
-    if (decoded.len != decoded_len) return error.SizeMismatch;
-    @memcpy(output[0..decoded.len], decoded);
-    return decoded.len;
+    if (expected_size) |size| {
+        if (decoded_len != size) return error.SizeMismatch;
+    }
+
+    const prefix_len = @min(prefix.len, max_block_history_len);
+    if (output.len - decoded_len < prefix_len) {
+        // The caller buffer is large enough for the final decoded block but not
+        // for the temporary history prefix needed by the current in-place
+        // decoder. Fall back to an explicit byte-for-byte prefix replay instead
+        // of allocating; this keeps the public decode-into contract
+        // allocation-free while preserving LZ4's overlapping match semantics.
+        return try decodeBlockWithExternalPrefixIntoSlice(input, output, expected_size, prefix);
+    }
+
+    @memcpy(output[0..prefix_len], prefix[prefix.len - prefix_len ..]);
+    var written: usize = prefix_len;
+    try decodeBlockIntoBuffer(input, output, &written, decoded_len, 0);
+    std.mem.copyForwards(u8, output[0..decoded_len], output[prefix_len..][0..decoded_len]);
+    return decoded_len;
+}
+
+fn decodeBlockWithExternalPrefixIntoSlice(
+    input: []const u8,
+    output: []u8,
+    expected_size: ?usize,
+    prefix: []const u8,
+) Error!usize {
+    var written: usize = 0;
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const token = input[offset];
+        offset += 1;
+        var literal_len: usize = token >> 4;
+        if (literal_len == 15) literal_len = try checkedAdd(literal_len, try readLengthExtension(input, &offset));
+        if (input.len - offset < literal_len) return error.TruncatedFrame;
+        if (output.len - written < literal_len) return error.OutputTooSmall;
+        @memcpy(output[written..][0..literal_len], input[offset..][0..literal_len]);
+        written += literal_len;
+        offset += literal_len;
+        if (offset == input.len) break;
+
+        if (input.len - offset < 2) return error.TruncatedFrame;
+        const match_offset = std.mem.readInt(u16, input[offset..][0..2], .little);
+        offset += 2;
+        if (match_offset == 0 or match_offset > written + prefix.len) return error.InvalidMatch;
+        var match_len: usize = (token & 0x0f) + 4;
+        if ((token & 0x0f) == 15) match_len = try checkedAdd(match_len, try readLengthExtension(input, &offset));
+        if (output.len - written < match_len) return error.OutputTooSmall;
+
+        var remaining = match_len;
+        if (match_offset > written) {
+            const prefix_back = match_offset - written;
+            const from_prefix = @min(prefix_back, remaining);
+            @memcpy(output[written..][0..from_prefix], prefix[prefix.len - prefix_back ..][0..from_prefix]);
+            written += from_prefix;
+            remaining -= from_prefix;
+            if (remaining == 0) continue;
+        }
+
+        const repeat_start = written - match_offset;
+        appendMatchFromBuffer(output, &written, repeat_start, remaining);
+    }
+    if (expected_size) |size| {
+        if (written != size) return error.SizeMismatch;
+    }
+    return written;
 }
 
 pub fn decodedBlockSize(input: []const u8) Error!usize {
@@ -1531,6 +1593,16 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
     const prefix_into_written = try decodeBlockWithPrefixIntoSlice(std.testing.allocator, &prefix_match, &prefix_into, 8, "abcdefghijklmnop");
     try std.testing.expectEqual(@as(usize, 8), prefix_into_written);
     try std.testing.expectEqualSlices(u8, "mnopmnop", &prefix_into);
+    var prefix_into_noalloc: [8 + "abcdefghijklmnop".len]u8 = undefined;
+    const prefix_noalloc_written = try decodeBlockWithPrefixIntoSlice(
+        std.testing.failing_allocator,
+        &prefix_match,
+        &prefix_into_noalloc,
+        8,
+        "abcdefghijklmnop",
+    );
+    try std.testing.expectEqual(@as(usize, 8), prefix_noalloc_written);
+    try std.testing.expectEqualSlices(u8, "mnopmnop", prefix_into_noalloc[0..prefix_noalloc_written]);
     try std.testing.expectError(
         error.OutputTooSmall,
         decodeBlockWithPrefixIntoSlice(std.testing.allocator, &prefix_match, prefix_into[0..7], 8, "abcdefghijklmnop"),
