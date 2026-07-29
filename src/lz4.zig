@@ -957,20 +957,36 @@ pub const BlockEncoder = struct {
         return try encodeLinkedBlockInto(self.allocator, out, history, input, self.hash_table, self.occupancy_bits, self.chain_table);
     }
 
-    pub fn encodeIntoSlice(self: *BlockEncoder, input: []const u8, output: []u8) Error!usize {
+    pub fn encodeScratch(self: *BlockEncoder, input: []const u8) Error![]const u8 {
         self.output_scratch.clearRetainingCapacity();
-        const written = try self.append(&self.output_scratch, input);
-        if (output.len < written) return error.OutputTooSmall;
-        @memcpy(output[0..written], self.output_scratch.items[0..written]);
-        return written;
+        _ = self.append(&self.output_scratch, input) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        return self.output_scratch.items;
+    }
+
+    pub fn encodeWithPrefixScratch(self: *BlockEncoder, input: []const u8, prefix: []const u8) Error![]const u8 {
+        self.output_scratch.clearRetainingCapacity();
+        _ = self.appendWithPrefix(&self.output_scratch, input, prefix) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        return self.output_scratch.items;
+    }
+
+    pub fn encodeIntoSlice(self: *BlockEncoder, input: []const u8, output: []u8) Error!usize {
+        const scratch = try self.encodeScratch(input);
+        if (output.len < scratch.len) return error.OutputTooSmall;
+        @memcpy(output[0..scratch.len], scratch);
+        return scratch.len;
     }
 
     pub fn encodeWithPrefixIntoSlice(self: *BlockEncoder, input: []const u8, prefix: []const u8, output: []u8) Error!usize {
-        self.output_scratch.clearRetainingCapacity();
-        const written = try self.appendWithPrefix(&self.output_scratch, input, prefix);
-        if (output.len < written) return error.OutputTooSmall;
-        @memcpy(output[0..written], self.output_scratch.items[0..written]);
-        return written;
+        const scratch = try self.encodeWithPrefixScratch(input, prefix);
+        if (output.len < scratch.len) return error.OutputTooSmall;
+        @memcpy(output[0..scratch.len], scratch);
+        return scratch.len;
     }
 };
 
@@ -2047,6 +2063,8 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     try std.testing.expectError(error.OutputTooSmall, encodeBlockIntoSlice(std.testing.allocator, repeated, block_into[0 .. block_written - 1]));
     var reusable_block_encoder = try BlockEncoder.init(std.testing.allocator);
     defer reusable_block_encoder.deinit();
+    const reusable_block_scratch = try reusable_block_encoder.encodeScratch(repeated);
+    try std.testing.expectEqualSlices(u8, block_encoded, reusable_block_scratch);
     const reusable_block_written = try reusable_block_encoder.encodeIntoSlice(repeated, block_into);
     try std.testing.expectEqualSlices(u8, block_encoded, block_into[0..reusable_block_written]);
     try std.testing.expectError(error.OutputTooSmall, reusable_block_encoder.encodeIntoSlice(repeated, block_into[0 .. reusable_block_written - 1]));
@@ -2216,6 +2234,8 @@ test "lz4 block encoder uses caller prefix history" {
     const reusable_encoded = try reusable.encodeWithPrefixAlloc(block, prefix);
     defer std.testing.allocator.free(reusable_encoded);
     try std.testing.expectEqualSlices(u8, encoded, reusable_encoded);
+    const reusable_prefix_scratch = try reusable.encodeWithPrefixScratch(block, prefix);
+    try std.testing.expectEqualSlices(u8, encoded, reusable_prefix_scratch);
     const reusable_into_written = try reusable.encodeWithPrefixIntoSlice(block, prefix, into);
     try std.testing.expectEqualSlices(u8, encoded, into[0..reusable_into_written]);
     try std.testing.expectError(
@@ -2228,6 +2248,8 @@ test "lz4 block encoder uses caller prefix history" {
     const reusable_plain = try reusable.encodeAlloc("abcabcabca");
     defer std.testing.allocator.free(reusable_plain);
     try std.testing.expectEqualSlices(u8, reusable_plain, appended.items);
+    const reusable_plain_scratch = try reusable.encodeScratch("abcabcabca");
+    try std.testing.expectEqualSlices(u8, reusable_plain, reusable_plain_scratch);
     const reusable_plain_written = try reusable.encodeIntoSlice("abcabcabca", into);
     try std.testing.expectEqualSlices(u8, reusable_plain, into[0..reusable_plain_written]);
     const reusable_decoded = try decodeBlockAlloc(std.testing.allocator, reusable_plain, "abcabcabca".len);
