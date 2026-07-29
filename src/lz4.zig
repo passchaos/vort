@@ -1168,6 +1168,137 @@ pub fn decodeBlockWithPrefixAlloc(allocator: std.mem.Allocator, input: []const u
     return out.toOwnedSlice(allocator);
 }
 
+pub fn decodeBlockAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, expected_size: ?usize) Error!usize {
+    const decoded_len = if (expected_size) |size| size else try decodedBlockSize(input);
+    try out.ensureUnusedCapacity(allocator, decoded_len);
+    const start = out.items.len;
+    const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
+    const written = decodeBlockIntoSlice(input, slot, expected_size) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != decoded_len) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn decodeBlockAppendLimited(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    max_output_len: usize,
+) Error!usize {
+    const decoded_len = try decodedBlockSizeLimited(input, max_output_len);
+    return try decodeBlockAppend(allocator, out, input, decoded_len);
+}
+
+pub fn decodeBlockWithPrefixAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    expected_size: ?usize,
+    prefix: []const u8,
+) Error!usize {
+    const decoded_len = if (expected_size) |size| size else try decodedBlockSizeWithPrefix(input, prefix);
+    try out.ensureUnusedCapacity(allocator, decoded_len);
+    const start = out.items.len;
+    const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
+    const written = decodeBlockWithPrefixIntoSliceNoAlloc(input, slot, expected_size, prefix) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != decoded_len) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn decodeBlockWithPrefixAppendLimited(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    max_output_len: usize,
+    prefix: []const u8,
+) Error!usize {
+    const decoded_len = try decodedBlockSizeWithPrefixLimited(input, prefix, max_output_len);
+    return try decodeBlockWithPrefixAppend(allocator, out, input, decoded_len, prefix);
+}
+
+pub const BlockDecoder = struct {
+    allocator: std.mem.Allocator,
+    scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) BlockDecoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *BlockDecoder) void {
+        self.scratch.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn decodeAlloc(self: *BlockDecoder, input: []const u8, expected_size: ?usize) Error![]u8 {
+        return try decodeBlockAlloc(self.allocator, input, expected_size);
+    }
+
+    pub fn decodeWithPrefixAlloc(self: *BlockDecoder, input: []const u8, expected_size: ?usize, prefix: []const u8) Error![]u8 {
+        return try decodeBlockWithPrefixAlloc(self.allocator, input, expected_size, prefix);
+    }
+
+    pub fn decodeAppend(self: *BlockDecoder, out: *std.ArrayList(u8), input: []const u8, expected_size: ?usize) Error!usize {
+        return try decodeBlockAppend(self.allocator, out, input, expected_size);
+    }
+
+    pub fn decodeAppendLimited(self: *BlockDecoder, out: *std.ArrayList(u8), input: []const u8, max_output_len: usize) Error!usize {
+        return try decodeBlockAppendLimited(self.allocator, out, input, max_output_len);
+    }
+
+    pub fn decodeWithPrefixAppend(self: *BlockDecoder, out: *std.ArrayList(u8), input: []const u8, expected_size: ?usize, prefix: []const u8) Error!usize {
+        return try decodeBlockWithPrefixAppend(self.allocator, out, input, expected_size, prefix);
+    }
+
+    pub fn decodeWithPrefixAppendLimited(self: *BlockDecoder, out: *std.ArrayList(u8), input: []const u8, max_output_len: usize, prefix: []const u8) Error!usize {
+        return try decodeBlockWithPrefixAppendLimited(self.allocator, out, input, max_output_len, prefix);
+    }
+
+    pub fn decodeScratch(self: *BlockDecoder, input: []const u8, expected_size: ?usize) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeAppend(&self.scratch, input, expected_size);
+        return self.scratch.items;
+    }
+
+    pub fn decodeScratchLimited(self: *BlockDecoder, input: []const u8, max_output_len: usize) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeAppendLimited(&self.scratch, input, max_output_len);
+        return self.scratch.items;
+    }
+
+    pub fn decodeWithPrefixScratch(self: *BlockDecoder, input: []const u8, expected_size: ?usize, prefix: []const u8) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeWithPrefixAppend(&self.scratch, input, expected_size, prefix);
+        return self.scratch.items;
+    }
+
+    pub fn decodeWithPrefixScratchLimited(self: *BlockDecoder, input: []const u8, max_output_len: usize, prefix: []const u8) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeWithPrefixAppendLimited(&self.scratch, input, max_output_len, prefix);
+        return self.scratch.items;
+    }
+
+    pub fn decodeIntoSlice(self: *BlockDecoder, input: []const u8, output: []u8, expected_size: ?usize) Error!usize {
+        _ = self;
+        return try decodeBlockIntoSlice(input, output, expected_size);
+    }
+
+    pub fn decodeWithPrefixIntoSlice(self: *BlockDecoder, input: []const u8, output: []u8, expected_size: ?usize, prefix: []const u8) Error!usize {
+        _ = self;
+        return try decodeBlockWithPrefixIntoSliceNoAlloc(input, output, expected_size, prefix);
+    }
+};
+
 pub fn decodeBlockIntoSlice(input: []const u8, output: []u8, expected_size: ?usize) Error!usize {
     var written: usize = 0;
     try decodeBlockIntoBuffer(input, output, &written, expected_size, 0);
@@ -2225,6 +2356,24 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
     try std.testing.expectEqual(@as(usize, 10), raw_into_written);
     try std.testing.expectEqualSlices(u8, "abcabcabca", &raw_into);
     try std.testing.expectError(error.OutputTooSmall, decodeBlockIntoSlice(&raw_match, raw_into[0..9], 10));
+    var reusable_block_decoder = BlockDecoder.init(std.testing.allocator);
+    defer reusable_block_decoder.deinit();
+    var raw_appended: std.ArrayList(u8) = .empty;
+    defer raw_appended.deinit(std.testing.allocator);
+    try raw_appended.appendSlice(std.testing.allocator, "prefix:");
+    const raw_appended_written = try reusable_block_decoder.decodeAppendLimited(&raw_appended, &raw_match, 10);
+    try std.testing.expectEqual(@as(usize, 10), raw_appended_written);
+    try std.testing.expectEqualSlices(u8, "prefix:abcabcabca", raw_appended.items);
+    raw_appended.clearRetainingCapacity();
+    try raw_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectError(error.OutputLimitExceeded, reusable_block_decoder.decodeAppendLimited(&raw_appended, &raw_match, 9));
+    try std.testing.expectEqualSlices(u8, "prefix:", raw_appended.items);
+    const raw_scratch = try reusable_block_decoder.decodeScratch(&raw_match, 10);
+    try std.testing.expectEqualSlices(u8, "abcabcabca", raw_scratch);
+    const raw_scratch_limited = try reusable_block_decoder.decodeScratchLimited(&raw_match, 10);
+    try std.testing.expectEqualSlices(u8, "abcabcabca", raw_scratch_limited);
+    try std.testing.expectError(error.OutputLimitExceeded, reusable_block_decoder.decodeScratchLimited(&raw_match, 9));
+    try std.testing.expectEqual(@as(usize, 0), reusable_block_decoder.scratch.items.len);
 
     var long_run: std.ArrayList(u8) = .empty;
     defer long_run.deinit(std.testing.allocator);
@@ -2267,6 +2416,22 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
     const mixed_written = try decodeBlockWithPrefixIntoSliceNoAlloc(&mixed_prefix_match, &mixed_into, 10, "abcdef");
     try std.testing.expectEqual(@as(usize, 10), mixed_written);
     try std.testing.expectEqualSlices(u8, "ghcdefghcd", &mixed_into);
+    var prefix_appended: std.ArrayList(u8) = .empty;
+    defer prefix_appended.deinit(std.testing.allocator);
+    try prefix_appended.appendSlice(std.testing.allocator, "prefix:");
+    const prefix_appended_written = try reusable_block_decoder.decodeWithPrefixAppendLimited(&prefix_appended, &prefix_match, 8, "abcdefghijklmnop");
+    try std.testing.expectEqual(@as(usize, 8), prefix_appended_written);
+    try std.testing.expectEqualSlices(u8, "prefix:mnopmnop", prefix_appended.items);
+    prefix_appended.clearRetainingCapacity();
+    try prefix_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectError(error.OutputLimitExceeded, reusable_block_decoder.decodeWithPrefixAppendLimited(&prefix_appended, &prefix_match, 7, "abcdefghijklmnop"));
+    try std.testing.expectEqualSlices(u8, "prefix:", prefix_appended.items);
+    const prefix_scratch = try reusable_block_decoder.decodeWithPrefixScratch(&prefix_match, 8, "abcdefghijklmnop");
+    try std.testing.expectEqualSlices(u8, "mnopmnop", prefix_scratch);
+    const prefix_scratch_limited = try reusable_block_decoder.decodeWithPrefixScratchLimited(&prefix_match, 8, "abcdefghijklmnop");
+    try std.testing.expectEqualSlices(u8, "mnopmnop", prefix_scratch_limited);
+    try std.testing.expectError(error.OutputLimitExceeded, reusable_block_decoder.decodeWithPrefixScratchLimited(&prefix_match, 7, "abcdefghijklmnop"));
+    try std.testing.expectEqual(@as(usize, 0), reusable_block_decoder.scratch.items.len);
 }
 
 test "lz4 linked frame decoder replays matches across block boundary" {
