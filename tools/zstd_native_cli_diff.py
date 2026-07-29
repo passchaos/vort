@@ -79,6 +79,7 @@ def main() -> int:
     # block payload would not be smaller than the regenerated block. That keeps
     # output compatible with deployed zstd builds that reject expanded
     # compressed blocks even though newer format wording allows them.
+    large_duplicate_text = "".join(chr(((i * 1103515245 + 12345) >> 16) % 26 + 65) for i in range(8192))
     cases = [
         ("", "raw_or_rle", "true", "true"),
         ("hello", "raw_or_rle", "true", "true"),
@@ -91,6 +92,7 @@ def main() -> int:
         ("abc" * 24, "literal_only", "true", "true"),
         ("prefix-abcdefghijklmno-middle-abcdefghijklmno-tail", "literal_only", "true", "true"),
         ("abcdefghijabcdefghijklmnopqrstklmnopqrst", "literal_only", "true", "true"),
+        (large_duplicate_text * 2 + "tail-data", "literal_only", "true", "true"),
     ]
     for text, mode, checksum, content_size in cases:
         encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum, content_size)

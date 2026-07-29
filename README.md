@@ -23,7 +23,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   dependency-free raw/RLE, literal-only compressed-block, single-/four-stream
   and treeless repeat Huffman-literals, minimal RLE-sequence, mixed
   RLE/predefined/FSE sequence-table, repeated sequence-table, and streaming
-  default predefined-sequence compressed-block fallback encode/decode
+  default predefined-sequence compressed-block fallback encode/decode with
+  hash-probed large duplicate-match emission
   (falling back to raw/RLE blocks when sequence-free compressed blocks would
   expand, for broad zstd CLI compatibility) plus deterministic smallest-mode
   native selection, optional content checksum/content-size header fields,
