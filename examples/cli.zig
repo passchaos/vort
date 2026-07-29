@@ -594,6 +594,37 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.zstdDecodedNativeFrameSize(compressed);
         try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "size-lz4-block-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const block = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(block);
+        const decoded_len = if (max_output_len) |limit|
+            try vort.lz4DecodedBlockSizeLimited(block, limit)
+        else
+            try vort.lz4DecodedBlockSize(block);
+        try stdout.print("lz4_block_compressed_bytes={d} decoded_bytes={d}\n", .{ block.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "encode-lz4-block-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const payload = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(payload);
+        const encoded = try vort.lz4EncodeBlockAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "decode-lz4-block-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const block = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(block);
+        const decoded_len = if (max_output_len) |limit|
+            try vort.lz4DecodedBlockSizeLimited(block, limit)
+        else
+            try vort.lz4DecodedBlockSize(block);
+        const decoded = try init.gpa.alloc(u8, decoded_len);
+        defer init.gpa.free(decoded);
+        const written = try vort.lz4DecodeBlockIntoSlice(block, decoded, decoded_len);
+        if (written != decoded_len) return error.SizeMismatch;
+        try printDecoded(stdout, "lz4_block", block.len, decoded);
     } else if (std.mem.eql(u8, command, "size-lz4-block-prefix-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const prefix_hex = args.next() orelse return error.MissingHexInput;
@@ -1327,6 +1358,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight dependency-free native-subset Zstandard decoded size
         \\  size-zstd-native-file [path] [max_output]
         \\                              Preflight dependency-free native-subset Zstandard file decoded size
+        \\  size-lz4-block-hex [hex] [max_output]
+        \\                              Preflight LZ4 block decoded size
+        \\  encode-lz4-block-hex [hex]
+        \\                              Encode LZ4 block
+        \\  decode-lz4-block-hex [hex] [max_output]
+        \\                              Decode LZ4 block
         \\  size-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
         \\                              Preflight LZ4 block decoded size with prefix history
         \\  encode-lz4-block-prefix-hex [hex] [prefix_hex]
