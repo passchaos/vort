@@ -75,6 +75,22 @@ def native_encode(cli: pathlib.Path, payload: bytes, mode: str = "auto") -> byte
     return bytes.fromhex(result.stdout.decode("ascii").strip())
 
 
+def verify_native_encode(cli: pathlib.Path, payload: bytes, mode: str) -> None:
+    native_frame = native_encode(cli, payload, mode)
+    zstd_decoded = subprocess.run(
+        [ZSTD, "-dcq"],
+        input=native_frame,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    ).stdout
+    if zstd_decoded != payload:
+        raise AssertionError(
+            f"system zstd decoded {len(zstd_decoded)} bytes, expected {len(payload)}"
+        )
+    native_decode(cli, native_frame, payload)
+
+
 def generated_payloads() -> list[tuple[str, bytes]]:
     rng = random.Random(0x51D)
     printable = bytes(range(32, 127))
@@ -170,29 +186,19 @@ def main() -> int:
         raise SystemExit(f"missing built CLI at {cli}; run `zig build` first")
 
     levels = (1, 3, 6, 9, 12, 19)
+    native_modes = ("auto", "raw_or_rle", "literal_only")
     checked = 0
     for name, payload in payloads(args.path, args.dir, args.max_files, args.limit):
-        try:
-            native_frame = native_encode(cli, payload)
-            zstd_decoded = subprocess.run(
-                [ZSTD, "-dcq"],
-                input=native_frame,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True,
-            ).stdout
-            if zstd_decoded != payload:
-                raise AssertionError(
-                    f"system zstd decoded {len(zstd_decoded)} bytes, expected {len(payload)}"
+        for mode in native_modes:
+            try:
+                verify_native_encode(cli, payload, mode)
+            except (AssertionError, subprocess.CalledProcessError) as exc:
+                print(
+                    f"zstd_native_probe_fail case={name} mode=native-encode:{mode} "
+                    f"input_bytes={len(payload)} error={exc}"
                 )
-            native_decode(cli, native_frame, payload)
-        except (AssertionError, subprocess.CalledProcessError) as exc:
-            print(
-                f"zstd_native_probe_fail case={name} mode=native-encode "
-                f"input_bytes={len(payload)} error={exc}"
-            )
-            return 1
-        checked += 1
+                return 1
+            checked += 1
 
         for level in levels:
             frame = zstd_compress(payload, level)
