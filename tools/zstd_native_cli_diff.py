@@ -284,14 +284,18 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="vort-zstd-native-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         payload = b"file payload for zstd native smoke" * 4
-        # Keep one file-system smoke around the CLI invocation/decompression path
-        # without adding more public Vort file commands yet.
-        frame = bytes.fromhex(run_cli("encode-zstd-native-hex", payload.decode(), "raw_or_rle", "true"))
+        payload_path = tmp / "sample.payload"
+        payload_path.write_bytes(payload)
+        # Keep one file-system smoke around the CLI invocation/decompression path.
+        frame = bytes.fromhex(
+            run_cli("encode-zstd-native-file-hex", str(payload_path), "literal_only", "true")
+        )
         frame_path = tmp / "sample.zst"
         out_path = tmp / "sample.out"
         frame_path.write_bytes(frame)
         subprocess.run([ZSTD, "-dcq", str(frame_path), "-o", str(out_path)], check=True)
         assert out_path.read_bytes() == payload
+        assert_vort_native_decode(frame, payload)
 
     print(
         f"zstd_native_cli_diff_ok cases={len(cases)} external_cases={len(external_cases)} "
