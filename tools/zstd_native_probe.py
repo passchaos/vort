@@ -43,6 +43,28 @@ def parse_crc(output: str) -> tuple[int, int]:
     return int(decoded.group(1)), int(crc.group(1))
 
 
+def parse_decoded_size(output: str) -> int:
+    decoded = re.search(r"(?:^| )decoded_bytes=([0-9]+)", output)
+    if not decoded:
+        raise AssertionError(f"missing decoded size in {output!r}")
+    return int(decoded.group(1))
+
+
+def native_size(cli: pathlib.Path, frame: bytes, expected_len: int) -> None:
+    result = subprocess.run(
+        [str(cli), "size-zstd-native-hex", frame.hex(), str(expected_len)],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", "replace").strip()
+        raise AssertionError(stderr or f"native size rc={result.returncode}")
+    decoded_len = parse_decoded_size(result.stdout.decode("utf-8", "replace"))
+    if decoded_len != expected_len:
+        raise AssertionError(f"decoded_len={decoded_len} expected_len={expected_len}")
+
+
 def native_decode(cli: pathlib.Path, frame: bytes, expected: bytes) -> None:
     result = subprocess.run(
         [str(cli), "decode-zstd-native-hex", frame.hex(), str(len(expected))],
@@ -88,6 +110,7 @@ def verify_native_encode(cli: pathlib.Path, payload: bytes, mode: str) -> None:
         raise AssertionError(
             f"system zstd decoded {len(zstd_decoded)} bytes, expected {len(payload)}"
         )
+    native_size(cli, native_frame, len(payload))
     native_decode(cli, native_frame, payload)
 
 
@@ -203,6 +226,7 @@ def main() -> int:
         for level in levels:
             frame = zstd_compress(payload, level)
             try:
+                native_size(cli, frame, len(payload))
                 native_decode(cli, frame, payload)
             except AssertionError as exc:
                 print(

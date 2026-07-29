@@ -192,6 +192,7 @@ zig build run-lz4-native-probe
 zig build run-lz4-native-probe -- --path README.md --limit 4096
 zig build run-lz4-native-probe -- --dir docs --max-files 2 --limit 2048
 zig build run -- encode-zstd-native-bytes-hex 68656c6c6f auto true true
+zig build run -- size-zstd-native-hex 28b52ffd240529000068656c6c6fa36d9f88 5
 zig build run-zstd-native-cli-diff
 zig build run-zstd-native-probe
 zig build run-zstd-native-probe -- --path README.md --limit 4096

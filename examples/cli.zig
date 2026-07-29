@@ -520,6 +520,16 @@ pub fn main(init: std.process.Init) !void {
             try vort.zstdDecodeNativeFrameAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "zstd_native", compressed.len, decoded);
+    } else if (std.mem.eql(u8, command, "size-zstd-native-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const decoded_len = if (max_output_len) |limit|
+            try vort.zstdDecodedNativeFrameSizeLimited(compressed, limit)
+        else
+            try vort.zstdDecodedNativeFrameSize(compressed);
+        try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
     } else if (std.mem.eql(u8, command, "encode-zlib-best-file-hex")) {
         const path = args.next() orelse return error.MissingCorpusPath;
         const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
@@ -1201,6 +1211,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode bytes as dependency-free native-subset Zstandard hex
         \\  decode-zstd-native-hex [hex] [max_output]
         \\                              Decode dependency-free native-subset Zstandard hex
+        \\  size-zstd-native-hex [hex] [max_output]
+        \\                              Preflight dependency-free native-subset Zstandard decoded size
         \\  decode-raw-hex [hex] [max_output]
         \\                              Decode raw deflate hex to text
         \\  decode-raw-dict-hex [hex] [dict] [max_output]
