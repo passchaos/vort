@@ -153,6 +153,12 @@ def generated_payloads() -> list[tuple[str, bytes]]:
     for _ in range(256):
         sixteen_symbol_state = (sixteen_symbol_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         sixteen_symbol_huffman.append(b"ABCDEFGHIJKLMNOP"[(sixteen_symbol_state >> 28) & 15])
+    thirty_two_symbol_alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"
+    thirty_two_symbol_state = 0xFEED_BEEF
+    thirty_two_symbol_huffman = bytearray()
+    for _ in range(384):
+        thirty_two_symbol_state = (thirty_two_symbol_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        thirty_two_symbol_huffman.append(thirty_two_symbol_alphabet[(thirty_two_symbol_state >> 27) & 31])
 
     cases: list[tuple[str, bytes]] = [
         ("empty", b""),
@@ -164,6 +170,7 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         ("six-symbol-huffman", bytes(six_symbol_huffman)),
         ("eight-symbol-huffman", bytes(eight_symbol_huffman)),
         ("sixteen-symbol-huffman", bytes(sixteen_symbol_huffman)),
+        ("thirty-two-symbol-huffman", bytes(thirty_two_symbol_huffman)),
         (
             "structured-lines",
             b"".join(
