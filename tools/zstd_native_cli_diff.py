@@ -90,6 +90,8 @@ def main() -> int:
     large_duplicate_text = deterministic_text(0x9E37_79B9, 8192)
     large_multi_a = deterministic_text(0x243F_6A88, 4096)
     large_multi_b = deterministic_text(0xB7E1_5162, 4096)
+    predefined_multi_large = deterministic_text(0x4528_21E6, 8192)
+    predefined_multi_small = deterministic_text(0x38D0_13F7, 257)
     cases = [
         ("", "raw_or_rle", "true", "true"),
         ("hello", "raw_or_rle", "true", "true"),
@@ -104,6 +106,7 @@ def main() -> int:
         ("abcdefghijabcdefghijklmnopqrstklmnopqrst", "literal_only", "true", "true"),
         (large_duplicate_text * 2 + "tail-data", "literal_only", "true", "true"),
         (large_multi_a * 2 + large_multi_b * 2 + "tail-data", "literal_only", "true", "true"),
+        (predefined_multi_large * 2 + predefined_multi_small * 2 + "tail-data", "literal_only", "true", "true"),
     ]
     for text, mode, checksum, content_size in cases:
         encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum, content_size)
