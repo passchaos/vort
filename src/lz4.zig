@@ -780,6 +780,87 @@ pub const BlockEncoder = struct {
     }
 };
 
+pub const NativeFrameEncoder = struct {
+    block_encoder: BlockEncoder,
+
+    pub fn init(allocator: std.mem.Allocator) Error!NativeFrameEncoder {
+        return .{ .block_encoder = try BlockEncoder.init(allocator) };
+    }
+
+    pub fn deinit(self: *NativeFrameEncoder) void {
+        self.block_encoder.deinit();
+        self.* = undefined;
+    }
+
+    pub fn encodeAppend(
+        self: *NativeFrameEncoder,
+        out: *std.ArrayList(u8),
+        input: []const u8,
+        options: NativeFrameOptions,
+    ) Error!void {
+        const allocator = self.block_encoder.allocator;
+        try out.appendSlice(allocator, &frame_magic);
+        const descriptor_start = out.items.len;
+        var flg: u8 = 0x40;
+        if (options.block_mode == .independent) flg |= 0x20;
+        if (options.block_checksum) flg |= 0x10;
+        if (options.include_content_size) flg |= 0x08;
+        if (options.content_checksum) flg |= 0x04;
+        try out.append(allocator, flg);
+        try out.append(allocator, @intFromEnum(options.block_size_id) << 4);
+        if (options.include_content_size) {
+            var content_size: [8]u8 = undefined;
+            std.mem.writeInt(u64, &content_size, try checkedUsizeToU64(input.len), .little);
+            try out.appendSlice(allocator, &content_size);
+        }
+        const descriptor = out.items[descriptor_start..];
+        try out.append(allocator, @truncate(std.hash.XxHash32.hash(0, descriptor) >> 8));
+
+        var offset: usize = 0;
+        const max_block_len = options.block_size_id.maxLen();
+        while (offset < input.len) {
+            const block_len = @min(input.len - offset, max_block_len);
+            var header: [4]u8 = undefined;
+            const block = input[offset..][0..block_len];
+            const history = if (options.block_mode == .linked)
+                input[if (offset > max_match_offset) offset - max_match_offset else 0..offset]
+            else
+                &[_]u8{};
+            const header_start = out.items.len;
+            try out.appendNTimes(allocator, 0, 4);
+            const encoded_start = out.items.len;
+            const compressed_len = if (history.len == 0)
+                try self.block_encoder.append(out, block)
+            else
+                try self.block_encoder.appendWithPrefix(out, block, history);
+            if (compressed_len < block.len) {
+                std.mem.writeInt(u32, out.items[header_start..][0..4], @intCast(compressed_len), .little);
+                if (options.block_checksum) try emitBlockChecksum(allocator, out, out.items[encoded_start..][0..compressed_len]);
+            } else {
+                out.items.len = encoded_start;
+                std.mem.writeInt(u32, &header, 0x8000_0000 | @as(u32, @intCast(block_len)), .little);
+                @memcpy(out.items[header_start..][0..4], &header);
+                try out.appendSlice(allocator, block);
+                if (options.block_checksum) try emitBlockChecksum(allocator, out, block);
+            }
+            offset += block_len;
+        }
+        try out.appendSlice(allocator, &.{ 0, 0, 0, 0 });
+        if (options.content_checksum) {
+            var checksum: [4]u8 = undefined;
+            std.mem.writeInt(u32, &checksum, std.hash.XxHash32.hash(0, input), .little);
+            try out.appendSlice(allocator, &checksum);
+        }
+    }
+
+    pub fn encodeAlloc(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions) Error![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.block_encoder.allocator);
+        try self.encodeAppend(&out, input, options);
+        return out.toOwnedSlice(self.block_encoder.allocator);
+    }
+};
+
 pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -1545,6 +1626,12 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     defer appended_frame.deinit(std.testing.allocator);
     try encodeNativeFrameAppend(std.testing.allocator, &appended_frame, repeated, .{});
     try std.testing.expectEqualSlices(u8, encoded, appended_frame.items);
+    var reusable_frame_encoder = try NativeFrameEncoder.init(std.testing.allocator);
+    defer reusable_frame_encoder.deinit();
+    var reusable_frame: std.ArrayList(u8) = .empty;
+    defer reusable_frame.deinit(std.testing.allocator);
+    try reusable_frame_encoder.encodeAppend(&reusable_frame, repeated, .{});
+    try std.testing.expectEqualSlices(u8, encoded, reusable_frame.items);
     const frame_bound = try encodedNativeFrameBound(repeated.len);
     const encoded_into = try std.testing.allocator.alloc(u8, frame_bound);
     defer std.testing.allocator.free(encoded_into);
@@ -1588,6 +1675,12 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     );
     defer std.testing.allocator.free(linked);
     try std.testing.expectEqual(@as(u8, 0x48), linked[4]);
+    reusable_frame.clearRetainingCapacity();
+    try reusable_frame_encoder.encodeAppend(&reusable_frame, repeated, .{
+        .block_mode = .linked,
+        .content_checksum = false,
+    });
+    try std.testing.expectEqualSlices(u8, linked, reusable_frame.items);
     const linked_decoded = try decodeNativeFrameAlloc(std.testing.allocator, linked);
     defer std.testing.allocator.free(linked_decoded);
     try std.testing.expectEqualSlices(u8, repeated, linked_decoded);
