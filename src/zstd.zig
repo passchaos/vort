@@ -542,6 +542,25 @@ pub const NativeFrameEncoder = struct {
         self.* = undefined;
     }
 
+    pub fn encodeAlloc(self: *NativeFrameEncoder, input: []const u8) Error![]u8 {
+        const result = try self.encodeWithOptionsAlloc(input, .{});
+        return result.frame;
+    }
+
+    pub fn encodeWithOptionsAlloc(
+        self: *NativeFrameEncoder,
+        input: []const u8,
+        options: NativeFrameOptions,
+    ) Error!NativeFrameEncodeResult {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        const mode = try self.encodeAppend(&out, input, options);
+        return .{
+            .frame = try out.toOwnedSlice(self.allocator),
+            .mode = mode,
+        };
+    }
+
     pub fn encodeAppend(
         self: *NativeFrameEncoder,
         out: *std.ArrayList(u8),
@@ -5219,6 +5238,10 @@ test "zstd native frame writer chooses smallest fallback mode" {
     const reusable_mode = try reusable.encodeAppend(&reusable_out, duplicate_payload, .{});
     try std.testing.expectEqual(duplicate_result.mode, reusable_mode);
     try std.testing.expectEqualSlices(u8, duplicate_result.frame, reusable_out.items);
+    const reusable_owned = try reusable.encodeWithOptionsAlloc(duplicate_payload, .{});
+    defer std.testing.allocator.free(reusable_owned.frame);
+    try std.testing.expectEqual(duplicate_result.mode, reusable_owned.mode);
+    try std.testing.expectEqualSlices(u8, duplicate_result.frame, reusable_owned.frame);
     reusable_out.clearRetainingCapacity();
     const reusable_raw_mode = try reusable.encodeAppend(&reusable_out, repeated, .{ .selection = .raw_or_rle });
     try std.testing.expectEqual(NativeFrameMode.raw_or_rle, reusable_raw_mode);
