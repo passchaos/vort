@@ -66,6 +66,33 @@ def assert_vort_native_decode_error(frame: bytes, max_output_len: int, error_nam
         raise AssertionError(f"expected {error_name}, got rc={failed.returncode} stderr={failed.stderr!r}")
 
 
+def assert_vort_native_huffman_literals(frame: bytes) -> None:
+    if frame[:4] != bytes.fromhex("28b52ffd"):
+        raise AssertionError("missing zstd magic")
+    descriptor = frame[4]
+    offset = 5
+    if descriptor & 0x08:
+        raise AssertionError("reserved frame bit set")
+    single_segment = bool(descriptor & 0x20)
+    if not single_segment:
+        offset += 1  # Window_Descriptor
+    dict_id_flag = descriptor & 0x03
+    offset += (0, 1, 2, 4)[dict_id_flag]
+    fcs_flag = descriptor >> 6
+    if single_segment or fcs_flag != 0:
+        offset += 1 << fcs_flag
+    if len(frame) - offset < 3:
+        raise AssertionError("missing block header")
+    block_header = int.from_bytes(frame[offset : offset + 3], "little")
+    offset += 3
+    if ((block_header >> 1) & 0x03) != 2:
+        raise AssertionError("expected compressed block")
+    if offset >= len(frame):
+        raise AssertionError("missing literals header")
+    if (frame[offset] & 0x03) != 2:
+        raise AssertionError("expected compressed Huffman literals")
+
+
 def main() -> int:
     if not ZSTD:
         print("zstd native CLI diff: zstd=missing")
@@ -179,9 +206,22 @@ def main() -> int:
         (printable_huffman_text, "literal_only", "true", "true"),
         (four_stream_huffman_text, "literal_only", "true", "true"),
     ]
+    huffman_literal_texts = {
+        two_symbol_huffman_text,
+        four_symbol_huffman_text,
+        six_symbol_huffman_text,
+        eight_symbol_huffman_text,
+        sixteen_symbol_huffman_text,
+        thirty_two_symbol_huffman_text,
+        sixty_four_symbol_huffman_text,
+        printable_huffman_text,
+        four_stream_huffman_text,
+    }
     for text, mode, checksum, content_size in cases:
         encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum, content_size)
         frame = bytes.fromhex(encoded_hex)
+        if text in huffman_literal_texts:
+            assert_vort_native_huffman_literals(frame)
         decoded = zstd_decompress(frame)
         expected = text.encode()
         if decoded != expected:
