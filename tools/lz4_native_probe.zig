@@ -57,6 +57,7 @@ const Options = struct {
 
 fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) !Options {
     var options: Options = .{};
+    errdefer options.deinit(allocator);
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--path")) {
             const path = args.next() orelse return error.MissingPath;
@@ -86,6 +87,7 @@ fn addGeneratedCases(allocator: std.mem.Allocator, cases: *std.ArrayList(Case)) 
     var rng = std.Random.DefaultPrng.init(0x4c5a34);
     try cases.append(allocator, .{ .name = try allocator.dupe(u8, "printable"), .payload = try randomFromAlphabet(allocator, &rng, 4096, printable_alphabet) });
     try cases.append(allocator, .{ .name = try allocator.dupe(u8, "dna"), .payload = try randomFromAlphabet(allocator, &rng, 8192, "ACGTN") });
+    try cases.append(allocator, .{ .name = try allocator.dupe(u8, "linked-tail-copy"), .payload = try linkedTailCopyPayload(allocator, &rng) });
 }
 
 fn addGeneratedCase(allocator: std.mem.Allocator, cases: *std.ArrayList(Case), name: []const u8, payload: []const u8) !void {
@@ -139,6 +141,15 @@ fn randomFromAlphabet(
     return out;
 }
 
+fn linkedTailCopyPayload(allocator: std.mem.Allocator, rng: *std.Random.DefaultPrng) ![]u8 {
+    const first_block_len = 64 * 1024;
+    const second_block_len = 4 * 1024;
+    const out = try allocator.alloc(u8, first_block_len + second_block_len);
+    rng.random().bytes(out[0..first_block_len]);
+    @memcpy(out[first_block_len..], out[first_block_len - second_block_len .. first_block_len]);
+    return out;
+}
+
 fn checkFrameRoundTrips(allocator: std.mem.Allocator, case: Case) !void {
     const lib_frame = try vort.lz4EncodeFrameAlloc(allocator, case.payload);
     defer allocator.free(lib_frame);
@@ -155,6 +166,22 @@ fn checkFrameRoundTrips(allocator: std.mem.Allocator, case: Case) !void {
     const lib_decoded = try vort.lz4DecodeFrameAlloc(allocator, native_frame);
     defer allocator.free(lib_decoded);
     try expectPayload(case, lib_decoded);
+
+    if (case.payload.len > 64 * 1024) {
+        const linked_native_frame = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, case.payload, .{
+            .content_checksum = true,
+            .include_content_size = true,
+            .block_checksum = true,
+            .block_size_id = .max64kb,
+            .block_mode = .linked,
+        });
+        defer allocator.free(linked_native_frame);
+        const decoded_len = try vort.lz4DecodedFrameSize(linked_native_frame);
+        if (decoded_len != case.payload.len) return error.Lz4ProbeSizeMismatch;
+        const linked_decoded = try vort.lz4DecodeNativeFrameAlloc(allocator, linked_native_frame);
+        defer allocator.free(linked_decoded);
+        try expectPayload(case, linked_decoded);
+    }
 }
 
 fn checkBlockRoundTrip(allocator: std.mem.Allocator, case: Case) !void {
