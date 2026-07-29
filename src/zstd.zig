@@ -442,6 +442,18 @@ pub fn encodeRawOrRleFrameAppend(
     try emitContentChecksum(allocator, out, input, options);
 }
 
+pub fn encodeRawOrRleFrameIntoSlice(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+    output: []u8,
+) Error!usize {
+    var encoder = NativeFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    const result = try encoder.encodeIntoSlice(input, forceNativeSelection(options, .raw_or_rle), output);
+    return result.written;
+}
+
 pub fn encodeLiteralOnlyFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return try encodeLiteralOnlyFrameWithOptionsAlloc(allocator, input, .{});
 }
@@ -477,6 +489,18 @@ pub fn encodeLiteralOnlyFrameAppend(
     }
 
     try emitContentChecksum(allocator, out, input, options);
+}
+
+pub fn encodeLiteralOnlyFrameIntoSlice(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+    output: []u8,
+) Error!usize {
+    var encoder = NativeFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    const result = try encoder.encodeIntoSlice(input, forceNativeSelection(options, .literal_only), output);
+    return result.written;
 }
 
 pub fn encodeSkippableFrameAlloc(allocator: std.mem.Allocator, skippable_id: u4, payload: []const u8) Error![]u8 {
@@ -616,6 +640,12 @@ pub const NativeFrameEncoder = struct {
         return .raw_or_rle;
     }
 };
+
+fn forceNativeSelection(options: NativeFrameOptions, selection: NativeFrameSelection) NativeFrameOptions {
+    var forced = options;
+    forced.selection = selection;
+    return forced;
+}
 
 fn emitFrameHeader(
     allocator: std.mem.Allocator,
@@ -3497,6 +3527,12 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     try std.testing.expectEqual(payload.len, into_written);
     try std.testing.expectEqualSlices(u8, payload, into_buffer[0..into_written]);
     try std.testing.expectError(error.OutputTooSmall, decodeRawOrRleFrameInto(encoded, into_buffer[0 .. into_buffer.len - 1]));
+    const raw_bound = try encodedNativeFrameBoundWithOptions(payload.len, .{ .selection = .raw_or_rle });
+    const raw_into = try std.testing.allocator.alloc(u8, raw_bound);
+    defer std.testing.allocator.free(raw_into);
+    const raw_into_written = try encodeRawOrRleFrameIntoSlice(std.testing.allocator, payload, .{}, raw_into);
+    try std.testing.expectEqualSlices(u8, encoded, raw_into[0..raw_into_written]);
+    try std.testing.expectError(error.OutputTooSmall, encodeRawOrRleFrameIntoSlice(std.testing.allocator, payload, .{}, raw_into[0 .. raw_into_written - 1]));
     try std.testing.expectEqual(@as(u8, 0x24), encoded[4]);
     try std.testing.expectEqual(@as(u8, payload.len), encoded[5]);
 
@@ -4362,6 +4398,15 @@ test "zstd literal-only frame writer falls back when compressed literals expand"
     const no_checksum_decoded = try decodeNativeFrameAlloc(std.testing.allocator, no_checksum);
     defer std.testing.allocator.free(no_checksum_decoded);
     try std.testing.expectEqualSlices(u8, payload, no_checksum_decoded);
+
+    const literal_bound = try encodedNativeFrameBoundWithOptions(payload.len, .{ .selection = .literal_only });
+    const literal_into = try std.testing.allocator.alloc(u8, literal_bound);
+    defer std.testing.allocator.free(literal_into);
+    const literal_into_written = try encodeLiteralOnlyFrameIntoSlice(std.testing.allocator, payload, .{}, literal_into);
+    try std.testing.expectEqualSlices(u8, encoded, literal_into[0..literal_into_written]);
+    try std.testing.expectError(error.OutputTooSmall, encodeLiteralOnlyFrameIntoSlice(std.testing.allocator, payload, .{}, literal_into[0 .. literal_into_written - 1]));
+    const no_checksum_into_written = try encodeLiteralOnlyFrameIntoSlice(std.testing.allocator, payload, .{ .content_checksum = false }, literal_into);
+    try std.testing.expectEqualSlices(u8, no_checksum, literal_into[0..no_checksum_into_written]);
 }
 
 test "zstd literal-only writer uses RLE literals for repeated blocks" {

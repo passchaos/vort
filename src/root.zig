@@ -97,9 +97,11 @@ pub const ZstdLibFrameOptions = zstd.LibFrameOptions;
 pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
 pub const zstdEncodeRawOrRleFrameWithOptionsAlloc = zstd.encodeRawOrRleFrameWithOptionsAlloc;
 pub const zstdEncodeRawOrRleFrameAppend = zstd.encodeRawOrRleFrameAppend;
+pub const zstdEncodeRawOrRleFrameIntoSlice = zstd.encodeRawOrRleFrameIntoSlice;
 pub const zstdEncodeLiteralOnlyFrameAlloc = zstd.encodeLiteralOnlyFrameAlloc;
 pub const zstdEncodeLiteralOnlyFrameWithOptionsAlloc = zstd.encodeLiteralOnlyFrameWithOptionsAlloc;
 pub const zstdEncodeLiteralOnlyFrameAppend = zstd.encodeLiteralOnlyFrameAppend;
+pub const zstdEncodeLiteralOnlyFrameIntoSlice = zstd.encodeLiteralOnlyFrameIntoSlice;
 pub const zstdEncodeSkippableFrameAlloc = zstd.encodeSkippableFrameAlloc;
 pub const ZstdNativeFrameOptions = zstd.NativeFrameOptions;
 pub const ZstdNativeFrameSelection = zstd.NativeFrameSelection;
@@ -721,9 +723,11 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodeRawOrRleFrameAlloc;
     _ = zstdEncodeRawOrRleFrameWithOptionsAlloc;
     _ = zstdEncodeRawOrRleFrameAppend;
+    _ = zstdEncodeRawOrRleFrameIntoSlice;
     _ = zstdEncodeLiteralOnlyFrameAlloc;
     _ = zstdEncodeLiteralOnlyFrameWithOptionsAlloc;
     _ = zstdEncodeLiteralOnlyFrameAppend;
+    _ = zstdEncodeLiteralOnlyFrameIntoSlice;
     _ = zstdEncodeSkippableFrameAlloc;
     _ = ZstdNativeFrameOptions;
     _ = ZstdNativeFrameSelection;
@@ -828,6 +832,26 @@ test "root zstd native size preflight covers compressed blocks" {
     try std.testing.expectEqual(payload.len, decoded_len);
     try std.testing.expectEqual(payload.len, try zstdDecodedNativeFrameSizeLimited(encoded.frame, payload.len));
     try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedNativeFrameSizeLimited(encoded.frame, payload.len - 1));
+}
+
+test "root zstd explicit native encode-into helpers round trip" {
+    const raw_payload = "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr";
+    const raw_bound = try zstdEncodedNativeFrameBoundWithOptions(raw_payload.len, .{ .selection = .raw_or_rle });
+    const raw_into = try std.testing.allocator.alloc(u8, raw_bound);
+    defer std.testing.allocator.free(raw_into);
+    const raw_written = try zstdEncodeRawOrRleFrameIntoSlice(std.testing.allocator, raw_payload, .{}, raw_into);
+    const raw_decoded = try zstdDecodeNativeFrameAlloc(std.testing.allocator, raw_into[0..raw_written]);
+    defer std.testing.allocator.free(raw_decoded);
+    try std.testing.expectEqualSlices(u8, raw_payload, raw_decoded);
+
+    const literal_payload = "prefix-abcdefghijklmno-middle-abcdefghijklmno-tail";
+    const literal_bound = try zstdEncodedNativeFrameBoundWithOptions(literal_payload.len, .{ .selection = .literal_only });
+    const literal_into = try std.testing.allocator.alloc(u8, literal_bound);
+    defer std.testing.allocator.free(literal_into);
+    const literal_written = try zstdEncodeLiteralOnlyFrameIntoSlice(std.testing.allocator, literal_payload, .{}, literal_into);
+    const literal_decoded = try zstdDecodeNativeFrameAlloc(std.testing.allocator, literal_into[0..literal_written]);
+    defer std.testing.allocator.free(literal_decoded);
+    try std.testing.expectEqualSlices(u8, literal_payload, literal_decoded);
 }
 
 test "root exports chunked compatibility decode helpers" {
