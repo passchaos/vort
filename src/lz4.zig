@@ -600,6 +600,8 @@ fn frameDecodedSizeLimited(frame: []const u8, max_output_len: usize) Error!usize
 
         if (header.block_checksum) {
             if (frame.len - offset < 4) return error.TruncatedFrame;
+            const expected = std.mem.readInt(u32, frame[offset..][0..4], .little);
+            if (std.hash.XxHash32.hash(0, block) != expected) return error.ChecksumMismatch;
             offset += 4;
         }
     }
@@ -1695,6 +1697,7 @@ test "lz4 native frame decoder validates header, block checksum, and block size"
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, plain, decoded);
+    try std.testing.expectEqual(plain.len, try decodedFrameSize(frame.items));
     var into_buffer: [plain.len]u8 = undefined;
     const into_written = try decodeNativeFrameInto(frame.items, &into_buffer);
     try std.testing.expectEqual(plain.len, into_written);
@@ -1709,6 +1712,7 @@ test "lz4 native frame decoder validates header, block checksum, and block size"
     defer std.testing.allocator.free(bad_block_checksum);
     bad_block_checksum[bad_block_checksum.len - 5] ^= 0x01;
     try std.testing.expectError(error.ChecksumMismatch, decodeNativeFrameAlloc(std.testing.allocator, bad_block_checksum));
+    try std.testing.expectError(error.ChecksumMismatch, decodedFrameSize(bad_block_checksum));
 
     var bad_block_size = try std.testing.allocator.dupe(u8, frame.items);
     defer std.testing.allocator.free(bad_block_size);
