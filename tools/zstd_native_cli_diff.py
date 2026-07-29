@@ -116,6 +116,12 @@ def main() -> int:
         eight_symbol_state = (eight_symbol_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         eight_symbol_huffman_chars.append("ABCDEFGH"[(eight_symbol_state >> 29) & 7])
     eight_symbol_huffman_text = "".join(eight_symbol_huffman_chars)
+    sixteen_symbol_state = 0x8765_4321
+    sixteen_symbol_huffman_chars = []
+    for _ in range(256):
+        sixteen_symbol_state = (sixteen_symbol_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        sixteen_symbol_huffman_chars.append("ABCDEFGHIJKLMNOP"[(sixteen_symbol_state >> 28) & 15])
+    sixteen_symbol_huffman_text = "".join(sixteen_symbol_huffman_chars)
     cases = [
         ("", "raw_or_rle", "true", "true"),
         ("hello", "raw_or_rle", "true", "true"),
@@ -135,6 +141,7 @@ def main() -> int:
         (two_symbol_huffman_text, "literal_only", "true", "true"),
         (four_symbol_huffman_text, "literal_only", "true", "true"),
         (eight_symbol_huffman_text, "literal_only", "true", "true"),
+        (sixteen_symbol_huffman_text, "literal_only", "true", "true"),
     ]
     for text, mode, checksum, content_size in cases:
         encoded_hex = run_cli("encode-zstd-native-hex", text, mode, checksum, content_size)

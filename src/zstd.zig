@@ -2544,7 +2544,7 @@ fn emitMultiSequencePredefinedCompressedBlock(
 }
 
 const SmallHuffmanLiteralPlan = struct {
-    symbols: [8]u8 = undefined,
+    symbols: [16]u8 = undefined,
     len: usize = 0,
     max_symbol: u8 = 0,
     weight: u4 = 0,
@@ -2591,7 +2591,7 @@ fn smallHuffmanLiteralPlan(block: []const u8) ?SmallHuffmanLiteralPlan {
         plan.len += 1;
         plan.max_symbol = @max(plan.max_symbol, byte);
     }
-    if (!(plan.len == 2 or plan.len == 3 or plan.len == 4 or plan.len == 8)) return null;
+    if (!(plan.len == 2 or plan.len == 3 or plan.len == 4 or plan.len == 8 or plan.len == 16)) return null;
     if (plan.max_symbol > 128) return null;
     std.mem.sort(u8, plan.symbols[0..plan.len], {}, std.sort.asc(u8));
     plan.max_symbol = plan.symbols[plan.len - 1];
@@ -2599,6 +2599,7 @@ fn smallHuffmanLiteralPlan(block: []const u8) ?SmallHuffmanLiteralPlan {
         2 => 1,
         3, 4 => 1,
         8 => 1,
+        16 => 1,
         else => return null,
     };
     return plan;
@@ -2627,6 +2628,7 @@ fn smallHuffmanCode(plan: SmallHuffmanLiteralPlan, symbol: u8) ?usize {
         },
         4 => index,
         8 => index,
+        16 => index,
         else => null,
     };
 }
@@ -2638,6 +2640,7 @@ fn smallHuffmanBitCount(plan: SmallHuffmanLiteralPlan, symbol: u8) ?u8 {
         3 => if (index == 2) 1 else 2,
         4 => 2,
         8 => 3,
+        16 => 4,
         else => null,
     };
 }
@@ -4348,6 +4351,39 @@ test "zstd literal-only writer emits eight-symbol Huffman literals" {
     for (&payload) |*byte| {
         state = state *% 1_664_525 +% 1_013_904_223;
         byte.* = "ABCDEFGH"[(state >> 29) & 7];
+    }
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits sixteen-symbol Huffman literals" {
+    var payload: [256]u8 = undefined;
+    var state: u32 = 0x8765_4321;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = "ABCDEFGHIJKLMNOP"[(state >> 28) & 15];
     }
 
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
