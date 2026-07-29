@@ -553,6 +553,17 @@ pub fn encodeNativeFrameAppend(
     return result.mode;
 }
 
+pub fn encodeNativeFrameIntoSlice(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+    output: []u8,
+) Error!NativeFrameEncodeIntoResult {
+    var encoder = NativeFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return try encoder.encodeIntoSlice(input, options, output);
+}
+
 pub const NativeFrameEncoder = struct {
     allocator: std.mem.Allocator,
     raw_scratch: std.ArrayList(u8) = .empty,
@@ -5278,6 +5289,11 @@ test "zstd native frame writer chooses smallest fallback mode" {
     const appended_decoded = try decodeNativeFrameAlloc(std.testing.allocator, appended.items);
     defer std.testing.allocator.free(appended_decoded);
     try std.testing.expectEqualSlices(u8, duplicate_payload, appended_decoded);
+    const one_shot_into = try std.testing.allocator.alloc(u8, try encodedNativeFrameBound(duplicate_payload.len));
+    defer std.testing.allocator.free(one_shot_into);
+    const one_shot_into_result = try encodeNativeFrameIntoSlice(std.testing.allocator, duplicate_payload, .{}, one_shot_into);
+    try std.testing.expectEqual(duplicate_result.mode, one_shot_into_result.mode);
+    try std.testing.expectEqualSlices(u8, duplicate_result.frame, one_shot_into[0..one_shot_into_result.written]);
 
     var reusable = NativeFrameEncoder.init(std.testing.allocator);
     defer reusable.deinit();

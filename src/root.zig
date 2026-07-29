@@ -111,6 +111,7 @@ pub const zstdEncodedNativeFrameBound = zstd.encodedNativeFrameBound;
 pub const zstdEncodedNativeFrameBoundWithOptions = zstd.encodedNativeFrameBoundWithOptions;
 pub const zstdEncodeNativeFrameWithOptionsAlloc = zstd.encodeNativeFrameWithOptionsAlloc;
 pub const zstdEncodeNativeFrameAppend = zstd.encodeNativeFrameAppend;
+pub const zstdEncodeNativeFrameIntoSlice = zstd.encodeNativeFrameIntoSlice;
 pub const zstdDecodeRawOrRleFrameAlloc = zstd.decodeRawOrRleFrameAlloc;
 pub const zstdDecodeRawOrRleFrameAllocLimited = zstd.decodeRawOrRleFrameAllocLimited;
 pub const zstdDecodedRawOrRleFrameSize = zstd.decodedRawOrRleFrameSize;
@@ -734,6 +735,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodedNativeFrameBoundWithOptions;
     _ = zstdEncodeNativeFrameWithOptionsAlloc;
     _ = zstdEncodeNativeFrameAppend;
+    _ = zstdEncodeNativeFrameIntoSlice;
     _ = zstdDecodeRawOrRleFrameAlloc;
     _ = zstdDecodeRawOrRleFrameAllocLimited;
     _ = zstdDecodedRawOrRleFrameSize;
