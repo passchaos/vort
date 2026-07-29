@@ -260,6 +260,19 @@ pub fn encodePureFrameAppend(
 pub const encodeNativeFrameAlloc = encodePureFrameAlloc;
 pub const encodeNativeFrameAppend = encodePureFrameAppend;
 
+pub fn encodeNativeFrameIntoSlice(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+    output: []u8,
+) Error!usize {
+    const encoded = try encodePureFrameWithOptionsAlloc(allocator, input, options);
+    defer allocator.free(encoded);
+    if (output.len < encoded.len) return error.OutputTooSmall;
+    @memcpy(output[0..encoded.len], encoded);
+    return encoded.len;
+}
+
 pub fn encodedBlockBound(input_len: usize) Error!usize {
     return try maxCompressedLen(input_len);
 }
@@ -1532,6 +1545,12 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     defer appended_frame.deinit(std.testing.allocator);
     try encodeNativeFrameAppend(std.testing.allocator, &appended_frame, repeated, .{});
     try std.testing.expectEqualSlices(u8, encoded, appended_frame.items);
+    const frame_bound = try encodedNativeFrameBound(repeated.len);
+    const encoded_into = try std.testing.allocator.alloc(u8, frame_bound);
+    defer std.testing.allocator.free(encoded_into);
+    const frame_written = try encodeNativeFrameIntoSlice(std.testing.allocator, repeated, .{}, encoded_into);
+    try std.testing.expectEqualSlices(u8, encoded, encoded_into[0..frame_written]);
+    try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSlice(std.testing.allocator, repeated, .{}, encoded_into[0 .. frame_written - 1]));
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, repeated, decoded);
