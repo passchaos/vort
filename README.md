@@ -194,6 +194,7 @@ zig build run-lz4-native-probe -- --dir docs --max-files 2 --limit 2048
 zig build run -- encode-lz4-block-prefix-hex 6d6e6f706d6e6f70 6162636465666768696a6b6c6d6e6f70
 zig build run -- decode-lz4-block-prefix-hex 040400 6162636465666768696a6b6c6d6e6f70 8
 zig build run -- encode-zstd-native-bytes-hex 68656c6c6f auto true true
+zig build run -- encode-zstd-native-file-hex README.md literal_only true true
 zig build run -- size-zstd-native-hex 28b52ffd240529000068656c6c6fa36d9f88 5
 zig build run-zstd-native-cli-diff
 zig build run-zstd-native-probe

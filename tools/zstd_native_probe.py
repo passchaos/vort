@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zlib
 
 
@@ -51,6 +52,24 @@ def parse_decoded_size(output: str) -> int:
 
 
 def native_size(cli: pathlib.Path, frame: bytes, expected_len: int) -> None:
+    if len(frame) > 24_000:
+        with tempfile.TemporaryDirectory(prefix="vort-zstd-native-probe-", dir=ROOT / ".zig-cache") as tmpdir:
+            path = pathlib.Path(tmpdir) / "frame.zst"
+            path.write_bytes(frame)
+            result = subprocess.run(
+                [str(cli), "size-zstd-native-file", str(path), str(expected_len)],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            if result.returncode != 0:
+                stderr = result.stderr.decode("utf-8", "replace").strip()
+                raise AssertionError(stderr or f"native size rc={result.returncode}")
+            decoded_len = parse_decoded_size(result.stdout.decode("utf-8", "replace"))
+            if decoded_len != expected_len:
+                raise AssertionError(f"decoded_len={decoded_len} expected_len={expected_len}")
+            return
+
     result = subprocess.run(
         [str(cli), "size-zstd-native-hex", frame.hex(), str(expected_len)],
         cwd=ROOT,
@@ -66,6 +85,28 @@ def native_size(cli: pathlib.Path, frame: bytes, expected_len: int) -> None:
 
 
 def native_decode(cli: pathlib.Path, frame: bytes, expected: bytes) -> None:
+    if len(frame) > 24_000:
+        with tempfile.TemporaryDirectory(prefix="vort-zstd-native-probe-", dir=ROOT / ".zig-cache") as tmpdir:
+            path = pathlib.Path(tmpdir) / "frame.zst"
+            path.write_bytes(frame)
+            result = subprocess.run(
+                [str(cli), "decode-zstd-native-file", str(path), str(len(expected))],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            if result.returncode != 0:
+                stderr = result.stderr.decode("utf-8", "replace").strip()
+                raise AssertionError(stderr or f"native decode rc={result.returncode}")
+            decoded_len, crc = parse_crc(result.stdout.decode("utf-8", "replace"))
+            expected_crc = zlib.crc32(expected) & 0xFFFFFFFF
+            if decoded_len != len(expected) or crc != expected_crc:
+                raise AssertionError(
+                    f"decoded_len={decoded_len} expected_len={len(expected)} "
+                    f"crc={crc} expected_crc={expected_crc}"
+                )
+            return
+
     result = subprocess.run(
         [str(cli), "decode-zstd-native-hex", frame.hex(), str(len(expected))],
         cwd=ROOT,
@@ -85,6 +126,21 @@ def native_decode(cli: pathlib.Path, frame: bytes, expected: bytes) -> None:
 
 
 def native_encode(cli: pathlib.Path, payload: bytes, mode: str = "auto") -> bytes:
+    if len(payload) > 24_000:
+        with tempfile.TemporaryDirectory(prefix="vort-zstd-native-probe-", dir=ROOT / ".zig-cache") as tmpdir:
+            path = pathlib.Path(tmpdir) / "payload.bin"
+            path.write_bytes(payload)
+            result = subprocess.run(
+                [str(cli), "encode-zstd-native-file-hex", str(path), mode, "true", "true"],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            if result.returncode != 0:
+                stderr = result.stderr.decode("utf-8", "replace").strip()
+                raise AssertionError(stderr or f"native encode rc={result.returncode}")
+            return bytes.fromhex(result.stdout.decode("ascii").strip())
+
     result = subprocess.run(
         [str(cli), "encode-zstd-native-bytes-hex", payload.hex(), mode, "true", "true"],
         cwd=ROOT,
@@ -174,6 +230,11 @@ def generated_payloads() -> list[tuple[str, bytes]]:
     for _ in range(4096):
         four_stream_huffman_state = (four_stream_huffman_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         four_stream_huffman.append(32 + ((four_stream_huffman_state >> 24) % 95))
+    large_four_stream_huffman_state = 0x577D_F00D
+    large_four_stream_huffman = bytearray()
+    for _ in range(64 * 1024):
+        large_four_stream_huffman_state = (large_four_stream_huffman_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        large_four_stream_huffman.append(32 + ((large_four_stream_huffman_state >> 24) % 95))
     one_twenty_eight_symbol_state = 0x1357_9BDF
     one_twenty_eight_symbol_huffman = bytearray()
     for _ in range(896):
@@ -194,6 +255,7 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         ("sixty-four-symbol-huffman", bytes(sixty_four_symbol_huffman)),
         ("printable-huffman", bytes(printable_huffman)),
         ("four-stream-huffman", bytes(four_stream_huffman)),
+        ("large-four-stream-huffman", bytes(large_four_stream_huffman)),
         ("one-twenty-eight-symbol-huffman", bytes(one_twenty_eight_symbol_huffman)),
         (
             "structured-lines",
