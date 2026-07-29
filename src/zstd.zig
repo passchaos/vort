@@ -118,6 +118,27 @@ pub const NativeFrameEncodeIntoResult = struct {
     mode: NativeFrameMode,
 };
 
+pub fn encodedNativeFrameBound(input_len: usize) Error!usize {
+    return try encodedNativeFrameBoundWithOptions(input_len, .{});
+}
+
+pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrameOptions) Error!usize {
+    const frame_header_len: usize = if (options.include_content_size)
+        4 + 1 + 8
+    else
+        4 + 1 + 1;
+    const block_count = if (input_len == 0)
+        1
+    else
+        (input_len + std.compress.zstd.block_size_max - 1) / std.compress.zstd.block_size_max;
+    var bound = frame_header_len;
+    bound = std.math.add(usize, bound, input_len) catch return error.IntegerOverflow;
+    const block_header_bytes = std.math.mul(usize, block_count, 3) catch return error.IntegerOverflow;
+    bound = std.math.add(usize, bound, block_header_bytes) catch return error.IntegerOverflow;
+    if (options.content_checksum) bound = std.math.add(usize, bound, 4) catch return error.IntegerOverflow;
+    return bound;
+}
+
 /// Decode a Zstandard frame. Prefer libzstd's one-shot decoder because MCAP and
 /// similar containers often know the decoded chunk size out-of-band and because
 /// the one-shot path avoids Zig streaming allocator overhead. When the frame
@@ -5241,6 +5262,10 @@ test "zstd native frame writer chooses smallest fallback mode" {
     const duplicate_result = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, duplicate_payload, .{});
     defer std.testing.allocator.free(duplicate_result.frame);
     try std.testing.expectEqual(NativeFrameMode.literal_only, duplicate_result.mode);
+    try std.testing.expect(duplicate_result.frame.len <= try encodedNativeFrameBound(duplicate_payload.len));
+    try std.testing.expect(duplicate_result.frame.len <= try encodedNativeFrameBoundWithOptions(duplicate_payload.len, .{
+        .selection = .literal_only,
+    }));
     const duplicate_decoded = try decodeNativeFrameAlloc(std.testing.allocator, duplicate_result.frame);
     defer std.testing.allocator.free(duplicate_decoded);
     try std.testing.expectEqualSlices(u8, duplicate_payload, duplicate_decoded);
