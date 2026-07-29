@@ -68,6 +68,7 @@ pub const lz4DecodeBlockAlloc = lz4.decodeBlockAlloc;
 pub const lz4DecodeBlockWithPrefixAlloc = lz4.decodeBlockWithPrefixAlloc;
 pub const lz4DecodeBlockIntoSlice = lz4.decodeBlockIntoSlice;
 pub const lz4DecodeBlockWithPrefixIntoSlice = lz4.decodeBlockWithPrefixIntoSlice;
+pub const lz4DecodeBlockWithPrefixIntoSliceNoAlloc = lz4.decodeBlockWithPrefixIntoSliceNoAlloc;
 pub const lz4DecodedBlockSize = lz4.decodedBlockSize;
 pub const lz4DecodedBlockSizeLimited = lz4.decodedBlockSizeLimited;
 pub const lz4DecodedBlockSizeWithPrefix = lz4.decodedBlockSizeWithPrefix;
@@ -674,6 +675,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeBlockWithPrefixAlloc;
     _ = lz4DecodeBlockIntoSlice;
     _ = lz4DecodeBlockWithPrefixIntoSlice;
+    _ = lz4DecodeBlockWithPrefixIntoSliceNoAlloc;
     _ = lz4DecodedBlockSize;
     _ = lz4DecodedBlockSizeLimited;
     _ = lz4DecodedBlockSizeWithPrefix;
@@ -740,6 +742,10 @@ test "root lz4 lib frame options round trip" {
     var prefix_out: [8]u8 = undefined;
     const prefix_written = try lz4DecodeBlockWithPrefixIntoSlice(std.testing.allocator, &prefix_match, &prefix_out, 8, "abcdefghijklmnop");
     try std.testing.expectEqual(@as(usize, 8), prefix_written);
+    try std.testing.expectEqualSlices(u8, "mnopmnop", &prefix_out);
+    @memset(&prefix_out, 0);
+    const prefix_noalloc_written = try lz4DecodeBlockWithPrefixIntoSliceNoAlloc(&prefix_match, &prefix_out, 8, "abcdefghijklmnop");
+    try std.testing.expectEqual(@as(usize, 8), prefix_noalloc_written);
     try std.testing.expectEqualSlices(u8, "mnopmnop", &prefix_out);
     var raw_encoded_into: [16]u8 = undefined;
     const raw_written = try lz4EncodeBlockIntoSlice(std.testing.allocator, "abcabcabca", &raw_encoded_into);

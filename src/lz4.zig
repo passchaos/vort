@@ -730,6 +730,15 @@ pub fn decodeBlockWithPrefixIntoSlice(
     prefix: []const u8,
 ) Error!usize {
     _ = allocator;
+    return try decodeBlockWithPrefixIntoSliceNoAlloc(input, output, expected_size, prefix);
+}
+
+pub fn decodeBlockWithPrefixIntoSliceNoAlloc(
+    input: []const u8,
+    output: []u8,
+    expected_size: ?usize,
+    prefix: []const u8,
+) Error!usize {
     const decoded_len = try decodedBlockSizeWithPrefix(input, prefix);
     if (output.len < decoded_len) return error.OutputTooSmall;
     if (expected_size) |size| {
@@ -1610,6 +1619,12 @@ test "lz4 decoder handles independent frame and raw overlapping matches" {
     const prefixed = try decodeBlockWithPrefixAlloc(std.testing.allocator, &prefix_match, 8, "abcdefghijklmnop");
     defer std.testing.allocator.free(prefixed);
     try std.testing.expectEqualSlices(u8, "mnopmnop", prefixed);
+
+    const mixed_prefix_match = [_]u8{ 0x24, 'g', 'h', 6, 0 };
+    var mixed_into: [10]u8 = undefined;
+    const mixed_written = try decodeBlockWithPrefixIntoSliceNoAlloc(&mixed_prefix_match, &mixed_into, 10, "abcdef");
+    try std.testing.expectEqual(@as(usize, 10), mixed_written);
+    try std.testing.expectEqualSlices(u8, "ghcdefghcd", &mixed_into);
 }
 
 test "lz4 linked frame decoder replays matches across block boundary" {
