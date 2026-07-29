@@ -2669,8 +2669,8 @@ fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     });
     try payload.appendSlice(allocator, sequence_bits.items);
 
-    const raw_payload_len = std.math.add(usize, block.len, try literalsHeaderLen(block.len)) catch return error.IntegerOverflow;
-    if (payload.items.len + 3 >= raw_payload_len) return false;
+    const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_block_len) return false;
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
     return true;
@@ -2746,8 +2746,8 @@ fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *st
     try emitReverseBitstream(allocator, &sequence_bits, fields[0..field_count]);
     try payload.appendSlice(allocator, sequence_bits.items);
 
-    const raw_payload_len = std.math.add(usize, block.len, try literalsHeaderLen(block.len)) catch return error.IntegerOverflow;
-    if (payload.items.len + 3 >= raw_payload_len) return false;
+    const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_block_len) return false;
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
     return true;
@@ -2833,8 +2833,8 @@ fn emitMultiSequencePredefinedCompressedBlock(
     try emitReverseBitstreamFromReadOrder(allocator, &sequence_bits, read_fields[0..read_field_count]);
     try payload.appendSlice(allocator, sequence_bits.items);
 
-    const raw_payload_len = std.math.add(usize, block.len, try literalsHeaderLen(block.len)) catch return error.IntegerOverflow;
-    if (payload.items.len + 3 >= raw_payload_len) return false;
+    const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_block_len) return false;
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
     return true;
@@ -3156,8 +3156,8 @@ fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.Ar
     });
     try payload.appendSlice(allocator, sequence_bits.items);
 
-    const raw_payload_len = std.math.add(usize, block.len, try literalsHeaderLen(block.len)) catch return error.IntegerOverflow;
-    if (payload.items.len + 3 >= raw_payload_len) return false;
+    const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_block_len) return false;
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
     return true;
@@ -3240,8 +3240,8 @@ fn emitMultiRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *s
     try emitReverseBitstream(allocator, &sequence_bits, bit_fields[0..field_count]);
     try payload.appendSlice(allocator, sequence_bits.items);
 
-    const raw_payload_len = std.math.add(usize, block.len, try literalsHeaderLen(block.len)) catch return error.IntegerOverflow;
-    if (payload.items.len + 3 >= raw_payload_len) return false;
+    const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_block_len) return false;
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
     return true;
