@@ -221,6 +221,17 @@ fn checkPrefixPreflight(allocator: std.mem.Allocator) !void {
     const decoded = try vort.lz4DecodeBlockWithPrefixAlloc(allocator, &prefix_match, 8, prefix);
     defer allocator.free(decoded);
     if (!std.mem.eql(u8, "mnopmnop", decoded)) return error.Lz4ProbeMismatch;
+
+    var into_buffer: [8]u8 = undefined;
+    const written = try vort.lz4DecodeBlockWithPrefixIntoSlice(allocator, &prefix_match, &into_buffer, 8, prefix);
+    if (written != into_buffer.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, "mnopmnop", &into_buffer)) return error.Lz4ProbeMismatch;
+    if (vort.lz4DecodeBlockWithPrefixIntoSlice(allocator, &prefix_match, into_buffer[0..7], 8, prefix)) |_| {
+        return error.Lz4ProbeExpectedOutputLimit;
+    } else |err| switch (err) {
+        error.OutputTooSmall => {},
+        else => return err,
+    }
 }
 
 fn expectPayload(case: Case, decoded: []const u8) !void {
