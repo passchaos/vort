@@ -29,6 +29,8 @@ pub fn main(init: std.process.Init) !void {
         try checkBlockRoundTrip(init.gpa, case);
         checked += 1;
     }
+    try checkPrefixPreflight(init.gpa);
+    checked += 1;
 
     try stdout.print("lz4_native_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -192,6 +194,33 @@ fn checkBlockRoundTrip(allocator: std.mem.Allocator, case: Case) !void {
     const decoded = try vort.lz4DecodeBlockAlloc(allocator, block, case.payload.len);
     defer allocator.free(decoded);
     try expectPayload(case, decoded);
+}
+
+fn checkPrefixPreflight(allocator: std.mem.Allocator) !void {
+    const prefix = "abcdefghijklmnop";
+    const prefix_match = [_]u8{ 0x04, 4, 0 };
+    if (vort.lz4DecodedBlockSize(&prefix_match)) |_| {
+        return error.Lz4ProbeExpectedInvalidMatch;
+    } else |err| switch (err) {
+        error.InvalidMatch => {},
+        else => return err,
+    }
+    if (try vort.lz4DecodedBlockSizeWithPrefix(&prefix_match, prefix) != 8) {
+        return error.Lz4ProbeSizeMismatch;
+    }
+    if (try vort.lz4DecodedBlockSizeWithPrefixLimited(&prefix_match, prefix, 8) != 8) {
+        return error.Lz4ProbeSizeMismatch;
+    }
+    if (vort.lz4DecodedBlockSizeWithPrefixLimited(&prefix_match, prefix, 7)) |_| {
+        return error.Lz4ProbeExpectedOutputLimit;
+    } else |err| switch (err) {
+        error.OutputLimitExceeded => {},
+        else => return err,
+    }
+
+    const decoded = try vort.lz4DecodeBlockWithPrefixAlloc(allocator, &prefix_match, 8, prefix);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, "mnopmnop", decoded)) return error.Lz4ProbeMismatch;
 }
 
 fn expectPayload(case: Case, decoded: []const u8) !void {
