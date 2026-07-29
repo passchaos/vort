@@ -1064,12 +1064,20 @@ pub const NativeFrameEncoder = struct {
         return out.toOwnedSlice(self.block_encoder.allocator);
     }
 
-    pub fn encodeIntoSlice(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, output: []u8) Error!usize {
+    pub fn encodeScratch(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions) Error![]const u8 {
         self.output_scratch.clearRetainingCapacity();
-        try self.encodeAppend(&self.output_scratch, input, options);
-        if (output.len < self.output_scratch.items.len) return error.OutputTooSmall;
-        @memcpy(output[0..self.output_scratch.items.len], self.output_scratch.items);
-        return self.output_scratch.items.len;
+        self.encodeAppend(&self.output_scratch, input, options) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        return self.output_scratch.items;
+    }
+
+    pub fn encodeIntoSlice(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, output: []u8) Error!usize {
+        const scratch = try self.encodeScratch(input, options);
+        if (output.len < scratch.len) return error.OutputTooSmall;
+        @memcpy(output[0..scratch.len], scratch);
+        return scratch.len;
     }
 };
 
@@ -1843,6 +1851,8 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const reusable_owned = try reusable_frame_encoder.encodeWithOptionsAlloc(repeated, .{});
     defer std.testing.allocator.free(reusable_owned);
     try std.testing.expectEqualSlices(u8, encoded, reusable_owned);
+    const reusable_encoded_scratch = try reusable_frame_encoder.encodeScratch(repeated, .{});
+    try std.testing.expectEqualSlices(u8, encoded, reusable_encoded_scratch);
     const frame_bound = try encodedNativeFrameBound(repeated.len);
     const reusable_into = try std.testing.allocator.alloc(u8, frame_bound);
     defer std.testing.allocator.free(reusable_into);
@@ -1879,8 +1889,8 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const reusable_decoded = try reusable_frame_decoder.decodeAlloc(encoded);
     defer std.testing.allocator.free(reusable_decoded);
     try std.testing.expectEqualSlices(u8, repeated, reusable_decoded);
-    const reusable_scratch = try reusable_frame_decoder.decodeScratch(encoded);
-    try std.testing.expectEqualSlices(u8, repeated, reusable_scratch);
+    const reusable_decoded_scratch = try reusable_frame_decoder.decodeScratch(encoded);
+    try std.testing.expectEqualSlices(u8, repeated, reusable_decoded_scratch);
     const reusable_scratch_limited = try reusable_frame_decoder.decodeScratchLimited(encoded, repeated.len);
     try std.testing.expectEqualSlices(u8, repeated, reusable_scratch_limited);
     try std.testing.expectError(error.OutputLimitExceeded, reusable_frame_decoder.decodeScratchLimited(encoded, repeated.len - 1));
