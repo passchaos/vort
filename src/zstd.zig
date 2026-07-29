@@ -395,12 +395,14 @@ pub const decodeNativeFrameInto = decodeRawOrRleFrameInto;
 
 pub const NativeFrameDecoder = struct {
     allocator: std.mem.Allocator,
+    scratch: std.ArrayList(u8) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) NativeFrameDecoder {
         return .{ .allocator = allocator };
     }
 
     pub fn deinit(self: *NativeFrameDecoder) void {
+        self.scratch.deinit(self.allocator);
         self.* = undefined;
     }
 
@@ -410,6 +412,18 @@ pub const NativeFrameDecoder = struct {
 
     pub fn decodeAllocLimited(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize) Error![]u8 {
         return try decodeRawOrRleFrameAllocLimited(self.allocator, frame, max_output_len);
+    }
+
+    pub fn decodeScratch(self: *NativeFrameDecoder, frame: []const u8) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeAppend(&self.scratch, frame);
+        return self.scratch.items;
+    }
+
+    pub fn decodeScratchLimited(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeAppendLimited(&self.scratch, frame, max_output_len);
+        return self.scratch.items;
     }
 
     pub fn decodeAppend(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8) Error!usize {
@@ -3626,6 +3640,12 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     const reusable_decoded = try reusable_decoder.decodeAlloc(encoded);
     defer std.testing.allocator.free(reusable_decoded);
     try std.testing.expectEqualSlices(u8, payload, reusable_decoded);
+    const reusable_scratch = try reusable_decoder.decodeScratch(encoded);
+    try std.testing.expectEqualSlices(u8, payload, reusable_scratch);
+    const reusable_scratch_limited = try reusable_decoder.decodeScratchLimited(encoded, payload.len);
+    try std.testing.expectEqualSlices(u8, payload, reusable_scratch_limited);
+    try std.testing.expectError(error.OutputLimitExceeded, reusable_decoder.decodeScratchLimited(encoded, payload.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), reusable_decoder.scratch.items.len);
     native_appended.clearRetainingCapacity();
     try native_appended.appendSlice(std.testing.allocator, "prefix:");
     const reusable_append_written = try reusable_decoder.decodeAppendLimited(&native_appended, encoded, payload.len);
@@ -5473,6 +5493,12 @@ test "zstd native frame writer chooses smallest fallback mode" {
     const reusable_decoded = try reusable_decoder.decodeAlloc(duplicate_result.frame);
     defer std.testing.allocator.free(reusable_decoded);
     try std.testing.expectEqualSlices(u8, duplicate_payload, reusable_decoded);
+    const reusable_scratch = try reusable_decoder.decodeScratch(duplicate_result.frame);
+    try std.testing.expectEqualSlices(u8, duplicate_payload, reusable_scratch);
+    const reusable_scratch_limited = try reusable_decoder.decodeScratchLimited(duplicate_result.frame, duplicate_payload.len);
+    try std.testing.expectEqualSlices(u8, duplicate_payload, reusable_scratch_limited);
+    try std.testing.expectError(error.OutputLimitExceeded, reusable_decoder.decodeScratchLimited(duplicate_result.frame, duplicate_payload.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), reusable_decoder.scratch.items.len);
     duplicate_appended.clearRetainingCapacity();
     try duplicate_appended.appendSlice(std.testing.allocator, "prefix:");
     const reusable_append_written = try reusable_decoder.decodeAppendLimited(&duplicate_appended, duplicate_result.frame, duplicate_payload.len);

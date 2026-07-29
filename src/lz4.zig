@@ -443,12 +443,14 @@ pub const decodeNativeFrameAllocLimited = decodeFrameAllocLimited;
 
 pub const NativeFrameDecoder = struct {
     allocator: std.mem.Allocator,
+    scratch: std.ArrayList(u8) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) NativeFrameDecoder {
         return .{ .allocator = allocator };
     }
 
     pub fn deinit(self: *NativeFrameDecoder) void {
+        self.scratch.deinit(self.allocator);
         self.* = undefined;
     }
 
@@ -458,6 +460,18 @@ pub const NativeFrameDecoder = struct {
 
     pub fn decodeAllocLimited(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize) Error![]u8 {
         return try decodeFrameAllocLimited(self.allocator, frame, max_output_len);
+    }
+
+    pub fn decodeScratch(self: *NativeFrameDecoder, frame: []const u8) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeAppend(&self.scratch, frame);
+        return self.scratch.items;
+    }
+
+    pub fn decodeScratchLimited(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeAppendLimited(&self.scratch, frame, max_output_len);
+        return self.scratch.items;
     }
 
     pub fn decodeAppend(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8) Error!usize {
@@ -479,6 +493,18 @@ pub const NativeFrameDecoder = struct {
 
     pub fn decodeConcatenatedAllocLimited(self: *NativeFrameDecoder, frames: []const u8, max_output_len: usize) Error![]u8 {
         return try decodeConcatenatedFrameAllocLimited(self.allocator, frames, max_output_len);
+    }
+
+    pub fn decodeConcatenatedScratch(self: *NativeFrameDecoder, frames: []const u8) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeConcatenatedAppend(&self.scratch, frames);
+        return self.scratch.items;
+    }
+
+    pub fn decodeConcatenatedScratchLimited(self: *NativeFrameDecoder, frames: []const u8, max_output_len: usize) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeConcatenatedAppendLimited(&self.scratch, frames, max_output_len);
+        return self.scratch.items;
     }
 
     pub fn decodeConcatenatedAppend(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frames: []const u8) Error!usize {
@@ -1853,6 +1879,12 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const reusable_decoded = try reusable_frame_decoder.decodeAlloc(encoded);
     defer std.testing.allocator.free(reusable_decoded);
     try std.testing.expectEqualSlices(u8, repeated, reusable_decoded);
+    const reusable_scratch = try reusable_frame_decoder.decodeScratch(encoded);
+    try std.testing.expectEqualSlices(u8, repeated, reusable_scratch);
+    const reusable_scratch_limited = try reusable_frame_decoder.decodeScratchLimited(encoded, repeated.len);
+    try std.testing.expectEqualSlices(u8, repeated, reusable_scratch_limited);
+    try std.testing.expectError(error.OutputLimitExceeded, reusable_frame_decoder.decodeScratchLimited(encoded, repeated.len - 1));
+    try std.testing.expectEqual(@as(usize, 0), reusable_frame_decoder.scratch.items.len);
     decoded_appended.clearRetainingCapacity();
     try decoded_appended.appendSlice(std.testing.allocator, "prefix:");
     const reusable_append_written = try reusable_frame_decoder.decodeAppendLimited(&decoded_appended, encoded, repeated.len);
@@ -2116,6 +2148,12 @@ test "lz4 skippable frame writer composes with concatenated native streams" {
     const reusable_decoded = try reusable_decoder.decodeConcatenatedAlloc(stream.items);
     defer std.testing.allocator.free(reusable_decoded);
     try std.testing.expectEqualSlices(u8, "firstsecond", reusable_decoded);
+    const reusable_scratch = try reusable_decoder.decodeConcatenatedScratch(stream.items);
+    try std.testing.expectEqualSlices(u8, "firstsecond", reusable_scratch);
+    const reusable_scratch_limited = try reusable_decoder.decodeConcatenatedScratchLimited(stream.items, "firstsecond".len);
+    try std.testing.expectEqualSlices(u8, "firstsecond", reusable_scratch_limited);
+    try std.testing.expectError(error.OutputLimitExceeded, reusable_decoder.decodeConcatenatedScratchLimited(stream.items, "firstsecond".len - 1));
+    try std.testing.expectEqual(@as(usize, 0), reusable_decoder.scratch.items.len);
     decoded_appended.clearRetainingCapacity();
     try decoded_appended.appendSlice(std.testing.allocator, "prefix:");
     const reusable_append_written = try reusable_decoder.decodeConcatenatedAppendLimited(&decoded_appended, stream.items, "firstsecond".len);

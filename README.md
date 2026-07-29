@@ -18,7 +18,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   sizes, linked-block history encoding, encoded-block bounds, decoded-size
   preflight, bounded allocation for single/concatenated streams, bounded
   raw-block and skippable-frame encode-into/decoded-size preflight, and
-  caller-owned decode-into/append plus reusable decoder APIs,
+  caller-owned decode-into/append plus reusable scratch decoder APIs,
   libzstd-backed Zstandard frame encode/bounded/caller-owned decode with header
   options and decoded-size preflight, a
   dependency-free raw/RLE, literal-only compressed-block, single-/four-stream
@@ -31,7 +31,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   expand, for broad zstd CLI compatibility) plus deterministic smallest-mode
   native selection, optional content checksum/content-size header fields,
   skippable frame append/encode-into writer, decoded-size preflight, bounded
-  allocation, and caller-owned decode-into/append plus reusable decoder API,
+  allocation, and caller-owned decode-into/append plus reusable scratch decoder API,
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;
