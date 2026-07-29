@@ -334,6 +334,42 @@ _ = raw_chunk_header.block_type;
 const raw_chunked = try vort.decodeRawDeflateChunks(&raw_chunks, &raw_join_scratch, &raw_out);
 _ = raw_chunked;
 
+// Native LZ4 APIs are available as alloc, append, caller-owned slice, and
+// reusable scratch forms. Linked block mode can improve ratio when chunks share
+// the previous 64 KiB of history.
+const lz4_options: vort.Lz4NativeFrameOptions = .{ .block_mode = .linked };
+var lz4_encoder = try vort.Lz4NativeFrameEncoder.init(allocator);
+defer lz4_encoder.deinit();
+const lz4_frame = try lz4_encoder.encodeScratch("payload payload", lz4_options);
+var lz4_decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+defer lz4_decoder.deinit();
+const lz4_plain = try lz4_decoder.decodeScratch(lz4_frame);
+_ = lz4_plain;
+
+var lz4_block_encoder = try vort.Lz4BlockEncoder.init(allocator);
+defer lz4_block_encoder.deinit();
+const lz4_block = try lz4_block_encoder.encodeWithPrefixScratch("payload", "previous payload history");
+var lz4_block_decoder = vort.Lz4BlockDecoder.init(allocator);
+defer lz4_block_decoder.deinit();
+const lz4_block_plain = try lz4_block_decoder.decodeWithPrefixScratch(lz4_block, "payload".len, "previous payload history");
+_ = lz4_block_plain;
+
+// Native-subset Zstd APIs expose the same alloc/append/into/scratch style plus
+// mode reporting. The block size option lets callers trade ratio for latency or
+// seekability without going through the CLI.
+const zstd_options: vort.ZstdNativeFrameOptions = .{
+    .selection = .auto,
+    .block_size_max = 32 * 1024,
+};
+var zstd_encoder = vort.ZstdNativeFrameEncoder.init(allocator);
+defer zstd_encoder.deinit();
+const zstd_result = try zstd_encoder.encodeScratch("payload payload", zstd_options);
+_ = zstd_result.mode;
+var zstd_decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+defer zstd_decoder.deinit();
+const zstd_plain = try zstd_decoder.decodeScratch(zstd_result.frame);
+_ = zstd_plain;
+
 const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);
 const zlib_level_6 = try vort.encodeZlibLevelAlloc(allocator, "payload", 6);
