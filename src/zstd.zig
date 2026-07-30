@@ -4630,6 +4630,17 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     }
 
     if (count < 2 or !has_dictionary_match or !has_non_dictionary_match) return false;
+    if (try emitRleSequenceCompressedBlock(
+        allocator,
+        out,
+        block,
+        last,
+        literal_lens[0..count],
+        offsets[0..count],
+        match_lens[0..count],
+        literal_ends[0..count],
+        literal_start,
+    )) return true;
     return try emitMultiSequencePredefinedCompressedBlock(
         allocator,
         out,
@@ -4671,6 +4682,17 @@ fn emitMixedDuplicateRepeatedMatchCompressedBlock(
     }
 
     if (count < 2 or !has_duplicate_match or !has_repeated_match) return false;
+    if (try emitRleSequenceCompressedBlock(
+        allocator,
+        out,
+        block,
+        last,
+        literal_lens[0..count],
+        offsets[0..count],
+        match_lens[0..count],
+        literal_ends[0..count],
+        literal_start,
+    )) return true;
     return try emitMultiSequencePredefinedCompressedBlock(
         allocator,
         out,
@@ -5049,6 +5071,73 @@ fn emitMultiDuplicateMatchPredefinedCompressedBlock(
         literal_ends[0..matches.len],
         tail_start,
     );
+}
+
+fn emitRleSequenceCompressedBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!bool {
+    if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return false;
+    if (literal_lens.len != literal_ends.len) return false;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return false;
+
+    const literal_code = try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits);
+    const offset_code = try sequenceCodeForValue(offsets[0], &of_base, &of_bits);
+    const match_code = try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits);
+    for (1..literal_lens.len) |i| {
+        if (try sequenceCodeForValue(literal_lens[i], &ll_base, &ll_bits) != literal_code) return false;
+        if (try sequenceCodeForValue(offsets[i], &of_base, &of_bits) != offset_code) return false;
+        if (try sequenceCodeForValue(match_lens[i], &ml_base, &ml_bits) != match_code) return false;
+    }
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    var regenerated_literals = block.len - tail_start;
+    for (literal_lens) |literal_len| {
+        regenerated_literals = std.math.add(usize, regenerated_literals, literal_len) catch return error.IntegerOverflow;
+    }
+    try emitLiteralsHeader(allocator, &payload, .raw, regenerated_literals);
+    var literal_start: usize = 0;
+    for (literal_lens, 0..) |literal_len, i| {
+        try payload.appendSlice(allocator, block[literal_start..][0..literal_len]);
+        literal_start = literal_ends[i];
+    }
+    try payload.appendSlice(allocator, block[tail_start..]);
+    try emitSequenceCount(allocator, &payload, literal_lens.len);
+    try payload.append(allocator, 0x54); // LL, OF, and ML use RLE_Mode.
+    try payload.append(allocator, literal_code);
+    try payload.append(allocator, offset_code);
+    try payload.append(allocator, match_code);
+
+    var fields: [max_bootstrap_sequence_count * 3]BitField = undefined;
+    var field_count: usize = 0;
+    var i = literal_lens.len;
+    while (i > 0) {
+        i -= 1;
+        fields[field_count] = .{ .value = literal_lens[i] - ll_base[literal_code], .bits = ll_bits[literal_code] };
+        field_count += 1;
+        fields[field_count] = .{ .value = match_lens[i] - ml_base[match_code], .bits = ml_bits[match_code] };
+        field_count += 1;
+        fields[field_count] = .{ .value = offsets[i] - of_base[offset_code], .bits = of_bits[offset_code] };
+        field_count += 1;
+    }
+    var sequence_bits: std.ArrayList(u8) = .empty;
+    defer sequence_bits.deinit(allocator);
+    try emitReverseBitstream(allocator, &sequence_bits, fields[0..field_count]);
+    try payload.appendSlice(allocator, sequence_bits.items);
+
+    const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_block_len) return false;
+    try emitBlockHeader(allocator, out, 2, payload.items.len, last);
+    try out.appendSlice(allocator, payload.items);
+    return true;
 }
 
 fn emitMultiSequencePredefinedCompressedBlock(
@@ -7387,7 +7476,8 @@ test "zstd literal-only writer mixes duplicate and repeated-pattern matches" {
     const first_block = try inspectNativeFrameFirstBlock(encoded);
     try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
     var frame_state: SequenceFrameState = .{};
-    const section = try parseLiteralsSection(encoded[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    const block = encoded[first_block.payload_offset..][0..first_block.payload_len];
+    const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expect(section.sequence_count >= 2);
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
@@ -8274,6 +8364,54 @@ test "zstd literal-only writer emits two repeated-pattern sequences" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd RLE sequence emitter matches payload estimate" {
+    const payload = ("ab" ** 12) ++ ("cd" ** 12);
+    const literal_lens = [_]usize{ 2, 2 };
+    const offsets = [_]usize{ 2, 2 };
+    const match_lens = [_]usize{ 22, 22 };
+    const literal_ends = [_]usize{ 24, 48 };
+    const literal_code = try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits);
+    const offset_code = try sequenceCodeForValue(offsets[0], &of_base, &of_bits);
+    const match_code = try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits);
+    const estimated_payload_len = try rleSequencePayloadLen(
+        payload,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        payload.len,
+        literal_code,
+        offset_code,
+        match_code,
+    );
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{ .content_checksum = false });
+    try std.testing.expect(try emitRleSequenceCompressedBlock(
+        std.testing.allocator,
+        &frame,
+        payload,
+        true,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        payload.len,
+    ));
+
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    try std.testing.expectEqual(estimated_payload_len, first_block.payload_len);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(frame.items[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+    try std.testing.expectEqual(@as(u8, 0x54), frame.items[first_block.payload_offset + section.sequence_payload_offset]);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "zstd literal-only writer emits predefined repeated-pattern sequences" {
