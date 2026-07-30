@@ -21,6 +21,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkDictionaryDirectFallback(init.gpa);
     checked += 1;
+    try checkDictionarySetDirectFallback(init.gpa);
+    checked += 1;
 
     try stdout.print("lz4_native_dictionary_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -212,6 +214,35 @@ fn checkDictionaryDirectFallback(allocator: std.mem.Allocator) !void {
     defer allocator.free(encoded);
 
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    const initial = try decoder.step(encoded, output[0..0]);
+    try expect(initial.status == .need_output);
+    try expectEqualSlices("direct_output", decoder.diagnostics().phase_name);
+    const partial = try decoder.step("", output[0..5]);
+    try expect(partial.status == .need_output);
+    try expect(partial.progress.output_written == 5);
+    try expect(decoder.decoded_scratch.items.len == payload.len);
+    const done = try decoder.step("", output[5..]);
+    try expect(done.status == .done);
+    try expectEqualSlices(payload, &output);
+}
+
+fn checkDictionarySetDirectFallback(allocator: std.mem.Allocator) !void {
+    const dict = vort.Lz4NativeDictionary.init(0x5351, "abcdefghijklmnop");
+    const other = vort.Lz4NativeDictionary.init(0x5352, "QRSTUVWXYZabcdef");
+    const dictionary_set = vort.Lz4NativeDictionarySet.init(&.{ dict, other });
+    const payload = "abcdefghijklmnop-set-small-output-tail";
+    const encoded = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+    }, dict);
+    defer allocator.free(encoded);
+
+    var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
         .expected_output_len = payload.len,
         .max_decoded_buffer_len = payload.len,
     });
