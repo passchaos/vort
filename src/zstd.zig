@@ -105,6 +105,7 @@ pub const NativeFrameOptions = struct {
     include_content_size: bool = true,
     selection: NativeFrameSelection = .auto,
     block_size_max: usize = std.compress.zstd.block_size_max,
+    dictionary_id: u32 = 0,
 };
 
 pub const NativeFrameMode = enum {
@@ -133,10 +134,11 @@ pub fn encodedNativeFrameBound(input_len: usize) Error!usize {
 
 pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrameOptions) Error!usize {
     const block_size_max = try nativeBlockSizeMax(options);
+    const dictionary_id_len = nativeDictionaryIdFieldLen(options.dictionary_id);
     const frame_header_len: usize = if (options.include_content_size)
-        4 + 1 + 8
+        4 + 1 + dictionary_id_len + 8
     else
-        4 + 1 + 1;
+        4 + 1 + 1 + dictionary_id_len;
     const block_count = if (input_len == 0)
         1
     else
@@ -212,6 +214,39 @@ pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!u
 fn nativeBlockSizeMax(options: NativeFrameOptions) Error!usize {
     if (options.block_size_max == 0 or options.block_size_max > std.compress.zstd.block_size_max) return error.InvalidBlockPlan;
     return options.block_size_max;
+}
+
+fn nativeDictionaryIdFlag(dictionary_id: u32) u2 {
+    if (dictionary_id == 0) return 0;
+    if (dictionary_id <= std.math.maxInt(u8)) return 1;
+    if (dictionary_id <= std.math.maxInt(u16)) return 2;
+    return 3;
+}
+
+fn nativeDictionaryIdFieldLen(dictionary_id: u32) usize {
+    return switch (nativeDictionaryIdFlag(dictionary_id)) {
+        0 => 0,
+        1 => 1,
+        2 => 2,
+        3 => 4,
+    };
+}
+
+fn emitDictionaryId(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary_id: u32) Error!void {
+    switch (nativeDictionaryIdFlag(dictionary_id)) {
+        0 => {},
+        1 => try out.append(allocator, @intCast(dictionary_id)),
+        2 => {
+            var bytes: [2]u8 = undefined;
+            std.mem.writeInt(u16, &bytes, @intCast(dictionary_id), .little);
+            try out.appendSlice(allocator, &bytes);
+        },
+        3 => {
+            var bytes: [4]u8 = undefined;
+            std.mem.writeInt(u32, &bytes, dictionary_id, .little);
+            try out.appendSlice(allocator, &bytes);
+        },
+    }
 }
 
 fn decodeFrameAllocWithLimit(allocator: std.mem.Allocator, frame: []const u8, max_output_len: ?usize) Error![]u8 {
@@ -815,10 +850,13 @@ fn emitFrameHeader(
     options: NativeFrameOptions,
 ) Error!void {
     try out.appendSlice(allocator, &frame_magic);
+    const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
+    const dictionary_flag: u8 = nativeDictionaryIdFlag(options.dictionary_id);
 
     if (!options.include_content_size) {
-        try out.append(allocator, if (options.content_checksum) 0x04 else 0x00);
+        try out.append(allocator, checksum_flag | dictionary_flag);
         try emitWindowDescriptor(allocator, out, content_len);
+        try emitDictionaryId(allocator, out, options.dictionary_id);
         return;
     }
 
@@ -826,22 +864,25 @@ fn emitFrameHeader(
     // the Zstandard format. The previous bootstrap writer always spent eight
     // bytes here, which was easy to inspect but disproportionately expensive
     // for the tiny raw/RLE frames this dependency-free path is meant to cover.
-    const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
     if (content_len <= 255) {
-        try out.append(allocator, 0x20 | checksum_flag); // fcs=1 byte, single segment
+        try out.append(allocator, 0x20 | checksum_flag | dictionary_flag); // fcs=1 byte, single segment
+        try emitDictionaryId(allocator, out, options.dictionary_id);
         try out.append(allocator, @intCast(content_len));
     } else if (content_len <= 256 + std.math.maxInt(u16)) {
-        try out.append(allocator, 0x60 | checksum_flag); // fcs=2 bytes (+256), single segment
+        try out.append(allocator, 0x60 | checksum_flag | dictionary_flag); // fcs=2 bytes (+256), single segment
+        try emitDictionaryId(allocator, out, options.dictionary_id);
         var size_bytes: [2]u8 = undefined;
         std.mem.writeInt(u16, &size_bytes, @intCast(content_len - 256), .little);
         try out.appendSlice(allocator, &size_bytes);
     } else if (content_len <= std.math.maxInt(u32)) {
-        try out.append(allocator, 0xa0 | checksum_flag); // fcs=4 bytes, single segment
+        try out.append(allocator, 0xa0 | checksum_flag | dictionary_flag); // fcs=4 bytes, single segment
+        try emitDictionaryId(allocator, out, options.dictionary_id);
         var size_bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &size_bytes, @intCast(content_len), .little);
         try out.appendSlice(allocator, &size_bytes);
     } else {
-        try out.append(allocator, 0xe0 | checksum_flag); // fcs=8 bytes, single segment
+        try out.append(allocator, 0xe0 | checksum_flag | dictionary_flag); // fcs=8 bytes, single segment
+        try emitDictionaryId(allocator, out, options.dictionary_id);
         var size_bytes: [8]u8 = undefined;
         std.mem.writeInt(u64, &size_bytes, content_len, .little);
         try out.appendSlice(allocator, &size_bytes);
@@ -5841,6 +5882,31 @@ test "zstd raw/RLE native decoder rejects corrupt frames" {
 
     try std.testing.expectError(error.TruncatedFrame, decodeRawOrRleFrameAlloc(std.testing.allocator, encoded[0 .. encoded.len - 1]));
     try std.testing.expectError(error.InvalidMagic, decodeRawOrRleFrameAlloc(std.testing.allocator, "not-zstd"));
+}
+
+test "zstd native writer emits dictionary ids" {
+    const encoded = try encodeRawOrRleFrameWithOptionsAlloc(
+        std.testing.allocator,
+        "abc",
+        .{ .content_checksum = false, .dictionary_id = 0x1234 },
+    );
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(@as(u8, 0x22), encoded[4]); // 2-byte Dictionary_ID, single segment, 1-byte content size.
+    try std.testing.expectEqual(@as(u16, 0x1234), std.mem.readInt(u16, encoded[5..7], .little));
+    try std.testing.expectEqual(@as(u8, 3), encoded[7]);
+    try std.testing.expect(encoded.len <= try encodedNativeFrameBoundWithOptions(3, .{ .content_checksum = false, .dictionary_id = 0x1234 }));
+    try std.testing.expectError(error.NeedDictionary, decodeNativeFrameAlloc(std.testing.allocator, encoded));
+
+    const no_size = try encodeRawOrRleFrameWithOptionsAlloc(
+        std.testing.allocator,
+        "abc",
+        .{ .content_checksum = false, .include_content_size = false, .dictionary_id = 0x7f },
+    );
+    defer std.testing.allocator.free(no_size);
+    try std.testing.expectEqual(@as(u8, 0x01), no_size[4]); // 1-byte Dictionary_ID, no content size.
+    try std.testing.expectEqual(@as(u8, 0x00), no_size[5]); // Window descriptor for tiny payloads.
+    try std.testing.expectEqual(@as(u8, 0x7f), no_size[6]);
+    try std.testing.expectError(error.NeedDictionary, decodedRawOrRleFrameSize(no_size));
 }
 
 test "zstd native decoder rejects dictionary id frames without a dictionary" {

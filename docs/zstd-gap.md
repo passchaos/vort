@@ -127,7 +127,8 @@ Current interpretation:
   both system zstd decode and Vort native decode, with `size-zstd-native-hex`
   preflight checked before each native decode. The native decoder accepts
   zero-valued Dictionary_ID fields without requiring a dictionary while still
-  returning `NeedDictionary` for non-zero IDs. The native writer also exposes a
+  returning `NeedDictionary` for non-zero IDs; the native writer can emit
+  Dictionary_ID fields for downstream container metadata. The native writer also exposes a
   block-size option so future latency/ratio sweeps can share the same library
   API rather than relying on CLI-specific chunking. The probe accepts repeated `--path`
   arguments or bounded recursive `--dir` discovery with an optional `--limit`
