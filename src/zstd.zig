@@ -182,6 +182,12 @@ pub fn encodedNativeFrameBoundWithDictionary(input_len: usize, options: NativeFr
     return try encodedNativeFrameBoundWithOptions(input_len, optionsWithNativeDictionary(options, dictionary));
 }
 
+pub fn encodedNativeFrameBoundWithDictionarySet(input_len: usize, options: NativeFrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    if (dictionary_id == 0) return error.NeedDictionary;
+    const dictionary = dictionary_set.find(dictionary_id) orelse return error.NeedDictionary;
+    return try encodedNativeFrameBoundWithDictionary(input_len, options, dictionary);
+}
+
 /// Decode a Zstandard frame. Prefer libzstd's one-shot decoder because MCAP and
 /// similar containers often know the decoded chunk size out-of-band and because
 /// the one-shot path avoids Zig streaming allocator overhead. When the frame

@@ -197,6 +197,7 @@ pub const lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet = lz4.deco
 pub const lz4EncodedNativeFrameBound = lz4.encodedNativeFrameBound;
 pub const lz4EncodedNativeFrameBoundWithOptions = lz4.encodedNativeFrameBoundWithOptions;
 pub const lz4EncodedNativeFrameBoundWithDictionary = lz4.encodedNativeFrameBoundWithDictionary;
+pub const lz4EncodedNativeFrameBoundWithDictionarySet = lz4.encodedNativeFrameBoundWithDictionarySet;
 pub const lz4EncodeNativeFrameWithDictionaryAlloc = lz4.encodeNativeFrameWithDictionaryAlloc;
 pub const lz4EncodeNativeFrameAppendWithDictionary = lz4.encodeNativeFrameAppendWithDictionary;
 pub const lz4EncodeNativeFrameIntoSliceWithDictionary = lz4.encodeNativeFrameIntoSliceWithDictionary;
@@ -274,6 +275,7 @@ pub const zstdIterateNativeStream = zstd.iterateNativeStream;
 pub const zstdEncodedNativeFrameBound = zstd.encodedNativeFrameBound;
 pub const zstdEncodedNativeFrameBoundWithOptions = zstd.encodedNativeFrameBoundWithOptions;
 pub const zstdEncodedNativeFrameBoundWithDictionary = zstd.encodedNativeFrameBoundWithDictionary;
+pub const zstdEncodedNativeFrameBoundWithDictionarySet = zstd.encodedNativeFrameBoundWithDictionarySet;
 pub const zstdEncodeNativeFrameWithOptionsAlloc = zstd.encodeNativeFrameWithOptionsAlloc;
 pub const zstdEncodeNativeFrameWithDictionaryAlloc = zstd.encodeNativeFrameWithDictionaryAlloc;
 pub const zstdEncodeNativeFrameAppend = zstd.encodeNativeFrameAppend;
@@ -1041,6 +1043,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4EncodedNativeFrameBound;
     _ = lz4EncodedNativeFrameBoundWithOptions;
     _ = lz4EncodedNativeFrameBoundWithDictionary;
+    _ = lz4EncodedNativeFrameBoundWithDictionarySet;
     _ = lz4EncodeBlockAlloc;
     _ = lz4EncodeBlockWithPrefixAlloc;
     _ = lz4EncodeBlockIntoSlice;
@@ -1108,6 +1111,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodedNativeFrameBound;
     _ = zstdEncodedNativeFrameBoundWithOptions;
     _ = zstdEncodedNativeFrameBoundWithDictionary;
+    _ = zstdEncodedNativeFrameBoundWithDictionarySet;
     _ = zstdEncodeNativeFrameWithOptionsAlloc;
     _ = zstdEncodeNativeFrameAppend;
     _ = zstdEncodeNativeFrameIntoSlice;
@@ -1994,6 +1998,9 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     try lz4_stream.appendSlice(std.testing.allocator, lz4_second);
 
     const lz4_expected = lz4_first_payload ++ lz4_second_payload;
+    const lz4_set_bound = try lz4EncodedNativeFrameBoundWithDictionarySet(lz4_first_payload.len, lz4_options, lz4_dictionary_set, lz4_first_dict.id);
+    try std.testing.expect(lz4_first.len <= lz4_set_bound);
+    try std.testing.expectError(error.NeedDictionary, lz4EncodedNativeFrameBoundWithDictionarySet(lz4_first_payload.len, lz4_options, lz4_dictionary_set, 0xeeee));
     const lz4_decoded = try lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(std.testing.allocator, lz4_stream.items, lz4_dictionary_set);
     defer std.testing.allocator.free(lz4_decoded);
     try std.testing.expectEqualSlices(u8, lz4_expected, lz4_decoded);
@@ -2068,6 +2075,9 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     try zstd_stream.appendSlice(std.testing.allocator, zstd_second.frame);
 
     const zstd_expected = zstd_first_payload ++ zstd_second_payload;
+    const zstd_set_bound = try zstdEncodedNativeFrameBoundWithDictionarySet(zstd_first_payload.len, zstd_options, zstd_dictionary_set, zstd_first_dict.id);
+    try std.testing.expect(zstd_first.frame.len <= zstd_set_bound);
+    try std.testing.expectError(error.NeedDictionary, zstdEncodedNativeFrameBoundWithDictionarySet(zstd_first_payload.len, zstd_options, zstd_dictionary_set, 0xeeee));
     const zstd_decoded = try zstdDecodeNativeConcatenatedFrameAllocWithDictionarySet(std.testing.allocator, zstd_stream.items, zstd_dictionary_set);
     defer std.testing.allocator.free(zstd_decoded);
     try std.testing.expectEqualSlices(u8, zstd_expected, zstd_decoded);

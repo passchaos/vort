@@ -137,6 +137,12 @@ pub fn encodedNativeFrameBoundWithDictionary(input_len: usize, options: NativeFr
     return try encodedNativeFrameBoundWithOptions(input_len, optionsWithNativeDictionary(options, dictionary));
 }
 
+pub fn encodedNativeFrameBoundWithDictionarySet(input_len: usize, options: NativeFrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    if (dictionary_id == 0) return error.NeedDictionary;
+    const dictionary = dictionary_set.find(dictionary_id) orelse return error.NeedDictionary;
+    return try encodedNativeFrameBoundWithDictionary(input_len, options, dictionary);
+}
+
 /// Encode a complete interoperable LZ4 frame using liblz4's high-compression
 /// frame encoder. The default level starts at LZ4HC_CLEVEL_OPT_MIN (10)
 /// because it closes the C++ reference ratio gap on MCAP chunk workloads while
