@@ -8157,6 +8157,21 @@ test "zstd literal-only writer emits multiple duplicate matches" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+    try std.testing.expectEqual(@as(u8, 0x54), block[section.sequence_payload_offset]);
+    const literal_lens = [_]usize{ 10, 10 };
+    const offsets = [_]usize{ 10, 10 };
+    const match_lens = [_]usize{ 10, 10 };
+    const estimated_payload_len = try rleSequencePayloadLen(
+        payload,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        payload.len,
+        try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits),
+        try sequenceCodeForValue(offsets[0], &of_base, &of_bits),
+        try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits),
+    );
+    try std.testing.expectEqual(block_len, estimated_payload_len);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
