@@ -4671,18 +4671,7 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     }
 
     if (count < 2 or !has_dictionary_match or !has_non_dictionary_match) return false;
-    if (try emitRleSequenceCompressedBlock(
-        allocator,
-        out,
-        block,
-        last,
-        literal_lens[0..count],
-        offsets[0..count],
-        match_lens[0..count],
-        literal_ends[0..count],
-        literal_start,
-    )) return true;
-    return try emitMultiSequencePredefinedCompressedBlock(
+    return try emitBestSequenceCompressedBlock(
         allocator,
         out,
         block,
@@ -4723,18 +4712,7 @@ fn emitMixedDuplicateRepeatedMatchCompressedBlock(
     }
 
     if (count < 2 or !has_duplicate_match or !has_repeated_match) return false;
-    if (try emitRleSequenceCompressedBlock(
-        allocator,
-        out,
-        block,
-        last,
-        literal_lens[0..count],
-        offsets[0..count],
-        match_lens[0..count],
-        literal_ends[0..count],
-        literal_start,
-    )) return true;
-    return try emitMultiSequencePredefinedCompressedBlock(
+    return try emitBestSequenceCompressedBlock(
         allocator,
         out,
         block,
@@ -4971,18 +4949,7 @@ fn emitMultiDictionaryMatchCompressedBlock(
     }
     if (count < 2) return false;
 
-    if (try emitRleSequenceCompressedBlock(
-        allocator,
-        out,
-        block,
-        last,
-        literal_lens[0..count],
-        offsets[0..count],
-        match_lens[0..count],
-        literal_ends[0..count],
-        literal_start,
-    )) return true;
-    return try emitMultiSequencePredefinedCompressedBlock(
+    return try emitBestSequenceCompressedBlock(
         allocator,
         out,
         block,
@@ -5032,7 +4999,7 @@ fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *st
         match_lens[i] = match.len;
         literal_ends[i] = match.second_start + match.len;
     }
-    if (try emitRleSequenceCompressedBlock(
+    return try emitBestSequenceCompressedBlock(
         allocator,
         out,
         block,
@@ -5042,8 +5009,7 @@ fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *st
         match_lens[0..count],
         literal_ends[0..count],
         tail_start,
-    )) return true;
-    return try emitMultiDuplicateMatchPredefinedCompressedBlock(allocator, out, block, last, matches[0..count], literal_lens[0..count], tail_start);
+    );
 }
 
 fn emitMultiDuplicateMatchPredefinedCompressedBlock(
@@ -5076,6 +5042,54 @@ fn emitMultiDuplicateMatchPredefinedCompressedBlock(
         literal_ends[0..matches.len],
         tail_start,
     );
+}
+
+fn emitBestSequenceCompressedBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!bool {
+    var rle_block: std.ArrayList(u8) = .empty;
+    defer rle_block.deinit(allocator);
+    const rle_ok = try emitRleSequenceCompressedBlock(
+        allocator,
+        &rle_block,
+        block,
+        last,
+        literal_lens,
+        offsets,
+        match_lens,
+        literal_ends,
+        tail_start,
+    );
+
+    var predefined_block: std.ArrayList(u8) = .empty;
+    defer predefined_block.deinit(allocator);
+    const predefined_ok = try emitMultiSequencePredefinedCompressedBlock(
+        allocator,
+        &predefined_block,
+        block,
+        last,
+        literal_lens,
+        offsets,
+        match_lens,
+        literal_ends,
+        tail_start,
+    );
+
+    var best: ?[]const u8 = null;
+    var best_len: usize = std.math.maxInt(usize);
+    chooseShortestPlannedBlock(rle_ok, rle_block.items, &best, &best_len);
+    chooseShortestPlannedBlock(predefined_ok, predefined_block.items, &best, &best_len);
+    const best_block = best orelse return false;
+    try out.appendSlice(allocator, best_block);
+    return true;
 }
 
 fn emitRleSequenceCompressedBlock(
@@ -5832,7 +5846,7 @@ fn emitMultiRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *s
         match_lens[i] = segment.match_len;
         literal_ends[i] = segment.start + segment.period + segment.match_len;
     }
-    if (try emitRleSequenceCompressedBlock(
+    return try emitBestSequenceCompressedBlock(
         allocator,
         out,
         block,
@@ -5842,8 +5856,7 @@ fn emitMultiRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *s
         match_lens[0..count],
         literal_ends[0..count],
         search_start,
-    )) return true;
-    return try emitMultiRepeatedPatternPredefinedCompressedBlock(allocator, out, block, last, segments[0..count], literal_lens[0..count], search_start);
+    );
 }
 
 fn emitMultiRepeatedPatternPredefinedCompressedBlock(
