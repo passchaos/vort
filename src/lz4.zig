@@ -61,6 +61,7 @@ pub const NativeFrameOptions = struct {
     block_checksum: bool = false,
     block_size_id: BlockSizeId = .max4mb,
     block_mode: BlockMode = .independent,
+    dictionary_id: ?u32 = null,
 };
 
 pub const BlockMode = enum {
@@ -91,6 +92,7 @@ pub fn encodedNativeFrameBound(input_len: usize) Error!usize {
 pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrameOptions) Error!usize {
     var bound: usize = 4 + 2 + 1; // magic + FLG/BD + descriptor checksum
     if (options.include_content_size) bound = std.math.add(usize, bound, 8) catch return error.IntegerOverflow;
+    if (options.dictionary_id != null) bound = std.math.add(usize, bound, 4) catch return error.IntegerOverflow;
     if (input_len != 0) {
         const max_block_len = options.block_size_id.maxLen();
         const block_count = (input_len + max_block_len - 1) / max_block_len;
@@ -186,12 +188,18 @@ pub fn encodePureFrameAppend(
     if (options.block_checksum) flg |= 0x10;
     if (options.include_content_size) flg |= 0x08;
     if (options.content_checksum) flg |= 0x04;
+    if (options.dictionary_id != null) flg |= 0x01;
     try out.append(allocator, flg);
     try out.append(allocator, @intFromEnum(options.block_size_id) << 4);
     if (options.include_content_size) {
         var content_size: [8]u8 = undefined;
         std.mem.writeInt(u64, &content_size, try checkedUsizeToU64(input.len), .little);
         try out.appendSlice(allocator, &content_size);
+    }
+    if (options.dictionary_id) |dictionary_id| {
+        var dictionary_id_bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &dictionary_id_bytes, dictionary_id, .little);
+        try out.appendSlice(allocator, &dictionary_id_bytes);
     }
     const descriptor = out.items[descriptor_start..];
     try out.append(allocator, @truncate(std.hash.XxHash32.hash(0, descriptor) >> 8));
@@ -1028,12 +1036,18 @@ pub const NativeFrameEncoder = struct {
         if (options.block_checksum) flg |= 0x10;
         if (options.include_content_size) flg |= 0x08;
         if (options.content_checksum) flg |= 0x04;
+        if (options.dictionary_id != null) flg |= 0x01;
         try out.append(allocator, flg);
         try out.append(allocator, @intFromEnum(options.block_size_id) << 4);
         if (options.include_content_size) {
             var content_size: [8]u8 = undefined;
             std.mem.writeInt(u64, &content_size, try checkedUsizeToU64(input.len), .little);
             try out.appendSlice(allocator, &content_size);
+        }
+        if (options.dictionary_id) |dictionary_id| {
+            var dictionary_id_bytes: [4]u8 = undefined;
+            std.mem.writeInt(u32, &dictionary_id_bytes, dictionary_id, .little);
+            try out.appendSlice(allocator, &dictionary_id_bytes);
         }
         const descriptor = out.items[descriptor_start..];
         try out.append(allocator, @truncate(std.hash.XxHash32.hash(0, descriptor) >> 8));
@@ -2101,6 +2115,22 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     try std.testing.expectEqual(false, inspected.content_checksum);
     try std.testing.expectEqual(@as(?u32, null), inspected.dictionary_id);
     try std.testing.expectEqual(max_frame_block_len, inspected.block_size_max);
+
+    const with_dictionary_id = try encodePureFrameWithOptionsAlloc(
+        std.testing.allocator,
+        repeated,
+        .{ .dictionary_id = 0x1234_abcd, .content_checksum = false },
+    );
+    defer std.testing.allocator.free(with_dictionary_id);
+    const dict_header = try inspectNativeFrameHeader(with_dictionary_id);
+    try std.testing.expectEqual(@as(?u32, 0x1234_abcd), dict_header.dictionary_id);
+    try std.testing.expectEqual(@as(?u64, repeated.len), dict_header.expected_content_size);
+    const dict_decoded = try decodeNativeFrameAlloc(std.testing.allocator, with_dictionary_id);
+    defer std.testing.allocator.free(dict_decoded);
+    try std.testing.expectEqualSlices(u8, repeated, dict_decoded);
+    const reusable_with_dictionary_id = try reusable_frame_encoder.encodeScratch(repeated, .{ .dictionary_id = 0x1234_abcd, .content_checksum = false });
+    const reusable_dict_header = try inspectNativeFrameHeader(reusable_with_dictionary_id);
+    try std.testing.expectEqual(@as(?u32, 0x1234_abcd), reusable_dict_header.dictionary_id);
 
     const linked = try encodePureFrameWithOptionsAlloc(
         std.testing.allocator,

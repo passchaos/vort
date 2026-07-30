@@ -14,8 +14,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - shared progress/error/frame metadata types;
 - liblz4-backed LZ4 frame encoding plus pure Zig LZ4 frame/block
   decode/fallback encode with skippable/concatenated stream handling,
-  optional content-size/checksum/block-checksum fields, configurable frame block
-  sizes, linked-block history encoding, encoded-block bounds, decoded-size
+  optional content-size/checksum/block-checksum/Dictionary_ID fields,
+  configurable frame block sizes, linked-block history encoding, encoded-block bounds, decoded-size
   preflight, bounded allocation for single/concatenated streams, bounded
   raw-block and skippable-frame encode-into/decoded-size preflight, inspectable
   native frame headers, reusable raw-block decoder, and caller-owned
