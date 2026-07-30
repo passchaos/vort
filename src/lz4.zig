@@ -4525,6 +4525,48 @@ test "lz4 native incremental decoder streams single compressed block without dec
     try std.testing.expectEqualSlices(u8, "frame", bad.diagnostics().last_error_phase_name);
 }
 
+test "lz4 native incremental compressed block falls back for small output" {
+    const payload = ("fedcba9876543210" ** 8) ** 64;
+    const encoded = try encodePureFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+        .block_mode = .independent,
+        .block_size_id = .max64kb,
+    });
+    defer std.testing.allocator.free(encoded);
+    const first_block = (try inspectNativeFrameFirstBlock(encoded)) orelse return error.CorruptFrame;
+    try std.testing.expect(first_block.is_compressed);
+
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    const initial = try decoder.step(encoded, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+
+    var written: usize = 0;
+    while (true) {
+        const end = @min(output.len, written + 127);
+        const result = try decoder.step("", output[written..end]);
+        written += result.progress.output_written;
+        if (result.status == .done) break;
+        try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
+        if (decoder.decoded_scratch.items.len != 0) {
+            // Compressed LZ4 blocks are currently decoded atomically in the
+            // direct path.  A small caller buffer therefore falls back to the
+            // mature whole-frame scratch path instead of spinning with
+            // zero-progress need_output.
+            try std.testing.expectEqual(payload.len, decoder.decoded_scratch.items.len);
+        }
+    }
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expectEqual(payload.len, decoder.diagnostics().output_written);
+}
+
 test "lz4 native incremental decoder streams multiple compressed blocks directly" {
     const payload = try std.testing.allocator.alloc(u8, max_block_history_len + 4096);
     defer std.testing.allocator.free(payload);
