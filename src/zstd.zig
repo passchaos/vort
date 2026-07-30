@@ -2890,18 +2890,13 @@ fn resolveSequenceOffset(
 ) Error!usize {
     if (offset_bits > 1) {
         const offset = std.math.add(usize, offset_base, offset_extra) catch return error.IntegerOverflow;
-        const previous_0 = repeated_offsets[0];
-        const previous_1 = repeated_offsets[1];
-        repeated_offsets.* = .{ offset, previous_0, previous_1 };
+        updateRepeatedOffsets(repeated_offsets, offset);
         return offset;
     }
 
     const literal_len_is_zero = literal_len == 0;
     if (offset_bits == 0) {
-        const offset = if (literal_len_is_zero) repeated_offsets[1] else repeated_offsets[0];
-        repeated_offsets[1] = repeated_offsets[if (literal_len_is_zero) 0 else 1];
-        repeated_offsets[0] = offset;
-        return offset;
+        return try useRepeatedOffset(repeated_offsets, if (literal_len_is_zero) 1 else 0);
     }
 
     const raw_base = std.math.add(usize, offset_base, if (literal_len_is_zero) 1 else 0) catch return error.IntegerOverflow;
@@ -2910,19 +2905,61 @@ fn resolveSequenceOffset(
         raw_base,
         offset_extra,
     ) catch return error.IntegerOverflow;
-    const offset = if (raw_offset == 3) blk: {
+    if (raw_offset == 3) {
         if (repeated_offsets[0] == 0) return error.InvalidMatch;
-        break :blk repeated_offsets[0] - 1;
-    } else if (raw_offset < repeated_offsets.len) blk: {
-        break :blk repeated_offsets[raw_offset];
-    } else {
-        return error.UnsupportedZstdFeature;
-    };
-    if (offset == 0) return error.InvalidMatch;
-    if (raw_offset != 1) repeated_offsets[2] = repeated_offsets[1];
-    repeated_offsets[1] = repeated_offsets[0];
-    repeated_offsets[0] = offset;
-    return offset;
+        const offset = repeated_offsets[0] - 1;
+        if (offset == 0) return error.InvalidMatch;
+        updateRepeatedOffsets(repeated_offsets, offset);
+        return offset;
+    }
+    if (raw_offset >= repeated_offsets.len) return error.UnsupportedZstdFeature;
+    return try useRepeatedOffset(repeated_offsets, raw_offset);
+}
+
+fn updateRepeatedOffsets(repeated_offsets: *[3]usize, offset: usize) void {
+    const previous_0 = repeated_offsets[0];
+    const previous_1 = repeated_offsets[1];
+    repeated_offsets.* = .{ offset, previous_0, previous_1 };
+}
+
+fn useRepeatedOffset(repeated_offsets: *[3]usize, index: usize) Error!usize {
+    switch (index) {
+        0 => {},
+        1 => std.mem.swap(usize, &repeated_offsets[0], &repeated_offsets[1]),
+        2 => {
+            std.mem.swap(usize, &repeated_offsets[0], &repeated_offsets[2]);
+            std.mem.swap(usize, &repeated_offsets[1], &repeated_offsets[2]);
+        },
+        else => return error.UnsupportedZstdFeature,
+    }
+    if (repeated_offsets[0] == 0) return error.InvalidMatch;
+    return repeated_offsets[0];
+}
+
+test "zstd native repeat-offset resolver follows selector updates" {
+    var offsets = initial_repeated_offsets;
+    try std.testing.expectEqual(@as(usize, 1), try resolveSequenceOffset(0, 0, 0, 1, &offsets));
+    try std.testing.expectEqual([3]usize{ 1, 4, 8 }, offsets);
+
+    offsets = initial_repeated_offsets;
+    try std.testing.expectEqual(@as(usize, 4), try resolveSequenceOffset(0, 0, 0, 0, &offsets));
+    try std.testing.expectEqual([3]usize{ 4, 1, 8 }, offsets);
+
+    offsets = initial_repeated_offsets;
+    try std.testing.expectEqual(@as(usize, 4), try resolveSequenceOffset(1, 1, 0, 1, &offsets));
+    try std.testing.expectEqual([3]usize{ 4, 1, 8 }, offsets);
+
+    offsets = initial_repeated_offsets;
+    try std.testing.expectEqual(@as(usize, 8), try resolveSequenceOffset(1, 1, 1, 1, &offsets));
+    try std.testing.expectEqual([3]usize{ 8, 1, 4 }, offsets);
+
+    offsets = .{ 2, 4, 8 };
+    try std.testing.expectEqual(@as(usize, 1), try resolveSequenceOffset(1, 1, 1, 0, &offsets));
+    try std.testing.expectEqual([3]usize{ 1, 2, 4 }, offsets);
+
+    offsets = initial_repeated_offsets;
+    try std.testing.expectEqual(@as(usize, 5), try resolveSequenceOffset(5, 2, 0, 0, &offsets));
+    try std.testing.expectEqual([3]usize{ 5, 1, 4 }, offsets);
 }
 
 fn copyMatchFromOutputBuffer(
