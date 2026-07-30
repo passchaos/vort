@@ -940,6 +940,14 @@ pub const NativeFrameBlockHeader = struct {
     next_header_offset: usize,
 };
 
+pub const NativeFrameBlockSummary = struct {
+    block_count: usize = 0,
+    raw_block_count: usize = 0,
+    rle_block_count: usize = 0,
+    compressed_block_count: usize = 0,
+    payload_bytes: usize = 0,
+};
+
 const RawOrRleFrameHeader = NativeFrameHeader;
 
 fn validateBlockSize(header: RawOrRleFrameHeader, block_type: u32, block_len: usize) Error!void {
@@ -2675,6 +2683,25 @@ pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!NativeFrameBlockHea
     return try inspectNativeFrameBlockAt(frame, header.payload_offset);
 }
 
+pub fn summarizeNativeFrameBlocks(frame: []const u8) Error!NativeFrameBlockSummary {
+    const header = try inspectNativeFrameHeader(frame);
+    var offset = header.payload_offset;
+    var summary: NativeFrameBlockSummary = .{};
+    while (true) {
+        const block = try inspectNativeFrameBlockAt(frame, offset);
+        summary.block_count += 1;
+        switch (block.block_type) {
+            .raw => summary.raw_block_count += 1,
+            .rle => summary.rle_block_count += 1,
+            .compressed => summary.compressed_block_count += 1,
+        }
+        summary.payload_bytes = std.math.add(usize, summary.payload_bytes, block.payload_len) catch return error.IntegerOverflow;
+        if (block.last) break;
+        offset = block.next_header_offset;
+    }
+    return summary;
+}
+
 fn decodeWindowSize(descriptor: u8) u64 {
     const exponent = (descriptor & 0b1111_1000) >> 3;
     const mantissa = descriptor & 0b0000_0111;
@@ -3818,6 +3845,10 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     try std.testing.expectEqual(first_block.payload_offset + first_block.payload_len, first_block.next_header_offset);
     const first_block_again = try inspectNativeFrameBlockAt(encoded, first_block.header_offset);
     try std.testing.expectEqual(first_block.next_header_offset, first_block_again.next_header_offset);
+    const raw_summary = try summarizeNativeFrameBlocks(encoded);
+    try std.testing.expectEqual(@as(usize, 1), raw_summary.block_count);
+    try std.testing.expectEqual(@as(usize, 1), raw_summary.raw_block_count);
+    try std.testing.expectEqual(payload.len, raw_summary.payload_bytes);
     var native_appended: std.ArrayList(u8) = .empty;
     defer native_appended.deinit(std.testing.allocator);
     try native_appended.appendSlice(std.testing.allocator, "prefix:");
@@ -3909,6 +3940,10 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     try std.testing.expectEqual(repeated.len, rle_first_block.payload_len);
     try std.testing.expectEqual(true, rle_first_block.last);
     try std.testing.expectEqual(rle_first_block.payload_offset + 1, rle_first_block.next_header_offset);
+    const rle_summary = try summarizeNativeFrameBlocks(rle_encoded);
+    try std.testing.expectEqual(@as(usize, 1), rle_summary.block_count);
+    try std.testing.expectEqual(@as(usize, 1), rle_summary.rle_block_count);
+    try std.testing.expectEqual(repeated.len, rle_summary.payload_bytes);
     var rle_into_buffer: [repeated.len]u8 = undefined;
     const rle_into_written = try decodeNativeFrameInto(rle_encoded, &rle_into_buffer);
     try std.testing.expectEqual(repeated.len, rle_into_written);
@@ -4865,6 +4900,10 @@ test "zstd literal-only writer emits repeated-pattern sequence blocks" {
     try std.testing.expectEqual(true, compressed_first_block.last);
     try std.testing.expectEqual(@as(usize, block_header >> 3), compressed_first_block.payload_len);
     try std.testing.expectEqual(compressed_first_block.payload_offset + compressed_first_block.payload_len, compressed_first_block.next_header_offset);
+    const compressed_summary = try summarizeNativeFrameBlocks(encoded);
+    try std.testing.expectEqual(@as(usize, 1), compressed_summary.block_count);
+    try std.testing.expectEqual(@as(usize, 1), compressed_summary.compressed_block_count);
+    try std.testing.expectEqual(compressed_first_block.payload_len, compressed_summary.payload_bytes);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);

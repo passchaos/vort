@@ -771,6 +771,13 @@ pub const NativeFrameBlockHeader = struct {
     next_header_offset: usize,
 };
 
+pub const NativeFrameBlockSummary = struct {
+    block_count: usize = 0,
+    compressed_block_count: usize = 0,
+    raw_block_count: usize = 0,
+    payload_bytes: usize = 0,
+};
+
 fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
     if (frame.len < 7) return error.TruncatedFrame;
     if (!std.mem.eql(u8, frame[0..4], &frame_magic)) return error.CorruptFrame;
@@ -841,6 +848,24 @@ pub fn inspectNativeFrameBlockAt(frame: []const u8, header_offset: usize) Error!
 pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!?NativeFrameBlockHeader {
     const header = try parseFrameHeader(frame);
     return try inspectNativeFrameBlockAt(frame, header.payload_offset);
+}
+
+pub fn summarizeNativeFrameBlocks(frame: []const u8) Error!NativeFrameBlockSummary {
+    const header = try parseFrameHeader(frame);
+    var offset = header.payload_offset;
+    var summary: NativeFrameBlockSummary = .{};
+    while (true) {
+        const block = (try inspectNativeFrameBlockAt(frame, offset)) orelse break;
+        summary.block_count += 1;
+        if (block.is_compressed) {
+            summary.compressed_block_count += 1;
+        } else {
+            summary.raw_block_count += 1;
+        }
+        summary.payload_bytes = std.math.add(usize, summary.payload_bytes, block.payload_len) catch return error.IntegerOverflow;
+        offset = block.next_header_offset;
+    }
+    return summary;
 }
 
 fn findFrameEnd(frames: []const u8, offset: *usize) Error!usize {
@@ -2163,6 +2188,10 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     try std.testing.expectEqual(first_block.payload_offset + first_block.payload_len + 4, first_block.next_header_offset);
     const first_block_again = (try inspectNativeFrameBlockAt(with_options, first_block.header_offset)) orelse return error.CorruptFrame;
     try std.testing.expectEqual(first_block.next_header_offset, first_block_again.next_header_offset);
+    const block_summary = try summarizeNativeFrameBlocks(with_options);
+    try std.testing.expect(block_summary.block_count >= 1);
+    try std.testing.expectEqual(block_summary.block_count, block_summary.compressed_block_count + block_summary.raw_block_count);
+    try std.testing.expect(block_summary.payload_bytes >= first_block.payload_len);
 
     const with_dictionary_id = try encodePureFrameWithOptionsAlloc(
         std.testing.allocator,
