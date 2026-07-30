@@ -1449,13 +1449,34 @@ test "root native no-size incremental direct-output paths round trip" {
 test "root native dictionary incremental direct-output paths round trip" {
     const lz4_dict = Lz4NativeDictionary.init(0x5051, "abcdefghijklmnop");
     const lz4_payload = "abcdefghijklmnop-root-tail";
-    const lz4_frame = try lz4EncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, lz4_payload, .{
+    const lz4_options: Lz4NativeFrameOptions = .{
         .content_checksum = true,
         .block_checksum = true,
-    }, lz4_dict);
+    };
+    const lz4_frame = try lz4EncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, lz4_payload, lz4_options, lz4_dict);
     defer std.testing.allocator.free(lz4_frame);
     const lz4_first_block = (try lz4InspectNativeFrameFirstBlock(lz4_frame)) orelse return error.CorruptFrame;
     try std.testing.expect(lz4_first_block.is_compressed);
+    var lz4_appended: std.ArrayList(u8) = .empty;
+    defer lz4_appended.deinit(std.testing.allocator);
+    try lz4EncodeNativeFrameAppendWithDictionary(std.testing.allocator, &lz4_appended, lz4_payload, lz4_options, lz4_dict);
+    try std.testing.expectEqualSlices(u8, lz4_frame, lz4_appended.items);
+    const lz4_bound = try lz4EncodedNativeFrameBoundWithOptions(lz4_payload.len, .{
+        .content_checksum = true,
+        .block_checksum = true,
+        .dictionary_id = lz4_dict.id,
+    });
+    const lz4_into = try std.testing.allocator.alloc(u8, lz4_bound);
+    defer std.testing.allocator.free(lz4_into);
+    const lz4_into_written = try lz4EncodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, lz4_payload, lz4_options, lz4_dict, lz4_into);
+    try std.testing.expectEqualSlices(u8, lz4_frame, lz4_into[0..lz4_into_written]);
+    try std.testing.expectError(error.OutputTooSmall, lz4EncodeNativeFrameIntoSliceWithDictionary(
+        std.testing.allocator,
+        lz4_payload,
+        lz4_options,
+        lz4_dict,
+        lz4_into[0 .. lz4_into_written - 1],
+    ));
 
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, lz4_dict, .{
         .expected_output_len = lz4_payload.len,
@@ -1501,13 +1522,36 @@ test "root native dictionary incremental direct-output paths round trip" {
 
     const zstd_dict = ZstdNativeDictionary.init(0x6061, "abcdefghijklmnop");
     const zstd_payload = "pfx-abcdefghijklmnop-root-tail";
-    const zstd_frame = try zstdEncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, zstd_payload, .{
+    const zstd_options: ZstdNativeFrameOptions = .{
         .selection = .literal_only,
         .content_checksum = true,
-    }, zstd_dict);
+    };
+    const zstd_frame = try zstdEncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, zstd_payload, zstd_options, zstd_dict);
     defer std.testing.allocator.free(zstd_frame.frame);
     const zstd_first_block = try zstdInspectNativeFrameFirstBlock(zstd_frame.frame);
     try std.testing.expectEqual(ZstdNativeBlockType.compressed, zstd_first_block.block_type);
+    var zstd_appended: std.ArrayList(u8) = .empty;
+    defer zstd_appended.deinit(std.testing.allocator);
+    const zstd_appended_mode = try zstdEncodeNativeFrameAppendWithDictionary(std.testing.allocator, &zstd_appended, zstd_payload, zstd_options, zstd_dict);
+    try std.testing.expectEqual(zstd_frame.mode, zstd_appended_mode);
+    try std.testing.expectEqualSlices(u8, zstd_frame.frame, zstd_appended.items);
+    const zstd_bound = try zstdEncodedNativeFrameBoundWithOptions(zstd_payload.len, .{
+        .selection = .literal_only,
+        .content_checksum = true,
+        .dictionary_id = zstd_dict.id,
+    });
+    const zstd_into = try std.testing.allocator.alloc(u8, zstd_bound);
+    defer std.testing.allocator.free(zstd_into);
+    const zstd_into_result = try zstdEncodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, zstd_payload, zstd_options, zstd_dict, zstd_into);
+    try std.testing.expectEqual(zstd_frame.mode, zstd_into_result.mode);
+    try std.testing.expectEqualSlices(u8, zstd_frame.frame, zstd_into[0..zstd_into_result.written]);
+    try std.testing.expectError(error.OutputTooSmall, zstdEncodeNativeFrameIntoSliceWithDictionary(
+        std.testing.allocator,
+        zstd_payload,
+        zstd_options,
+        zstd_dict,
+        zstd_into[0 .. zstd_into_result.written - 1],
+    ));
 
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, zstd_dict, .{
         .expected_output_len = zstd_payload.len,
