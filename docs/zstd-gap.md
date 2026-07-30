@@ -146,8 +146,8 @@ Current interpretation:
   expected output length. LZ4 native incremental decoding has started moving
   beyond the whole-frame facade with a direct-output path for raw
   block-independent frames, including multi-block frames with block checksum
-  and content checksum verification, plus single compressed independent blocks;
-  multi-compressed/linked block-by-block paths remain open. The
+  and content checksum verification, plus compressed independent blocks;
+  linked block-by-block paths remain open. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
