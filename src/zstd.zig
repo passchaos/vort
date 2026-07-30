@@ -4901,6 +4901,17 @@ fn emitMultiDictionaryMatchCompressedBlock(
     }
     if (count < 2) return false;
 
+    if (try emitRleSequenceCompressedBlock(
+        allocator,
+        out,
+        block,
+        last,
+        literal_lens[0..count],
+        offsets[0..count],
+        match_lens[0..count],
+        literal_ends[0..count],
+        literal_start,
+    )) return true;
     return try emitMultiSequencePredefinedCompressedBlock(
         allocator,
         out,
@@ -9443,6 +9454,38 @@ test "zstd native writer uses preset dictionary history" {
     try std.testing.expectEqualSlices(u8, encoded.frame, into[0..into_result.written]);
     try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, into[0 .. into_result.written - 1]));
     try std.testing.expectError(error.NeedDictionary, encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, NativeDictionary.init(0, dict.content)));
+}
+
+test "zstd native writer emits RLE multi dictionary matches" {
+    const dict = NativeDictionary.init(
+        0x2346,
+        "ABCDEFGHIJKLMNOPXXXXXXXXQRSTUVWXYZabcdef0123456789ghijklmnopqrst",
+    );
+    const payload = "pfx" ++ "ABCDEFGHIJKLMNOP" ++ "pfx" ++ "QRSTUVWXYZabcdef";
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    }, dict);
+    defer std.testing.allocator.free(encoded.frame);
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded.frame, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    const block = encoded.frame[first_block.payload_offset..][0..first_block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+    try std.testing.expectEqual(@as(u8, 0x54), block[section.sequence_payload_offset]);
+
+    const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .dictionary_id = dict.id,
+    });
+    defer std.testing.allocator.free(raw);
+    try std.testing.expect(encoded.frame.len < raw.len);
 }
 
 test "zstd native concatenated streams select dictionaries by id" {
