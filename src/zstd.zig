@@ -799,22 +799,33 @@ pub fn encodeLiteralOnlyFrameAppend(
     input: []const u8,
     options: NativeFrameOptions,
 ) Error!void {
-    try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), options);
+    try encodeLiteralOnlyFrameAppendWithDictionaryInternal(allocator, out, input, options, null);
+}
+
+fn encodeLiteralOnlyFrameAppendWithDictionaryInternal(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: NativeFrameOptions,
+    dictionary: ?NativeDictionary,
+) Error!void {
+    const frame_options = optionsWithNativeDictionary(options, dictionary);
+    try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), frame_options);
 
     var offset: usize = 0;
-    const block_size_max = try nativeBlockSizeMax(options);
+    const block_size_max = try nativeBlockSizeMax(frame_options);
     var encoder_state: LiteralOnlyEncoderState = .{};
     if (input.len == 0) {
-        try emitLiteralOnlyCompressedBlock(allocator, out, "", true, &encoder_state);
+        try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, "", true, &encoder_state, dictionary, 0);
     } else {
         while (offset < input.len) {
             const block_end = @min(input.len, offset + block_size_max);
-            try emitLiteralOnlyCompressedBlock(allocator, out, input[offset..block_end], block_end == input.len, &encoder_state);
+            try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, input[offset..block_end], block_end == input.len, &encoder_state, dictionary, offset);
             offset = block_end;
         }
     }
 
-    try emitContentChecksum(allocator, out, input, options);
+    try emitContentChecksum(allocator, out, input, frame_options);
 }
 
 pub fn encodeLiteralOnlyFrameIntoSlice(
@@ -876,6 +887,17 @@ pub fn encodeNativeFrameWithOptionsAlloc(
     return try encoder.encodeWithOptionsAlloc(input, options);
 }
 
+pub fn encodeNativeFrameWithDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+    dictionary: NativeDictionary,
+) Error!NativeFrameEncodeResult {
+    var encoder = NativeFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return try encoder.encodeWithDictionaryAlloc(input, options, dictionary);
+}
+
 pub fn encodeNativeFrameAppend(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -887,6 +909,18 @@ pub fn encodeNativeFrameAppend(
     return try encoder.encodeAppend(out, input, options);
 }
 
+pub fn encodeNativeFrameAppendWithDictionary(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: NativeFrameOptions,
+    dictionary: NativeDictionary,
+) Error!NativeFrameMode {
+    var encoder = NativeFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return try encoder.encodeAppendWithDictionary(out, input, options, dictionary);
+}
+
 pub fn encodeNativeFrameIntoSlice(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -896,6 +930,18 @@ pub fn encodeNativeFrameIntoSlice(
     var encoder = NativeFrameEncoder.init(allocator);
     defer encoder.deinit();
     return try encoder.encodeIntoSlice(input, options, output);
+}
+
+pub fn encodeNativeFrameIntoSliceWithDictionary(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+    dictionary: NativeDictionary,
+    output: []u8,
+) Error!NativeFrameEncodeIntoResult {
+    var encoder = NativeFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    return try encoder.encodeIntoSliceWithDictionary(input, options, dictionary, output);
 }
 
 pub const NativeFrameEncoder = struct {
@@ -934,6 +980,21 @@ pub const NativeFrameEncoder = struct {
         };
     }
 
+    pub fn encodeWithDictionaryAlloc(
+        self: *NativeFrameEncoder,
+        input: []const u8,
+        options: NativeFrameOptions,
+        dictionary: NativeDictionary,
+    ) Error!NativeFrameEncodeResult {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        const mode = try self.encodeAppendWithDictionary(&out, input, options, dictionary);
+        return .{
+            .frame = try out.toOwnedSlice(self.allocator),
+            .mode = mode,
+        };
+    }
+
     pub fn encodeScratch(
         self: *NativeFrameEncoder,
         input: []const u8,
@@ -941,6 +1002,23 @@ pub const NativeFrameEncoder = struct {
     ) Error!NativeFrameEncodeScratchResult {
         self.output_scratch.clearRetainingCapacity();
         const mode = self.encodeAppend(&self.output_scratch, input, options) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        return .{
+            .frame = self.output_scratch.items,
+            .mode = mode,
+        };
+    }
+
+    pub fn encodeScratchWithDictionary(
+        self: *NativeFrameEncoder,
+        input: []const u8,
+        options: NativeFrameOptions,
+        dictionary: NativeDictionary,
+    ) Error!NativeFrameEncodeScratchResult {
+        self.output_scratch.clearRetainingCapacity();
+        const mode = self.encodeAppendWithDictionary(&self.output_scratch, input, options, dictionary) catch |err| {
             self.output_scratch.clearRetainingCapacity();
             return err;
         };
@@ -965,19 +1043,59 @@ pub const NativeFrameEncoder = struct {
         };
     }
 
+    pub fn encodeIntoSliceWithDictionary(
+        self: *NativeFrameEncoder,
+        input: []const u8,
+        options: NativeFrameOptions,
+        dictionary: NativeDictionary,
+        output: []u8,
+    ) Error!NativeFrameEncodeIntoResult {
+        const result = try self.encodeScratchWithDictionary(input, options, dictionary);
+        if (output.len < result.frame.len) return error.OutputTooSmall;
+        @memcpy(output[0..result.frame.len], result.frame);
+        return .{
+            .written = result.frame.len,
+            .mode = result.mode,
+        };
+    }
+
     pub fn encodeAppend(
         self: *NativeFrameEncoder,
         out: *std.ArrayList(u8),
         input: []const u8,
         options: NativeFrameOptions,
     ) Error!NativeFrameMode {
+        return try self.encodeAppendInternal(out, input, options, null);
+    }
+
+    pub fn encodeAppendWithDictionary(
+        self: *NativeFrameEncoder,
+        out: *std.ArrayList(u8),
+        input: []const u8,
+        options: NativeFrameOptions,
+        dictionary: NativeDictionary,
+    ) Error!NativeFrameMode {
+        return try self.encodeAppendInternal(out, input, options, dictionary);
+    }
+
+    fn encodeAppendInternal(
+        self: *NativeFrameEncoder,
+        out: *std.ArrayList(u8),
+        input: []const u8,
+        options: NativeFrameOptions,
+        dictionary: ?NativeDictionary,
+    ) Error!NativeFrameMode {
+        if (dictionary) |dict| {
+            if (dict.id == 0) return error.NeedDictionary;
+        }
+        const frame_options = optionsWithNativeDictionary(options, dictionary);
         switch (options.selection) {
             .raw_or_rle => {
-                try encodeRawOrRleFrameAppend(self.allocator, out, input, options);
+                try encodeRawOrRleFrameAppend(self.allocator, out, input, frame_options);
                 return .raw_or_rle;
             },
             .literal_only => {
-                try encodeLiteralOnlyFrameAppend(self.allocator, out, input, options);
+                try encodeLiteralOnlyFrameAppendWithDictionaryInternal(self.allocator, out, input, frame_options, dictionary);
                 return .literal_only;
             },
             .auto => {},
@@ -985,8 +1103,8 @@ pub const NativeFrameEncoder = struct {
 
         self.raw_scratch.clearRetainingCapacity();
         self.literal_scratch.clearRetainingCapacity();
-        try encodeRawOrRleFrameAppend(self.allocator, &self.raw_scratch, input, options);
-        try encodeLiteralOnlyFrameAppend(self.allocator, &self.literal_scratch, input, options);
+        try encodeRawOrRleFrameAppend(self.allocator, &self.raw_scratch, input, frame_options);
+        try encodeLiteralOnlyFrameAppendWithDictionaryInternal(self.allocator, &self.literal_scratch, input, frame_options, dictionary);
 
         // Keep the bootstrap selector deterministic and transparent: both
         // supported native encoders run against reusable scratch buffers, then
@@ -1006,6 +1124,12 @@ fn forceNativeSelection(options: NativeFrameOptions, selection: NativeFrameSelec
     var forced = options;
     forced.selection = selection;
     return forced;
+}
+
+fn optionsWithNativeDictionary(options: NativeFrameOptions, dictionary: ?NativeDictionary) NativeFrameOptions {
+    var with_dictionary = options;
+    if (dictionary) |dict| with_dictionary.dictionary_id = dict.id;
+    return with_dictionary;
 }
 
 fn emitFrameHeader(
@@ -3184,6 +3308,24 @@ fn emitBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []con
 }
 
 fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *LiteralOnlyEncoderState) Error!void {
+    return try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, block, last, state, null, 0);
+}
+
+fn emitLiteralOnlyCompressedBlockWithDictionary(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    state: *LiteralOnlyEncoderState,
+    dictionary: ?NativeDictionary,
+    frame_offset: usize,
+) Error!void {
+    if (frame_offset == 0) {
+        if (dictionary) |dict| {
+            state.previous_huffman_plan = null;
+            if (try emitDictionaryPrefixMatchCompressedBlock(allocator, out, block, last, dict)) return;
+        }
+    }
     if (try emitSmallHuffmanLiteralBlock(allocator, out, block, last, state)) return;
     state.previous_huffman_plan = null;
     if (try emitRepeatedPatternCompressedBlock(allocator, out, block, last)) return;
@@ -3222,6 +3364,48 @@ fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     try payload.append(allocator, 0); // sequence_count=0: the compressed block is literals-only.
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
+}
+
+fn emitDictionaryPrefixMatchCompressedBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    dictionary: NativeDictionary,
+) Error!bool {
+    const match = findDictionaryPrefixMatch(dictionary.content, block) orelse return false;
+    const literal_len: usize = 0;
+    const match_offset = dictionary.content.len - match.dictionary_start;
+    const tail = block[match.len..];
+
+    const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
+    const offset_code = try sequenceCodeForValue(match_offset, &of_base, &of_bits);
+    const match_code = try sequenceCodeForValue(match.len, &ml_base, &ml_bits);
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    try emitLiteralsHeader(allocator, &payload, .raw, tail.len);
+    try payload.appendSlice(allocator, tail);
+    try payload.append(allocator, 1); // one sequence that pulls the prefix from preset history.
+    try payload.append(allocator, 0x54); // LL, OF, and ML use RLE_Mode.
+    try payload.append(allocator, literal_code);
+    try payload.append(allocator, offset_code);
+    try payload.append(allocator, match_code);
+
+    var sequence_bits: std.ArrayList(u8) = .empty;
+    defer sequence_bits.deinit(allocator);
+    try emitReverseBitstream(allocator, &sequence_bits, &.{
+        .{ .value = literal_len - ll_base[literal_code], .bits = ll_bits[literal_code] },
+        .{ .value = match.len - ml_base[match_code], .bits = ml_bits[match_code] },
+        .{ .value = match_offset - of_base[offset_code], .bits = of_bits[offset_code] },
+    });
+    try payload.appendSlice(allocator, sequence_bits.items);
+
+    const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_block_len) return false;
+    try emitBlockHeader(allocator, out, 2, payload.items.len, last);
+    try out.appendSlice(allocator, payload.items);
+    return true;
 }
 
 fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
@@ -3615,6 +3799,29 @@ const DuplicateMatch = struct {
     second_start: usize,
     len: usize,
 };
+
+const DictionaryPrefixMatch = struct {
+    dictionary_start: usize,
+    len: usize,
+};
+
+fn findDictionaryPrefixMatch(dictionary: []const u8, block: []const u8) ?DictionaryPrefixMatch {
+    // This is the first encoder slice for preset dictionaries: only the block
+    // prefix can reference dictionary history, so there are no preceding frame
+    // literals to complicate offset accounting. Keep the search deliberately
+    // small and deterministic; general dictionary match finding can grow from
+    // this API-compatible baseline.
+    if (dictionary.len == 0 or block.len < 8) return null;
+    var best: ?DictionaryPrefixMatch = null;
+    for (dictionary, 0..) |_, start| {
+        var len: usize = 0;
+        while (start + len < dictionary.len and len < block.len and dictionary[start + len] == block[len]) : (len += 1) {}
+        if (len >= 8 and (best == null or len > best.?.len)) {
+            best = .{ .dictionary_start = start, .len = len };
+        }
+    }
+    return best;
+}
 
 fn findBestDuplicateMatch(block: []const u8) Error!?DuplicateMatch {
     return try findBestDuplicateMatchIn(block, 0);
@@ -6612,6 +6819,67 @@ test "zstd native dictionary decodes matches from preset history" {
     const written = try decodeNativeFrameIntoWithDictionary(frame.items, &into, dict);
     try std.testing.expectEqual(@as(usize, dict.content.len), written);
     try std.testing.expectEqualSlices(u8, dict.content, &into);
+}
+
+test "zstd native writer uses preset dictionary prefix history" {
+    const dict = NativeDictionary.init(0x1234, "abcdefghijklmnop");
+    const payload = "abcdefghijklmnop-tail";
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, dict);
+    defer std.testing.allocator.free(encoded.frame);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, encoded.mode);
+
+    const header = try inspectNativeFrameHeader(encoded.frame);
+    try std.testing.expectEqual(dict.id, header.dictionary_id);
+    try std.testing.expectError(error.NeedDictionary, decodeNativeFrameAlloc(std.testing.allocator, encoded.frame));
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded.frame, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .dictionary_id = dict.id,
+    });
+    defer std.testing.allocator.free(raw);
+    try std.testing.expect(encoded.frame.len < raw.len);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded.frame[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+
+    var reusable = NativeFrameEncoder.init(std.testing.allocator);
+    defer reusable.deinit();
+    const scratch = try reusable.encodeScratchWithDictionary(payload, options, dict);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, scratch.mode);
+    try std.testing.expectEqualSlices(u8, encoded.frame, scratch.frame);
+    const scratch_decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, scratch.frame, dict);
+    defer std.testing.allocator.free(scratch_decoded);
+    try std.testing.expectEqualSlices(u8, payload, scratch_decoded);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    const appended_mode = try encodeNativeFrameAppendWithDictionary(std.testing.allocator, &appended, payload, options, dict);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, appended_mode);
+    try std.testing.expectEqualSlices(u8, encoded.frame, appended.items);
+
+    const bound = try encodedNativeFrameBoundWithOptions(payload.len, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .dictionary_id = dict.id,
+    });
+    const into = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(into);
+    const into_result = try encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, into);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, into_result.mode);
+    try std.testing.expectEqualSlices(u8, encoded.frame, into[0..into_result.written]);
+    try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, into[0 .. into_result.written - 1]));
+    try std.testing.expectError(error.NeedDictionary, encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, NativeDictionary.init(0, dict.content)));
 }
 
 test "zstd native raw/RLE decoder handles fallback frames and skippable frames" {

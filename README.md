@@ -415,10 +415,11 @@ defer zstd_decoder.deinit();
 const zstd_plain = try zstd_decoder.decodeScratch(zstd_result.frame);
 _ = zstd_plain;
 const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history");
-const zstd_dict_frame = try vort.zstdEncodeNativeFrameWithOptionsAlloc(
+const zstd_dict_frame = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(
     allocator,
-    "payload",
-    .{ .dictionary_id = zstd_dict.id },
+    "previous zstd history payload",
+    .{ .selection = .literal_only },
+    zstd_dict,
 );
 defer allocator.free(zstd_dict_frame.frame);
 const zstd_dict_plain = try vort.zstdDecodeNativeFrameAllocWithDictionary(
@@ -427,6 +428,7 @@ const zstd_dict_plain = try vort.zstdDecodeNativeFrameAllocWithDictionary(
     zstd_dict,
 );
 defer allocator.free(zstd_dict_plain);
+_ = zstd_dict_plain;
 
 const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);
