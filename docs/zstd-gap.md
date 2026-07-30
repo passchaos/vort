@@ -123,7 +123,8 @@ Current interpretation:
   four-stream Huffman literal payloads, long-period and long-prefix
   repeated-pattern writer cases, a small-depth hash-chain duplicate-candidate writer case,
   no-dictionary mixed duplicate/repeated match selection plus dictionary/native
-  match-vs-Huffman size arbitration, raw-block-cost-aware sequence selection, plus a file-backed multi-block
+  match-vs-Huffman size arbitration, smallest native match-plan arbitration,
+  raw-block-cost-aware sequence selection, plus a file-backed multi-block
   treeless Huffman writer case, then checks
   both system zstd decode and Vort native decode, with `size-zstd-native-hex`
   preflight checked before each native decode. The native decoder accepts

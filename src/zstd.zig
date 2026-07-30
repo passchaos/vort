@@ -4535,10 +4535,35 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
 }
 
 fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
-    if (try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, out, block, last)) return true;
-    if (try emitRepeatedPatternCompressedBlock(allocator, out, block, last)) return true;
-    if (try emitMultiDuplicateMatchCompressedBlock(allocator, out, block, last)) return true;
-    return try emitSingleMatchCompressedBlock(allocator, out, block, last);
+    // The bootstrap match emitters are intentionally independent heuristics.
+    // Plan all successful candidates and then copy the smallest encoded block so
+    // a broad mixed plan cannot hide a tighter single-family plan found later.
+    var mixed_block: std.ArrayList(u8) = .empty;
+    defer mixed_block.deinit(allocator);
+    const mixed_ok = try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &mixed_block, block, last);
+
+    var repeated_block: std.ArrayList(u8) = .empty;
+    defer repeated_block.deinit(allocator);
+    const repeated_ok = try emitRepeatedPatternCompressedBlock(allocator, &repeated_block, block, last);
+
+    var multi_duplicate_block: std.ArrayList(u8) = .empty;
+    defer multi_duplicate_block.deinit(allocator);
+    const multi_duplicate_ok = try emitMultiDuplicateMatchCompressedBlock(allocator, &multi_duplicate_block, block, last);
+
+    var single_duplicate_block: std.ArrayList(u8) = .empty;
+    defer single_duplicate_block.deinit(allocator);
+    const single_duplicate_ok = try emitSingleMatchCompressedBlock(allocator, &single_duplicate_block, block, last);
+
+    var best: ?[]const u8 = null;
+    var best_len: usize = std.math.maxInt(usize);
+    chooseShortestPlannedBlock(mixed_ok, mixed_block.items, &best, &best_len);
+    chooseShortestPlannedBlock(repeated_ok, repeated_block.items, &best, &best_len);
+    chooseShortestPlannedBlock(multi_duplicate_ok, multi_duplicate_block.items, &best, &best_len);
+    chooseShortestPlannedBlock(single_duplicate_ok, single_duplicate_block.items, &best, &best_len);
+
+    const best_block = best orelse return false;
+    try out.appendSlice(allocator, best_block);
+    return true;
 }
 
 fn emitDictionaryMatchCompressedBlock(
@@ -4549,9 +4574,43 @@ fn emitDictionaryMatchCompressedBlock(
     dictionary: NativeDictionary,
     frame_offset: usize,
 ) Error!bool {
-    if (try emitMixedDictionaryDuplicateMatchCompressedBlock(allocator, out, block, last, dictionary, frame_offset)) return true;
-    if (try emitMultiDictionaryMatchCompressedBlock(allocator, out, block, last, dictionary, frame_offset)) return true;
+    var mixed_block: std.ArrayList(u8) = .empty;
+    defer mixed_block.deinit(allocator);
+    const mixed_ok = try emitMixedDictionaryDuplicateMatchCompressedBlock(allocator, &mixed_block, block, last, dictionary, frame_offset);
 
+    var multi_block: std.ArrayList(u8) = .empty;
+    defer multi_block.deinit(allocator);
+    const multi_ok = try emitMultiDictionaryMatchCompressedBlock(allocator, &multi_block, block, last, dictionary, frame_offset);
+
+    var single_block: std.ArrayList(u8) = .empty;
+    defer single_block.deinit(allocator);
+    const single_ok = try emitSingleDictionaryMatchCompressedBlock(allocator, &single_block, block, last, dictionary, frame_offset);
+
+    var best: ?[]const u8 = null;
+    var best_len: usize = std.math.maxInt(usize);
+    chooseShortestPlannedBlock(mixed_ok, mixed_block.items, &best, &best_len);
+    chooseShortestPlannedBlock(multi_ok, multi_block.items, &best, &best_len);
+    chooseShortestPlannedBlock(single_ok, single_block.items, &best, &best_len);
+
+    const best_block = best orelse return false;
+    try out.appendSlice(allocator, best_block);
+    return true;
+}
+
+fn chooseShortestPlannedBlock(ok: bool, block: []const u8, best: *?[]const u8, best_len: *usize) void {
+    if (!ok or block.len >= best_len.*) return;
+    best.* = block;
+    best_len.* = block.len;
+}
+
+fn emitSingleDictionaryMatchCompressedBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    dictionary: NativeDictionary,
+    frame_offset: usize,
+) Error!bool {
     const match = findDictionaryMatch(dictionary.content, block, frame_offset) orelse return false;
     const literal_len = match.block_start;
     const match_offset = try dictionaryMatchOffset(dictionary.content.len, frame_offset, match);
@@ -7343,6 +7402,47 @@ test "zstd literal-only writer mixes duplicate and repeated-pattern matches" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer chooses shortest native match plan" {
+    var payload: [160]u8 = undefined;
+    var state: u32 = 0x3039;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+        // Keep filler out of the ASCII letters used for explicit repeated
+        // patterns below, so this regression is driven by the intended match
+        // candidates instead of accidental short-period text.
+        if (byte.* >= 'a' and byte.* <= 'z') byte.* ^= 0x80;
+    }
+    @memcpy(payload[20..][0..16], payload[0..16]);
+    const repeat_start = 60;
+    @memcpy(payload[repeat_start..][0..2], "ab");
+    for (2..80) |i| payload[repeat_start + i] = payload[repeat_start + (i % 2)];
+    for (140..160) |i| payload[i] = @intCast('T' + (i % 7));
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    var frame_state: SequenceFrameState = .{};
+    const block = encoded[first_block.payload_offset..][0..first_block.payload_len];
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+    const estimated_payload_len = try multiSequencePayloadLen(&payload, &.{ 62, 7 }, &.{ 2, 7 }, &.{ 78, 13 }, payload.len);
+    try std.testing.expectEqual(estimated_payload_len, first_block.payload_len);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
 }
 
