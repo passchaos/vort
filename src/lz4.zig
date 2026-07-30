@@ -4013,6 +4013,53 @@ test "lz4 lib frame encoder round trips and compresses repetitive payloads" {
     try std.testing.expectEqual(repeated.len, try decodedFrameSize(no_content_fields));
 }
 
+test "lz4 native decoder covers liblz4 generated corpus shapes" {
+    var sequential: [5000]u8 = undefined;
+    for (&sequential, 0..) |*byte, i| byte.* = @intCast(i % 251);
+
+    var randomish: [5000]u8 = undefined;
+    var rng = std.Random.DefaultPrng.init(2);
+    for (&randomish) |*byte| byte.* = rng.random().int(u8);
+
+    const json_unit = "{\"key\":\"value\",\"number\":123,\"array\":[1,2,3],\"text\":\"abcdefg\"}\n";
+    const cases = [_][]const u8{
+        "abcd" ** 1000,
+        &sequential,
+        &randomish,
+        json_unit ** 200,
+        ("a" ** 100 ++ "b" ** 100 ++ "c" ** 100) ** 20,
+    };
+    const levels = [_]c_int{ 0, 4, default_compression_level };
+    const option_sets = [_]LibFrameOptions{
+        .{},
+        .{ .include_content_size = false },
+        .{ .content_checksum = false, .block_checksum = true, .block_size_id = .max64kb },
+        .{ .content_checksum = true, .block_checksum = true, .block_mode = .independent, .block_size_id = .max256kb },
+    };
+
+    for (cases) |payload| {
+        for (levels) |level| {
+            for (option_sets) |options| {
+                const encoded = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, level, options);
+                defer std.testing.allocator.free(encoded);
+
+                const decoded = try decodeFrameAllocLimited(std.testing.allocator, encoded, payload.len);
+                defer std.testing.allocator.free(decoded);
+                try std.testing.expectEqualSlices(u8, payload, decoded);
+
+                const into = try std.testing.allocator.alloc(u8, payload.len);
+                defer std.testing.allocator.free(into);
+                const written = try decodeFrameInto(encoded, into);
+                try std.testing.expectEqual(payload.len, written);
+                try std.testing.expectEqualSlices(u8, payload, into[0..written]);
+
+                try std.testing.expectEqual(payload.len, try decodedFrameSizeLimited(encoded, payload.len));
+                try std.testing.expectError(error.OutputLimitExceeded, decodedFrameSizeLimited(encoded, payload.len - 1));
+            }
+        }
+    }
+}
+
 test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const repeated = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const encoded = try encodePureFrameAlloc(std.testing.allocator, repeated);
