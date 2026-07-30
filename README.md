@@ -45,8 +45,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   checksum/content-size header fields, skippable frame append/encode-into writer,
   decoded-size preflight, bounded allocation, explicit Dictionary_ID/preset
   history decode APIs, direct-output incremental decode for raw/RLE/compressed
-  native frames (including dictionary, no-content-size, and bounded-history
-  multi-block paths), zero-allocation native stream/block iterators, and
+  native frames (including dictionary, dictionary-set, no-content-size,
+  bounded-history multi-block paths, and small-output scratch fallback), zero-allocation native stream/block iterators, and
   caller-owned encode/decode-into/append plus reusable scratch encoder/decoder API,
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in

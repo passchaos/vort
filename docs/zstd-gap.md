@@ -156,7 +156,9 @@ Current interpretation:
   constructors can stream dictionary-backed compressed blocks directly. Linked
   compressed drains now keep a bounded 64 KiB direct history window, so caller
   output chunks that split frame history can continue without the whole-frame
-  scratch fallback.
+  scratch fallback; if a caller buffer is too small for an atomic compressed
+  block, the decoder falls back to the bounded scratch facade after returning
+  any available progress.
   Zstd native incremental decoding now
   has matching direct-output slices for raw/RLE blocks and compressed native
   blocks, including multi-block frames whose later compressed blocks reuse
@@ -170,7 +172,9 @@ Current interpretation:
   solely because earlier frame bytes are no longer in the current output slice.
   When caller output is too small for the next compressed block, the direct path
   intentionally falls back to the whole-frame scratch facade only if it cannot
-  first return existing progress as `need_output`. The
+  first return existing progress as `need_output`; root tests and dictionary
+  probes now cover dictionary, dictionary-set, no-content-size, and multi-block
+  fallback shapes. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
@@ -179,8 +183,9 @@ Current interpretation:
   block-size option, and the public native stream/block iterators expose
   zero-allocation frame, block, and skippable-frame inspection so future
   latency/ratio sweeps can share the same library API rather than relying on
-  CLI-specific chunking. `run-zstd-native-dictionary-probe` exercises the public
-  dictionary APIs directly, while the generated-corpus probe accepts repeated `--path`
+  CLI-specific chunking. `run-lz4-native-dictionary-probe` and
+  `run-zstd-native-dictionary-probe` exercise the public dictionary APIs and
+  direct-output fallback paths directly, while the generated-corpus probe accepts repeated `--path`
   arguments or bounded recursive `--dir` discovery with an optional `--limit`
   for focused file payloads when investigating real corpus failures.
 
