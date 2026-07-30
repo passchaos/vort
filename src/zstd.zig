@@ -7234,6 +7234,7 @@ test "zstd native writer can choose repeated before dictionary" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 
     const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(encoded.frame[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
     try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
