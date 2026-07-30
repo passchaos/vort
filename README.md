@@ -38,9 +38,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   broad zstd CLI compatibility), plus deterministic smallest-mode
   native selection, configurable native block size, optional content
   checksum/content-size header fields, skippable frame append/encode-into writer,
-  decoded-size preflight, bounded
-  allocation, zero-allocation native stream/block iterators, and caller-owned
-  encode/decode-into/append plus reusable scratch encoder/decoder API,
+  decoded-size preflight, bounded allocation, explicit Dictionary_ID/preset
+  history decode APIs, zero-allocation native stream/block iterators, and
+  caller-owned encode/decode-into/append plus reusable scratch encoder/decoder API,
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;
@@ -414,6 +414,19 @@ var zstd_decoder = vort.ZstdNativeFrameDecoder.init(allocator);
 defer zstd_decoder.deinit();
 const zstd_plain = try zstd_decoder.decodeScratch(zstd_result.frame);
 _ = zstd_plain;
+const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history");
+const zstd_dict_frame = try vort.zstdEncodeNativeFrameWithOptionsAlloc(
+    allocator,
+    "payload",
+    .{ .dictionary_id = zstd_dict.id },
+);
+defer allocator.free(zstd_dict_frame.frame);
+const zstd_dict_plain = try vort.zstdDecodeNativeFrameAllocWithDictionary(
+    allocator,
+    zstd_dict_frame.frame,
+    zstd_dict,
+);
+defer allocator.free(zstd_dict_plain);
 
 const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);
