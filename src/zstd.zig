@@ -7089,24 +7089,32 @@ test "zstd native decoder covers libzstd generated corpus shapes" {
         ("a" ** 100 ++ "b" ** 100 ++ "c" ** 100) ** 20,
     };
     const levels = [_]c_int{ 1, 3, 5, 9, 15, 19 };
+    const option_sets = [_]LibFrameOptions{
+        .{},
+        .{ .include_content_size = false },
+        .{ .content_checksum = true },
+        .{ .include_content_size = false, .content_checksum = true },
+    };
 
     for (cases) |payload| {
         for (levels) |level| {
-            const encoded = try encodeFrameWithLevelAlloc(std.testing.allocator, payload, level);
-            defer std.testing.allocator.free(encoded);
+            for (option_sets) |options| {
+                const encoded = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, level, options);
+                defer std.testing.allocator.free(encoded);
 
-            const native_decoded = try decodeNativeFrameAllocLimited(std.testing.allocator, encoded, payload.len);
-            defer std.testing.allocator.free(native_decoded);
-            try std.testing.expectEqualSlices(u8, payload, native_decoded);
+                const native_decoded = try decodeNativeFrameAllocLimited(std.testing.allocator, encoded, payload.len);
+                defer std.testing.allocator.free(native_decoded);
+                try std.testing.expectEqualSlices(u8, payload, native_decoded);
 
-            const into = try std.testing.allocator.alloc(u8, payload.len);
-            defer std.testing.allocator.free(into);
-            const written = try decodeNativeFrameInto(encoded, into);
-            try std.testing.expectEqual(payload.len, written);
-            try std.testing.expectEqualSlices(u8, payload, into[0..written]);
+                const into = try std.testing.allocator.alloc(u8, payload.len);
+                defer std.testing.allocator.free(into);
+                const written = try decodeNativeFrameInto(encoded, into);
+                try std.testing.expectEqual(payload.len, written);
+                try std.testing.expectEqualSlices(u8, payload, into[0..written]);
 
-            try std.testing.expectEqual(payload.len, try decodedRawOrRleFrameSizeLimited(encoded, payload.len));
-            try std.testing.expectError(error.OutputLimitExceeded, decodedRawOrRleFrameSizeLimited(encoded, payload.len - 1));
+                try std.testing.expectEqual(payload.len, try decodedRawOrRleFrameSizeLimited(encoded, payload.len));
+                try std.testing.expectError(error.OutputLimitExceeded, decodedRawOrRleFrameSizeLimited(encoded, payload.len - 1));
+            }
         }
     }
 }
