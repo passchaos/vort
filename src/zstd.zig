@@ -5118,6 +5118,38 @@ fn multiSequencePayloadLen(
     return std.math.add(usize, len, bitstream_len) catch return error.IntegerOverflow;
 }
 
+fn rleSequencePayloadLen(
+    block: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    tail_start: usize,
+    literal_code: u8,
+    offset_code: u8,
+    match_code: u8,
+) Error!usize {
+    if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+
+    var regenerated_literals = block.len - tail_start;
+    var bit_count: usize = 1; // Reverse bitstream end marker.
+    for (literal_lens, 0..) |literal_len, i| {
+        if (try sequenceCodeForValue(literal_len, &ll_base, &ll_bits) != literal_code) return error.CorruptFrame;
+        if (try sequenceCodeForValue(offsets[i], &of_base, &of_bits) != offset_code) return error.CorruptFrame;
+        if (try sequenceCodeForValue(match_lens[i], &ml_base, &ml_bits) != match_code) return error.CorruptFrame;
+        regenerated_literals = std.math.add(usize, regenerated_literals, literal_len) catch return error.IntegerOverflow;
+        bit_count = std.math.add(usize, bit_count, ll_bits[literal_code]) catch return error.IntegerOverflow;
+        bit_count = std.math.add(usize, bit_count, ml_bits[match_code]) catch return error.IntegerOverflow;
+        bit_count = std.math.add(usize, bit_count, of_bits[offset_code]) catch return error.IntegerOverflow;
+    }
+
+    var len = try literalsHeaderLen(regenerated_literals);
+    len = std.math.add(usize, len, regenerated_literals) catch return error.IntegerOverflow;
+    len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
+    len = std.math.add(usize, len, 1 + 3) catch return error.IntegerOverflow; // modes + three RLE symbol codes.
+    return std.math.add(usize, len, (bit_count + 7) / 8) catch return error.IntegerOverflow;
+}
+
 fn sequenceCountLen(count: usize) Error!usize {
     if (count == 0) return error.CorruptFrame;
     if (count < 128) return 1;
@@ -8144,8 +8176,9 @@ test "zstd literal-only writer emits multiple duplicate matches" {
     _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
     const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
     const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
     var frame_state: SequenceFrameState = .{};
-    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
@@ -8186,9 +8219,24 @@ test "zstd literal-only writer emits two repeated-pattern sequences" {
     _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
     const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
     const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
     var frame_state: SequenceFrameState = .{};
-    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+    const literal_lens = [_]usize{ 2, 2 };
+    const offsets = [_]usize{ 2, 2 };
+    const match_lens = [_]usize{ 22, 22 };
+    const estimated_payload_len = try rleSequencePayloadLen(
+        payload,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        payload.len,
+        try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits),
+        try sequenceCodeForValue(offsets[0], &of_base, &of_bits),
+        try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits),
+    );
+    try std.testing.expectEqual(block_len, estimated_payload_len);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
