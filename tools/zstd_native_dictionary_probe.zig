@@ -13,6 +13,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkReusableDictionaryApis(init.gpa);
     checked += 1;
+    try checkLaterBlockDictionaryMatch(init.gpa);
+    checked += 1;
     try checkConcatenatedDictionaryApis(init.gpa);
     checked += 1;
 
@@ -115,6 +117,32 @@ fn checkReusableDictionaryApis(allocator: std.mem.Allocator) !void {
     const into_written = try decoder.decodeIntoSliceWithDictionary(scratch.frame, &into, dict);
     try expect(into_written == payload.len);
     try expectEqualSlices(payload, &into);
+}
+
+fn checkLaterBlockDictionaryMatch(allocator: std.mem.Allocator) !void {
+    const dict = vort.ZstdNativeDictionary.init(0x99, "abcdefghijklmnop");
+    const first_block_payload = "0123456789!@#$%^&*()_+-=[]{}<>";
+    const second_block_payload = "pfx-abcdefghijklmnop-tail";
+    const payload = first_block_payload ++ second_block_payload;
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .block_size_max = first_block_payload.len,
+    };
+
+    const encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict);
+    defer allocator.free(encoded.frame);
+    try expect(encoded.mode == .literal_only);
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameAlloc(allocator, encoded.frame));
+
+    var iterator = try vort.zstdIterateNativeFrameBlocks(encoded.frame);
+    _ = (try iterator.next()) orelse return error.ZstdNativeDictionaryProbeMismatch;
+    const second_block = (try iterator.next()) orelse return error.ZstdNativeDictionaryProbeMismatch;
+    try expect(second_block.block_type == .compressed);
+
+    const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
+    defer allocator.free(decoded);
+    try expectEqualSlices(payload, decoded);
 }
 
 fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {

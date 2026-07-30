@@ -3320,10 +3320,10 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     dictionary: ?NativeDictionary,
     frame_offset: usize,
 ) Error!void {
-    if (frame_offset == 0) {
-        if (dictionary) |dict| {
+    if (dictionary) |dict| {
+        if (try emitDictionaryMatchCompressedBlock(allocator, out, block, last, dict, frame_offset)) {
             state.previous_huffman_plan = null;
-            if (try emitDictionaryMatchCompressedBlock(allocator, out, block, last, dict)) return;
+            return;
         }
     }
     if (try emitSmallHuffmanLiteralBlock(allocator, out, block, last, state)) return;
@@ -3372,12 +3372,13 @@ fn emitDictionaryMatchCompressedBlock(
     block: []const u8,
     last: bool,
     dictionary: NativeDictionary,
+    frame_offset: usize,
 ) Error!bool {
-    if (try emitMultiDictionaryMatchCompressedBlock(allocator, out, block, last, dictionary)) return true;
+    if (try emitMultiDictionaryMatchCompressedBlock(allocator, out, block, last, dictionary, frame_offset)) return true;
 
     const match = findDictionaryMatch(dictionary.content, block) orelse return false;
     const literal_len = match.block_start;
-    const match_offset = dictionary.content.len + literal_len - match.dictionary_start;
+    const match_offset = dictionary.content.len + frame_offset + literal_len - match.dictionary_start;
     const tail = block[match.block_start + match.len ..];
 
     const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
@@ -3418,6 +3419,7 @@ fn emitMultiDictionaryMatchCompressedBlock(
     block: []const u8,
     last: bool,
     dictionary: NativeDictionary,
+    frame_offset: usize,
 ) Error!bool {
     var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
     var offsets: [max_bootstrap_sequence_count]usize = undefined;
@@ -3428,7 +3430,7 @@ fn emitMultiDictionaryMatchCompressedBlock(
     while (count < max_bootstrap_sequence_count and literal_start < block.len) {
         const match = findDictionaryMatchIn(dictionary.content, block, literal_start) orelse break;
         literal_lens[count] = match.block_start - literal_start;
-        offsets[count] = dictionary.content.len + match.block_start - match.dictionary_start;
+        offsets[count] = dictionary.content.len + frame_offset + match.block_start - match.dictionary_start;
         match_lens[count] = match.len;
         literal_ends[count] = match.block_start + match.len;
         literal_start = literal_ends[count];
@@ -3853,7 +3855,7 @@ fn findDictionaryMatch(dictionary: []const u8, block: []const u8) ?DictionaryMat
 
 fn findDictionaryMatchIn(dictionary: []const u8, block: []const u8, start_min: usize) ?DictionaryMatch {
     // Keep this first dictionary encoder slice deliberately small and
-    // deterministic: it emits dictionary sequences in the first block, and each
+    // deterministic: it emits dictionary sequences in native blocks, and each
     // sequence may start after caller literals. Offset accounting uses the bytes
     // already emitted in the frame plus the preset history length, matching the
     // decoder's explicit dictionary-history model.
@@ -6933,6 +6935,44 @@ test "zstd native writer uses preset dictionary history" {
     try std.testing.expectEqualSlices(u8, encoded.frame, into[0..into_result.written]);
     try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, into[0 .. into_result.written - 1]));
     try std.testing.expectError(error.NeedDictionary, encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, NativeDictionary.init(0, dict.content)));
+}
+
+test "zstd native writer uses preset dictionary history after first block" {
+    const dict = NativeDictionary.init(0x4321, "abcdefghijklmnop");
+    const first_block_payload = "0123456789!@#$%^&*()_+-=[]{}<>"; // 32 bytes with no long dictionary substring.
+    const second_block_payload = "pfx-abcdefghijklmnop-tail";
+    const payload = first_block_payload ++ second_block_payload;
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .block_size_max = first_block_payload.len,
+    };
+
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, dict);
+    defer std.testing.allocator.free(encoded.frame);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, encoded.mode);
+    try std.testing.expectEqual(dict.id, (try inspectNativeFrameHeader(encoded.frame)).dictionary_id);
+
+    var iterator = try iterateNativeFrameBlocks(encoded.frame);
+    _ = (try iterator.next()) orelse return error.CorruptFrame;
+    const second_block = (try iterator.next()) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(NativeBlockType.compressed, second_block.block_type);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded.frame[second_block.payload_offset..][0..second_block.payload_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+
+    try std.testing.expectError(error.NeedDictionary, decodeNativeFrameAlloc(std.testing.allocator, encoded.frame));
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded.frame, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .dictionary_id = dict.id,
+        .block_size_max = first_block_payload.len,
+    });
+    defer std.testing.allocator.free(raw);
+    try std.testing.expect(encoded.frame.len < raw.len);
 }
 
 test "zstd native raw/RLE decoder handles fallback frames and skippable frames" {

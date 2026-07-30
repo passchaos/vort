@@ -131,8 +131,8 @@ Current interpretation:
   `NativeDictionary`; dictionary-aware alloc/append/into/scratch/size APIs now
   validate the ID and can use the preset bytes as match history for the native
   sequence subset. The native writer can emit Dictionary_ID fields for downstream
-  container metadata and has a dictionary-aware multi-match path for first blocks, so frames
-  whose first block contains preset history can be smaller than raw storage
+  container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
+  whose blocks contain preset history can be smaller than raw storage
   while remaining decodable through explicit dictionary APIs. Callers can inspect
   Dictionary_ID metadata before decode. The native writer also exposes a
   block-size option, and the public native stream/block iterators expose
