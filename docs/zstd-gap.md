@@ -153,12 +153,14 @@ Current interpretation:
   Zstd native incremental decoding now
   has matching direct-output slices for raw/RLE blocks and compressed native
   blocks, including multi-block frames whose later compressed blocks reuse
-  sequence tables/repeated offsets from earlier compressed blocks; content
-  checksum validation runs on the direct path. When caller output is too small
-  for the next compressed block or has already split away the frame history
-  needed by later sequence matches, the direct path intentionally falls back to
-  the whole-frame scratch facade and resumes after bytes already returned to
-  the caller instead of repeatedly returning zero-progress `need_output`. The
+  sequence tables/repeated offsets from earlier compressed blocks and frames
+  whose Dictionary_ID resolves through the explicit dictionary or dictionary-set
+  incremental constructors; content checksum validation runs on the direct path.
+  When caller output is too small for the next compressed block or has already
+  split away the frame history needed by later sequence matches, the direct path
+  intentionally falls back to the whole-frame scratch facade and resumes after
+  bytes already returned to the caller instead of repeatedly returning
+  zero-progress `need_output`. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
