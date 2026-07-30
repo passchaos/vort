@@ -248,6 +248,7 @@ pub const ZstdNativeFrameEncodeIntoResult = zstd.NativeFrameEncodeIntoResult;
 pub const ZstdNativeFrameEncodeScratchResult = zstd.NativeFrameEncodeScratchResult;
 pub const ZstdNativeFrameEncoder = zstd.NativeFrameEncoder;
 pub const ZstdNativeFrameDecoder = zstd.NativeFrameDecoder;
+pub const ZstdNativeIncrementalFrameDecoder = zstd.NativeIncrementalFrameDecoder;
 pub const ZstdNativeDictionary = zstd.NativeDictionary;
 pub const ZstdNativeDictionarySet = zstd.NativeDictionarySet;
 pub const ZstdNativeFrameHeader = zstd.NativeFrameHeader;
@@ -1086,6 +1087,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = ZstdNativeFrameEncodeScratchResult;
     _ = ZstdNativeFrameEncoder;
     _ = ZstdNativeFrameDecoder;
+    _ = ZstdNativeIncrementalFrameDecoder;
     _ = ZstdNativeDictionary;
     _ = ZstdNativeDictionarySet;
     _ = ZstdNativeFrameHeader;
@@ -1283,6 +1285,41 @@ test "root zstd explicit native encode-into helpers round trip" {
     const literal_decoded = try zstdDecodeNativeFrameAlloc(std.testing.allocator, literal_into[0..literal_written]);
     defer std.testing.allocator.free(literal_decoded);
     try std.testing.expectEqualSlices(u8, literal_payload, literal_decoded);
+}
+
+test "root zstd native incremental decoder round trip" {
+    const payload = "root zstd incremental payload " ** 3;
+    const encoded = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    });
+    defer std.testing.allocator.free(encoded.frame);
+
+    var decoder = ZstdNativeIncrementalFrameDecoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+
+    const first = try decoder.step(encoded.frame[0..5], output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, first.status);
+    try std.testing.expectEqual(@as(usize, 5), first.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), first.progress.output_written);
+
+    const second = try decoder.step(encoded.frame[5..], output[0..13]);
+    try std.testing.expectEqual(StepResult.Status.need_output, second.status);
+    try std.testing.expectEqual(encoded.frame.len - 5, second.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 13), second.progress.output_written);
+
+    var written = second.progress.output_written;
+    while (true) {
+        const end = @min(output.len, written + 11);
+        const result = try decoder.step("", output[written..end]);
+        written += result.progress.output_written;
+        if (result.status == .done) break;
+        try std.testing.expectEqual(StepResult.Status.need_output, result.status);
+    }
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expectEqualSlices(u8, "done", decoder.diagnostics().phase_name);
 }
 
 test "root native dictionary set APIs resolve concatenated frame dictionaries" {

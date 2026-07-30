@@ -461,6 +461,11 @@ var zstd_decoder = vort.ZstdNativeFrameDecoder.init(allocator);
 defer zstd_decoder.deinit();
 const zstd_plain = try zstd_decoder.decodeScratch(zstd_result.frame);
 _ = zstd_plain;
+var zstd_incremental = vort.ZstdNativeIncrementalFrameDecoder.init(allocator);
+defer zstd_incremental.deinit();
+var zstd_incremental_out: ["payload payload".len]u8 = undefined;
+_ = try zstd_incremental.step(zstd_result.frame[0..4], zstd_incremental_out[0..0]);
+_ = try zstd_incremental.step(zstd_result.frame[4..], &zstd_incremental_out);
 const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history shared phrase");
 const zstd_dict_frame = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(
     allocator,
