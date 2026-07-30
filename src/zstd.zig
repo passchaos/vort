@@ -925,6 +925,20 @@ pub const NativeFrameHeader = struct {
     payload_offset: usize,
 };
 
+pub const NativeBlockType = enum {
+    raw,
+    rle,
+    compressed,
+};
+
+pub const NativeFrameBlockHeader = struct {
+    header_offset: usize,
+    payload_offset: usize,
+    payload_len: usize,
+    block_type: NativeBlockType,
+    last: bool,
+};
+
 const RawOrRleFrameHeader = NativeFrameHeader;
 
 fn validateBlockSize(header: RawOrRleFrameHeader, block_type: u32, block_len: usize) Error!void {
@@ -2628,6 +2642,32 @@ pub fn inspectNativeFrameHeader(frame: []const u8) Error!NativeFrameHeader {
     return try parseRawOrRleFrameHeaderWithOptions(frame, &offset, true);
 }
 
+pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!NativeFrameBlockHeader {
+    const header = try inspectNativeFrameHeader(frame);
+    const header_offset = header.payload_offset;
+    if (frame.len - header_offset < 3) return error.TruncatedFrame;
+    const block_header = std.mem.readInt(u24, frame[header_offset..][0..3], .little);
+    const block_type_raw = (block_header >> 1) & 0x03;
+    const payload_len: usize = @intCast(block_header >> 3);
+    const block_type: NativeBlockType = switch (block_type_raw) {
+        0 => .raw,
+        1 => .rle,
+        2 => .compressed,
+        else => return error.CorruptFrame,
+    };
+    try validateBlockSize(header, block_type_raw, payload_len);
+    const payload_offset = header_offset + 3;
+    const required_payload_len: usize = if (block_type == .rle) 1 else payload_len;
+    if (frame.len - payload_offset < required_payload_len) return error.TruncatedFrame;
+    return .{
+        .header_offset = header_offset,
+        .payload_offset = payload_offset,
+        .payload_len = payload_len,
+        .block_type = block_type,
+        .last = (block_header & 1) != 0,
+    };
+}
+
 fn decodeWindowSize(descriptor: u8) u64 {
     const exponent = (descriptor & 0b1111_1000) >> 3;
     const mantissa = descriptor & 0b0000_0111;
@@ -3763,6 +3803,11 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     defer std.testing.allocator.free(native_decoded);
     try std.testing.expectEqualSlices(u8, payload, native_decoded);
     try std.testing.expectEqual(payload.len, try decodedRawOrRleFrameSize(encoded));
+    const first_block = try inspectNativeFrameFirstBlock(encoded);
+    try std.testing.expectEqual(NativeBlockType.raw, first_block.block_type);
+    try std.testing.expectEqual(true, first_block.last);
+    try std.testing.expectEqual(payload.len, first_block.payload_len);
+    try std.testing.expectEqual((try inspectNativeFrameHeader(encoded)).payload_offset, first_block.header_offset);
     var native_appended: std.ArrayList(u8) = .empty;
     defer native_appended.deinit(std.testing.allocator);
     try native_appended.appendSlice(std.testing.allocator, "prefix:");
@@ -3849,6 +3894,10 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     const native_rle_decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, rle_encoded);
     defer std.testing.allocator.free(native_rle_decoded);
     try std.testing.expectEqualSlices(u8, repeated, native_rle_decoded);
+    const rle_first_block = try inspectNativeFrameFirstBlock(rle_encoded);
+    try std.testing.expectEqual(NativeBlockType.rle, rle_first_block.block_type);
+    try std.testing.expectEqual(repeated.len, rle_first_block.payload_len);
+    try std.testing.expectEqual(true, rle_first_block.last);
     var rle_into_buffer: [repeated.len]u8 = undefined;
     const rle_into_written = try decodeNativeFrameInto(rle_encoded, &rle_into_buffer);
     try std.testing.expectEqual(repeated.len, rle_into_written);
@@ -4800,6 +4849,10 @@ test "zstd literal-only writer emits repeated-pattern sequence blocks" {
     _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
     const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
     try std.testing.expectEqual(@as(u24, 2), (block_header >> 1) & 0x3);
+    const compressed_first_block = try inspectNativeFrameFirstBlock(encoded);
+    try std.testing.expectEqual(NativeBlockType.compressed, compressed_first_block.block_type);
+    try std.testing.expectEqual(true, compressed_first_block.last);
+    try std.testing.expectEqual(@as(usize, block_header >> 3), compressed_first_block.payload_len);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
