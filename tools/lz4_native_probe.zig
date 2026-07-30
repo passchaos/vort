@@ -33,6 +33,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkPrefixEncoder(init.gpa);
     checked += 1;
+    try checkDictionaryFrame(init.gpa);
+    checked += 1;
 
     try stdout.print("lz4_native_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -273,6 +275,31 @@ fn checkPrefixEncoder(allocator: std.mem.Allocator) !void {
         error.OutputTooSmall => {},
         else => return err,
     }
+}
+
+fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
+    const dict = vort.Lz4NativeDictionary.init(0x1234_abcd, "abcdefghijklmnop");
+    const payload = "abcdefghijklmnop-tail";
+    const encoded = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+    }, dict);
+    defer allocator.free(encoded);
+
+    const header = try vort.lz4InspectNativeFrameHeader(encoded);
+    if (header.dictionary_id != dict.id) return error.Lz4ProbeMismatch;
+    if (vort.lz4DecodeNativeFrameAlloc(allocator, encoded)) |decoded_without_dict| {
+        allocator.free(decoded_without_dict);
+        return error.Lz4ProbeExpectedInvalidMatch;
+    } else |err| switch (err) {
+        error.InvalidMatch => {},
+        else => return err,
+    }
+
+    const decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, encoded, dict);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, payload, decoded)) return error.Lz4ProbeMismatch;
+    if (try vort.lz4DecodedNativeFrameSizeWithDictionary(encoded, dict) != payload.len) return error.Lz4ProbeSizeMismatch;
 }
 
 fn expectPayload(case: Case, decoded: []const u8) !void {

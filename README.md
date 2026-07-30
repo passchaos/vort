@@ -370,6 +370,16 @@ var lz4_decoder = vort.Lz4NativeFrameDecoder.init(allocator);
 defer lz4_decoder.deinit();
 const lz4_plain = try lz4_decoder.decodeScratch(lz4_frame);
 _ = lz4_plain;
+const lz4_dict = vort.Lz4NativeDictionary.init(0x1234, "previous lz4 history");
+const lz4_dict_frame = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(
+    allocator,
+    "previous lz4 history payload",
+    .{ .content_checksum = false },
+    lz4_dict,
+);
+defer allocator.free(lz4_dict_frame);
+const lz4_dict_plain = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, lz4_dict_frame, lz4_dict);
+defer allocator.free(lz4_dict_plain);
 
 var lz4_block_encoder = try vort.Lz4BlockEncoder.init(allocator);
 defer lz4_block_encoder.deinit();
