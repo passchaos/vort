@@ -4379,6 +4379,50 @@ test "lz4 native incremental decoder streams linked raw blocks without decoded s
     try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
 }
 
+test "lz4 native incremental linked compressed blocks use scratch fallback" {
+    const first_block_len = max_block_history_len;
+    const second_block_len = 4 * 1024;
+    const payload = try std.testing.allocator.alloc(u8, first_block_len + second_block_len);
+    defer std.testing.allocator.free(payload);
+    var state: u32 = 0x3141_5926;
+    for (payload[0..first_block_len]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[first_block_len..], payload[first_block_len - second_block_len .. first_block_len]);
+
+    const encoded = try encodePureFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = true,
+        .block_checksum = true,
+        .block_mode = .linked,
+        .block_size_id = .max64kb,
+    });
+    defer std.testing.allocator.free(encoded);
+    const header = try inspectNativeFrameHeader(encoded);
+    try std.testing.expect(!header.block_independent);
+    const first_block = (try inspectNativeFrameFirstBlock(encoded)) orelse return error.CorruptFrame;
+    const second_block = (try inspectNativeFrameBlockAt(encoded, first_block.next_header_offset)) orelse return error.CorruptFrame;
+    try std.testing.expect(second_block.is_compressed);
+
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    const output = try std.testing.allocator.alloc(u8, payload.len);
+    defer std.testing.allocator.free(output);
+    const initial = try decoder.step(encoded, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
+    // Linked compressed blocks need previous-block history, so they currently
+    // fall back to the whole-frame scratch decoder rather than the stateless
+    // direct-output path.
+    try std.testing.expectEqual(payload.len, decoder.decoded_scratch.items.len);
+    const done = try decoder.step("", output);
+    try std.testing.expectEqual(core.StepResult.Status.done, done.status);
+    try std.testing.expectEqual(payload.len, done.progress.output_written);
+    try std.testing.expectEqualSlices(u8, payload, output);
+}
+
 test "lz4 native incremental decoder validates raw block checksums directly" {
     const payload = try std.testing.allocator.alloc(u8, max_block_history_len + 1024);
     defer std.testing.allocator.free(payload);
