@@ -1258,15 +1258,23 @@ pub const NativeIncrementalFrameDecoder = struct {
             error.NeedDictionary => return false,
             else => return err,
         };
-        const expected_len: ?usize = if (header.expected_content_size) |size| blk: {
+        const frame_expected_len: ?usize = if (header.expected_content_size) |size| blk: {
             const len = try checkedU64ToUsize(size);
             if (len > self.options.max_decoded_buffer_len) {
                 self.recordError(.frame, error.OutputLimitExceeded);
                 return error.OutputLimitExceeded;
             }
             break :blk len;
-        } else self.options.expected_output_len;
-        const direct_limit = expected_len orelse self.options.max_decoded_buffer_len;
+        } else null;
+        const direct_limit = if (frame_expected_len) |len|
+            len
+        else if (self.options.expected_output_len) |expected| blk: {
+            if (self.output_written > expected) {
+                self.recordError(.frame, error.SizeMismatch);
+                return error.SizeMismatch;
+            }
+            break :blk expected - self.output_written;
+        } else self.options.max_decoded_buffer_len;
 
         var offset = header.payload_offset;
         var first_payload_offset: usize = 0;
@@ -1337,7 +1345,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             offset += 4;
         }
         if (offset != frame_end) return false;
-        if (expected_len) |len| {
+        if (frame_expected_len) |len| {
             if (total != len) return false;
         }
 
