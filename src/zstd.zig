@@ -8420,6 +8420,49 @@ test "zstd native incremental compressed block falls back for small output" {
     try std.testing.expectEqual(payload.len, decoder.diagnostics().output_written);
 }
 
+test "zstd native incremental compressed checksum uses scratch fallback" {
+    const payload = ("content-checksum-zstd" ** 4) ** 64;
+    const encoded = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = true,
+    });
+    defer std.testing.allocator.free(encoded.frame);
+    const header = try inspectNativeFrameHeader(encoded.frame);
+    try std.testing.expect(header.has_checksum);
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    try std.testing.expect(first_block.last);
+
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    const initial = try decoder.step(encoded.frame, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
+    // Compressed content checksums are still validated by the mature whole-frame
+    // path, so this frame should materialize decoded_scratch rather than taking
+    // the checksum-free direct compressed block path.
+    try std.testing.expectEqual(payload.len, decoder.decoded_scratch.items.len);
+    const decoded = try decoder.step("", &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, decoded.status);
+    try std.testing.expectEqual(payload.len, decoded.progress.output_written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+
+    var corrupt = try std.testing.allocator.dupe(u8, encoded.frame);
+    defer std.testing.allocator.free(corrupt);
+    corrupt[corrupt.len - 1] ^= 0x01;
+    var bad = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer bad.deinit();
+    try std.testing.expectError(error.ChecksumMismatch, bad.step(corrupt, output[0..0]));
+    try std.testing.expectEqualSlices(u8, "ChecksumMismatch", bad.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", bad.diagnostics().last_error_phase_name);
+}
+
 test "zstd native incremental decoder drains concatenated streams and skippable frames" {
     const first_payload = "incremental zstd first stream member " ** 2;
     const second_payload = "incremental zstd second stream member " ** 3;
