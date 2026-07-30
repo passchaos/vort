@@ -187,7 +187,36 @@ fn checkFrameRoundTrips(allocator: std.mem.Allocator, case: Case) !void {
         const linked_decoded = try vort.lz4DecodeNativeFrameAlloc(allocator, linked_native_frame);
         defer allocator.free(linked_decoded);
         try expectPayload(case, linked_decoded);
+        try checkLinkedDirectFallback(allocator, case, linked_native_frame);
     }
+}
+
+fn checkLinkedDirectFallback(allocator: std.mem.Allocator, case: Case, frame: []const u8) !void {
+    const first_block = (try vort.lz4InspectNativeFrameFirstBlock(frame)) orelse return error.Lz4ProbeSizeMismatch;
+    const second_block = (try vort.lz4InspectNativeFrameBlockAt(frame, first_block.next_header_offset)) orelse return error.Lz4ProbeSizeMismatch;
+    if (first_block.is_compressed or !second_block.is_compressed) return;
+
+    var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = case.payload.len,
+        .max_decoded_buffer_len = case.payload.len,
+    });
+    defer decoder.deinit();
+    const output = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(output);
+    const initial = try decoder.step(frame, output[0..0]);
+    if (initial.status != .need_output) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, "direct_output", decoder.diagnostics().phase_name)) return error.Lz4ProbeMismatch;
+    const first = try decoder.step("", output[0 .. 64 * 1024]);
+    if (first.status != .need_output) return error.Lz4ProbeMismatch;
+    if (first.progress.output_written != 64 * 1024) return error.Lz4ProbeSizeMismatch;
+    if (decoder.decoded_scratch.items.len != 0) return error.Lz4ProbeMismatch;
+    const partial = try decoder.step("", output[64 * 1024 ..][0..127]);
+    if (partial.status != .need_output) return error.Lz4ProbeMismatch;
+    if (partial.progress.output_written != 127) return error.Lz4ProbeSizeMismatch;
+    if (decoder.decoded_scratch.items.len != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    const done = try decoder.step("", output[64 * 1024 + 127 ..]);
+    if (done.status != .done) return error.Lz4ProbeMismatch;
+    try expectPayload(case, output);
 }
 
 fn checkBlockRoundTrip(allocator: std.mem.Allocator, case: Case) !void {
