@@ -3323,7 +3323,7 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     if (frame_offset == 0) {
         if (dictionary) |dict| {
             state.previous_huffman_plan = null;
-            if (try emitDictionaryPrefixMatchCompressedBlock(allocator, out, block, last, dict)) return;
+            if (try emitDictionaryMatchCompressedBlock(allocator, out, block, last, dict)) return;
         }
     }
     if (try emitSmallHuffmanLiteralBlock(allocator, out, block, last, state)) return;
@@ -3366,17 +3366,17 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     try out.appendSlice(allocator, payload.items);
 }
 
-fn emitDictionaryPrefixMatchCompressedBlock(
+fn emitDictionaryMatchCompressedBlock(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     block: []const u8,
     last: bool,
     dictionary: NativeDictionary,
 ) Error!bool {
-    const match = findDictionaryPrefixMatch(dictionary.content, block) orelse return false;
-    const literal_len: usize = 0;
-    const match_offset = dictionary.content.len - match.dictionary_start;
-    const tail = block[match.len..];
+    const match = findDictionaryMatch(dictionary.content, block) orelse return false;
+    const literal_len = match.block_start;
+    const match_offset = dictionary.content.len + literal_len - match.dictionary_start;
+    const tail = block[match.block_start + match.len ..];
 
     const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
     const offset_code = try sequenceCodeForValue(match_offset, &of_base, &of_bits);
@@ -3384,9 +3384,11 @@ fn emitDictionaryPrefixMatchCompressedBlock(
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    try emitLiteralsHeader(allocator, &payload, .raw, tail.len);
+    const regenerated_literals = std.math.add(usize, literal_len, tail.len) catch return error.IntegerOverflow;
+    try emitLiteralsHeader(allocator, &payload, .raw, regenerated_literals);
+    try payload.appendSlice(allocator, block[0..literal_len]);
     try payload.appendSlice(allocator, tail);
-    try payload.append(allocator, 1); // one sequence that pulls the prefix from preset history.
+    try payload.append(allocator, 1); // one sequence that pulls a run from preset history.
     try payload.append(allocator, 0x54); // LL, OF, and ML use RLE_Mode.
     try payload.append(allocator, literal_code);
     try payload.append(allocator, offset_code);
@@ -3800,24 +3802,31 @@ const DuplicateMatch = struct {
     len: usize,
 };
 
-const DictionaryPrefixMatch = struct {
+const DictionaryMatch = struct {
     dictionary_start: usize,
+    block_start: usize,
     len: usize,
 };
 
-fn findDictionaryPrefixMatch(dictionary: []const u8, block: []const u8) ?DictionaryPrefixMatch {
-    // This is the first encoder slice for preset dictionaries: only the block
-    // prefix can reference dictionary history, so there are no preceding frame
-    // literals to complicate offset accounting. Keep the search deliberately
-    // small and deterministic; general dictionary match finding can grow from
-    // this API-compatible baseline.
+fn findDictionaryMatch(dictionary: []const u8, block: []const u8) ?DictionaryMatch {
+    // Keep this first dictionary encoder slice deliberately small and
+    // deterministic: it emits at most one sequence in the first block, but that
+    // sequence may start after caller literals. Offset accounting uses the
+    // bytes already emitted in the frame plus the preset history length, matching
+    // the decoder's explicit dictionary-history model.
     if (dictionary.len == 0 or block.len < 8) return null;
-    var best: ?DictionaryPrefixMatch = null;
-    for (dictionary, 0..) |_, start| {
-        var len: usize = 0;
-        while (start + len < dictionary.len and len < block.len and dictionary[start + len] == block[len]) : (len += 1) {}
-        if (len >= 8 and (best == null or len > best.?.len)) {
-            best = .{ .dictionary_start = start, .len = len };
+    var best: ?DictionaryMatch = null;
+    for (block, 0..) |_, block_start| {
+        if (block_start + 8 > block.len) break;
+        for (dictionary, 0..) |_, dictionary_start| {
+            var len: usize = 0;
+            while (dictionary_start + len < dictionary.len and
+                block_start + len < block.len and
+                dictionary[dictionary_start + len] == block[block_start + len]) : (len += 1)
+            {}
+            if (len >= 8 and (best == null or len > best.?.len)) {
+                best = .{ .dictionary_start = dictionary_start, .block_start = block_start, .len = len };
+            }
         }
     }
     return best;
@@ -6821,9 +6830,9 @@ test "zstd native dictionary decodes matches from preset history" {
     try std.testing.expectEqualSlices(u8, dict.content, &into);
 }
 
-test "zstd native writer uses preset dictionary prefix history" {
+test "zstd native writer uses preset dictionary history" {
     const dict = NativeDictionary.init(0x1234, "abcdefghijklmnop");
-    const payload = "abcdefghijklmnop-tail";
+    const payload = "prefix-abcdefghijklmnop-tail";
     const options: NativeFrameOptions = .{
         .selection = .literal_only,
         .content_checksum = false,
@@ -6852,6 +6861,7 @@ test "zstd native writer uses preset dictionary prefix history" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(encoded.frame[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+    try std.testing.expect(section.regenerated_size >= "prefix-".len + "-tail".len);
 
     var reusable = NativeFrameEncoder.init(std.testing.allocator);
     defer reusable.deinit();

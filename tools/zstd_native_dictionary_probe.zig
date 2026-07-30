@@ -9,7 +9,7 @@ pub fn main(init: std.process.Init) !void {
     var checked: usize = 0;
     try checkDictionaryIdValidation(init.gpa);
     checked += 1;
-    try checkDictionaryPrefixEncoding(init.gpa);
+    try checkDictionaryMatchEncoding(init.gpa);
     checked += 1;
     try checkReusableDictionaryApis(init.gpa);
     checked += 1;
@@ -43,9 +43,9 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimitedWithDictionary(encoded, payload.len - 1, dict));
 }
 
-fn checkDictionaryPrefixEncoding(allocator: std.mem.Allocator) !void {
+fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
     const dict = vort.ZstdNativeDictionary.init(0x4433_2211, "abcdefghijklmnop");
-    const payload = "abcdefghijklmnop-tail";
+    const payload = "prefix-abcdefghijklmnop-tail";
     const options: vort.ZstdNativeFrameOptions = .{
         .selection = .literal_only,
         .content_checksum = false,
