@@ -778,6 +778,13 @@ pub const NativeFrameBlockSummary = struct {
     payload_bytes: usize = 0,
 };
 
+pub const NativeSkippableFrameHeader = struct {
+    skippable_id: u4,
+    payload_offset: usize,
+    payload_len: usize,
+    next_frame_offset: usize,
+};
+
 pub const NativeStreamSummary = struct {
     frame_count: usize = 0,
     skippable_frame_count: usize = 0,
@@ -876,6 +883,20 @@ pub fn summarizeNativeFrameBlocks(frame: []const u8) Error!NativeFrameBlockSumma
         offset = block.next_header_offset;
     }
     return summary;
+}
+
+pub fn inspectNativeSkippableFrame(frame: []const u8) Error!NativeSkippableFrameHeader {
+    if (frame.len < 8) return error.TruncatedFrame;
+    const magic = std.mem.readInt(u32, frame[0..4], .little);
+    if (magic < skippable_magic_min or magic > skippable_magic_max) return error.InvalidMagic;
+    const payload_len: usize = @intCast(std.mem.readInt(u32, frame[4..8], .little));
+    if (frame.len - 8 < payload_len) return error.TruncatedFrame;
+    return .{
+        .skippable_id = @intCast(magic - skippable_magic_min),
+        .payload_offset = 8,
+        .payload_len = payload_len,
+        .next_frame_offset = 8 + payload_len,
+    };
 }
 
 pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
@@ -2439,6 +2460,11 @@ test "lz4 skippable frame writer composes with concatenated native streams" {
     try std.testing.expectEqual(skippable_magic_min + 11, std.mem.readInt(u32, skip[0..4], .little));
     try std.testing.expectEqual(@as(u32, "metadata".len), std.mem.readInt(u32, skip[4..8], .little));
     try std.testing.expectEqualSlices(u8, "metadata", skip[8..]);
+    const skip_header = try inspectNativeSkippableFrame(skip);
+    try std.testing.expectEqual(@as(u4, 11), skip_header.skippable_id);
+    try std.testing.expectEqual(@as(usize, 8), skip_header.payload_offset);
+    try std.testing.expectEqual(@as(usize, "metadata".len), skip_header.payload_len);
+    try std.testing.expectEqual(skip.len, skip_header.next_frame_offset);
     try std.testing.expectEqual(skip.len, try encodedSkippableFrameBound("metadata".len));
     var skip_appended: std.ArrayList(u8) = .empty;
     defer skip_appended.deinit(std.testing.allocator);
