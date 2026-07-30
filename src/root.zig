@@ -1399,7 +1399,7 @@ test "root native no-size incremental direct-output paths round trip" {
     try std.testing.expect(lz4_first_block.is_compressed);
 
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
-        .max_decoded_buffer_len = lz4_payload.len,
+        .expected_output_len = lz4_payload.len,
     });
     defer lz4_decoder.deinit();
     var lz4_output: [lz4_payload.len]u8 = undefined;
@@ -1424,7 +1424,7 @@ test "root native no-size incremental direct-output paths round trip" {
     try std.testing.expectEqual(ZstdNativeBlockType.compressed, zstd_first_block.block_type);
 
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
-        .max_decoded_buffer_len = zstd_payload.len,
+        .expected_output_len = zstd_payload.len,
     });
     defer zstd_decoder.deinit();
     var zstd_output: [zstd_payload.len]u8 = undefined;

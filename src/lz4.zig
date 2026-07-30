@@ -1264,7 +1264,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                 return error.OutputLimitExceeded;
             }
             break :blk len;
-        } else null;
+        } else self.options.expected_output_len;
         const direct_limit = expected_len orelse self.options.max_decoded_buffer_len;
 
         var offset = header.payload_offset;
@@ -4732,7 +4732,7 @@ test "lz4 native incremental decoder streams no-size compressed frame directly" 
     try std.testing.expect(first_block.is_compressed);
 
     var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
-        .max_decoded_buffer_len = payload.len,
+        .expected_output_len = payload.len,
     });
     defer decoder.deinit();
     var output: [payload.len]u8 = undefined;
