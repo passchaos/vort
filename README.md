@@ -384,6 +384,14 @@ const lz4_dict_frame = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(
 defer allocator.free(lz4_dict_frame);
 const lz4_dict_plain = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, lz4_dict_frame, lz4_dict);
 defer allocator.free(lz4_dict_plain);
+const lz4_dicts = [_]vort.Lz4NativeDictionary{lz4_dict};
+const lz4_dict_set = vort.Lz4NativeDictionarySet.init(&lz4_dicts);
+const lz4_stream_plain = try vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(
+    allocator,
+    lz4_dict_frame,
+    lz4_dict_set,
+);
+defer allocator.free(lz4_stream_plain);
 
 var lz4_block_encoder = try vort.Lz4BlockEncoder.init(allocator);
 defer lz4_block_encoder.deinit();
@@ -444,6 +452,14 @@ const zstd_dict_plain = try vort.zstdDecodeNativeFrameAllocWithDictionary(
 );
 defer allocator.free(zstd_dict_plain);
 _ = zstd_dict_plain;
+const zstd_dicts = [_]vort.ZstdNativeDictionary{zstd_dict};
+const zstd_dict_set = vort.ZstdNativeDictionarySet.init(&zstd_dicts);
+const zstd_stream_plain = try vort.zstdDecodeNativeConcatenatedFrameAllocWithDictionarySet(
+    allocator,
+    zstd_dict_frame.frame,
+    zstd_dict_set,
+);
+defer allocator.free(zstd_stream_plain);
 
 const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);

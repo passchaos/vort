@@ -117,6 +117,23 @@ pub const NativeDictionary = struct {
     }
 };
 
+/// Caller-supplied preset dictionary catalog used when decoding concatenated
+/// native streams whose frames can reference different Dictionary_ID values.
+pub const NativeDictionarySet = struct {
+    dictionaries: []const NativeDictionary,
+
+    pub fn init(dictionaries: []const NativeDictionary) NativeDictionarySet {
+        return .{ .dictionaries = dictionaries };
+    }
+
+    pub fn find(self: NativeDictionarySet, id: u32) ?NativeDictionary {
+        for (self.dictionaries) |dictionary| {
+            if (dictionary.id == id) return dictionary;
+        }
+        return null;
+    }
+};
+
 pub const NativeFrameMode = enum {
     raw_or_rle,
     literal_only,
@@ -339,6 +356,17 @@ pub fn decodeRawOrRleFrameAllocWithDictionary(
     return try decodeRawOrRleFrameAllocWithDictionaryInternal(allocator, frame, dictionary);
 }
 
+pub fn decodeRawOrRleFrameAllocWithDictionarySet(
+    allocator: std.mem.Allocator,
+    frame: []const u8,
+    dictionary_set: NativeDictionarySet,
+) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    _ = try decodeRawOrRleFrameAppendWithDictionarySet(allocator, &out, frame, dictionary_set);
+    return out.toOwnedSlice(allocator);
+}
+
 fn decodeRawOrRleFrameAllocWithDictionaryInternal(
     allocator: std.mem.Allocator,
     frame: []const u8,
@@ -381,6 +409,27 @@ pub fn decodeRawOrRleFrameAppendWithDictionary(
     return try decodeRawOrRleFrameAppendWithDictionaryInternal(allocator, out, frame, dictionary);
 }
 
+pub fn decodeRawOrRleFrameAppendWithDictionarySet(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    frame: []const u8,
+    dictionary_set: NativeDictionarySet,
+) Error!usize {
+    const decoded_len = try decodedRawOrRleFrameSizeWithDictionarySet(frame, dictionary_set);
+    try out.ensureUnusedCapacity(allocator, decoded_len);
+    const start = out.items.len;
+    const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
+    const written = decodeRawOrRleFrameIntoWithDictionarySet(frame, slot, dictionary_set) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != decoded_len) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
 fn decodeRawOrRleFrameAppendWithDictionaryInternal(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -419,6 +468,34 @@ pub fn decodeRawOrRleFrameAppendLimitedWithDictionary(
     dictionary: NativeDictionary,
 ) Error!usize {
     return try decodeRawOrRleFrameAppendLimitedWithDictionaryInternal(allocator, out, frame, max_output_len, dictionary);
+}
+
+pub fn decodeRawOrRleFrameAppendLimitedWithDictionarySet(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    frame: []const u8,
+    max_output_len: usize,
+    dictionary_set: NativeDictionarySet,
+) Error!usize {
+    const decoded_len = try decodedRawOrRleFrameSizeLimitedWithDictionarySet(frame, max_output_len, dictionary_set);
+    try out.ensureUnusedCapacity(allocator, decoded_len);
+    const start = out.items.len;
+    const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
+    const written = decodeRawOrRleFrameIntoWithDictionarySet(frame, slot, dictionary_set) catch |err| switch (err) {
+        error.OutputTooSmall => {
+            out.items.len = start;
+            return error.OutputLimitExceeded;
+        },
+        else => {
+            out.items.len = start;
+            return err;
+        },
+    };
+    if (written != decoded_len) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
 }
 
 fn decodeRawOrRleFrameAppendLimitedWithDictionaryInternal(
@@ -466,6 +543,23 @@ pub fn decodeRawOrRleFrameAllocLimitedWithDictionary(
     return try decodeRawOrRleFrameAllocLimitedWithDictionaryInternal(allocator, frame, max_output_len, dictionary);
 }
 
+pub fn decodeRawOrRleFrameAllocLimitedWithDictionarySet(
+    allocator: std.mem.Allocator,
+    frame: []const u8,
+    max_output_len: usize,
+    dictionary_set: NativeDictionarySet,
+) Error![]u8 {
+    const decoded_len = try decodedRawOrRleFrameSizeLimitedWithDictionarySet(frame, max_output_len, dictionary_set);
+    const out = try allocator.alloc(u8, decoded_len);
+    errdefer allocator.free(out);
+    const written = decodeRawOrRleFrameIntoWithDictionarySet(frame, out, dictionary_set) catch |err| switch (err) {
+        error.OutputTooSmall => return error.OutputLimitExceeded,
+        else => return err,
+    };
+    if (written != decoded_len) return error.SizeMismatch;
+    return out;
+}
+
 fn decodeRawOrRleFrameAllocLimitedWithDictionaryInternal(
     allocator: std.mem.Allocator,
     frame: []const u8,
@@ -495,11 +589,47 @@ pub fn decodedRawOrRleFrameSizeLimitedWithDictionary(frame: []const u8, max_outp
     return try rawOrRleDecodedSizeLimitedWithDictionary(frame, max_output_len, dictionary);
 }
 
+pub fn decodedRawOrRleFrameSizeWithDictionarySet(frame: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
+    return try decodedRawOrRleFrameSizeLimitedWithDictionarySet(frame, std.math.maxInt(usize), dictionary_set);
+}
+
+pub fn decodedRawOrRleFrameSizeLimitedWithDictionarySet(frame: []const u8, max_output_len: usize, dictionary_set: NativeDictionarySet) Error!usize {
+    var offset: usize = 0;
+    var total: usize = 0;
+    while (offset < frame.len) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        const magic = std.mem.readInt(u32, frame[offset..][0..4], .little);
+        if (magic == frame_magic_u32) {
+            const end = try findNativeFrameEnd(frame, offset);
+            const frame_bytes = frame[offset..end];
+            const dictionary = try dictionaryForNativeFrame(frame_bytes, dictionary_set);
+            const frame_len = if (dictionary) |dict|
+                try decodedRawOrRleFrameSizeLimitedWithDictionary(frame_bytes, max_output_len - total, dict)
+            else
+                try decodedRawOrRleFrameSizeLimited(frame_bytes, max_output_len - total);
+            total = try checkedAddWithinLimit(total, frame_len, max_output_len);
+            offset = end;
+        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+            offset += 4;
+            if (frame.len - offset < 4) return error.TruncatedFrame;
+            const skip_len: usize = @intCast(std.mem.readInt(u32, frame[offset..][0..4], .little));
+            offset += 4;
+            if (frame.len - offset < skip_len) return error.TruncatedFrame;
+            offset += skip_len;
+        } else {
+            return error.InvalidMagic;
+        }
+    }
+    return total;
+}
+
 pub const decodedRawOrRleFrameSizeLimited = rawOrRleDecodedSizeLimited;
 pub const decodedNativeFrameSize = decodedRawOrRleFrameSize;
 pub const decodedNativeFrameSizeLimited = rawOrRleDecodedSizeLimited;
 pub const decodedNativeFrameSizeWithDictionary = decodedRawOrRleFrameSizeWithDictionary;
 pub const decodedNativeFrameSizeLimitedWithDictionary = decodedRawOrRleFrameSizeLimitedWithDictionary;
+pub const decodedNativeFrameSizeWithDictionarySet = decodedRawOrRleFrameSizeWithDictionarySet;
+pub const decodedNativeFrameSizeLimitedWithDictionarySet = decodedRawOrRleFrameSizeLimitedWithDictionarySet;
 
 /// Decode the raw/RLE Zstandard subset directly into caller-owned storage.
 /// The returned length is the number of bytes written across all concatenated
@@ -516,6 +646,39 @@ pub fn decodeRawOrRleFrameIntoWithDictionary(
     dictionary: NativeDictionary,
 ) Error!usize {
     return try decodeRawOrRleFrameIntoWithDictionaryInternal(frame, output, dictionary);
+}
+
+pub fn decodeRawOrRleFrameIntoWithDictionarySet(
+    frame: []const u8,
+    output: []u8,
+    dictionary_set: NativeDictionarySet,
+) Error!usize {
+    var offset: usize = 0;
+    var written: usize = 0;
+    while (offset < frame.len) {
+        if (frame.len - offset < 4) return error.TruncatedFrame;
+        const magic = std.mem.readInt(u32, frame[offset..][0..4], .little);
+        if (magic == frame_magic_u32) {
+            const end = try findNativeFrameEnd(frame, offset);
+            const frame_bytes = frame[offset..end];
+            const dictionary = try dictionaryForNativeFrame(frame_bytes, dictionary_set);
+            written += if (dictionary) |dict|
+                try decodeRawOrRleFrameIntoWithDictionary(frame_bytes, output[written..], dict)
+            else
+                try decodeRawOrRleFrameInto(frame_bytes, output[written..]);
+            offset = end;
+        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+            offset += 4;
+            if (frame.len - offset < 4) return error.TruncatedFrame;
+            const skip_len: usize = @intCast(std.mem.readInt(u32, frame[offset..][0..4], .little));
+            offset += 4;
+            if (frame.len - offset < skip_len) return error.TruncatedFrame;
+            offset += skip_len;
+        } else {
+            return error.InvalidMagic;
+        }
+    }
+    return written;
 }
 
 fn decodeRawOrRleFrameIntoWithDictionaryInternal(
@@ -554,6 +717,11 @@ pub const decodeNativeFrameAppendWithDictionary = decodeRawOrRleFrameAppendWithD
 pub const decodeNativeFrameAppendLimitedWithDictionary = decodeRawOrRleFrameAppendLimitedWithDictionary;
 pub const decodeNativeFrameAllocLimitedWithDictionary = decodeRawOrRleFrameAllocLimitedWithDictionary;
 pub const decodeNativeFrameIntoWithDictionary = decodeRawOrRleFrameIntoWithDictionary;
+pub const decodeNativeFrameAllocWithDictionarySet = decodeRawOrRleFrameAllocWithDictionarySet;
+pub const decodeNativeFrameAppendWithDictionarySet = decodeRawOrRleFrameAppendWithDictionarySet;
+pub const decodeNativeFrameAppendLimitedWithDictionarySet = decodeRawOrRleFrameAppendLimitedWithDictionarySet;
+pub const decodeNativeFrameAllocLimitedWithDictionarySet = decodeRawOrRleFrameAllocLimitedWithDictionarySet;
+pub const decodeNativeFrameIntoWithDictionarySet = decodeRawOrRleFrameIntoWithDictionarySet;
 pub const decodeNativeConcatenatedFrameAlloc = decodeRawOrRleFrameAlloc;
 pub const decodeNativeConcatenatedFrameAppend = decodeRawOrRleFrameAppend;
 pub const decodeNativeConcatenatedFrameAppendLimited = decodeRawOrRleFrameAppendLimited;
@@ -564,10 +732,17 @@ pub const decodeNativeConcatenatedFrameAppendWithDictionary = decodeRawOrRleFram
 pub const decodeNativeConcatenatedFrameAppendLimitedWithDictionary = decodeRawOrRleFrameAppendLimitedWithDictionary;
 pub const decodeNativeConcatenatedFrameAllocLimitedWithDictionary = decodeRawOrRleFrameAllocLimitedWithDictionary;
 pub const decodeNativeConcatenatedFrameIntoWithDictionary = decodeRawOrRleFrameIntoWithDictionary;
+pub const decodeNativeConcatenatedFrameAllocWithDictionarySet = decodeRawOrRleFrameAllocWithDictionarySet;
+pub const decodeNativeConcatenatedFrameAppendWithDictionarySet = decodeRawOrRleFrameAppendWithDictionarySet;
+pub const decodeNativeConcatenatedFrameAppendLimitedWithDictionarySet = decodeRawOrRleFrameAppendLimitedWithDictionarySet;
+pub const decodeNativeConcatenatedFrameAllocLimitedWithDictionarySet = decodeRawOrRleFrameAllocLimitedWithDictionarySet;
+pub const decodeNativeConcatenatedFrameIntoWithDictionarySet = decodeRawOrRleFrameIntoWithDictionarySet;
 pub const decodedNativeConcatenatedFrameSize = decodedRawOrRleFrameSize;
 pub const decodedNativeConcatenatedFrameSizeLimited = decodedRawOrRleFrameSizeLimited;
 pub const decodedNativeConcatenatedFrameSizeWithDictionary = decodedRawOrRleFrameSizeWithDictionary;
 pub const decodedNativeConcatenatedFrameSizeLimitedWithDictionary = decodedRawOrRleFrameSizeLimitedWithDictionary;
+pub const decodedNativeConcatenatedFrameSizeWithDictionarySet = decodedRawOrRleFrameSizeWithDictionarySet;
+pub const decodedNativeConcatenatedFrameSizeLimitedWithDictionarySet = decodedRawOrRleFrameSizeLimitedWithDictionarySet;
 
 pub const NativeFrameDecoder = struct {
     allocator: std.mem.Allocator,
@@ -590,12 +765,20 @@ pub const NativeFrameDecoder = struct {
         return try decodeRawOrRleFrameAllocWithDictionary(self.allocator, frame, dictionary);
     }
 
+    pub fn decodeAllocWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, dictionary_set: NativeDictionarySet) Error![]u8 {
+        return try decodeRawOrRleFrameAllocWithDictionarySet(self.allocator, frame, dictionary_set);
+    }
+
     pub fn decodeAllocLimited(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize) Error![]u8 {
         return try decodeRawOrRleFrameAllocLimited(self.allocator, frame, max_output_len);
     }
 
     pub fn decodeAllocLimitedWithDictionary(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary: NativeDictionary) Error![]u8 {
         return try decodeRawOrRleFrameAllocLimitedWithDictionary(self.allocator, frame, max_output_len, dictionary);
+    }
+
+    pub fn decodeAllocLimitedWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary_set: NativeDictionarySet) Error![]u8 {
+        return try decodeRawOrRleFrameAllocLimitedWithDictionarySet(self.allocator, frame, max_output_len, dictionary_set);
     }
 
     pub fn decodeScratch(self: *NativeFrameDecoder, frame: []const u8) Error![]const u8 {
@@ -607,6 +790,12 @@ pub const NativeFrameDecoder = struct {
     pub fn decodeScratchWithDictionary(self: *NativeFrameDecoder, frame: []const u8, dictionary: NativeDictionary) Error![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.decodeAppendWithDictionary(&self.scratch, frame, dictionary);
+        return self.scratch.items;
+    }
+
+    pub fn decodeScratchWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, dictionary_set: NativeDictionarySet) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeAppendWithDictionarySet(&self.scratch, frame, dictionary_set);
         return self.scratch.items;
     }
 
@@ -622,12 +811,22 @@ pub const NativeFrameDecoder = struct {
         return self.scratch.items;
     }
 
+    pub fn decodeScratchLimitedWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary_set: NativeDictionarySet) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.decodeAppendLimitedWithDictionarySet(&self.scratch, frame, max_output_len, dictionary_set);
+        return self.scratch.items;
+    }
+
     pub fn decodeAppend(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8) Error!usize {
         return try decodeRawOrRleFrameAppend(self.allocator, out, frame);
     }
 
     pub fn decodeAppendWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary) Error!usize {
         return try decodeRawOrRleFrameAppendWithDictionary(self.allocator, out, frame, dictionary);
+    }
+
+    pub fn decodeAppendWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
+        return try decodeRawOrRleFrameAppendWithDictionarySet(self.allocator, out, frame, dictionary_set);
     }
 
     pub fn decodeAppendLimited(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, max_output_len: usize) Error!usize {
@@ -644,6 +843,16 @@ pub const NativeFrameDecoder = struct {
         return try decodeRawOrRleFrameAppendLimitedWithDictionary(self.allocator, out, frame, max_output_len, dictionary);
     }
 
+    pub fn decodeAppendLimitedWithDictionarySet(
+        self: *NativeFrameDecoder,
+        out: *std.ArrayList(u8),
+        frame: []const u8,
+        max_output_len: usize,
+        dictionary_set: NativeDictionarySet,
+    ) Error!usize {
+        return try decodeRawOrRleFrameAppendLimitedWithDictionarySet(self.allocator, out, frame, max_output_len, dictionary_set);
+    }
+
     pub fn decodeIntoSlice(self: *NativeFrameDecoder, frame: []const u8, output: []u8) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameInto(frame, output);
@@ -652,6 +861,11 @@ pub const NativeFrameDecoder = struct {
     pub fn decodeIntoSliceWithDictionary(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary: NativeDictionary) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameIntoWithDictionary(frame, output, dictionary);
+    }
+
+    pub fn decodeIntoSliceWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameIntoWithDictionarySet(frame, output, dictionary_set);
     }
 
     pub const decodeConcatenatedAlloc = decodeAlloc;
@@ -668,6 +882,13 @@ pub const NativeFrameDecoder = struct {
     pub const decodeConcatenatedAppendWithDictionary = decodeAppendWithDictionary;
     pub const decodeConcatenatedAppendLimitedWithDictionary = decodeAppendLimitedWithDictionary;
     pub const decodeConcatenatedIntoSliceWithDictionary = decodeIntoSliceWithDictionary;
+    pub const decodeConcatenatedAllocWithDictionarySet = decodeAllocWithDictionarySet;
+    pub const decodeConcatenatedAllocLimitedWithDictionarySet = decodeAllocLimitedWithDictionarySet;
+    pub const decodeConcatenatedScratchWithDictionarySet = decodeScratchWithDictionarySet;
+    pub const decodeConcatenatedScratchLimitedWithDictionarySet = decodeScratchLimitedWithDictionarySet;
+    pub const decodeConcatenatedAppendWithDictionarySet = decodeAppendWithDictionarySet;
+    pub const decodeConcatenatedAppendLimitedWithDictionarySet = decodeAppendLimitedWithDictionarySet;
+    pub const decodeConcatenatedIntoSliceWithDictionarySet = decodeIntoSliceWithDictionarySet;
 };
 
 /// Compress a complete Zstandard frame using the reference-compatible libzstd
@@ -1391,6 +1612,12 @@ fn validateNativeDictionary(header: NativeFrameHeader, dictionary: ?NativeDictio
     // this explicit validation path lets callers enforce Dictionary_ID policy
     // without hidden global state.
     return dict.content;
+}
+
+fn dictionaryForNativeFrame(frame: []const u8, dictionary_set: NativeDictionarySet) Error!?NativeDictionary {
+    const header = try inspectNativeFrameHeader(frame);
+    if (header.dictionary_id == 0) return null;
+    return dictionary_set.find(header.dictionary_id) orelse error.NeedDictionary;
 }
 
 fn decodeRawOrRleZstandardFrameInto(
@@ -7252,6 +7479,82 @@ test "zstd native writer uses preset dictionary history" {
     try std.testing.expectEqualSlices(u8, encoded.frame, into[0..into_result.written]);
     try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, into[0 .. into_result.written - 1]));
     try std.testing.expectError(error.NeedDictionary, encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, NativeDictionary.init(0, dict.content)));
+}
+
+test "zstd native concatenated streams select dictionaries by id" {
+    const first_dict = NativeDictionary.init(0x1234, "abcdefghijklmnop");
+    const second_dict = NativeDictionary.init(0x5678, "QRSTUVWXYZabcd1234");
+    const dictionaries = [_]NativeDictionary{ first_dict, second_dict };
+    const dictionary_set = NativeDictionarySet.init(&dictionaries);
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+    const first_payload = "pfx-abcdefghijklmnop-tail";
+    const second_payload = "pfx-QRSTUVWXYZabcd1234-tail";
+    const first = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, first_payload, options, first_dict);
+    defer std.testing.allocator.free(first.frame);
+    const skip = try encodeSkippableFrameAlloc(std.testing.allocator, 5, "zstd-set");
+    defer std.testing.allocator.free(skip);
+    const second = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, second_payload, options, second_dict);
+    defer std.testing.allocator.free(second.frame);
+
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, first.frame);
+    try stream.appendSlice(std.testing.allocator, skip);
+    try stream.appendSlice(std.testing.allocator, second.frame);
+
+    const expected = first_payload ++ second_payload;
+    try std.testing.expectError(error.NeedDictionary, decodeNativeConcatenatedFrameAlloc(std.testing.allocator, stream.items));
+    try std.testing.expectError(error.NeedDictionary, decodeNativeConcatenatedFrameAllocWithDictionary(std.testing.allocator, stream.items, first_dict));
+
+    const first_decoded = try decodeNativeFrameAllocWithDictionarySet(std.testing.allocator, first.frame, dictionary_set);
+    defer std.testing.allocator.free(first_decoded);
+    try std.testing.expectEqualSlices(u8, first_payload, first_decoded);
+    const first_limited = try decodeNativeFrameAllocLimitedWithDictionarySet(std.testing.allocator, first.frame, first_payload.len, dictionary_set);
+    defer std.testing.allocator.free(first_limited);
+    try std.testing.expectEqualSlices(u8, first_payload, first_limited);
+
+    const decoded = try decodeNativeConcatenatedFrameAllocWithDictionarySet(std.testing.allocator, stream.items, dictionary_set);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+    const decoded_limited = try decodeNativeConcatenatedFrameAllocLimitedWithDictionarySet(std.testing.allocator, stream.items, expected.len, dictionary_set);
+    defer std.testing.allocator.free(decoded_limited);
+    try std.testing.expectEqualSlices(u8, expected, decoded_limited);
+    try std.testing.expectEqual(expected.len, try decodedNativeConcatenatedFrameSizeWithDictionarySet(stream.items, dictionary_set));
+    try std.testing.expectEqual(expected.len, try decodedNativeConcatenatedFrameSizeLimitedWithDictionarySet(stream.items, expected.len, dictionary_set));
+    try std.testing.expectError(error.OutputLimitExceeded, decodedNativeConcatenatedFrameSizeLimitedWithDictionarySet(stream.items, expected.len - 1, dictionary_set));
+
+    var into: [expected.len]u8 = undefined;
+    const into_written = try decodeNativeConcatenatedFrameIntoWithDictionarySet(stream.items, &into, dictionary_set);
+    try std.testing.expectEqual(expected.len, into_written);
+    try std.testing.expectEqualSlices(u8, expected, &into);
+    try std.testing.expectError(error.OutputTooSmall, decodeNativeConcatenatedFrameIntoWithDictionarySet(stream.items, into[0 .. into.len - 1], dictionary_set));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(expected.len, try decodeNativeConcatenatedFrameAppendWithDictionarySet(std.testing.allocator, &appended, stream.items, dictionary_set));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ expected, appended.items);
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(expected.len, try decodeNativeConcatenatedFrameAppendLimitedWithDictionarySet(std.testing.allocator, &appended, stream.items, expected.len, dictionary_set));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ expected, appended.items);
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(first_payload.len, try decodeNativeFrameAppendLimitedWithDictionarySet(std.testing.allocator, &appended, first.frame, first_payload.len, dictionary_set));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ first_payload, appended.items);
+
+    var decoder = NativeFrameDecoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    const scratch = try decoder.decodeConcatenatedScratchWithDictionarySet(stream.items, dictionary_set);
+    try std.testing.expectEqualSlices(u8, expected, scratch);
+    const scratch_limited = try decoder.decodeConcatenatedScratchLimitedWithDictionarySet(stream.items, expected.len, dictionary_set);
+    try std.testing.expectEqualSlices(u8, expected, scratch_limited);
+
+    const missing_dictionaries = [_]NativeDictionary{first_dict};
+    try std.testing.expectError(error.NeedDictionary, decodeNativeConcatenatedFrameAllocWithDictionarySet(std.testing.allocator, stream.items, NativeDictionarySet.init(&missing_dictionaries)));
 }
 
 test "zstd native writer mixes dictionary and duplicate matches" {
