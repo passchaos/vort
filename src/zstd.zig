@@ -14,7 +14,7 @@ const initial_repeated_offsets = [3]usize{ 1, 4, 8 };
 const duplicate_hash_bits = 15;
 const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
-const duplicate_hash_candidates = 4;
+const duplicate_hash_candidates = 8;
 const max_bootstrap_sequence_count = 16;
 const max_predefined_sequence_states = 64;
 const repeated_pattern_period_max = 64;
@@ -7982,6 +7982,49 @@ test "zstd literal-only writer finds older large duplicate candidate" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer keeps deeper duplicate hash candidates" {
+    const base = "ABCDEFGH";
+    const colliders = [_][]const u8{
+        "\x28\x8b\x0012345",
+        "\x19\xfb\x0012345",
+        "\x39\xb0\x0112345",
+        "\x2a\x20\x0212345",
+        "\x59\x65\x0212345",
+    };
+    const gap = "0123456789abcdef" ** 64;
+    const filler = "zyxwvutsrqponmlk" ** 16;
+    const tail = "tail-data";
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    try payload.appendSlice(std.testing.allocator, base);
+    for (colliders) |collider| {
+        try payload.appendSlice(std.testing.allocator, gap);
+        try payload.appendSlice(std.testing.allocator, collider);
+    }
+    try payload.appendSlice(std.testing.allocator, filler);
+    try payload.appendSlice(std.testing.allocator, base ++ ("ABCDEFGH" ** 16));
+    try payload.appendSlice(std.testing.allocator, tail);
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload.items);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload.items);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    try std.testing.expectEqual(@as(u24, 2), (block_header >> 1) & 0x3);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    try std.testing.expect(section.sequence_count >= 1);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
 }
 
