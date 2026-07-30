@@ -18,7 +18,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   configurable frame block sizes, linked-block history encoding, encoded-block bounds, decoded-size
   preflight, bounded allocation for single/concatenated streams, bounded
   raw-block and skippable-frame encode-into/decoded-size preflight, inspectable
-  native frame and first-block headers, reusable raw-block decoder, and
+  native frame/block/skippable headers, zero-allocation native stream/block
+  iterators, reusable raw-block decoder, and
   caller-owned encode/decode-into/append plus reusable
   scratch encoder/decoder APIs,
   libzstd-backed Zstandard frame encode/bounded/caller-owned decode with header
@@ -38,8 +39,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   native selection, configurable native block size, optional content
   checksum/content-size header fields, skippable frame append/encode-into writer,
   decoded-size preflight, bounded
-  allocation, and caller-owned encode/decode-into/append plus reusable scratch
-  encoder/decoder API,
+  allocation, zero-allocation native stream/block iterators, and caller-owned
+  encode/decode-into/append plus reusable scratch encoder/decoder API,
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;
@@ -352,9 +353,18 @@ const lz4_blocks = try vort.lz4SummarizeNativeFrameBlocks(lz4_frame);
 _ = lz4_blocks.block_count;
 const lz4_stream = try vort.lz4SummarizeNativeStream(lz4_frame);
 _ = lz4_stream.frame_count;
+var lz4_block_iter = try vort.lz4IterateNativeFrameBlocks(lz4_frame);
+while (try lz4_block_iter.next()) |block| {
+    _ = block.payload_len;
+}
 const lz4_skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 0, "metadata");
 defer allocator.free(lz4_skip);
 _ = try vort.lz4InspectNativeSkippableFrame(lz4_skip);
+var lz4_stream_iter = vort.lz4IterateNativeStream(lz4_skip);
+while (try lz4_stream_iter.next()) |element| switch (element) {
+    .frame => |frame| _ = frame.header.block_size_max,
+    .skippable => |skippable| _ = skippable.payload,
+};
 var lz4_decoder = vort.Lz4NativeFrameDecoder.init(allocator);
 defer lz4_decoder.deinit();
 const lz4_plain = try lz4_decoder.decodeScratch(lz4_frame);
@@ -388,9 +398,18 @@ const zstd_blocks = try vort.zstdSummarizeNativeFrameBlocks(zstd_result.frame);
 _ = zstd_blocks.block_count;
 const zstd_stream = try vort.zstdSummarizeNativeStream(zstd_result.frame);
 _ = zstd_stream.frame_count;
+var zstd_block_iter = try vort.zstdIterateNativeFrameBlocks(zstd_result.frame);
+while (try zstd_block_iter.next()) |block| {
+    _ = block.block_type;
+}
 const zstd_skip = try vort.zstdEncodeSkippableFrameAlloc(allocator, 0, "metadata");
 defer allocator.free(zstd_skip);
 _ = try vort.zstdInspectNativeSkippableFrame(zstd_skip);
+var zstd_stream_iter = vort.zstdIterateNativeStream(zstd_result.frame);
+while (try zstd_stream_iter.next()) |element| switch (element) {
+    .frame => |frame| _ = frame.header.block_size_max,
+    .skippable => |skippable| _ = skippable.payload,
+};
 var zstd_decoder = vort.ZstdNativeFrameDecoder.init(allocator);
 defer zstd_decoder.deinit();
 const zstd_plain = try zstd_decoder.decodeScratch(zstd_result.frame);

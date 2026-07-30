@@ -795,6 +795,124 @@ pub const NativeStreamSummary = struct {
     skippable_payload_bytes: usize = 0,
 };
 
+/// Zero-allocation cursor over a single native LZ4 frame's data blocks.
+/// Returned block offsets are relative to `frame`; when `next()` returns null,
+/// `next_header_offset` points just after the LZ4 end mark and optional content
+/// checksum. Use `NativeStreamIterator` for concatenated streams with
+/// skippable frames instead of passing a whole stream here.
+pub const NativeFrameBlockIterator = struct {
+    frame: []const u8,
+    header: NativeFrameHeader,
+    next_header_offset: usize,
+    end_mark_offset: ?usize = null,
+    finished: bool = false,
+
+    pub fn init(frame: []const u8) Error!NativeFrameBlockIterator {
+        const header = try parseFrameHeader(frame);
+        return .{
+            .frame = frame,
+            .header = header,
+            .next_header_offset = header.payload_offset,
+        };
+    }
+
+    pub fn next(self: *NativeFrameBlockIterator) Error!?NativeFrameBlockHeader {
+        if (self.finished) return null;
+        const header_offset = self.next_header_offset;
+        const block = (try inspectNativeFrameBlockAt(self.frame, header_offset)) orelse {
+            var frame_end = std.math.add(usize, header_offset, 4) catch return error.IntegerOverflow;
+            if (self.header.content_checksum) {
+                if (self.frame.len - frame_end < 4) return error.TruncatedFrame;
+                frame_end += 4;
+            }
+            self.end_mark_offset = header_offset;
+            self.next_header_offset = frame_end;
+            self.finished = true;
+            return null;
+        };
+        self.next_header_offset = block.next_header_offset;
+        return block;
+    }
+};
+
+/// One non-skippable frame discovered inside a concatenated native LZ4 stream.
+pub const NativeStreamFrame = struct {
+    offset: usize,
+    bytes: []const u8,
+    header: NativeFrameHeader,
+
+    pub fn blockIterator(self: NativeStreamFrame) Error!NativeFrameBlockIterator {
+        return try NativeFrameBlockIterator.init(self.bytes);
+    }
+};
+
+/// One skippable frame discovered inside a concatenated native LZ4 stream.
+pub const NativeStreamSkippableFrame = struct {
+    offset: usize,
+    bytes: []const u8,
+    payload: []const u8,
+    header: NativeSkippableFrameHeader,
+};
+
+/// Stream iterator item; all slices borrow from the input passed to
+/// `iterateNativeStream`.
+pub const NativeStreamElement = union(enum) {
+    frame: NativeStreamFrame,
+    skippable: NativeStreamSkippableFrame,
+};
+
+/// Zero-allocation cursor over concatenated native LZ4 frames and skippable
+/// metadata frames. It validates frame boundaries before yielding so callers can
+/// safely slice `bytes`/`payload` without materializing decoded output.
+pub const NativeStreamIterator = struct {
+    frames: []const u8,
+    next_offset: usize = 0,
+
+    pub fn init(frames: []const u8) NativeStreamIterator {
+        return .{ .frames = frames };
+    }
+
+    pub fn next(self: *NativeStreamIterator) Error!?NativeStreamElement {
+        if (self.next_offset >= self.frames.len) return null;
+        if (self.frames.len - self.next_offset < 4) return error.TruncatedFrame;
+
+        const start = self.next_offset;
+        const magic = std.mem.readInt(u32, self.frames[start..][0..4], .little);
+        if (magic == frame_magic_u32) {
+            var end = start;
+            _ = try findFrameEnd(self.frames, &end);
+            const bytes = self.frames[start..end];
+            const header = try parseFrameHeader(bytes);
+            self.next_offset = end;
+            return .{ .frame = .{
+                .offset = start,
+                .bytes = bytes,
+                .header = header,
+            } };
+        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+            const header = try inspectNativeSkippableFrame(self.frames[start..]);
+            const end = start + header.next_frame_offset;
+            self.next_offset = end;
+            return .{ .skippable = .{
+                .offset = start,
+                .bytes = self.frames[start..end],
+                .payload = self.frames[start + header.payload_offset .. end],
+                .header = header,
+            } };
+        } else {
+            return error.CorruptFrame;
+        }
+    }
+};
+
+pub fn iterateNativeFrameBlocks(frame: []const u8) Error!NativeFrameBlockIterator {
+    return try NativeFrameBlockIterator.init(frame);
+}
+
+pub fn iterateNativeStream(frames: []const u8) NativeStreamIterator {
+    return NativeStreamIterator.init(frames);
+}
+
 fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
     if (frame.len < 7) return error.TruncatedFrame;
     if (!std.mem.eql(u8, frame[0..4], &frame_magic)) return error.CorruptFrame;
@@ -2257,6 +2375,18 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     try std.testing.expectEqual(@as(usize, 1), stream_summary.frame_count);
     try std.testing.expectEqual(@as(usize, 0), stream_summary.skippable_frame_count);
     try std.testing.expectEqual(block_summary.block_count, stream_summary.block_count);
+    var block_iterator = try NativeFrameBlockIterator.init(with_options);
+    var iterated_block_count: usize = 0;
+    var iterated_payload_bytes: usize = 0;
+    while (try block_iterator.next()) |block| {
+        iterated_block_count += 1;
+        iterated_payload_bytes += block.payload_len;
+        try std.testing.expect(block.payload_len <= inspected.block_size_max);
+    }
+    try std.testing.expectEqual(block_summary.block_count, iterated_block_count);
+    try std.testing.expectEqual(block_summary.payload_bytes, iterated_payload_bytes);
+    try std.testing.expectEqual(@as(?usize, block_iterator.next_header_offset - 4), block_iterator.end_mark_offset);
+    try std.testing.expectEqual(@as(?NativeFrameBlockHeader, null), try block_iterator.next());
 
     const with_dictionary_id = try encodePureFrameWithOptionsAlloc(
         std.testing.allocator,
@@ -2276,6 +2406,10 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const empty_frame = try encodePureFrameAlloc(std.testing.allocator, "");
     defer std.testing.allocator.free(empty_frame);
     try std.testing.expectEqual(@as(?NativeFrameBlockHeader, null), try inspectNativeFrameFirstBlock(empty_frame));
+    const empty_header = try inspectNativeFrameHeader(empty_frame);
+    var empty_block_iterator = try NativeFrameBlockIterator.init(empty_frame);
+    try std.testing.expectEqual(@as(?NativeFrameBlockHeader, null), try empty_block_iterator.next());
+    try std.testing.expectEqual(@as(?usize, empty_header.payload_offset), empty_block_iterator.end_mark_offset);
 
     const linked = try encodePureFrameWithOptionsAlloc(
         std.testing.allocator,
@@ -2489,6 +2623,38 @@ test "lz4 skippable frame writer composes with concatenated native streams" {
     try std.testing.expectEqual(@as(usize, 2), stream_summary.frame_count);
     try std.testing.expectEqual(@as(usize, 1), stream_summary.skippable_frame_count);
     try std.testing.expectEqual(@as(usize, "metadata".len), stream_summary.skippable_payload_bytes);
+    var stream_iterator = iterateNativeStream(stream.items);
+    const first_element = (try stream_iterator.next()) orelse return error.CorruptFrame;
+    switch (first_element) {
+        .frame => |frame| {
+            try std.testing.expectEqual(@as(usize, 0), frame.offset);
+            try std.testing.expectEqualSlices(u8, first, frame.bytes);
+            var first_blocks = try frame.blockIterator();
+            var first_block_count: usize = 0;
+            while (try first_blocks.next()) |_| first_block_count += 1;
+            try std.testing.expectEqual((try summarizeNativeFrameBlocks(first)).block_count, first_block_count);
+        },
+        .skippable => return error.CorruptFrame,
+    }
+    const skip_element = (try stream_iterator.next()) orelse return error.CorruptFrame;
+    switch (skip_element) {
+        .frame => return error.CorruptFrame,
+        .skippable => |skippable| {
+            try std.testing.expectEqual(first.len, skippable.offset);
+            try std.testing.expectEqualSlices(u8, skip, skippable.bytes);
+            try std.testing.expectEqualSlices(u8, "metadata", skippable.payload);
+            try std.testing.expectEqual(@as(u4, 11), skippable.header.skippable_id);
+        },
+    }
+    const second_element = (try stream_iterator.next()) orelse return error.CorruptFrame;
+    switch (second_element) {
+        .frame => |frame| {
+            try std.testing.expectEqual(first.len + skip.len, frame.offset);
+            try std.testing.expectEqualSlices(u8, second, frame.bytes);
+        },
+        .skippable => return error.CorruptFrame,
+    }
+    try std.testing.expect((try stream_iterator.next()) == null);
     try std.testing.expectEqual(@as(usize, "firstsecond".len), try decodedConcatenatedFrameSize(stream.items));
     var decoded_appended: std.ArrayList(u8) = .empty;
     defer decoded_appended.deinit(std.testing.allocator);

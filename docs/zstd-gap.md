@@ -130,8 +130,10 @@ Current interpretation:
   returning `NeedDictionary` for non-zero IDs; the native writer can emit
   Dictionary_ID fields for downstream container metadata, and callers can inspect
   that frame metadata before decode. The native writer also exposes a block-size
-  option so future latency/ratio sweeps can share the same library
-  API rather than relying on CLI-specific chunking. The probe accepts repeated `--path`
+  option, and the public native stream/block iterators expose zero-allocation
+  frame, block, and skippable-frame inspection so future latency/ratio sweeps can
+  share the same library API rather than relying on CLI-specific chunking. The
+  probe accepts repeated `--path`
   arguments or bounded recursive `--dir` discovery with an optional `--limit`
   for focused file payloads when investigating real corpus failures.
 
