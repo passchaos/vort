@@ -768,6 +768,7 @@ pub const NativeFrameBlockHeader = struct {
     payload_len: usize,
     is_compressed: bool,
     block_checksum_offset: ?usize = null,
+    next_header_offset: usize,
 };
 
 fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
@@ -811,9 +812,9 @@ pub fn inspectNativeFrameHeader(frame: []const u8) Error!NativeFrameHeader {
     return try parseFrameHeader(frame);
 }
 
-pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!?NativeFrameBlockHeader {
+pub fn inspectNativeFrameBlockAt(frame: []const u8, header_offset: usize) Error!?NativeFrameBlockHeader {
     const header = try parseFrameHeader(frame);
-    const header_offset = header.payload_offset;
+    if (header_offset < header.payload_offset) return error.CorruptFrame;
     if (frame.len - header_offset < 4) return error.TruncatedFrame;
     const block_header = std.mem.readInt(u32, frame[header_offset..][0..4], .little);
     if (block_header == 0) return null;
@@ -826,13 +827,20 @@ pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!?NativeFrameBlockHe
         if (frame.len - checksum_offset < 4) return error.TruncatedFrame;
         break :blk checksum_offset;
     } else null;
+    const next_header_offset = payload_offset + payload_len + if (header.block_checksum) @as(usize, 4) else 0;
     return .{
         .header_offset = header_offset,
         .payload_offset = payload_offset,
         .payload_len = payload_len,
         .is_compressed = (block_header & 0x8000_0000) == 0,
         .block_checksum_offset = block_checksum_offset,
+        .next_header_offset = next_header_offset,
     };
+}
+
+pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!?NativeFrameBlockHeader {
+    const header = try parseFrameHeader(frame);
+    return try inspectNativeFrameBlockAt(frame, header.payload_offset);
 }
 
 fn findFrameEnd(frames: []const u8, offset: *usize) Error!usize {
@@ -2152,6 +2160,9 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     try std.testing.expectEqual(inspected.payload_offset + 4, first_block.payload_offset);
     try std.testing.expect(first_block.payload_len <= inspected.block_size_max);
     try std.testing.expectEqual(@as(?usize, first_block.payload_offset + first_block.payload_len), first_block.block_checksum_offset);
+    try std.testing.expectEqual(first_block.payload_offset + first_block.payload_len + 4, first_block.next_header_offset);
+    const first_block_again = (try inspectNativeFrameBlockAt(with_options, first_block.header_offset)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(first_block.next_header_offset, first_block_again.next_header_offset);
 
     const with_dictionary_id = try encodePureFrameWithOptionsAlloc(
         std.testing.allocator,
