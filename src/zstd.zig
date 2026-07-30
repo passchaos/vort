@@ -4774,7 +4774,7 @@ fn duplicateMixedMatchCandidate(block: []const u8, literal_start: usize) Error!?
 
 fn repeatedMixedMatchCandidate(block: []const u8, literal_start: usize) ?MixedMatchCandidate {
     if (findRepeatedPatternSegmentIn(block, literal_start, block.len)) |segment| {
-        if (repeatedPatternPayloadLenFrom(segment, literal_start)) |payload_len| {
+        if (repeatedPatternPayloadLenFrom(block, segment, literal_start)) |payload_len| {
             const literal_len = segment.start - literal_start + segment.period;
             return .{
                 .literal_len = literal_len,
@@ -5141,6 +5141,28 @@ fn multiSequencePayloadLen(
     return std.math.add(usize, len, bitstream_len) catch return error.IntegerOverflow;
 }
 
+fn singleRleSequencePayloadLen(
+    block: []const u8,
+    literal_len: usize,
+    offset: usize,
+    match_len: usize,
+    tail_start: usize,
+) Error!usize {
+    const literal_lens = [_]usize{literal_len};
+    const offsets = [_]usize{offset};
+    const match_lens = [_]usize{match_len};
+    return try rleSequencePayloadLen(
+        block,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        tail_start,
+        try sequenceCodeForValue(literal_len, &ll_base, &ll_bits),
+        try sequenceCodeForValue(offset, &of_base, &of_bits),
+        try sequenceCodeForValue(match_len, &ml_base, &ml_bits),
+    );
+}
+
 fn rleSequencePayloadLen(
     block: []const u8,
     literal_lens: []const usize,
@@ -5428,16 +5450,7 @@ fn dictionaryMatchPayloadLenFrom(
     const literal_len = match.block_start - literal_start;
     const match_offset = dictionaryMatchOffset(dictionary_len, frame_offset, match) catch return null;
     const tail_len = block.len - match.block_start - match.len;
-    const literal_code = sequenceCodeForValue(literal_len, &ll_base, &ll_bits) catch return null;
-    const offset_code = sequenceCodeForValue(match_offset, &of_base, &of_bits) catch return null;
-    const match_code = sequenceCodeForValue(match.len, &ml_base, &ml_bits) catch return null;
-    const regenerated_literals = std.math.add(usize, literal_len, tail_len) catch return null;
-    const bit_count = @as(usize, ll_bits[literal_code]) + ml_bits[match_code] + of_bits[offset_code] + 1;
-    const bitstream_len = (bit_count + 7) / 8;
-    var len = literalsHeaderLen(regenerated_literals) catch return null;
-    len = std.math.add(usize, len, regenerated_literals) catch return null;
-    len = std.math.add(usize, len, 1 + 1 + 3 + bitstream_len) catch return null;
-    return len;
+    return singleRleSequencePayloadLen(block, literal_len, match_offset, match.len, block.len - tail_len) catch null;
 }
 
 fn findBestDuplicateMatch(block: []const u8) Error!?DuplicateMatch {
@@ -5525,33 +5538,14 @@ fn singleMatchPayloadLen(block: []const u8, match: DuplicateMatch) Error!usize {
 fn singleMatchPayloadLenFrom(block: []const u8, match: DuplicateMatch, literal_start: usize) Error!usize {
     const literal_len = match.second_start - literal_start;
     const offset = match.second_start - match.first_start;
-    const tail_len = block.len - match.second_start - match.len;
-    const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
-    const offset_code = try sequenceCodeForValue(offset, &of_base, &of_bits);
-    const match_code = try sequenceCodeForValue(match.len, &ml_base, &ml_bits);
-    const regenerated_literals = std.math.add(usize, literal_len, tail_len) catch return error.IntegerOverflow;
-    const bit_count = @as(usize, ll_bits[literal_code]) + ml_bits[match_code] + of_bits[offset_code] + 1;
-    const bitstream_len = (bit_count + 7) / 8;
-    var len = try literalsHeaderLen(regenerated_literals);
-    len = std.math.add(usize, len, regenerated_literals) catch return error.IntegerOverflow;
-    len = std.math.add(usize, len, 1 + 1 + 3 + bitstream_len) catch return error.IntegerOverflow;
-    return len;
+    return try singleRleSequencePayloadLen(block, literal_len, offset, match.len, match.second_start + match.len);
 }
 
-fn repeatedPatternPayloadLenFrom(segment: RepeatedPatternSegment, literal_start: usize) ?usize {
+fn repeatedPatternPayloadLenFrom(block: []const u8, segment: RepeatedPatternSegment, literal_start: usize) ?usize {
     if (segment.start < literal_start) return null;
     const literal_len = std.math.add(usize, segment.start - literal_start, segment.period) catch return null;
-    const match_len = segment.match_len;
-    const literal_code = sequenceCodeForValue(literal_len, &ll_base, &ll_bits) catch return null;
-    const offset_code = sequenceCodeForValue(segment.period, &of_base, &of_bits) catch return null;
-    const match_code = sequenceCodeForValue(match_len, &ml_base, &ml_bits) catch return null;
-    const regenerated_literals = std.math.add(usize, literal_len, segment.tail_len) catch return null;
-    const bit_count = @as(usize, ll_bits[literal_code]) + ml_bits[match_code] + of_bits[offset_code] + 1;
-    const bitstream_len = (bit_count + 7) / 8;
-    var len = literalsHeaderLen(regenerated_literals) catch return null;
-    len = std.math.add(usize, len, regenerated_literals) catch return null;
-    len = std.math.add(usize, len, 1 + 1 + 3 + bitstream_len) catch return null;
-    return len;
+    const tail_start = std.math.add(usize, segment.start + segment.period, segment.match_len) catch return null;
+    return singleRleSequencePayloadLen(block, literal_len, segment.period, segment.match_len, tail_start) catch null;
 }
 
 fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
@@ -7288,9 +7282,12 @@ test "zstd literal-only writer emits duplicate substring match" {
     _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
     const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
     const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
     var frame_state: SequenceFrameState = .{};
-    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+    const estimated_payload_len = try singleRleSequencePayloadLen(payload, 29, 23, 17, 46);
+    try std.testing.expectEqual(block_len, estimated_payload_len);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
@@ -7807,6 +7804,8 @@ test "zstd literal-only writer keeps two-symbol repeated pattern matches" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+    const estimated_payload_len = try singleRleSequencePayloadLen(payload, 2, 2, payload.len - 2, payload.len);
+    try std.testing.expectEqual(block_len, estimated_payload_len);
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
