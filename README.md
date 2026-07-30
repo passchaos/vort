@@ -366,6 +366,8 @@ var zstd_encoder = vort.ZstdNativeFrameEncoder.init(allocator);
 defer zstd_encoder.deinit();
 const zstd_result = try zstd_encoder.encodeScratch("payload payload", zstd_options);
 _ = zstd_result.mode;
+const zstd_header = try vort.zstdInspectNativeFrameHeader(zstd_result.frame);
+_ = zstd_header.content_size;
 var zstd_decoder = vort.ZstdNativeFrameDecoder.init(allocator);
 defer zstd_decoder.deinit();
 const zstd_plain = try zstd_decoder.decodeScratch(zstd_result.frame);

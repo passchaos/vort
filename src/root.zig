@@ -132,6 +132,8 @@ pub const ZstdNativeFrameEncodeIntoResult = zstd.NativeFrameEncodeIntoResult;
 pub const ZstdNativeFrameEncodeScratchResult = zstd.NativeFrameEncodeScratchResult;
 pub const ZstdNativeFrameEncoder = zstd.NativeFrameEncoder;
 pub const ZstdNativeFrameDecoder = zstd.NativeFrameDecoder;
+pub const ZstdNativeFrameHeader = zstd.NativeFrameHeader;
+pub const zstdInspectNativeFrameHeader = zstd.inspectNativeFrameHeader;
 pub const zstdEncodedNativeFrameBound = zstd.encodedNativeFrameBound;
 pub const zstdEncodedNativeFrameBoundWithOptions = zstd.encodedNativeFrameBoundWithOptions;
 pub const zstdEncodeNativeFrameWithOptionsAlloc = zstd.encodeNativeFrameWithOptionsAlloc;
@@ -793,6 +795,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = ZstdNativeFrameEncodeScratchResult;
     _ = ZstdNativeFrameEncoder;
     _ = ZstdNativeFrameDecoder;
+    _ = ZstdNativeFrameHeader;
+    _ = zstdInspectNativeFrameHeader;
     _ = zstdEncodedNativeFrameBound;
     _ = zstdEncodedNativeFrameBoundWithOptions;
     _ = zstdEncodeNativeFrameWithOptionsAlloc;
