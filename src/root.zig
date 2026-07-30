@@ -1804,6 +1804,17 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     const lz4_decoded = try lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(std.testing.allocator, lz4_stream.items, lz4_dictionary_set);
     defer std.testing.allocator.free(lz4_decoded);
     try std.testing.expectEqualSlices(u8, lz4_expected, lz4_decoded);
+    var lz4_reusable_decoder = Lz4NativeFrameDecoder.init(std.testing.allocator);
+    defer lz4_reusable_decoder.deinit();
+    const lz4_reusable_scratch = try lz4_reusable_decoder.decodeConcatenatedScratchWithDictionarySet(lz4_stream.items, lz4_dictionary_set);
+    try std.testing.expectEqualSlices(u8, lz4_expected, lz4_reusable_scratch);
+    var lz4_reusable_append: std.ArrayList(u8) = .empty;
+    defer lz4_reusable_append.deinit(std.testing.allocator);
+    try lz4_reusable_append.appendSlice(std.testing.allocator, "prefix:");
+    const lz4_reusable_appended = try lz4_reusable_decoder.decodeConcatenatedAppendWithDictionarySet(&lz4_reusable_append, lz4_stream.items, lz4_dictionary_set);
+    try std.testing.expectEqual(lz4_expected.len, lz4_reusable_appended);
+    try std.testing.expectEqualSlices(u8, "prefix:", lz4_reusable_append.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, lz4_expected, lz4_reusable_append.items["prefix:".len..]);
     const lz4_exact_decoded = try lz4DecodeNativeConcatenatedFrameAllocWithDictionarySetExactSize(std.testing.allocator, lz4_stream.items, lz4_dictionary_set, lz4_expected.len);
     defer std.testing.allocator.free(lz4_exact_decoded);
     try std.testing.expectEqualSlices(u8, lz4_expected, lz4_exact_decoded);
@@ -1816,6 +1827,10 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     try std.testing.expectEqual(lz4_expected.len, try lz4DecodedNativeConcatenatedFrameSizeWithDictionarySet(lz4_stream.items, lz4_dictionary_set));
     var lz4_into: [lz4_expected.len]u8 = undefined;
     try std.testing.expectEqual(lz4_expected.len, try lz4DecodeNativeConcatenatedFrameIntoWithDictionarySet(lz4_stream.items, &lz4_into, lz4_dictionary_set));
+    try std.testing.expectEqualSlices(u8, lz4_expected, &lz4_into);
+    @memset(&lz4_into, 0);
+    const lz4_reusable_into = try lz4_reusable_decoder.decodeConcatenatedIntoSliceWithDictionarySet(lz4_stream.items, &lz4_into, lz4_dictionary_set);
+    try std.testing.expectEqual(lz4_expected.len, lz4_reusable_into);
     try std.testing.expectEqualSlices(u8, lz4_expected, &lz4_into);
     const lz4_chunks = [_][]const u8{
         lz4_stream.items[0..5],
@@ -1863,6 +1878,17 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     const zstd_decoded = try zstdDecodeNativeConcatenatedFrameAllocWithDictionarySet(std.testing.allocator, zstd_stream.items, zstd_dictionary_set);
     defer std.testing.allocator.free(zstd_decoded);
     try std.testing.expectEqualSlices(u8, zstd_expected, zstd_decoded);
+    var zstd_reusable_decoder = ZstdNativeFrameDecoder.init(std.testing.allocator);
+    defer zstd_reusable_decoder.deinit();
+    const zstd_reusable_scratch = try zstd_reusable_decoder.decodeConcatenatedScratchWithDictionarySet(zstd_stream.items, zstd_dictionary_set);
+    try std.testing.expectEqualSlices(u8, zstd_expected, zstd_reusable_scratch);
+    var zstd_reusable_append: std.ArrayList(u8) = .empty;
+    defer zstd_reusable_append.deinit(std.testing.allocator);
+    try zstd_reusable_append.appendSlice(std.testing.allocator, "prefix:");
+    const zstd_reusable_appended = try zstd_reusable_decoder.decodeConcatenatedAppendWithDictionarySet(&zstd_reusable_append, zstd_stream.items, zstd_dictionary_set);
+    try std.testing.expectEqual(zstd_expected.len, zstd_reusable_appended);
+    try std.testing.expectEqualSlices(u8, "prefix:", zstd_reusable_append.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, zstd_expected, zstd_reusable_append.items["prefix:".len..]);
     const zstd_exact_decoded = try zstdDecodeNativeConcatenatedFrameAllocWithDictionarySetExactSize(std.testing.allocator, zstd_stream.items, zstd_dictionary_set, zstd_expected.len);
     defer std.testing.allocator.free(zstd_exact_decoded);
     try std.testing.expectEqualSlices(u8, zstd_expected, zstd_exact_decoded);
@@ -1875,6 +1901,10 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     try std.testing.expectEqual(zstd_expected.len, try zstdDecodedNativeConcatenatedFrameSizeWithDictionarySet(zstd_stream.items, zstd_dictionary_set));
     var zstd_into: [zstd_expected.len]u8 = undefined;
     try std.testing.expectEqual(zstd_expected.len, try zstdDecodeNativeConcatenatedFrameIntoWithDictionarySet(zstd_stream.items, &zstd_into, zstd_dictionary_set));
+    try std.testing.expectEqualSlices(u8, zstd_expected, &zstd_into);
+    @memset(&zstd_into, 0);
+    const zstd_reusable_into = try zstd_reusable_decoder.decodeConcatenatedIntoSliceWithDictionarySet(zstd_stream.items, &zstd_into, zstd_dictionary_set);
+    try std.testing.expectEqual(zstd_expected.len, zstd_reusable_into);
     try std.testing.expectEqualSlices(u8, zstd_expected, &zstd_into);
     const zstd_chunks = [_][]const u8{
         zstd_stream.items[0..7],
