@@ -252,6 +252,8 @@ zig build run-huffman-length-report-dashboard
 zig build run-huffman-length-report-dashboard -- --iterations 1000
 zig build run-level-report -- README.md docs/roadmap.md
 zig build run-dictionary-report
+zig build run-native-library-bench
+zig build run-native-library-bench -- --iterations 50
 zig build run-native-dictionary-report
 zig build run-native-dictionary-report -- --path README.md --limit 4096 --dict-len 512
 zig build run-native-dictionary-report -- --path README.md --limit 4096 --dict-len 512 --json zig-out/native-dict.json --markdown zig-out/native-dict.md
