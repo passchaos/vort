@@ -756,6 +756,11 @@ pub const NativeIncrementalFrameDecoder = struct {
         /// draining to caller-owned output chunks. This is a per-frame cap, not
         /// a cap on cumulative output across a concatenated stream.
         max_decoded_buffer_len: usize = std.math.maxInt(usize),
+        /// Optional exact decoded byte count for the whole logical incremental
+        /// stream. When set, `step` reports `SizeMismatch` if decoded data would
+        /// exceed this count and `finish` reports `SizeMismatch` if EOF arrives
+        /// before the count is reached.
+        expected_output_len: ?usize = null,
     };
 
     pub const Snapshot = struct {
@@ -836,9 +841,31 @@ pub const NativeIncrementalFrameDecoder = struct {
         };
     }
 
+    pub fn finish(self: *NativeIncrementalFrameDecoder) Error!void {
+        if (self.frame_scratch.items.len != 0) {
+            self.recordError(.frame, error.TruncatedFrame);
+            return error.TruncatedFrame;
+        }
+        if (self.phase == .output and self.decoded_offset != self.decoded_scratch.items.len) {
+            self.recordError(.output, error.OutputTooSmall);
+            return error.OutputTooSmall;
+        }
+        if (self.options.expected_output_len) |expected| {
+            if (self.output_written != expected) {
+                self.recordError(.output, error.SizeMismatch);
+                return error.SizeMismatch;
+            }
+        }
+        self.phase = .done;
+    }
+
     pub fn step(self: *NativeIncrementalFrameDecoder, input: []const u8, output: []u8) Error!core.StepResult {
         if (self.phase == .done) {
             if (input.len == 0) return .{ .status = .done };
+            if (self.options.expected_output_len != null) {
+                self.recordError(.frame, error.SizeMismatch);
+                return error.SizeMismatch;
+            }
             // Treat fresh input after a completed frame as the next member of a
             // caller-driven concatenated stream.  Cumulative counters are kept
             // intact; `reset()` remains the explicit way to start a new logical
@@ -860,6 +887,12 @@ pub const NativeIncrementalFrameDecoder = struct {
                     const frame_end = (try self.completeFrameAvailable()) orelse {
                         if (self.frame_scratch.items.len == 0 and (input_read != 0 or output_written_step != 0)) {
                             if (input_read < input.len) continue;
+                            if (try self.needMoreInputForExpectedOutput()) {
+                                return .{
+                                    .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                    .status = .need_input,
+                                };
+                            }
                             self.phase = .done;
                             return .{
                                 .progress = .{ .input_read = input_read, .output_written = output_written_step },
@@ -889,6 +922,13 @@ pub const NativeIncrementalFrameDecoder = struct {
                             self.phase = .frame;
                             continue;
                         }
+                        if (try self.needMoreInputForExpectedOutput()) {
+                            self.phase = .frame;
+                            return .{
+                                .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                .status = .need_input,
+                            };
+                        }
                         self.phase = .done;
                         return .{
                             .progress = .{ .input_read = input_read, .output_written = output_written_step },
@@ -901,6 +941,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                             .status = .need_output,
                         };
                     }
+                    try self.ensureDecodedScratchFitsExpected();
                     const n = @min(self.decoded_scratch.items.len - self.decoded_offset, output.len - output_written_step);
                     @memcpy(output[output_written_step..][0..n], self.decoded_scratch.items[self.decoded_offset..][0..n]);
                     self.decoded_offset += n;
@@ -912,6 +953,29 @@ pub const NativeIncrementalFrameDecoder = struct {
                     .status = .done,
                 },
             }
+        }
+    }
+
+    fn needMoreInputForExpectedOutput(self: *NativeIncrementalFrameDecoder) Error!bool {
+        const expected = self.options.expected_output_len orelse return false;
+        if (self.output_written > expected) {
+            self.recordError(.output, error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+        return self.output_written < expected;
+    }
+
+    fn ensureDecodedScratchFitsExpected(self: *NativeIncrementalFrameDecoder) Error!void {
+        const expected = self.options.expected_output_len orelse return;
+        if (self.output_written > expected) {
+            self.recordError(.output, error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+        const remaining_expected = expected - self.output_written;
+        const remaining_decoded = self.decoded_scratch.items.len - self.decoded_offset;
+        if (remaining_decoded > remaining_expected) {
+            self.recordError(.output, error.SizeMismatch);
+            return error.SizeMismatch;
         }
     }
 
@@ -3985,6 +4049,54 @@ test "lz4 native incremental decoder enforces buffer limits" {
     try std.testing.expectEqual(encoded.len, decoded_limited.snapshot().input_received);
     try std.testing.expectEqualSlices(u8, "OutputLimitExceeded", decoded_limited.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "frame", decoded_limited.diagnostics().last_error_phase_name);
+}
+
+test "lz4 native incremental decoder enforces exact output size" {
+    const payload = "exact incremental lz4 payload " ** 3;
+    const encoded = try encodePureFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+    });
+    defer std.testing.allocator.free(encoded);
+
+    var exact = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+    });
+    defer exact.deinit();
+    var output: [payload.len]u8 = undefined;
+    var written: usize = 0;
+    var result = try exact.step(encoded[0 .. encoded.len / 2], output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, result.status);
+    result = try exact.step(encoded[encoded.len / 2 ..], output[0..9]);
+    written += result.progress.output_written;
+    while (result.status != .done) {
+        try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
+        const end = @min(output.len, written + 9);
+        result = try exact.step("", output[written..end]);
+        written += result.progress.output_written;
+    }
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try exact.finish();
+
+    var too_small = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len - 1,
+    });
+    defer too_small.deinit();
+    try std.testing.expectError(error.SizeMismatch, too_small.step(encoded, &output));
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", too_small.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "output", too_small.diagnostics().last_error_phase_name);
+
+    var too_large = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len + 1,
+    });
+    defer too_large.deinit();
+    _ = try too_large.step(encoded, &output);
+    const pending = try too_large.step("", output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, pending.status);
+    try std.testing.expectError(error.SizeMismatch, too_large.finish());
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", too_large.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "output", too_large.diagnostics().last_error_phase_name);
 }
 
 test "lz4 native incremental decoder supports dictionaries" {

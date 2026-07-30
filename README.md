@@ -391,8 +391,10 @@ _ = try lz4_incremental.step(lz4_frame[4..], &lz4_incremental_out);
 var lz4_bounded_incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
     .max_compressed_buffer_len = 1 << 20,
     .max_decoded_buffer_len = 1 << 20,
+    .expected_output_len = "payload payload".len,
 });
 defer lz4_bounded_incremental.deinit();
+// After feeding/draining the final frame, call finish() to validate exact-size EOF.
 const lz4_dict = vort.Lz4NativeDictionary.init(0x1234, "previous lz4 history");
 const lz4_dict_frame = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(
     allocator,
@@ -483,8 +485,10 @@ _ = try zstd_incremental.step(zstd_result.frame[4..], &zstd_incremental_out);
 var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
     .max_compressed_buffer_len = 1 << 20,
     .max_decoded_buffer_len = 1 << 20,
+    .expected_output_len = "payload payload".len,
 });
 defer zstd_bounded_incremental.deinit();
+// After feeding/draining the final frame, call finish() to validate exact-size EOF.
 const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history shared phrase");
 const zstd_dict_frame = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(
     allocator,

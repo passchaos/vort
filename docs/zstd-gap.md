@@ -141,8 +141,9 @@ Current interpretation:
   values. Those facades also expose caller-configured compressed-frame and
   decoded-frame buffer limits so the current whole-frame validation path can
   fail safely with `OutputLimitExceeded` instead of retaining unbounded hostile
-  input, and exact-size allocation variants provide strict SizeMismatch
-  semantics when callers know the expected output length. The
+  input. Exact-size allocation variants and incremental `expected_output_len`
+  plus `finish()` provide strict SizeMismatch semantics when callers know the
+  expected output length. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
