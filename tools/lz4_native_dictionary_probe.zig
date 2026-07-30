@@ -17,6 +17,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkReusableDictionaryApis(init.gpa);
     checked += 1;
+    try checkNoSizeDictionarySetDirectOutput(init.gpa);
+    checked += 1;
 
     try stdout.print("lz4_native_dictionary_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -154,6 +156,48 @@ fn checkReusableDictionaryApis(allocator: std.mem.Allocator) !void {
     const appended_written = try decoder.decodeAppendWithDictionary(&appended, encoded, dict);
     try expect(appended_written == payload.len);
     try expectEqualSlices("prefix:" ++ payload, appended.items);
+}
+
+fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
+    const first_dict = vort.Lz4NativeDictionary.init(0x5151, "abcdefghijklmnop");
+    const second_dict = vort.Lz4NativeDictionary.init(0x5152, "QRSTUVWXYZabcdef");
+    const dictionary_set = vort.Lz4NativeDictionarySet.init(&.{ first_dict, second_dict });
+    const first_payload = "abcdefghijklmnop-nosize-one";
+    const second_payload = "QRSTUVWXYZabcdef-nosize-two";
+    const options: vort.Lz4NativeFrameOptions = .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .block_checksum = true,
+    };
+
+    const first = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, first_payload, options, first_dict);
+    defer allocator.free(first);
+    const second = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, second_payload, options, second_dict);
+    defer allocator.free(second);
+    const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 4, "probe-nosize-set-lz4");
+    defer allocator.free(skip);
+
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(allocator);
+    try stream.appendSlice(allocator, first);
+    try stream.appendSlice(allocator, skip);
+    try stream.appendSlice(allocator, second);
+
+    const expected = first_payload ++ second_payload;
+    var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
+        .expected_output_len = expected.len,
+        .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
+    });
+    defer decoder.deinit();
+    var output: [expected.len]u8 = undefined;
+    const initial = try decoder.step(stream.items, output[0..0]);
+    try expect(initial.status == .need_output);
+    try expectEqualSlices("direct_output", decoder.diagnostics().phase_name);
+    try expect(decoder.snapshot().decoded_len.? == first_payload.len);
+    const done = try decoder.step("", &output);
+    try expect(done.status == .done);
+    try expectEqualSlices(expected, &output);
+    try decoder.finish();
 }
 
 fn expect(ok: bool) !void {
