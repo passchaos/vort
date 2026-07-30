@@ -30,18 +30,21 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   default predefined-sequence compressed-block fallback encode/decode with
   up-to-128-symbol single-/four-stream direct Huffman literal emission
   (including non-4-divisible four-stream splits and treeless repeat trees across
-  blocks), small-depth hash-chain large duplicate plus
-  RLE/predefined-table multi-duplicate, repeated-pattern, and mixed
-  duplicate/repeated match emission with starts scanned up to 32 bytes and
-  periods up to 32 bytes, size-aware dictionary/native-match-vs-Huffman
-  arbitration,
+  blocks), small-depth hash-chain large duplicate plus deeper duplicate
+  candidate retention, RLE/predefined-table multi-duplicate, dictionary,
+  repeated-pattern, and mixed duplicate/repeated/dictionary match emission with
+  starts scanned up to 48 bytes and periods up to 64 bytes, exact
+  RLE/predefined sequence-payload scoring for lookahead, size-aware
+  dictionary/native-match-vs-Huffman arbitration,
   raw-block-cost-aware compressed-block selection
   (falling back to raw/RLE blocks when compressed blocks would expand, for
   broad zstd CLI compatibility), plus deterministic smallest-mode
   native selection, configurable native block size, optional content
   checksum/content-size header fields, skippable frame append/encode-into writer,
   decoded-size preflight, bounded allocation, explicit Dictionary_ID/preset
-  history decode APIs, zero-allocation native stream/block iterators, and
+  history decode APIs, direct-output incremental decode for raw/RLE/compressed
+  native frames (including dictionary, no-content-size, and bounded-history
+  multi-block paths), zero-allocation native stream/block iterators, and
   caller-owned encode/decode-into/append plus reusable scratch encoder/decoder API,
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
