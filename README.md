@@ -250,6 +250,7 @@ zig build run-huffman-length-report-dashboard
 zig build run-huffman-length-report-dashboard -- --iterations 1000
 zig build run-level-report -- README.md docs/roadmap.md
 zig build run-dictionary-report
+zig build run-native-dictionary-report
 zig build run-dictionary-report -- README.md docs/roadmap.md
 zig build run-dictionary-report -- --target 512 README.md docs/roadmap.md
 zig build run-dictionary-deflate-report

@@ -1133,6 +1133,21 @@ pub fn build(b: *std.Build) void {
     const dictionary_report_step = b.step("run-dictionary-report", "Report deterministic dictionary training metadata");
     dictionary_report_step.dependOn(&run_dictionary_report.step);
 
+    const native_dictionary_report_exe = b.addExecutable(.{
+        .name = "vort-native-dictionary-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/native_dictionary_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_native_dictionary_report = b.addRunArtifact(native_dictionary_report_exe);
+    const native_dictionary_report_step = b.step("run-native-dictionary-report", "Report native LZ4/Zstd dictionary encoding savings");
+    native_dictionary_report_step.dependOn(&run_native_dictionary_report.step);
+
     const dictionary_decode_bench_exe = b.addExecutable(.{
         .name = "vort-dictionary-decode-bench",
         .root_module = b.createModule(.{
@@ -1803,6 +1818,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&gzip_diff_exe.step);
     check_step.dependOn(&compression_report_exe.step);
     check_step.dependOn(&dictionary_report_exe.step);
+    check_step.dependOn(&native_dictionary_report_exe.step);
     check_step.dependOn(&dictionary_deflate_report_exe.step);
     check_step.dependOn(&dictionary_decode_bench_exe.step);
     check_step.dependOn(&level_report_exe.step);
