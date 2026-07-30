@@ -31,8 +31,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   up-to-128-symbol single-/four-stream direct Huffman literal emission
   (including non-4-divisible four-stream splits and treeless repeat trees across
   blocks), small-depth hash-chain large duplicate plus
-  RLE/predefined-table multi-duplicate and repeated-pattern match emission
-  with starts scanned up to 32 bytes and periods up to 32 bytes,
+  RLE/predefined-table multi-duplicate, repeated-pattern, and mixed
+  duplicate/repeated match emission with starts scanned up to 32 bytes and
+  periods up to 32 bytes, size-aware match-vs-Huffman arbitration,
   raw-block-cost-aware compressed-block selection
   (falling back to raw/RLE blocks when compressed blocks would expand, for
   broad zstd CLI compatibility), plus deterministic smallest-mode

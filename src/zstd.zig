@@ -3660,11 +3660,25 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
             return;
         }
     }
-    if (try emitSmallHuffmanLiteralBlock(allocator, out, block, last, state)) return;
+    var huffman_state = state.*;
+    var huffman_block: std.ArrayList(u8) = .empty;
+    defer huffman_block.deinit(allocator);
+    const huffman_ok = try emitSmallHuffmanLiteralBlock(allocator, &huffman_block, block, last, &huffman_state);
+
+    var match_block: std.ArrayList(u8) = .empty;
+    defer match_block.deinit(allocator);
+    const match_ok = try emitNativeMatchCompressedBlock(allocator, &match_block, block, last);
+
+    if (huffman_ok and (!match_ok or huffman_block.items.len <= match_block.items.len)) {
+        try out.appendSlice(allocator, huffman_block.items);
+        state.* = huffman_state;
+        return;
+    }
     state.previous_huffman_plan = null;
-    if (try emitRepeatedPatternCompressedBlock(allocator, out, block, last)) return;
-    if (try emitMultiDuplicateMatchCompressedBlock(allocator, out, block, last)) return;
-    if (try emitSingleMatchCompressedBlock(allocator, out, block, last)) return;
+    if (match_ok) {
+        try out.appendSlice(allocator, match_block.items);
+        return;
+    }
 
     const literal_kind: LiteralsKind = if (rleByte(block) != null) .rle else .raw;
     const literal_payload_len: usize = switch (literal_kind) {
@@ -3698,6 +3712,13 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     try payload.append(allocator, 0); // sequence_count=0: the compressed block is literals-only.
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
+}
+
+fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
+    if (try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, out, block, last)) return true;
+    if (try emitRepeatedPatternCompressedBlock(allocator, out, block, last)) return true;
+    if (try emitMultiDuplicateMatchCompressedBlock(allocator, out, block, last)) return true;
+    return try emitSingleMatchCompressedBlock(allocator, out, block, last);
 }
 
 fn emitDictionaryMatchCompressedBlock(
@@ -3800,6 +3821,72 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
         literal_ends[0..count],
         literal_start,
     );
+}
+
+fn emitMixedDuplicateRepeatedMatchCompressedBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+) Error!bool {
+    var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
+    var offsets: [max_bootstrap_sequence_count]usize = undefined;
+    var match_lens: [max_bootstrap_sequence_count]usize = undefined;
+    var literal_ends: [max_bootstrap_sequence_count]usize = undefined;
+    var count: usize = 0;
+    var literal_start: usize = 0;
+    var has_duplicate_match = false;
+    var has_repeated_match = false;
+
+    while (count < max_bootstrap_sequence_count and literal_start < block.len) {
+        const candidate = try bestMixedDuplicateRepeatedCandidate(block, literal_start) orelse break;
+        literal_lens[count] = candidate.literal_len;
+        offsets[count] = candidate.offset;
+        match_lens[count] = candidate.match_len;
+        literal_ends[count] = candidate.literal_end;
+        literal_start = candidate.literal_end;
+        has_duplicate_match = has_duplicate_match or candidate.kind == .duplicate;
+        has_repeated_match = has_repeated_match or candidate.kind == .repeated;
+        count += 1;
+    }
+
+    if (count < 2 or !has_duplicate_match or !has_repeated_match) return false;
+    return try emitMultiSequencePredefinedCompressedBlock(
+        allocator,
+        out,
+        block,
+        last,
+        literal_lens[0..count],
+        offsets[0..count],
+        match_lens[0..count],
+        literal_ends[0..count],
+        literal_start,
+    );
+}
+
+fn bestMixedDuplicateRepeatedCandidate(block: []const u8, literal_start: usize) Error!?MixedMatchCandidate {
+    var candidates: [2]MixedMatchCandidate = undefined;
+    var candidate_count: usize = 0;
+
+    if (try duplicateMixedMatchCandidate(block, literal_start)) |candidate| {
+        candidates[candidate_count] = candidate;
+        candidate_count += 1;
+    }
+    if (repeatedMixedMatchCandidate(block, literal_start)) |candidate| {
+        candidates[candidate_count] = candidate;
+        candidate_count += 1;
+    }
+
+    var best: ?MixedMatchCandidate = null;
+    var best_score: usize = std.math.maxInt(usize);
+    for (candidates[0..candidate_count]) |candidate| {
+        const score = try mixedCandidateLookaheadPayloadLen(&.{}, block, 0, candidate) orelse candidate.payload_len;
+        if (score < best_score or (score == best_score and mixedMatchCandidateBetter(candidate, best))) {
+            best = candidate;
+            best_score = score;
+        }
+    }
+    return best;
 }
 
 fn dictionaryMixedMatchCandidate(
@@ -6351,6 +6438,50 @@ test "zstd literal-only writer emits duplicate substring match" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer mixes duplicate and repeated-pattern matches" {
+    const phrase = "abcdefghijklmnop012345";
+    const payload = "pfx-" ++ phrase ++ "-mid-" ++ phrase ++ "-repeat-" ++ ("ab" ** 80) ++ "-tail";
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    try std.testing.expect(section.sequence_count >= 2);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer chooses duplicate matches over larger Huffman literals" {
+    const phrase = "abcdefghijklmno0123456789";
+    const payload = "prefix-" ++ phrase ++ "-middle-" ++ phrase ++ "-suffix-" ++ ("pqrs" ** 8);
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    try std.testing.expect(section.sequence_count >= 1);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
