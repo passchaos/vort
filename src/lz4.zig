@@ -744,10 +744,12 @@ pub const NativeIncrementalFrameDecoder = struct {
     direct_payload_read: usize = 0,
     direct_block_compressed: bool = false,
     direct_block_independent: bool = true,
+    direct_block_uses_dictionary_prefix: bool = false,
     direct_block_decoded_len: usize = 0,
     direct_block_decoded_lens: std.ArrayList(usize) = .empty,
     direct_block_index: usize = 0,
     direct_frame_output_start: usize = 0,
+    direct_dictionary_history: []const u8 = &.{},
     direct_next_block_header_offset: usize = 0,
     direct_decoded_len: usize = 0,
     direct_decoded_read: usize = 0,
@@ -1030,27 +1032,36 @@ pub const NativeIncrementalFrameDecoder = struct {
                             try self.fallbackDirectOutputToScratch();
                             continue;
                         }
-                        const call_output_base = self.output_written - output_written_step;
-                        const history_start = if (self.direct_block_independent)
-                            output_written_step
-                        else if (self.direct_frame_output_start >= call_output_base)
-                            self.direct_frame_output_start - call_output_base
-                        else {
-                            // Linked LZ4 blocks may reference bytes emitted by
-                            // previous blocks in the same frame.  The direct
-                            // buffer decoder can only see history that was
-                            // produced earlier in this same `step()` output
-                            // slice; when a caller drains the frame across
-                            // multiple output buffers, switch to the scratch
-                            // decoder and resume after the bytes already
-                            // returned to the caller.
-                            try self.fallbackDirectOutputToScratch();
-                            continue;
-                        };
                         const source = self.frame_scratch.items[self.direct_payload_offset..][0..self.direct_payload_len];
-                        var written_abs = output_written_step;
-                        try decodeBlockIntoBuffer(source, output, &written_abs, self.direct_block_decoded_len, history_start);
-                        const written = written_abs - output_written_step;
+                        const written = if (self.direct_block_uses_dictionary_prefix) written: {
+                            break :written try decodeBlockWithPrefixIntoSliceNoAlloc(
+                                source,
+                                output[output_written_step..][0..self.direct_block_decoded_len],
+                                self.direct_block_decoded_len,
+                                self.direct_dictionary_history,
+                            );
+                        } else written: {
+                            const call_output_base = self.output_written - output_written_step;
+                            const history_start = if (self.direct_block_independent)
+                                output_written_step
+                            else if (self.direct_frame_output_start >= call_output_base)
+                                self.direct_frame_output_start - call_output_base
+                            else {
+                                // Linked LZ4 blocks may reference bytes emitted by
+                                // previous blocks in the same frame.  The direct
+                                // buffer decoder can only see history that was
+                                // produced earlier in this same `step()` output
+                                // slice; when a caller drains the frame across
+                                // multiple output buffers, switch to the scratch
+                                // decoder and resume after the bytes already
+                                // returned to the caller.
+                                try self.fallbackDirectOutputToScratch();
+                                continue;
+                            };
+                            var written_abs = output_written_step;
+                            try decodeBlockIntoBuffer(source, output, &written_abs, self.direct_block_decoded_len, history_start);
+                            break :written written_abs - output_written_step;
+                        };
                         if (written != self.direct_block_decoded_len) return error.SizeMismatch;
                         if (self.direct_content_checksum) self.direct_content_hasher.update(output[output_written_step..][0..written]);
                         self.direct_payload_read = self.direct_payload_len;
@@ -1082,10 +1093,12 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_payload_read = 0;
         self.direct_block_compressed = false;
         self.direct_block_independent = true;
+        self.direct_block_uses_dictionary_prefix = false;
         self.direct_block_decoded_len = 0;
         self.direct_block_decoded_lens.clearRetainingCapacity();
         self.direct_block_index = 0;
         self.direct_frame_output_start = 0;
+        self.direct_dictionary_history = &.{};
         self.direct_next_block_header_offset = 0;
         self.direct_decoded_len = 0;
         self.direct_decoded_read = 0;
@@ -1215,12 +1228,16 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     fn beginDirectOutputIfSupported(self: *NativeIncrementalFrameDecoder, frame_end: usize) Error!bool {
-        if (self.dictionary != null or self.dictionary_set != null) return false;
         const frame = self.frame_scratch.items[0..frame_end];
         const header = try parseFrameHeader(frame);
-        if (header.dictionary_id) |id| {
-            if (id != 0) return false;
-        }
+        const dictionary_history = self.resolveDirectDictionaryHistory(header) catch |err| switch (err) {
+            // Keep dictionary policy and diagnostics identical to the scratch
+            // decoder. Direct output is only an optimization; if the caller has
+            // not provided the required preset dictionary, let the normal frame
+            // path record `NeedDictionary` in the frame phase.
+            error.NeedDictionary => return false,
+            else => return err,
+        };
         const expected_size = header.expected_content_size orelse return false;
         const expected_len = try checkedU64ToUsize(expected_size);
         if (expected_len > self.options.max_decoded_buffer_len) {
@@ -1251,8 +1268,11 @@ pub const NativeIncrementalFrameDecoder = struct {
             if (frame.len - offset < block_len) return error.TruncatedFrame;
             const payload = frame[offset..][0..block_len];
             if (!uncompressed_block) any_block_compressed = true;
+            const block_uses_dictionary = !uncompressed_block and dictionary_history.len != 0 and (header.block_independent or block_count == 0);
             const decoded_block_len = if (uncompressed_block)
                 block_len
+            else if (block_uses_dictionary)
+                try decodedBlockSizeWithPrefixLimited(payload, dictionary_history, expected_len - total)
             else if (header.block_independent)
                 try compressedBlockDecodedSizeLimited(payload, 0, expected_len)
             else decoded: {
@@ -1303,11 +1323,13 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_payload_read = 0;
         self.direct_block_compressed = first_block_compressed;
         self.direct_block_independent = header.block_independent;
+        self.direct_block_uses_dictionary_prefix = first_block_compressed and dictionary_history.len != 0;
         self.direct_block_decoded_len = first_block_decoded_len;
         self.direct_block_decoded_lens.clearRetainingCapacity();
         try self.direct_block_decoded_lens.appendSlice(self.allocator, decoded_lens.items);
         self.direct_block_index = 0;
         self.direct_frame_output_start = self.output_written;
+        self.direct_dictionary_history = dictionary_history;
         self.direct_next_block_header_offset = first_next_header;
         self.direct_decoded_len = expected_len;
         self.direct_decoded_read = 0;
@@ -1317,6 +1339,17 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_expected_content_checksum = expected_content_checksum;
         self.direct_frame_len = frame_end;
         return true;
+    }
+
+    fn resolveDirectDictionaryHistory(self: *const NativeIncrementalFrameDecoder, header: NativeFrameHeader) Error![]const u8 {
+        const id = header.dictionary_id orelse return &.{};
+        if (id == 0) return &.{};
+        if (self.dictionary_set) |dictionary_set| {
+            const dictionary = dictionary_set.find(id) orelse return error.NeedDictionary;
+            return dictionary.content;
+        }
+        const dictionary = self.dictionary orelse return error.NeedDictionary;
+        return try validateNativeDictionary(header, dictionary);
     }
 
     fn advanceDirectOutputBlock(self: *NativeIncrementalFrameDecoder) Error!void {
@@ -1335,6 +1368,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_block_index += 1;
         if (self.direct_block_index >= self.direct_block_decoded_lens.items.len) return error.CorruptFrame;
         self.direct_block_decoded_len = self.direct_block_decoded_lens.items[self.direct_block_index];
+        self.direct_block_uses_dictionary_prefix =
+            self.direct_block_compressed and
+            self.direct_dictionary_history.len != 0 and
+            (self.direct_block_independent or self.direct_block_index == 0);
         offset += block_len;
         if (self.direct_block_checksum) {
             if (self.frame_scratch.items.len - offset < 4) return error.TruncatedFrame;
@@ -4933,6 +4970,53 @@ test "lz4 native incremental decoder supports dictionaries" {
     try std.testing.expectEqualSlices(u8, "frame", diagnostics.last_error_phase_name);
 }
 
+test "lz4 native incremental decoder streams dictionary compressed blocks directly" {
+    const dict = NativeDictionary.init(0x4449_4355, "abcdefghijklmnop");
+    const payload = "abcdefghijklmnop-tail";
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{
+        .content_checksum = true,
+        .block_checksum = true,
+    }, dict);
+    defer std.testing.allocator.free(encoded);
+    const first_block = (try inspectNativeFrameFirstBlock(encoded)) orelse return error.CorruptFrame;
+    try std.testing.expect(first_block.is_compressed);
+
+    var decoder = NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, dict, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    const initial = try decoder.step(encoded, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+    const decoded = try decoder.step("", &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, decoded.status);
+    try std.testing.expectEqual(payload.len, decoded.progress.output_written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+
+    var corrupt = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(corrupt);
+    corrupt[corrupt.len - 1] ^= 0x01;
+    var bad = NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, dict, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer bad.deinit();
+    const bad_initial = try bad.step(corrupt, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, bad_initial.status);
+    try std.testing.expectError(error.ChecksumMismatch, bad.step("", &output));
+    try std.testing.expectEqualSlices(u8, "ChecksumMismatch", bad.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "direct_output", bad.diagnostics().last_error_phase_name);
+
+    var missing = NativeIncrementalFrameDecoder.init(std.testing.allocator);
+    defer missing.deinit();
+    try std.testing.expectError(error.NeedDictionary, missing.step(encoded, output[0..0]));
+    try std.testing.expectEqualSlices(u8, "NeedDictionary", missing.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", missing.diagnostics().last_error_phase_name);
+}
+
 test "lz4 native frame uses preset dictionary history" {
     const dict = NativeDictionary.init(0x1234_abcd, "abcdefghijklmnop");
     const payload = "abcdefghijklmnop-tail";
@@ -5153,6 +5237,23 @@ test "lz4 native concatenated streams select dictionaries by id" {
     try std.testing.expectEqualSlices(u8, expected, reusable_exact_decoded);
     const scratch_limited = try decoder.decodeConcatenatedScratchLimitedWithDictionarySet(stream.items, expected.len, dictionary_set);
     try std.testing.expectEqualSlices(u8, expected, scratch_limited);
+
+    var direct_incremental = NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, dictionary_set, .{
+        .expected_output_len = expected.len,
+        .max_compressed_buffer_len = stream.items.len,
+        .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
+    });
+    defer direct_incremental.deinit();
+    var direct_out: [expected.len]u8 = undefined;
+    const direct_initial = try direct_incremental.step(stream.items, direct_out[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, direct_initial.status);
+    try std.testing.expectEqual(stream.items.len, direct_initial.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), direct_incremental.decoded_scratch.items.len);
+    const direct_done = try direct_incremental.step("", &direct_out);
+    try std.testing.expectEqual(core.StepResult.Status.done, direct_done.status);
+    try std.testing.expectEqual(expected.len, direct_done.progress.output_written);
+    try std.testing.expectEqualSlices(u8, expected, &direct_out);
+    try std.testing.expectEqual(@as(usize, 0), direct_incremental.decoded_scratch.items.len);
 
     var incremental = NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, dictionary_set, .{
         .max_compressed_buffer_len = stream.items.len,
