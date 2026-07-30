@@ -742,14 +742,17 @@ fn concatenatedFrameDecodedSizeLimited(frames: []const u8, max_output_len: usize
     return total;
 }
 
-const FrameHeader = struct {
+pub const NativeFrameHeader = struct {
     payload_offset: usize,
     block_size_max: usize,
     block_independent: bool,
     block_checksum: bool,
     content_checksum: bool,
     expected_content_size: ?u64,
+    dictionary_id: ?u32 = null,
 };
+
+const FrameHeader = NativeFrameHeader;
 
 fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
     if (frame.len < 7) return error.TruncatedFrame;
@@ -767,10 +770,12 @@ fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
         offset += 8;
         break :blk value;
     } else null;
-    if ((flg & 0x01) != 0) {
+    const dictionary_id: ?u32 = if ((flg & 0x01) != 0) blk: {
         if (frame.len - offset < 4) return error.TruncatedFrame;
+        const value = std.mem.readInt(u32, frame[offset..][0..4], .little);
         offset += 4;
-    }
+        break :blk value;
+    } else null;
     if (offset >= frame.len) return error.TruncatedFrame;
     if (frame[offset] != descriptorChecksum(frame[4..offset])) return error.ChecksumMismatch;
     offset += 1;
@@ -782,7 +787,12 @@ fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
         .block_checksum = (flg & 0x10) != 0,
         .content_checksum = (flg & 0x04) != 0,
         .expected_content_size = expected_content_size,
+        .dictionary_id = dictionary_id,
     };
+}
+
+pub fn inspectNativeFrameHeader(frame: []const u8) Error!NativeFrameHeader {
+    return try parseFrameHeader(frame);
 }
 
 fn findFrameEnd(frames: []const u8, offset: *usize) Error!usize {
@@ -2084,6 +2094,13 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const with_options_decoded = try decodeNativeFrameAlloc(std.testing.allocator, with_options);
     defer std.testing.allocator.free(with_options_decoded);
     try std.testing.expectEqualSlices(u8, repeated, with_options_decoded);
+    const inspected = try inspectNativeFrameHeader(with_options);
+    try std.testing.expectEqual(@as(?u64, null), inspected.expected_content_size);
+    try std.testing.expectEqual(true, inspected.block_independent);
+    try std.testing.expectEqual(true, inspected.block_checksum);
+    try std.testing.expectEqual(false, inspected.content_checksum);
+    try std.testing.expectEqual(@as(?u32, null), inspected.dictionary_id);
+    try std.testing.expectEqual(max_frame_block_len, inspected.block_size_max);
 
     const linked = try encodePureFrameWithOptionsAlloc(
         std.testing.allocator,
