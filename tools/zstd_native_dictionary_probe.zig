@@ -44,8 +44,8 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
-    const dict = vort.ZstdNativeDictionary.init(0x4433_2211, "abcdefghijklmnop");
-    const payload = "prefix-abcdefghijklmnop-tail";
+    const dict = vort.ZstdNativeDictionary.init(0x4433_2211, "abcdefghijklmnopQRSTUVWXYZabcd");
+    const payload = "pfx-abcdefghijklmnop-mid-QRSTUVWXYZabcd-tail";
     const options: vort.ZstdNativeFrameOptions = .{
         .selection = .literal_only,
         .content_checksum = false,

@@ -415,10 +415,10 @@ var zstd_decoder = vort.ZstdNativeFrameDecoder.init(allocator);
 defer zstd_decoder.deinit();
 const zstd_plain = try zstd_decoder.decodeScratch(zstd_result.frame);
 _ = zstd_plain;
-const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history");
+const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history shared phrase");
 const zstd_dict_frame = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(
     allocator,
-    "prefix: previous zstd history payload",
+    "prefix: previous zstd history payload, shared phrase tail",
     .{ .selection = .literal_only },
     zstd_dict,
 );
