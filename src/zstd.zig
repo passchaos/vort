@@ -1407,12 +1407,15 @@ pub const NativeIncrementalFrameDecoder = struct {
             error.NeedDictionary => return false,
             else => return err,
         };
-        const expected_size = header.content_size orelse return false;
-        const expected_len = try checkedU64ToUsize(expected_size);
-        if (expected_len > self.options.max_decoded_buffer_len) {
-            self.recordError(.frame, error.OutputLimitExceeded);
-            return error.OutputLimitExceeded;
-        }
+        const expected_len: ?usize = if (header.content_size) |size| blk: {
+            const len = try checkedU64ToUsize(size);
+            if (len > self.options.max_decoded_buffer_len) {
+                self.recordError(.frame, error.OutputLimitExceeded);
+                return error.OutputLimitExceeded;
+            }
+            break :blk len;
+        } else null;
+        const direct_limit = expected_len orelse self.options.max_decoded_buffer_len;
 
         var offset = header.payload_offset;
         var first_payload_offset: usize = 0;
@@ -1444,7 +1447,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                 const initial_history_len = std.math.add(usize, dictionary_history.len, total) catch return error.IntegerOverflow;
                 break :blk try compressedLiteralOnlyBlockDecodedSize(payload, header.block_size_max, initial_history_len, &preflight_state);
             } else block_len;
-            total = try checkedAddWithinLimit(total, decoded_block_len, expected_len);
+            total = try checkedAddWithinLimit(total, decoded_block_len, direct_limit);
             if (block_count == 0) {
                 first_payload_offset = offset;
                 first_payload_len = block_len;
@@ -1483,7 +1486,9 @@ pub const NativeIncrementalFrameDecoder = struct {
             offset += 4;
         }
         if (offset != frame_end) return false;
-        if (total != expected_len) return false;
+        if (expected_len) |len| {
+            if (total != len) return false;
+        }
 
         self.decoded_scratch.clearRetainingCapacity();
         self.decoded_offset = 0;
@@ -1495,7 +1500,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_block_compressed = first_block_compressed;
         self.direct_block_decoded_len = first_block_decoded_len;
         self.direct_block_size_max = header.block_size_max;
-        const frame_history_window = @min(expected_len, try checkedU64ToUsize(header.window_size));
+        const frame_history_window = @min(total, try checkedU64ToUsize(header.window_size));
         self.direct_history_window_len = std.math.add(usize, dictionary_history.len, frame_history_window) catch return error.IntegerOverflow;
         self.direct_history.clearRetainingCapacity();
         try self.rememberDirectOutput(dictionary_history);
@@ -1503,7 +1508,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_dictionary_history = dictionary_history;
         self.direct_sequence_state = .{};
         self.direct_next_block_header_offset = first_next_header;
-        self.direct_decoded_len = expected_len;
+        self.direct_decoded_len = total;
         self.direct_decoded_read = 0;
         self.direct_content_checksum = header.has_checksum;
         self.direct_content_hasher = std.hash.XxHash64.init(0);
@@ -8501,6 +8506,48 @@ test "zstd native incremental decoder streams single compressed block without de
     corrupt[corrupt.len - 1] ^= 0x01;
     var bad = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer bad.deinit();
+    const bad_initial = try bad.step(corrupt, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, bad_initial.status);
+    try std.testing.expectError(error.ChecksumMismatch, bad.step("", &output));
+    try std.testing.expectEqualSlices(u8, "ChecksumMismatch", bad.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "direct_output", bad.diagnostics().last_error_phase_name);
+}
+
+test "zstd native incremental decoder streams no-size compressed frame directly" {
+    const payload = ("zstd-nosize-direct" ** 8) ** 64;
+    const encoded = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .include_content_size = false,
+        .selection = .literal_only,
+        .content_checksum = true,
+    });
+    defer std.testing.allocator.free(encoded.frame);
+    const header = try inspectNativeFrameHeader(encoded.frame);
+    try std.testing.expectEqual(@as(?u64, null), header.content_size);
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    const initial = try decoder.step(encoded.frame, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
+    try std.testing.expectEqual(@as(?usize, payload.len), decoder.snapshot().decoded_len);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+    const decoded = try decoder.step("", &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, decoded.status);
+    try std.testing.expectEqual(payload.len, decoded.progress.output_written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+
+    var corrupt = try std.testing.allocator.dupe(u8, encoded.frame);
+    defer std.testing.allocator.free(corrupt);
+    corrupt[corrupt.len - 1] ^= 0x01;
+    var bad = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .max_decoded_buffer_len = payload.len,
     });
     defer bad.deinit();

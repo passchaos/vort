@@ -147,21 +147,25 @@ Current interpretation:
   beyond the whole-frame facade with a direct-output path for raw linked or
   independent blocks plus independent and linked compressed blocks with
   block/content checksum verification when the caller supplies one contiguous
-  frame output buffer. Frames whose Dictionary_ID resolves through the explicit
-  dictionary or dictionary-set incremental constructors can also stream
-  dictionary-backed compressed blocks directly. Linked compressed drains now
-  keep a bounded 64 KiB direct history window, so caller output chunks that
-  split frame history can continue without the whole-frame scratch fallback.
+  frame output buffer. Frames without an embedded content size can also use
+  direct output when callers provide `max_decoded_buffer_len` as the preflight
+  cap. Frames whose Dictionary_ID resolves through the explicit dictionary or
+  dictionary-set incremental constructors can stream dictionary-backed
+  compressed blocks directly. Linked compressed drains now keep a bounded 64
+  KiB direct history window, so caller output chunks that split frame history
+  can continue without the whole-frame scratch fallback.
   Zstd native incremental decoding now
   has matching direct-output slices for raw/RLE blocks and compressed native
   blocks, including multi-block frames whose later compressed blocks reuse
   sequence tables/repeated offsets from earlier compressed blocks and frames
   whose Dictionary_ID resolves through the explicit dictionary or dictionary-set
   incremental constructors; content checksum validation runs on the direct path.
-  The direct path keeps a bounded history window, so multi-block sequence
-  matches can continue across caller output chunks without falling back solely
-  because earlier frame bytes are no longer in the current output slice. When
-  caller output is too small for the next compressed block, the direct path
+  Frames without an embedded content size can use the same direct path when
+  callers provide `max_decoded_buffer_len` as a safe preflight cap. The direct
+  path keeps a bounded history window, so multi-block sequence matches can
+  continue across caller output chunks without falling back solely because
+  earlier frame bytes are no longer in the current output slice. When caller
+  output is too small for the next compressed block, the direct path
   intentionally falls back to the whole-frame scratch facade only if it cannot
   first return existing progress as `need_output`. The
   native writer can emit Dictionary_ID fields for downstream
