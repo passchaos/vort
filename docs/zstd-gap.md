@@ -148,9 +148,9 @@ Current interpretation:
   independent blocks plus independent compressed blocks with block/content
   checksum verification; linked compressed block-by-block paths remain open.
   Zstd native incremental decoding now
-  has matching direct-output slices for raw/RLE blocks with content checksum
-  validation and single compressed blocks without content checksum; broader
-  compressed Zstd frames still use the whole-frame facade. When caller output
+  has matching direct-output slices for raw/RLE blocks and single compressed
+  blocks with content checksum validation; broader compressed Zstd frames still
+  use the whole-frame facade. When caller output
   is too small for that single compressed block, the direct path intentionally
   falls back to the whole-frame scratch facade instead of repeatedly returning
   zero-progress `need_output`. The

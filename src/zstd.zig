@@ -911,6 +911,9 @@ pub const NativeIncrementalFrameDecoder = struct {
     direct_next_block_header_offset: usize = 0,
     direct_decoded_len: usize = 0,
     direct_decoded_read: usize = 0,
+    direct_content_checksum: bool = false,
+    direct_content_hasher: std.hash.XxHash64 = std.hash.XxHash64.init(0),
+    direct_expected_content_checksum: u32 = 0,
     direct_frame_len: usize = 0,
     input_received: usize = 0,
     output_written: usize = 0,
@@ -1030,6 +1033,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                 self.recordError(.direct_output, error.OutputTooSmall);
                 return error.OutputTooSmall;
             }
+            try self.validateDirectContentChecksum();
             const frame_len = self.direct_frame_len;
             self.resetDirectOutput();
             self.discardFrameScratchPrefix(frame_len);
@@ -1196,10 +1200,12 @@ pub const NativeIncrementalFrameDecoder = struct {
                         var frame_state: SequenceFrameState = .{};
                         try decodeLiteralOnlyCompressedBlockIntoBuffer(source, target, &written, self.direct_block_decoded_len, 0, &.{}, &frame_state);
                         if (written != self.direct_block_decoded_len) return error.SizeMismatch;
+                        if (self.direct_content_checksum) self.direct_content_hasher.update(target[0..written]);
                         self.direct_payload_read = self.direct_payload_len;
                         self.direct_decoded_read += written;
                         output_written_step += written;
                         self.output_written += written;
+                        if (self.direct_decoded_read == self.direct_decoded_len) try self.validateDirectContentChecksum();
                         continue;
                     }
                     const n = @min(self.direct_payload_len - self.direct_payload_read, output.len - output_written_step);
@@ -1209,6 +1215,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                         const source_offset = self.direct_payload_offset + self.direct_payload_read;
                         @memcpy(output[output_written_step..][0..n], self.frame_scratch.items[source_offset..][0..n]);
                     }
+                    if (self.direct_content_checksum) self.direct_content_hasher.update(output[output_written_step..][0..n]);
                     self.direct_payload_read += n;
                     self.direct_decoded_read += n;
                     output_written_step += n;
@@ -1256,6 +1263,9 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_next_block_header_offset = 0;
         self.direct_decoded_len = 0;
         self.direct_decoded_read = 0;
+        self.direct_content_checksum = false;
+        self.direct_content_hasher = std.hash.XxHash64.init(0);
+        self.direct_expected_content_checksum = 0;
         self.direct_frame_len = 0;
     }
 
@@ -1273,6 +1283,14 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (remaining_direct > remaining_expected) {
             self.recordError(.direct_output, error.SizeMismatch);
             return error.SizeMismatch;
+        }
+    }
+
+    fn validateDirectContentChecksum(self: *NativeIncrementalFrameDecoder) Error!void {
+        if (!self.direct_content_checksum) return;
+        if (@as(u32, @truncate(self.direct_content_hasher.final())) != self.direct_expected_content_checksum) {
+            self.recordError(.direct_output, error.ChecksumMismatch);
+            return error.ChecksumMismatch;
         }
     }
 
@@ -1360,7 +1378,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             const block_len: usize = @intCast(block_header >> 3);
             try validateBlockSize(header, block_type, block_len);
             if (block_type != 0 and block_type != 1 and block_type != 2) return false;
-            if (block_type == 2 and (block_count != 0 or header.has_checksum)) return false;
+            if (block_type == 2 and block_count != 0) return false;
             const payload_len: usize = if (block_type == 1) 1 else block_len;
             if (frame.len - offset < payload_len) return error.TruncatedFrame;
             const payload = frame[offset..][0..payload_len];
@@ -1387,7 +1405,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                         content_hasher.update(repeated[0..n]);
                         remaining -= n;
                     }
-                } else {
+                } else if (block_type != 2) {
                     content_hasher.update(payload);
                 }
             }
@@ -1400,7 +1418,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (header.has_checksum) {
             if (frame.len - offset < 4) return error.TruncatedFrame;
             const expected = std.mem.readInt(u32, frame[offset..][0..4], .little);
-            if (@as(u32, @truncate(content_hasher.final())) != expected) {
+            if (!first_block_compressed and @as(u32, @truncate(content_hasher.final())) != expected) {
                 self.recordError(.frame, error.ChecksumMismatch);
                 return error.ChecksumMismatch;
             }
@@ -1421,6 +1439,12 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_next_block_header_offset = first_next_header;
         self.direct_decoded_len = expected_len;
         self.direct_decoded_read = 0;
+        self.direct_content_checksum = header.has_checksum;
+        self.direct_content_hasher = std.hash.XxHash64.init(0);
+        self.direct_expected_content_checksum = if (header.has_checksum)
+            std.mem.readInt(u32, frame[offset - 4 ..][0..4], .little)
+        else
+            0;
         self.direct_frame_len = frame_end;
         return true;
     }
@@ -8355,7 +8379,7 @@ test "zstd native incremental decoder streams single compressed block without de
     const payload = ("0123456789abcdef" ** 8) ** 64;
     const encoded = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .selection = .literal_only,
-        .content_checksum = false,
+        .content_checksum = true,
     });
     defer std.testing.allocator.free(encoded.frame);
     try std.testing.expectEqual(NativeFrameMode.literal_only, encoded.mode);
@@ -8378,6 +8402,20 @@ test "zstd native incremental decoder streams single compressed block without de
     try std.testing.expectEqual(payload.len, decoded.progress.output_written);
     try std.testing.expectEqualSlices(u8, payload, &output);
     try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+
+    var corrupt = try std.testing.allocator.dupe(u8, encoded.frame);
+    defer std.testing.allocator.free(corrupt);
+    corrupt[corrupt.len - 1] ^= 0x01;
+    var bad = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer bad.deinit();
+    const bad_initial = try bad.step(corrupt, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, bad_initial.status);
+    try std.testing.expectError(error.ChecksumMismatch, bad.step("", &output));
+    try std.testing.expectEqualSlices(u8, "ChecksumMismatch", bad.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "direct_output", bad.diagnostics().last_error_phase_name);
 }
 
 test "zstd native incremental compressed block falls back for small output" {
@@ -8420,7 +8458,7 @@ test "zstd native incremental compressed block falls back for small output" {
     try std.testing.expectEqual(payload.len, decoder.diagnostics().output_written);
 }
 
-test "zstd native incremental compressed checksum uses scratch fallback" {
+test "zstd native incremental compressed checksum validates directly" {
     const payload = ("content-checksum-zstd" ** 4) ** 64;
     const encoded = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .selection = .literal_only,
@@ -8441,10 +8479,7 @@ test "zstd native incremental compressed checksum uses scratch fallback" {
     var output: [payload.len]u8 = undefined;
     const initial = try decoder.step(encoded.frame, output[0..0]);
     try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
-    // Compressed content checksums are still validated by the mature whole-frame
-    // path, so this frame should materialize decoded_scratch rather than taking
-    // the checksum-free direct compressed block path.
-    try std.testing.expectEqual(payload.len, decoder.decoded_scratch.items.len);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
     const decoded = try decoder.step("", &output);
     try std.testing.expectEqual(core.StepResult.Status.done, decoded.status);
     try std.testing.expectEqual(payload.len, decoded.progress.output_written);
@@ -8458,9 +8493,11 @@ test "zstd native incremental compressed checksum uses scratch fallback" {
         .max_decoded_buffer_len = payload.len,
     });
     defer bad.deinit();
-    try std.testing.expectError(error.ChecksumMismatch, bad.step(corrupt, output[0..0]));
+    const bad_initial = try bad.step(corrupt, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, bad_initial.status);
+    try std.testing.expectError(error.ChecksumMismatch, bad.step("", &output));
     try std.testing.expectEqualSlices(u8, "ChecksumMismatch", bad.diagnostics().last_error_name);
-    try std.testing.expectEqualSlices(u8, "frame", bad.diagnostics().last_error_phase_name);
+    try std.testing.expectEqualSlices(u8, "direct_output", bad.diagnostics().last_error_phase_name);
 }
 
 test "zstd native incremental decoder drains concatenated streams and skippable frames" {
