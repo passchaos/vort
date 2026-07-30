@@ -40,6 +40,8 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "repetitive", .payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 256 },
     };
 
+    try smokeZstdMultiblockDirectFallback(init.gpa);
+
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(init.gpa);
     for (cases) |case| {
@@ -248,6 +250,32 @@ fn timeDecodeZstdIncrementalDirect(io: std.Io, allocator: std.mem.Allocator, enc
         checksum +%= decoded[0];
     }
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
+    const payload = "a" ** 264;
+    const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = true,
+        .block_size_max = payload.len / 2,
+    });
+    defer allocator.free(encoded.frame);
+
+    var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var decoded: [payload.len]u8 = undefined;
+    const first = try decoder.step(encoded.frame, decoded[0..0]);
+    if (first.status != .need_output) return error.SizeMismatch;
+    if (!std.mem.eql(u8, decoder.diagnostics().phase_name, "direct_output")) return error.SizeMismatch;
+    const partial = try decoder.step("", decoded[0..17]);
+    if (partial.status != .need_output or partial.progress.output_written != 17) return error.SizeMismatch;
+    if (decoder.decoded_scratch.items.len != payload.len) return error.SizeMismatch;
+    const done = try decoder.step("", decoded[17..]);
+    if (done.status != .done) return error.SizeMismatch;
+    if (!std.mem.eql(u8, payload, &decoded)) return error.SizeMismatch;
 }
 
 fn decodeLz4Incremental(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8) !void {
