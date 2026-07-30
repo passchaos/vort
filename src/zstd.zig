@@ -4804,6 +4804,31 @@ fn mixedCandidateLookaheadPayloadLen(
     const literal_lens = [_]usize{ candidate.literal_len, next.literal_len };
     const offsets = [_]usize{ candidate.offset, next.offset };
     const match_lens = [_]usize{ candidate.match_len, next.match_len };
+    const literal_code = try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits);
+    const offset_code = try sequenceCodeForValue(offsets[0], &of_base, &of_bits);
+    const match_code = try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits);
+    if (sequenceCodeForValue(literal_lens[1], &ll_base, &ll_bits) catch null) |next_literal_code| {
+        if (next_literal_code == literal_code) {
+            if (sequenceCodeForValue(offsets[1], &of_base, &of_bits) catch null) |next_offset_code| {
+                if (next_offset_code == offset_code) {
+                    if (sequenceCodeForValue(match_lens[1], &ml_base, &ml_bits) catch null) |next_match_code| {
+                        if (next_match_code == match_code) {
+                            return try rleSequencePayloadLen(
+                                block,
+                                &literal_lens,
+                                &offsets,
+                                &match_lens,
+                                next.literal_end,
+                                literal_code,
+                                offset_code,
+                                match_code,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
     return try multiSequencePayloadLen(block, &literal_lens, &offsets, &match_lens, next.literal_end);
 }
 
@@ -8237,6 +8262,9 @@ test "zstd literal-only writer emits two repeated-pattern sequences" {
         try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits),
     );
     try std.testing.expectEqual(block_len, estimated_payload_len);
+    const first_candidate = repeatedMixedMatchCandidate(payload, 0) orelse return error.CorruptFrame;
+    const lookahead_payload_len = (try mixedCandidateLookaheadPayloadLen(&.{}, payload, 0, first_candidate)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(estimated_payload_len, lookahead_payload_len);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
