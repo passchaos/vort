@@ -17,7 +17,7 @@ const duplicate_hash_invalid = std.math.maxInt(u32);
 const duplicate_hash_candidates = 4;
 const max_bootstrap_sequence_count = 16;
 const max_predefined_sequence_states = 64;
-const repeated_pattern_period_max = 32;
+const repeated_pattern_period_max = 64;
 const repeated_pattern_start_scan = 48;
 
 const ll_base = [_]usize{
@@ -7842,6 +7842,32 @@ test "zstd literal-only writer emits long-period repeated pattern match" {
     const block = encoded[block_offset + 3 ..][0..block_len];
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits wider repeated pattern match" {
+    const pattern = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKL";
+    const payload = pattern ** 12;
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
