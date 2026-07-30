@@ -1594,6 +1594,64 @@ test "root native no-size dictionary-set direct-output paths round trip" {
     try zstd_decoder.finish();
 }
 
+test "root native dictionary direct-output falls back for small output" {
+    const lz4_dict = Lz4NativeDictionary.init(0x5351, "abcdefghijklmnop");
+    const lz4_payload = "abcdefghijklmnop-small-output-tail";
+    const lz4_frame = try lz4EncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, lz4_payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+    }, lz4_dict);
+    defer std.testing.allocator.free(lz4_frame);
+    const lz4_first_block = (try lz4InspectNativeFrameFirstBlock(lz4_frame)) orelse return error.CorruptFrame;
+    try std.testing.expect(lz4_first_block.is_compressed);
+
+    var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, lz4_dict, .{
+        .expected_output_len = lz4_payload.len,
+        .max_decoded_buffer_len = lz4_payload.len,
+    });
+    defer lz4_decoder.deinit();
+    var lz4_output: [lz4_payload.len]u8 = undefined;
+    const lz4_initial = try lz4_decoder.step(lz4_frame, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_initial.status);
+    try std.testing.expectEqualSlices(u8, "direct_output", lz4_decoder.diagnostics().phase_name);
+    const lz4_partial = try lz4_decoder.step("", lz4_output[0..5]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_partial.status);
+    try std.testing.expectEqual(@as(usize, 5), lz4_partial.progress.output_written);
+    try std.testing.expectEqual(lz4_payload.len, lz4_decoder.snapshot().decoded_len.?);
+    try std.testing.expectEqual(lz4_payload.len, lz4_decoder.decoded_scratch.items.len);
+    const lz4_done = try lz4_decoder.step("", lz4_output[5..]);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_done.status);
+    try std.testing.expectEqualSlices(u8, lz4_payload, &lz4_output);
+
+    const zstd_dict = ZstdNativeDictionary.init(0x6361, "abcdefghijklmnop");
+    const zstd_payload = "pfx-abcdefghijklmnop-small-output-tail";
+    const zstd_frame = try zstdEncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, zstd_payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    }, zstd_dict);
+    defer std.testing.allocator.free(zstd_frame.frame);
+    const zstd_first_block = try zstdInspectNativeFrameFirstBlock(zstd_frame.frame);
+    try std.testing.expectEqual(ZstdNativeBlockType.compressed, zstd_first_block.block_type);
+
+    var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, zstd_dict, .{
+        .expected_output_len = zstd_payload.len,
+        .max_decoded_buffer_len = zstd_payload.len,
+    });
+    defer zstd_decoder.deinit();
+    var zstd_output: [zstd_payload.len]u8 = undefined;
+    const zstd_initial = try zstd_decoder.step(zstd_frame.frame, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_initial.status);
+    try std.testing.expectEqualSlices(u8, "direct_output", zstd_decoder.diagnostics().phase_name);
+    const zstd_partial = try zstd_decoder.step("", zstd_output[0..5]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_partial.status);
+    try std.testing.expectEqual(@as(usize, 5), zstd_partial.progress.output_written);
+    try std.testing.expectEqual(zstd_payload.len, zstd_decoder.snapshot().decoded_len.?);
+    try std.testing.expectEqual(zstd_payload.len, zstd_decoder.decoded_scratch.items.len);
+    const zstd_done = try zstd_decoder.step("", zstd_output[5..]);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
+    try std.testing.expectEqualSlices(u8, zstd_payload, &zstd_output);
+}
+
 test "root native dictionary incremental direct-output paths round trip" {
     const lz4_dict = Lz4NativeDictionary.init(0x5051, "abcdefghijklmnop");
     const lz4_payload = "abcdefghijklmnop-root-tail";
