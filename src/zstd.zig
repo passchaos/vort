@@ -5090,9 +5090,9 @@ fn multiSequencePayloadLen(
 ) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
     if (literal_lens.len < 2 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
-    _ = (try planPredefinedSequenceValues(literal_lens, &default_ll_symbols, 0)) orelse return error.CorruptFrame;
-    _ = (try planPredefinedSequenceValues(offsets, &default_of_symbols, 2)) orelse return error.CorruptFrame;
-    _ = (try planPredefinedSequenceValues(match_lens, &default_ml_symbols, 0)) orelse return error.CorruptFrame;
+    const literal_plan = (try planPredefinedSequenceValues(literal_lens, &default_ll_symbols, 0)) orelse return error.CorruptFrame;
+    const offset_plan = (try planPredefinedSequenceValues(offsets, &default_of_symbols, 2)) orelse return error.CorruptFrame;
+    const match_plan = (try planPredefinedSequenceValues(match_lens, &default_ml_symbols, 0)) orelse return error.CorruptFrame;
 
     var regenerated_literals = block.len - tail_start;
     for (literal_lens) |literal_len| {
@@ -5103,15 +5103,18 @@ fn multiSequencePayloadLen(
     len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, 1) catch return error.IntegerOverflow; // sequence mode byte
 
-    var read_field_count: usize = 3; // initial states
-    for (literal_lens, 0..) |_, i| {
-        read_field_count += 3; // LL/ML/OF extra bits
-        if (i + 1 < literal_lens.len) read_field_count += 3; // next states
+    var read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    const read_field_count = try predefinedSequenceReadFields(
+        read_fields[0..],
+        literal_plan,
+        offset_plan,
+        match_plan,
+    );
+    var bit_count: usize = 1; // Reverse bitstream end marker.
+    for (read_fields[0..read_field_count]) |field| {
+        bit_count = std.math.add(usize, bit_count, field.bits) catch return error.IntegerOverflow;
     }
-    // The exact bit count depends on the chosen state path. This conservative
-    // byte estimate is sufficient for relative one-step lookahead scoring and
-    // avoids duplicating the full state planner output buffer here.
-    const bitstream_len = (read_field_count * 6 + 1 + 7) / 8;
+    const bitstream_len = (bit_count + 7) / 8;
     return std.math.add(usize, len, bitstream_len) catch return error.IntegerOverflow;
 }
 
@@ -8111,6 +8114,14 @@ test "zstd literal-only writer emits predefined multi duplicate matches" {
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
     try std.testing.expectEqual(@as(u8, 0x00), block[section.sequence_payload_offset]); // LL/OF/ML all use Predefined_Mode.
+    const estimated_payload_len = try multiSequencePayloadLen(
+        payload,
+        &.{ large_len, small_len },
+        &.{ large_len, small_len },
+        &.{ large_len, small_len },
+        payload.len - tail.len,
+    );
+    try std.testing.expectEqual(block_len, estimated_payload_len);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
