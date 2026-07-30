@@ -131,7 +131,9 @@ Current interpretation:
   `NativeDictionary`; dictionary-aware alloc/append/into/scratch/size APIs now
   validate the ID and can use the preset bytes as match history for the native
   sequence subset. Dictionary-set decode APIs can resolve per-frame Dictionary_ID
-  values in concatenated native streams without caller-side frame splitting. The
+  values in concatenated native streams without caller-side frame splitting, and
+  exact-size allocation variants provide strict SizeMismatch semantics when
+  callers know the expected output length. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage

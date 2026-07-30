@@ -392,6 +392,13 @@ const lz4_stream_plain = try vort.lz4DecodeNativeConcatenatedFrameAllocWithDicti
     lz4_dict_set,
 );
 defer allocator.free(lz4_stream_plain);
+const lz4_stream_exact = try vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySetExactSize(
+    allocator,
+    lz4_dict_frame,
+    lz4_dict_set,
+    lz4_stream_plain.len,
+);
+defer allocator.free(lz4_stream_exact);
 
 var lz4_block_encoder = try vort.Lz4BlockEncoder.init(allocator);
 defer lz4_block_encoder.deinit();
@@ -460,6 +467,13 @@ const zstd_stream_plain = try vort.zstdDecodeNativeConcatenatedFrameAllocWithDic
     zstd_dict_set,
 );
 defer allocator.free(zstd_stream_plain);
+const zstd_stream_exact = try vort.zstdDecodeNativeConcatenatedFrameAllocWithDictionarySetExactSize(
+    allocator,
+    zstd_dict_frame.frame,
+    zstd_dict_set,
+    zstd_stream_plain.len,
+);
+defer allocator.free(zstd_stream_exact);
 
 const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);
