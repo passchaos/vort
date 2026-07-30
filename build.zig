@@ -1145,6 +1145,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_native_dictionary_report = b.addRunArtifact(native_dictionary_report_exe);
+    if (b.args) |args| run_native_dictionary_report.addArgs(args);
     const native_dictionary_report_step = b.step("run-native-dictionary-report", "Report native LZ4/Zstd dictionary encoding savings");
     native_dictionary_report_step.dependOn(&run_native_dictionary_report.step);
 
