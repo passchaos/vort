@@ -787,6 +787,22 @@ pub fn build(b: *std.Build) void {
     const zstd_native_probe_step = b.step("run-zstd-native-probe", "Run bounded generated-corpus probe for native-subset zstd frames");
     zstd_native_probe_step.dependOn(&zstd_native_probe.step);
 
+    const zstd_native_dictionary_probe_exe = b.addExecutable(.{
+        .name = "zstd-native-dictionary-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd_native_dictionary_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_zstd_native_dictionary_probe = b.addRunArtifact(zstd_native_dictionary_probe_exe);
+    if (b.args) |args| run_zstd_native_dictionary_probe.addArgs(args);
+    const zstd_native_dictionary_probe_step = b.step("run-zstd-native-dictionary-probe", "Run library probe for native Zstd dictionary APIs");
+    zstd_native_dictionary_probe_step.dependOn(&run_zstd_native_dictionary_probe.step);
+
     const lz4_native_probe_exe = b.addExecutable(.{
         .name = "lz4-native-probe",
         .root_module = b.createModule(.{
@@ -1783,6 +1799,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&sidecar_verify_report_exe.step);
     check_step.dependOn(&file_corpus_report_exe.step);
     check_step.dependOn(&cpu_features_exe.step);
+    check_step.dependOn(&zstd_native_dictionary_probe_exe.step);
 
     const ci_smoke_step = b.step("ci-smoke", "Run local CI smoke validation across tests, fuzz, differential, and benchmark reports");
     ci_smoke_step.dependOn(test_step);

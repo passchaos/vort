@@ -138,7 +138,8 @@ Current interpretation:
   block-size option, and the public native stream/block iterators expose
   zero-allocation frame, block, and skippable-frame inspection so future
   latency/ratio sweeps can share the same library API rather than relying on
-  CLI-specific chunking. The probe accepts repeated `--path`
+  CLI-specific chunking. `run-zstd-native-dictionary-probe` exercises the public
+  dictionary APIs directly, while the generated-corpus probe accepts repeated `--path`
   arguments or bounded recursive `--dir` discovery with an optional `--limit`
   for focused file payloads when investigating real corpus failures.
 
