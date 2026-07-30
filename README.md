@@ -18,8 +18,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   configurable frame block sizes, linked-block history encoding, encoded-block bounds, decoded-size
   preflight, bounded allocation for single/concatenated streams, bounded
   raw-block and skippable-frame encode-into/decoded-size preflight, inspectable
-  native frame headers, reusable raw-block decoder, and caller-owned
-  encode/decode-into/append plus reusable
+  native frame and first-block headers, reusable raw-block decoder, and
+  caller-owned encode/decode-into/append plus reusable
   scratch encoder/decoder APIs,
   libzstd-backed Zstandard frame encode/bounded/caller-owned decode with header
   options and decoded-size preflight, a
@@ -345,6 +345,8 @@ defer lz4_encoder.deinit();
 const lz4_frame = try lz4_encoder.encodeScratch("payload payload", lz4_options);
 const lz4_header = try vort.lz4InspectNativeFrameHeader(lz4_frame);
 _ = lz4_header.block_independent;
+const lz4_first_block = try vort.lz4InspectNativeFrameFirstBlock(lz4_frame);
+_ = lz4_first_block;
 var lz4_decoder = vort.Lz4NativeFrameDecoder.init(allocator);
 defer lz4_decoder.deinit();
 const lz4_plain = try lz4_decoder.decodeScratch(lz4_frame);

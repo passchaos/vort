@@ -762,6 +762,14 @@ pub const NativeFrameHeader = struct {
 
 const FrameHeader = NativeFrameHeader;
 
+pub const NativeFrameBlockHeader = struct {
+    header_offset: usize,
+    payload_offset: usize,
+    payload_len: usize,
+    is_compressed: bool,
+    block_checksum_offset: ?usize = null,
+};
+
 fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
     if (frame.len < 7) return error.TruncatedFrame;
     if (!std.mem.eql(u8, frame[0..4], &frame_magic)) return error.CorruptFrame;
@@ -801,6 +809,30 @@ fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
 
 pub fn inspectNativeFrameHeader(frame: []const u8) Error!NativeFrameHeader {
     return try parseFrameHeader(frame);
+}
+
+pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!?NativeFrameBlockHeader {
+    const header = try parseFrameHeader(frame);
+    const header_offset = header.payload_offset;
+    if (frame.len - header_offset < 4) return error.TruncatedFrame;
+    const block_header = std.mem.readInt(u32, frame[header_offset..][0..4], .little);
+    if (block_header == 0) return null;
+    const payload_len: usize = @intCast(block_header & 0x7fff_ffff);
+    if (payload_len > header.block_size_max) return error.CorruptFrame;
+    const payload_offset = header_offset + 4;
+    if (frame.len - payload_offset < payload_len) return error.TruncatedFrame;
+    const block_checksum_offset: ?usize = if (header.block_checksum) blk: {
+        const checksum_offset = payload_offset + payload_len;
+        if (frame.len - checksum_offset < 4) return error.TruncatedFrame;
+        break :blk checksum_offset;
+    } else null;
+    return .{
+        .header_offset = header_offset,
+        .payload_offset = payload_offset,
+        .payload_len = payload_len,
+        .is_compressed = (block_header & 0x8000_0000) == 0,
+        .block_checksum_offset = block_checksum_offset,
+    };
 }
 
 fn findFrameEnd(frames: []const u8, offset: *usize) Error!usize {
@@ -2115,6 +2147,11 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     try std.testing.expectEqual(false, inspected.content_checksum);
     try std.testing.expectEqual(@as(?u32, null), inspected.dictionary_id);
     try std.testing.expectEqual(max_frame_block_len, inspected.block_size_max);
+    const first_block = (try inspectNativeFrameFirstBlock(with_options)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(inspected.payload_offset, first_block.header_offset);
+    try std.testing.expectEqual(inspected.payload_offset + 4, first_block.payload_offset);
+    try std.testing.expect(first_block.payload_len <= inspected.block_size_max);
+    try std.testing.expectEqual(@as(?usize, first_block.payload_offset + first_block.payload_len), first_block.block_checksum_offset);
 
     const with_dictionary_id = try encodePureFrameWithOptionsAlloc(
         std.testing.allocator,
@@ -2131,6 +2168,9 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const reusable_with_dictionary_id = try reusable_frame_encoder.encodeScratch(repeated, .{ .dictionary_id = 0x1234_abcd, .content_checksum = false });
     const reusable_dict_header = try inspectNativeFrameHeader(reusable_with_dictionary_id);
     try std.testing.expectEqual(@as(?u32, 0x1234_abcd), reusable_dict_header.dictionary_id);
+    const empty_frame = try encodePureFrameAlloc(std.testing.allocator, "");
+    defer std.testing.allocator.free(empty_frame);
+    try std.testing.expectEqual(@as(?NativeFrameBlockHeader, null), try inspectNativeFrameFirstBlock(empty_frame));
 
     const linked = try encodePureFrameWithOptionsAlloc(
         std.testing.allocator,
