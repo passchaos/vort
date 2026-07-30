@@ -292,7 +292,7 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
         allocator.free(decoded_without_dict);
         return error.Lz4ProbeExpectedInvalidMatch;
     } else |err| switch (err) {
-        error.InvalidMatch => {},
+        error.NeedDictionary => {},
         else => return err,
     }
 

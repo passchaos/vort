@@ -368,6 +368,7 @@ pub fn encodeSkippableFrameIntoSlice(skippable_id: u4, payload: []const u8, outp
 /// dictionaries are not required for frames produced by `encodeFrameAlloc`.
 pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
     const header = try parseFrameHeader(frame);
+    try rejectNativeDictionaryHeader(header);
     var offset = header.payload_offset;
 
     var out: std.ArrayList(u8) = .empty;
@@ -928,6 +929,7 @@ pub const decodedNativeConcatenatedFrameSizeLimitedWithDictionary = decodedConca
 /// provide the output buffer up front.
 pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
     const header = try parseFrameHeader(frame);
+    try rejectNativeDictionaryHeader(header);
     var offset = header.payload_offset;
     var written: usize = 0;
     if (header.expected_content_size) |size| {
@@ -1473,6 +1475,7 @@ fn findFrameEnd(frames: []const u8, offset: *usize) Error!usize {
 
 fn frameDecodedSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {
     const header = try parseFrameHeader(frame);
+    try rejectNativeDictionaryHeader(header);
     var offset = header.payload_offset;
     var total: usize = 0;
     while (true) {
@@ -1583,6 +1586,12 @@ fn validateNativeDictionary(header: NativeFrameHeader, dictionary: NativeDiction
     const id = header.dictionary_id orelse return &.{};
     if (id != dictionary.id) return error.NeedDictionary;
     return dictionary.content;
+}
+
+fn rejectNativeDictionaryHeader(header: NativeFrameHeader) Error!void {
+    if (header.dictionary_id) |id| {
+        if (id != 0) return error.NeedDictionary;
+    }
 }
 
 fn compressedBlockDecodedSizeLimited(block: []const u8, initial_len: usize, max_output_len: usize) Error!usize {
@@ -2917,9 +2926,7 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const dict_header = try inspectNativeFrameHeader(with_dictionary_id);
     try std.testing.expectEqual(@as(?u32, 0x1234_abcd), dict_header.dictionary_id);
     try std.testing.expectEqual(@as(?u64, repeated.len), dict_header.expected_content_size);
-    const dict_decoded = try decodeNativeFrameAlloc(std.testing.allocator, with_dictionary_id);
-    defer std.testing.allocator.free(dict_decoded);
-    try std.testing.expectEqualSlices(u8, repeated, dict_decoded);
+    try std.testing.expectError(error.NeedDictionary, decodeNativeFrameAlloc(std.testing.allocator, with_dictionary_id));
     const reusable_with_dictionary_id = try reusable_frame_encoder.encodeScratch(repeated, .{ .dictionary_id = 0x1234_abcd, .content_checksum = false });
     const reusable_dict_header = try inspectNativeFrameHeader(reusable_with_dictionary_id);
     try std.testing.expectEqual(@as(?u32, 0x1234_abcd), reusable_dict_header.dictionary_id);
@@ -3050,7 +3057,7 @@ test "lz4 native frame uses preset dictionary history" {
     try std.testing.expectEqual(@as(?u32, dict.id), header.dictionary_id);
     const first_block = (try inspectNativeFrameFirstBlock(encoded)) orelse return error.CorruptFrame;
     try std.testing.expect(first_block.is_compressed);
-    try std.testing.expectError(error.InvalidMatch, decodeNativeFrameAlloc(std.testing.allocator, encoded));
+    try std.testing.expectError(error.NeedDictionary, decodeNativeFrameAlloc(std.testing.allocator, encoded));
     try std.testing.expectError(error.NeedDictionary, decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded, NativeDictionary.init(0x1111, dict.content)));
 
     const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded, dict);

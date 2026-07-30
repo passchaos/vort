@@ -35,7 +35,7 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
 
     const header = try vort.lz4InspectNativeFrameHeader(encoded);
     try expect(header.dictionary_id == dict.id);
-    try expectError(error.InvalidMatch, vort.lz4DecodeNativeFrameAlloc(allocator, encoded));
+    try expectError(error.NeedDictionary, vort.lz4DecodeNativeFrameAlloc(allocator, encoded));
     try expectError(error.NeedDictionary, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, encoded, wrong));
 
     const decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, encoded, dict);
