@@ -252,6 +252,7 @@ zig build run-level-report -- README.md docs/roadmap.md
 zig build run-dictionary-report
 zig build run-native-dictionary-report
 zig build run-native-dictionary-report -- --path README.md --limit 4096 --dict-len 512
+zig build run-native-dictionary-report -- --path README.md --limit 4096 --dict-len 512 --json zig-out/native-dict.json --markdown zig-out/native-dict.md
 zig build run-dictionary-report -- README.md docs/roadmap.md
 zig build run-dictionary-report -- --target 512 README.md docs/roadmap.md
 zig build run-dictionary-deflate-report

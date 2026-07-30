@@ -12,10 +12,15 @@ pub fn main(init: std.process.Init) !void {
     const options = try parseOptions(init.gpa, &args);
     defer options.deinit(init.gpa);
 
-    try stdout.print("codec,case,input_bytes,dictionary_bytes,native_bytes,dictionary_bytes_out,savings_bytes,savings_percent\n", .{});
-    try reportBuiltIns(init.gpa, stdout);
-    try reportFileCases(init.io, init.gpa, stdout, options);
+    var rows: std.ArrayList(ReportRow) = .empty;
+    defer rows.deinit(init.gpa);
+    try reportBuiltIns(init.gpa, &rows);
+    try reportFileCases(init.io, init.gpa, &rows, options);
+
+    try writeCsv(stdout, rows.items);
     try stdout.flush();
+    if (options.json_path) |path| try writeJsonFile(init, path, rows.items);
+    if (options.markdown_path) |path| try writeMarkdownFile(init, path, rows.items);
 }
 
 const Options = struct {
@@ -24,10 +29,14 @@ const Options = struct {
     limit: usize = 64 * 1024,
     max_files: usize = 8,
     dictionary_len: usize = 512,
+    json_path: ?[]const u8 = null,
+    markdown_path: ?[]const u8 = null,
 
     fn deinit(self: Options, allocator: std.mem.Allocator) void {
         for (self.paths.items) |path| allocator.free(path);
         for (self.dirs.items) |dir| allocator.free(dir);
+        if (self.json_path) |path| allocator.free(path);
+        if (self.markdown_path) |path| allocator.free(path);
         var paths = self.paths;
         paths.deinit(allocator);
         var dirs = self.dirs;
@@ -54,6 +63,12 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
         } else if (std.mem.eql(u8, arg, "--dict-len")) {
             const value = args.next() orelse return error.MissingLimit;
             options.dictionary_len = try std.fmt.parseInt(usize, value, 10);
+        } else if (std.mem.eql(u8, arg, "--json")) {
+            const path = args.next() orelse return error.MissingReportPath;
+            options.json_path = try allocator.dupe(u8, path);
+        } else if (std.mem.eql(u8, arg, "--markdown")) {
+            const path = args.next() orelse return error.MissingReportPath;
+            options.markdown_path = try allocator.dupe(u8, path);
         } else {
             return error.UnknownArgument;
         }
@@ -61,23 +76,23 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
     return options;
 }
 
-fn reportBuiltIns(allocator: std.mem.Allocator, stdout: *std.Io.Writer) !void {
+fn reportBuiltIns(allocator: std.mem.Allocator, rows: *std.ArrayList(ReportRow)) !void {
     const lz4_dict = vort.Lz4NativeDictionary.init(0x4c5a_4449, "abcdefghijklmnop");
     const lz4_payload = "pfx-abcdefghijklmnop-mid-abcdefghijklmnop-tail";
     const lz4_row = try lz4Row(allocator, "builtin-lz4", lz4_payload, lz4_dict);
     if (lz4_row.savings() <= 0) return error.NativeDictionaryReportNoSavings;
-    try printRow(stdout, lz4_row);
+    try rows.append(allocator, lz4_row);
 
     const dictionary_payload = "abcdefghijklmnopqrstuvwxyz0123456789" ** 8;
     const zstd_dict = vort.ZstdNativeDictionary.init(0x5a57_4449, dictionary_payload);
     const zstd_payload = "pfx-" ++ dictionary_payload ++ "-mid-" ++ dictionary_payload ++ "-tail";
     const zstd_row = try zstdRow(allocator, "builtin-zstd", zstd_payload, zstd_dict);
     if (zstd_row.savings() <= 0) return error.NativeDictionaryReportNoSavings;
-    try printRow(stdout, zstd_row);
+    try rows.append(allocator, zstd_row);
 }
 
-fn reportFileCases(io: std.Io, allocator: std.mem.Allocator, stdout: *std.Io.Writer, options: Options) !void {
-    for (options.paths.items) |path| try reportFileCase(io, allocator, stdout, path, options.limit, options.dictionary_len);
+fn reportFileCases(io: std.Io, allocator: std.mem.Allocator, rows: *std.ArrayList(ReportRow), options: Options) !void {
+    for (options.paths.items) |path| try reportFileCase(io, allocator, rows, path, options.limit, options.dictionary_len);
 
     var discovered: usize = 0;
     for (options.dirs.items) |dir_path| {
@@ -89,13 +104,13 @@ fn reportFileCases(io: std.Io, allocator: std.mem.Allocator, stdout: *std.Io.Wri
             if (options.max_files != 0 and discovered >= options.max_files) return;
             const path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir_path, entry.name });
             defer allocator.free(path);
-            try reportFileCase(io, allocator, stdout, path, options.limit, options.dictionary_len);
+            try reportFileCase(io, allocator, rows, path, options.limit, options.dictionary_len);
             discovered += 1;
         }
     }
 }
 
-fn reportFileCase(io: std.Io, allocator: std.mem.Allocator, stdout: *std.Io.Writer, path: []const u8, limit: usize, requested_dictionary_len: usize) !void {
+fn reportFileCase(io: std.Io, allocator: std.mem.Allocator, rows: *std.ArrayList(ReportRow), path: []const u8, limit: usize, requested_dictionary_len: usize) !void {
     const full = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(128 * 1024 * 1024));
     defer allocator.free(full);
     const payload = if (limit != 0 and full.len > limit) full[0..limit] else full;
@@ -104,16 +119,8 @@ fn reportFileCase(io: std.Io, allocator: std.mem.Allocator, stdout: *std.Io.Writ
     const dictionary = payload[0..dictionary_len];
     const id = std.hash.Crc32.hash(dictionary) | 1;
 
-    const lz4_row_result = lz4Row(allocator, path, payload, vort.Lz4NativeDictionary.init(id, dictionary));
-    if (lz4_row_result) |row| try printRow(stdout, row) else |err| switch (err) {
-        error.NeedDictionary, error.InvalidMatch, error.OutputTooSmall, error.OutputLimitExceeded => return err,
-        else => return err,
-    }
-    const zstd_row_result = zstdRow(allocator, path, payload, vort.ZstdNativeDictionary.init(id, dictionary));
-    if (zstd_row_result) |row| try printRow(stdout, row) else |err| switch (err) {
-        error.NeedDictionary, error.InvalidMatch, error.OutputTooSmall, error.OutputLimitExceeded => return err,
-        else => return err,
-    }
+    try rows.append(allocator, try lz4Row(allocator, path, payload, vort.Lz4NativeDictionary.init(id, dictionary)));
+    try rows.append(allocator, try zstdRow(allocator, path, payload, vort.ZstdNativeDictionary.init(id, dictionary)));
 }
 
 const ReportRow = struct {
@@ -126,6 +133,10 @@ const ReportRow = struct {
 
     fn savings(self: ReportRow) isize {
         return @as(isize, @intCast(self.native_len)) - @as(isize, @intCast(self.dictionary_frame_len));
+    }
+
+    fn savingsPercent(self: ReportRow) f64 {
+        return (@as(f64, @floatFromInt(self.savings())) * 100.0) / @as(f64, @floatFromInt(self.native_len));
     }
 };
 
@@ -159,11 +170,62 @@ fn zstdRow(allocator: std.mem.Allocator, case_name: []const u8, payload: []const
     return .{ .codec = "zstd", .case_name = case_name, .input_len = payload.len, .dictionary_len = dict.content.len, .native_len = native.frame.len, .dictionary_frame_len = with_dict.frame.len };
 }
 
-fn printRow(stdout: *std.Io.Writer, row: ReportRow) !void {
-    const savings = row.savings();
-    const savings_percent = (@as(f64, @floatFromInt(savings)) * 100.0) / @as(f64, @floatFromInt(row.native_len));
+fn writeCsv(stdout: *std.Io.Writer, rows: []const ReportRow) !void {
+    try stdout.print("codec,case,input_bytes,dictionary_bytes,native_bytes,dictionary_bytes_out,savings_bytes,savings_percent\n", .{});
+    for (rows) |row| try printCsvRow(stdout, row);
+}
+
+fn printCsvRow(stdout: *std.Io.Writer, row: ReportRow) !void {
     try stdout.print(
         "{s},{s},{d},{d},{d},{d},{d},{d:.2}\n",
-        .{ row.codec, row.case_name, row.input_len, row.dictionary_len, row.native_len, row.dictionary_frame_len, savings, savings_percent },
+        .{ row.codec, row.case_name, row.input_len, row.dictionary_len, row.native_len, row.dictionary_frame_len, row.savings(), row.savingsPercent() },
     );
+}
+
+fn writeJsonFile(init: std.process.Init, path: []const u8, rows: []const ReportRow) !void {
+    var json = std.Io.Writer.Allocating.init(init.gpa);
+    defer json.deinit();
+    try writeJson(&json.writer, rows);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = json.written() });
+}
+
+fn writeJson(writer: *std.Io.Writer, rows: []const ReportRow) !void {
+    try writer.writeAll("[\n");
+    for (rows, 0..) |row, i| {
+        if (i != 0) try writer.writeAll(",\n");
+        try writer.writeAll("  {");
+        try writer.writeAll("\"codec\":");
+        try std.json.Stringify.value(row.codec, .{}, writer);
+        try writer.print(",\"case\":", .{});
+        try std.json.Stringify.value(row.case_name, .{}, writer);
+        try writer.print(",\"input_bytes\":{d},\"dictionary_bytes\":{d},\"native_bytes\":{d},\"dictionary_bytes_out\":{d},\"savings_bytes\":{d},\"savings_percent\":{d:.2}", .{
+            row.input_len,
+            row.dictionary_len,
+            row.native_len,
+            row.dictionary_frame_len,
+            row.savings(),
+            row.savingsPercent(),
+        });
+        try writer.writeAll("}");
+    }
+    try writer.writeAll("\n]\n");
+}
+
+fn writeMarkdownFile(init: std.process.Init, path: []const u8, rows: []const ReportRow) !void {
+    var markdown = std.Io.Writer.Allocating.init(init.gpa);
+    defer markdown.deinit();
+    try writeMarkdown(&markdown.writer, rows);
+    try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = markdown.written() });
+}
+
+fn writeMarkdown(writer: *std.Io.Writer, rows: []const ReportRow) !void {
+    try writer.writeAll("# Native dictionary encoding report\n\n");
+    try writer.writeAll("| codec | case | input bytes | dictionary bytes | native bytes | dictionary bytes out | savings bytes | savings % |\n");
+    try writer.writeAll("|---|---:|---:|---:|---:|---:|---:|---:|\n");
+    for (rows) |row| {
+        try writer.print(
+            "| {s} | {s} | {d} | {d} | {d} | {d} | {d} | {d:.2} |\n",
+            .{ row.codec, row.case_name, row.input_len, row.dictionary_len, row.native_len, row.dictionary_frame_len, row.savings(), row.savingsPercent() },
+        );
+    }
 }
