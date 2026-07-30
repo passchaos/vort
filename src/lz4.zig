@@ -4229,6 +4229,26 @@ test "lz4 native concatenated streams select dictionaries by id" {
     const scratch_limited = try decoder.decodeConcatenatedScratchLimitedWithDictionarySet(stream.items, expected.len, dictionary_set);
     try std.testing.expectEqualSlices(u8, expected, scratch_limited);
 
+    var incremental = NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, dictionary_set, .{
+        .max_compressed_buffer_len = stream.items.len,
+        .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
+    });
+    defer incremental.deinit();
+    var incremental_out: [expected.len]u8 = undefined;
+    const initial = try incremental.step(stream.items, incremental_out[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
+    try std.testing.expectEqual(stream.items.len, initial.progress.input_read);
+    var incremental_written: usize = 0;
+    while (true) {
+        const end = @min(incremental_out.len, incremental_written + 5);
+        const result = try incremental.step("", incremental_out[incremental_written..end]);
+        incremental_written += result.progress.output_written;
+        if (result.status == .done) break;
+        try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
+    }
+    try std.testing.expectEqual(expected.len, incremental_written);
+    try std.testing.expectEqualSlices(u8, expected, &incremental_out);
+
     const missing_dictionaries = [_]NativeDictionary{first_dict};
     try std.testing.expectError(error.NeedDictionary, decodeNativeConcatenatedFrameAllocWithDictionarySet(std.testing.allocator, stream.items, NativeDictionarySet.init(&missing_dictionaries)));
 }

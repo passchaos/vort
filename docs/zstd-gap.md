@@ -136,12 +136,13 @@ Current interpretation:
   chunk-joined decode helpers accept split compressed input with caller-owned
   join scratch, incremental decoder facades expose the shared StepResult
   contract for split-input/caller-output library use and can now drain
-  concatenated native streams while skipping skippable metadata frames. Those
-  facades also expose caller-configured compressed-frame and decoded-frame
-  buffer limits so the current whole-frame validation path can fail safely with
-  `OutputLimitExceeded` instead of retaining unbounded hostile input, and
-  exact-size allocation variants provide strict SizeMismatch semantics when
-  callers know the expected output length. The
+  concatenated native streams while skipping skippable metadata frames,
+  including dictionary-set streams whose frames carry different Dictionary_ID
+  values. Those facades also expose caller-configured compressed-frame and
+  decoded-frame buffer limits so the current whole-frame validation path can
+  fail safely with `OutputLimitExceeded` instead of retaining unbounded hostile
+  input, and exact-size allocation variants provide strict SizeMismatch
+  semantics when callers know the expected output length. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
