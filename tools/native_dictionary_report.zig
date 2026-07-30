@@ -14,7 +14,7 @@ pub fn main(init: std.process.Init) !void {
 
     var rows: std.ArrayList(ReportRow) = .empty;
     defer rows.deinit(init.gpa);
-    try reportBuiltIns(init.gpa, &rows);
+    try reportBuiltIns(init.io, init.gpa, &rows);
     try reportFileCases(init.io, init.gpa, &rows, options);
 
     try writeCsv(stdout, rows.items);
@@ -76,17 +76,17 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
     return options;
 }
 
-fn reportBuiltIns(allocator: std.mem.Allocator, rows: *std.ArrayList(ReportRow)) !void {
+fn reportBuiltIns(io: std.Io, allocator: std.mem.Allocator, rows: *std.ArrayList(ReportRow)) !void {
     const lz4_dict = vort.Lz4NativeDictionary.init(0x4c5a_4449, "abcdefghijklmnop");
     const lz4_payload = "pfx-abcdefghijklmnop-mid-abcdefghijklmnop-tail";
-    const lz4_row = try lz4Row(allocator, "builtin-lz4", lz4_payload, lz4_dict);
+    const lz4_row = try lz4Row(io, allocator, "builtin-lz4", lz4_payload, lz4_dict);
     if (lz4_row.savings() <= 0) return error.NativeDictionaryReportNoSavings;
     try rows.append(allocator, lz4_row);
 
     const dictionary_payload = "abcdefghijklmnopqrstuvwxyz0123456789" ** 8;
     const zstd_dict = vort.ZstdNativeDictionary.init(0x5a57_4449, dictionary_payload);
     const zstd_payload = "pfx-" ++ dictionary_payload ++ "-mid-" ++ dictionary_payload ++ "-tail";
-    const zstd_row = try zstdRow(allocator, "builtin-zstd", zstd_payload, zstd_dict);
+    const zstd_row = try zstdRow(io, allocator, "builtin-zstd", zstd_payload, zstd_dict);
     if (zstd_row.savings() <= 0) return error.NativeDictionaryReportNoSavings;
     try rows.append(allocator, zstd_row);
 }
@@ -119,8 +119,8 @@ fn reportFileCase(io: std.Io, allocator: std.mem.Allocator, rows: *std.ArrayList
     const dictionary = payload[0..dictionary_len];
     const id = std.hash.Crc32.hash(dictionary) | 1;
 
-    try rows.append(allocator, try lz4Row(allocator, path, payload, vort.Lz4NativeDictionary.init(id, dictionary)));
-    try rows.append(allocator, try zstdRow(allocator, path, payload, vort.ZstdNativeDictionary.init(id, dictionary)));
+    try rows.append(allocator, try lz4Row(io, allocator, path, payload, vort.Lz4NativeDictionary.init(id, dictionary)));
+    try rows.append(allocator, try zstdRow(io, allocator, path, payload, vort.ZstdNativeDictionary.init(id, dictionary)));
 }
 
 const ReportRow = struct {
@@ -130,6 +130,8 @@ const ReportRow = struct {
     dictionary_len: usize,
     native_len: usize,
     dictionary_frame_len: usize,
+    dictionary_encode_ns: u64,
+    dictionary_decode_ns: u64,
 
     fn savings(self: ReportRow) isize {
         return @as(isize, @intCast(self.native_len)) - @as(isize, @intCast(self.dictionary_frame_len));
@@ -140,45 +142,84 @@ const ReportRow = struct {
     }
 };
 
-fn lz4Row(allocator: std.mem.Allocator, case_name: []const u8, payload: []const u8, dict: vort.Lz4NativeDictionary) !ReportRow {
+fn lz4Row(io: std.Io, allocator: std.mem.Allocator, case_name: []const u8, payload: []const u8, dict: vort.Lz4NativeDictionary) !ReportRow {
     const options: vort.Lz4NativeFrameOptions = .{
         .content_checksum = false,
         .block_checksum = true,
     };
     const native = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
     defer allocator.free(native);
+    const encode_start = std.Io.Clock.awake.now(io);
     const with_dict = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict);
+    const dictionary_encode_ns = elapsedNs(io, encode_start);
     defer allocator.free(with_dict);
+    const decode_start = std.Io.Clock.awake.now(io);
     const decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, with_dict, dict);
+    const dictionary_decode_ns = elapsedNs(io, decode_start);
     defer allocator.free(decoded);
     if (!std.mem.eql(u8, payload, decoded)) return error.NativeDictionaryReportMismatch;
-    return .{ .codec = "lz4", .case_name = case_name, .input_len = payload.len, .dictionary_len = dict.content.len, .native_len = native.len, .dictionary_frame_len = with_dict.len };
+    return .{
+        .codec = "lz4",
+        .case_name = case_name,
+        .input_len = payload.len,
+        .dictionary_len = dict.content.len,
+        .native_len = native.len,
+        .dictionary_frame_len = with_dict.len,
+        .dictionary_encode_ns = dictionary_encode_ns,
+        .dictionary_decode_ns = dictionary_decode_ns,
+    };
 }
 
-fn zstdRow(allocator: std.mem.Allocator, case_name: []const u8, payload: []const u8, dict: vort.ZstdNativeDictionary) !ReportRow {
+fn zstdRow(io: std.Io, allocator: std.mem.Allocator, case_name: []const u8, payload: []const u8, dict: vort.ZstdNativeDictionary) !ReportRow {
     const options: vort.ZstdNativeFrameOptions = .{
         .selection = .literal_only,
         .content_checksum = false,
     };
     const native = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
     defer allocator.free(native.frame);
+    const encode_start = std.Io.Clock.awake.now(io);
     const with_dict = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict);
+    const dictionary_encode_ns = elapsedNs(io, encode_start);
     defer allocator.free(with_dict.frame);
+    const decode_start = std.Io.Clock.awake.now(io);
     const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, with_dict.frame, dict);
+    const dictionary_decode_ns = elapsedNs(io, decode_start);
     defer allocator.free(decoded);
     if (!std.mem.eql(u8, payload, decoded)) return error.NativeDictionaryReportMismatch;
-    return .{ .codec = "zstd", .case_name = case_name, .input_len = payload.len, .dictionary_len = dict.content.len, .native_len = native.frame.len, .dictionary_frame_len = with_dict.frame.len };
+    return .{
+        .codec = "zstd",
+        .case_name = case_name,
+        .input_len = payload.len,
+        .dictionary_len = dict.content.len,
+        .native_len = native.frame.len,
+        .dictionary_frame_len = with_dict.frame.len,
+        .dictionary_encode_ns = dictionary_encode_ns,
+        .dictionary_decode_ns = dictionary_decode_ns,
+    };
 }
 
 fn writeCsv(stdout: *std.Io.Writer, rows: []const ReportRow) !void {
-    try stdout.print("codec,case,input_bytes,dictionary_bytes,native_bytes,dictionary_bytes_out,savings_bytes,savings_percent\n", .{});
+    try stdout.print("codec,case,input_bytes,dictionary_bytes,native_bytes,dictionary_bytes_out,savings_bytes,savings_percent,dictionary_encode_ns,dictionary_decode_ns,dictionary_encode_mib_s,dictionary_decode_mib_s\n", .{});
     for (rows) |row| try printCsvRow(stdout, row);
 }
 
 fn printCsvRow(stdout: *std.Io.Writer, row: ReportRow) !void {
     try stdout.print(
-        "{s},{s},{d},{d},{d},{d},{d},{d:.2}\n",
-        .{ row.codec, row.case_name, row.input_len, row.dictionary_len, row.native_len, row.dictionary_frame_len, row.savings(), row.savingsPercent() },
+        "{s},{s},{d},{d},{d},{d},{d},{d:.2},{d},{d},{d:.2},{d:.2}\n",
+        .{
+            row.codec,
+            row.case_name,
+            row.input_len,
+            row.dictionary_len,
+            row.native_len,
+            row.dictionary_frame_len,
+            row.savings(),
+            row.savingsPercent(),
+            row.dictionary_encode_ns,
+            row.dictionary_decode_ns,
+            mibPerSecond(row.input_len, row.dictionary_encode_ns),
+            mibPerSecond(row.input_len, row.dictionary_decode_ns),
+        },
     );
 }
 
@@ -198,13 +239,17 @@ fn writeJson(writer: *std.Io.Writer, rows: []const ReportRow) !void {
         try std.json.Stringify.value(row.codec, .{}, writer);
         try writer.print(",\"case\":", .{});
         try std.json.Stringify.value(row.case_name, .{}, writer);
-        try writer.print(",\"input_bytes\":{d},\"dictionary_bytes\":{d},\"native_bytes\":{d},\"dictionary_bytes_out\":{d},\"savings_bytes\":{d},\"savings_percent\":{d:.2}", .{
+        try writer.print(",\"input_bytes\":{d},\"dictionary_bytes\":{d},\"native_bytes\":{d},\"dictionary_bytes_out\":{d},\"savings_bytes\":{d},\"savings_percent\":{d:.2},\"dictionary_encode_ns\":{d},\"dictionary_decode_ns\":{d},\"dictionary_encode_mib_s\":{d:.2},\"dictionary_decode_mib_s\":{d:.2}", .{
             row.input_len,
             row.dictionary_len,
             row.native_len,
             row.dictionary_frame_len,
             row.savings(),
             row.savingsPercent(),
+            row.dictionary_encode_ns,
+            row.dictionary_decode_ns,
+            mibPerSecond(row.input_len, row.dictionary_encode_ns),
+            mibPerSecond(row.input_len, row.dictionary_decode_ns),
         });
         try writer.writeAll("}");
     }
@@ -220,12 +265,36 @@ fn writeMarkdownFile(init: std.process.Init, path: []const u8, rows: []const Rep
 
 fn writeMarkdown(writer: *std.Io.Writer, rows: []const ReportRow) !void {
     try writer.writeAll("# Native dictionary encoding report\n\n");
-    try writer.writeAll("| codec | case | input bytes | dictionary bytes | native bytes | dictionary bytes out | savings bytes | savings % |\n");
-    try writer.writeAll("|---|---:|---:|---:|---:|---:|---:|---:|\n");
+    try writer.writeAll("| codec | case | input bytes | dictionary bytes | native bytes | dictionary bytes out | savings bytes | savings % | encode MiB/s | decode MiB/s |\n");
+    try writer.writeAll("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n");
     for (rows) |row| {
         try writer.print(
-            "| {s} | {s} | {d} | {d} | {d} | {d} | {d} | {d:.2} |\n",
-            .{ row.codec, row.case_name, row.input_len, row.dictionary_len, row.native_len, row.dictionary_frame_len, row.savings(), row.savingsPercent() },
+            "| {s} | {s} | {d} | {d} | {d} | {d} | {d} | {d:.2} | {d:.2} | {d:.2} |\n",
+            .{
+                row.codec,
+                row.case_name,
+                row.input_len,
+                row.dictionary_len,
+                row.native_len,
+                row.dictionary_frame_len,
+                row.savings(),
+                row.savingsPercent(),
+                mibPerSecond(row.input_len, row.dictionary_encode_ns),
+                mibPerSecond(row.input_len, row.dictionary_decode_ns),
+            },
         );
     }
+}
+
+fn mibPerSecond(input_len: usize, ns: u64) f64 {
+    if (ns == 0) return 0.0;
+    const mib = @as(f64, @floatFromInt(input_len)) / (1024.0 * 1024.0);
+    const seconds = @as(f64, @floatFromInt(ns)) / 1_000_000_000.0;
+    return mib / seconds;
+}
+
+fn elapsedNs(io: std.Io, start: std.Io.Timestamp) u64 {
+    const end = std.Io.Clock.awake.now(io);
+    const duration = start.durationTo(end).nanoseconds;
+    return if (duration <= 0) 0 else @intCast(duration);
 }
