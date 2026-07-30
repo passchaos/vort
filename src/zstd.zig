@@ -883,14 +883,15 @@ pub const decodeNativeConcatenatedFrameChunksAllocWithDictionarySetExactSize = d
 pub const decodeNativeConcatenatedFrameChunksAllocWithDictionarySetLimited = decodeRawOrRleFrameChunksAllocWithDictionarySetLimited;
 pub const decodeNativeConcatenatedFrameChunksIntoWithDictionarySet = decodeRawOrRleFrameChunksIntoWithDictionarySet;
 
-/// Incremental input/output facade for a single native Zstandard frame.
+/// Incremental input/output facade for native Zstandard frames.
 ///
 /// This mirrors `lz4.NativeIncrementalFrameDecoder`: callers can feed
 /// compressed bytes in arbitrary chunks and drain decoded bytes through
-/// caller-owned output buffers. The first implementation buffers one complete
-/// frame and delegates validation/decode to the mature one-shot native path so
-/// checksum, dictionary, and unsupported-feature behavior stays identical while
-/// the resumable `StepResult` contract is established.
+/// caller-owned output buffers. It can walk concatenated native streams and
+/// skip Zstandard skippable metadata frames while still buffering one complete
+/// data frame before delegating validation/decode to the mature one-shot native
+/// path, so checksum, dictionary, and unsupported-feature behavior stays
+/// identical while the resumable `StepResult` contract evolves.
 pub const NativeIncrementalFrameDecoder = struct {
     allocator: std.mem.Allocator,
     dictionary: ?NativeDictionary = null,
@@ -973,7 +974,15 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn step(self: *NativeIncrementalFrameDecoder, input: []const u8, output: []u8) Error!core.StepResult {
-        if (self.phase == .done) return .{ .status = .done };
+        if (self.phase == .done) {
+            if (input.len == 0) return .{ .status = .done };
+            // Fresh bytes after a completed frame are interpreted as the next
+            // member of the same caller-driven concatenated stream.  Keep the
+            // cumulative counters intact; `reset()` starts a new logical stream.
+            self.phase = .frame;
+            self.decoded_scratch.clearRetainingCapacity();
+            self.decoded_offset = 0;
+        }
 
         var input_read: usize = 0;
         var output_written_step: usize = 0;
@@ -987,21 +996,33 @@ pub const NativeIncrementalFrameDecoder = struct {
                         self.input_received += consumed;
                     }
 
-                    if (!try self.completeFrameAvailable()) {
+                    const frame_end = (try self.completeFrameAvailable()) orelse {
+                        if (self.frame_scratch.items.len == 0 and (input_read != 0 or output_written_step != 0)) {
+                            self.phase = .done;
+                            return .{
+                                .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                .status = .done,
+                            };
+                        }
                         return .{
                             .progress = .{ .input_read = input_read, .output_written = output_written_step },
                             .status = .need_input,
                         };
-                    }
+                    };
 
-                    self.decodeCompleteFrame() catch |err| {
+                    self.decodeCompleteFrame(self.frame_scratch.items[0..frame_end]) catch |err| {
                         self.recordError(.frame, err);
                         return err;
                     };
+                    self.discardFrameScratchPrefix(frame_end);
                     self.phase = .output;
                 },
                 .output => {
                     if (self.decoded_offset == self.decoded_scratch.items.len) {
+                        if (self.frame_scratch.items.len != 0) {
+                            self.phase = .frame;
+                            continue;
+                        }
                         self.phase = .done;
                         return .{
                             .progress = .{ .input_read = input_read, .output_written = output_written_step },
@@ -1028,31 +1049,54 @@ pub const NativeIncrementalFrameDecoder = struct {
         }
     }
 
-    fn completeFrameAvailable(self: *NativeIncrementalFrameDecoder) Error!bool {
+    fn completeFrameAvailable(self: *NativeIncrementalFrameDecoder) Error!?usize {
+        while (true) {
+            if (self.frame_scratch.items.len < 4) return null;
+            const magic = std.mem.readInt(u32, self.frame_scratch.items[0..4], .little);
+            if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+                if (self.frame_scratch.items.len < 8) return null;
+                const skip_len: usize = @intCast(std.mem.readInt(u32, self.frame_scratch.items[4..8], .little));
+                const total = checkedAdd(8, skip_len) catch |err| {
+                    self.recordError(.frame, err);
+                    return err;
+                };
+                if (self.frame_scratch.items.len < total) return null;
+                self.discardFrameScratchPrefix(total);
+                continue;
+            }
+            break;
+        }
         const end = findNativeFrameEnd(self.frame_scratch.items, 0) catch |err| switch (err) {
-            error.TruncatedFrame => return false,
+            error.TruncatedFrame => return null,
             else => {
                 self.recordError(.frame, err);
                 return err;
             },
         };
-        if (end != self.frame_scratch.items.len) {
-            self.recordError(.frame, error.TrailingData);
-            return error.TrailingData;
-        }
-        return true;
+        return end;
     }
 
-    fn decodeCompleteFrame(self: *NativeIncrementalFrameDecoder) Error!void {
+    fn decodeCompleteFrame(self: *NativeIncrementalFrameDecoder, frame: []const u8) Error!void {
         self.decoded_scratch.clearRetainingCapacity();
         self.decoded_offset = 0;
         if (self.dictionary_set) |dictionary_set| {
-            _ = try decodeRawOrRleFrameAppendWithDictionarySet(self.allocator, &self.decoded_scratch, self.frame_scratch.items, dictionary_set);
+            _ = try decodeRawOrRleFrameAppendWithDictionarySet(self.allocator, &self.decoded_scratch, frame, dictionary_set);
         } else if (self.dictionary) |dictionary| {
-            _ = try decodeRawOrRleFrameAppendWithDictionary(self.allocator, &self.decoded_scratch, self.frame_scratch.items, dictionary);
+            _ = try decodeRawOrRleFrameAppendWithDictionary(self.allocator, &self.decoded_scratch, frame, dictionary);
         } else {
-            _ = try decodeRawOrRleFrameAppend(self.allocator, &self.decoded_scratch, self.frame_scratch.items);
+            _ = try decodeRawOrRleFrameAppend(self.allocator, &self.decoded_scratch, frame);
         }
+    }
+
+    fn discardFrameScratchPrefix(self: *NativeIncrementalFrameDecoder, n: usize) void {
+        if (n == 0) return;
+        if (n == self.frame_scratch.items.len) {
+            self.frame_scratch.clearRetainingCapacity();
+            return;
+        }
+        const remaining_len = self.frame_scratch.items.len - n;
+        std.mem.copyForwards(u8, self.frame_scratch.items[0..remaining_len], self.frame_scratch.items[n..]);
+        self.frame_scratch.shrinkRetainingCapacity(remaining_len);
     }
 
     fn recordError(self: *NativeIncrementalFrameDecoder, phase: Phase, err: Error) void {
@@ -3665,6 +3709,10 @@ fn checkedAddWithinLimit(current: usize, additional: usize, max: usize) Error!us
     const next = std.math.add(usize, current, additional) catch return error.IntegerOverflow;
     if (next > max) return error.OutputLimitExceeded;
     return next;
+}
+
+fn checkedAdd(a: usize, b: usize) Error!usize {
+    return std.math.add(usize, a, b) catch return error.IntegerOverflow;
 }
 
 fn parseRawOrRleFrameHeaderWithOptions(frame: []const u8, offset: *usize, allow_nonzero_dictionary_id: bool) Error!RawOrRleFrameHeader {
@@ -7832,6 +7880,59 @@ test "zstd native incremental decoder accepts split input and output" {
     try std.testing.expectEqual(encoded.frame.len, reused.progress.input_read);
     try std.testing.expectEqual(payload.len, reused.progress.output_written);
     try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "zstd native incremental decoder drains concatenated streams and skippable frames" {
+    const first_payload = "incremental zstd first stream member " ** 2;
+    const second_payload = "incremental zstd second stream member " ** 3;
+    const third_payload = "incremental zstd third stream member";
+    const options: NativeFrameOptions = .{ .selection = .literal_only, .content_checksum = false };
+
+    const first = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, first_payload, options);
+    defer std.testing.allocator.free(first.frame);
+    const second = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, second_payload, options);
+    defer std.testing.allocator.free(second.frame);
+    const third = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, third_payload, options);
+    defer std.testing.allocator.free(third.frame);
+    const skip = try encodeSkippableFrameAlloc(std.testing.allocator, 7, "incremental metadata");
+    defer std.testing.allocator.free(skip);
+
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, first.frame);
+    try stream.appendSlice(std.testing.allocator, skip);
+    try stream.appendSlice(std.testing.allocator, second.frame);
+    try stream.appendSlice(std.testing.allocator, skip);
+
+    var decoder = NativeIncrementalFrameDecoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    var output: [first_payload.len + second_payload.len]u8 = undefined;
+    const initial = try decoder.step(stream.items, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
+    try std.testing.expectEqual(stream.items.len, initial.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), initial.progress.output_written);
+
+    var written: usize = 0;
+    while (true) {
+        const end = @min(output.len, written + 13);
+        const result = try decoder.step("", output[written..end]);
+        written += result.progress.output_written;
+        if (result.status == .done) break;
+        try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
+    }
+    try std.testing.expectEqual(output.len, written);
+    try std.testing.expectEqualSlices(u8, first_payload, output[0..first_payload.len]);
+    try std.testing.expectEqualSlices(u8, second_payload, output[first_payload.len..]);
+    try std.testing.expectEqual(output.len, decoder.diagnostics().output_written);
+
+    var continued: [third_payload.len]u8 = undefined;
+    const continued_result = try decoder.step(third.frame, &continued);
+    try std.testing.expectEqual(core.StepResult.Status.done, continued_result.status);
+    try std.testing.expectEqual(third.frame.len, continued_result.progress.input_read);
+    try std.testing.expectEqual(third_payload.len, continued_result.progress.output_written);
+    try std.testing.expectEqualSlices(u8, third_payload, &continued);
+    try std.testing.expectEqual(stream.items.len + third.frame.len, decoder.snapshot().input_received);
+    try std.testing.expectEqual(output.len + third_payload.len, decoder.diagnostics().output_written);
 }
 
 test "zstd native incremental decoder supports dictionaries" {

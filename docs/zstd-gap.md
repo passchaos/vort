@@ -135,9 +135,10 @@ Current interpretation:
   values in concatenated native streams without caller-side frame splitting,
   chunk-joined decode helpers accept split compressed input with caller-owned
   join scratch, incremental decoder facades expose the shared StepResult
-  contract for split-input/caller-output library use, and exact-size allocation
-  variants provide strict SizeMismatch semantics when callers know the expected
-  output length. The
+  contract for split-input/caller-output library use and can now drain
+  concatenated native streams while skipping skippable metadata frames, and
+  exact-size allocation variants provide strict SizeMismatch semantics when
+  callers know the expected output length. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
