@@ -40,6 +40,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "repetitive", .payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 256 },
     };
 
+    try smokeLz4LinkedDirectFallback(init.gpa);
     try smokeZstdMultiblockDirectFallback(init.gpa);
 
     var rows: std.ArrayList(Row) = .empty;
@@ -250,6 +251,42 @@ fn timeDecodeZstdIncrementalDirect(io: std.Io, allocator: std.mem.Allocator, enc
         checksum +%= decoded[0];
     }
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn smokeLz4LinkedDirectFallback(allocator: std.mem.Allocator) !void {
+    var payload: [64 * 1024 + 4096]u8 = undefined;
+    var state: u32 = 0x1234_abcd;
+    for (payload[0 .. 64 * 1024]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[64 * 1024 ..], payload[60 * 1024 .. 64 * 1024]);
+    const encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, &payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+        .block_mode = .linked,
+        .block_size_id = .max64kb,
+    });
+    defer allocator.free(encoded);
+
+    var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var decoded: [payload.len]u8 = undefined;
+    const initial = try decoder.step(encoded, decoded[0..0]);
+    if (initial.status != .need_output) return error.SizeMismatch;
+    if (!std.mem.eql(u8, decoder.diagnostics().phase_name, "direct_output")) return error.SizeMismatch;
+    const first = try decoder.step("", decoded[0 .. 64 * 1024]);
+    if (first.status != .need_output or first.progress.output_written != 64 * 1024) return error.SizeMismatch;
+    if (decoder.decoded_scratch.items.len != 0) return error.SizeMismatch;
+    const partial = try decoder.step("", decoded[64 * 1024 ..][0..127]);
+    if (partial.status != .need_output or partial.progress.output_written != 127) return error.SizeMismatch;
+    if (decoder.decoded_scratch.items.len != payload.len) return error.SizeMismatch;
+    const done = try decoder.step("", decoded[64 * 1024 + 127 ..]);
+    if (done.status != .done) return error.SizeMismatch;
+    if (!std.mem.eql(u8, &payload, &decoded)) return error.SizeMismatch;
 }
 
 fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
