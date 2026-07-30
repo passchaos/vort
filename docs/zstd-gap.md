@@ -150,7 +150,10 @@ Current interpretation:
   Zstd native incremental decoding now
   has matching direct-output slices for raw/RLE blocks with content checksum
   validation and single compressed blocks without content checksum; broader
-  compressed Zstd frames still use the whole-frame facade. The
+  compressed Zstd frames still use the whole-frame facade. When caller output
+  is too small for that single compressed block, the direct path intentionally
+  falls back to the whole-frame scratch facade instead of repeatedly returning
+  zero-progress `need_output`. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
