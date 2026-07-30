@@ -909,8 +909,10 @@ pub const NativeIncrementalFrameDecoder = struct {
     direct_block_compressed: bool = false,
     direct_block_decoded_len: usize = 0,
     direct_block_size_max: usize = 0,
+    direct_history_window_len: usize = 0,
     direct_frame_output_start: usize = 0,
     direct_dictionary_history: []const u8 = &.{},
+    direct_history: std.ArrayList(u8) = .empty,
     direct_sequence_state: SequenceFrameState = .{},
     direct_next_block_header_offset: usize = 0,
     direct_decoded_len: usize = 0,
@@ -979,6 +981,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn deinit(self: *NativeIncrementalFrameDecoder) void {
+        self.direct_history.deinit(self.allocator);
         self.decoded_scratch.deinit(self.allocator);
         self.frame_scratch.deinit(self.allocator);
         self.* = undefined;
@@ -1189,29 +1192,24 @@ pub const NativeIncrementalFrameDecoder = struct {
                     try self.ensureDirectOutputFitsExpected();
                     if (self.direct_block_compressed) {
                         if (output.len - output_written_step < self.direct_block_decoded_len) {
+                            if (output_written_step != 0) {
+                                return .{
+                                    .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                    .status = .need_output,
+                                };
+                            }
                             try self.fallbackDirectOutputToScratch();
                             continue;
                         }
-                        const call_output_base = self.output_written - output_written_step;
-                        const frame_output_start = if (self.direct_frame_output_start >= call_output_base)
-                            self.direct_frame_output_start - call_output_base
-                        else {
-                            // Sequence matches in later Zstd compressed blocks
-                            // may refer to bytes produced by earlier blocks in
-                            // the same frame. The direct decoder can replay
-                            // those matches only while that prefix is still in
-                            // the caller's current output slice; otherwise,
-                            // fall back to the full-frame scratch decoder and
-                            // resume after the prefix already returned.
-                            try self.fallbackDirectOutputToScratch();
-                            continue;
-                        };
                         const source = self.frame_scratch.items[self.direct_payload_offset..][0..self.direct_payload_len];
-                        var written_abs = output_written_step;
-                        try decodeLiteralOnlyCompressedBlockIntoBuffer(source, output, &written_abs, self.direct_block_size_max, frame_output_start, self.direct_dictionary_history, &self.direct_sequence_state);
-                        const written = written_abs - output_written_step;
+                        const written = written: {
+                            var written_abs = output_written_step;
+                            try decodeLiteralOnlyCompressedBlockIntoBuffer(source, output, &written_abs, self.direct_block_size_max, output_written_step, self.direct_history.items, &self.direct_sequence_state);
+                            break :written written_abs - output_written_step;
+                        };
                         if (written != self.direct_block_decoded_len) return error.SizeMismatch;
                         if (self.direct_content_checksum) self.direct_content_hasher.update(output[output_written_step..][0..written]);
+                        try self.rememberDirectOutput(output[output_written_step..][0..written]);
                         self.direct_payload_read = self.direct_payload_len;
                         self.direct_decoded_read += written;
                         output_written_step += written;
@@ -1226,6 +1224,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                         @memcpy(output[output_written_step..][0..n], self.frame_scratch.items[source_offset..][0..n]);
                     }
                     if (self.direct_content_checksum) self.direct_content_hasher.update(output[output_written_step..][0..n]);
+                    try self.rememberDirectOutput(output[output_written_step..][0..n]);
                     self.direct_payload_read += n;
                     self.direct_decoded_read += n;
                     output_written_step += n;
@@ -1271,8 +1270,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_block_compressed = false;
         self.direct_block_decoded_len = 0;
         self.direct_block_size_max = 0;
+        self.direct_history_window_len = 0;
         self.direct_frame_output_start = 0;
         self.direct_dictionary_history = &.{};
+        self.direct_history.clearRetainingCapacity();
         self.direct_sequence_state = .{};
         self.direct_next_block_header_offset = 0;
         self.direct_decoded_len = 0;
@@ -1298,6 +1299,24 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.resetDirectOutput();
         self.discardFrameScratchPrefix(frame_len);
         self.phase = .output;
+    }
+
+    fn rememberDirectOutput(self: *NativeIncrementalFrameDecoder, bytes: []const u8) Error!void {
+        if (bytes.len == 0 or self.direct_history_window_len == 0) return;
+        if (bytes.len >= self.direct_history_window_len) {
+            self.direct_history.clearRetainingCapacity();
+            try self.direct_history.appendSlice(self.allocator, bytes[bytes.len - self.direct_history_window_len ..]);
+            return;
+        }
+
+        const combined_len = self.direct_history.items.len + bytes.len;
+        if (combined_len > self.direct_history_window_len) {
+            const drop = combined_len - self.direct_history_window_len;
+            const keep_len = self.direct_history.items.len - drop;
+            std.mem.copyForwards(u8, self.direct_history.items[0..keep_len], self.direct_history.items[drop..]);
+            self.direct_history.shrinkRetainingCapacity(keep_len);
+        }
+        try self.direct_history.appendSlice(self.allocator, bytes);
     }
 
     fn ensureDirectOutputFitsExpected(self: *NativeIncrementalFrameDecoder) Error!void {
@@ -1476,6 +1495,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_block_compressed = first_block_compressed;
         self.direct_block_decoded_len = first_block_decoded_len;
         self.direct_block_size_max = header.block_size_max;
+        const frame_history_window = @min(expected_len, try checkedU64ToUsize(header.window_size));
+        self.direct_history_window_len = std.math.add(usize, dictionary_history.len, frame_history_window) catch return error.IntegerOverflow;
+        self.direct_history.clearRetainingCapacity();
+        try self.rememberDirectOutput(dictionary_history);
         self.direct_frame_output_start = self.output_written;
         self.direct_dictionary_history = dictionary_history;
         self.direct_sequence_state = .{};
@@ -2262,6 +2285,7 @@ fn emitContentChecksum(
 pub const NativeFrameHeader = struct {
     content_size: ?u64,
     has_checksum: bool,
+    window_size: u64,
     block_size_max: usize,
     dictionary_id: u32 = 0,
     payload_offset: usize,
@@ -4209,6 +4233,7 @@ fn parseRawOrRleFrameHeaderWithOptions(frame: []const u8, offset: *usize, allow_
     return .{
         .content_size = content_size,
         .has_checksum = has_checksum,
+        .window_size = effective_window,
         .block_size_max = block_size_max,
         .dictionary_id = dictionary_id,
         .payload_offset = offset.*,
@@ -8630,7 +8655,7 @@ test "zstd native incremental decoder streams multiple compressed blocks directl
     try std.testing.expectEqualSlices(u8, "direct_output", bad.diagnostics().last_error_phase_name);
 }
 
-test "zstd native incremental multi compressed fallback preserves emitted prefix" {
+test "zstd native incremental multi compressed keeps direct history across output chunks" {
     const payload = "a" ** 264;
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
@@ -8662,21 +8687,17 @@ test "zstd native incremental multi compressed fallback preserves emitted prefix
     try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
 
     var written: usize = 0;
-    var saw_fallback = false;
     while (true) {
         const end = @min(output.len, written + 150);
         const result = try decoder.step("", output[written..end]);
         written += result.progress.output_written;
-        if (decoder.decoded_scratch.items.len != 0) {
-            saw_fallback = true;
-            try std.testing.expectEqual(payload.len, decoder.decoded_scratch.items.len);
-        }
+        try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
         if (result.status == .done) break;
         try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
     }
-    try std.testing.expect(saw_fallback);
     try std.testing.expectEqual(payload.len, written);
     try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
 }
 
 test "zstd native incremental decoder drains concatenated streams and skippable frames" {

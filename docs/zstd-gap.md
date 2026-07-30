@@ -158,11 +158,12 @@ Current interpretation:
   sequence tables/repeated offsets from earlier compressed blocks and frames
   whose Dictionary_ID resolves through the explicit dictionary or dictionary-set
   incremental constructors; content checksum validation runs on the direct path.
-  When caller output is too small for the next compressed block or has already
-  split away the frame history needed by later sequence matches, the direct path
-  intentionally falls back to the whole-frame scratch facade and resumes after
-  bytes already returned to the caller instead of repeatedly returning
-  zero-progress `need_output`. The
+  The direct path keeps a bounded history window, so multi-block sequence
+  matches can continue across caller output chunks without falling back solely
+  because earlier frame bytes are no longer in the current output slice. When
+  caller output is too small for the next compressed block, the direct path
+  intentionally falls back to the whole-frame scratch facade only if it cannot
+  first return existing progress as `need_output`. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
