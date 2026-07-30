@@ -401,6 +401,16 @@ const lz4_stream_exact = try vort.lz4DecodeNativeConcatenatedFrameAllocWithDicti
     lz4_stream_plain.len,
 );
 defer allocator.free(lz4_stream_exact);
+const lz4_chunks = [_][]const u8{ lz4_dict_frame[0..8], lz4_dict_frame[8..] };
+const lz4_join = try allocator.alloc(u8, lz4_dict_frame.len);
+defer allocator.free(lz4_join);
+var lz4_chunk_out: ["previous lz4 history payload".len]u8 = undefined;
+_ = try vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
+    &lz4_chunks,
+    lz4_join,
+    &lz4_chunk_out,
+    lz4_dict_set,
+);
 
 var lz4_block_encoder = try vort.Lz4BlockEncoder.init(allocator);
 defer lz4_block_encoder.deinit();
@@ -476,6 +486,16 @@ const zstd_stream_exact = try vort.zstdDecodeNativeConcatenatedFrameAllocWithDic
     zstd_stream_plain.len,
 );
 defer allocator.free(zstd_stream_exact);
+const zstd_chunks = [_][]const u8{ zstd_dict_frame.frame[0..8], zstd_dict_frame.frame[8..] };
+const zstd_join = try allocator.alloc(u8, zstd_dict_frame.frame.len);
+defer allocator.free(zstd_join);
+var zstd_chunk_out: ["prefix: previous zstd history payload, shared phrase tail".len]u8 = undefined;
+_ = try vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
+    &zstd_chunks,
+    zstd_join,
+    &zstd_chunk_out,
+    zstd_dict_set,
+);
 
 const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);
