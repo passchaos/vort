@@ -1477,6 +1477,21 @@ test "root native dictionary incremental direct-output paths round trip" {
         lz4_dict,
         lz4_into[0 .. lz4_into_written - 1],
     ));
+    var lz4_reusable_encoder = try Lz4NativeFrameEncoder.init(std.testing.allocator);
+    defer lz4_reusable_encoder.deinit();
+    const lz4_reusable_owned = try lz4_reusable_encoder.encodeWithDictionaryAlloc(lz4_payload, lz4_options, lz4_dict);
+    defer std.testing.allocator.free(lz4_reusable_owned);
+    try std.testing.expectEqualSlices(u8, lz4_frame, lz4_reusable_owned);
+    const lz4_reusable_scratch = try lz4_reusable_encoder.encodeScratchWithDictionary(lz4_payload, lz4_options, lz4_dict);
+    try std.testing.expectEqualSlices(u8, lz4_frame, lz4_reusable_scratch);
+    const lz4_reusable_into_written = try lz4_reusable_encoder.encodeIntoSliceWithDictionary(lz4_payload, lz4_options, lz4_dict, lz4_into);
+    try std.testing.expectEqualSlices(u8, lz4_frame, lz4_into[0..lz4_reusable_into_written]);
+    try std.testing.expectError(error.OutputTooSmall, lz4_reusable_encoder.encodeIntoSliceWithDictionary(
+        lz4_payload,
+        lz4_options,
+        lz4_dict,
+        lz4_into[0 .. lz4_reusable_into_written - 1],
+    ));
 
     var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, lz4_dict, .{
         .expected_output_len = lz4_payload.len,
@@ -1551,6 +1566,24 @@ test "root native dictionary incremental direct-output paths round trip" {
         zstd_options,
         zstd_dict,
         zstd_into[0 .. zstd_into_result.written - 1],
+    ));
+    var zstd_reusable_encoder = ZstdNativeFrameEncoder.init(std.testing.allocator);
+    defer zstd_reusable_encoder.deinit();
+    const zstd_reusable_owned = try zstd_reusable_encoder.encodeWithDictionaryAlloc(zstd_payload, zstd_options, zstd_dict);
+    defer std.testing.allocator.free(zstd_reusable_owned.frame);
+    try std.testing.expectEqual(zstd_frame.mode, zstd_reusable_owned.mode);
+    try std.testing.expectEqualSlices(u8, zstd_frame.frame, zstd_reusable_owned.frame);
+    const zstd_reusable_scratch = try zstd_reusable_encoder.encodeScratchWithDictionary(zstd_payload, zstd_options, zstd_dict);
+    try std.testing.expectEqual(zstd_frame.mode, zstd_reusable_scratch.mode);
+    try std.testing.expectEqualSlices(u8, zstd_frame.frame, zstd_reusable_scratch.frame);
+    const zstd_reusable_into_result = try zstd_reusable_encoder.encodeIntoSliceWithDictionary(zstd_payload, zstd_options, zstd_dict, zstd_into);
+    try std.testing.expectEqual(zstd_frame.mode, zstd_reusable_into_result.mode);
+    try std.testing.expectEqualSlices(u8, zstd_frame.frame, zstd_into[0..zstd_reusable_into_result.written]);
+    try std.testing.expectError(error.OutputTooSmall, zstd_reusable_encoder.encodeIntoSliceWithDictionary(
+        zstd_payload,
+        zstd_options,
+        zstd_dict,
+        zstd_into[0 .. zstd_reusable_into_result.written - 1],
     ));
 
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, zstd_dict, .{
