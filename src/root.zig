@@ -196,6 +196,7 @@ pub const lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySetLimited = 
 pub const lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet = lz4.decodeNativeConcatenatedFrameChunksIntoWithDictionarySet;
 pub const lz4EncodedNativeFrameBound = lz4.encodedNativeFrameBound;
 pub const lz4EncodedNativeFrameBoundWithOptions = lz4.encodedNativeFrameBoundWithOptions;
+pub const lz4EncodedNativeFrameBoundWithDictionary = lz4.encodedNativeFrameBoundWithDictionary;
 pub const lz4EncodeNativeFrameWithDictionaryAlloc = lz4.encodeNativeFrameWithDictionaryAlloc;
 pub const lz4EncodeNativeFrameAppendWithDictionary = lz4.encodeNativeFrameAppendWithDictionary;
 pub const lz4EncodeNativeFrameIntoSliceWithDictionary = lz4.encodeNativeFrameIntoSliceWithDictionary;
@@ -272,6 +273,7 @@ pub const zstdIterateNativeFrameBlocks = zstd.iterateNativeFrameBlocks;
 pub const zstdIterateNativeStream = zstd.iterateNativeStream;
 pub const zstdEncodedNativeFrameBound = zstd.encodedNativeFrameBound;
 pub const zstdEncodedNativeFrameBoundWithOptions = zstd.encodedNativeFrameBoundWithOptions;
+pub const zstdEncodedNativeFrameBoundWithDictionary = zstd.encodedNativeFrameBoundWithDictionary;
 pub const zstdEncodeNativeFrameWithOptionsAlloc = zstd.encodeNativeFrameWithOptionsAlloc;
 pub const zstdEncodeNativeFrameWithDictionaryAlloc = zstd.encodeNativeFrameWithDictionaryAlloc;
 pub const zstdEncodeNativeFrameAppend = zstd.encodeNativeFrameAppend;
@@ -1038,6 +1040,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet;
     _ = lz4EncodedNativeFrameBound;
     _ = lz4EncodedNativeFrameBoundWithOptions;
+    _ = lz4EncodedNativeFrameBoundWithDictionary;
     _ = lz4EncodeBlockAlloc;
     _ = lz4EncodeBlockWithPrefixAlloc;
     _ = lz4EncodeBlockIntoSlice;
@@ -1104,6 +1107,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdInspectNativeSkippableFrame;
     _ = zstdEncodedNativeFrameBound;
     _ = zstdEncodedNativeFrameBoundWithOptions;
+    _ = zstdEncodedNativeFrameBoundWithDictionary;
     _ = zstdEncodeNativeFrameWithOptionsAlloc;
     _ = zstdEncodeNativeFrameAppend;
     _ = zstdEncodeNativeFrameIntoSlice;
@@ -1806,11 +1810,7 @@ test "root native dictionary incremental direct-output paths round trip" {
     defer lz4_appended.deinit(std.testing.allocator);
     try lz4EncodeNativeFrameAppendWithDictionary(std.testing.allocator, &lz4_appended, lz4_payload, lz4_options, lz4_dict);
     try std.testing.expectEqualSlices(u8, lz4_frame, lz4_appended.items);
-    const lz4_bound = try lz4EncodedNativeFrameBoundWithOptions(lz4_payload.len, .{
-        .content_checksum = true,
-        .block_checksum = true,
-        .dictionary_id = lz4_dict.id,
-    });
+    const lz4_bound = try lz4EncodedNativeFrameBoundWithDictionary(lz4_payload.len, lz4_options, lz4_dict);
     const lz4_into = try std.testing.allocator.alloc(u8, lz4_bound);
     defer std.testing.allocator.free(lz4_into);
     const lz4_into_written = try lz4EncodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, lz4_payload, lz4_options, lz4_dict, lz4_into);
@@ -1895,11 +1895,7 @@ test "root native dictionary incremental direct-output paths round trip" {
     const zstd_appended_mode = try zstdEncodeNativeFrameAppendWithDictionary(std.testing.allocator, &zstd_appended, zstd_payload, zstd_options, zstd_dict);
     try std.testing.expectEqual(zstd_frame.mode, zstd_appended_mode);
     try std.testing.expectEqualSlices(u8, zstd_frame.frame, zstd_appended.items);
-    const zstd_bound = try zstdEncodedNativeFrameBoundWithOptions(zstd_payload.len, .{
-        .selection = .literal_only,
-        .content_checksum = true,
-        .dictionary_id = zstd_dict.id,
-    });
+    const zstd_bound = try zstdEncodedNativeFrameBoundWithDictionary(zstd_payload.len, zstd_options, zstd_dict);
     const zstd_into = try std.testing.allocator.alloc(u8, zstd_bound);
     defer std.testing.allocator.free(zstd_into);
     const zstd_into_result = try zstdEncodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, zstd_payload, zstd_options, zstd_dict, zstd_into);
