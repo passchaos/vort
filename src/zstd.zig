@@ -3376,9 +3376,9 @@ fn emitDictionaryMatchCompressedBlock(
 ) Error!bool {
     if (try emitMultiDictionaryMatchCompressedBlock(allocator, out, block, last, dictionary, frame_offset)) return true;
 
-    const match = findDictionaryMatch(dictionary.content, block) orelse return false;
+    const match = findDictionaryMatch(dictionary.content, block, frame_offset) orelse return false;
     const literal_len = match.block_start;
-    const match_offset = dictionary.content.len + frame_offset + literal_len - match.dictionary_start;
+    const match_offset = try dictionaryMatchOffset(dictionary.content.len, frame_offset, match);
     const tail = block[match.block_start + match.len ..];
 
     const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
@@ -3428,9 +3428,9 @@ fn emitMultiDictionaryMatchCompressedBlock(
     var count: usize = 0;
     var literal_start: usize = 0;
     while (count < max_bootstrap_sequence_count and literal_start < block.len) {
-        const match = findDictionaryMatchIn(dictionary.content, block, literal_start) orelse break;
+        const match = findDictionaryMatchIn(dictionary.content, block, literal_start, frame_offset) orelse break;
         literal_lens[count] = match.block_start - literal_start;
-        offsets[count] = dictionary.content.len + frame_offset + match.block_start - match.dictionary_start;
+        offsets[count] = try dictionaryMatchOffset(dictionary.content.len, frame_offset, match);
         match_lens[count] = match.len;
         literal_ends[count] = match.block_start + match.len;
         literal_start = literal_ends[count];
@@ -3849,11 +3849,11 @@ const DictionaryMatch = struct {
     len: usize,
 };
 
-fn findDictionaryMatch(dictionary: []const u8, block: []const u8) ?DictionaryMatch {
-    return findDictionaryMatchIn(dictionary, block, 0);
+fn findDictionaryMatch(dictionary: []const u8, block: []const u8, frame_offset: usize) ?DictionaryMatch {
+    return findDictionaryMatchIn(dictionary, block, 0, frame_offset);
 }
 
-fn findDictionaryMatchIn(dictionary: []const u8, block: []const u8, start_min: usize) ?DictionaryMatch {
+fn findDictionaryMatchIn(dictionary: []const u8, block: []const u8, start_min: usize, frame_offset: usize) ?DictionaryMatch {
     // Keep this first dictionary encoder slice deliberately small and
     // deterministic: it emits dictionary sequences in native blocks, and each
     // sequence may start after caller literals. Offset accounting uses the bytes
@@ -3861,6 +3861,7 @@ fn findDictionaryMatchIn(dictionary: []const u8, block: []const u8, start_min: u
     // decoder's explicit dictionary-history model.
     if (dictionary.len == 0 or block.len < 8 or start_min + 8 > block.len) return null;
     var best: ?DictionaryMatch = null;
+    var best_payload_len: usize = std.math.maxInt(usize);
     var block_start = start_min;
     while (block_start + 8 <= block.len) : (block_start += 1) {
         for (dictionary, 0..) |_, dictionary_start| {
@@ -3869,12 +3870,48 @@ fn findDictionaryMatchIn(dictionary: []const u8, block: []const u8, start_min: u
                 block_start + len < block.len and
                 dictionary[dictionary_start + len] == block[block_start + len]) : (len += 1)
             {}
-            if (len >= 8 and (best == null or len > best.?.len)) {
-                best = .{ .dictionary_start = dictionary_start, .block_start = block_start, .len = len };
+            if (len >= 8) {
+                const candidate: DictionaryMatch = .{ .dictionary_start = dictionary_start, .block_start = block_start, .len = len };
+                const candidate_payload_len = dictionaryMatchPayloadLenFrom(block, candidate, start_min, frame_offset, dictionary.len) orelse continue;
+                if (candidate_payload_len < best_payload_len or
+                    (candidate_payload_len == best_payload_len and len > (best orelse candidate).len))
+                {
+                    best = candidate;
+                    best_payload_len = candidate_payload_len;
+                }
             }
         }
     }
     return best;
+}
+
+fn dictionaryMatchOffset(dictionary_len: usize, frame_offset: usize, match: DictionaryMatch) Error!usize {
+    const dict_distance = dictionary_len - match.dictionary_start;
+    const frame_distance = std.math.add(usize, frame_offset, match.block_start) catch return error.IntegerOverflow;
+    return std.math.add(usize, dict_distance, frame_distance) catch return error.IntegerOverflow;
+}
+
+fn dictionaryMatchPayloadLenFrom(
+    block: []const u8,
+    match: DictionaryMatch,
+    literal_start: usize,
+    frame_offset: usize,
+    dictionary_len: usize,
+) ?usize {
+    if (match.block_start < literal_start) return null;
+    const literal_len = match.block_start - literal_start;
+    const match_offset = dictionaryMatchOffset(dictionary_len, frame_offset, match) catch return null;
+    const tail_len = block.len - match.block_start - match.len;
+    const literal_code = sequenceCodeForValue(literal_len, &ll_base, &ll_bits) catch return null;
+    const offset_code = sequenceCodeForValue(match_offset, &of_base, &of_bits) catch return null;
+    const match_code = sequenceCodeForValue(match.len, &ml_base, &ml_bits) catch return null;
+    const regenerated_literals = std.math.add(usize, literal_len, tail_len) catch return null;
+    const bit_count = @as(usize, ll_bits[literal_code]) + ml_bits[match_code] + of_bits[offset_code] + 1;
+    const bitstream_len = (bit_count + 7) / 8;
+    var len = literalsHeaderLen(regenerated_literals) catch return null;
+    len = std.math.add(usize, len, regenerated_literals) catch return null;
+    len = std.math.add(usize, len, 1 + 1 + 3 + bitstream_len) catch return null;
+    return len;
 }
 
 fn findBestDuplicateMatch(block: []const u8) Error!?DuplicateMatch {
@@ -6935,6 +6972,35 @@ test "zstd native writer uses preset dictionary history" {
     try std.testing.expectEqualSlices(u8, encoded.frame, into[0..into_result.written]);
     try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, into[0 .. into_result.written - 1]));
     try std.testing.expectError(error.NeedDictionary, encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, NativeDictionary.init(0, dict.content)));
+}
+
+test "zstd native dictionary match planner scores offset cost" {
+    var dict_bytes: std.ArrayList(u8) = .empty;
+    defer dict_bytes.deinit(std.testing.allocator);
+    try dict_bytes.appendSlice(std.testing.allocator, "ABCDEFGHI");
+    try dict_bytes.appendNTimes(std.testing.allocator, 'x', 70 * 1024);
+    try dict_bytes.appendSlice(std.testing.allocator, "ABCDEFGH");
+
+    const dict = NativeDictionary.init(0x2345, dict_bytes.items);
+    const payload = "ABCDEFGHI-tail";
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    }, dict);
+    defer std.testing.allocator.free(encoded.frame);
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded.frame, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded.frame[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
+    // A longer 9-byte match exists at the beginning of the dictionary, but it
+    // needs a much larger offset. The planner should prefer the 8-byte near-tail
+    // match because its cheaper offset code wins after full payload-cost scoring.
+    try std.testing.expectEqual(payload.len - 8, section.regenerated_size);
 }
 
 test "zstd native writer uses preset dictionary history after first block" {

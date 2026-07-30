@@ -15,6 +15,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkLaterBlockDictionaryMatch(init.gpa);
     checked += 1;
+    try checkDictionaryMatchCostScoring(init.gpa);
+    checked += 1;
     try checkConcatenatedDictionaryApis(init.gpa);
     checked += 1;
 
@@ -143,6 +145,36 @@ fn checkLaterBlockDictionaryMatch(allocator: std.mem.Allocator) !void {
     const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
     defer allocator.free(decoded);
     try expectEqualSlices(payload, decoded);
+}
+
+fn checkDictionaryMatchCostScoring(allocator: std.mem.Allocator) !void {
+    var dict_bytes: std.ArrayList(u8) = .empty;
+    defer dict_bytes.deinit(allocator);
+    try dict_bytes.appendSlice(allocator, "ABCDEFGHI");
+    try dict_bytes.appendNTimes(allocator, 'x', 70 * 1024);
+    try dict_bytes.appendSlice(allocator, "ABCDEFGH");
+
+    const dict = vort.ZstdNativeDictionary.init(0x9A, dict_bytes.items);
+    const payload = "ABCDEFGHI-tail";
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    const encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict);
+    defer allocator.free(encoded.frame);
+    const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
+    defer allocator.free(decoded);
+    try expectEqualSlices(payload, decoded);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(encoded.frame);
+    try expect(first_block.block_type == .compressed);
+    const raw = try vort.zstdEncodeRawOrRleFrameWithOptionsAlloc(allocator, payload, .{
+        .content_checksum = false,
+        .dictionary_id = dict.id,
+    });
+    defer allocator.free(raw);
+    try expect(encoded.frame.len < raw.len);
 }
 
 fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
