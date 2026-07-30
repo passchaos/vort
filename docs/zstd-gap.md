@@ -145,8 +145,11 @@ Current interpretation:
   plus `finish()` provide strict SizeMismatch semantics when callers know the
   expected output length. LZ4 native incremental decoding has started moving
   beyond the whole-frame facade with a direct-output path for raw linked or
-  independent blocks plus independent compressed blocks with block/content
-  checksum verification; linked compressed block-by-block paths remain open.
+  independent blocks plus independent and linked compressed blocks with
+  block/content checksum verification when the caller supplies one contiguous
+  frame output buffer; linked compressed drains that split the frame history
+  across caller output buffers still fall back to the whole-frame scratch path
+  and resume after the prefix already returned to the caller.
   Zstd native incremental decoding now
   has matching direct-output slices for raw/RLE blocks and single compressed
   blocks with content checksum validation; broader compressed Zstd frames still
