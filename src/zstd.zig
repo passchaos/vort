@@ -896,6 +896,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     allocator: std.mem.Allocator,
     dictionary: ?NativeDictionary = null,
     dictionary_set: ?NativeDictionarySet = null,
+    options: Options = .{},
     phase: Phase = .frame,
     frame_scratch: std.ArrayList(u8) = .empty,
     decoded_scratch: std.ArrayList(u8) = .empty,
@@ -906,6 +907,19 @@ pub const NativeIncrementalFrameDecoder = struct {
     last_error_phase: ?Phase = null,
 
     pub const Phase = enum { frame, output, done };
+
+    pub const Options = struct {
+        /// Maximum compressed bytes retained while waiting for one complete
+        /// data frame or skippable frame. Because this facade still delegates
+        /// validation to the one-shot native decoder, hostile streams should be
+        /// guarded by the same container/frame limit the caller would apply to
+        /// a one-shot decode.
+        max_compressed_buffer_len: usize = std.math.maxInt(usize),
+        /// Maximum decoded bytes retained for one complete data frame before
+        /// callers drain it through their output chunks. This is per-frame and
+        /// does not cap cumulative output across a concatenated stream.
+        max_decoded_buffer_len: usize = std.math.maxInt(usize),
+    };
 
     pub const Snapshot = struct {
         phase: Phase,
@@ -921,12 +935,24 @@ pub const NativeIncrementalFrameDecoder = struct {
         return .{ .allocator = allocator };
     }
 
+    pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) NativeIncrementalFrameDecoder {
+        return .{ .allocator = allocator, .options = options };
+    }
+
     pub fn initWithDictionary(allocator: std.mem.Allocator, dictionary: NativeDictionary) NativeIncrementalFrameDecoder {
         return .{ .allocator = allocator, .dictionary = dictionary };
     }
 
+    pub fn initWithDictionaryAndOptions(allocator: std.mem.Allocator, dictionary: NativeDictionary, options: Options) NativeIncrementalFrameDecoder {
+        return .{ .allocator = allocator, .dictionary = dictionary, .options = options };
+    }
+
     pub fn initWithDictionarySet(allocator: std.mem.Allocator, dictionary_set: NativeDictionarySet) NativeIncrementalFrameDecoder {
         return .{ .allocator = allocator, .dictionary_set = dictionary_set };
+    }
+
+    pub fn initWithDictionarySetAndOptions(allocator: std.mem.Allocator, dictionary_set: NativeDictionarySet, options: Options) NativeIncrementalFrameDecoder {
+        return .{ .allocator = allocator, .dictionary_set = dictionary_set, .options = options };
     }
 
     pub fn deinit(self: *NativeIncrementalFrameDecoder) void {
@@ -990,19 +1016,21 @@ pub const NativeIncrementalFrameDecoder = struct {
             switch (self.phase) {
                 .frame => {
                     if (input_read < input.len) {
-                        try self.frame_scratch.appendSlice(self.allocator, input[input_read..]);
-                        const consumed = input.len - input_read;
-                        input_read = input.len;
-                        self.input_received += consumed;
+                        try self.appendInputWithinCompressedLimit(input, &input_read);
                     }
 
                     const frame_end = (try self.completeFrameAvailable()) orelse {
                         if (self.frame_scratch.items.len == 0 and (input_read != 0 or output_written_step != 0)) {
+                            if (input_read < input.len) continue;
                             self.phase = .done;
                             return .{
                                 .progress = .{ .input_read = input_read, .output_written = output_written_step },
                                 .status = .done,
                             };
+                        }
+                        if (input_read < input.len or self.frame_scratch.items.len >= self.options.max_compressed_buffer_len) {
+                            self.recordError(.frame, error.OutputLimitExceeded);
+                            return error.OutputLimitExceeded;
                         }
                         return .{
                             .progress = .{ .input_read = input_read, .output_written = output_written_step },
@@ -1049,6 +1077,19 @@ pub const NativeIncrementalFrameDecoder = struct {
         }
     }
 
+    fn appendInputWithinCompressedLimit(self: *NativeIncrementalFrameDecoder, input: []const u8, input_read: *usize) Error!void {
+        if (self.frame_scratch.items.len > self.options.max_compressed_buffer_len) {
+            self.recordError(.frame, error.OutputLimitExceeded);
+            return error.OutputLimitExceeded;
+        }
+        const remaining_capacity = self.options.max_compressed_buffer_len - self.frame_scratch.items.len;
+        if (remaining_capacity == 0) return;
+        const n = @min(remaining_capacity, input.len - input_read.*);
+        try self.frame_scratch.appendSlice(self.allocator, input[input_read.*..][0..n]);
+        input_read.* += n;
+        self.input_received += n;
+    }
+
     fn completeFrameAvailable(self: *NativeIncrementalFrameDecoder) Error!?usize {
         while (true) {
             if (self.frame_scratch.items.len < 4) return null;
@@ -1080,11 +1121,11 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.decoded_scratch.clearRetainingCapacity();
         self.decoded_offset = 0;
         if (self.dictionary_set) |dictionary_set| {
-            _ = try decodeRawOrRleFrameAppendWithDictionarySet(self.allocator, &self.decoded_scratch, frame, dictionary_set);
+            _ = try decodeRawOrRleFrameAppendLimitedWithDictionarySet(self.allocator, &self.decoded_scratch, frame, self.options.max_decoded_buffer_len, dictionary_set);
         } else if (self.dictionary) |dictionary| {
-            _ = try decodeRawOrRleFrameAppendWithDictionary(self.allocator, &self.decoded_scratch, frame, dictionary);
+            _ = try decodeRawOrRleFrameAppendLimitedWithDictionary(self.allocator, &self.decoded_scratch, frame, self.options.max_decoded_buffer_len, dictionary);
         } else {
-            _ = try decodeRawOrRleFrameAppend(self.allocator, &self.decoded_scratch, frame);
+            _ = try decodeRawOrRleFrameAppendLimited(self.allocator, &self.decoded_scratch, frame, self.options.max_decoded_buffer_len);
         }
     }
 
@@ -7933,6 +7974,34 @@ test "zstd native incremental decoder drains concatenated streams and skippable 
     try std.testing.expectEqualSlices(u8, third_payload, &continued);
     try std.testing.expectEqual(stream.items.len + third.frame.len, decoder.snapshot().input_received);
     try std.testing.expectEqual(output.len + third_payload.len, decoder.diagnostics().output_written);
+}
+
+test "zstd native incremental decoder enforces buffer limits" {
+    const payload = "bounded incremental zstd payload " ** 8;
+    const encoded = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    });
+    defer std.testing.allocator.free(encoded.frame);
+
+    var compressed_limited = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .max_compressed_buffer_len = encoded.frame.len - 1,
+    });
+    defer compressed_limited.deinit();
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectError(error.OutputLimitExceeded, compressed_limited.step(encoded.frame, output[0..0]));
+    try std.testing.expectEqual(encoded.frame.len - 1, compressed_limited.snapshot().input_received);
+    try std.testing.expectEqualSlices(u8, "OutputLimitExceeded", compressed_limited.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", compressed_limited.diagnostics().last_error_phase_name);
+
+    var decoded_limited = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .max_decoded_buffer_len = payload.len - 1,
+    });
+    defer decoded_limited.deinit();
+    try std.testing.expectError(error.OutputLimitExceeded, decoded_limited.step(encoded.frame, &output));
+    try std.testing.expectEqual(encoded.frame.len, decoded_limited.snapshot().input_received);
+    try std.testing.expectEqualSlices(u8, "OutputLimitExceeded", decoded_limited.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", decoded_limited.diagnostics().last_error_phase_name);
 }
 
 test "zstd native incremental decoder supports dictionaries" {

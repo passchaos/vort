@@ -388,6 +388,11 @@ _ = try lz4_incremental.step(lz4_frame[4..], &lz4_incremental_out);
 // The same incremental decoder can continue through concatenated native
 // streams and LZ4 skippable metadata frames; feed more bytes after `.done` to
 // decode the next stream member without resetting cumulative diagnostics.
+var lz4_bounded_incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+    .max_compressed_buffer_len = 1 << 20,
+    .max_decoded_buffer_len = 1 << 20,
+});
+defer lz4_bounded_incremental.deinit();
 const lz4_dict = vort.Lz4NativeDictionary.init(0x1234, "previous lz4 history");
 const lz4_dict_frame = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(
     allocator,
@@ -475,6 +480,11 @@ _ = try zstd_incremental.step(zstd_result.frame[0..4], zstd_incremental_out[0..0
 _ = try zstd_incremental.step(zstd_result.frame[4..], &zstd_incremental_out);
 // Zstd native incremental decode likewise walks concatenated frames and
 // skippable metadata frames through the same caller-owned StepResult API.
+var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+    .max_compressed_buffer_len = 1 << 20,
+    .max_decoded_buffer_len = 1 << 20,
+});
+defer zstd_bounded_incremental.deinit();
 const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history shared phrase");
 const zstd_dict_frame = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(
     allocator,
