@@ -24,7 +24,7 @@ EXPECTED_COLUMNS = [
     "checksum",
 ]
 EXPECTED_CODECS = {"lz4", "zstd"}
-EXPECTED_MODES = {"one_shot", "incremental"}
+EXPECTED_MODES = {"one_shot", "incremental", "incremental_direct"}
 EXPECTED_CASES = {"text", "structured", "repetitive"}
 
 

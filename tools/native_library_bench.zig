@@ -2,7 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 
 const Codec = enum { lz4, zstd };
-const Mode = enum { one_shot, incremental };
+const Mode = enum { one_shot, incremental, incremental_direct };
 
 const Case = struct {
     name: []const u8,
@@ -45,8 +45,10 @@ pub fn main(init: std.process.Init) !void {
     for (cases) |case| {
         try rows.append(init.gpa, try lz4OneShotRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try lz4IncrementalRow(init.io, init.gpa, case, options.iterations));
+        try rows.append(init.gpa, try lz4IncrementalDirectRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdOneShotRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdIncrementalRow(init.io, init.gpa, case, options.iterations));
+        try rows.append(init.gpa, try zstdIncrementalDirectRow(init.io, init.gpa, case, options.iterations));
     }
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
@@ -105,6 +107,20 @@ fn lz4IncrementalRow(io: std.Io, allocator: std.mem.Allocator, case: Case, itera
     return makeRow(.lz4, .incremental, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
+fn lz4IncrementalDirectRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
+    const options: vort.Lz4NativeFrameOptions = .{ .content_checksum = false, .block_checksum = true };
+    const encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, case.payload, options);
+    defer allocator.free(encoded);
+    const decoded = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(decoded);
+    try decodeLz4IncrementalDirect(allocator, encoded, decoded);
+    if (!std.mem.eql(u8, case.payload, decoded)) return error.SizeMismatch;
+
+    const decode_result = try timeDecodeLz4IncrementalDirect(io, allocator, encoded, decoded, case.payload, iterations);
+    const encode_result = try timeEncodeLz4(io, allocator, case.payload, options, iterations);
+    return makeRow(.lz4, .incremental_direct, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
 fn zstdOneShotRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
     const options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only, .content_checksum = false };
     const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, case.payload, options);
@@ -130,6 +146,20 @@ fn zstdIncrementalRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iter
     const decode_result = try timeDecodeZstdIncremental(io, allocator, encoded.frame, decoded, case.payload, iterations);
     const encode_result = try timeEncodeZstd(io, allocator, case.payload, options, iterations);
     return makeRow(.zstd, .incremental, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdIncrementalDirectRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
+    const options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only, .content_checksum = false };
+    const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, case.payload, options);
+    defer allocator.free(encoded.frame);
+    const decoded = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(decoded);
+    try decodeZstdIncrementalDirect(allocator, encoded.frame, decoded);
+    if (!std.mem.eql(u8, case.payload, decoded)) return error.SizeMismatch;
+
+    const decode_result = try timeDecodeZstdIncrementalDirect(io, allocator, encoded.frame, decoded, case.payload, iterations);
+    const encode_result = try timeEncodeZstd(io, allocator, case.payload, options, iterations);
+    return makeRow(.zstd, .incremental_direct, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
 const TimeResult = struct { elapsed_ns: u64, checksum: u64 };
@@ -198,6 +228,28 @@ fn timeDecodeZstdIncremental(io: std.Io, allocator: std.mem.Allocator, encoded: 
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
 }
 
+fn timeDecodeLz4IncrementalDirect(io: std.Io, allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8, expected: []const u8, iterations: usize) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        try decodeLz4IncrementalDirect(allocator, encoded, decoded);
+        if (!std.mem.eql(u8, expected, decoded)) return error.SizeMismatch;
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeZstdIncrementalDirect(io: std.Io, allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8, expected: []const u8, iterations: usize) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        try decodeZstdIncrementalDirect(allocator, encoded, decoded);
+        if (!std.mem.eql(u8, expected, decoded)) return error.SizeMismatch;
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
 fn decodeLz4Incremental(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8) !void {
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.init(allocator);
     defer decoder.deinit();
@@ -208,6 +260,32 @@ fn decodeZstdIncremental(allocator: std.mem.Allocator, encoded: []const u8, deco
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.init(allocator);
     defer decoder.deinit();
     try drainIncremental(&decoder, encoded, decoded);
+}
+
+fn decodeLz4IncrementalDirect(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8) !void {
+    var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = decoded.len,
+        .max_decoded_buffer_len = decoded.len,
+    });
+    defer decoder.deinit();
+    const first = try decoder.step(encoded, decoded[0..0]);
+    if (first.status != .need_output) return error.SizeMismatch;
+    if (!std.mem.eql(u8, decoder.diagnostics().phase_name, "direct_output")) return error.SizeMismatch;
+    const done = try decoder.step("", decoded);
+    if (done.status != .done or done.progress.output_written != decoded.len) return error.SizeMismatch;
+}
+
+fn decodeZstdIncrementalDirect(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8) !void {
+    var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = decoded.len,
+        .max_decoded_buffer_len = decoded.len,
+    });
+    defer decoder.deinit();
+    const first = try decoder.step(encoded, decoded[0..0]);
+    if (first.status != .need_output) return error.SizeMismatch;
+    if (!std.mem.eql(u8, decoder.diagnostics().phase_name, "direct_output")) return error.SizeMismatch;
+    const done = try decoder.step("", decoded);
+    if (done.status != .done or done.progress.output_written != decoded.len) return error.SizeMismatch;
 }
 
 fn drainIncremental(decoder: anytype, encoded: []const u8, decoded: []u8) !void {
@@ -276,6 +354,7 @@ fn modeName(mode: Mode) []const u8 {
     return switch (mode) {
         .one_shot => "one_shot",
         .incremental => "incremental",
+        .incremental_direct => "incremental_direct",
     };
 }
 
