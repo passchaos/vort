@@ -1165,6 +1165,21 @@ pub fn build(b: *std.Build) void {
     const native_library_bench_step = b.step("run-native-library-bench", "Benchmark native LZ4/Zstd public library APIs");
     native_library_bench_step.dependOn(&run_native_library_bench.step);
 
+    const run_native_library_bench_csv = b.addRunArtifact(native_library_bench_exe);
+    run_native_library_bench_csv.addArgs(&.{ "--iterations", "25", "--csv", "zig-out/vort-native-library-bench.csv" });
+    const native_library_bench_csv_step = b.step("run-native-library-bench-csv", "Write native LZ4/Zstd public library benchmark CSV");
+    native_library_bench_csv_step.dependOn(&run_native_library_bench_csv.step);
+
+    const native_library_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/native_library_bench_gate.py",
+        "--csv",
+        "zig-out/vort-native-library-bench.csv",
+    });
+    native_library_bench_gate.step.dependOn(native_library_bench_csv_step);
+    const native_library_bench_gate_step = b.step("run-native-library-bench-gate", "Validate native LZ4/Zstd public library benchmark CSV");
+    native_library_bench_gate_step.dependOn(&native_library_bench_gate.step);
+
     const dictionary_decode_bench_exe = b.addExecutable(.{
         .name = "vort-dictionary-decode-bench",
         .root_module = b.createModule(.{
@@ -1911,6 +1926,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(dynamic_plan_report_step);
     ci_smoke_step.dependOn(split_policy_report_step);
     ci_smoke_step.dependOn(native_range_report_step);
+    ci_smoke_step.dependOn(native_library_bench_gate_step);
     ci_smoke_step.dependOn(native_tier_range_bench_gate_step);
     ci_smoke_step.dependOn(native_tier_range_files_bench_gate_step);
     ci_smoke_step.dependOn(native_tier_range_corpus_bench_gate_step);

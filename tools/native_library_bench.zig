@@ -25,6 +25,7 @@ const Row = struct {
 
 const Options = struct {
     iterations: usize = 200,
+    csv_path: ?[]const u8 = null,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -48,10 +49,17 @@ pub fn main(init: std.process.Init) !void {
         try rows.append(init.gpa, try zstdIncrementalRow(init.io, init.gpa, case, options.iterations));
     }
 
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
-    try writeCsv(&stdout_writer.interface, rows.items);
-    try stdout_writer.interface.flush();
+    var csv = std.Io.Writer.Allocating.init(init.gpa);
+    defer csv.deinit();
+    try writeCsv(&csv.writer, rows.items);
+    if (options.csv_path) |path| {
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
+    } else {
+        var stdout_buffer: [1024]u8 = undefined;
+        var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
+        try stdout_writer.interface.writeAll(csv.written());
+        try stdout_writer.interface.flush();
+    }
 }
 
 fn parseOptions(args: *std.process.Args.Iterator) !Options {
@@ -61,6 +69,8 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             const value = args.next() orelse return error.MissingIterationCount;
             options.iterations = try std.fmt.parseInt(usize, value, 10);
             if (options.iterations == 0) return error.InvalidIterationCount;
+        } else if (std.mem.eql(u8, arg, "--csv")) {
+            options.csv_path = args.next() orelse return error.MissingCsvPath;
         } else {
             return error.UnknownArgument;
         }
