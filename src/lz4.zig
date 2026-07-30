@@ -292,6 +292,7 @@ pub fn encodePureFrameAppend(
 }
 
 pub const encodeNativeFrameAlloc = encodePureFrameAlloc;
+pub const encodeNativeFrameWithOptionsAlloc = encodePureFrameWithOptionsAlloc;
 pub const encodeNativeFrameAppend = encodePureFrameAppend;
 
 pub fn encodeNativeFrameWithDictionaryAlloc(

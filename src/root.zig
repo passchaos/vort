@@ -42,7 +42,7 @@ pub const lz4EncodeFrameWithLevelAlloc = lz4.encodeFrameWithLevelAlloc;
 pub const lz4EncodeFrameWithOptionsAlloc = lz4.encodeFrameWithOptionsAlloc;
 pub const lz4EncodeFrameWithLevelAndOptionsAlloc = lz4.encodeFrameWithLevelAndOptionsAlloc;
 pub const lz4EncodeNativeFrameAlloc = lz4.encodeNativeFrameAlloc;
-pub const lz4EncodeNativeFrameWithOptionsAlloc = lz4.encodePureFrameWithOptionsAlloc;
+pub const lz4EncodeNativeFrameWithOptionsAlloc = lz4.encodeNativeFrameWithOptionsAlloc;
 pub const lz4EncodeNativeFrameAppend = lz4.encodeNativeFrameAppend;
 pub const lz4EncodeNativeFrameIntoSlice = lz4.encodeNativeFrameIntoSlice;
 pub const lz4EncodedSkippableFrameBound = lz4.encodedSkippableFrameBound;
@@ -1203,6 +1203,15 @@ test "root lz4 lib frame options round trip" {
     try std.testing.expectError(error.OutputLimitExceeded, lz4DecodedFrameSizeLimited(encoded, payload.len - 1));
     const native_encoded = try lz4EncodeNativeFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(native_encoded);
+    const native_with_options = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .include_content_size = false,
+        .content_checksum = false,
+        .block_size_id = .max64kb,
+    });
+    defer std.testing.allocator.free(native_with_options);
+    const native_with_options_decoded = try lz4DecodeNativeFrameAlloc(std.testing.allocator, native_with_options);
+    defer std.testing.allocator.free(native_with_options_decoded);
+    try std.testing.expectEqualSlices(u8, payload, native_with_options_decoded);
     try std.testing.expect(native_encoded.len <= try lz4EncodedNativeFrameBound(payload.len));
     try std.testing.expect(native_encoded.len <= try lz4EncodedNativeFrameBoundWithOptions(payload.len, .{
         .block_size_id = .max64kb,
