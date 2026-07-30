@@ -145,9 +145,9 @@ Current interpretation:
   plus `finish()` provide strict SizeMismatch semantics when callers know the
   expected output length. LZ4 native incremental decoding has started moving
   beyond the whole-frame facade with a direct-output path for raw
-  block-independent frames without checksums or dictionaries, including
-  multi-block frames; compressed/checksummed/linked block-by-block paths remain
-  open. The
+  block-independent frames, including multi-block frames with block checksum
+  verification; compressed/content-checksummed/linked block-by-block paths
+  remain open. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
