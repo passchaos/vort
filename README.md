@@ -33,7 +33,8 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   blocks), small-depth hash-chain large duplicate plus
   RLE/predefined-table multi-duplicate, repeated-pattern, and mixed
   duplicate/repeated match emission with starts scanned up to 32 bytes and
-  periods up to 32 bytes, size-aware match-vs-Huffman arbitration,
+  periods up to 32 bytes, size-aware dictionary/native-match-vs-Huffman
+  arbitration,
   raw-block-cost-aware compressed-block selection
   (falling back to raw/RLE blocks when compressed blocks would expand, for
   broad zstd CLI compatibility), plus deterministic smallest-mode

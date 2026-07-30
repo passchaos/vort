@@ -3654,12 +3654,13 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     dictionary: ?NativeDictionary,
     frame_offset: usize,
 ) Error!void {
-    if (dictionary) |dict| {
-        if (try emitDictionaryMatchCompressedBlock(allocator, out, block, last, dict, frame_offset)) {
-            state.previous_huffman_plan = null;
-            return;
-        }
-    }
+    var dictionary_block: std.ArrayList(u8) = .empty;
+    defer dictionary_block.deinit(allocator);
+    const dictionary_ok = if (dictionary) |dict|
+        try emitDictionaryMatchCompressedBlock(allocator, &dictionary_block, block, last, dict, frame_offset)
+    else
+        false;
+
     var huffman_state = state.*;
     var huffman_block: std.ArrayList(u8) = .empty;
     defer huffman_block.deinit(allocator);
@@ -3669,16 +3670,39 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     defer match_block.deinit(allocator);
     const match_ok = try emitNativeMatchCompressedBlock(allocator, &match_block, block, last);
 
-    if (huffman_ok and (!match_ok or huffman_block.items.len <= match_block.items.len)) {
-        try out.appendSlice(allocator, huffman_block.items);
-        state.* = huffman_state;
-        return;
+    const CandidateKind = enum { dictionary, huffman, match };
+    var best_kind: ?CandidateKind = null;
+    var best_len: usize = std.math.maxInt(usize);
+    if (dictionary_ok) {
+        best_kind = .dictionary;
+        best_len = dictionary_block.items.len;
     }
-    state.previous_huffman_plan = null;
-    if (match_ok) {
-        try out.appendSlice(allocator, match_block.items);
-        return;
+    if (huffman_ok and huffman_block.items.len <= best_len) {
+        best_kind = .huffman;
+        best_len = huffman_block.items.len;
     }
+    if (match_ok and match_block.items.len < best_len) {
+        best_kind = .match;
+        best_len = match_block.items.len;
+    }
+
+    if (best_kind) |kind| switch (kind) {
+        .dictionary => {
+            state.previous_huffman_plan = null;
+            try out.appendSlice(allocator, dictionary_block.items);
+            return;
+        },
+        .huffman => {
+            try out.appendSlice(allocator, huffman_block.items);
+            state.* = huffman_state;
+            return;
+        },
+        .match => {
+            state.previous_huffman_plan = null;
+            try out.appendSlice(allocator, match_block.items);
+            return;
+        },
+    };
 
     const literal_kind: LiteralsKind = if (rleByte(block) != null) .rle else .raw;
     const literal_payload_len: usize = switch (literal_kind) {
@@ -7878,6 +7902,36 @@ test "zstd native writer uses preset dictionary history after first block" {
     });
     defer std.testing.allocator.free(raw);
     try std.testing.expect(encoded.frame.len < raw.len);
+}
+
+test "zstd native writer chooses Huffman over larger dictionary match" {
+    const dict = NativeDictionary.init(0x4568, "shortdictabcdefgh");
+    var payload: [192]u8 = undefined;
+    var state: u8 = 1;
+    for (&payload) |*byte| {
+        byte.* = if ((state & 1) == 0) 'A' else 'B';
+        const feedback: u8 = ((state >> 0) ^ (state >> 2) ^ (state >> 3) ^ (state >> 4)) & 1;
+        state = (state >> 1) | (feedback << 7);
+    }
+    @memcpy(payload[64..80], dict.content[0..16]);
+
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, &payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    }, dict);
+    defer std.testing.allocator.free(encoded.frame);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, encoded.mode);
+    try std.testing.expectEqual(dict.id, (try inspectNativeFrameHeader(encoded.frame)).dictionary_id);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded.frame[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded.frame, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
 }
 
 test "zstd native writer can choose repeated before dictionary" {
