@@ -1006,7 +1006,7 @@ pub fn decodeFrameIntoWithDictionary(frame: []const u8, output: []u8, dictionary
         if (uncompressed_block) {
             @memcpy(output[written..][0..block_len], block);
             written += block_len;
-        } else if (block_index == 0 and dictionary_history.len != 0) {
+        } else if (dictionary_history.len != 0 and (header.block_independent or block_index == 0)) {
             written += try decodeBlockWithPrefixIntoSliceNoAlloc(block, output[written..], null, dictionary_history);
         } else {
             const block_start = written;
@@ -1538,7 +1538,7 @@ fn frameDecodedSizeLimitedWithDictionary(frame: []const u8, max_output_len: usiz
 
         if (uncompressed_block) {
             total = try checkedAddWithinLimit(total, block_len, max_output_len);
-        } else if (block_index == 0 and prefix_len != 0) {
+        } else if (prefix_len != 0 and (header.block_independent or block_index == 0)) {
             const remaining_limit = max_output_len - total;
             const prefixed_total = try compressedBlockDecodedSizeLimitedWithHistory(
                 block,
@@ -1791,7 +1791,7 @@ pub const NativeFrameEncoder = struct {
             const block_len = @min(input.len - offset, max_block_len);
             var header: [4]u8 = undefined;
             const block = input[offset..][0..block_len];
-            const history = if (dictionary != null and offset == 0)
+            const history = if (dictionary != null and (frame_options.block_mode == .independent or offset == 0))
                 dictionary.?.content
             else if (frame_options.block_mode == .linked)
                 input[if (offset > max_match_offset) offset - max_match_offset else 0..offset]
@@ -3090,6 +3090,38 @@ test "lz4 native frame uses preset dictionary history" {
     const written = try encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, out);
     try std.testing.expectEqualSlices(u8, encoded, out[0..written]);
     try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, out[0 .. written - 1]));
+}
+
+test "lz4 independent blocks reuse preset dictionary" {
+    const dict = NativeDictionary.init(0x2222_abcd, "abcdefghijklmnop");
+    const first_block = try std.testing.allocator.alloc(u8, max_block_history_len);
+    defer std.testing.allocator.free(first_block);
+    @memset(first_block, 'x');
+    const second_block = "abcdefghijklmnop-two";
+    const payload = try std.testing.allocator.alloc(u8, first_block.len + second_block.len);
+    defer std.testing.allocator.free(payload);
+    @memcpy(payload[0..first_block.len], first_block);
+    @memcpy(payload[first_block.len..], second_block);
+
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+        .block_size_id = .max64kb,
+        .block_mode = .independent,
+    }, dict);
+    defer std.testing.allocator.free(encoded);
+
+    const summary = try summarizeNativeFrameBlocks(encoded);
+    try std.testing.expectEqual(@as(usize, 2), summary.block_count);
+    var blocks = try iterateNativeFrameBlocks(encoded);
+    _ = (try blocks.next()) orelse return error.CorruptFrame;
+    const second = (try blocks.next()) orelse return error.CorruptFrame;
+    try std.testing.expect(second.is_compressed);
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectEqual(payload.len, try decodedNativeFrameSizeWithDictionary(encoded, dict));
 }
 
 test "lz4 native concatenated streams use preset dictionary" {

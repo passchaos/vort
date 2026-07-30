@@ -318,6 +318,25 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
     if (try vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionary(stream.items, dict) != concatenated.len) {
         return error.Lz4ProbeSizeMismatch;
     }
+
+    const first_block = try allocator.alloc(u8, 64 * 1024);
+    defer allocator.free(first_block);
+    @memset(first_block, 'x');
+    const tail = "abcdefghijklmnop-tail-block";
+    const multi_payload = try allocator.alloc(u8, first_block.len + tail.len);
+    defer allocator.free(multi_payload);
+    @memcpy(multi_payload[0..first_block.len], first_block);
+    @memcpy(multi_payload[first_block.len..], tail);
+    const multi = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, multi_payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+        .block_size_id = .max64kb,
+        .block_mode = .independent,
+    }, dict);
+    defer allocator.free(multi);
+    const multi_decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, multi, dict);
+    defer allocator.free(multi_decoded);
+    if (!std.mem.eql(u8, multi_payload, multi_decoded)) return error.Lz4ProbeMismatch;
 }
 
 fn expectPayload(case: Case, decoded: []const u8) !void {
