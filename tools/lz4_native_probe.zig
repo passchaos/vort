@@ -300,6 +300,24 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
     defer allocator.free(decoded);
     if (!std.mem.eql(u8, payload, decoded)) return error.Lz4ProbeMismatch;
     if (try vort.lz4DecodedNativeFrameSizeWithDictionary(encoded, dict) != payload.len) return error.Lz4ProbeSizeMismatch;
+
+    const second_payload = "abcdefghijklmnop-second";
+    const second = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, second_payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+    }, dict);
+    defer allocator.free(second);
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(allocator);
+    try stream.appendSlice(allocator, encoded);
+    try stream.appendSlice(allocator, second);
+
+    const concatenated = try vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionary(allocator, stream.items, dict);
+    defer allocator.free(concatenated);
+    if (!std.mem.eql(u8, payload ++ second_payload, concatenated)) return error.Lz4ProbeMismatch;
+    if (try vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionary(stream.items, dict) != concatenated.len) {
+        return error.Lz4ProbeSizeMismatch;
+    }
 }
 
 fn expectPayload(case: Case, decoded: []const u8) !void {
