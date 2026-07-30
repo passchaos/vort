@@ -4795,37 +4795,52 @@ fn mixedCandidateLookaheadPayloadLen(
     frame_offset: usize,
     candidate: MixedMatchCandidate,
 ) Error!?usize {
-    if (candidate.literal_end >= block.len) return null;
-    const next = try bestMixedCandidateNoLookahead(dictionary, block, candidate.literal_end, frame_offset) orelse return null;
-    const literal_lens = [_]usize{ candidate.literal_len, next.literal_len };
-    const offsets = [_]usize{ candidate.offset, next.offset };
-    const match_lens = [_]usize{ candidate.match_len, next.match_len };
+    var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
+    var offsets: [max_bootstrap_sequence_count]usize = undefined;
+    var match_lens: [max_bootstrap_sequence_count]usize = undefined;
+    var count: usize = 0;
+    var current = candidate;
+    while (true) {
+        literal_lens[count] = current.literal_len;
+        offsets[count] = current.offset;
+        match_lens[count] = current.match_len;
+        count += 1;
+        if (count == max_bootstrap_sequence_count or current.literal_end >= block.len) break;
+        current = try bestMixedCandidateNoLookahead(dictionary, block, current.literal_end, frame_offset) orelse break;
+    }
+    if (count < 2) return null;
+
     const literal_code = try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits);
     const offset_code = try sequenceCodeForValue(offsets[0], &of_base, &of_bits);
     const match_code = try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits);
-    if (sequenceCodeForValue(literal_lens[1], &ll_base, &ll_bits) catch null) |next_literal_code| {
-        if (next_literal_code == literal_code) {
-            if (sequenceCodeForValue(offsets[1], &of_base, &of_bits) catch null) |next_offset_code| {
-                if (next_offset_code == offset_code) {
-                    if (sequenceCodeForValue(match_lens[1], &ml_base, &ml_bits) catch null) |next_match_code| {
-                        if (next_match_code == match_code) {
-                            return try rleSequencePayloadLen(
-                                block,
-                                &literal_lens,
-                                &offsets,
-                                &match_lens,
-                                next.literal_end,
-                                literal_code,
-                                offset_code,
-                                match_code,
-                            );
-                        }
-                    }
-                }
-            }
+    var rle_compatible = true;
+    for (1..count) |i| {
+        if ((sequenceCodeForValue(literal_lens[i], &ll_base, &ll_bits) catch return try multiSequencePayloadLen(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], current.literal_end)) != literal_code) {
+            rle_compatible = false;
+            break;
+        }
+        if ((sequenceCodeForValue(offsets[i], &of_base, &of_bits) catch return try multiSequencePayloadLen(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], current.literal_end)) != offset_code) {
+            rle_compatible = false;
+            break;
+        }
+        if ((sequenceCodeForValue(match_lens[i], &ml_base, &ml_bits) catch return try multiSequencePayloadLen(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], current.literal_end)) != match_code) {
+            rle_compatible = false;
+            break;
         }
     }
-    return try multiSequencePayloadLen(block, &literal_lens, &offsets, &match_lens, next.literal_end);
+    if (rle_compatible) {
+        return try rleSequencePayloadLen(
+            block,
+            literal_lens[0..count],
+            offsets[0..count],
+            match_lens[0..count],
+            current.literal_end,
+            literal_code,
+            offset_code,
+            match_code,
+        );
+    }
+    return try multiSequencePayloadLen(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], current.literal_end);
 }
 
 fn bestMixedCandidateNoLookahead(
@@ -8288,9 +8303,26 @@ test "zstd literal-only writer emits several repeated-pattern sequences" {
     _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
     const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
     const block_len: usize = @intCast(block_header >> 3);
+    const block = encoded[block_offset + 3 ..][0..block_len];
     var frame_state: SequenceFrameState = .{};
-    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 3), section.sequence_count);
+    const literal_lens = [_]usize{ 2, 2, 2 };
+    const offsets = [_]usize{ 2, 2, 2 };
+    const match_lens = [_]usize{ 22, 22, 22 };
+    const expected_payload_len = try rleSequencePayloadLen(
+        payload,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        payload.len,
+        try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits),
+        try sequenceCodeForValue(offsets[0], &of_base, &of_bits),
+        try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits),
+    );
+    const first_candidate = repeatedMixedMatchCandidate(payload, 0) orelse return error.CorruptFrame;
+    const lookahead_payload_len = (try mixedCandidateLookaheadPayloadLen(&.{}, payload, 0, first_candidate)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(expected_payload_len, lookahead_payload_len);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
