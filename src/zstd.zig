@@ -3374,6 +3374,7 @@ fn emitDictionaryMatchCompressedBlock(
     dictionary: NativeDictionary,
     frame_offset: usize,
 ) Error!bool {
+    if (try emitMixedDictionaryDuplicateMatchCompressedBlock(allocator, out, block, last, dictionary, frame_offset)) return true;
     if (try emitMultiDictionaryMatchCompressedBlock(allocator, out, block, last, dictionary, frame_offset)) return true;
 
     const match = findDictionaryMatch(dictionary.content, block, frame_offset) orelse return false;
@@ -3411,6 +3412,102 @@ fn emitDictionaryMatchCompressedBlock(
     try emitBlockHeader(allocator, out, 2, payload.items.len, last);
     try out.appendSlice(allocator, payload.items);
     return true;
+}
+
+const MixedMatchCandidate = struct {
+    literal_len: usize,
+    offset: usize,
+    match_len: usize,
+    literal_end: usize,
+    payload_len: usize,
+    from_dictionary: bool,
+};
+
+fn emitMixedDictionaryDuplicateMatchCompressedBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    dictionary: NativeDictionary,
+    frame_offset: usize,
+) Error!bool {
+    var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
+    var offsets: [max_bootstrap_sequence_count]usize = undefined;
+    var match_lens: [max_bootstrap_sequence_count]usize = undefined;
+    var literal_ends: [max_bootstrap_sequence_count]usize = undefined;
+    var count: usize = 0;
+    var literal_start: usize = 0;
+    var has_dictionary_match = false;
+    var has_duplicate_match = false;
+
+    while (count < max_bootstrap_sequence_count and literal_start < block.len) {
+        const candidate = try bestMixedDictionaryDuplicateCandidate(dictionary.content, block, literal_start, frame_offset) orelse break;
+        literal_lens[count] = candidate.literal_len;
+        offsets[count] = candidate.offset;
+        match_lens[count] = candidate.match_len;
+        literal_ends[count] = candidate.literal_end;
+        literal_start = candidate.literal_end;
+        has_dictionary_match = has_dictionary_match or candidate.from_dictionary;
+        has_duplicate_match = has_duplicate_match or !candidate.from_dictionary;
+        count += 1;
+    }
+
+    if (count < 2 or !has_dictionary_match or !has_duplicate_match) return false;
+    return try emitMultiSequencePredefinedCompressedBlock(
+        allocator,
+        out,
+        block,
+        last,
+        literal_lens[0..count],
+        offsets[0..count],
+        match_lens[0..count],
+        literal_ends[0..count],
+        literal_start,
+    );
+}
+
+fn bestMixedDictionaryDuplicateCandidate(
+    dictionary: []const u8,
+    block: []const u8,
+    literal_start: usize,
+    frame_offset: usize,
+) Error!?MixedMatchCandidate {
+    var best: ?MixedMatchCandidate = null;
+
+    if (findDictionaryMatchIn(dictionary, block, literal_start, frame_offset)) |match| {
+        if (dictionaryMatchPayloadLenFrom(block, match, literal_start, frame_offset, dictionary.len)) |payload_len| {
+            best = .{
+                .literal_len = match.block_start - literal_start,
+                .offset = try dictionaryMatchOffset(dictionary.len, frame_offset, match),
+                .match_len = match.len,
+                .literal_end = match.block_start + match.len,
+                .payload_len = payload_len,
+                .from_dictionary = true,
+            };
+        }
+    }
+
+    if (try findBestDuplicateMatchIn(block, literal_start)) |match| {
+        const payload_len = singleMatchPayloadLenFrom(block, match, literal_start) catch std.math.maxInt(usize);
+        const candidate: MixedMatchCandidate = .{
+            .literal_len = match.second_start - literal_start,
+            .offset = match.second_start - match.first_start,
+            .match_len = match.len,
+            .literal_end = match.second_start + match.len,
+            .payload_len = payload_len,
+            .from_dictionary = false,
+        };
+        if (mixedMatchCandidateBetter(candidate, best)) best = candidate;
+    }
+
+    return best;
+}
+
+fn mixedMatchCandidateBetter(candidate: MixedMatchCandidate, current: ?MixedMatchCandidate) bool {
+    const existing = current orelse return true;
+    if (candidate.payload_len != existing.payload_len) return candidate.payload_len < existing.payload_len;
+    if (candidate.match_len != existing.match_len) return candidate.match_len > existing.match_len;
+    return candidate.literal_len < existing.literal_len;
 }
 
 fn emitMultiDictionaryMatchCompressedBlock(
@@ -6972,6 +7069,36 @@ test "zstd native writer uses preset dictionary history" {
     try std.testing.expectEqualSlices(u8, encoded.frame, into[0..into_result.written]);
     try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, into[0 .. into_result.written - 1]));
     try std.testing.expectError(error.NeedDictionary, encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, NativeDictionary.init(0, dict.content)));
+}
+
+test "zstd native writer mixes dictionary and duplicate matches" {
+    const dict = NativeDictionary.init(0x2468, "abcdefghijklmnop");
+    const payload = "pfx-abcdefghijklmnop-mid-abcdefghijklmnop-tail";
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, dict);
+    defer std.testing.allocator.free(encoded.frame);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, encoded.mode);
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded.frame, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded.frame[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+
+    const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .dictionary_id = dict.id,
+    });
+    defer std.testing.allocator.free(raw);
+    try std.testing.expect(encoded.frame.len < raw.len);
 }
 
 test "zstd native dictionary match planner scores offset cost" {

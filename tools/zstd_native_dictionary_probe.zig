@@ -17,6 +17,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkDictionaryMatchCostScoring(init.gpa);
     checked += 1;
+    try checkMixedDictionaryDuplicateMatch(init.gpa);
+    checked += 1;
     try checkConcatenatedDictionaryApis(init.gpa);
     checked += 1;
 
@@ -175,6 +177,25 @@ fn checkDictionaryMatchCostScoring(allocator: std.mem.Allocator) !void {
     });
     defer allocator.free(raw);
     try expect(encoded.frame.len < raw.len);
+}
+
+fn checkMixedDictionaryDuplicateMatch(allocator: std.mem.Allocator) !void {
+    const dict = vort.ZstdNativeDictionary.init(0x9B, "abcdefghijklmnop");
+    const payload = "pfx-abcdefghijklmnop-mid-abcdefghijklmnop-tail";
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    const encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict);
+    defer allocator.free(encoded.frame);
+    try expect(encoded.mode == .literal_only);
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(encoded.frame);
+    try expect(first_block.block_type == .compressed);
+
+    const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
+    defer allocator.free(decoded);
+    try expectEqualSlices(payload, decoded);
 }
 
 fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
