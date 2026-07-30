@@ -150,8 +150,15 @@ pub const zstdDecodeNativeFrameAppend = zstd.decodeNativeFrameAppend;
 pub const zstdDecodeNativeFrameAppendLimited = zstd.decodeNativeFrameAppendLimited;
 pub const zstdDecodeNativeFrameAllocLimited = zstd.decodeNativeFrameAllocLimited;
 pub const zstdDecodeNativeFrameInto = zstd.decodeNativeFrameInto;
+pub const zstdDecodeNativeConcatenatedFrameAlloc = zstd.decodeNativeConcatenatedFrameAlloc;
+pub const zstdDecodeNativeConcatenatedFrameAppend = zstd.decodeNativeConcatenatedFrameAppend;
+pub const zstdDecodeNativeConcatenatedFrameAppendLimited = zstd.decodeNativeConcatenatedFrameAppendLimited;
+pub const zstdDecodeNativeConcatenatedFrameAllocLimited = zstd.decodeNativeConcatenatedFrameAllocLimited;
+pub const zstdDecodeNativeConcatenatedFrameInto = zstd.decodeNativeConcatenatedFrameInto;
 pub const zstdDecodedNativeFrameSize = zstd.decodedNativeFrameSize;
 pub const zstdDecodedNativeFrameSizeLimited = zstd.decodedNativeFrameSizeLimited;
+pub const zstdDecodedNativeConcatenatedFrameSize = zstd.decodedNativeConcatenatedFrameSize;
+pub const zstdDecodedNativeConcatenatedFrameSizeLimited = zstd.decodedNativeConcatenatedFrameSizeLimited;
 
 pub const Error = core.Error;
 pub const FrameInfo = core.FrameInfo;
@@ -804,8 +811,15 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeNativeFrameAppendLimited;
     _ = zstdDecodeNativeFrameAllocLimited;
     _ = zstdDecodeNativeFrameInto;
+    _ = zstdDecodeNativeConcatenatedFrameAlloc;
+    _ = zstdDecodeNativeConcatenatedFrameAppend;
+    _ = zstdDecodeNativeConcatenatedFrameAppendLimited;
+    _ = zstdDecodeNativeConcatenatedFrameAllocLimited;
+    _ = zstdDecodeNativeConcatenatedFrameInto;
     _ = zstdDecodedNativeFrameSize;
     _ = zstdDecodedNativeFrameSizeLimited;
+    _ = zstdDecodedNativeConcatenatedFrameSize;
+    _ = zstdDecodedNativeConcatenatedFrameSizeLimited;
 }
 
 test "root lz4 lib frame options round trip" {
