@@ -5093,17 +5093,7 @@ fn emitRleSequenceCompressedBlock(
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    var regenerated_literals = block.len - tail_start;
-    for (literal_lens) |literal_len| {
-        regenerated_literals = std.math.add(usize, regenerated_literals, literal_len) catch return error.IntegerOverflow;
-    }
-    try emitLiteralsHeader(allocator, &payload, .raw, regenerated_literals);
-    var literal_start: usize = 0;
-    for (literal_lens, 0..) |literal_len, i| {
-        try payload.appendSlice(allocator, block[literal_start..][0..literal_len]);
-        literal_start = literal_ends[i];
-    }
-    try payload.appendSlice(allocator, block[tail_start..]);
+    _ = try emitSequenceLiteralsSection(allocator, &payload, block, literal_lens, literal_ends, tail_start);
     try emitSequenceCount(allocator, &payload, literal_lens.len);
     try payload.append(allocator, 0x54); // LL, OF, and ML use RLE_Mode.
     try payload.append(allocator, literal_code);
@@ -5155,17 +5145,7 @@ fn emitMultiSequencePredefinedCompressedBlock(
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    var regenerated_literals = block.len - tail_start;
-    for (literal_lens) |literal_len| {
-        regenerated_literals = std.math.add(usize, regenerated_literals, literal_len) catch return error.IntegerOverflow;
-    }
-    try emitLiteralsHeader(allocator, &payload, .raw, regenerated_literals);
-    var literal_start: usize = 0;
-    for (literal_lens, 0..) |_, i| {
-        try payload.appendSlice(allocator, block[literal_start..][0..literal_lens[i]]);
-        literal_start = literal_ends[i];
-    }
-    try payload.appendSlice(allocator, block[tail_start..]);
+    _ = try emitSequenceLiteralsSection(allocator, &payload, block, literal_lens, literal_ends, tail_start);
     try emitSequenceCount(allocator, &payload, literal_lens.len);
     try payload.append(allocator, 0x00); // LL, OF, and ML all use Predefined_Mode.
 
@@ -5189,6 +5169,101 @@ fn emitMultiSequencePredefinedCompressedBlock(
     return true;
 }
 
+const SequenceLiteralsInfo = struct {
+    regenerated_len: usize,
+    payload_len: usize,
+    rle_byte: ?u8 = null,
+};
+
+fn emitSequenceLiteralsSection(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    literal_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!SequenceLiteralsInfo {
+    const info = try sequenceLiteralsInfo(block, literal_lens, literal_ends, tail_start);
+    if (info.rle_byte) |byte| {
+        try emitLiteralsHeader(allocator, out, .rle, info.regenerated_len);
+        try out.append(allocator, byte);
+        return info;
+    }
+
+    try emitLiteralsHeader(allocator, out, .raw, info.regenerated_len);
+    try appendSequenceRawLiterals(allocator, out, block, literal_lens, literal_ends, tail_start);
+    return info;
+}
+
+fn appendSequenceRawLiterals(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    literal_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!void {
+    if (literal_lens.len != literal_ends.len) return error.CorruptFrame;
+    var literal_start: usize = 0;
+    for (literal_lens, 0..) |literal_len, i| {
+        if (literal_start > block.len or literal_len > block.len - literal_start) return error.CorruptFrame;
+        try out.appendSlice(allocator, block[literal_start..][0..literal_len]);
+        if (literal_ends[i] < literal_start + literal_len or literal_ends[i] > block.len) return error.CorruptFrame;
+        literal_start = literal_ends[i];
+    }
+    if (tail_start > block.len) return error.CorruptFrame;
+    try out.appendSlice(allocator, block[tail_start..]);
+}
+
+fn sequenceLiteralsInfo(
+    block: []const u8,
+    literal_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!SequenceLiteralsInfo {
+    if (literal_lens.len != literal_ends.len) return error.CorruptFrame;
+    if (tail_start > block.len) return error.CorruptFrame;
+    var info: SequenceLiteralsInfo = .{
+        .regenerated_len = block.len - tail_start,
+        .payload_len = block.len - tail_start,
+    };
+    var first_literal_byte: u8 = 0;
+    var have_literal_byte = false;
+    var all_same = true;
+
+    var literal_start: usize = 0;
+    for (literal_lens, 0..) |literal_len, i| {
+        if (literal_start > block.len or literal_len > block.len - literal_start) return error.CorruptFrame;
+        info.regenerated_len = std.math.add(usize, info.regenerated_len, literal_len) catch return error.IntegerOverflow;
+        info.payload_len = info.regenerated_len;
+        updateLiteralRunInfo(block[literal_start..][0..literal_len], &first_literal_byte, &have_literal_byte, &all_same);
+        if (literal_ends[i] < literal_start + literal_len or literal_ends[i] > block.len) return error.CorruptFrame;
+        literal_start = literal_ends[i];
+    }
+    updateLiteralRunInfo(block[tail_start..], &first_literal_byte, &have_literal_byte, &all_same);
+
+    // Sequence-compressed blocks often carry only a handful of separator or
+    // tail literals. When all regenerated literals are the same byte, the
+    // standard RLE-literals section avoids storing those bytes repeatedly while
+    // keeping the sequence table and match replay unchanged.
+    if (info.regenerated_len != 0 and all_same) {
+        info.rle_byte = first_literal_byte;
+        info.payload_len = 1;
+    }
+    return info;
+}
+
+fn updateLiteralRunInfo(bytes: []const u8, first_literal_byte: *u8, have_literal_byte: *bool, all_same: *bool) void {
+    for (bytes) |byte| {
+        if (!have_literal_byte.*) {
+            first_literal_byte.* = byte;
+            have_literal_byte.* = true;
+        } else if (byte != first_literal_byte.*) {
+            all_same.* = false;
+        }
+    }
+}
+
 fn multiSequencePayloadLen(
     block: []const u8,
     literal_lens: []const usize,
@@ -5196,18 +5271,40 @@ fn multiSequencePayloadLen(
     match_lens: []const usize,
     tail_start: usize,
 ) Error!usize {
+    return try multiSequencePayloadLenInternal(block, literal_lens, offsets, match_lens, null, tail_start);
+}
+
+fn multiSequencePayloadLenWithLiteralEnds(
+    block: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!usize {
+    return try multiSequencePayloadLenInternal(block, literal_lens, offsets, match_lens, literal_ends, tail_start);
+}
+
+fn multiSequencePayloadLenInternal(
+    block: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: ?[]const usize,
+    tail_start: usize,
+) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
     if (literal_lens.len < 2 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_ends) |ends| {
+        if (ends.len != literal_lens.len) return error.CorruptFrame;
+    }
     const literal_plan = (try planPredefinedSequenceValues(literal_lens, &default_ll_symbols, 0)) orelse return error.CorruptFrame;
     const offset_plan = (try planPredefinedSequenceValues(offsets, &default_of_symbols, 2)) orelse return error.CorruptFrame;
     const match_plan = (try planPredefinedSequenceValues(match_lens, &default_ml_symbols, 0)) orelse return error.CorruptFrame;
 
-    var regenerated_literals = block.len - tail_start;
-    for (literal_lens) |literal_len| {
-        regenerated_literals = std.math.add(usize, regenerated_literals, literal_len) catch return error.IntegerOverflow;
-    }
-    var len = try literalsHeaderLen(regenerated_literals);
-    len = std.math.add(usize, len, regenerated_literals) catch return error.IntegerOverflow;
+    const literal_info = try sequenceLiteralsPayloadInfo(block, literal_lens, literal_ends, tail_start);
+    var len = try literalsHeaderLen(literal_info.regenerated_len);
+    len = std.math.add(usize, len, literal_info.payload_len) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, 1) catch return error.IntegerOverflow; // sequence mode byte
 
@@ -5226,6 +5323,24 @@ fn multiSequencePayloadLen(
     return std.math.add(usize, len, bitstream_len) catch return error.IntegerOverflow;
 }
 
+fn sequenceLiteralsPayloadInfo(
+    block: []const u8,
+    literal_lens: []const usize,
+    literal_ends: ?[]const usize,
+    tail_start: usize,
+) Error!SequenceLiteralsInfo {
+    if (literal_ends) |ends| return try sequenceLiteralsInfo(block, literal_lens, ends, tail_start);
+
+    var regenerated_literals = block.len - tail_start;
+    for (literal_lens) |literal_len| {
+        regenerated_literals = std.math.add(usize, regenerated_literals, literal_len) catch return error.IntegerOverflow;
+    }
+    return .{
+        .regenerated_len = regenerated_literals,
+        .payload_len = regenerated_literals,
+    };
+}
+
 fn singleRleSequencePayloadLen(
     block: []const u8,
     literal_len: usize,
@@ -5236,11 +5351,13 @@ fn singleRleSequencePayloadLen(
     const literal_lens = [_]usize{literal_len};
     const offsets = [_]usize{offset};
     const match_lens = [_]usize{match_len};
-    return try rleSequencePayloadLen(
+    const literal_ends = [_]usize{tail_start};
+    return try rleSequencePayloadLenWithLiteralEnds(
         block,
         &literal_lens,
         &offsets,
         &match_lens,
+        &literal_ends,
         tail_start,
         try sequenceCodeForValue(literal_len, &ll_base, &ll_bits),
         try sequenceCodeForValue(offset, &of_base, &of_bits),
@@ -5258,23 +5375,53 @@ fn rleSequencePayloadLen(
     offset_code: u8,
     match_code: u8,
 ) Error!usize {
+    return try rleSequencePayloadLenInternal(block, literal_lens, offsets, match_lens, null, tail_start, literal_code, offset_code, match_code);
+}
+
+fn rleSequencePayloadLenWithLiteralEnds(
+    block: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    literal_code: u8,
+    offset_code: u8,
+    match_code: u8,
+) Error!usize {
+    return try rleSequencePayloadLenInternal(block, literal_lens, offsets, match_lens, literal_ends, tail_start, literal_code, offset_code, match_code);
+}
+
+fn rleSequencePayloadLenInternal(
+    block: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: ?[]const usize,
+    tail_start: usize,
+    literal_code: u8,
+    offset_code: u8,
+    match_code: u8,
+) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
     if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_ends) |ends| {
+        if (ends.len != literal_lens.len) return error.CorruptFrame;
+    }
 
-    var regenerated_literals = block.len - tail_start;
+    const literal_info = try sequenceLiteralsPayloadInfo(block, literal_lens, literal_ends, tail_start);
     var bit_count: usize = 1; // Reverse bitstream end marker.
     for (literal_lens, 0..) |literal_len, i| {
         if (try sequenceCodeForValue(literal_len, &ll_base, &ll_bits) != literal_code) return error.CorruptFrame;
         if (try sequenceCodeForValue(offsets[i], &of_base, &of_bits) != offset_code) return error.CorruptFrame;
         if (try sequenceCodeForValue(match_lens[i], &ml_base, &ml_bits) != match_code) return error.CorruptFrame;
-        regenerated_literals = std.math.add(usize, regenerated_literals, literal_len) catch return error.IntegerOverflow;
         bit_count = std.math.add(usize, bit_count, ll_bits[literal_code]) catch return error.IntegerOverflow;
         bit_count = std.math.add(usize, bit_count, ml_bits[match_code]) catch return error.IntegerOverflow;
         bit_count = std.math.add(usize, bit_count, of_bits[offset_code]) catch return error.IntegerOverflow;
     }
 
-    var len = try literalsHeaderLen(regenerated_literals);
-    len = std.math.add(usize, len, regenerated_literals) catch return error.IntegerOverflow;
+    var len = try literalsHeaderLen(literal_info.regenerated_len);
+    len = std.math.add(usize, len, literal_info.payload_len) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, 1 + 3) catch return error.IntegerOverflow; // modes + three RLE symbol codes.
     return std.math.add(usize, len, (bit_count + 7) / 8) catch return error.IntegerOverflow;
@@ -9594,6 +9741,40 @@ test "zstd native writer emits RLE multi dictionary matches" {
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
     try std.testing.expectEqual(@as(u8, 0x54), block[section.sequence_payload_offset]);
+
+    const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .dictionary_id = dict.id,
+    });
+    defer std.testing.allocator.free(raw);
+    try std.testing.expect(encoded.frame.len < raw.len);
+}
+
+test "zstd native writer emits RLE literals for dictionary sequences" {
+    const dict = NativeDictionary.init(
+        0x2350,
+        "ABCDEFGHIJKLMNOPXXXXXXXXQRSTUVWXYZabcdef0123456789ghijklmnopqrst",
+    );
+    const payload = "x" ++ "ABCDEFGHIJKLMNOP" ++ "x" ++ "QRSTUVWXYZabcdef" ++ "x";
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    }, dict);
+    defer std.testing.allocator.free(encoded.frame);
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded.frame, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    const block = encoded.frame[first_block.payload_offset..][0..first_block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(LiteralsKind.rle, section.kind);
+    try std.testing.expectEqual(@as(usize, 3), section.regenerated_size);
+    try std.testing.expectEqual(@as(u8, 'x'), block[section.literal_payload_offset]);
+    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
 
     const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .content_checksum = false,

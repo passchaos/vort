@@ -37,6 +37,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   RLE/predefined sequence-payload scoring for lookahead, size-aware
   dictionary/native-match-vs-Huffman arbitration,
   smallest native match-plan arbitration across independent bootstrap emitters,
+  RLE-literals sections for same-byte sequence literals,
   raw-block-cost-aware compressed-block selection
   (falling back to raw/RLE blocks when compressed blocks would expand, for
   broad zstd CLI compatibility), plus deterministic smallest-mode
