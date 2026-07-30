@@ -778,6 +778,16 @@ pub const NativeFrameBlockSummary = struct {
     payload_bytes: usize = 0,
 };
 
+pub const NativeStreamSummary = struct {
+    frame_count: usize = 0,
+    skippable_frame_count: usize = 0,
+    block_count: usize = 0,
+    compressed_block_count: usize = 0,
+    raw_block_count: usize = 0,
+    payload_bytes: usize = 0,
+    skippable_payload_bytes: usize = 0,
+};
+
 fn parseFrameHeader(frame: []const u8) Error!FrameHeader {
     if (frame.len < 7) return error.TruncatedFrame;
     if (!std.mem.eql(u8, frame[0..4], &frame_magic)) return error.CorruptFrame;
@@ -864,6 +874,36 @@ pub fn summarizeNativeFrameBlocks(frame: []const u8) Error!NativeFrameBlockSumma
         }
         summary.payload_bytes = std.math.add(usize, summary.payload_bytes, block.payload_len) catch return error.IntegerOverflow;
         offset = block.next_header_offset;
+    }
+    return summary;
+}
+
+pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
+    var offset: usize = 0;
+    var summary: NativeStreamSummary = .{};
+    while (offset < frames.len) {
+        if (frames.len - offset < 4) return error.TruncatedFrame;
+        const magic = std.mem.readInt(u32, frames[offset..][0..4], .little);
+        if (magic == frame_magic_u32) {
+            const start = offset;
+            const end = try findFrameEnd(frames, &offset);
+            const frame_summary = try summarizeNativeFrameBlocks(frames[start..end]);
+            summary.frame_count += 1;
+            summary.block_count = std.math.add(usize, summary.block_count, frame_summary.block_count) catch return error.IntegerOverflow;
+            summary.compressed_block_count = std.math.add(usize, summary.compressed_block_count, frame_summary.compressed_block_count) catch return error.IntegerOverflow;
+            summary.raw_block_count = std.math.add(usize, summary.raw_block_count, frame_summary.raw_block_count) catch return error.IntegerOverflow;
+            summary.payload_bytes = std.math.add(usize, summary.payload_bytes, frame_summary.payload_bytes) catch return error.IntegerOverflow;
+        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+            if (frames.len - offset < 8) return error.TruncatedFrame;
+            const skip_len: usize = @intCast(std.mem.readInt(u32, frames[offset + 4 ..][0..4], .little));
+            offset += 8;
+            if (frames.len - offset < skip_len) return error.TruncatedFrame;
+            summary.skippable_frame_count += 1;
+            summary.skippable_payload_bytes = std.math.add(usize, summary.skippable_payload_bytes, skip_len) catch return error.IntegerOverflow;
+            offset += skip_len;
+        } else {
+            return error.CorruptFrame;
+        }
     }
     return summary;
 }
@@ -2192,6 +2232,10 @@ test "lz4 frame encoder compresses repetitive payloads and round trips" {
     try std.testing.expect(block_summary.block_count >= 1);
     try std.testing.expectEqual(block_summary.block_count, block_summary.compressed_block_count + block_summary.raw_block_count);
     try std.testing.expect(block_summary.payload_bytes >= first_block.payload_len);
+    const stream_summary = try summarizeNativeStream(with_options);
+    try std.testing.expectEqual(@as(usize, 1), stream_summary.frame_count);
+    try std.testing.expectEqual(@as(usize, 0), stream_summary.skippable_frame_count);
+    try std.testing.expectEqual(block_summary.block_count, stream_summary.block_count);
 
     const with_dictionary_id = try encodePureFrameWithOptionsAlloc(
         std.testing.allocator,
@@ -2415,6 +2459,10 @@ test "lz4 skippable frame writer composes with concatenated native streams" {
     const decoded = try decodeConcatenatedFrameAlloc(std.testing.allocator, stream.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "firstsecond", decoded);
+    const stream_summary = try summarizeNativeStream(stream.items);
+    try std.testing.expectEqual(@as(usize, 2), stream_summary.frame_count);
+    try std.testing.expectEqual(@as(usize, 1), stream_summary.skippable_frame_count);
+    try std.testing.expectEqual(@as(usize, "metadata".len), stream_summary.skippable_payload_bytes);
     try std.testing.expectEqual(@as(usize, "firstsecond".len), try decodedConcatenatedFrameSize(stream.items));
     var decoded_appended: std.ArrayList(u8) = .empty;
     defer decoded_appended.deinit(std.testing.allocator);

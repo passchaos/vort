@@ -948,6 +948,17 @@ pub const NativeFrameBlockSummary = struct {
     payload_bytes: usize = 0,
 };
 
+pub const NativeStreamSummary = struct {
+    frame_count: usize = 0,
+    skippable_frame_count: usize = 0,
+    block_count: usize = 0,
+    raw_block_count: usize = 0,
+    rle_block_count: usize = 0,
+    compressed_block_count: usize = 0,
+    payload_bytes: usize = 0,
+    skippable_payload_bytes: usize = 0,
+};
+
 const RawOrRleFrameHeader = NativeFrameHeader;
 
 fn validateBlockSize(header: RawOrRleFrameHeader, block_type: u32, block_len: usize) Error!void {
@@ -2702,6 +2713,48 @@ pub fn summarizeNativeFrameBlocks(frame: []const u8) Error!NativeFrameBlockSumma
     return summary;
 }
 
+pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
+    var offset: usize = 0;
+    var summary: NativeStreamSummary = .{};
+    while (offset < frames.len) {
+        if (frames.len - offset < 4) return error.TruncatedFrame;
+        const magic = std.mem.readInt(u32, frames[offset..][0..4], .little);
+        offset += 4;
+        if (magic == frame_magic_u32) {
+            const frame_start = offset - 4;
+            const header = try parseRawOrRleFrameHeaderWithOptions(frames, &offset, true);
+            while (true) {
+                const block = try inspectNativeFrameBlockAt(frames[frame_start..], offset - frame_start);
+                summary.block_count += 1;
+                switch (block.block_type) {
+                    .raw => summary.raw_block_count += 1,
+                    .rle => summary.rle_block_count += 1,
+                    .compressed => summary.compressed_block_count += 1,
+                }
+                summary.payload_bytes = std.math.add(usize, summary.payload_bytes, block.payload_len) catch return error.IntegerOverflow;
+                offset = frame_start + block.next_header_offset;
+                if (block.last) break;
+            }
+            if (header.has_checksum) {
+                if (frames.len - offset < 4) return error.TruncatedFrame;
+                offset += 4;
+            }
+            summary.frame_count += 1;
+        } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
+            if (frames.len - offset < 4) return error.TruncatedFrame;
+            const skip_len: usize = @intCast(std.mem.readInt(u32, frames[offset..][0..4], .little));
+            offset += 4;
+            if (frames.len - offset < skip_len) return error.TruncatedFrame;
+            summary.skippable_frame_count += 1;
+            summary.skippable_payload_bytes = std.math.add(usize, summary.skippable_payload_bytes, skip_len) catch return error.IntegerOverflow;
+            offset += skip_len;
+        } else {
+            return error.InvalidMagic;
+        }
+    }
+    return summary;
+}
+
 fn decodeWindowSize(descriptor: u8) u64 {
     const exponent = (descriptor & 0b1111_1000) >> 3;
     const mantissa = descriptor & 0b0000_0111;
@@ -3849,6 +3902,10 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     try std.testing.expectEqual(@as(usize, 1), raw_summary.block_count);
     try std.testing.expectEqual(@as(usize, 1), raw_summary.raw_block_count);
     try std.testing.expectEqual(payload.len, raw_summary.payload_bytes);
+    const raw_stream_summary = try summarizeNativeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 1), raw_stream_summary.frame_count);
+    try std.testing.expectEqual(@as(usize, 1), raw_stream_summary.block_count);
+    try std.testing.expectEqual(payload.len, raw_stream_summary.payload_bytes);
     var native_appended: std.ArrayList(u8) = .empty;
     defer native_appended.deinit(std.testing.allocator);
     try native_appended.appendSlice(std.testing.allocator, "prefix:");
@@ -3969,6 +4026,10 @@ test "zstd raw/RLE native decoder handles skippable and concatenated frames" {
     const decoded = try decodeRawOrRleFrameAlloc(std.testing.allocator, stream.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "firstsecond", decoded);
+    const stream_summary = try summarizeNativeStream(stream.items);
+    try std.testing.expectEqual(@as(usize, 2), stream_summary.frame_count);
+    try std.testing.expectEqual(@as(usize, 1), stream_summary.skippable_frame_count);
+    try std.testing.expectEqual(@as(usize, 5), stream_summary.skippable_payload_bytes);
     const native_concatenated = try decodeNativeConcatenatedFrameAlloc(std.testing.allocator, stream.items);
     defer std.testing.allocator.free(native_concatenated);
     try std.testing.expectEqualSlices(u8, "firstsecond", native_concatenated);
