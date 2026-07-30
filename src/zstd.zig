@@ -3443,10 +3443,7 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     var has_non_dictionary_match = false;
 
     while (count < max_bootstrap_sequence_count and literal_start < block.len) {
-        const candidate = if (!has_dictionary_match)
-            (try dictionaryMixedMatchCandidate(dictionary.content, block, literal_start, frame_offset)) orelse break
-        else
-            (try bestMixedDictionaryDuplicateCandidate(dictionary.content, block, literal_start, frame_offset)) orelse break;
+        const candidate = try bestMixedDictionaryDuplicateCandidate(dictionary.content, block, literal_start, frame_offset) orelse break;
         literal_lens[count] = candidate.literal_len;
         offsets[count] = candidate.offset;
         match_lens[count] = candidate.match_len;
@@ -7220,9 +7217,39 @@ test "zstd native writer uses preset dictionary history after first block" {
     try std.testing.expect(encoded.frame.len < raw.len);
 }
 
+test "zstd native writer can choose repeated before dictionary" {
+    const dict = NativeDictionary.init(0x4567, "abcdefghijklmnop");
+    const payload = ("ab" ** 80) ++ "-mid-abcdefghijklmnop-tail";
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, dict);
+    defer std.testing.allocator.free(encoded.frame);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, encoded.mode);
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded.frame, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded.frame[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+
+    const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .dictionary_id = dict.id,
+    });
+    defer std.testing.allocator.free(raw);
+    try std.testing.expect(encoded.frame.len < raw.len);
+}
+
 test "zstd native writer mixes dictionary and repeated-pattern matches" {
-    const dict = NativeDictionary.init(0x3456, "abcdefghijklmnop");
-    const payload = "pfx-abcdefghijklmnop-mid-0123456789xy" ++ ("ab" ** 80) ++ "-tail";
+    const dictionary_payload = "abcdefghijklmnopqrstuvwxyz0123456789" ** 8;
+    const dict = NativeDictionary.init(0x3456, dictionary_payload);
+    const payload = "pfx-" ++ dictionary_payload ++ "-mid-0123456789xy" ++ ("ab" ** 80) ++ "-tail";
     const options: NativeFrameOptions = .{
         .selection = .literal_only,
         .content_checksum = false,

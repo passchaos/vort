@@ -21,6 +21,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkMixedDictionaryRepeatedMatch(init.gpa);
     checked += 1;
+    try checkRepeatedBeforeDictionaryMatch(init.gpa);
+    checked += 1;
     try checkConcatenatedDictionaryApis(init.gpa);
     checked += 1;
 
@@ -201,8 +203,9 @@ fn checkMixedDictionaryDuplicateMatch(allocator: std.mem.Allocator) !void {
 }
 
 fn checkMixedDictionaryRepeatedMatch(allocator: std.mem.Allocator) !void {
-    const dict = vort.ZstdNativeDictionary.init(0x9C, "abcdefghijklmnop");
-    const payload = "pfx-abcdefghijklmnop-mid-0123456789xy" ++ ("ab" ** 80) ++ "-tail";
+    const dictionary_payload = "abcdefghijklmnopqrstuvwxyz0123456789" ** 8;
+    const dict = vort.ZstdNativeDictionary.init(0x9C, dictionary_payload);
+    const payload = "pfx-" ++ dictionary_payload ++ "-mid-0123456789xy" ++ ("ab" ** 80) ++ "-tail";
     const options: vort.ZstdNativeFrameOptions = .{
         .selection = .literal_only,
         .content_checksum = false,
@@ -211,6 +214,21 @@ fn checkMixedDictionaryRepeatedMatch(allocator: std.mem.Allocator) !void {
     const encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict);
     defer allocator.free(encoded.frame);
     try expect(encoded.mode == .literal_only);
+    const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
+    defer allocator.free(decoded);
+    try expectEqualSlices(payload, decoded);
+}
+
+fn checkRepeatedBeforeDictionaryMatch(allocator: std.mem.Allocator) !void {
+    const dict = vort.ZstdNativeDictionary.init(0x9D, "abcdefghijklmnop");
+    const payload = ("ab" ** 80) ++ "-mid-abcdefghijklmnop-tail";
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    const encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict);
+    defer allocator.free(encoded.frame);
     const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
     defer allocator.free(decoded);
     try expectEqualSlices(payload, decoded);
