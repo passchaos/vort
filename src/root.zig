@@ -1594,6 +1594,49 @@ test "root native no-size dictionary-set direct-output paths round trip" {
     try zstd_decoder.finish();
 }
 
+test "root lz4 linked direct-output falls back for small output" {
+    var lz4_payload: [64 * 1024 + 4096]u8 = undefined;
+    var state: u32 = 0x1234_abcd;
+    for (lz4_payload[0 .. 64 * 1024]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(lz4_payload[64 * 1024 ..], lz4_payload[60 * 1024 .. 64 * 1024]);
+    const encoded = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, &lz4_payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+        .block_mode = .linked,
+        .block_size_id = .max64kb,
+    });
+    defer std.testing.allocator.free(encoded);
+    const first_block = (try lz4InspectNativeFrameFirstBlock(encoded)) orelse return error.CorruptFrame;
+    const second_block = (try lz4InspectNativeFrameBlockAt(encoded, first_block.next_header_offset)) orelse return error.CorruptFrame;
+    try std.testing.expect(!first_block.is_compressed);
+    try std.testing.expect(second_block.is_compressed);
+
+    var decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = lz4_payload.len,
+        .max_decoded_buffer_len = lz4_payload.len,
+    });
+    defer decoder.deinit();
+    var output: [lz4_payload.len]u8 = undefined;
+    const initial = try decoder.step(encoded, output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, initial.status);
+    try std.testing.expectEqualSlices(u8, "direct_output", decoder.diagnostics().phase_name);
+    const first = try decoder.step("", output[0 .. 64 * 1024]);
+    try std.testing.expectEqual(StepResult.Status.need_output, first.status);
+    try std.testing.expectEqual(@as(usize, 64 * 1024), first.progress.output_written);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+    const partial = try decoder.step("", output[64 * 1024 ..][0..127]);
+    try std.testing.expectEqual(StepResult.Status.need_output, partial.status);
+    try std.testing.expectEqual(@as(usize, 127), partial.progress.output_written);
+    try std.testing.expectEqual(lz4_payload.len, decoder.snapshot().decoded_len.?);
+    try std.testing.expectEqual(lz4_payload.len, decoder.decoded_scratch.items.len);
+    const done = try decoder.step("", output[64 * 1024 + 127 ..]);
+    try std.testing.expectEqual(StepResult.Status.done, done.status);
+    try std.testing.expectEqualSlices(u8, &lz4_payload, &output);
+}
+
 test "root zstd multi-block direct-output falls back for small output" {
     const payload = "a" ** 264;
     const encoded = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
