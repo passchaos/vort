@@ -75,6 +75,7 @@ pub const Lz4BlockEncoder = lz4.BlockEncoder;
 pub const Lz4BlockDecoder = lz4.BlockDecoder;
 pub const Lz4NativeFrameEncoder = lz4.NativeFrameEncoder;
 pub const Lz4NativeFrameDecoder = lz4.NativeFrameDecoder;
+pub const Lz4NativeIncrementalFrameDecoder = lz4.NativeIncrementalFrameDecoder;
 pub const Lz4NativeDictionary = lz4.NativeDictionary;
 pub const Lz4NativeDictionarySet = lz4.NativeDictionarySet;
 pub const lz4DecodeFrameAlloc = lz4.decodeFrameAlloc;
@@ -943,6 +944,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = Lz4BlockDecoder;
     _ = Lz4NativeFrameEncoder;
     _ = Lz4NativeFrameDecoder;
+    _ = Lz4NativeIncrementalFrameDecoder;
     _ = Lz4NativeDictionary;
     _ = Lz4NativeDictionarySet;
     _ = lz4DecodeFrameAlloc;

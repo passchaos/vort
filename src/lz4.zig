@@ -721,6 +721,194 @@ pub const decodedNativeFrameSizeLimitedWithDictionary = decodedFrameSizeLimitedW
 pub const decodedNativeFrameSizeWithDictionarySet = decodedFrameSizeWithDictionarySet;
 pub const decodedNativeFrameSizeLimitedWithDictionarySet = decodedFrameSizeLimitedWithDictionarySet;
 
+/// Incremental input/output facade for a single native LZ4 frame.
+///
+/// This first streaming slice accepts compressed frame bytes in arbitrary input
+/// chunks and emits decoded bytes through caller-provided output chunks. It
+/// intentionally buffers one complete compressed frame and then delegates the
+/// actual block/checksum validation to the one-shot decoder. That keeps the new
+/// resumable API behavior-identical to the mature path while establishing the
+/// caller-owned `StepResult` contract; future work can replace the internal
+/// buffering with true block-by-block decode without changing call sites.
+pub const NativeIncrementalFrameDecoder = struct {
+    allocator: std.mem.Allocator,
+    dictionary: ?NativeDictionary = null,
+    dictionary_set: ?NativeDictionarySet = null,
+    phase: Phase = .frame,
+    frame_scratch: std.ArrayList(u8) = .empty,
+    decoded_scratch: std.ArrayList(u8) = .empty,
+    decoded_offset: usize = 0,
+    input_received: usize = 0,
+    output_written: usize = 0,
+    last_error_name: []const u8 = "",
+    last_error_phase: ?Phase = null,
+
+    pub const Phase = enum { frame, output, done };
+
+    pub const Snapshot = struct {
+        phase: Phase,
+        input_received: usize,
+        output_written: usize,
+        decoded_len: ?usize,
+        decoded_remaining: ?usize,
+        last_error_name: []const u8,
+        last_error_phase: ?Phase,
+    };
+
+    pub fn init(allocator: std.mem.Allocator) NativeIncrementalFrameDecoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn initWithDictionary(allocator: std.mem.Allocator, dictionary: NativeDictionary) NativeIncrementalFrameDecoder {
+        return .{ .allocator = allocator, .dictionary = dictionary };
+    }
+
+    pub fn initWithDictionarySet(allocator: std.mem.Allocator, dictionary_set: NativeDictionarySet) NativeIncrementalFrameDecoder {
+        return .{ .allocator = allocator, .dictionary_set = dictionary_set };
+    }
+
+    pub fn deinit(self: *NativeIncrementalFrameDecoder) void {
+        self.decoded_scratch.deinit(self.allocator);
+        self.frame_scratch.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *NativeIncrementalFrameDecoder) void {
+        self.phase = .frame;
+        self.frame_scratch.clearRetainingCapacity();
+        self.decoded_scratch.clearRetainingCapacity();
+        self.decoded_offset = 0;
+        self.input_received = 0;
+        self.output_written = 0;
+        self.last_error_name = "";
+        self.last_error_phase = null;
+    }
+
+    pub fn snapshot(self: *const NativeIncrementalFrameDecoder) Snapshot {
+        const decoded_len: ?usize = if (self.phase == .frame) null else self.decoded_scratch.items.len;
+        const decoded_remaining: ?usize = if (self.phase == .frame) null else self.decoded_scratch.items.len - self.decoded_offset;
+        return .{
+            .phase = self.phase,
+            .input_received = self.input_received,
+            .output_written = self.output_written,
+            .decoded_len = decoded_len,
+            .decoded_remaining = decoded_remaining,
+            .last_error_name = self.last_error_name,
+            .last_error_phase = self.last_error_phase,
+        };
+    }
+
+    pub fn diagnostics(self: *const NativeIncrementalFrameDecoder) core.StreamingDiagnostics {
+        const snap = self.snapshot();
+        return .{
+            .phase_name = phaseName(snap.phase),
+            .frame_input_read = snap.input_received,
+            .output_written = snap.output_written,
+            .expected_output_len = snap.decoded_len,
+            .payload_remaining = snap.decoded_remaining,
+            .last_error_name = snap.last_error_name,
+            .last_error_phase_name = if (snap.last_error_phase) |phase| phaseName(phase) else "",
+        };
+    }
+
+    pub fn step(self: *NativeIncrementalFrameDecoder, input: []const u8, output: []u8) Error!core.StepResult {
+        if (self.phase == .done) return .{ .status = .done };
+
+        var input_read: usize = 0;
+        var output_written_step: usize = 0;
+        while (true) {
+            switch (self.phase) {
+                .frame => {
+                    if (input_read < input.len) {
+                        try self.frame_scratch.appendSlice(self.allocator, input[input_read..]);
+                        const consumed = input.len - input_read;
+                        input_read = input.len;
+                        self.input_received += consumed;
+                    }
+
+                    if (!try self.completeFrameAvailable()) {
+                        return .{
+                            .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                            .status = .need_input,
+                        };
+                    }
+
+                    self.decodeCompleteFrame() catch |err| {
+                        self.recordError(.frame, err);
+                        return err;
+                    };
+                    self.phase = .output;
+                },
+                .output => {
+                    if (self.decoded_offset == self.decoded_scratch.items.len) {
+                        self.phase = .done;
+                        return .{
+                            .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                            .status = .done,
+                        };
+                    }
+                    if (output_written_step == output.len) {
+                        return .{
+                            .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                            .status = .need_output,
+                        };
+                    }
+                    const n = @min(self.decoded_scratch.items.len - self.decoded_offset, output.len - output_written_step);
+                    @memcpy(output[output_written_step..][0..n], self.decoded_scratch.items[self.decoded_offset..][0..n]);
+                    self.decoded_offset += n;
+                    output_written_step += n;
+                    self.output_written += n;
+                },
+                .done => return .{
+                    .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                    .status = .done,
+                },
+            }
+        }
+    }
+
+    fn completeFrameAvailable(self: *NativeIncrementalFrameDecoder) Error!bool {
+        var end: usize = 0;
+        _ = findFrameEnd(self.frame_scratch.items, &end) catch |err| switch (err) {
+            error.TruncatedFrame => return false,
+            else => {
+                self.recordError(.frame, err);
+                return err;
+            },
+        };
+        if (end != self.frame_scratch.items.len) {
+            self.recordError(.frame, error.TrailingData);
+            return error.TrailingData;
+        }
+        return true;
+    }
+
+    fn decodeCompleteFrame(self: *NativeIncrementalFrameDecoder) Error!void {
+        self.decoded_scratch.clearRetainingCapacity();
+        self.decoded_offset = 0;
+        if (self.dictionary_set) |dictionary_set| {
+            _ = try decodeFrameAppendWithDictionarySet(self.allocator, &self.decoded_scratch, self.frame_scratch.items, dictionary_set);
+        } else if (self.dictionary) |dictionary| {
+            _ = try decodeFrameAppendWithDictionary(self.allocator, &self.decoded_scratch, self.frame_scratch.items, dictionary);
+        } else {
+            _ = try decodeFrameAppend(self.allocator, &self.decoded_scratch, self.frame_scratch.items);
+        }
+    }
+
+    fn recordError(self: *NativeIncrementalFrameDecoder, phase: Phase, err: Error) void {
+        self.last_error_name = @errorName(err);
+        self.last_error_phase = phase;
+    }
+
+    fn phaseName(phase: Phase) []const u8 {
+        return switch (phase) {
+            .frame => "frame",
+            .output => "output",
+            .done => "done",
+        };
+    }
+};
+
 pub const NativeFrameDecoder = struct {
     allocator: std.mem.Allocator,
     scratch: std.ArrayList(u8) = .empty,
@@ -3577,6 +3765,82 @@ test "lz4 linked frame encoder uses previous block history" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, linked);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "lz4 native incremental decoder accepts split input and output" {
+    const payload = "incremental lz4 native payload " ** 4;
+    const encoded = try encodePureFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+    });
+    defer std.testing.allocator.free(encoded);
+
+    var decoder = NativeIncrementalFrameDecoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    const chunks = [_][]const u8{
+        encoded[0..3],
+        encoded[3..11],
+        encoded[11..],
+    };
+
+    const first = try decoder.step(chunks[0], output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, first.status);
+    try std.testing.expectEqual(chunks[0].len, first.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), first.progress.output_written);
+    try std.testing.expectEqual(NativeIncrementalFrameDecoder.Phase.frame, decoder.snapshot().phase);
+
+    const second = try decoder.step(chunks[1], output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_input, second.status);
+    try std.testing.expectEqual(chunks[1].len, second.progress.input_read);
+
+    const third = try decoder.step(chunks[2], output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, third.status);
+    try std.testing.expectEqual(chunks[2].len, third.progress.input_read);
+    try std.testing.expectEqual(encoded.len, decoder.snapshot().input_received);
+    try std.testing.expectEqual(payload.len, decoder.snapshot().decoded_len.?);
+
+    var written: usize = 0;
+    while (true) {
+        const end = @min(output.len, written + 7);
+        const result = try decoder.step("", output[written..end]);
+        written += result.progress.output_written;
+        if (result.status == .done) break;
+        try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
+    }
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expectEqual(NativeIncrementalFrameDecoder.Phase.done, decoder.snapshot().phase);
+    try std.testing.expectEqual(payload.len, decoder.diagnostics().output_written);
+    try std.testing.expectEqual(core.StepResult.Status.done, (try decoder.step("", output[0..0])).status);
+
+    decoder.reset();
+    const reused = try decoder.step(encoded, &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, reused.status);
+    try std.testing.expectEqual(encoded.len, reused.progress.input_read);
+    try std.testing.expectEqual(payload.len, reused.progress.output_written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "lz4 native incremental decoder supports dictionaries" {
+    const dict = NativeDictionary.init(0x4449_4354, "abcdefghijklmnop");
+    const payload = "abcdefghijklmnop-tail";
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{ .content_checksum = false }, dict);
+    defer std.testing.allocator.free(encoded);
+
+    var output: [payload.len]u8 = undefined;
+    var decoder = NativeIncrementalFrameDecoder.initWithDictionary(std.testing.allocator, dict);
+    defer decoder.deinit();
+    const result = try decoder.step(encoded, &output);
+    try std.testing.expectEqual(core.StepResult.Status.done, result.status);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+
+    var missing = NativeIncrementalFrameDecoder.init(std.testing.allocator);
+    defer missing.deinit();
+    try std.testing.expectError(error.NeedDictionary, missing.step(encoded, &output));
+    const diagnostics = missing.diagnostics();
+    try std.testing.expectEqualSlices(u8, "NeedDictionary", diagnostics.last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", diagnostics.last_error_phase_name);
 }
 
 test "lz4 native frame uses preset dictionary history" {

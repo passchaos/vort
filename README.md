@@ -376,6 +376,11 @@ var lz4_decoder = vort.Lz4NativeFrameDecoder.init(allocator);
 defer lz4_decoder.deinit();
 const lz4_plain = try lz4_decoder.decodeScratch(lz4_frame);
 _ = lz4_plain;
+var lz4_incremental = vort.Lz4NativeIncrementalFrameDecoder.init(allocator);
+defer lz4_incremental.deinit();
+var lz4_incremental_out: ["payload payload".len]u8 = undefined;
+_ = try lz4_incremental.step(lz4_frame[0..4], lz4_incremental_out[0..0]);
+_ = try lz4_incremental.step(lz4_frame[4..], &lz4_incremental_out);
 const lz4_dict = vort.Lz4NativeDictionary.init(0x1234, "previous lz4 history");
 const lz4_dict_frame = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(
     allocator,
