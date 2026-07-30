@@ -3414,13 +3414,15 @@ fn emitDictionaryMatchCompressedBlock(
     return true;
 }
 
+const MixedMatchKind = enum { dictionary, duplicate, repeated };
+
 const MixedMatchCandidate = struct {
     literal_len: usize,
     offset: usize,
     match_len: usize,
     literal_end: usize,
     payload_len: usize,
-    from_dictionary: bool,
+    kind: MixedMatchKind,
 };
 
 fn emitMixedDictionaryDuplicateMatchCompressedBlock(
@@ -3438,21 +3440,24 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     var count: usize = 0;
     var literal_start: usize = 0;
     var has_dictionary_match = false;
-    var has_duplicate_match = false;
+    var has_non_dictionary_match = false;
 
     while (count < max_bootstrap_sequence_count and literal_start < block.len) {
-        const candidate = try bestMixedDictionaryDuplicateCandidate(dictionary.content, block, literal_start, frame_offset) orelse break;
+        const candidate = if (!has_dictionary_match)
+            (try dictionaryMixedMatchCandidate(dictionary.content, block, literal_start, frame_offset)) orelse break
+        else
+            (try bestMixedDictionaryDuplicateCandidate(dictionary.content, block, literal_start, frame_offset)) orelse break;
         literal_lens[count] = candidate.literal_len;
         offsets[count] = candidate.offset;
         match_lens[count] = candidate.match_len;
         literal_ends[count] = candidate.literal_end;
         literal_start = candidate.literal_end;
-        has_dictionary_match = has_dictionary_match or candidate.from_dictionary;
-        has_duplicate_match = has_duplicate_match or !candidate.from_dictionary;
+        has_dictionary_match = has_dictionary_match or candidate.kind == .dictionary;
+        has_non_dictionary_match = has_non_dictionary_match or candidate.kind != .dictionary;
         count += 1;
     }
 
-    if (count < 2 or !has_dictionary_match or !has_duplicate_match) return false;
+    if (count < 2 or !has_dictionary_match or !has_non_dictionary_match) return false;
     return try emitMultiSequencePredefinedCompressedBlock(
         allocator,
         out,
@@ -3466,6 +3471,24 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     );
 }
 
+fn dictionaryMixedMatchCandidate(
+    dictionary: []const u8,
+    block: []const u8,
+    literal_start: usize,
+    frame_offset: usize,
+) Error!?MixedMatchCandidate {
+    const match = findDictionaryMatchIn(dictionary, block, literal_start, frame_offset) orelse return null;
+    const payload_len = dictionaryMatchPayloadLenFrom(block, match, literal_start, frame_offset, dictionary.len) orelse return null;
+    return .{
+        .literal_len = match.block_start - literal_start,
+        .offset = try dictionaryMatchOffset(dictionary.len, frame_offset, match),
+        .match_len = match.len,
+        .literal_end = match.block_start + match.len,
+        .payload_len = payload_len,
+        .kind = .dictionary,
+    };
+}
+
 fn bestMixedDictionaryDuplicateCandidate(
     dictionary: []const u8,
     block: []const u8,
@@ -3474,18 +3497,7 @@ fn bestMixedDictionaryDuplicateCandidate(
 ) Error!?MixedMatchCandidate {
     var best: ?MixedMatchCandidate = null;
 
-    if (findDictionaryMatchIn(dictionary, block, literal_start, frame_offset)) |match| {
-        if (dictionaryMatchPayloadLenFrom(block, match, literal_start, frame_offset, dictionary.len)) |payload_len| {
-            best = .{
-                .literal_len = match.block_start - literal_start,
-                .offset = try dictionaryMatchOffset(dictionary.len, frame_offset, match),
-                .match_len = match.len,
-                .literal_end = match.block_start + match.len,
-                .payload_len = payload_len,
-                .from_dictionary = true,
-            };
-        }
-    }
+    if (try dictionaryMixedMatchCandidate(dictionary, block, literal_start, frame_offset)) |candidate| best = candidate;
 
     if (try findBestDuplicateMatchIn(block, literal_start)) |match| {
         const payload_len = singleMatchPayloadLenFrom(block, match, literal_start) catch std.math.maxInt(usize);
@@ -3495,9 +3507,24 @@ fn bestMixedDictionaryDuplicateCandidate(
             .match_len = match.len,
             .literal_end = match.second_start + match.len,
             .payload_len = payload_len,
-            .from_dictionary = false,
+            .kind = .duplicate,
         };
         if (mixedMatchCandidateBetter(candidate, best)) best = candidate;
+    }
+
+    if (findRepeatedPatternSegmentIn(block, literal_start, block.len)) |segment| {
+        if (repeatedPatternPayloadLenFrom(segment, literal_start)) |payload_len| {
+            const literal_len = segment.start - literal_start + segment.period;
+            const candidate: MixedMatchCandidate = .{
+                .literal_len = literal_len,
+                .offset = segment.period,
+                .match_len = segment.match_len,
+                .literal_end = segment.start + segment.period + segment.match_len,
+                .payload_len = payload_len,
+                .kind = .repeated,
+            };
+            if (mixedMatchCandidateBetter(candidate, best)) best = candidate;
+        }
     }
 
     return best;
@@ -3507,7 +3534,16 @@ fn mixedMatchCandidateBetter(candidate: MixedMatchCandidate, current: ?MixedMatc
     const existing = current orelse return true;
     if (candidate.payload_len != existing.payload_len) return candidate.payload_len < existing.payload_len;
     if (candidate.match_len != existing.match_len) return candidate.match_len > existing.match_len;
-    return candidate.literal_len < existing.literal_len;
+    if (candidate.literal_len != existing.literal_len) return candidate.literal_len < existing.literal_len;
+    return mixedMatchKindRank(candidate.kind) > mixedMatchKindRank(existing.kind);
+}
+
+fn mixedMatchKindRank(kind: MixedMatchKind) u2 {
+    return switch (kind) {
+        .duplicate => 0,
+        .dictionary => 1,
+        .repeated => 2,
+    };
 }
 
 fn emitMultiDictionaryMatchCompressedBlock(
@@ -4106,6 +4142,22 @@ fn singleMatchPayloadLenFrom(block: []const u8, match: DuplicateMatch, literal_s
     var len = try literalsHeaderLen(regenerated_literals);
     len = std.math.add(usize, len, regenerated_literals) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, 1 + 1 + 3 + bitstream_len) catch return error.IntegerOverflow;
+    return len;
+}
+
+fn repeatedPatternPayloadLenFrom(segment: RepeatedPatternSegment, literal_start: usize) ?usize {
+    if (segment.start < literal_start) return null;
+    const literal_len = std.math.add(usize, segment.start - literal_start, segment.period) catch return null;
+    const match_len = segment.match_len;
+    const literal_code = sequenceCodeForValue(literal_len, &ll_base, &ll_bits) catch return null;
+    const offset_code = sequenceCodeForValue(segment.period, &of_base, &of_bits) catch return null;
+    const match_code = sequenceCodeForValue(match_len, &ml_base, &ml_bits) catch return null;
+    const regenerated_literals = std.math.add(usize, literal_len, segment.tail_len) catch return null;
+    const bit_count = @as(usize, ll_bits[literal_code]) + ml_bits[match_code] + of_bits[offset_code] + 1;
+    const bitstream_len = (bit_count + 7) / 8;
+    var len = literalsHeaderLen(regenerated_literals) catch return null;
+    len = std.math.add(usize, len, regenerated_literals) catch return null;
+    len = std.math.add(usize, len, 1 + 1 + 3 + bitstream_len) catch return null;
     return len;
 }
 
@@ -7163,6 +7215,36 @@ test "zstd native writer uses preset dictionary history after first block" {
         .content_checksum = false,
         .dictionary_id = dict.id,
         .block_size_max = first_block_payload.len,
+    });
+    defer std.testing.allocator.free(raw);
+    try std.testing.expect(encoded.frame.len < raw.len);
+}
+
+test "zstd native writer mixes dictionary and repeated-pattern matches" {
+    const dict = NativeDictionary.init(0x3456, "abcdefghijklmnop");
+    const payload = "pfx-abcdefghijklmnop-mid-0123456789xy" ++ ("ab" ** 80) ++ "-tail";
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, dict);
+    defer std.testing.allocator.free(encoded.frame);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, encoded.mode);
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded.frame, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded.frame[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+
+    const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .dictionary_id = dict.id,
     });
     defer std.testing.allocator.free(raw);
     try std.testing.expect(encoded.frame.len < raw.len);
