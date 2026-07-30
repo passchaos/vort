@@ -7072,6 +7072,45 @@ test "zstd native decoder reads mixed FSE tables in serialized order" {
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
 }
 
+test "zstd native decoder covers libzstd generated corpus shapes" {
+    var sequential: [5000]u8 = undefined;
+    for (&sequential, 0..) |*byte, i| byte.* = @intCast(i % 251);
+
+    var randomish: [5000]u8 = undefined;
+    var rng = std.Random.DefaultPrng.init(1);
+    for (&randomish) |*byte| byte.* = rng.random().int(u8);
+
+    const json_unit = "{\"key\":\"value\",\"number\":123,\"array\":[1,2,3],\"text\":\"abcdefg\"}\n";
+    const cases = [_][]const u8{
+        "abcd" ** 1000,
+        &sequential,
+        &randomish,
+        json_unit ** 200,
+        ("a" ** 100 ++ "b" ** 100 ++ "c" ** 100) ** 20,
+    };
+    const levels = [_]c_int{ 1, 3, 5, 9, 15, 19 };
+
+    for (cases) |payload| {
+        for (levels) |level| {
+            const encoded = try encodeFrameWithLevelAlloc(std.testing.allocator, payload, level);
+            defer std.testing.allocator.free(encoded);
+
+            const native_decoded = try decodeNativeFrameAllocLimited(std.testing.allocator, encoded, payload.len);
+            defer std.testing.allocator.free(native_decoded);
+            try std.testing.expectEqualSlices(u8, payload, native_decoded);
+
+            const into = try std.testing.allocator.alloc(u8, payload.len);
+            defer std.testing.allocator.free(into);
+            const written = try decodeNativeFrameInto(encoded, into);
+            try std.testing.expectEqual(payload.len, written);
+            try std.testing.expectEqualSlices(u8, payload, into[0..written]);
+
+            try std.testing.expectEqual(payload.len, try decodedRawOrRleFrameSizeLimited(encoded, payload.len));
+            try std.testing.expectError(error.OutputLimitExceeded, decodedRawOrRleFrameSizeLimited(encoded, payload.len - 1));
+        }
+    }
+}
+
 test "zstd native decoder rejects malformed FSE compressed sequence tables" {
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
