@@ -1186,7 +1186,6 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (self.dictionary != null or self.dictionary_set != null) return false;
         const frame = self.frame_scratch.items[0..frame_end];
         const header = try parseFrameHeader(frame);
-        if (!header.block_independent) return false;
         if (header.dictionary_id) |id| {
             if (id != 0) return false;
         }
@@ -1218,6 +1217,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             if (block_len > header.block_size_max) return error.CorruptFrame;
             if (frame.len - offset < block_len) return error.TruncatedFrame;
             const payload = frame[offset..][0..block_len];
+            if (!header.block_independent and !uncompressed_block) return false;
             const decoded_block_len = if (uncompressed_block)
                 block_len
             else
@@ -4330,6 +4330,53 @@ test "lz4 native incremental decoder streams multiple raw blocks without decoded
     try std.testing.expectEqualSlices(u8, payload, output);
     try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
     try decoder.finish();
+}
+
+test "lz4 native incremental decoder streams linked raw blocks without decoded scratch" {
+    const payload = try std.testing.allocator.alloc(u8, max_block_history_len + 2048);
+    defer std.testing.allocator.free(payload);
+    var state: u32 = 0x89ab_cdef;
+    for (payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    const encoded = try encodePureFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = true,
+        .block_checksum = true,
+        .block_mode = .linked,
+        .block_size_id = .max64kb,
+    });
+    defer std.testing.allocator.free(encoded);
+    const header = try inspectNativeFrameHeader(encoded);
+    try std.testing.expect(!header.block_independent);
+    const first_block = (try inspectNativeFrameFirstBlock(encoded)) orelse return error.CorruptFrame;
+    try std.testing.expect(!first_block.is_compressed);
+    const second_block = (try inspectNativeFrameBlockAt(encoded, first_block.next_header_offset)) orelse return error.CorruptFrame;
+    try std.testing.expect(!second_block.is_compressed);
+
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    const output = try std.testing.allocator.alloc(u8, payload.len);
+    defer std.testing.allocator.free(output);
+    const initial = try decoder.step(encoded, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
+    try std.testing.expectEqual(@as(?usize, payload.len), decoder.snapshot().decoded_len);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+
+    var written: usize = 0;
+    while (true) {
+        const end = @min(output.len, written + 4099);
+        const result = try decoder.step("", output[written..end]);
+        written += result.progress.output_written;
+        if (result.status == .done) break;
+        try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
+    }
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, output);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
 }
 
 test "lz4 native incremental decoder validates raw block checksums directly" {

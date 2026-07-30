@@ -144,10 +144,10 @@ Current interpretation:
   input. Exact-size allocation variants and incremental `expected_output_len`
   plus `finish()` provide strict SizeMismatch semantics when callers know the
   expected output length. LZ4 native incremental decoding has started moving
-  beyond the whole-frame facade with a direct-output path for
-  block-independent raw and compressed frames with block/content checksum
-  verification;
-  linked block-by-block paths remain open. Zstd native incremental decoding now
+  beyond the whole-frame facade with a direct-output path for raw linked or
+  independent blocks plus independent compressed blocks with block/content
+  checksum verification; linked compressed block-by-block paths remain open.
+  Zstd native incremental decoding now
   has matching direct-output slices for raw/RLE blocks with content checksum
   validation and single compressed blocks without content checksum; broader
   compressed Zstd frames still use the whole-frame facade. The
