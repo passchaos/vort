@@ -149,10 +149,9 @@ Current interpretation:
   block/content checksum verification when the caller supplies one contiguous
   frame output buffer. Frames whose Dictionary_ID resolves through the explicit
   dictionary or dictionary-set incremental constructors can also stream
-  dictionary-backed compressed blocks directly. Linked compressed drains that
-  split the frame history across caller output buffers still fall back to the
-  whole-frame scratch path and resume after the prefix already returned to the
-  caller.
+  dictionary-backed compressed blocks directly. Linked compressed drains now
+  keep a bounded 64 KiB direct history window, so caller output chunks that
+  split frame history can continue without the whole-frame scratch fallback.
   Zstd native incremental decoding now
   has matching direct-output slices for raw/RLE blocks and compressed native
   blocks, including multi-block frames whose later compressed blocks reuse

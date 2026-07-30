@@ -750,6 +750,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     direct_block_index: usize = 0,
     direct_frame_output_start: usize = 0,
     direct_dictionary_history: []const u8 = &.{},
+    direct_history: std.ArrayList(u8) = .empty,
     direct_next_block_header_offset: usize = 0,
     direct_decoded_len: usize = 0,
     direct_decoded_read: usize = 0,
@@ -817,6 +818,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn deinit(self: *NativeIncrementalFrameDecoder) void {
+        self.direct_history.deinit(self.allocator);
         self.direct_block_decoded_lens.deinit(self.allocator);
         self.decoded_scratch.deinit(self.allocator);
         self.frame_scratch.deinit(self.allocator);
@@ -1029,6 +1031,12 @@ pub const NativeIncrementalFrameDecoder = struct {
                     try self.ensureDirectOutputFitsExpected();
                     if (self.direct_block_compressed) {
                         if (output.len - output_written_step < self.direct_block_decoded_len) {
+                            if (output_written_step != 0) {
+                                return .{
+                                    .progress = .{ .input_read = input_read, .output_written = output_written_step },
+                                    .status = .need_output,
+                                };
+                            }
                             try self.fallbackDirectOutputToScratch();
                             continue;
                         }
@@ -1040,30 +1048,21 @@ pub const NativeIncrementalFrameDecoder = struct {
                                 self.direct_block_decoded_len,
                                 self.direct_dictionary_history,
                             );
+                        } else if (!self.direct_block_independent) written: {
+                            break :written try decodeBlockWithPrefixIntoSliceNoAlloc(
+                                source,
+                                output[output_written_step..][0..self.direct_block_decoded_len],
+                                self.direct_block_decoded_len,
+                                self.direct_history.items,
+                            );
                         } else written: {
-                            const call_output_base = self.output_written - output_written_step;
-                            const history_start = if (self.direct_block_independent)
-                                output_written_step
-                            else if (self.direct_frame_output_start >= call_output_base)
-                                self.direct_frame_output_start - call_output_base
-                            else {
-                                // Linked LZ4 blocks may reference bytes emitted by
-                                // previous blocks in the same frame.  The direct
-                                // buffer decoder can only see history that was
-                                // produced earlier in this same `step()` output
-                                // slice; when a caller drains the frame across
-                                // multiple output buffers, switch to the scratch
-                                // decoder and resume after the bytes already
-                                // returned to the caller.
-                                try self.fallbackDirectOutputToScratch();
-                                continue;
-                            };
                             var written_abs = output_written_step;
-                            try decodeBlockIntoBuffer(source, output, &written_abs, self.direct_block_decoded_len, history_start);
+                            try decodeBlockIntoBuffer(source, output, &written_abs, self.direct_block_decoded_len, output_written_step);
                             break :written written_abs - output_written_step;
                         };
                         if (written != self.direct_block_decoded_len) return error.SizeMismatch;
                         if (self.direct_content_checksum) self.direct_content_hasher.update(output[output_written_step..][0..written]);
+                        if (!self.direct_block_independent) try self.rememberDirectOutput(output[output_written_step..][0..written]);
                         self.direct_payload_read = self.direct_payload_len;
                         self.direct_decoded_read += written;
                         output_written_step += written;
@@ -1074,6 +1073,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                     const source_offset = self.direct_payload_offset + self.direct_payload_read;
                     @memcpy(output[output_written_step..][0..n], self.frame_scratch.items[source_offset..][0..n]);
                     if (self.direct_content_checksum) self.direct_content_hasher.update(output[output_written_step..][0..n]);
+                    if (!self.direct_block_independent) try self.rememberDirectOutput(output[output_written_step..][0..n]);
                     self.direct_payload_read += n;
                     self.direct_decoded_read += n;
                     output_written_step += n;
@@ -1099,6 +1099,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_block_index = 0;
         self.direct_frame_output_start = 0;
         self.direct_dictionary_history = &.{};
+        self.direct_history.clearRetainingCapacity();
         self.direct_next_block_header_offset = 0;
         self.direct_decoded_len = 0;
         self.direct_decoded_read = 0;
@@ -1124,6 +1125,24 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.resetDirectOutput();
         self.discardFrameScratchPrefix(frame_len);
         self.phase = .output;
+    }
+
+    fn rememberDirectOutput(self: *NativeIncrementalFrameDecoder, bytes: []const u8) Error!void {
+        if (bytes.len == 0) return;
+        if (bytes.len >= max_block_history_len) {
+            self.direct_history.clearRetainingCapacity();
+            try self.direct_history.appendSlice(self.allocator, bytes[bytes.len - max_block_history_len ..]);
+            return;
+        }
+
+        const combined_len = self.direct_history.items.len + bytes.len;
+        if (combined_len > max_block_history_len) {
+            const drop = combined_len - max_block_history_len;
+            const keep_len = self.direct_history.items.len - drop;
+            std.mem.copyForwards(u8, self.direct_history.items[0..keep_len], self.direct_history.items[drop..]);
+            self.direct_history.shrinkRetainingCapacity(keep_len);
+        }
+        try self.direct_history.appendSlice(self.allocator, bytes);
     }
 
     fn needMoreInputForExpectedOutput(self: *NativeIncrementalFrameDecoder) Error!bool {
@@ -4497,7 +4516,7 @@ test "lz4 native incremental decoder streams linked compressed blocks directly" 
     try std.testing.expectEqualSlices(u8, payload, output);
 }
 
-test "lz4 native incremental linked compressed fallback preserves emitted prefix" {
+test "lz4 native incremental linked compressed blocks keep direct history across output chunks" {
     const first_block_len = max_block_history_len;
     const second_block_len = 4 * 1024;
     const payload = try std.testing.allocator.alloc(u8, first_block_len + second_block_len);
@@ -4533,21 +4552,17 @@ test "lz4 native incremental linked compressed fallback preserves emitted prefix
     try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
 
     var written: usize = 0;
-    var saw_fallback = false;
     while (true) {
         const end = @min(output.len, written + 4097);
         const result = try decoder.step("", output[written..end]);
         written += result.progress.output_written;
-        if (decoder.decoded_scratch.items.len != 0) {
-            saw_fallback = true;
-            try std.testing.expectEqual(payload.len, decoder.decoded_scratch.items.len);
-        }
+        try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
         if (result.status == .done) break;
         try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
     }
-    try std.testing.expect(saw_fallback);
     try std.testing.expectEqual(payload.len, written);
     try std.testing.expectEqualSlices(u8, payload, output);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
 }
 
 test "lz4 native incremental decoder validates raw block checksums directly" {
