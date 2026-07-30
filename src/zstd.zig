@@ -8380,6 +8380,46 @@ test "zstd native incremental decoder streams single compressed block without de
     try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
 }
 
+test "zstd native incremental compressed block falls back for small output" {
+    const payload = ("fedcba9876543210" ** 8) ** 64;
+    const encoded = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    });
+    defer std.testing.allocator.free(encoded.frame);
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    try std.testing.expect(first_block.last);
+
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    const initial = try decoder.step(encoded.frame, output[0..0]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, initial.status);
+    try std.testing.expectEqual(@as(usize, 0), decoder.decoded_scratch.items.len);
+
+    var written: usize = 0;
+    while (true) {
+        const end = @min(output.len, written + 113);
+        const result = try decoder.step("", output[written..end]);
+        written += result.progress.output_written;
+        if (result.status == .done) break;
+        try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
+        if (decoder.decoded_scratch.items.len != 0) {
+            // A compressed block cannot be partially decoded directly without a
+            // resumable block decoder, so small caller buffers intentionally
+            // fall back to the mature whole-frame scratch path.
+            try std.testing.expectEqual(payload.len, decoder.decoded_scratch.items.len);
+        }
+    }
+    try std.testing.expectEqual(payload.len, written);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expectEqual(payload.len, decoder.diagnostics().output_written);
+}
+
 test "zstd native incremental decoder drains concatenated streams and skippable frames" {
     const first_payload = "incremental zstd first stream member " ** 2;
     const second_payload = "incremental zstd second stream member " ** 3;
