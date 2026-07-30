@@ -148,9 +148,9 @@ Current interpretation:
   block-independent raw and compressed frames with block/content checksum
   verification;
   linked block-by-block paths remain open. Zstd native incremental decoding now
-  has matching direct-output slices for raw and RLE blocks with content
-  checksum validation; compressed Zstd blocks still use the whole-frame
-  facade. The
+  has matching direct-output slices for raw/RLE blocks with content checksum
+  validation and single compressed blocks without content checksum; broader
+  compressed Zstd frames still use the whole-frame facade. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
