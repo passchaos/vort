@@ -27,6 +27,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkNoSizeDictionarySetDirectOutput(init.gpa);
     checked += 1;
+    try checkDictionaryDirectFallback(init.gpa);
+    checked += 1;
 
     try stdout.print("zstd_native_dictionary_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -308,6 +310,33 @@ fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
     try expect(done.status == .done);
     try expectEqualSlices(expected, &output);
     try decoder.finish();
+}
+
+fn checkDictionaryDirectFallback(allocator: std.mem.Allocator) !void {
+    const dict = vort.ZstdNativeDictionary.init(0x6261, "abcdefghijklmnop");
+    const payload = "pfx-abcdefghijklmnop-small-output-tail";
+    const encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    }, dict);
+    defer allocator.free(encoded.frame);
+
+    var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    const initial = try decoder.step(encoded.frame, output[0..0]);
+    try expect(initial.status == .need_output);
+    try expectEqualSlices("direct_output", decoder.diagnostics().phase_name);
+    const partial = try decoder.step("", output[0..5]);
+    try expect(partial.status == .need_output);
+    try expect(partial.progress.output_written == 5);
+    try expect(decoder.decoded_scratch.items.len == payload.len);
+    const done = try decoder.step("", output[5..]);
+    try expect(done.status == .done);
+    try expectEqualSlices(payload, &output);
 }
 
 fn expect(ok: bool) !void {
