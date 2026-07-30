@@ -1145,6 +1145,80 @@ test "root zstd explicit native encode-into helpers round trip" {
     try std.testing.expectEqualSlices(u8, literal_payload, literal_decoded);
 }
 
+test "root native dictionary set APIs resolve concatenated frame dictionaries" {
+    const lz4_first_dict = Lz4NativeDictionary.init(0x1010, "abcdefghijklmnop");
+    const lz4_second_dict = Lz4NativeDictionary.init(0x2020, "qrstuvwxyz123456");
+    const lz4_dictionary_set = Lz4NativeDictionarySet.init(&.{ lz4_first_dict, lz4_second_dict });
+    const lz4_options: Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+    };
+    const lz4_first_payload = "abcdefghijklmnop-one";
+    const lz4_second_payload = "qrstuvwxyz123456-two";
+    const lz4_first = try lz4EncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, lz4_first_payload, lz4_options, lz4_first_dict);
+    defer std.testing.allocator.free(lz4_first);
+    const lz4_second = try lz4EncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, lz4_second_payload, lz4_options, lz4_second_dict);
+    defer std.testing.allocator.free(lz4_second);
+    const lz4_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 1, "root-lz4-dict-set");
+    defer std.testing.allocator.free(lz4_skip);
+
+    var lz4_stream: std.ArrayList(u8) = .empty;
+    defer lz4_stream.deinit(std.testing.allocator);
+    try lz4_stream.appendSlice(std.testing.allocator, lz4_first);
+    try lz4_stream.appendSlice(std.testing.allocator, lz4_skip);
+    try lz4_stream.appendSlice(std.testing.allocator, lz4_second);
+
+    const lz4_expected = lz4_first_payload ++ lz4_second_payload;
+    const lz4_decoded = try lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(std.testing.allocator, lz4_stream.items, lz4_dictionary_set);
+    defer std.testing.allocator.free(lz4_decoded);
+    try std.testing.expectEqualSlices(u8, lz4_expected, lz4_decoded);
+    try std.testing.expectEqual(lz4_expected.len, try lz4DecodedNativeConcatenatedFrameSizeWithDictionarySet(lz4_stream.items, lz4_dictionary_set));
+    var lz4_into: [lz4_expected.len]u8 = undefined;
+    try std.testing.expectEqual(lz4_expected.len, try lz4DecodeNativeConcatenatedFrameIntoWithDictionarySet(lz4_stream.items, &lz4_into, lz4_dictionary_set));
+    try std.testing.expectEqualSlices(u8, lz4_expected, &lz4_into);
+    try std.testing.expectError(error.NeedDictionary, lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(
+        std.testing.allocator,
+        lz4_stream.items,
+        Lz4NativeDictionarySet.init(&.{lz4_first_dict}),
+    ));
+
+    const zstd_first_dict = ZstdNativeDictionary.init(0x3030, "abcdefghijklmnop");
+    const zstd_second_dict = ZstdNativeDictionary.init(0x4040, "QRSTUVWXYZabcd1234");
+    const zstd_dictionary_set = ZstdNativeDictionarySet.init(&.{ zstd_first_dict, zstd_second_dict });
+    const zstd_options: ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+    const zstd_first_payload = "pfx-abcdefghijklmnop-tail";
+    const zstd_second_payload = "pfx-QRSTUVWXYZabcd1234-tail";
+    const zstd_first = try zstdEncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, zstd_first_payload, zstd_options, zstd_first_dict);
+    defer std.testing.allocator.free(zstd_first.frame);
+    const zstd_second = try zstdEncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, zstd_second_payload, zstd_options, zstd_second_dict);
+    defer std.testing.allocator.free(zstd_second.frame);
+    const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 1, "root-zstd-dict-set");
+    defer std.testing.allocator.free(zstd_skip);
+
+    var zstd_stream: std.ArrayList(u8) = .empty;
+    defer zstd_stream.deinit(std.testing.allocator);
+    try zstd_stream.appendSlice(std.testing.allocator, zstd_first.frame);
+    try zstd_stream.appendSlice(std.testing.allocator, zstd_skip);
+    try zstd_stream.appendSlice(std.testing.allocator, zstd_second.frame);
+
+    const zstd_expected = zstd_first_payload ++ zstd_second_payload;
+    const zstd_decoded = try zstdDecodeNativeConcatenatedFrameAllocWithDictionarySet(std.testing.allocator, zstd_stream.items, zstd_dictionary_set);
+    defer std.testing.allocator.free(zstd_decoded);
+    try std.testing.expectEqualSlices(u8, zstd_expected, zstd_decoded);
+    try std.testing.expectEqual(zstd_expected.len, try zstdDecodedNativeConcatenatedFrameSizeWithDictionarySet(zstd_stream.items, zstd_dictionary_set));
+    var zstd_into: [zstd_expected.len]u8 = undefined;
+    try std.testing.expectEqual(zstd_expected.len, try zstdDecodeNativeConcatenatedFrameIntoWithDictionarySet(zstd_stream.items, &zstd_into, zstd_dictionary_set));
+    try std.testing.expectEqualSlices(u8, zstd_expected, &zstd_into);
+    try std.testing.expectError(error.NeedDictionary, zstdDecodeNativeConcatenatedFrameAllocWithDictionarySet(
+        std.testing.allocator,
+        zstd_stream.items,
+        ZstdNativeDictionarySet.init(&.{zstd_first_dict}),
+    ));
+}
+
 test "root exports chunked compatibility decode helpers" {
     // Keep the README/API-sketch split-input helpers tied to root exports. These
     // references are intentionally compile-time only: codec behavior is covered
