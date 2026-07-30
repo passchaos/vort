@@ -4857,12 +4857,14 @@ fn mixedCandidateLookaheadPayloadLen(
     var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
     var offsets: [max_bootstrap_sequence_count]usize = undefined;
     var match_lens: [max_bootstrap_sequence_count]usize = undefined;
+    var literal_ends: [max_bootstrap_sequence_count]usize = undefined;
     var count: usize = 0;
     var current = candidate;
     while (true) {
         literal_lens[count] = current.literal_len;
         offsets[count] = current.offset;
         match_lens[count] = current.match_len;
+        literal_ends[count] = current.literal_end;
         count += 1;
         if (count == max_bootstrap_sequence_count or current.literal_end >= block.len) break;
         current = try bestMixedCandidateNoLookahead(dictionary, block, current.literal_end, frame_offset) orelse break;
@@ -4874,32 +4876,33 @@ fn mixedCandidateLookaheadPayloadLen(
     const match_code = try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits);
     var rle_compatible = true;
     for (1..count) |i| {
-        if ((sequenceCodeForValue(literal_lens[i], &ll_base, &ll_bits) catch return try multiSequencePayloadLen(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], current.literal_end)) != literal_code) {
+        if ((sequenceCodeForValue(literal_lens[i], &ll_base, &ll_bits) catch return try multiSequencePayloadLenWithLiteralEnds(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], current.literal_end)) != literal_code) {
             rle_compatible = false;
             break;
         }
-        if ((sequenceCodeForValue(offsets[i], &of_base, &of_bits) catch return try multiSequencePayloadLen(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], current.literal_end)) != offset_code) {
+        if ((sequenceCodeForValue(offsets[i], &of_base, &of_bits) catch return try multiSequencePayloadLenWithLiteralEnds(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], current.literal_end)) != offset_code) {
             rle_compatible = false;
             break;
         }
-        if ((sequenceCodeForValue(match_lens[i], &ml_base, &ml_bits) catch return try multiSequencePayloadLen(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], current.literal_end)) != match_code) {
+        if ((sequenceCodeForValue(match_lens[i], &ml_base, &ml_bits) catch return try multiSequencePayloadLenWithLiteralEnds(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], current.literal_end)) != match_code) {
             rle_compatible = false;
             break;
         }
     }
     if (rle_compatible) {
-        return try rleSequencePayloadLen(
+        return try rleSequencePayloadLenWithLiteralEnds(
             block,
             literal_lens[0..count],
             offsets[0..count],
             match_lens[0..count],
+            literal_ends[0..count],
             current.literal_end,
             literal_code,
             offset_code,
             match_code,
         );
     }
-    return try multiSequencePayloadLen(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], current.literal_end);
+    return try multiSequencePayloadLenWithLiteralEnds(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], current.literal_end);
 }
 
 fn bestMixedCandidateNoLookahead(
@@ -9775,6 +9778,9 @@ test "zstd native writer emits RLE literals for dictionary sequences" {
     try std.testing.expectEqual(@as(usize, 3), section.regenerated_size);
     try std.testing.expectEqual(@as(u8, 'x'), block[section.literal_payload_offset]);
     try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+    const first_candidate = (try dictionaryMixedMatchCandidate(dict.content, payload, 0, 0)) orelse return error.CorruptFrame;
+    const lookahead_payload_len = (try mixedCandidateLookaheadPayloadLen(dict.content, payload, 0, first_candidate)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(first_block.payload_len, lookahead_payload_len);
 
     const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .content_checksum = false,
