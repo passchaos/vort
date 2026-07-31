@@ -2387,6 +2387,12 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     try lz4_reusable_chunked_append.appendSlice(std.testing.allocator, "prefix:");
     try std.testing.expectEqual(lz4_expected.len, try lz4_reusable_decoder.decodeConcatenatedChunksAppendWithDictionarySet(&lz4_reusable_chunked_append, &lz4_chunks, lz4_join, lz4_dictionary_set));
     try std.testing.expectEqualSlices(u8, "prefix:" ++ lz4_expected, lz4_reusable_chunked_append.items);
+    lz4_reusable_chunked_append.clearRetainingCapacity();
+    try lz4_reusable_chunked_append.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(lz4_expected.len, try lz4_reusable_decoder.decodeConcatenatedChunksAppendExactSizeWithDictionarySet(&lz4_reusable_chunked_append, &lz4_chunks, lz4_join, lz4_dictionary_set, lz4_expected.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ lz4_expected, lz4_reusable_chunked_append.items);
+    lz4_reusable_chunked_append.clearRetainingCapacity();
+    try std.testing.expectError(error.SizeMismatch, lz4_reusable_decoder.decodeConcatenatedChunksAppendExactSizeWithDictionarySet(&lz4_reusable_chunked_append, &lz4_chunks, lz4_join, lz4_dictionary_set, lz4_expected.len - 1));
     @memset(&lz4_chunked_into, 0);
     try std.testing.expectEqual(lz4_expected.len, try lz4_reusable_decoder.decodeConcatenatedChunksIntoSliceWithDictionarySet(&lz4_chunks, lz4_join, &lz4_chunked_into, lz4_dictionary_set));
     try std.testing.expectEqualSlices(u8, lz4_expected, &lz4_chunked_into);
@@ -2542,6 +2548,12 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     try zstd_reusable_chunked_append.appendSlice(std.testing.allocator, "prefix:");
     try std.testing.expectEqual(zstd_expected.len, try zstd_reusable_decoder.decodeConcatenatedChunksAppendWithDictionarySet(&zstd_reusable_chunked_append, &zstd_chunks, zstd_join, zstd_dictionary_set));
     try std.testing.expectEqualSlices(u8, "prefix:" ++ zstd_expected, zstd_reusable_chunked_append.items);
+    zstd_reusable_chunked_append.clearRetainingCapacity();
+    try zstd_reusable_chunked_append.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(zstd_expected.len, try zstd_reusable_decoder.decodeConcatenatedChunksAppendExactSizeWithDictionarySet(&zstd_reusable_chunked_append, &zstd_chunks, zstd_join, zstd_dictionary_set, zstd_expected.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ zstd_expected, zstd_reusable_chunked_append.items);
+    zstd_reusable_chunked_append.clearRetainingCapacity();
+    try std.testing.expectError(error.SizeMismatch, zstd_reusable_decoder.decodeConcatenatedChunksAppendExactSizeWithDictionarySet(&zstd_reusable_chunked_append, &zstd_chunks, zstd_join, zstd_dictionary_set, zstd_expected.len - 1));
     @memset(&zstd_chunked_into, 0);
     try std.testing.expectEqual(zstd_expected.len, try zstd_reusable_decoder.decodeConcatenatedChunksIntoSliceWithDictionarySet(&zstd_chunks, zstd_join, &zstd_chunked_into, zstd_dictionary_set));
     try std.testing.expectEqualSlices(u8, zstd_expected, &zstd_chunked_into);

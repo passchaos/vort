@@ -1668,12 +1668,24 @@ pub const NativeFrameDecoder = struct {
         return try decodeFrameAppend(self.allocator, out, frame);
     }
 
+    pub fn decodeAppendExactSize(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, expected_output_len: usize) Error!usize {
+        return try decodeFrameAppendExactSize(self.allocator, out, frame, expected_output_len);
+    }
+
     pub fn decodeAppendWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary) Error!usize {
         return try decodeFrameAppendWithDictionary(self.allocator, out, frame, dictionary);
     }
 
+    pub fn decodeAppendExactSizeWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+        return try decodeFrameAppendExactSizeWithDictionary(self.allocator, out, frame, dictionary, expected_output_len);
+    }
+
     pub fn decodeAppendWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
         return try decodeFrameAppendWithDictionarySet(self.allocator, out, frame, dictionary_set);
+    }
+
+    pub fn decodeAppendExactSizeWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+        return try decodeFrameAppendExactSizeWithDictionarySet(self.allocator, out, frame, dictionary_set, expected_output_len);
     }
 
     pub fn decodeAppendLimited(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, max_output_len: usize) Error!usize {
@@ -1821,12 +1833,24 @@ pub const NativeFrameDecoder = struct {
         return try decodeConcatenatedFrameAppend(self.allocator, out, frames);
     }
 
+    pub fn decodeConcatenatedAppendExactSize(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frames: []const u8, expected_output_len: usize) Error!usize {
+        return try decodeConcatenatedFrameAppendExactSize(self.allocator, out, frames, expected_output_len);
+    }
+
     pub fn decodeConcatenatedAppendWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frames: []const u8, dictionary: NativeDictionary) Error!usize {
         return try decodeConcatenatedFrameAppendWithDictionary(self.allocator, out, frames, dictionary);
     }
 
+    pub fn decodeConcatenatedAppendExactSizeWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frames: []const u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+        return try decodeConcatenatedFrameAppendExactSizeWithDictionary(self.allocator, out, frames, dictionary, expected_output_len);
+    }
+
     pub fn decodeConcatenatedAppendWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frames: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
         return try decodeConcatenatedFrameAppendWithDictionarySet(self.allocator, out, frames, dictionary_set);
+    }
+
+    pub fn decodeConcatenatedAppendExactSizeWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frames: []const u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+        return try decodeConcatenatedFrameAppendExactSizeWithDictionarySet(self.allocator, out, frames, dictionary_set, expected_output_len);
     }
 
     pub fn decodeConcatenatedAppendLimited(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frames: []const u8, max_output_len: usize) Error!usize {
@@ -1927,6 +1951,11 @@ pub const NativeFrameDecoder = struct {
         return try self.decodeConcatenatedAppend(out, joined);
     }
 
+    pub fn decodeConcatenatedChunksAppendExactSize(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error!usize {
+        const joined = try joinChunks(chunks, compressed_scratch);
+        return try self.decodeConcatenatedAppendExactSize(out, joined, expected_output_len);
+    }
+
     pub fn decodeConcatenatedChunksAppendLimited(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppendLimited(out, joined, max_output_len);
@@ -1982,6 +2011,11 @@ pub const NativeFrameDecoder = struct {
     pub fn decodeConcatenatedChunksAppendWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error!usize {
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppendWithDictionary(out, joined, dictionary);
+    }
+
+    pub fn decodeConcatenatedChunksAppendExactSizeWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+        const joined = try joinChunks(chunks, compressed_scratch);
+        return try self.decodeConcatenatedAppendExactSizeWithDictionary(out, joined, dictionary, expected_output_len);
     }
 
     pub fn decodeConcatenatedChunksAppendLimitedWithDictionary(
@@ -2046,6 +2080,11 @@ pub const NativeFrameDecoder = struct {
     pub fn decodeConcatenatedChunksAppendWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
         const joined = try joinChunks(chunks, compressed_scratch);
         return try self.decodeConcatenatedAppendWithDictionarySet(out, joined, dictionary_set);
+    }
+
+    pub fn decodeConcatenatedChunksAppendExactSizeWithDictionarySet(self: *NativeFrameDecoder, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+        const joined = try joinChunks(chunks, compressed_scratch);
+        return try self.decodeConcatenatedAppendExactSizeWithDictionarySet(out, joined, dictionary_set, expected_output_len);
     }
 
     pub fn decodeConcatenatedChunksAppendLimitedWithDictionarySet(
