@@ -8517,6 +8517,27 @@ test "zstd native decoder accepts four-stream Huffman literals" {
     try std.testing.expectEqual(payload.len, decoded_len);
 }
 
+test "zstd native decoder parses system high-byte Huffman tree" {
+    const tree_hex =
+        "3710657a2b5cbc991677a0b3d956ae1aa76ac132b29a169ab2abdcef38e438a8e62e6e" ++
+        "8751108babaaaaaaaaaaaaaaaaaaaaaaaaaaaa6a82";
+    var tree_bytes: [tree_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&tree_bytes, tree_hex);
+
+    var reader: std.Io.Reader = .fixed(&tree_bytes);
+    var remaining: std.Io.Limit = .limited(tree_bytes.len);
+    const tree = try decodeStdZstdHuffmanTree(&reader, &remaining);
+    try std.testing.expectEqual(tree_bytes.len, reader.seek);
+    try std.testing.expectEqual(@as(u4, 9), tree.max_bit_count);
+    try std.testing.expectEqual(@as(usize, 127), @as(usize, tree.symbol_count_minus_one) + 1);
+    try std.testing.expectEqual(@as(u8, 132), tree.nodes[0].symbol);
+    try std.testing.expectEqual(@as(u4, 1), tree.nodes[0].weight);
+    try std.testing.expectEqual(@as(u16, 0), tree.nodes[0].prefix);
+    try std.testing.expectEqual(@as(u8, 238), tree.nodes[tree.symbol_count_minus_one].symbol);
+    try std.testing.expectEqual(@as(u4, 4), tree.nodes[tree.symbol_count_minus_one].weight);
+    try std.testing.expectEqual(@as(u16, 63), tree.nodes[tree.symbol_count_minus_one].prefix);
+}
+
 test "zstd native decoder accepts system high-byte Huffman frame" {
     const frame_hex =
         "28b52ffd0448ed1d000a40e00e3710657a2b5cbc991677a0b3d956ae1aa76ac132b29a169ab2abdcef38e438a8e62e6e" ++
