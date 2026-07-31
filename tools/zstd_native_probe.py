@@ -170,6 +170,16 @@ def verify_native_encode(cli: pathlib.Path, payload: bytes, mode: str) -> None:
     native_decode(cli, native_frame, payload)
 
 
+def handcrafted_frames() -> list[tuple[str, bytes, bytes]]:
+    """Small valid frames that exercise parser edge cases not emitted by writers."""
+    raw = b"abc"
+    block_header = ((len(raw) << 3) | 1).to_bytes(3, "little")
+    descriptor_unused_bit = bytes.fromhex("28b52ffd") + b"\x10\x00" + block_header + raw
+    return [
+        ("descriptor-unused-bit", descriptor_unused_bit, raw),
+    ]
+
+
 def generated_payloads() -> list[tuple[str, bytes]]:
     rng = random.Random(0x51D)
     printable = bytes(range(32, 127))
@@ -374,6 +384,32 @@ def main() -> int:
     levels = (1, 3, 6, 9, 12, 19)
     native_modes = ("auto", "raw_or_rle", "literal_only")
     checked = 0
+    for name, frame, expected in handcrafted_frames():
+        zstd_decoded = subprocess.run(
+            [ZSTD, "-dcq"],
+            input=frame,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        ).stdout
+        if zstd_decoded != expected:
+            print(
+                f"zstd_native_probe_fail case={name} mode=handcrafted-zstd "
+                f"decoded_bytes={len(zstd_decoded)} expected_bytes={len(expected)}"
+            )
+            return 1
+        try:
+            native_size(cli, frame, len(expected))
+            native_decode(cli, frame, expected)
+        except AssertionError as exc:
+            print(
+                f"zstd_native_probe_fail case={name} mode=handcrafted-native "
+                f"input_bytes={len(expected)} frame_bytes={len(frame)} error={exc}"
+            )
+            print(frame.hex()[:800])
+            return 1
+        checked += 1
+
     for name, payload in payloads(args.path, args.dir, args.max_files, args.limit):
         for mode in native_modes:
             try:
