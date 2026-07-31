@@ -66,6 +66,9 @@ pub const NativeFrameOptions = struct {
     block_size_id: BlockSizeId = .max4mb,
     block_mode: BlockMode = .independent,
     dictionary_id: ?u32 = null,
+    /// Maximum hash-chain candidates to inspect per position. Lower values
+    /// favor encode speed; the default keeps the deeper-ratio parser enabled.
+    chain_depth: u8 = max_chain_depth,
 };
 
 pub const NativeDictionary = struct {
@@ -120,6 +123,7 @@ pub fn encodedNativeFrameBound(input_len: usize) Error!usize {
 }
 
 pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrameOptions) Error!usize {
+    _ = try nativeChainDepth(options);
     var bound: usize = 4 + 2 + 1; // magic + FLG/BD + descriptor checksum
     if (options.include_content_size) bound = std.math.add(usize, bound, 8) catch return error.IntegerOverflow;
     if (options.dictionary_id != null) bound = std.math.add(usize, bound, 4) catch return error.IntegerOverflow;
@@ -134,6 +138,11 @@ pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrame
     bound = std.math.add(usize, bound, 4) catch return error.IntegerOverflow; // end mark
     if (options.content_checksum) bound = std.math.add(usize, bound, 4) catch return error.IntegerOverflow;
     return bound;
+}
+
+fn nativeChainDepth(options: NativeFrameOptions) Error!u8 {
+    if (options.chain_depth > max_chain_depth) return error.InvalidBlockPlan;
+    return options.chain_depth;
 }
 
 pub fn encodedNativeFrameBoundWithDictionary(input_len: usize, options: NativeFrameOptions, dictionary: NativeDictionary) Error!usize {
@@ -271,6 +280,7 @@ pub fn encodePureFrameAppend(
 
     var offset: usize = 0;
     const max_block_len = options.block_size_id.maxLen();
+    const chain_depth = try nativeChainDepth(options);
     while (offset < input.len) {
         const block_len = @min(input.len - offset, max_block_len);
         var header: [4]u8 = undefined;
@@ -283,9 +293,9 @@ pub fn encodePureFrameAppend(
         try out.appendNTimes(allocator, 0, 4);
         const encoded_start = out.items.len;
         const compressed_len = if (history.len == 0)
-            try encodeBlockInto(allocator, out, block, hash_table, occupancy_bits, chain_table)
+            try encodeBlockInto(allocator, out, block, hash_table, occupancy_bits, chain_table, chain_depth)
         else
-            try encodeLinkedBlockInto(allocator, out, history, block, hash_table, occupancy_bits, chain_table);
+            try encodeLinkedBlockInto(allocator, out, history, block, hash_table, occupancy_bits, chain_table, chain_depth);
         if (compressed_len < block.len) {
             std.mem.writeInt(u32, out.items[header_start..][0..4], @intCast(compressed_len), .little);
             if (options.block_checksum) try emitBlockChecksum(allocator, out, out.items[encoded_start..][0..compressed_len]);
@@ -3297,12 +3307,22 @@ pub const BlockEncoder = struct {
     }
 
     pub fn append(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8) Error!usize {
-        return try encodeBlockInto(self.allocator, out, input, self.hash_table, self.occupancy_bits, self.chain_table);
+        return try self.appendWithChainDepth(out, input, max_chain_depth);
+    }
+
+    pub fn appendWithChainDepth(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, chain_depth: u8) Error!usize {
+        if (chain_depth > max_chain_depth) return error.InvalidBlockPlan;
+        return try encodeBlockInto(self.allocator, out, input, self.hash_table, self.occupancy_bits, self.chain_table, chain_depth);
     }
 
     pub fn appendWithPrefix(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, prefix: []const u8) Error!usize {
+        return try self.appendWithPrefixAndChainDepth(out, input, prefix, max_chain_depth);
+    }
+
+    pub fn appendWithPrefixAndChainDepth(self: *BlockEncoder, out: *std.ArrayList(u8), input: []const u8, prefix: []const u8, chain_depth: u8) Error!usize {
+        if (chain_depth > max_chain_depth) return error.InvalidBlockPlan;
         const history = prefix[if (prefix.len > max_match_offset) prefix.len - max_match_offset else 0..];
-        return try encodeLinkedBlockInto(self.allocator, out, history, input, self.hash_table, self.occupancy_bits, self.chain_table);
+        return try encodeLinkedBlockInto(self.allocator, out, history, input, self.hash_table, self.occupancy_bits, self.chain_table, chain_depth);
     }
 
     pub fn encodeScratch(self: *BlockEncoder, input: []const u8) Error![]const u8 {
@@ -3418,6 +3438,7 @@ pub const NativeFrameEncoder = struct {
 
         var offset: usize = 0;
         const max_block_len = frame_options.block_size_id.maxLen();
+        const chain_depth = try nativeChainDepth(frame_options);
         while (offset < input.len) {
             const block_len = @min(input.len - offset, max_block_len);
             var header: [4]u8 = undefined;
@@ -3432,9 +3453,9 @@ pub const NativeFrameEncoder = struct {
             try out.appendNTimes(allocator, 0, 4);
             const encoded_start = out.items.len;
             const compressed_len = if (history.len == 0)
-                try self.block_encoder.append(out, block)
+                try self.block_encoder.appendWithChainDepth(out, block, chain_depth)
             else
-                try self.block_encoder.appendWithPrefix(out, block, history);
+                try self.block_encoder.appendWithPrefixAndChainDepth(out, block, history, chain_depth);
             if (compressed_len < block.len) {
                 std.mem.writeInt(u32, out.items[header_start..][0..4], @intCast(compressed_len), .little);
                 if (frame_options.block_checksum) try emitBlockChecksum(allocator, out, out.items[encoded_start..][0..compressed_len]);
@@ -3557,7 +3578,7 @@ pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![
         if (occupancy_bits.len != 0) allocator.free(occupancy_bits);
         if (hash_table.len != 0) allocator.free(hash_table);
     }
-    _ = try encodeBlockInto(allocator, &out, input, hash_table, occupancy_bits, chain_table);
+    _ = try encodeBlockInto(allocator, &out, input, hash_table, occupancy_bits, chain_table, max_chain_depth);
     return out.toOwnedSlice(allocator);
 }
 
@@ -3588,7 +3609,7 @@ pub fn encodeBlockWithPrefixAlloc(allocator: std.mem.Allocator, input: []const u
         if (hash_table.len != 0) allocator.free(hash_table);
     }
     const history = prefix[if (prefix.len > max_match_offset) prefix.len - max_match_offset else 0..];
-    _ = try encodeLinkedBlockInto(allocator, &out, history, input, hash_table, occupancy_bits, chain_table);
+    _ = try encodeLinkedBlockInto(allocator, &out, history, input, hash_table, occupancy_bits, chain_table, max_chain_depth);
     return out.toOwnedSlice(allocator);
 }
 
@@ -4015,6 +4036,7 @@ fn encodeBlockInto(
     table: []u32,
     occupancy_bits: []u64,
     chain_table: []u32,
+    chain_depth: u8,
 ) Error!usize {
     const out_start = out.items.len;
     if (input.len == 0) return 0;
@@ -4036,9 +4058,9 @@ fn encodeBlockInto(
     var index: usize = 0;
     while (index + 12 <= input.len) {
         var match_index = index;
-        var best = insertAndFindBest(input, index, table, occupancy_bits, chain_table);
+        var best = insertAndFindBest(input, index, table, occupancy_bits, chain_table, chain_depth);
         if (best.len != 0 and index + 13 <= input.len and best.len < good_match_len) {
-            const next = insertAndFindBest(input, index + 1, table, occupancy_bits, chain_table);
+            const next = insertAndFindBest(input, index + 1, table, occupancy_bits, chain_table, chain_depth);
             if (next.len > best.len + lazy_extra_gain) {
                 match_index = index + 1;
                 best = next;
@@ -4079,6 +4101,7 @@ fn encodeLinkedBlockInto(
     table: []u32,
     occupancy_bits: []u64,
     chain_table: []u32,
+    chain_depth: u8,
 ) Error!usize {
     const out_start = out.items.len;
     if (input.len == 0) return 0;
@@ -4111,9 +4134,9 @@ fn encodeLinkedBlockInto(
     var index: usize = block_start;
     while (index + 12 <= virtual_len) {
         var match_index = index;
-        var best = insertAndFindBestLinked(history, input, index, table, occupancy_bits, chain_table);
+        var best = insertAndFindBestLinked(history, input, index, table, occupancy_bits, chain_table, chain_depth);
         if (best.len != 0 and index + 13 <= virtual_len and best.len < good_match_len) {
-            const next = insertAndFindBestLinked(history, input, index + 1, table, occupancy_bits, chain_table);
+            const next = insertAndFindBestLinked(history, input, index + 1, table, occupancy_bits, chain_table, chain_depth);
             if (next.len > best.len + lazy_extra_gain) {
                 match_index = index + 1;
                 best = next;
@@ -4160,13 +4183,14 @@ fn insertAndFindBest(
     table: []u32,
     occupancy_bits: []u64,
     chain_table: []u32,
+    chain_depth: usize,
 ) Match {
     const candidate_entry = insertHash(input, index, table, occupancy_bits, chain_table);
 
     var best: Match = .{};
     var candidate = candidate_entry;
     var depth: usize = 0;
-    while (candidate != invalid_pos and depth < max_chain_depth) : (depth += 1) {
+    while (candidate != invalid_pos and depth < chain_depth) : (depth += 1) {
         const candidate_start: usize = @intCast(candidate);
         if (candidate_start >= index) break;
         if (index - candidate_start > max_match_offset) break;
@@ -4196,6 +4220,7 @@ fn insertAndFindBestLinked(
     table: []u32,
     occupancy_bits: []u64,
     chain_table: []u32,
+    chain_depth: usize,
 ) Match {
     const virtual_len = history.len + input.len;
     const candidate_entry = insertLinkedHash(history, input, index, table, occupancy_bits, chain_table);
@@ -4203,7 +4228,7 @@ fn insertAndFindBestLinked(
     var best: Match = .{};
     var candidate = candidate_entry;
     var depth: usize = 0;
-    while (candidate != invalid_pos and depth < max_chain_depth) : (depth += 1) {
+    while (candidate != invalid_pos and depth < chain_depth) : (depth += 1) {
         const candidate_start: usize = @intCast(candidate);
         if (candidate_start >= index) break;
         if (index - candidate_start > max_match_offset) break;
@@ -4486,7 +4511,9 @@ test "lz4 hash-chain finder reaches deeper long candidates" {
     for (0..12) |i| {
         _ = insertHash(&payload, 24 + i * 6, &table, &occupancy_bits, &chain_table);
     }
-    const best = insertAndFindBest(&payload, target_start, &table, &occupancy_bits, &chain_table);
+    const shallow = insertAndFindBest(&payload, target_start, &table, &occupancy_bits, &chain_table, 8);
+    try std.testing.expect(shallow.start != 0);
+    const best = insertAndFindBest(&payload, target_start, &table, &occupancy_bits, &chain_table, max_chain_depth);
     try std.testing.expectEqual(@as(usize, 0), best.start);
     try std.testing.expect(best.len >= long.len);
 }
@@ -4513,9 +4540,38 @@ test "lz4 linked hash-chain finder reaches deeper history candidates" {
     for (0..12) |i| {
         _ = insertLinkedHash(&history, &input, 24 + i * 6, &table, &occupancy_bits, &chain_table);
     }
-    const best = insertAndFindBestLinked(&history, &input, history.len, &table, &occupancy_bits, &chain_table);
+    const shallow = insertAndFindBestLinked(&history, &input, history.len, &table, &occupancy_bits, &chain_table, 8);
+    try std.testing.expect(shallow.start != 0);
+    const best = insertAndFindBestLinked(&history, &input, history.len, &table, &occupancy_bits, &chain_table, max_chain_depth);
     try std.testing.expectEqual(@as(usize, 0), best.start);
     try std.testing.expect(best.len >= long.len);
+}
+
+test "lz4 native frame validates chain depth option" {
+    var payload: [160]u8 = undefined;
+    @memset(&payload, 'z');
+    const long = "AAAABCDEFGHIJKLMNOP";
+    const target_start = 120;
+    @memcpy(payload[0..long.len], long);
+    @memcpy(payload[target_start..][0..long.len], long);
+    for (0..12) |i| {
+        const pos = 24 + i * 6;
+        @memcpy(payload[pos..][0..4], "AAAA");
+        payload[pos + 4] = @intCast('a' + i);
+    }
+
+    try std.testing.expectError(error.InvalidBlockPlan, encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, .{
+        .chain_depth = max_chain_depth + 1,
+    }));
+
+    const encoded = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, .{
+        .content_checksum = false,
+        .chain_depth = max_chain_depth,
+    });
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
 }
 
 test "lz4 frame encoder compresses repetitive payloads and round trips" {
