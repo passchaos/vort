@@ -658,6 +658,11 @@ defer allocator.free(zstd_stream_exact);
 const zstd_chunks = [_][]const u8{ zstd_dict_frame.frame[0..8], zstd_dict_frame.frame[8..] };
 const zstd_join = try allocator.alloc(u8, zstd_dict_frame.frame.len);
 defer allocator.free(zstd_join);
+_ = try vort.zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(
+    &zstd_chunks,
+    zstd_join,
+    zstd_dict_set,
+);
 var zstd_chunk_out: ["prefix: previous zstd history payload, shared phrase tail".len]u8 = undefined;
 _ = try vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
     &zstd_chunks,
