@@ -2044,6 +2044,46 @@ pub fn encodeNativeFrameIntoSliceWithDictionary(
     return try encoder.encodeIntoSliceWithDictionary(input, options, dictionary, output);
 }
 
+pub fn encodeNativeFrameWithDictionarySetAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+    dictionary_set: NativeDictionarySet,
+    dictionary_id: u32,
+) Error!NativeFrameEncodeResult {
+    const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+    return try encodeNativeFrameWithDictionaryAlloc(allocator, input, options, dictionary);
+}
+
+pub fn encodeNativeFrameAppendWithDictionarySet(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: NativeFrameOptions,
+    dictionary_set: NativeDictionarySet,
+    dictionary_id: u32,
+) Error!NativeFrameMode {
+    const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+    return try encodeNativeFrameAppendWithDictionary(allocator, out, input, options, dictionary);
+}
+
+pub fn encodeNativeFrameIntoSliceWithDictionarySet(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+    dictionary_set: NativeDictionarySet,
+    dictionary_id: u32,
+    output: []u8,
+) Error!NativeFrameEncodeIntoResult {
+    const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+    return try encodeNativeFrameIntoSliceWithDictionary(allocator, input, options, dictionary, output);
+}
+
+fn dictionaryFromSet(dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!NativeDictionary {
+    if (dictionary_id == 0) return error.NeedDictionary;
+    return dictionary_set.find(dictionary_id) orelse error.NeedDictionary;
+}
+
 pub const NativeFrameEncoder = struct {
     allocator: std.mem.Allocator,
     raw_scratch: std.ArrayList(u8) = .empty,
