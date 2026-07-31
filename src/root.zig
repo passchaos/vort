@@ -1868,6 +1868,75 @@ test "root native incremental decoders enforce compressed limits on skippable fr
     try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().last_error_phase_name);
 }
 
+test "root native incremental decoders use expected size after skippable no-size frames" {
+    const lz4_payload = "root-lz4-skippable-nosize";
+    const lz4_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 12, "root-lz4-nosize-skip");
+    defer std.testing.allocator.free(lz4_skip);
+    const lz4_frame = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, lz4_payload, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .block_checksum = true,
+    });
+    defer std.testing.allocator.free(lz4_frame);
+    const lz4_stream = try std.mem.concat(std.testing.allocator, u8, &.{ lz4_skip, lz4_frame });
+    defer std.testing.allocator.free(lz4_stream);
+
+    var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = lz4_payload.len,
+        .max_decoded_buffer_len = lz4_payload.len,
+    });
+    defer lz4_decoder.deinit();
+    var lz4_output: [lz4_payload.len]u8 = undefined;
+
+    // The no-content-size frame carries no decoded-length promise of its own.
+    // After skipping metadata, the direct-output path should still use the
+    // caller's expected length as the bounded output contract.
+    const lz4_initial = try lz4_decoder.step(lz4_stream, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_initial.status);
+    try std.testing.expectEqual(lz4_stream.len, lz4_initial.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_initial.progress.output_written);
+    try std.testing.expectEqualSlices(u8, "direct_output", lz4_decoder.diagnostics().phase_name);
+    try std.testing.expectEqual(@as(?usize, lz4_payload.len), lz4_decoder.snapshot().decoded_len);
+
+    const lz4_done = try lz4_decoder.step("", &lz4_output);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_done.status);
+    try std.testing.expectEqual(lz4_payload.len, lz4_done.progress.output_written);
+    try std.testing.expectEqualSlices(u8, lz4_payload, &lz4_output);
+    try lz4_decoder.finish();
+
+    const zstd_payload = "root-zstd-skippable-nosize";
+    const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 13, "root-zstd-nosize-skip");
+    defer std.testing.allocator.free(zstd_skip);
+    const zstd_frame = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, zstd_payload, .{
+        .include_content_size = false,
+        .selection = .literal_only,
+        .content_checksum = true,
+    });
+    defer std.testing.allocator.free(zstd_frame.frame);
+    const zstd_stream = try std.mem.concat(std.testing.allocator, u8, &.{ zstd_skip, zstd_frame.frame });
+    defer std.testing.allocator.free(zstd_stream);
+
+    var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = zstd_payload.len,
+        .max_decoded_buffer_len = zstd_payload.len,
+    });
+    defer zstd_decoder.deinit();
+    var zstd_output: [zstd_payload.len]u8 = undefined;
+
+    const zstd_initial = try zstd_decoder.step(zstd_stream, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_initial.status);
+    try std.testing.expectEqual(zstd_stream.len, zstd_initial.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_initial.progress.output_written);
+    try std.testing.expectEqualSlices(u8, "direct_output", zstd_decoder.diagnostics().phase_name);
+    try std.testing.expectEqual(@as(?usize, zstd_payload.len), zstd_decoder.snapshot().decoded_len);
+
+    const zstd_done = try zstd_decoder.step("", &zstd_output);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
+    try std.testing.expectEqual(zstd_payload.len, zstd_done.progress.output_written);
+    try std.testing.expectEqualSlices(u8, zstd_payload, &zstd_output);
+    try zstd_decoder.finish();
+}
+
 test "root native incremental direct-output paths round trip" {
     var lz4_payload: [4096]u8 = undefined;
     var state: u32 = 0x1020_3040;
