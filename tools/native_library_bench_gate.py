@@ -28,11 +28,15 @@ EXPECTED_MODES = {
     "one_shot",
     "incremental",
     "incremental_direct",
+    "chain_depth_0",
+    "chain_depth_default",
     "match_budget_0",
     "match_budget_full",
 }
 EXPECTED_CASES = {"text", "structured", "repetitive"}
 EXPECTED_EXTRA_ROWS = {
+    ("lz4", "chain_depth_0", "chain_depth"),
+    ("lz4", "chain_depth_default", "chain_depth"),
     ("zstd", "match_budget_0", "mixed_budget"),
     ("zstd", "match_budget_full", "mixed_budget"),
 }
@@ -120,6 +124,14 @@ def main() -> int:
         raise AssertionError(f"bad codec/mode/case matrix: seen={sorted(seen)!r}")
 
     row_by_identity = {(row["codec"], row["mode"], row["case"]): row for row in rows}
+    chain0 = row_by_identity[("lz4", "chain_depth_0", "chain_depth")]
+    chain_default = row_by_identity[("lz4", "chain_depth_default", "chain_depth")]
+    if int(chain_default["encoded_bytes"]) >= int(chain0["encoded_bytes"]):
+        raise AssertionError(
+            "expected default lz4 chain depth to improve chain_depth size: "
+            f"depth0={chain0['encoded_bytes']} default={chain_default['encoded_bytes']}"
+        )
+
     budget0 = row_by_identity[("zstd", "match_budget_0", "mixed_budget")]
     budget_full = row_by_identity[("zstd", "match_budget_full", "mixed_budget")]
     if int(budget_full["encoded_bytes"]) >= int(budget0["encoded_bytes"]):

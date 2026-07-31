@@ -6,6 +6,8 @@ const Mode = enum {
     one_shot,
     incremental,
     incremental_direct,
+    chain_depth_0,
+    chain_depth_default,
     match_budget_0,
     match_budget_full,
 };
@@ -49,6 +51,7 @@ pub fn main(init: std.process.Init) !void {
     try smokeLz4LinkedDirectFallback(init.gpa);
     try smokeLz4DeepHashChain(init.gpa);
     try smokeLz4LinkedDeepHashChain(init.gpa);
+    try smokeLz4ChainDepthBudget(init.gpa);
     try smokeZstdMultiblockDirectFallback(init.gpa);
     try smokeReusableChunkedDecoders(init.gpa);
     try smokeZstdManyRepeatedSequences(init.gpa);
@@ -64,6 +67,14 @@ pub fn main(init: std.process.Init) !void {
         try rows.append(init.gpa, try zstdIncrementalRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdIncrementalDirectRow(init.io, init.gpa, case, options.iterations));
     }
+    try rows.append(init.gpa, try lz4ChainDepthRow(init.io, init.gpa, .chain_depth_0, 0, options.iterations));
+    try rows.append(init.gpa, try lz4ChainDepthRow(
+        init.io,
+        init.gpa,
+        .chain_depth_default,
+        @as(vort.Lz4NativeFrameOptions, .{}).chain_depth,
+        options.iterations,
+    ));
     try rows.append(init.gpa, try zstdMatchBudgetRow(init.io, init.gpa, .match_budget_0, 0, options.iterations));
     try rows.append(init.gpa, try zstdMatchBudgetRow(
         init.io,
@@ -184,6 +195,31 @@ fn zstdIncrementalDirectRow(io: std.Io, allocator: std.mem.Allocator, case: Case
     return makeRow(.zstd, .incremental_direct, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
+fn lz4ChainDepthRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    chain_depth: u8,
+    iterations: usize,
+) !Row {
+    const payload = lz4_chain_depth_payload;
+    const case: Case = .{ .name = "chain_depth", .payload = payload };
+    const options: vort.Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+        .chain_depth = chain_depth,
+    };
+    const encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
+    defer allocator.free(encoded);
+    const decoded = try allocator.alloc(u8, payload.len);
+    defer allocator.free(decoded);
+    try expectRoundTrip(vort.lz4DecodeNativeFrameInto(encoded, decoded), payload, decoded);
+
+    const encode_result = try timeEncodeLz4(io, allocator, payload, options, iterations);
+    const decode_result = try timeDecodeLz4OneShot(io, encoded, decoded, payload, iterations);
+    return makeRow(.lz4, mode, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
 fn zstdMatchBudgetRow(
     io: std.Io,
     allocator: std.mem.Allocator,
@@ -210,6 +246,8 @@ fn zstdMatchBudgetRow(
 }
 
 const TimeResult = struct { elapsed_ns: u64, checksum: u64 };
+
+const lz4_chain_depth_payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 16;
 
 const zstd_match_budget_payload =
     "bbeegfabcceeehaabcdfacefegahabdffgabcccfeggbcddffgah" ++
@@ -397,6 +435,26 @@ fn smokeLz4LinkedDeepHashChain(allocator: std.mem.Allocator) !void {
     defer decoder.deinit();
     const decoded = try decoder.decodeScratch(encoded);
     if (!std.mem.eql(u8, payload, decoded)) return error.SizeMismatch;
+}
+
+fn smokeLz4ChainDepthBudget(allocator: std.mem.Allocator) !void {
+    const depth0 = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, lz4_chain_depth_payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+        .chain_depth = 0,
+    });
+    defer allocator.free(depth0);
+    const default_depth = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, lz4_chain_depth_payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+        .chain_depth = @as(vort.Lz4NativeFrameOptions, .{}).chain_depth,
+    });
+    defer allocator.free(default_depth);
+
+    if (default_depth.len >= depth0.len) return error.SizeMismatch;
+    var decoded: [lz4_chain_depth_payload.len]u8 = undefined;
+    try expectRoundTrip(vort.lz4DecodeNativeFrameInto(depth0, &decoded), lz4_chain_depth_payload, &decoded);
+    try expectRoundTrip(vort.lz4DecodeNativeFrameInto(default_depth, &decoded), lz4_chain_depth_payload, &decoded);
 }
 
 fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
@@ -621,6 +679,8 @@ fn modeName(mode: Mode) []const u8 {
         .one_shot => "one_shot",
         .incremental => "incremental",
         .incremental_direct => "incremental_direct",
+        .chain_depth_0 => "chain_depth_0",
+        .chain_depth_default => "chain_depth_default",
         .match_budget_0 => "match_budget_0",
         .match_budget_full => "match_budget_full",
     };
