@@ -1768,6 +1768,23 @@ test "root native incremental decoders finish skippable-only streams with zero e
     try std.testing.expectEqual(@as(usize, 0), lz4_decoder.diagnostics().output_written);
     try lz4_decoder.finish();
 
+    const lz4_second_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 7, "root-lz4-skippable-only-two");
+    defer std.testing.allocator.free(lz4_second_skip);
+    const lz4_stream = try std.mem.concat(std.testing.allocator, u8, &.{ lz4_skip, lz4_second_skip });
+    defer std.testing.allocator.free(lz4_stream);
+    var lz4_multi_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer lz4_multi_decoder.deinit();
+    const lz4_multi_done = try lz4_multi_decoder.step(lz4_stream, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_multi_done.status);
+    try std.testing.expectEqual(lz4_stream.len, lz4_multi_done.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_multi_done.progress.output_written);
+    try std.testing.expectEqual(lz4_stream.len, lz4_multi_decoder.diagnostics().frame_input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_multi_decoder.diagnostics().output_written);
+    try lz4_multi_decoder.finish();
+
     const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 7, "root-zstd-skippable-only");
     defer std.testing.allocator.free(zstd_skip);
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
@@ -1783,6 +1800,23 @@ test "root native incremental decoders finish skippable-only streams with zero e
     try std.testing.expectEqual(zstd_skip.len, zstd_decoder.diagnostics().frame_input_read);
     try std.testing.expectEqual(@as(usize, 0), zstd_decoder.diagnostics().output_written);
     try zstd_decoder.finish();
+
+    const zstd_second_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 8, "root-zstd-skippable-only-two");
+    defer std.testing.allocator.free(zstd_second_skip);
+    const zstd_stream = try std.mem.concat(std.testing.allocator, u8, &.{ zstd_skip, zstd_second_skip });
+    defer std.testing.allocator.free(zstd_stream);
+    var zstd_multi_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer zstd_multi_decoder.deinit();
+    const zstd_multi_done = try zstd_multi_decoder.step(zstd_stream, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_multi_done.status);
+    try std.testing.expectEqual(zstd_stream.len, zstd_multi_done.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_multi_done.progress.output_written);
+    try std.testing.expectEqual(zstd_stream.len, zstd_multi_decoder.diagnostics().frame_input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_multi_decoder.diagnostics().output_written);
+    try zstd_multi_decoder.finish();
 }
 
 test "root native incremental decoders handle consecutive split skippable frames" {
