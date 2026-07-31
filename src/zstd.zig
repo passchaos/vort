@@ -2135,6 +2135,11 @@ pub const NativeFrameEncoder = struct {
         };
     }
 
+    pub fn encodeWithDictionarySetAlloc(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!NativeFrameEncodeResult {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return try self.encodeWithDictionaryAlloc(input, options, dictionary);
+    }
+
     pub fn encodeScratch(
         self: *NativeFrameEncoder,
         input: []const u8,
@@ -2168,6 +2173,11 @@ pub const NativeFrameEncoder = struct {
         };
     }
 
+    pub fn encodeScratchWithDictionarySet(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!NativeFrameEncodeScratchResult {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return try self.encodeScratchWithDictionary(input, options, dictionary);
+    }
+
     pub fn encodeIntoSlice(
         self: *NativeFrameEncoder,
         input: []const u8,
@@ -2199,6 +2209,11 @@ pub const NativeFrameEncoder = struct {
         };
     }
 
+    pub fn encodeIntoSliceWithDictionarySet(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32, output: []u8) Error!NativeFrameEncodeIntoResult {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return try self.encodeIntoSliceWithDictionary(input, options, dictionary, output);
+    }
+
     pub fn encodeAppend(
         self: *NativeFrameEncoder,
         out: *std.ArrayList(u8),
@@ -2216,6 +2231,18 @@ pub const NativeFrameEncoder = struct {
         dictionary: NativeDictionary,
     ) Error!NativeFrameMode {
         return try self.encodeAppendInternal(out, input, options, dictionary);
+    }
+
+    pub fn encodeAppendWithDictionarySet(
+        self: *NativeFrameEncoder,
+        out: *std.ArrayList(u8),
+        input: []const u8,
+        options: NativeFrameOptions,
+        dictionary_set: NativeDictionarySet,
+        dictionary_id: u32,
+    ) Error!NativeFrameMode {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return try self.encodeAppendWithDictionary(out, input, options, dictionary);
     }
 
     fn encodeAppendInternal(

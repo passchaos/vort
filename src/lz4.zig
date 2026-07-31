@@ -3059,6 +3059,18 @@ pub const NativeFrameEncoder = struct {
         return try self.encodeAppendInternal(out, input, options, dictionary);
     }
 
+    pub fn encodeAppendWithDictionarySet(
+        self: *NativeFrameEncoder,
+        out: *std.ArrayList(u8),
+        input: []const u8,
+        options: NativeFrameOptions,
+        dictionary_set: NativeDictionarySet,
+        dictionary_id: u32,
+    ) Error!void {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return try self.encodeAppendWithDictionary(out, input, options, dictionary);
+    }
+
     fn encodeAppendInternal(
         self: *NativeFrameEncoder,
         out: *std.ArrayList(u8),
@@ -3152,6 +3164,11 @@ pub const NativeFrameEncoder = struct {
         return out.toOwnedSlice(self.block_encoder.allocator);
     }
 
+    pub fn encodeWithDictionarySetAlloc(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return try self.encodeWithDictionaryAlloc(input, options, dictionary);
+    }
+
     pub fn encodeScratch(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions) Error![]const u8 {
         self.output_scratch.clearRetainingCapacity();
         self.encodeAppend(&self.output_scratch, input, options) catch |err| {
@@ -3170,6 +3187,11 @@ pub const NativeFrameEncoder = struct {
         return self.output_scratch.items;
     }
 
+    pub fn encodeScratchWithDictionarySet(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]const u8 {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return try self.encodeScratchWithDictionary(input, options, dictionary);
+    }
+
     pub fn encodeIntoSlice(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, output: []u8) Error!usize {
         const scratch = try self.encodeScratch(input, options);
         if (output.len < scratch.len) return error.OutputTooSmall;
@@ -3182,6 +3204,11 @@ pub const NativeFrameEncoder = struct {
         if (output.len < scratch.len) return error.OutputTooSmall;
         @memcpy(output[0..scratch.len], scratch);
         return scratch.len;
+    }
+
+    pub fn encodeIntoSliceWithDictionarySet(self: *NativeFrameEncoder, input: []const u8, options: NativeFrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32, output: []u8) Error!usize {
+        const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+        return try self.encodeIntoSliceWithDictionary(input, options, dictionary, output);
     }
 };
 
