@@ -16,6 +16,8 @@ const Mode = enum {
     dictionary_set,
     dictionary_set_chunked_plain,
     dictionary_set_chunked,
+    dictionary_set_reusable_plain,
+    dictionary_set_reusable,
 };
 
 const Case = struct {
@@ -104,6 +106,10 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(init.gpa, try lz4DictionarySetChunkedRow(init.io, init.gpa, .dictionary_set_chunked, true, options.iterations));
     try rows.append(init.gpa, try zstdDictionarySetChunkedRow(init.io, init.gpa, .dictionary_set_chunked_plain, false, options.iterations));
     try rows.append(init.gpa, try zstdDictionarySetChunkedRow(init.io, init.gpa, .dictionary_set_chunked, true, options.iterations));
+    try rows.append(init.gpa, try lz4DictionarySetReusableChunkedRow(init.io, init.gpa, .dictionary_set_reusable_plain, false, options.iterations));
+    try rows.append(init.gpa, try lz4DictionarySetReusableChunkedRow(init.io, init.gpa, .dictionary_set_reusable, true, options.iterations));
+    try rows.append(init.gpa, try zstdDictionarySetReusableChunkedRow(init.io, init.gpa, .dictionary_set_reusable_plain, false, options.iterations));
+    try rows.append(init.gpa, try zstdDictionarySetReusableChunkedRow(init.io, init.gpa, .dictionary_set_reusable, true, options.iterations));
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
@@ -466,6 +472,80 @@ fn zstdDictionarySetChunkedRow(
     return makeRow(.zstd, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
+fn lz4DictionarySetReusableChunkedRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !Row {
+    const first_dict = vort.Lz4NativeDictionary.init(0x4c5a_4501, lz4_dictionary_set_first_content);
+    const second_dict = vort.Lz4NativeDictionary.init(0x4c5a_4502, lz4_dictionary_set_second_content);
+    const dictionary_set = vort.Lz4NativeDictionarySet.init(&.{ first_dict, second_dict });
+    const case: Case = .{ .name = "dictionary_set_reusable", .payload = lz4_dictionary_set_payload };
+    const options: vort.Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+    };
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    try appendLz4DictionarySetFrames(allocator, &encoded, options, dictionary_set, first_dict, second_dict, use_dictionary_set);
+    const chunks = dictionarySetChunks(encoded.items);
+    const join = try allocator.alloc(u8, encoded.items.len);
+    defer allocator.free(join);
+    const decoded = try allocator.alloc(u8, lz4_dictionary_set_payload.len);
+    defer allocator.free(decoded);
+    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    if (use_dictionary_set) {
+        try expectRoundTrip(decoder.decodeConcatenatedChunksIntoSliceWithDictionarySet(&chunks, join, decoded, dictionary_set), lz4_dictionary_set_payload, decoded);
+    } else {
+        try expectRoundTrip(decoder.decodeConcatenatedChunksIntoSlice(&chunks, join, decoded), lz4_dictionary_set_payload, decoded);
+    }
+
+    const encode_result = try timeEncodeLz4DictionarySet(io, allocator, options, dictionary_set, first_dict, second_dict, use_dictionary_set, iterations);
+    const decode_result = try timeDecodeLz4DictionarySetReusableChunked(io, allocator, &chunks, join, decoded, dictionary_set, use_dictionary_set, iterations);
+    return makeRow(.lz4, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdDictionarySetReusableChunkedRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !Row {
+    const first_dict = vort.ZstdNativeDictionary.init(0x5a53_4501, zstd_dictionary_set_first_content);
+    const second_dict = vort.ZstdNativeDictionary.init(0x5a53_4502, zstd_dictionary_set_second_content);
+    const dictionary_set = vort.ZstdNativeDictionarySet.init(&.{ first_dict, second_dict });
+    const case: Case = .{ .name = "dictionary_set_reusable", .payload = zstd_dictionary_set_payload };
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    try appendZstdDictionarySetFrames(allocator, &encoded, options, dictionary_set, first_dict, second_dict, use_dictionary_set);
+    const chunks = dictionarySetChunks(encoded.items);
+    const join = try allocator.alloc(u8, encoded.items.len);
+    defer allocator.free(join);
+    const decoded = try allocator.alloc(u8, zstd_dictionary_set_payload.len);
+    defer allocator.free(decoded);
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    if (use_dictionary_set) {
+        try expectRoundTrip(decoder.decodeConcatenatedChunksIntoSliceWithDictionarySet(&chunks, join, decoded, dictionary_set), zstd_dictionary_set_payload, decoded);
+    } else {
+        try expectRoundTrip(decoder.decodeConcatenatedChunksIntoSlice(&chunks, join, decoded), zstd_dictionary_set_payload, decoded);
+    }
+
+    const encode_result = try timeEncodeZstdDictionarySet(io, allocator, options, dictionary_set, first_dict, second_dict, use_dictionary_set, iterations);
+    const decode_result = try timeDecodeZstdDictionarySetReusableChunked(io, allocator, &chunks, join, decoded, dictionary_set, use_dictionary_set, iterations);
+    return makeRow(.zstd, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
 const TimeResult = struct { elapsed_ns: u64, checksum: u64 };
 
 const lz4_chain_depth_payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 16;
@@ -742,6 +822,56 @@ fn timeDecodeZstdDictionarySetChunked(
             try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(chunks, join, decoded, dictionary_set), zstd_dictionary_set_payload, decoded);
         } else {
             try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameChunksInto(chunks, join, decoded), zstd_dictionary_set_payload, decoded);
+        }
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeLz4DictionarySetReusableChunked(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+    join: []u8,
+    decoded: []u8,
+    dictionary_set: vort.Lz4NativeDictionarySet,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        if (use_dictionary_set) {
+            try expectRoundTrip(decoder.decodeConcatenatedChunksIntoSliceWithDictionarySet(chunks, join, decoded, dictionary_set), lz4_dictionary_set_payload, decoded);
+        } else {
+            try expectRoundTrip(decoder.decodeConcatenatedChunksIntoSlice(chunks, join, decoded), lz4_dictionary_set_payload, decoded);
+        }
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeZstdDictionarySetReusableChunked(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+    join: []u8,
+    decoded: []u8,
+    dictionary_set: vort.ZstdNativeDictionarySet,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        if (use_dictionary_set) {
+            try expectRoundTrip(decoder.decodeConcatenatedChunksIntoSliceWithDictionarySet(chunks, join, decoded, dictionary_set), zstd_dictionary_set_payload, decoded);
+        } else {
+            try expectRoundTrip(decoder.decodeConcatenatedChunksIntoSlice(chunks, join, decoded), zstd_dictionary_set_payload, decoded);
         }
         checksum +%= decoded[0];
     }
@@ -1140,6 +1270,16 @@ fn smokeNativeDictionarySetChunkedBenchRows(allocator: std.mem.Allocator) !void 
     var zstd_out: [zstd_dictionary_set_payload.len]u8 = undefined;
     try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameChunksInto(&zstd_plain_chunks, zstd_plain_join, &zstd_out), zstd_dictionary_set_payload, &zstd_out);
     try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&zstd_set_chunks, zstd_set_join, &zstd_out, zstd_dictionary_set), zstd_dictionary_set_payload, &zstd_out);
+
+    var lz4_decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer lz4_decoder.deinit();
+    try expectRoundTrip(lz4_decoder.decodeConcatenatedChunksIntoSlice(&lz4_plain_chunks, lz4_plain_join, &lz4_out), lz4_dictionary_set_payload, &lz4_out);
+    try expectRoundTrip(lz4_decoder.decodeConcatenatedChunksIntoSliceWithDictionarySet(&lz4_set_chunks, lz4_set_join, &lz4_out, lz4_dictionary_set), lz4_dictionary_set_payload, &lz4_out);
+
+    var zstd_decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer zstd_decoder.deinit();
+    try expectRoundTrip(zstd_decoder.decodeConcatenatedChunksIntoSlice(&zstd_plain_chunks, zstd_plain_join, &zstd_out), zstd_dictionary_set_payload, &zstd_out);
+    try expectRoundTrip(zstd_decoder.decodeConcatenatedChunksIntoSliceWithDictionarySet(&zstd_set_chunks, zstd_set_join, &zstd_out, zstd_dictionary_set), zstd_dictionary_set_payload, &zstd_out);
 }
 
 fn dictionarySetChunks(encoded: []const u8) [3][]const u8 {
@@ -1313,6 +1453,8 @@ fn modeName(mode: Mode) []const u8 {
         .dictionary_set => "dictionary_set",
         .dictionary_set_chunked_plain => "dictionary_set_chunked_plain",
         .dictionary_set_chunked => "dictionary_set_chunked",
+        .dictionary_set_reusable_plain => "dictionary_set_reusable_plain",
+        .dictionary_set_reusable => "dictionary_set_reusable",
     };
 }
 
