@@ -17,6 +17,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkCompressedSequenceTableInspect(init.gpa);
     checked += 1;
+    try checkMatchLengthCompressedSequenceTableInspect(init.gpa);
+    checked += 1;
     try checkReusableDictionaryApis(init.gpa);
     checked += 1;
     try checkLaterBlockDictionaryMatch(init.gpa);
@@ -206,6 +208,47 @@ fn appendHighByteLiteralRun(allocator: std.mem.Allocator, out: *std.ArrayList(u8
 fn checkCompressedSequenceTableInspect(allocator: std.mem.Allocator) !void {
     try checkLiteralAndOffsetCompressedSequenceTableInspect(allocator, 4, 20, .compressed, .predefined);
     try checkLiteralAndOffsetCompressedSequenceTableInspect(allocator, 5, 21, .compressed, .compressed);
+}
+
+fn checkMatchLengthCompressedSequenceTableInspect(allocator: std.mem.Allocator) !void {
+    // Fixed fixture emitted by Vort's focused ML=FSE writer case:
+    // LL=Predefined, OF=RLE, ML=FSE. Keeping it in the public probe makes the
+    // inspection/decode contract visible without depending on internal helpers.
+    const frame_hex =
+        "28b52ffd209a250100606162636465666768696a6b6c10180210aeb5070b83c3c2c360e030701878383c1cec92";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    try expect(first_block.block_type == .compressed);
+    try expect(modes.sequence_count == 16);
+    try expect(modes.literal_length_mode == .predefined);
+    try expect(modes.offset_mode == .rle);
+    try expect(modes.match_length_mode == .compressed);
+
+    const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(decoded);
+    const expected = try matchLengthCompressedFixturePayload(allocator);
+    defer allocator.free(expected);
+    try expectEqualSlices(expected, decoded);
+
+    var into: [154]u8 = undefined;
+    const into_written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
+    try expect(into_written == expected.len);
+    try expectEqualSlices(expected, into[0..into_written]);
+}
+
+fn matchLengthCompressedFixturePayload(allocator: std.mem.Allocator) ![]u8 {
+    const literal_lens = [_]usize{ 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    const match_lens = [_]usize{ 8, 9, 8, 10, 9, 8, 10, 9, 8, 9, 8, 10, 9, 8, 10, 9 };
+    var payload: std.ArrayList(u8) = .empty;
+    errdefer payload.deinit(allocator);
+    for (match_lens, 0..) |match_len, i| {
+        if (literal_lens[i] != 0) try payload.appendSlice(allocator, "abcdefghijkl");
+        for (0..match_len) |_| try payload.append(allocator, payload.items[payload.items.len - 4]);
+    }
+    return try payload.toOwnedSlice(allocator);
 }
 
 fn checkLiteralAndOffsetCompressedSequenceTableInspect(

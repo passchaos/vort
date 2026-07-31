@@ -961,9 +961,9 @@ dictionary-set, chunked append, chunked append exact-size, reusable decoder,
 reusable append exact-size, direct-output, and small-output fallback rows to
 round-trip and to preserve the expected size relationships. The heavier
 limited compressed-FSE sequence-table path is covered by
-`run-zstd-native-dictionary-probe` for public inspect of LL/OF=FSE blocks and
-by focused unit tests for ML=FSE round-trips, keeping the regular native library
-bench gate fast enough for Debug smoke runs.
+`run-zstd-native-dictionary-probe` for public inspect/decode of LL/OF/ML=FSE
+blocks, while focused unit tests keep the writer-side ML=FSE construction
+covered without adding the heavier path to the regular native library bench gate.
 
 ## Direction
 
