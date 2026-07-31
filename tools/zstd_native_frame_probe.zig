@@ -15,6 +15,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkSplitHeaderIncremental(init.gpa);
     checked += 1;
+    try checkSplitSkippableHeaderIncremental(init.gpa);
+    checked += 1;
     checked += try checkHandcraftedFrameValidation(init.gpa);
     checked += try checkHandcraftedHeaderAndSkippableValidation(init.gpa);
 
@@ -181,6 +183,42 @@ fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {
 
     const done = try decoder.step(encoded.frame[2..], &output);
     try expect(done.status == .done);
+    try expectEqualSlices(payload, &output);
+    try decoder.finish();
+}
+
+fn checkSplitSkippableHeaderIncremental(allocator: std.mem.Allocator) !void {
+    const skip = try vort.zstdEncodeSkippableFrameAlloc(allocator, 7, "split-skip-zstd-metadata");
+    defer allocator.free(skip);
+    const payload = "split-skippable-header-zstd-native";
+    const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    });
+    defer allocator.free(encoded.frame);
+    const tail = try std.mem.concat(allocator, u8, &.{ skip[5..], encoded.frame });
+    defer allocator.free(tail);
+
+    var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+
+    // Five bytes include the skippable magic plus one byte of the length field;
+    // callers can split arbitrary transport chunks here, so the decoder should
+    // remain in the frame phase and wait for the rest of the skippable header.
+    const partial = try decoder.step(skip[0..5], output[0..0]);
+    try expect(partial.status == .need_input);
+    try expect(partial.progress.input_read == 5);
+    try expect(partial.progress.output_written == 0);
+    try expectEqualSlices("frame", decoder.diagnostics().phase_name);
+
+    const done = try decoder.step(tail, &output);
+    try expect(done.status == .done);
+    try expect(done.progress.input_read == tail.len);
+    try expect(done.progress.output_written == payload.len);
     try expectEqualSlices(payload, &output);
     try decoder.finish();
 }

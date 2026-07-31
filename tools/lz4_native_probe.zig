@@ -39,6 +39,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkSplitHeaderIncremental(init.gpa);
     checked += 1;
+    try checkSplitSkippableHeaderIncremental(init.gpa);
+    checked += 1;
     try checkSkippableOnlyStream(init.gpa);
     checked += 1;
     checked += try checkInvalidFrameHeaders(init.gpa);
@@ -701,6 +703,41 @@ fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {
 
     const done = try decoder.step(encoded[2..], &output);
     if (done.status != .done) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, payload, &output)) return error.Lz4ProbeMismatch;
+    try decoder.finish();
+}
+
+fn checkSplitSkippableHeaderIncremental(allocator: std.mem.Allocator) !void {
+    const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 6, "split-skip-lz4-metadata");
+    defer allocator.free(skip);
+    const payload = "split-skippable-header-lz4-native";
+    const encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, payload, .{
+        .content_checksum = false,
+        .include_content_size = true,
+        .block_checksum = true,
+    });
+    defer allocator.free(encoded);
+    const tail = try std.mem.concat(allocator, u8, &.{ skip[5..], encoded });
+    defer allocator.free(tail);
+
+    var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+
+    // Five bytes include the skippable magic plus one byte of the length field;
+    // the incremental decoder must wait in frame parsing instead of treating
+    // partial metadata as a malformed or empty stream.
+    const partial = try decoder.step(skip[0..5], output[0..0]);
+    if (partial.status != .need_input) return error.Lz4ProbeMismatch;
+    if (partial.progress.input_read != 5 or partial.progress.output_written != 0) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, "frame", decoder.diagnostics().phase_name)) return error.Lz4ProbeMismatch;
+
+    const done = try decoder.step(tail, &output);
+    if (done.status != .done) return error.Lz4ProbeMismatch;
+    if (done.progress.input_read != tail.len or done.progress.output_written != payload.len) return error.Lz4ProbeSizeMismatch;
     if (!std.mem.eql(u8, payload, &output)) return error.Lz4ProbeMismatch;
     try decoder.finish();
 }
