@@ -2891,6 +2891,29 @@ pub const NativeFrameBlockSummary = struct {
     payload_bytes: usize = 0,
 };
 
+pub const NativeLiteralsKind = enum {
+    raw,
+    rle,
+    compressed,
+    treeless,
+};
+
+pub const NativeSequenceModeSummary = struct {
+    literals_kind: NativeLiteralsKind,
+    regenerated_literals_size: usize,
+    sequence_count: usize,
+    literal_length_mode: NativeSequenceTableMode,
+    offset_mode: NativeSequenceTableMode,
+    match_length_mode: NativeSequenceTableMode,
+};
+
+pub const NativeSequenceTableMode = enum {
+    predefined,
+    rle,
+    compressed,
+    repeat,
+};
+
 pub const NativeSkippableFrameHeader = struct {
     skippable_id: u4,
     payload_offset: usize,
@@ -4861,6 +4884,52 @@ pub fn inspectNativeFrameBlockAt(frame: []const u8, header_offset: usize) Error!
 pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!NativeFrameBlockHeader {
     const header = try inspectNativeFrameHeader(frame);
     return try inspectNativeFrameBlockAt(frame, header.payload_offset);
+}
+
+pub fn inspectNativeFrameBlockSequenceModes(frame: []const u8, block: NativeFrameBlockHeader) Error!NativeSequenceModeSummary {
+    if (block.block_type != .compressed) return error.UnsupportedZstdFeature;
+    if (block.payload_offset > frame.len or frame.len - block.payload_offset < block.payload_len) return error.TruncatedFrame;
+    const payload = frame[block.payload_offset..][0..block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(payload, &frame_state);
+    if (section.sequence_count == 0) {
+        return .{
+            .literals_kind = nativeLiteralsKind(section.kind),
+            .regenerated_literals_size = section.regenerated_size,
+            .sequence_count = 0,
+            .literal_length_mode = .predefined,
+            .offset_mode = .predefined,
+            .match_length_mode = .predefined,
+        };
+    }
+    var offset = section.sequence_payload_offset;
+    const spec = try parseSequenceModeSpec(payload, &offset, section.sequence_count);
+    return .{
+        .literals_kind = nativeLiteralsKind(section.kind),
+        .regenerated_literals_size = section.regenerated_size,
+        .sequence_count = section.sequence_count,
+        .literal_length_mode = nativeSequenceTableMode(spec.ll_mode),
+        .offset_mode = nativeSequenceTableMode(spec.of_mode),
+        .match_length_mode = nativeSequenceTableMode(spec.ml_mode),
+    };
+}
+
+fn nativeLiteralsKind(kind: LiteralsKind) NativeLiteralsKind {
+    return switch (kind) {
+        .raw => .raw,
+        .rle => .rle,
+        .compressed => .compressed,
+        .treeless => .treeless,
+    };
+}
+
+fn nativeSequenceTableMode(mode: SymbolMode) NativeSequenceTableMode {
+    return switch (mode) {
+        .predefined => .predefined,
+        .rle => .rle,
+        .compressed => .compressed,
+        .repeat => .repeat,
+    };
 }
 
 pub fn summarizeNativeFrameBlocks(frame: []const u8) Error!NativeFrameBlockSummary {

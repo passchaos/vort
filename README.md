@@ -18,7 +18,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   configurable frame block sizes, linked-block history encoding, encoded-block bounds, decoded-size
   preflight, bounded allocation for single/concatenated streams, bounded
   raw-block and skippable-frame encode-into/decoded-size preflight, inspectable
-  native frame/block/skippable headers, zero-allocation native stream/block
+  native frame/block/skippable headers plus Zstd sequence-mode summaries, zero-allocation native stream/block
   iterators, reusable raw-block decoder, and
   caller-owned encode/decode-into/append plus reusable
   scratch encoder/decoder APIs,
@@ -567,6 +567,10 @@ _ = zstd_header.content_size;
 const zstd_first_block = try vort.zstdInspectNativeFrameFirstBlock(zstd_result.frame);
 _ = zstd_first_block.block_type;
 _ = try vort.zstdInspectNativeFrameBlockAt(zstd_result.frame, zstd_first_block.header_offset);
+if (zstd_first_block.block_type == .compressed) {
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(zstd_result.frame, zstd_first_block);
+    _ = modes.literal_length_mode;
+}
 const zstd_blocks = try vort.zstdSummarizeNativeFrameBlocks(zstd_result.frame);
 _ = zstd_blocks.block_count;
 const zstd_stream = try vort.zstdSummarizeNativeStream(zstd_result.frame);
