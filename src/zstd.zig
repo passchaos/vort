@@ -8552,12 +8552,21 @@ test "zstd native decoder accepts system high-byte Huffman frame" {
 
     const first_block = try inspectNativeFrameFirstBlock(&frame);
     try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    try std.testing.expectEqual(@as(usize, 957), first_block.payload_len);
     const block = frame[first_block.payload_offset..][0..first_block.payload_len];
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
     try std.testing.expectEqual(HuffmanLiteralStreams.four, std.meta.activeTag(section.huffman_streams));
     try std.testing.expectEqual(payload.len, section.regenerated_size);
+    try std.testing.expectEqual(@as(usize, 952), section.compressed_size);
+    try std.testing.expectEqual(@as(usize, 4), section.literal_payload_offset);
+    try std.testing.expectEqual(@as(usize, 60), section.huffman_stream_offset);
+    const streams = section.huffman_streams.four;
+    try std.testing.expectEqual(@as(usize, 220), streams[0].len);
+    try std.testing.expectEqual(@as(usize, 224), streams[1].len);
+    try std.testing.expectEqual(@as(usize, 222), streams[2].len);
+    try std.testing.expectEqual(@as(usize, 224), streams[3].len);
     try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
     const tree = section.huffman_tree orelse return error.CorruptFrame;
     try std.testing.expectEqual(@as(u4, 9), tree.max_bit_count);
