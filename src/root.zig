@@ -1829,6 +1829,45 @@ test "root native incremental decoders handle consecutive split skippable frames
     try zstd_decoder.finish();
 }
 
+test "root native incremental decoders enforce compressed limits on skippable frames" {
+    const lz4_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 10, "root-lz4-limit-skippable");
+    defer std.testing.allocator.free(lz4_skip);
+
+    var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+        .max_compressed_buffer_len = lz4_skip.len - 1,
+    });
+    defer lz4_decoder.deinit();
+    var lz4_output: [1]u8 = undefined;
+
+    // Skippable metadata still occupies the caller-bounded compressed scratch
+    // buffer until the full frame can be discarded. A frame that would exceed
+    // that limit must fail in the same public frame phase as data frames.
+    try std.testing.expectError(error.OutputLimitExceeded, lz4_decoder.step(lz4_skip, lz4_output[0..0]));
+    try std.testing.expectEqual(lz4_skip.len - 1, lz4_decoder.snapshot().input_received);
+    try std.testing.expectEqual(@as(usize, 0), lz4_decoder.diagnostics().output_written);
+    try std.testing.expectEqualSlices(u8, "OutputLimitExceeded", lz4_decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_decoder.diagnostics().last_error_phase_name);
+
+    const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 11, "root-zstd-limit-skippable");
+    defer std.testing.allocator.free(zstd_skip);
+
+    var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+        .max_compressed_buffer_len = zstd_skip.len - 1,
+    });
+    defer zstd_decoder.deinit();
+    var zstd_output: [1]u8 = undefined;
+
+    try std.testing.expectError(error.OutputLimitExceeded, zstd_decoder.step(zstd_skip, zstd_output[0..0]));
+    try std.testing.expectEqual(zstd_skip.len - 1, zstd_decoder.snapshot().input_received);
+    try std.testing.expectEqual(@as(usize, 0), zstd_decoder.diagnostics().output_written);
+    try std.testing.expectEqualSlices(u8, "OutputLimitExceeded", zstd_decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().last_error_phase_name);
+}
+
 test "root native incremental direct-output paths round trip" {
     var lz4_payload: [4096]u8 = undefined;
     var state: u32 = 0x1020_3040;
