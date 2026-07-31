@@ -257,6 +257,12 @@ def generated_payloads() -> list[tuple[str, bytes]]:
     for _ in range(896):
         one_twenty_eight_symbol_state = (one_twenty_eight_symbol_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         one_twenty_eight_symbol_huffman.append(1 + ((one_twenty_eight_symbol_state >> 24) & 127))
+    max_direct_state = 0x1290_0F5E
+    max_direct_huffman_bytes = bytearray(range(129))
+    for _ in range(129 * 64 - 129):
+        max_direct_state = (max_direct_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        max_direct_huffman_bytes.append((max_direct_state >> 16) % 129)
+    max_direct_huffman = bytes(max_direct_huffman_bytes)
 
     cases: list[tuple[str, bytes]] = [
         ("empty", b""),
@@ -278,6 +284,7 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         ("treeless-writer-huffman", bytes(treeless_writer_huffman)),
         ("older-duplicate-candidate", older_candidate_payload),
         ("one-twenty-eight-symbol-huffman", bytes(one_twenty_eight_symbol_huffman)),
+        ("max-direct-symbol-huffman", max_direct_huffman),
         (
             "structured-lines",
             b"".join(

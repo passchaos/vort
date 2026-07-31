@@ -6584,8 +6584,12 @@ fn sequenceCountLen(count: usize) Error!usize {
 }
 
 const SmallHuffmanLiteralPlan = struct {
-    symbols: [128]u8 = undefined,
-    weights: [128]u4 = undefined,
+    // Direct Huffman tree headers can describe symbols 0...128: the header
+    // byte stores `encoded_symbol_count = symbol_count - 1`, so 255 encodes a
+    // 129-symbol direct tree. Higher byte values require FSE-compressed
+    // Huffman weights, which the bootstrap native writer does not emit yet.
+    symbols: [129]u8 = undefined,
+    weights: [129]u4 = undefined,
     len: usize = 0,
     max_symbol: u8 = 0,
     max_bit_count: u4 = 0,
@@ -8942,13 +8946,11 @@ test "zstd literal-only writer emits small Huffman literals" {
     const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, &payload);
     defer std.testing.allocator.free(raw_encoded);
 
-    var block_offset: usize = 4;
-    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
-    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
-    const block_len: usize = @intCast(block_header >> 3);
-    const block = encoded[block_offset + 3 ..][0..block_len];
+    const first_block = try inspectNativeFrameFirstBlock(encoded);
+    const block = encoded[first_block.payload_offset..][0..first_block.payload_len];
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
     try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
     try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
 
@@ -9360,6 +9362,47 @@ test "zstd literal-only writer emits 128-symbol Huffman literals" {
     const block = encoded[block_offset + 3 ..][0..block_len];
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits max direct Huffman symbol set" {
+    var payload: [129 * 64]u8 = undefined;
+    for (payload[0..129], 0..) |*byte, i| {
+        byte.* = @intCast(i);
+    }
+    var state: u32 = 0x1290_0f5e;
+    for (payload[129..]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast((state >> 16) % 129);
+    }
+
+    const plan = smallHuffmanLiteralPlan(&payload) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(@as(usize, 129), plan.len);
+    var direct_huffman: std.ArrayList(u8) = .empty;
+    defer direct_huffman.deinit(std.testing.allocator);
+    var direct_state: LiteralOnlyEncoderState = .{};
+    try std.testing.expect(try emitSmallHuffmanLiteralBlock(std.testing.allocator, &direct_huffman, &payload, true, &direct_state));
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(raw_encoded);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded);
+    const block = encoded[first_block.payload_offset..][0..first_block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
     try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
     try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
 
