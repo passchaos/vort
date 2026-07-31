@@ -105,6 +105,7 @@ pub const lz4DecodedFrameSizeWithDictionarySet = lz4.decodedFrameSizeWithDiction
 pub const lz4DecodedFrameSizeLimitedWithDictionarySet = lz4.decodedFrameSizeLimitedWithDictionarySet;
 pub const lz4DecodeNativeFrameAlloc = lz4.decodeNativeFrameAlloc;
 pub const lz4DecodeNativeFrameAppend = lz4.decodeNativeFrameAppend;
+pub const lz4DecodeNativeFrameAppendExactSize = lz4.decodeNativeFrameAppendExactSize;
 pub const lz4DecodeNativeFrameAppendLimited = lz4.decodeNativeFrameAppendLimited;
 pub const lz4DecodeNativeFrameAllocLimited = lz4.decodeNativeFrameAllocLimited;
 pub const lz4DecodeNativeFrameAllocExactSize = lz4.decodeNativeFrameAllocExactSize;
@@ -113,6 +114,7 @@ pub const lz4DecodedNativeFrameSize = lz4.decodedNativeFrameSize;
 pub const lz4DecodedNativeFrameSizeLimited = lz4.decodedNativeFrameSizeLimited;
 pub const lz4DecodeNativeFrameAllocWithDictionary = lz4.decodeNativeFrameAllocWithDictionary;
 pub const lz4DecodeNativeFrameAppendWithDictionary = lz4.decodeNativeFrameAppendWithDictionary;
+pub const lz4DecodeNativeFrameAppendExactSizeWithDictionary = lz4.decodeNativeFrameAppendExactSizeWithDictionary;
 pub const lz4DecodeNativeFrameAppendLimitedWithDictionary = lz4.decodeNativeFrameAppendLimitedWithDictionary;
 pub const lz4DecodeNativeFrameAllocLimitedWithDictionary = lz4.decodeNativeFrameAllocLimitedWithDictionary;
 pub const lz4DecodeNativeFrameAllocWithDictionaryExactSize = lz4.decodeNativeFrameAllocWithDictionaryExactSize;
@@ -121,6 +123,7 @@ pub const lz4DecodedNativeFrameSizeWithDictionary = lz4.decodedNativeFrameSizeWi
 pub const lz4DecodedNativeFrameSizeLimitedWithDictionary = lz4.decodedNativeFrameSizeLimitedWithDictionary;
 pub const lz4DecodeNativeFrameAllocWithDictionarySet = lz4.decodeNativeFrameAllocWithDictionarySet;
 pub const lz4DecodeNativeFrameAppendWithDictionarySet = lz4.decodeNativeFrameAppendWithDictionarySet;
+pub const lz4DecodeNativeFrameAppendExactSizeWithDictionarySet = lz4.decodeNativeFrameAppendExactSizeWithDictionarySet;
 pub const lz4DecodeNativeFrameAppendLimitedWithDictionarySet = lz4.decodeNativeFrameAppendLimitedWithDictionarySet;
 pub const lz4DecodeNativeFrameAllocLimitedWithDictionarySet = lz4.decodeNativeFrameAllocLimitedWithDictionarySet;
 pub const lz4DecodeNativeFrameAllocWithDictionarySetExactSize = lz4.decodeNativeFrameAllocWithDictionarySetExactSize;
@@ -1071,6 +1074,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodedFrameSizeLimitedWithDictionarySet;
     _ = lz4DecodeNativeFrameAlloc;
     _ = lz4DecodeNativeFrameAppend;
+    _ = lz4DecodeNativeFrameAppendExactSize;
     _ = lz4DecodeNativeFrameAppendLimited;
     _ = lz4DecodeNativeFrameAllocLimited;
     _ = lz4DecodeNativeFrameAllocExactSize;
@@ -1078,6 +1082,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodedNativeFrameSize;
     _ = lz4DecodedNativeFrameSizeLimited;
     _ = lz4DecodeNativeFrameAppendWithDictionary;
+    _ = lz4DecodeNativeFrameAppendExactSizeWithDictionary;
     _ = lz4DecodeNativeFrameAppendLimitedWithDictionary;
     _ = lz4DecodeNativeFrameAllocLimitedWithDictionary;
     _ = lz4DecodeNativeFrameAllocWithDictionaryExactSize;
@@ -1087,6 +1092,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeNativeFrameInto;
     _ = lz4DecodeNativeFrameAllocWithDictionarySet;
     _ = lz4DecodeNativeFrameAppendWithDictionarySet;
+    _ = lz4DecodeNativeFrameAppendExactSizeWithDictionarySet;
     _ = lz4DecodeNativeFrameAppendLimitedWithDictionarySet;
     _ = lz4DecodeNativeFrameAllocLimitedWithDictionarySet;
     _ = lz4DecodeNativeFrameAllocWithDictionarySetExactSize;
@@ -1452,6 +1458,13 @@ test "root lz4 lib frame options round trip" {
     try std.testing.expectEqual(payload.len, try lz4DecodedNativeFrameSize(native_with_options));
     try std.testing.expectEqual(payload.len, try lz4DecodedNativeFrameSizeLimited(native_with_options, payload.len));
     try std.testing.expectError(error.OutputLimitExceeded, lz4DecodedNativeFrameSizeLimited(native_with_options, payload.len - 1));
+    var native_appended: std.ArrayList(u8) = .empty;
+    defer native_appended.deinit(std.testing.allocator);
+    try native_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try lz4DecodeNativeFrameAppendExactSize(std.testing.allocator, &native_appended, native_with_options, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, native_appended.items);
+    native_appended.clearRetainingCapacity();
+    try std.testing.expectError(error.SizeMismatch, lz4DecodeNativeFrameAppendExactSize(std.testing.allocator, &native_appended, native_with_options, payload.len - 1));
 
     const native_second = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, "second", .{
         .include_content_size = false,
@@ -2285,6 +2298,13 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     const lz4_decoded = try lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(std.testing.allocator, lz4_stream.items, lz4_dictionary_set);
     defer std.testing.allocator.free(lz4_decoded);
     try std.testing.expectEqualSlices(u8, lz4_expected, lz4_decoded);
+    var lz4_single_appended: std.ArrayList(u8) = .empty;
+    defer lz4_single_appended.deinit(std.testing.allocator);
+    try lz4_single_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(lz4_first_payload.len, try lz4DecodeNativeFrameAppendExactSizeWithDictionarySet(std.testing.allocator, &lz4_single_appended, lz4_first, lz4_dictionary_set, lz4_first_payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ lz4_first_payload, lz4_single_appended.items);
+    lz4_single_appended.clearRetainingCapacity();
+    try std.testing.expectError(error.SizeMismatch, lz4DecodeNativeFrameAppendExactSizeWithDictionarySet(std.testing.allocator, &lz4_single_appended, lz4_first, lz4_dictionary_set, lz4_first_payload.len - 1));
     var lz4_reusable_decoder = Lz4NativeFrameDecoder.init(std.testing.allocator);
     defer lz4_reusable_decoder.deinit();
     const lz4_reusable_scratch = try lz4_reusable_decoder.decodeConcatenatedScratchWithDictionarySet(lz4_stream.items, lz4_dictionary_set);
