@@ -970,8 +970,9 @@ regular native library bench gate.
 ## Direction
 
 See `docs/native-format.md` for the initial native Vort frame direction,
-`docs/validation-json.md` for validation/report JSON schemas, `docs/fuzzing.md`
-for parser fuzzing entrypoints, `docs/external-differential.md` for competitor
+`docs/native-lz4-zstd-status.md` for the current native LZ4/Zstd implementation
+audit, `docs/validation-json.md` for validation/report JSON schemas,
+`docs/fuzzing.md` for parser fuzzing entrypoints, `docs/external-differential.md` for competitor
 differential validation, `docs/checksum-dispatch.md` for checksum dispatch
 status, `docs/zstd-gap.md` for current zstd comparison limitations, and
 `docs/dynamic-encoder.md` for dynamic encoder status. Local Rust deflate
