@@ -1751,6 +1751,84 @@ test "root native incremental decoders reject truncated skippable metadata on fi
     try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().last_error_phase_name);
 }
 
+test "root native incremental decoders handle consecutive split skippable frames" {
+    const lz4_payload = "root-lz4-consecutive-skippables";
+    const lz4_first_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 8, "root-lz4-first-skip");
+    defer std.testing.allocator.free(lz4_first_skip);
+    const lz4_second_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 9, "root-lz4-second-skip");
+    defer std.testing.allocator.free(lz4_second_skip);
+    const lz4_frame = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, lz4_payload, .{
+        .content_checksum = false,
+        .include_content_size = true,
+        .block_checksum = true,
+    });
+    defer std.testing.allocator.free(lz4_frame);
+    const lz4_first_chunk = try std.mem.concat(std.testing.allocator, u8, &.{ lz4_first_skip, lz4_second_skip[0..5] });
+    defer std.testing.allocator.free(lz4_first_chunk);
+    const lz4_second_chunk = try std.mem.concat(std.testing.allocator, u8, &.{ lz4_second_skip[5..], lz4_frame });
+    defer std.testing.allocator.free(lz4_second_chunk);
+
+    var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = lz4_payload.len,
+        .max_decoded_buffer_len = lz4_payload.len,
+    });
+    defer lz4_decoder.deinit();
+    var lz4_output: [lz4_payload.len]u8 = undefined;
+
+    // Consume one whole skippable frame and then stop mid-header in the next.
+    // This protects the state machine path that discards already-complete
+    // metadata while preserving a partial following frame in the scratch buffer.
+    const lz4_wait = try lz4_decoder.step(lz4_first_chunk, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, lz4_wait.status);
+    try std.testing.expectEqual(lz4_first_chunk.len, lz4_wait.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_wait.progress.output_written);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_decoder.diagnostics().phase_name);
+
+    const lz4_done = try lz4_decoder.step(lz4_second_chunk, &lz4_output);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_done.status);
+    try std.testing.expectEqual(lz4_second_chunk.len, lz4_done.progress.input_read);
+    try std.testing.expectEqual(lz4_payload.len, lz4_done.progress.output_written);
+    try std.testing.expectEqual(lz4_first_chunk.len + lz4_second_chunk.len, lz4_decoder.diagnostics().frame_input_read);
+    try std.testing.expectEqualSlices(u8, lz4_payload, &lz4_output);
+    try lz4_decoder.finish();
+
+    const zstd_payload = "root-zstd-consecutive-skippables";
+    const zstd_first_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 8, "root-zstd-first-skip");
+    defer std.testing.allocator.free(zstd_first_skip);
+    const zstd_second_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 9, "root-zstd-second-skip");
+    defer std.testing.allocator.free(zstd_second_skip);
+    const zstd_frame = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, zstd_payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    });
+    defer std.testing.allocator.free(zstd_frame.frame);
+    const zstd_first_chunk = try std.mem.concat(std.testing.allocator, u8, &.{ zstd_first_skip, zstd_second_skip[0..5] });
+    defer std.testing.allocator.free(zstd_first_chunk);
+    const zstd_second_chunk = try std.mem.concat(std.testing.allocator, u8, &.{ zstd_second_skip[5..], zstd_frame.frame });
+    defer std.testing.allocator.free(zstd_second_chunk);
+
+    var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = zstd_payload.len,
+        .max_decoded_buffer_len = zstd_payload.len,
+    });
+    defer zstd_decoder.deinit();
+    var zstd_output: [zstd_payload.len]u8 = undefined;
+
+    const zstd_wait = try zstd_decoder.step(zstd_first_chunk, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, zstd_wait.status);
+    try std.testing.expectEqual(zstd_first_chunk.len, zstd_wait.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_wait.progress.output_written);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().phase_name);
+
+    const zstd_done = try zstd_decoder.step(zstd_second_chunk, &zstd_output);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
+    try std.testing.expectEqual(zstd_second_chunk.len, zstd_done.progress.input_read);
+    try std.testing.expectEqual(zstd_payload.len, zstd_done.progress.output_written);
+    try std.testing.expectEqual(zstd_first_chunk.len + zstd_second_chunk.len, zstd_decoder.diagnostics().frame_input_read);
+    try std.testing.expectEqualSlices(u8, zstd_payload, &zstd_output);
+    try zstd_decoder.finish();
+}
+
 test "root native incremental direct-output paths round trip" {
     var lz4_payload: [4096]u8 = undefined;
     var state: u32 = 0x1020_3040;
