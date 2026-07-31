@@ -39,6 +39,7 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     checked += try checkInvalidFrameHeaders(init.gpa);
     checked += try checkInvalidFrameBlocks(init.gpa);
+    checked += try checkInvalidFrameChecksumsAndTrailing(init.gpa);
 
     try stdout.print("lz4_native_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -483,6 +484,51 @@ fn checkInvalidFrameBlocks(allocator: std.mem.Allocator) !usize {
     return checked;
 }
 
+fn checkInvalidFrameChecksumsAndTrailing(allocator: std.mem.Allocator) !usize {
+    var checked: usize = 0;
+
+    const header_checksum = try minimalHeaderOnlyFrame(allocator, 0x60, 0x40);
+    defer allocator.free(header_checksum);
+    header_checksum[6] ^= 0x01;
+    try expectNativeFrameError(allocator, header_checksum, error.ChecksumMismatch);
+    checked += 1;
+
+    const block_payload = "abc";
+    var wrong_block_checksum_tail: [8]u8 = undefined;
+    std.mem.writeInt(u32, wrong_block_checksum_tail[0..4], std.hash.XxHash32.hash(0, block_payload) ^ 0x01, .little);
+    @memset(wrong_block_checksum_tail[4..8], 0);
+    const block_checksum = try frameWithSingleBlock(allocator, 0x70, 0x40, 0x8000_0000 | block_payload.len, block_payload, &wrong_block_checksum_tail);
+    defer allocator.free(block_checksum);
+    try expectNativeFrameDecodeAndSizeError(allocator, block_checksum, error.ChecksumMismatch);
+    checked += 1;
+
+    const content_payload = "content-checksum";
+    var truncated_content_tail = [_]u8{ 0, 0, 0, 0, 0, 0 };
+    const truncated_content_checksum = try frameWithSingleBlock(allocator, 0x64, 0x40, 0x8000_0000 | content_payload.len, content_payload, &truncated_content_tail);
+    defer allocator.free(truncated_content_checksum);
+    try expectNativeFrameDecodeAndSizeError(allocator, truncated_content_checksum, error.TruncatedFrame);
+    try expectNativeStreamErrorAfterFirstFrame(allocator, truncated_content_checksum, null, error.TruncatedFrame);
+    checked += 1;
+
+    var wrong_content_tail: [8]u8 = undefined;
+    @memset(wrong_content_tail[0..4], 0);
+    std.mem.writeInt(u32, wrong_content_tail[4..8], std.hash.XxHash32.hash(0, content_payload) ^ 0x01, .little);
+    const content_checksum = try frameWithSingleBlock(allocator, 0x64, 0x40, 0x8000_0000 | content_payload.len, content_payload, &wrong_content_tail);
+    defer allocator.free(content_checksum);
+    try expectNativeFrameDecodeErrorWithSize(allocator, content_checksum, error.ChecksumMismatch, content_payload.len);
+    checked += 1;
+
+    const trailing_payload = "trail";
+    var trailing_tail = [_]u8{ 0, 0, 0, 0, 'x', 'x' };
+    const trailing = try frameWithSingleBlock(allocator, 0x60, 0x40, 0x8000_0000 | trailing_payload.len, trailing_payload, &trailing_tail);
+    defer allocator.free(trailing);
+    try expectNativeFrameDecodeAndSizeError(allocator, trailing, error.TrailingData);
+    try expectNativeStreamErrorAfterFirstFrame(allocator, trailing, trailing_payload, error.TruncatedFrame);
+    checked += 1;
+
+    return checked;
+}
+
 fn minimalHeaderOnlyFrame(allocator: std.mem.Allocator, flg: u8, bd: u8) ![]u8 {
     var frame: std.ArrayList(u8) = .empty;
     errdefer frame.deinit(allocator);
@@ -580,6 +626,73 @@ fn expectNativeFrameBodyError(allocator: std.mem.Allocator, frame: []const u8, e
     if (iterator.next()) |_| {
         return error.Lz4ProbeExpectedFrameError;
     } else |err| if (@as(anyerror, err) != expected) return err;
+}
+
+fn expectNativeFrameDecodeAndSizeError(allocator: std.mem.Allocator, frame: []const u8, expected: anyerror) !void {
+    _ = try vort.lz4InspectNativeFrameHeader(frame);
+
+    if (vort.lz4DecodedNativeFrameSize(frame)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    const output = try allocator.alloc(u8, 64 * 1024 + 16);
+    defer allocator.free(output);
+    if (vort.lz4DecodeNativeFrameInto(frame, output)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    if (vort.lz4DecodeNativeFrameAlloc(allocator, frame)) |decoded| {
+        allocator.free(decoded);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+}
+
+fn expectNativeFrameDecodeErrorWithSize(
+    allocator: std.mem.Allocator,
+    frame: []const u8,
+    expected_decode_error: anyerror,
+    expected_size: usize,
+) !void {
+    _ = try vort.lz4InspectNativeFrameHeader(frame);
+    if (try vort.lz4DecodedNativeFrameSize(frame) != expected_size) return error.Lz4ProbeSizeMismatch;
+
+    const output = try allocator.alloc(u8, expected_size);
+    defer allocator.free(output);
+    if (vort.lz4DecodeNativeFrameInto(frame, output)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected_decode_error) return err;
+
+    if (vort.lz4DecodeNativeFrameAlloc(allocator, frame)) |decoded| {
+        allocator.free(decoded);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected_decode_error) return err;
+}
+
+fn expectNativeStreamErrorAfterFirstFrame(
+    allocator: std.mem.Allocator,
+    frame: []const u8,
+    expected_first_payload: ?[]const u8,
+    expected_stream_error: anyerror,
+) !void {
+    if (vort.lz4SummarizeNativeStream(frame)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected_stream_error) return err;
+
+    var iterator = vort.lz4IterateNativeStream(frame);
+    if (expected_first_payload) |payload| {
+        const first = (try iterator.next()) orelse return error.Lz4ProbeMismatch;
+        switch (first) {
+            .frame => |stream_frame| {
+                const decoded = try vort.lz4DecodeNativeFrameAlloc(allocator, stream_frame.bytes);
+                defer allocator.free(decoded);
+                if (!std.mem.eql(u8, payload, decoded)) return error.Lz4ProbeMismatch;
+            },
+            .skippable => return error.Lz4ProbeMismatch,
+        }
+    }
+    if (iterator.next()) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected_stream_error) return err;
 }
 
 fn expectPayload(case: Case, decoded: []const u8) !void {
