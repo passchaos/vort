@@ -418,6 +418,16 @@ fn checkMalformedCompressedSequenceTableInspect(allocator: std.mem.Allocator) !v
     var into: [154]u8 = undefined;
     try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&frame, &into));
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
+
+    const truncated_table_hex =
+        "28b52ffd209aa50000606162636465666768696a6b6c10180210aeb507";
+    var truncated_table: [truncated_table_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&truncated_table, truncated_table_hex);
+    const truncated_block = try vort.zstdInspectNativeFrameFirstBlock(&truncated_table);
+    try expectError(error.TruncatedFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&truncated_table, truncated_block));
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(&truncated_table));
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(&truncated_table, &into));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &truncated_table));
 }
 
 fn checkLiteralAndOffsetCompressedSequenceTableInspect(
