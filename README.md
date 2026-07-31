@@ -454,6 +454,27 @@ _ = try vort.lz4EncodeNativeFrameIntoSliceWithDictionarySet(
     lz4_dict.id,
     lz4_dict_set_into,
 );
+const lz4_reusable_dict_set_frame = try lz4_encoder.encodeScratchWithDictionarySet(
+    "previous lz4 history payload",
+    lz4_dict_options,
+    lz4_dict_set,
+    lz4_dict.id,
+);
+_ = lz4_reusable_dict_set_frame;
+const lz4_reusable_dict_set_owned = try lz4_encoder.encodeWithDictionarySetAlloc(
+    "previous lz4 history payload",
+    lz4_dict_options,
+    lz4_dict_set,
+    lz4_dict.id,
+);
+defer allocator.free(lz4_reusable_dict_set_owned);
+_ = try lz4_encoder.encodeIntoSliceWithDictionarySet(
+    "previous lz4 history payload",
+    lz4_dict_options,
+    lz4_dict_set,
+    lz4_dict.id,
+    lz4_dict_set_into,
+);
 const lz4_stream_plain = try vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(
     allocator,
     lz4_dict_frame,
@@ -589,6 +610,27 @@ const zstd_dict_set_into = try allocator.alloc(u8, zstd_dict_set_bound);
 defer allocator.free(zstd_dict_set_into);
 _ = try vort.zstdEncodeNativeFrameIntoSliceWithDictionarySet(
     allocator,
+    "prefix: previous zstd history payload, shared phrase tail",
+    zstd_dict_options,
+    zstd_dict_set,
+    zstd_dict.id,
+    zstd_dict_set_into,
+);
+const zstd_reusable_dict_set_frame = try zstd_encoder.encodeScratchWithDictionarySet(
+    "prefix: previous zstd history payload, shared phrase tail",
+    zstd_dict_options,
+    zstd_dict_set,
+    zstd_dict.id,
+);
+_ = zstd_reusable_dict_set_frame.mode;
+const zstd_reusable_dict_set_owned = try zstd_encoder.encodeWithDictionarySetAlloc(
+    "prefix: previous zstd history payload, shared phrase tail",
+    zstd_dict_options,
+    zstd_dict_set,
+    zstd_dict.id,
+);
+defer allocator.free(zstd_reusable_dict_set_owned.frame);
+_ = try zstd_encoder.encodeIntoSliceWithDictionarySet(
     "prefix: previous zstd history payload, shared phrase tail",
     zstd_dict_options,
     zstd_dict_set,
