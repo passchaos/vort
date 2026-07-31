@@ -271,6 +271,21 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
     const set_bound = try vort.zstdEncodedNativeFrameBoundWithDictionarySet(first_payload.len, options, dictionary_set, dict.id);
     try expect(first.frame.len <= set_bound);
     try expectError(error.NeedDictionary, vort.zstdEncodedNativeFrameBoundWithDictionarySet(first_payload.len, options, dictionary_set, 0xeeee));
+    const set_encoded = try vort.zstdEncodeNativeFrameWithDictionarySetAlloc(allocator, first_payload, options, dictionary_set, dict.id);
+    defer allocator.free(set_encoded.frame);
+    try expect(set_encoded.mode == first.mode);
+    try expectEqualSlices(first.frame, set_encoded.frame);
+    var set_appended: std.ArrayList(u8) = .empty;
+    defer set_appended.deinit(allocator);
+    const set_appended_mode = try vort.zstdEncodeNativeFrameAppendWithDictionarySet(allocator, &set_appended, first_payload, options, dictionary_set, dict.id);
+    try expect(set_appended_mode == first.mode);
+    try expectEqualSlices(first.frame, set_appended.items);
+    const set_into = try allocator.alloc(u8, set_bound);
+    defer allocator.free(set_into);
+    const set_into_result = try vort.zstdEncodeNativeFrameIntoSliceWithDictionarySet(allocator, first_payload, options, dictionary_set, dict.id, set_into);
+    try expect(set_into_result.mode == first.mode);
+    try expectEqualSlices(first.frame, set_into[0..set_into_result.written]);
+    try expectError(error.NeedDictionary, vort.zstdEncodeNativeFrameWithDictionarySetAlloc(allocator, first_payload, options, dictionary_set, 0xeeee));
 }
 
 fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {

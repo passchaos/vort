@@ -136,6 +136,18 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
     const set_bound = try vort.lz4EncodedNativeFrameBoundWithDictionarySet(first_payload.len, options, dictionary_set, dict.id);
     try expect(first.len <= set_bound);
     try expectError(error.NeedDictionary, vort.lz4EncodedNativeFrameBoundWithDictionarySet(first_payload.len, options, dictionary_set, 0xeeee));
+    const set_encoded = try vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, first_payload, options, dictionary_set, dict.id);
+    defer allocator.free(set_encoded);
+    try expectEqualSlices(first, set_encoded);
+    var set_appended: std.ArrayList(u8) = .empty;
+    defer set_appended.deinit(allocator);
+    try vort.lz4EncodeNativeFrameAppendWithDictionarySet(allocator, &set_appended, first_payload, options, dictionary_set, dict.id);
+    try expectEqualSlices(first, set_appended.items);
+    const set_into = try allocator.alloc(u8, set_bound);
+    defer allocator.free(set_into);
+    const set_into_written = try vort.lz4EncodeNativeFrameIntoSliceWithDictionarySet(allocator, first_payload, options, dictionary_set, dict.id, set_into);
+    try expectEqualSlices(first, set_into[0..set_into_written]);
+    try expectError(error.NeedDictionary, vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, first_payload, options, dictionary_set, 0xeeee));
 }
 
 fn checkReusableDictionaryApis(allocator: std.mem.Allocator) !void {
