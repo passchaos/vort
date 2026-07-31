@@ -962,7 +962,8 @@ reusable append exact-size, direct-output, and small-output fallback rows to
 round-trip and to preserve the expected size relationships. The heavier
 limited compressed-FSE sequence-table path is covered by
 `run-zstd-native-dictionary-probe` for public inspect/decode of LL/OF/ML=FSE
-blocks plus repeated sequence-table reuse, while focused unit tests keep the
+blocks plus repeated sequence-table reuse, and `run-zstd-native-frame-probe` for
+treeless repeat-Huffman literal reuse, while focused unit tests keep the
 writer-side ML=FSE construction covered without adding the heavier path to the
 regular native library bench gate.
 

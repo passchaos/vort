@@ -4900,9 +4900,37 @@ pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!NativeFrameBlockHea
 pub fn inspectNativeFrameBlockSequenceModes(frame: []const u8, block: NativeFrameBlockHeader) Error!NativeSequenceModeSummary {
     if (block.block_type != .compressed) return error.UnsupportedZstdFeature;
     if (block.payload_offset > frame.len or frame.len - block.payload_offset < block.payload_len) return error.TruncatedFrame;
-    const payload = frame[block.payload_offset..][0..block.payload_len];
+    var frame_state = try replayNativeFrameBlockInspectState(frame, block.header_offset);
+    return try inspectNativeFrameBlockSequenceModesWithState(frame, block, &frame_state);
+}
+
+fn replayNativeFrameBlockInspectState(frame: []const u8, target_header_offset: usize) Error!SequenceFrameState {
+    const header = try inspectNativeFrameHeader(frame);
+    if (target_header_offset < header.payload_offset) return error.CorruptFrame;
     var frame_state: SequenceFrameState = .{};
-    const section = try parseLiteralsSection(payload, &frame_state);
+    var offset = header.payload_offset;
+    while (offset < target_header_offset) {
+        const previous_block = try inspectNativeFrameBlockAt(frame, offset);
+        if (previous_block.header_offset >= target_header_offset) break;
+        if (previous_block.block_type == .compressed) {
+            _ = try inspectNativeFrameBlockSequenceModesWithState(frame, previous_block, &frame_state);
+        }
+        if (previous_block.last) return error.CorruptFrame;
+        offset = previous_block.next_header_offset;
+    }
+    if (offset != target_header_offset) return error.CorruptFrame;
+    return frame_state;
+}
+
+fn inspectNativeFrameBlockSequenceModesWithState(
+    frame: []const u8,
+    block: NativeFrameBlockHeader,
+    frame_state: *SequenceFrameState,
+) Error!NativeSequenceModeSummary {
+    if (block.block_type != .compressed) return error.UnsupportedZstdFeature;
+    if (block.payload_offset > frame.len or frame.len - block.payload_offset < block.payload_len) return error.TruncatedFrame;
+    const payload = frame[block.payload_offset..][0..block.payload_len];
+    const section = try parseLiteralsSection(payload, frame_state);
     if (section.sequence_count == 0) {
         return .{
             .literals_kind = nativeLiteralsKind(section.kind),
@@ -4915,6 +4943,8 @@ pub fn inspectNativeFrameBlockSequenceModes(frame: []const u8, block: NativeFram
     }
     var offset = section.sequence_payload_offset;
     const spec = try parseSequenceModeSpec(payload, &offset, section.sequence_count);
+    const resolved = try resolveSequenceModeSpec(spec, frame_state.previous_tables);
+    frame_state.previous_tables = resolved.tables();
     return .{
         .literals_kind = nativeLiteralsKind(section.kind),
         .regenerated_literals_size = section.regenerated_size,

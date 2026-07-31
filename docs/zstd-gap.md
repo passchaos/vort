@@ -134,8 +134,8 @@ Current interpretation:
   match lookahead and emission,
   RLE-literals sections for same-byte sequence literals,
   Huffman-compressed literals inside sequence blocks when the literal payload is compressible,
-  including high-byte FSE-Huffman sequence literals, raw-block-cost-aware sequence selection, plus a file-backed multi-block
-  treeless Huffman writer case, then checks
+  including high-byte FSE-Huffman sequence literals, raw-block-cost-aware sequence selection, plus public frame-probe
+  coverage for file-backed multi-block treeless Huffman literal reuse, then checks
   both system zstd decode and Vort native decode, with `size-zstd-native-hex`
   preflight checked before each native decode. The native decoder accepts
   zero-valued Dictionary_ID fields without requiring a dictionary while still

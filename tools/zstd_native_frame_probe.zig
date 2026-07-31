@@ -13,6 +13,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkSystemZstdHighByteFrame(init.gpa);
     checked += 1;
+    try checkTreelessRepeatHuffmanLiterals(init.gpa);
+    checked += 1;
     try checkSplitHeaderIncremental(init.gpa);
     checked += 1;
     try checkSplitSkippableHeaderIncremental(init.gpa);
@@ -159,6 +161,53 @@ fn checkSystemZstdHighByteFrame(allocator: std.mem.Allocator) !void {
     try expectPrefixedPayload(appended.items, &payload);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, &frame, payload.len - 1));
+}
+
+fn checkTreelessRepeatHuffmanLiterals(allocator: std.mem.Allocator) !void {
+    const unit = "{\"key\":\"value\",\"number\":123,\"array\":[1,2,3],\"text\":\"abcdefg\"}\n";
+    const payload = unit ** 200;
+    const frame_hex =
+        "28b52ffd00680c0200e2c30d1290cf016c3325f0fdb0cddd2ce10b3339ce4e20b" ++
+        "fb1a5123a279f76cdb7192d3a14f27ba43cef2102b95c08d2f8fea2efd493d" ++
+        "fe58e0301007e7f411fa0750100e3030920bfb1a5123a279f76cdb7192d3a" ++
+        "14f27ba43cef2102b95c08d2f8fea2efd493dfe58e0301007e7f411fa0";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    const first_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    try expect(first_block.block_type == .compressed);
+    try expect(!first_block.last);
+    try expect(first_modes.literals_kind == .compressed);
+    try expect(first_modes.sequence_count == 1);
+    try expect(first_modes.literal_length_mode == .predefined);
+    try expect(first_modes.offset_mode == .predefined);
+    try expect(first_modes.match_length_mode == .predefined);
+
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    const second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+    try expect(second_block.block_type == .compressed);
+    try expect(second_block.last);
+    try expect(second_modes.literals_kind == .treeless);
+    try expect(second_modes.sequence_count == 1);
+    try expect(second_modes.literal_length_mode == .predefined);
+    try expect(second_modes.offset_mode == .predefined);
+    try expect(second_modes.match_length_mode == .predefined);
+    try expect(second_modes.regenerated_literals_size == first_modes.regenerated_literals_size);
+
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
+    try expect(summary.block_count == 2);
+    try expect(summary.compressed_block_count == 2);
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == payload.len);
+
+    const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(decoded);
+    try expectEqualSlices(payload, decoded);
+
+    var into: [payload.len]u8 = undefined;
+    const into_written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
+    try expect(into_written == payload.len);
+    try expectEqualSlices(payload, &into);
 }
 
 fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {
