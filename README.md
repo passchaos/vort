@@ -28,9 +28,11 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   and treeless repeat Huffman-literals, minimal RLE-sequence, mixed
   RLE/predefined/FSE sequence-table, repeated sequence-table, and streaming
   default predefined-sequence compressed-block fallback encode/decode with
-  up-to-128-symbol single-/four-stream direct Huffman literal emission
-  (including non-4-divisible four-stream splits and treeless repeat trees across
-  blocks), small-depth hash-chain large duplicate plus deeper duplicate
+  up-to-129-symbol single-/four-stream direct Huffman literal emission
+  (covering the full direct-tree symbol range `0...128`, including
+  non-4-divisible four-stream splits and treeless repeat trees across blocks;
+  higher byte symbols still need FSE-compressed Huffman weights), small-depth
+  hash-chain large duplicate plus deeper duplicate
   candidate retention, RLE/predefined-table multi-duplicate, dictionary,
   repeated-pattern, and mixed duplicate/repeated/dictionary match emission with
   starts scanned up to 48 bytes and periods up to 64 bytes, exact

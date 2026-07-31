@@ -120,7 +120,8 @@ Current interpretation:
   validates Vort's dependency-free native encoder on the same generated/file
   byte payloads through `encode-zstd-native-bytes-hex` in `auto`, `raw_or_rle`,
   and `literal_only` modes, including both 4-divisible and non-4-divisible
-  four-stream Huffman literal payloads, long-period and long-prefix
+  four-stream Huffman literal payloads, the max direct Huffman symbol set
+  (`0...128`), long-period and long-prefix
   repeated-pattern writer cases, a small-depth hash-chain duplicate-candidate writer case,
   no-dictionary mixed duplicate/repeated match selection plus dictionary/native
   match-vs-Huffman size arbitration, smallest native match-plan arbitration,
