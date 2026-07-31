@@ -458,13 +458,42 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
 
     const first = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, first_payload, options, dict);
     defer allocator.free(first.frame);
+    const skip = try vort.zstdEncodeSkippableFrameAlloc(allocator, 4, "zstd-dict-metadata");
+    defer allocator.free(skip);
     const second = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, second_payload, options, dict);
     defer allocator.free(second.frame);
 
     var stream: std.ArrayList(u8) = .empty;
     defer stream.deinit(allocator);
     try stream.appendSlice(allocator, first.frame);
+    try stream.appendSlice(allocator, skip);
     try stream.appendSlice(allocator, second.frame);
+
+    const summary = try vort.zstdSummarizeNativeStream(stream.items);
+    try expect(summary.frame_count == 2);
+    try expect(summary.skippable_frame_count == 1);
+    try expect(summary.skippable_payload_bytes == "zstd-dict-metadata".len);
+
+    var stream_iterator = vort.zstdIterateNativeStream(stream.items);
+    const first_element = (try stream_iterator.next()) orelse return error.ZstdNativeDictionaryProbeMismatch;
+    const skip_element = (try stream_iterator.next()) orelse return error.ZstdNativeDictionaryProbeMismatch;
+    const second_element = (try stream_iterator.next()) orelse return error.ZstdNativeDictionaryProbeMismatch;
+    try expect((try stream_iterator.next()) == null);
+    switch (first_element) {
+        .frame => |frame| try expect(frame.header.dictionary_id == dict.id),
+        .skippable => return error.ZstdNativeDictionaryProbeMismatch,
+    }
+    switch (skip_element) {
+        .frame => return error.ZstdNativeDictionaryProbeMismatch,
+        .skippable => |skippable| {
+            try expect(skippable.header.skippable_id == 4);
+            try expectEqualSlices("zstd-dict-metadata", skippable.payload);
+        },
+    }
+    switch (second_element) {
+        .frame => |frame| try expect(frame.header.dictionary_id == dict.id),
+        .skippable => return error.ZstdNativeDictionaryProbeMismatch,
+    }
 
     const decoded = try vort.zstdDecodeNativeConcatenatedFrameAllocWithDictionary(allocator, stream.items, dict);
     defer allocator.free(decoded);
@@ -508,10 +537,12 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
     try expectEqualSlices(first.frame, set_into[0..reusable_set_into_result.written]);
     try expectError(error.NeedDictionary, vort.zstdEncodeNativeFrameWithDictionarySetAlloc(allocator, first_payload, options, dictionary_set, 0xeeee));
 
+    const second_start = first.frame.len + skip.len;
     const chunks = [_][]const u8{
         stream.items[0..7],
-        stream.items[7 .. stream.items.len - 4],
-        stream.items[stream.items.len - 4 ..],
+        stream.items[7 .. first.frame.len + 5],
+        stream.items[first.frame.len + 5 .. second_start + second.frame.len / 2],
+        stream.items[second_start + second.frame.len / 2 ..],
     };
     const join = try allocator.alloc(u8, stream.items.len);
     defer allocator.free(join);
