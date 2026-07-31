@@ -17,6 +17,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkRepeatOffsetAdditionalBits(init.gpa);
     checked += 1;
+    try checkRepeatOffsetZeroLiteralSelector(init.gpa);
+    checked += 1;
     try checkSplitHeaderIncremental(init.gpa);
     checked += 1;
     try checkSplitSkippableHeaderIncremental(init.gpa);
@@ -237,6 +239,40 @@ fn checkRepeatOffsetAdditionalBits(allocator: std.mem.Allocator) !void {
     try expectEqualSlices("aaaaaaaaaaaaaa", decoded);
 
     var into: [14]u8 = undefined;
+    const into_written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
+    try expect(into_written == decoded.len);
+    try expectEqualSlices(decoded, into[0..into_written]);
+}
+
+fn checkRepeatOffsetZeroLiteralSelector(allocator: std.mem.Allocator) !void {
+    // Raw first block seeds the history with "abcd". The compressed second
+    // block has literal_len=0 and OF code 0, which selects rep1 rather than
+    // rep0. That should copy the four-byte history prefix and produce
+    // "abcdabcd".
+    const frame_hex = "28b52ffd2008200000616263643d000000015400000101";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .raw);
+    try expect(!first_block.last);
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+    try expect(second_block.block_type == .compressed);
+    try expect(second_block.last);
+    try expect(modes.literals_kind == .raw);
+    try expect(modes.regenerated_literals_size == 0);
+    try expect(modes.sequence_count == 1);
+    try expect(modes.literal_length_mode == .rle);
+    try expect(modes.offset_mode == .rle);
+    try expect(modes.match_length_mode == .rle);
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == 8);
+
+    const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(decoded);
+    try expectEqualSlices("abcdabcd", decoded);
+
+    var into: [8]u8 = undefined;
     const into_written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
     try expect(into_written == decoded.len);
     try expectEqualSlices(decoded, into[0..into_written]);
