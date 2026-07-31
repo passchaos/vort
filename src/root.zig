@@ -1078,6 +1078,9 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4EncodedNativeFrameBoundWithOptions;
     _ = lz4EncodedNativeFrameBoundWithDictionary;
     _ = lz4EncodedNativeFrameBoundWithDictionarySet;
+    _ = lz4EncodeNativeFrameWithDictionaryAlloc;
+    _ = lz4EncodeNativeFrameAppendWithDictionary;
+    _ = lz4EncodeNativeFrameIntoSliceWithDictionary;
     _ = lz4EncodeNativeFrameWithDictionarySetAlloc;
     _ = lz4EncodeNativeFrameAppendWithDictionarySet;
     _ = lz4EncodeNativeFrameIntoSliceWithDictionarySet;
@@ -1152,6 +1155,9 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodeNativeFrameWithOptionsAlloc;
     _ = zstdEncodeNativeFrameAppend;
     _ = zstdEncodeNativeFrameIntoSlice;
+    _ = zstdEncodeNativeFrameWithDictionaryAlloc;
+    _ = zstdEncodeNativeFrameAppendWithDictionary;
+    _ = zstdEncodeNativeFrameIntoSliceWithDictionary;
     _ = zstdEncodeNativeFrameWithDictionarySetAlloc;
     _ = zstdEncodeNativeFrameAppendWithDictionarySet;
     _ = zstdEncodeNativeFrameIntoSliceWithDictionarySet;
