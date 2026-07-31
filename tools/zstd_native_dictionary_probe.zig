@@ -617,10 +617,13 @@ fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
 
     const expected = first_payload ++ second_payload;
     const chunks = [_][]const u8{
+        stream.items[0..0],
         stream.items[0..9],
+        stream.items[9..9],
         stream.items[9 .. first.frame.len + 2],
         stream.items[first.frame.len + 2 .. first.frame.len + skip.len + 4],
         stream.items[first.frame.len + skip.len + 4 ..],
+        stream.items[stream.items.len..stream.items.len],
     };
     const join = try allocator.alloc(u8, stream.items.len);
     defer allocator.free(join);

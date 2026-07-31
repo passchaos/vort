@@ -544,10 +544,13 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
 
     const second_start = first.len + skip.len;
     const chunks = [_][]const u8{
+        stream.items[0..0],
         stream.items[0..5],
+        stream.items[5..5],
         stream.items[5 .. first.len + 3],
         stream.items[first.len + 3 .. second_start + second.len / 2],
         stream.items[second_start + second.len / 2 ..],
+        stream.items[stream.items.len..stream.items.len],
     };
     const join = try allocator.alloc(u8, stream.items.len);
     defer allocator.free(join);
