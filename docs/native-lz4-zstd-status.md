@@ -33,7 +33,7 @@ APIs:
 | Library-first native Zstd APIs | `src/root.zig` exports Zstd native encode/decode, inspect, dictionary, dictionary-set, chunked/reusable APIs, incremental decoder, and sequence-mode inspect; `tools/zstd_native_frame_probe.zig` and `tools/zstd_native_dictionary_probe.zig` cover public frame/dictionary surfaces. | Implemented for supported native subset; not full zstd format parity. |
 | Incremental decode with caller-owned output | Root tests cover split skippable headers, truncated skippable finish, compressed-buffer limits, no-content-size expected sizes, dictionary-set missing dictionaries, exact frame output boundaries, split block boundaries, checksum diagnostics, and direct-output fallback. Codec tests cover additional direct-output and scratch fallback paths. | Strong coverage for current facade/direct paths; true byte-by-byte streaming decompression remains future work. |
 | Zstd Huffman literals | Zstd native frame probe covers direct Huffman limits, high-byte FSE-Huffman weights, system-zstd high-byte fixture, and treeless repeat-Huffman literal reuse through public inspect/decode. | Supported for covered forms; broader real-corpus tuning remains. |
-| Zstd sequence tables | Dictionary probe covers public inspection/decode for LL/OF/ML compressed-FSE modes and repeated table reuse; frame probe covers RLE repeated-table reuse, repeat-offset additional bits, zero-literal selector transitions, and treeless literal state reuse; focused unit tests still cover writer-side ML=FSE construction. | Supported for current sequence execution subset; more fixtures for mixed compressed/repeated transitions are useful. |
+| Zstd sequence tables | Dictionary probe covers public inspection/decode for LL/OF/ML compressed-FSE modes, repeated table reuse, and compressed-FSE-to-Repeat_Mode transitions; frame probe covers RLE repeated-table reuse, repeat-offset additional bits, zero-literal selector transitions, and treeless literal state reuse; focused unit tests still cover writer-side ML=FSE construction. | Supported for current sequence execution subset; more fixtures for broader mixed-table transitions are useful. |
 | Dictionaries and dictionary sets | Root tests and dictionary probes cover LZ4/Zstd Dictionary_ID metadata, explicit dictionaries, dictionary sets, no-content-size direct output, chunked APIs, missing dictionary diagnostics, and exact-size mismatches. | Implemented for current native APIs; training/stable dictionary workflows remain future work. |
 | Skippable/concatenated streams | LZ4/Zstd probes and root tests cover skippable-only streams, mixed streams, consecutive split skippable headers, truncated skippable metadata, chunked split inputs, and concatenated direct-output frame boundaries. | Implemented for current stream iterators/decoders. |
 | Bounded memory and hostile inputs | Incremental options expose `max_compressed_buffer_len`, `max_decoded_buffer_len`, and `expected_output_len`; root/probe tests cover OutputLimitExceeded, TruncatedFrame, SizeMismatch, ChecksumMismatch, and NeedDictionary diagnostics. | Good coverage for current whole-frame validation plus direct-output paths; fuzz/corpus expansion remains. |
@@ -86,8 +86,8 @@ Open items include:
 
 ## Next recommended work
 
-1. Add more public Zstd sequence fixtures for mixed compressed/repeated table
-   transitions.
+1. Add more public Zstd sequence fixtures for broader mixed-table transitions
+   and repeat-offset selector combinations.
 2. Expand public API benchmarks cautiously, keeping Debug gate time bounded.
 3. Add differential/corpus dashboards that compare native LZ4/Zstd APIs against
    local reference tools/libraries without routing through CLI-only code paths.
