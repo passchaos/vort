@@ -129,6 +129,7 @@ pub const lz4DecodedNativeFrameSizeWithDictionarySet = lz4.decodedNativeFrameSiz
 pub const lz4DecodedNativeFrameSizeLimitedWithDictionarySet = lz4.decodedNativeFrameSizeLimitedWithDictionarySet;
 pub const lz4DecodeConcatenatedFrameAlloc = lz4.decodeConcatenatedFrameAlloc;
 pub const lz4DecodeConcatenatedFrameAppend = lz4.decodeConcatenatedFrameAppend;
+pub const lz4DecodeConcatenatedFrameAppendExactSize = lz4.decodeConcatenatedFrameAppendExactSize;
 pub const lz4DecodeConcatenatedFrameAppendLimited = lz4.decodeConcatenatedFrameAppendLimited;
 pub const lz4DecodeConcatenatedFrameAllocLimited = lz4.decodeConcatenatedFrameAllocLimited;
 pub const lz4DecodeConcatenatedFrameAllocExactSize = lz4.decodeConcatenatedFrameAllocExactSize;
@@ -137,6 +138,7 @@ pub const lz4DecodedConcatenatedFrameSizeLimited = lz4.decodedConcatenatedFrameS
 pub const lz4DecodeConcatenatedFrameInto = lz4.decodeConcatenatedFrameInto;
 pub const lz4DecodeConcatenatedFrameAllocWithDictionary = lz4.decodeConcatenatedFrameAllocWithDictionary;
 pub const lz4DecodeConcatenatedFrameAppendWithDictionary = lz4.decodeConcatenatedFrameAppendWithDictionary;
+pub const lz4DecodeConcatenatedFrameAppendExactSizeWithDictionary = lz4.decodeConcatenatedFrameAppendExactSizeWithDictionary;
 pub const lz4DecodeConcatenatedFrameAppendLimitedWithDictionary = lz4.decodeConcatenatedFrameAppendLimitedWithDictionary;
 pub const lz4DecodeConcatenatedFrameAllocLimitedWithDictionary = lz4.decodeConcatenatedFrameAllocLimitedWithDictionary;
 pub const lz4DecodeConcatenatedFrameAllocWithDictionaryExactSize = lz4.decodeConcatenatedFrameAllocWithDictionaryExactSize;
@@ -145,6 +147,7 @@ pub const lz4DecodedConcatenatedFrameSizeWithDictionary = lz4.decodedConcatenate
 pub const lz4DecodedConcatenatedFrameSizeLimitedWithDictionary = lz4.decodedConcatenatedFrameSizeLimitedWithDictionary;
 pub const lz4DecodeConcatenatedFrameAllocWithDictionarySet = lz4.decodeConcatenatedFrameAllocWithDictionarySet;
 pub const lz4DecodeConcatenatedFrameAppendWithDictionarySet = lz4.decodeConcatenatedFrameAppendWithDictionarySet;
+pub const lz4DecodeConcatenatedFrameAppendExactSizeWithDictionarySet = lz4.decodeConcatenatedFrameAppendExactSizeWithDictionarySet;
 pub const lz4DecodeConcatenatedFrameAppendLimitedWithDictionarySet = lz4.decodeConcatenatedFrameAppendLimitedWithDictionarySet;
 pub const lz4DecodeConcatenatedFrameAllocLimitedWithDictionarySet = lz4.decodeConcatenatedFrameAllocLimitedWithDictionarySet;
 pub const lz4DecodeConcatenatedFrameAllocWithDictionarySetExactSize = lz4.decodeConcatenatedFrameAllocWithDictionarySetExactSize;
@@ -155,6 +158,7 @@ pub const lz4DecodeConcatenatedFrameChunksAlloc = lz4.decodeConcatenatedFrameChu
 pub const lz4DecodeConcatenatedFrameChunksAllocExactSize = lz4.decodeConcatenatedFrameChunksAllocExactSize;
 pub const lz4DecodeConcatenatedFrameChunksAllocLimited = lz4.decodeConcatenatedFrameChunksAllocLimited;
 pub const lz4DecodeConcatenatedFrameChunksAppend = lz4.decodeConcatenatedFrameChunksAppend;
+pub const lz4DecodeConcatenatedFrameChunksAppendExactSize = lz4.decodeConcatenatedFrameChunksAppendExactSize;
 pub const lz4DecodeConcatenatedFrameChunksAppendLimited = lz4.decodeConcatenatedFrameChunksAppendLimited;
 pub const lz4DecodeConcatenatedFrameChunksInto = lz4.decodeConcatenatedFrameChunksInto;
 pub const lz4DecodedConcatenatedFrameChunksSize = lz4.decodedConcatenatedFrameChunksSize;
@@ -163,6 +167,7 @@ pub const lz4DecodeConcatenatedFrameChunksAllocWithDictionary = lz4.decodeConcat
 pub const lz4DecodeConcatenatedFrameChunksAllocWithDictionaryExactSize = lz4.decodeConcatenatedFrameChunksAllocWithDictionaryExactSize;
 pub const lz4DecodeConcatenatedFrameChunksAllocWithDictionaryLimited = lz4.decodeConcatenatedFrameChunksAllocWithDictionaryLimited;
 pub const lz4DecodeConcatenatedFrameChunksAppendWithDictionary = lz4.decodeConcatenatedFrameChunksAppendWithDictionary;
+pub const lz4DecodeConcatenatedFrameChunksAppendExactSizeWithDictionary = lz4.decodeConcatenatedFrameChunksAppendExactSizeWithDictionary;
 pub const lz4DecodeConcatenatedFrameChunksAppendLimitedWithDictionary = lz4.decodeConcatenatedFrameChunksAppendLimitedWithDictionary;
 pub const lz4DecodeConcatenatedFrameChunksIntoWithDictionary = lz4.decodeConcatenatedFrameChunksIntoWithDictionary;
 pub const lz4DecodedConcatenatedFrameChunksSizeWithDictionary = lz4.decodedConcatenatedFrameChunksSizeWithDictionary;
@@ -171,12 +176,14 @@ pub const lz4DecodeConcatenatedFrameChunksAllocWithDictionarySet = lz4.decodeCon
 pub const lz4DecodeConcatenatedFrameChunksAllocWithDictionarySetExactSize = lz4.decodeConcatenatedFrameChunksAllocWithDictionarySetExactSize;
 pub const lz4DecodeConcatenatedFrameChunksAllocWithDictionarySetLimited = lz4.decodeConcatenatedFrameChunksAllocWithDictionarySetLimited;
 pub const lz4DecodeConcatenatedFrameChunksAppendWithDictionarySet = lz4.decodeConcatenatedFrameChunksAppendWithDictionarySet;
+pub const lz4DecodeConcatenatedFrameChunksAppendExactSizeWithDictionarySet = lz4.decodeConcatenatedFrameChunksAppendExactSizeWithDictionarySet;
 pub const lz4DecodeConcatenatedFrameChunksAppendLimitedWithDictionarySet = lz4.decodeConcatenatedFrameChunksAppendLimitedWithDictionarySet;
 pub const lz4DecodeConcatenatedFrameChunksIntoWithDictionarySet = lz4.decodeConcatenatedFrameChunksIntoWithDictionarySet;
 pub const lz4DecodedConcatenatedFrameChunksSizeWithDictionarySet = lz4.decodedConcatenatedFrameChunksSizeWithDictionarySet;
 pub const lz4DecodedConcatenatedFrameChunksSizeLimitedWithDictionarySet = lz4.decodedConcatenatedFrameChunksSizeLimitedWithDictionarySet;
 pub const lz4DecodeNativeConcatenatedFrameAlloc = lz4.decodeNativeConcatenatedFrameAlloc;
 pub const lz4DecodeNativeConcatenatedFrameAppend = lz4.decodeNativeConcatenatedFrameAppend;
+pub const lz4DecodeNativeConcatenatedFrameAppendExactSize = lz4.decodeNativeConcatenatedFrameAppendExactSize;
 pub const lz4DecodeNativeConcatenatedFrameAppendLimited = lz4.decodeNativeConcatenatedFrameAppendLimited;
 pub const lz4DecodeNativeConcatenatedFrameAllocLimited = lz4.decodeNativeConcatenatedFrameAllocLimited;
 pub const lz4DecodeNativeConcatenatedFrameAllocExactSize = lz4.decodeNativeConcatenatedFrameAllocExactSize;
@@ -185,6 +192,7 @@ pub const lz4DecodedNativeConcatenatedFrameSize = lz4.decodedNativeConcatenatedF
 pub const lz4DecodedNativeConcatenatedFrameSizeLimited = lz4.decodedNativeConcatenatedFrameSizeLimited;
 pub const lz4DecodeNativeConcatenatedFrameAllocWithDictionary = lz4.decodeNativeConcatenatedFrameAllocWithDictionary;
 pub const lz4DecodeNativeConcatenatedFrameAppendWithDictionary = lz4.decodeNativeConcatenatedFrameAppendWithDictionary;
+pub const lz4DecodeNativeConcatenatedFrameAppendExactSizeWithDictionary = lz4.decodeNativeConcatenatedFrameAppendExactSizeWithDictionary;
 pub const lz4DecodeNativeConcatenatedFrameAppendLimitedWithDictionary = lz4.decodeNativeConcatenatedFrameAppendLimitedWithDictionary;
 pub const lz4DecodeNativeConcatenatedFrameAllocLimitedWithDictionary = lz4.decodeNativeConcatenatedFrameAllocLimitedWithDictionary;
 pub const lz4DecodeNativeConcatenatedFrameAllocWithDictionaryExactSize = lz4.decodeNativeConcatenatedFrameAllocWithDictionaryExactSize;
@@ -193,6 +201,7 @@ pub const lz4DecodedNativeConcatenatedFrameSizeWithDictionary = lz4.decodedNativ
 pub const lz4DecodedNativeConcatenatedFrameSizeLimitedWithDictionary = lz4.decodedNativeConcatenatedFrameSizeLimitedWithDictionary;
 pub const lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet = lz4.decodeNativeConcatenatedFrameAllocWithDictionarySet;
 pub const lz4DecodeNativeConcatenatedFrameAppendWithDictionarySet = lz4.decodeNativeConcatenatedFrameAppendWithDictionarySet;
+pub const lz4DecodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet = lz4.decodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet;
 pub const lz4DecodeNativeConcatenatedFrameAppendLimitedWithDictionarySet = lz4.decodeNativeConcatenatedFrameAppendLimitedWithDictionarySet;
 pub const lz4DecodeNativeConcatenatedFrameAllocLimitedWithDictionarySet = lz4.decodeNativeConcatenatedFrameAllocLimitedWithDictionarySet;
 pub const lz4DecodeNativeConcatenatedFrameAllocWithDictionarySetExactSize = lz4.decodeNativeConcatenatedFrameAllocWithDictionarySetExactSize;
@@ -203,6 +212,7 @@ pub const lz4DecodeNativeConcatenatedFrameChunksAlloc = lz4.decodeNativeConcaten
 pub const lz4DecodeNativeConcatenatedFrameChunksAllocExactSize = lz4.decodeNativeConcatenatedFrameChunksAllocExactSize;
 pub const lz4DecodeNativeConcatenatedFrameChunksAllocLimited = lz4.decodeNativeConcatenatedFrameChunksAllocLimited;
 pub const lz4DecodeNativeConcatenatedFrameChunksAppend = lz4.decodeNativeConcatenatedFrameChunksAppend;
+pub const lz4DecodeNativeConcatenatedFrameChunksAppendExactSize = lz4.decodeNativeConcatenatedFrameChunksAppendExactSize;
 pub const lz4DecodeNativeConcatenatedFrameChunksAppendLimited = lz4.decodeNativeConcatenatedFrameChunksAppendLimited;
 pub const lz4DecodeNativeConcatenatedFrameChunksInto = lz4.decodeNativeConcatenatedFrameChunksInto;
 pub const lz4DecodedNativeConcatenatedFrameChunksSize = lz4.decodedNativeConcatenatedFrameChunksSize;
@@ -211,6 +221,7 @@ pub const lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionary = lz4.decode
 pub const lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionaryExactSize = lz4.decodeNativeConcatenatedFrameChunksAllocWithDictionaryExactSize;
 pub const lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionaryLimited = lz4.decodeNativeConcatenatedFrameChunksAllocWithDictionaryLimited;
 pub const lz4DecodeNativeConcatenatedFrameChunksAppendWithDictionary = lz4.decodeNativeConcatenatedFrameChunksAppendWithDictionary;
+pub const lz4DecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionary = lz4.decodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionary;
 pub const lz4DecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionary = lz4.decodeNativeConcatenatedFrameChunksAppendLimitedWithDictionary;
 pub const lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionary = lz4.decodeNativeConcatenatedFrameChunksIntoWithDictionary;
 pub const lz4DecodedNativeConcatenatedFrameChunksSizeWithDictionary = lz4.decodedNativeConcatenatedFrameChunksSizeWithDictionary;
@@ -219,6 +230,7 @@ pub const lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySet = lz4.dec
 pub const lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySetExactSize = lz4.decodeNativeConcatenatedFrameChunksAllocWithDictionarySetExactSize;
 pub const lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySetLimited = lz4.decodeNativeConcatenatedFrameChunksAllocWithDictionarySetLimited;
 pub const lz4DecodeNativeConcatenatedFrameChunksAppendWithDictionarySet = lz4.decodeNativeConcatenatedFrameChunksAppendWithDictionarySet;
+pub const lz4DecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet = lz4.decodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet;
 pub const lz4DecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet = lz4.decodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet;
 pub const lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet = lz4.decodeNativeConcatenatedFrameChunksIntoWithDictionarySet;
 pub const lz4DecodedNativeConcatenatedFrameChunksSizeWithDictionarySet = lz4.decodedNativeConcatenatedFrameChunksSizeWithDictionarySet;
@@ -325,6 +337,7 @@ pub const zstdEncodeNativeFrameIntoSliceWithDictionary = zstd.encodeNativeFrameI
 pub const zstdEncodeNativeFrameIntoSliceWithDictionarySet = zstd.encodeNativeFrameIntoSliceWithDictionarySet;
 pub const zstdDecodeRawOrRleFrameAlloc = zstd.decodeRawOrRleFrameAlloc;
 pub const zstdDecodeRawOrRleFrameAppend = zstd.decodeRawOrRleFrameAppend;
+pub const zstdDecodeRawOrRleFrameAppendExactSize = zstd.decodeRawOrRleFrameAppendExactSize;
 pub const zstdDecodeRawOrRleFrameAppendLimited = zstd.decodeRawOrRleFrameAppendLimited;
 pub const zstdDecodeRawOrRleFrameAllocLimited = zstd.decodeRawOrRleFrameAllocLimited;
 pub const zstdDecodeRawOrRleFrameAllocExactSize = zstd.decodeRawOrRleFrameAllocExactSize;
@@ -333,6 +346,7 @@ pub const zstdDecodedRawOrRleFrameSizeLimited = zstd.decodedRawOrRleFrameSizeLim
 pub const zstdDecodeRawOrRleFrameInto = zstd.decodeRawOrRleFrameInto;
 pub const zstdDecodeRawOrRleFrameAllocWithDictionary = zstd.decodeRawOrRleFrameAllocWithDictionary;
 pub const zstdDecodeRawOrRleFrameAppendWithDictionary = zstd.decodeRawOrRleFrameAppendWithDictionary;
+pub const zstdDecodeRawOrRleFrameAppendExactSizeWithDictionary = zstd.decodeRawOrRleFrameAppendExactSizeWithDictionary;
 pub const zstdDecodeRawOrRleFrameAppendLimitedWithDictionary = zstd.decodeRawOrRleFrameAppendLimitedWithDictionary;
 pub const zstdDecodeRawOrRleFrameAllocLimitedWithDictionary = zstd.decodeRawOrRleFrameAllocLimitedWithDictionary;
 pub const zstdDecodeRawOrRleFrameAllocWithDictionaryExactSize = zstd.decodeRawOrRleFrameAllocWithDictionaryExactSize;
@@ -341,6 +355,7 @@ pub const zstdDecodedRawOrRleFrameSizeLimitedWithDictionary = zstd.decodedRawOrR
 pub const zstdDecodeRawOrRleFrameIntoWithDictionary = zstd.decodeRawOrRleFrameIntoWithDictionary;
 pub const zstdDecodeRawOrRleFrameAllocWithDictionarySet = zstd.decodeRawOrRleFrameAllocWithDictionarySet;
 pub const zstdDecodeRawOrRleFrameAppendWithDictionarySet = zstd.decodeRawOrRleFrameAppendWithDictionarySet;
+pub const zstdDecodeRawOrRleFrameAppendExactSizeWithDictionarySet = zstd.decodeRawOrRleFrameAppendExactSizeWithDictionarySet;
 pub const zstdDecodeRawOrRleFrameAppendLimitedWithDictionarySet = zstd.decodeRawOrRleFrameAppendLimitedWithDictionarySet;
 pub const zstdDecodeRawOrRleFrameAllocLimitedWithDictionarySet = zstd.decodeRawOrRleFrameAllocLimitedWithDictionarySet;
 pub const zstdDecodeRawOrRleFrameAllocWithDictionarySetExactSize = zstd.decodeRawOrRleFrameAllocWithDictionarySetExactSize;
@@ -351,6 +366,7 @@ pub const zstdDecodeRawOrRleFrameChunksAlloc = zstd.decodeRawOrRleFrameChunksAll
 pub const zstdDecodeRawOrRleFrameChunksAllocExactSize = zstd.decodeRawOrRleFrameChunksAllocExactSize;
 pub const zstdDecodeRawOrRleFrameChunksAllocLimited = zstd.decodeRawOrRleFrameChunksAllocLimited;
 pub const zstdDecodeRawOrRleFrameChunksAppend = zstd.decodeRawOrRleFrameChunksAppend;
+pub const zstdDecodeRawOrRleFrameChunksAppendExactSize = zstd.decodeRawOrRleFrameChunksAppendExactSize;
 pub const zstdDecodeRawOrRleFrameChunksAppendLimited = zstd.decodeRawOrRleFrameChunksAppendLimited;
 pub const zstdDecodeRawOrRleFrameChunksInto = zstd.decodeRawOrRleFrameChunksInto;
 pub const zstdDecodedRawOrRleFrameChunksSize = zstd.decodedRawOrRleFrameChunksSize;
@@ -359,6 +375,7 @@ pub const zstdDecodeRawOrRleFrameChunksAllocWithDictionary = zstd.decodeRawOrRle
 pub const zstdDecodeRawOrRleFrameChunksAllocWithDictionaryExactSize = zstd.decodeRawOrRleFrameChunksAllocWithDictionaryExactSize;
 pub const zstdDecodeRawOrRleFrameChunksAllocWithDictionaryLimited = zstd.decodeRawOrRleFrameChunksAllocWithDictionaryLimited;
 pub const zstdDecodeRawOrRleFrameChunksAppendWithDictionary = zstd.decodeRawOrRleFrameChunksAppendWithDictionary;
+pub const zstdDecodeRawOrRleFrameChunksAppendExactSizeWithDictionary = zstd.decodeRawOrRleFrameChunksAppendExactSizeWithDictionary;
 pub const zstdDecodeRawOrRleFrameChunksAppendLimitedWithDictionary = zstd.decodeRawOrRleFrameChunksAppendLimitedWithDictionary;
 pub const zstdDecodeRawOrRleFrameChunksIntoWithDictionary = zstd.decodeRawOrRleFrameChunksIntoWithDictionary;
 pub const zstdDecodedRawOrRleFrameChunksSizeWithDictionary = zstd.decodedRawOrRleFrameChunksSizeWithDictionary;
@@ -367,6 +384,7 @@ pub const zstdDecodeRawOrRleFrameChunksAllocWithDictionarySet = zstd.decodeRawOr
 pub const zstdDecodeRawOrRleFrameChunksAllocWithDictionarySetExactSize = zstd.decodeRawOrRleFrameChunksAllocWithDictionarySetExactSize;
 pub const zstdDecodeRawOrRleFrameChunksAllocWithDictionarySetLimited = zstd.decodeRawOrRleFrameChunksAllocWithDictionarySetLimited;
 pub const zstdDecodeRawOrRleFrameChunksAppendWithDictionarySet = zstd.decodeRawOrRleFrameChunksAppendWithDictionarySet;
+pub const zstdDecodeRawOrRleFrameChunksAppendExactSizeWithDictionarySet = zstd.decodeRawOrRleFrameChunksAppendExactSizeWithDictionarySet;
 pub const zstdDecodeRawOrRleFrameChunksAppendLimitedWithDictionarySet = zstd.decodeRawOrRleFrameChunksAppendLimitedWithDictionarySet;
 pub const zstdDecodeRawOrRleFrameChunksIntoWithDictionarySet = zstd.decodeRawOrRleFrameChunksIntoWithDictionarySet;
 pub const zstdDecodedRawOrRleFrameChunksSizeWithDictionarySet = zstd.decodedRawOrRleFrameChunksSizeWithDictionarySet;
@@ -378,32 +396,38 @@ pub const zstdDecodeNativeFrameAppendLimited = zstd.decodeNativeFrameAppendLimit
 pub const zstdDecodeNativeFrameAllocLimited = zstd.decodeNativeFrameAllocLimited;
 pub const zstdDecodeNativeFrameAllocExactSize = zstd.decodeNativeFrameAllocExactSize;
 pub const zstdDecodeNativeFrameInto = zstd.decodeNativeFrameInto;
+pub const zstdDecodeNativeFrameAppendExactSize = zstd.decodeNativeFrameAppendExactSize;
 pub const zstdDecodeNativeFrameAllocWithDictionary = zstd.decodeNativeFrameAllocWithDictionary;
 pub const zstdDecodeNativeFrameAppendWithDictionary = zstd.decodeNativeFrameAppendWithDictionary;
+pub const zstdDecodeNativeFrameAppendExactSizeWithDictionary = zstd.decodeNativeFrameAppendExactSizeWithDictionary;
 pub const zstdDecodeNativeFrameAppendLimitedWithDictionary = zstd.decodeNativeFrameAppendLimitedWithDictionary;
 pub const zstdDecodeNativeFrameAllocLimitedWithDictionary = zstd.decodeNativeFrameAllocLimitedWithDictionary;
 pub const zstdDecodeNativeFrameAllocWithDictionaryExactSize = zstd.decodeNativeFrameAllocWithDictionaryExactSize;
 pub const zstdDecodeNativeFrameIntoWithDictionary = zstd.decodeNativeFrameIntoWithDictionary;
 pub const zstdDecodeNativeFrameAllocWithDictionarySet = zstd.decodeNativeFrameAllocWithDictionarySet;
 pub const zstdDecodeNativeFrameAppendWithDictionarySet = zstd.decodeNativeFrameAppendWithDictionarySet;
+pub const zstdDecodeNativeFrameAppendExactSizeWithDictionarySet = zstd.decodeNativeFrameAppendExactSizeWithDictionarySet;
 pub const zstdDecodeNativeFrameAppendLimitedWithDictionarySet = zstd.decodeNativeFrameAppendLimitedWithDictionarySet;
 pub const zstdDecodeNativeFrameAllocLimitedWithDictionarySet = zstd.decodeNativeFrameAllocLimitedWithDictionarySet;
 pub const zstdDecodeNativeFrameAllocWithDictionarySetExactSize = zstd.decodeNativeFrameAllocWithDictionarySetExactSize;
 pub const zstdDecodeNativeFrameIntoWithDictionarySet = zstd.decodeNativeFrameIntoWithDictionarySet;
 pub const zstdDecodeNativeConcatenatedFrameAlloc = zstd.decodeNativeConcatenatedFrameAlloc;
 pub const zstdDecodeNativeConcatenatedFrameAppend = zstd.decodeNativeConcatenatedFrameAppend;
+pub const zstdDecodeNativeConcatenatedFrameAppendExactSize = zstd.decodeNativeConcatenatedFrameAppendExactSize;
 pub const zstdDecodeNativeConcatenatedFrameAppendLimited = zstd.decodeNativeConcatenatedFrameAppendLimited;
 pub const zstdDecodeNativeConcatenatedFrameAllocLimited = zstd.decodeNativeConcatenatedFrameAllocLimited;
 pub const zstdDecodeNativeConcatenatedFrameAllocExactSize = zstd.decodeNativeConcatenatedFrameAllocExactSize;
 pub const zstdDecodeNativeConcatenatedFrameInto = zstd.decodeNativeConcatenatedFrameInto;
 pub const zstdDecodeNativeConcatenatedFrameAllocWithDictionary = zstd.decodeNativeConcatenatedFrameAllocWithDictionary;
 pub const zstdDecodeNativeConcatenatedFrameAppendWithDictionary = zstd.decodeNativeConcatenatedFrameAppendWithDictionary;
+pub const zstdDecodeNativeConcatenatedFrameAppendExactSizeWithDictionary = zstd.decodeNativeConcatenatedFrameAppendExactSizeWithDictionary;
 pub const zstdDecodeNativeConcatenatedFrameAppendLimitedWithDictionary = zstd.decodeNativeConcatenatedFrameAppendLimitedWithDictionary;
 pub const zstdDecodeNativeConcatenatedFrameAllocLimitedWithDictionary = zstd.decodeNativeConcatenatedFrameAllocLimitedWithDictionary;
 pub const zstdDecodeNativeConcatenatedFrameAllocWithDictionaryExactSize = zstd.decodeNativeConcatenatedFrameAllocWithDictionaryExactSize;
 pub const zstdDecodeNativeConcatenatedFrameIntoWithDictionary = zstd.decodeNativeConcatenatedFrameIntoWithDictionary;
 pub const zstdDecodeNativeConcatenatedFrameAllocWithDictionarySet = zstd.decodeNativeConcatenatedFrameAllocWithDictionarySet;
 pub const zstdDecodeNativeConcatenatedFrameAppendWithDictionarySet = zstd.decodeNativeConcatenatedFrameAppendWithDictionarySet;
+pub const zstdDecodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet = zstd.decodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet;
 pub const zstdDecodeNativeConcatenatedFrameAppendLimitedWithDictionarySet = zstd.decodeNativeConcatenatedFrameAppendLimitedWithDictionarySet;
 pub const zstdDecodeNativeConcatenatedFrameAllocLimitedWithDictionarySet = zstd.decodeNativeConcatenatedFrameAllocLimitedWithDictionarySet;
 pub const zstdDecodeNativeConcatenatedFrameAllocWithDictionarySetExactSize = zstd.decodeNativeConcatenatedFrameAllocWithDictionarySetExactSize;
@@ -424,6 +448,7 @@ pub const zstdDecodeNativeConcatenatedFrameChunksAlloc = zstd.decodeNativeConcat
 pub const zstdDecodeNativeConcatenatedFrameChunksAllocExactSize = zstd.decodeNativeConcatenatedFrameChunksAllocExactSize;
 pub const zstdDecodeNativeConcatenatedFrameChunksAllocLimited = zstd.decodeNativeConcatenatedFrameChunksAllocLimited;
 pub const zstdDecodeNativeConcatenatedFrameChunksAppend = zstd.decodeNativeConcatenatedFrameChunksAppend;
+pub const zstdDecodeNativeConcatenatedFrameChunksAppendExactSize = zstd.decodeNativeConcatenatedFrameChunksAppendExactSize;
 pub const zstdDecodeNativeConcatenatedFrameChunksAppendLimited = zstd.decodeNativeConcatenatedFrameChunksAppendLimited;
 pub const zstdDecodeNativeConcatenatedFrameChunksInto = zstd.decodeNativeConcatenatedFrameChunksInto;
 pub const zstdDecodedNativeConcatenatedFrameChunksSize = zstd.decodedNativeConcatenatedFrameChunksSize;
@@ -432,6 +457,7 @@ pub const zstdDecodeNativeConcatenatedFrameChunksAllocWithDictionary = zstd.deco
 pub const zstdDecodeNativeConcatenatedFrameChunksAllocWithDictionaryExactSize = zstd.decodeNativeConcatenatedFrameChunksAllocWithDictionaryExactSize;
 pub const zstdDecodeNativeConcatenatedFrameChunksAllocWithDictionaryLimited = zstd.decodeNativeConcatenatedFrameChunksAllocWithDictionaryLimited;
 pub const zstdDecodeNativeConcatenatedFrameChunksAppendWithDictionary = zstd.decodeNativeConcatenatedFrameChunksAppendWithDictionary;
+pub const zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionary = zstd.decodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionary;
 pub const zstdDecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionary = zstd.decodeNativeConcatenatedFrameChunksAppendLimitedWithDictionary;
 pub const zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionary = zstd.decodeNativeConcatenatedFrameChunksIntoWithDictionary;
 pub const zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionary = zstd.decodedNativeConcatenatedFrameChunksSizeWithDictionary;
@@ -440,6 +466,7 @@ pub const zstdDecodeNativeConcatenatedFrameChunksAllocWithDictionarySet = zstd.d
 pub const zstdDecodeNativeConcatenatedFrameChunksAllocWithDictionarySetExactSize = zstd.decodeNativeConcatenatedFrameChunksAllocWithDictionarySetExactSize;
 pub const zstdDecodeNativeConcatenatedFrameChunksAllocWithDictionarySetLimited = zstd.decodeNativeConcatenatedFrameChunksAllocWithDictionarySetLimited;
 pub const zstdDecodeNativeConcatenatedFrameChunksAppendWithDictionarySet = zstd.decodeNativeConcatenatedFrameChunksAppendWithDictionarySet;
+pub const zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet = zstd.decodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet;
 pub const zstdDecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet = zstd.decodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet;
 pub const zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet = zstd.decodeNativeConcatenatedFrameChunksIntoWithDictionarySet;
 pub const zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet = zstd.decodedNativeConcatenatedFrameChunksSizeWithDictionarySet;
@@ -1068,11 +1095,13 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodedNativeFrameSizeLimitedWithDictionarySet;
     _ = lz4DecodeConcatenatedFrameAlloc;
     _ = lz4DecodeConcatenatedFrameAppend;
+    _ = lz4DecodeConcatenatedFrameAppendExactSize;
     _ = lz4DecodeConcatenatedFrameAppendLimited;
     _ = lz4DecodeConcatenatedFrameAllocLimited;
     _ = lz4DecodeConcatenatedFrameAllocExactSize;
     _ = lz4DecodeConcatenatedFrameAllocWithDictionary;
     _ = lz4DecodeConcatenatedFrameAppendWithDictionary;
+    _ = lz4DecodeConcatenatedFrameAppendExactSizeWithDictionary;
     _ = lz4DecodeConcatenatedFrameAppendLimitedWithDictionary;
     _ = lz4DecodeConcatenatedFrameAllocLimitedWithDictionary;
     _ = lz4DecodeConcatenatedFrameAllocWithDictionaryExactSize;
@@ -1085,6 +1114,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeConcatenatedFrameInto;
     _ = lz4DecodeConcatenatedFrameAllocWithDictionarySet;
     _ = lz4DecodeConcatenatedFrameAppendWithDictionarySet;
+    _ = lz4DecodeConcatenatedFrameAppendExactSizeWithDictionarySet;
     _ = lz4DecodeConcatenatedFrameAppendLimitedWithDictionarySet;
     _ = lz4DecodeConcatenatedFrameAllocLimitedWithDictionarySet;
     _ = lz4DecodeConcatenatedFrameIntoWithDictionarySet;
@@ -1094,6 +1124,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeConcatenatedFrameChunksAllocExactSize;
     _ = lz4DecodeConcatenatedFrameChunksAllocLimited;
     _ = lz4DecodeConcatenatedFrameChunksAppend;
+    _ = lz4DecodeConcatenatedFrameChunksAppendExactSize;
     _ = lz4DecodeConcatenatedFrameChunksAppendLimited;
     _ = lz4DecodeConcatenatedFrameChunksInto;
     _ = lz4DecodedConcatenatedFrameChunksSize;
@@ -1102,6 +1133,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeConcatenatedFrameChunksAllocWithDictionaryExactSize;
     _ = lz4DecodeConcatenatedFrameChunksAllocWithDictionaryLimited;
     _ = lz4DecodeConcatenatedFrameChunksAppendWithDictionary;
+    _ = lz4DecodeConcatenatedFrameChunksAppendExactSizeWithDictionary;
     _ = lz4DecodeConcatenatedFrameChunksAppendLimitedWithDictionary;
     _ = lz4DecodeConcatenatedFrameChunksIntoWithDictionary;
     _ = lz4DecodedConcatenatedFrameChunksSizeWithDictionary;
@@ -1110,12 +1142,14 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeConcatenatedFrameChunksAllocWithDictionarySetExactSize;
     _ = lz4DecodeConcatenatedFrameChunksAllocWithDictionarySetLimited;
     _ = lz4DecodeConcatenatedFrameChunksAppendWithDictionarySet;
+    _ = lz4DecodeConcatenatedFrameChunksAppendExactSizeWithDictionarySet;
     _ = lz4DecodeConcatenatedFrameChunksAppendLimitedWithDictionarySet;
     _ = lz4DecodeConcatenatedFrameChunksIntoWithDictionarySet;
     _ = lz4DecodedConcatenatedFrameChunksSizeWithDictionarySet;
     _ = lz4DecodedConcatenatedFrameChunksSizeLimitedWithDictionarySet;
     _ = lz4DecodeNativeConcatenatedFrameAlloc;
     _ = lz4DecodeNativeConcatenatedFrameAppend;
+    _ = lz4DecodeNativeConcatenatedFrameAppendExactSize;
     _ = lz4DecodeNativeConcatenatedFrameAppendLimited;
     _ = lz4DecodeNativeConcatenatedFrameAllocLimited;
     _ = lz4DecodeNativeConcatenatedFrameAllocExactSize;
@@ -1123,6 +1157,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodedNativeConcatenatedFrameSizeLimited;
     _ = lz4DecodeNativeConcatenatedFrameAllocWithDictionary;
     _ = lz4DecodeNativeConcatenatedFrameAppendWithDictionary;
+    _ = lz4DecodeNativeConcatenatedFrameAppendExactSizeWithDictionary;
     _ = lz4DecodeNativeConcatenatedFrameAppendLimitedWithDictionary;
     _ = lz4DecodeNativeConcatenatedFrameAllocLimitedWithDictionary;
     _ = lz4DecodeNativeConcatenatedFrameAllocWithDictionaryExactSize;
@@ -1132,6 +1167,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeNativeConcatenatedFrameInto;
     _ = lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet;
     _ = lz4DecodeNativeConcatenatedFrameAppendWithDictionarySet;
+    _ = lz4DecodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet;
     _ = lz4DecodeNativeConcatenatedFrameAppendLimitedWithDictionarySet;
     _ = lz4DecodeNativeConcatenatedFrameAllocLimitedWithDictionarySet;
     _ = lz4DecodeNativeConcatenatedFrameAllocWithDictionarySetExactSize;
@@ -1140,10 +1176,13 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodedNativeConcatenatedFrameSizeLimitedWithDictionarySet;
     _ = lz4DecodeNativeConcatenatedFrameChunksAlloc;
     _ = lz4DecodeNativeConcatenatedFrameChunksAppend;
+    _ = lz4DecodeNativeConcatenatedFrameChunksAppendExactSize;
     _ = lz4DecodeNativeConcatenatedFrameChunksAppendLimited;
     _ = lz4DecodeNativeConcatenatedFrameChunksAppendWithDictionary;
+    _ = lz4DecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionary;
     _ = lz4DecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionary;
     _ = lz4DecodeNativeConcatenatedFrameChunksAppendWithDictionarySet;
+    _ = lz4DecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet;
     _ = lz4DecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet;
     _ = lz4DecodeNativeConcatenatedFrameChunksAllocExactSize;
     _ = lz4DecodeNativeConcatenatedFrameChunksAllocLimited;
@@ -1257,6 +1296,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodeNativeFrameIntoSliceWithDictionarySet;
     _ = zstdDecodeRawOrRleFrameAlloc;
     _ = zstdDecodeRawOrRleFrameAppend;
+    _ = zstdDecodeRawOrRleFrameAppendExactSize;
     _ = zstdDecodeRawOrRleFrameAppendLimited;
     _ = zstdDecodeRawOrRleFrameAllocLimited;
     _ = zstdDecodeRawOrRleFrameAllocExactSize;
@@ -1267,6 +1307,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeRawOrRleFrameInto;
     _ = zstdDecodeRawOrRleFrameAllocWithDictionarySet;
     _ = zstdDecodeRawOrRleFrameAppendWithDictionarySet;
+    _ = zstdDecodeRawOrRleFrameAppendExactSizeWithDictionarySet;
     _ = zstdDecodeRawOrRleFrameAppendLimitedWithDictionarySet;
     _ = zstdDecodeRawOrRleFrameAllocLimitedWithDictionarySet;
     _ = zstdDecodedRawOrRleFrameSizeWithDictionarySet;
@@ -1276,6 +1317,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeRawOrRleFrameChunksAllocExactSize;
     _ = zstdDecodeRawOrRleFrameChunksAllocLimited;
     _ = zstdDecodeRawOrRleFrameChunksAppend;
+    _ = zstdDecodeRawOrRleFrameChunksAppendExactSize;
     _ = zstdDecodeRawOrRleFrameChunksAppendLimited;
     _ = zstdDecodeRawOrRleFrameChunksInto;
     _ = zstdDecodedRawOrRleFrameChunksSize;
@@ -1284,6 +1326,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeRawOrRleFrameChunksAllocWithDictionaryExactSize;
     _ = zstdDecodeRawOrRleFrameChunksAllocWithDictionaryLimited;
     _ = zstdDecodeRawOrRleFrameChunksAppendWithDictionary;
+    _ = zstdDecodeRawOrRleFrameChunksAppendExactSizeWithDictionary;
     _ = zstdDecodeRawOrRleFrameChunksAppendLimitedWithDictionary;
     _ = zstdDecodeRawOrRleFrameChunksIntoWithDictionary;
     _ = zstdDecodedRawOrRleFrameChunksSizeWithDictionary;
@@ -1292,6 +1335,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeRawOrRleFrameChunksAllocWithDictionarySetExactSize;
     _ = zstdDecodeRawOrRleFrameChunksAllocWithDictionarySetLimited;
     _ = zstdDecodeRawOrRleFrameChunksAppendWithDictionarySet;
+    _ = zstdDecodeRawOrRleFrameChunksAppendExactSizeWithDictionarySet;
     _ = zstdDecodeRawOrRleFrameChunksAppendLimitedWithDictionarySet;
     _ = zstdDecodeRawOrRleFrameChunksIntoWithDictionarySet;
     _ = zstdDecodedRawOrRleFrameChunksSizeWithDictionarySet;
@@ -1299,6 +1343,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodeNativeFrameAlloc;
     _ = zstdDecodeNativeFrameAlloc;
     _ = zstdDecodeNativeFrameAppend;
+    _ = zstdDecodeNativeFrameAppendExactSize;
     _ = zstdDecodeNativeFrameAppendLimited;
     _ = zstdDecodeNativeFrameAllocLimited;
     _ = zstdDecodeNativeFrameAllocExactSize;
@@ -1313,6 +1358,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeNativeFrameInto;
     _ = zstdDecodeNativeFrameAllocWithDictionarySet;
     _ = zstdDecodeNativeFrameAppendWithDictionarySet;
+    _ = zstdDecodeNativeFrameAppendExactSizeWithDictionarySet;
     _ = zstdDecodeNativeFrameAppendLimitedWithDictionarySet;
     _ = zstdDecodeNativeFrameAllocLimitedWithDictionarySet;
     _ = zstdDecodeNativeFrameAllocWithDictionarySetExactSize;
@@ -1321,6 +1367,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodedNativeFrameSizeLimitedWithDictionarySet;
     _ = zstdDecodeNativeConcatenatedFrameAlloc;
     _ = zstdDecodeNativeConcatenatedFrameAppend;
+    _ = zstdDecodeNativeConcatenatedFrameAppendExactSize;
     _ = zstdDecodeNativeConcatenatedFrameAppendLimited;
     _ = zstdDecodeNativeConcatenatedFrameAllocLimited;
     _ = zstdDecodeNativeConcatenatedFrameAllocExactSize;
@@ -1335,6 +1382,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeNativeConcatenatedFrameInto;
     _ = zstdDecodeNativeConcatenatedFrameAllocWithDictionarySet;
     _ = zstdDecodeNativeConcatenatedFrameAppendWithDictionarySet;
+    _ = zstdDecodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet;
     _ = zstdDecodeNativeConcatenatedFrameAppendLimitedWithDictionarySet;
     _ = zstdDecodeNativeConcatenatedFrameAllocLimitedWithDictionarySet;
     _ = zstdDecodeNativeConcatenatedFrameAllocWithDictionarySetExactSize;
@@ -1345,10 +1393,13 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodedNativeConcatenatedFrameSizeLimited;
     _ = zstdDecodedNativeConcatenatedFrameSizeWithDictionarySet;
     _ = zstdDecodeNativeConcatenatedFrameChunksAppend;
+    _ = zstdDecodeNativeConcatenatedFrameChunksAppendExactSize;
     _ = zstdDecodeNativeConcatenatedFrameChunksAppendLimited;
     _ = zstdDecodeNativeConcatenatedFrameChunksAppendWithDictionary;
+    _ = zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionary;
     _ = zstdDecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionary;
     _ = zstdDecodeNativeConcatenatedFrameChunksAppendWithDictionarySet;
+    _ = zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet;
     _ = zstdDecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet;
     _ = zstdDecodedNativeConcatenatedFrameSizeLimitedWithDictionarySet;
     _ = zstdDecodeNativeConcatenatedFrameChunksAlloc;
@@ -2285,6 +2336,12 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     try std.testing.expectEqualSlices(u8, "prefix:" ++ lz4_expected, lz4_chunked_appended.items);
     lz4_chunked_appended.clearRetainingCapacity();
     try lz4_chunked_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(lz4_expected.len, try lz4DecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(std.testing.allocator, &lz4_chunked_appended, &lz4_chunks, lz4_join, lz4_dictionary_set, lz4_expected.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ lz4_expected, lz4_chunked_appended.items);
+    lz4_chunked_appended.clearRetainingCapacity();
+    try std.testing.expectError(error.SizeMismatch, lz4DecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(std.testing.allocator, &lz4_chunked_appended, &lz4_chunks, lz4_join, lz4_dictionary_set, lz4_expected.len - 1));
+    lz4_chunked_appended.clearRetainingCapacity();
+    try lz4_chunked_appended.appendSlice(std.testing.allocator, "prefix:");
     try std.testing.expectEqual(lz4_expected.len, try lz4DecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet(std.testing.allocator, &lz4_chunked_appended, &lz4_chunks, lz4_join, lz4_expected.len, lz4_dictionary_set));
     try std.testing.expectEqualSlices(u8, "prefix:" ++ lz4_expected, lz4_chunked_appended.items);
     lz4_chunked_appended.clearRetainingCapacity();
@@ -2431,6 +2488,12 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     try zstd_chunked_appended.appendSlice(std.testing.allocator, "prefix:");
     try std.testing.expectEqual(zstd_expected.len, try zstdDecodeNativeConcatenatedFrameChunksAppendWithDictionarySet(std.testing.allocator, &zstd_chunked_appended, &zstd_chunks, zstd_join, zstd_dictionary_set));
     try std.testing.expectEqualSlices(u8, "prefix:" ++ zstd_expected, zstd_chunked_appended.items);
+    zstd_chunked_appended.clearRetainingCapacity();
+    try zstd_chunked_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(zstd_expected.len, try zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(std.testing.allocator, &zstd_chunked_appended, &zstd_chunks, zstd_join, zstd_dictionary_set, zstd_expected.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ zstd_expected, zstd_chunked_appended.items);
+    zstd_chunked_appended.clearRetainingCapacity();
+    try std.testing.expectError(error.SizeMismatch, zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(std.testing.allocator, &zstd_chunked_appended, &zstd_chunks, zstd_join, zstd_dictionary_set, zstd_expected.len - 1));
     zstd_chunked_appended.clearRetainingCapacity();
     try zstd_chunked_appended.appendSlice(std.testing.allocator, "prefix:");
     try std.testing.expectEqual(zstd_expected.len, try zstdDecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet(std.testing.allocator, &zstd_chunked_appended, &zstd_chunks, zstd_join, zstd_expected.len, zstd_dictionary_set));

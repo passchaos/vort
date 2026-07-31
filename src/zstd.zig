@@ -479,6 +479,29 @@ pub fn decodeRawOrRleFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayLi
     return try decodeRawOrRleFrameAppendWithDictionaryInternal(allocator, out, frame, null);
 }
 
+pub fn decodeRawOrRleFrameAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, expected_output_len: usize) Error!usize {
+    const decoded_len = try decodedRawOrRleFrameSize(frame);
+    if (decoded_len != expected_output_len) return error.SizeMismatch;
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, expected_output_len);
+    const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
+    const written = decodeRawOrRleFrameInto(frame, slot) catch |err| switch (err) {
+        error.OutputTooSmall => {
+            out.items.len = start;
+            return error.SizeMismatch;
+        },
+        else => {
+            out.items.len = start;
+            return err;
+        },
+    };
+    if (written != expected_output_len) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
 pub fn decodeRawOrRleFrameAppendWithDictionary(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -486,6 +509,29 @@ pub fn decodeRawOrRleFrameAppendWithDictionary(
     dictionary: NativeDictionary,
 ) Error!usize {
     return try decodeRawOrRleFrameAppendWithDictionaryInternal(allocator, out, frame, dictionary);
+}
+
+pub fn decodeRawOrRleFrameAppendExactSizeWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+    const decoded_len = try decodedRawOrRleFrameSizeWithDictionary(frame, dictionary);
+    if (decoded_len != expected_output_len) return error.SizeMismatch;
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, expected_output_len);
+    const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
+    const written = decodeRawOrRleFrameIntoWithDictionary(frame, slot, dictionary) catch |err| switch (err) {
+        error.OutputTooSmall => {
+            out.items.len = start;
+            return error.SizeMismatch;
+        },
+        else => {
+            out.items.len = start;
+            return err;
+        },
+    };
+    if (written != expected_output_len) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
 }
 
 pub fn decodeRawOrRleFrameAppendWithDictionarySet(
@@ -503,6 +549,29 @@ pub fn decodeRawOrRleFrameAppendWithDictionarySet(
         return err;
     };
     if (written != decoded_len) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn decodeRawOrRleFrameAppendExactSizeWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+    const decoded_len = try decodedRawOrRleFrameSizeWithDictionarySet(frame, dictionary_set);
+    if (decoded_len != expected_output_len) return error.SizeMismatch;
+    try out.ensureUnusedCapacity(allocator, expected_output_len);
+    const start = out.items.len;
+    const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
+    const written = decodeRawOrRleFrameIntoWithDictionarySet(frame, slot, dictionary_set) catch |err| switch (err) {
+        error.OutputTooSmall => {
+            out.items.len = start;
+            return error.SizeMismatch;
+        },
+        else => {
+            out.items.len = start;
+            return err;
+        },
+    };
+    if (written != expected_output_len) {
         out.items.len = start;
         return error.SizeMismatch;
     }
@@ -780,6 +849,11 @@ pub fn decodeRawOrRleFrameChunksAppend(allocator: std.mem.Allocator, out: *std.A
     return try decodeRawOrRleFrameAppend(allocator, out, joined);
 }
 
+pub fn decodeRawOrRleFrameChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeRawOrRleFrameAppendExactSize(allocator, out, joined, expected_output_len);
+}
+
 pub fn decodeRawOrRleFrameChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodeRawOrRleFrameAppendLimited(allocator, out, joined, max_output_len);
@@ -820,6 +894,11 @@ pub fn decodeRawOrRleFrameChunksAppendWithDictionary(allocator: std.mem.Allocato
     return try decodeRawOrRleFrameAppendWithDictionary(allocator, out, joined, dictionary);
 }
 
+pub fn decodeRawOrRleFrameChunksAppendExactSizeWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeRawOrRleFrameAppendExactSizeWithDictionary(allocator, out, joined, dictionary, expected_output_len);
+}
+
 pub fn decodeRawOrRleFrameChunksAppendLimitedWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, dictionary: NativeDictionary) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodeRawOrRleFrameAppendLimitedWithDictionary(allocator, out, joined, max_output_len, dictionary);
@@ -858,6 +937,11 @@ pub fn decodeRawOrRleFrameChunksAllocWithDictionarySetLimited(allocator: std.mem
 pub fn decodeRawOrRleFrameChunksAppendWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodeRawOrRleFrameAppendWithDictionarySet(allocator, out, joined, dictionary_set);
+}
+
+pub fn decodeRawOrRleFrameChunksAppendExactSizeWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeRawOrRleFrameAppendExactSizeWithDictionarySet(allocator, out, joined, dictionary_set, expected_output_len);
 }
 
 pub fn decodeRawOrRleFrameChunksAppendLimitedWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, dictionary_set: NativeDictionarySet) Error!usize {
@@ -921,36 +1005,42 @@ fn decodeRawOrRleFrameIntoWithDictionaryInternal(
 pub const decodeNativeFrameAlloc = decodeRawOrRleFrameAlloc;
 pub const decodeNativeFrameAllocExactSize = decodeRawOrRleFrameAllocExactSize;
 pub const decodeNativeFrameAppend = decodeRawOrRleFrameAppend;
+pub const decodeNativeFrameAppendExactSize = decodeRawOrRleFrameAppendExactSize;
 pub const decodeNativeFrameAppendLimited = decodeRawOrRleFrameAppendLimited;
 pub const decodeNativeFrameAllocLimited = decodeRawOrRleFrameAllocLimited;
 pub const decodeNativeFrameInto = decodeRawOrRleFrameInto;
 pub const decodeNativeFrameAllocWithDictionary = decodeRawOrRleFrameAllocWithDictionary;
 pub const decodeNativeFrameAllocWithDictionaryExactSize = decodeRawOrRleFrameAllocWithDictionaryExactSize;
 pub const decodeNativeFrameAppendWithDictionary = decodeRawOrRleFrameAppendWithDictionary;
+pub const decodeNativeFrameAppendExactSizeWithDictionary = decodeRawOrRleFrameAppendExactSizeWithDictionary;
 pub const decodeNativeFrameAppendLimitedWithDictionary = decodeRawOrRleFrameAppendLimitedWithDictionary;
 pub const decodeNativeFrameAllocLimitedWithDictionary = decodeRawOrRleFrameAllocLimitedWithDictionary;
 pub const decodeNativeFrameIntoWithDictionary = decodeRawOrRleFrameIntoWithDictionary;
 pub const decodeNativeFrameAllocWithDictionarySet = decodeRawOrRleFrameAllocWithDictionarySet;
 pub const decodeNativeFrameAllocWithDictionarySetExactSize = decodeRawOrRleFrameAllocWithDictionarySetExactSize;
 pub const decodeNativeFrameAppendWithDictionarySet = decodeRawOrRleFrameAppendWithDictionarySet;
+pub const decodeNativeFrameAppendExactSizeWithDictionarySet = decodeRawOrRleFrameAppendExactSizeWithDictionarySet;
 pub const decodeNativeFrameAppendLimitedWithDictionarySet = decodeRawOrRleFrameAppendLimitedWithDictionarySet;
 pub const decodeNativeFrameAllocLimitedWithDictionarySet = decodeRawOrRleFrameAllocLimitedWithDictionarySet;
 pub const decodeNativeFrameIntoWithDictionarySet = decodeRawOrRleFrameIntoWithDictionarySet;
 pub const decodeNativeConcatenatedFrameAlloc = decodeRawOrRleFrameAlloc;
 pub const decodeNativeConcatenatedFrameAllocExactSize = decodeRawOrRleFrameAllocExactSize;
 pub const decodeNativeConcatenatedFrameAppend = decodeRawOrRleFrameAppend;
+pub const decodeNativeConcatenatedFrameAppendExactSize = decodeRawOrRleFrameAppendExactSize;
 pub const decodeNativeConcatenatedFrameAppendLimited = decodeRawOrRleFrameAppendLimited;
 pub const decodeNativeConcatenatedFrameAllocLimited = decodeRawOrRleFrameAllocLimited;
 pub const decodeNativeConcatenatedFrameInto = decodeRawOrRleFrameInto;
 pub const decodeNativeConcatenatedFrameAllocWithDictionary = decodeRawOrRleFrameAllocWithDictionary;
 pub const decodeNativeConcatenatedFrameAllocWithDictionaryExactSize = decodeRawOrRleFrameAllocWithDictionaryExactSize;
 pub const decodeNativeConcatenatedFrameAppendWithDictionary = decodeRawOrRleFrameAppendWithDictionary;
+pub const decodeNativeConcatenatedFrameAppendExactSizeWithDictionary = decodeRawOrRleFrameAppendExactSizeWithDictionary;
 pub const decodeNativeConcatenatedFrameAppendLimitedWithDictionary = decodeRawOrRleFrameAppendLimitedWithDictionary;
 pub const decodeNativeConcatenatedFrameAllocLimitedWithDictionary = decodeRawOrRleFrameAllocLimitedWithDictionary;
 pub const decodeNativeConcatenatedFrameIntoWithDictionary = decodeRawOrRleFrameIntoWithDictionary;
 pub const decodeNativeConcatenatedFrameAllocWithDictionarySet = decodeRawOrRleFrameAllocWithDictionarySet;
 pub const decodeNativeConcatenatedFrameAllocWithDictionarySetExactSize = decodeRawOrRleFrameAllocWithDictionarySetExactSize;
 pub const decodeNativeConcatenatedFrameAppendWithDictionarySet = decodeRawOrRleFrameAppendWithDictionarySet;
+pub const decodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet = decodeRawOrRleFrameAppendExactSizeWithDictionarySet;
 pub const decodeNativeConcatenatedFrameAppendLimitedWithDictionarySet = decodeRawOrRleFrameAppendLimitedWithDictionarySet;
 pub const decodeNativeConcatenatedFrameAllocLimitedWithDictionarySet = decodeRawOrRleFrameAllocLimitedWithDictionarySet;
 pub const decodeNativeConcatenatedFrameIntoWithDictionarySet = decodeRawOrRleFrameIntoWithDictionarySet;
@@ -964,6 +1054,7 @@ pub const decodeNativeConcatenatedFrameChunksAlloc = decodeRawOrRleFrameChunksAl
 pub const decodeNativeConcatenatedFrameChunksAllocExactSize = decodeRawOrRleFrameChunksAllocExactSize;
 pub const decodeNativeConcatenatedFrameChunksAllocLimited = decodeRawOrRleFrameChunksAllocLimited;
 pub const decodeNativeConcatenatedFrameChunksAppend = decodeRawOrRleFrameChunksAppend;
+pub const decodeNativeConcatenatedFrameChunksAppendExactSize = decodeRawOrRleFrameChunksAppendExactSize;
 pub const decodeNativeConcatenatedFrameChunksAppendLimited = decodeRawOrRleFrameChunksAppendLimited;
 pub const decodeNativeConcatenatedFrameChunksInto = decodeRawOrRleFrameChunksInto;
 pub const decodedNativeConcatenatedFrameChunksSize = decodedRawOrRleFrameChunksSize;
@@ -972,6 +1063,7 @@ pub const decodeNativeConcatenatedFrameChunksAllocWithDictionary = decodeRawOrRl
 pub const decodeNativeConcatenatedFrameChunksAllocWithDictionaryExactSize = decodeRawOrRleFrameChunksAllocWithDictionaryExactSize;
 pub const decodeNativeConcatenatedFrameChunksAllocWithDictionaryLimited = decodeRawOrRleFrameChunksAllocWithDictionaryLimited;
 pub const decodeNativeConcatenatedFrameChunksAppendWithDictionary = decodeRawOrRleFrameChunksAppendWithDictionary;
+pub const decodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionary = decodeRawOrRleFrameChunksAppendExactSizeWithDictionary;
 pub const decodeNativeConcatenatedFrameChunksAppendLimitedWithDictionary = decodeRawOrRleFrameChunksAppendLimitedWithDictionary;
 pub const decodeNativeConcatenatedFrameChunksIntoWithDictionary = decodeRawOrRleFrameChunksIntoWithDictionary;
 pub const decodedNativeConcatenatedFrameChunksSizeWithDictionary = decodedRawOrRleFrameChunksSizeWithDictionary;
@@ -980,6 +1072,7 @@ pub const decodeNativeConcatenatedFrameChunksAllocWithDictionarySet = decodeRawO
 pub const decodeNativeConcatenatedFrameChunksAllocWithDictionarySetExactSize = decodeRawOrRleFrameChunksAllocWithDictionarySetExactSize;
 pub const decodeNativeConcatenatedFrameChunksAllocWithDictionarySetLimited = decodeRawOrRleFrameChunksAllocWithDictionarySetLimited;
 pub const decodeNativeConcatenatedFrameChunksAppendWithDictionarySet = decodeRawOrRleFrameChunksAppendWithDictionarySet;
+pub const decodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet = decodeRawOrRleFrameChunksAppendExactSizeWithDictionarySet;
 pub const decodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet = decodeRawOrRleFrameChunksAppendLimitedWithDictionarySet;
 pub const decodeNativeConcatenatedFrameChunksIntoWithDictionarySet = decodeRawOrRleFrameChunksIntoWithDictionarySet;
 pub const decodedNativeConcatenatedFrameChunksSizeWithDictionarySet = decodedRawOrRleFrameChunksSizeWithDictionarySet;
