@@ -125,6 +125,28 @@ def native_decode(cli: pathlib.Path, frame: bytes, expected: bytes) -> None:
         )
 
 
+def native_error(cli: pathlib.Path, frame: bytes, expected_error: str) -> None:
+    """Assert that both size preflight and decode reject a malformed frame.
+
+    The native library exposes size and decode as separate public APIs, and both
+    must reject reserved/header-invalid frames before any output-limit decision
+    can mask the parser error.
+    """
+    for command in ("size-zstd-native-hex", "decode-zstd-native-hex"):
+        result = subprocess.run(
+            [str(cli), command, frame.hex(), "0"],
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode == 0 or expected_error not in result.stderr:
+            raise AssertionError(
+                f"{command} expected {expected_error}, got "
+                f"rc={result.returncode} stdout={result.stdout!r} stderr={result.stderr!r}"
+            )
+
+
 def native_encode(cli: pathlib.Path, payload: bytes, mode: str = "auto") -> bytes:
     if len(payload) > 24_000:
         with tempfile.TemporaryDirectory(prefix="vort-zstd-native-probe-", dir=ROOT / ".zig-cache") as tmpdir:
@@ -179,6 +201,20 @@ def handcrafted_frames() -> list[tuple[str, bytes, bytes]]:
     return [
         ("descriptor-unused-bit", descriptor_unused_bit, raw),
         ("skippable-only", skippable_only, b""),
+    ]
+
+
+def handcrafted_invalid_frames() -> list[tuple[str, bytes, str]]:
+    """Small malformed frames with reference-visible failures."""
+    raw = b"abc"
+    block_header = ((len(raw) << 3) | 1).to_bytes(3, "little")
+    # Frame Header Descriptor bit 3 is reserved by the Zstandard spec. Unlike
+    # the adjacent unused bit 4, reference zstd rejects otherwise valid frames
+    # with this bit set, so the native parser should report a hard corruption
+    # error instead of accepting the stream or classifying it as a feature gap.
+    descriptor_reserved_bit = bytes.fromhex("28b52ffd") + b"\x08\x00" + block_header + raw
+    return [
+        ("descriptor-reserved-bit", descriptor_reserved_bit, "CorruptFrame"),
     ]
 
 
@@ -407,6 +443,30 @@ def main() -> int:
             print(
                 f"zstd_native_probe_fail case={name} mode=handcrafted-native "
                 f"input_bytes={len(expected)} frame_bytes={len(frame)} error={exc}"
+            )
+            print(frame.hex()[:800])
+            return 1
+        checked += 1
+
+    for name, frame, expected_error in handcrafted_invalid_frames():
+        zstd_failed = subprocess.run(
+            [ZSTD, "-dcq"],
+            input=frame,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if zstd_failed.returncode == 0:
+            print(
+                f"zstd_native_probe_fail case={name} mode=handcrafted-zstd-invalid "
+                f"decoded_bytes={len(zstd_failed.stdout)}"
+            )
+            return 1
+        try:
+            native_error(cli, frame, expected_error)
+        except AssertionError as exc:
+            print(
+                f"zstd_native_probe_fail case={name} mode=handcrafted-native-invalid "
+                f"frame_bytes={len(frame)} error={exc}"
             )
             print(frame.hex()[:800])
             return 1
