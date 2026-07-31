@@ -1937,6 +1937,83 @@ test "root native incremental decoders use expected size after skippable no-size
     try zstd_decoder.finish();
 }
 
+test "root native incremental no-size streams diagnose expected size mismatches" {
+    const lz4_payload = "root-lz4-nosize-size-mismatch";
+    const lz4_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 14, "root-lz4-mismatch-skip");
+    defer std.testing.allocator.free(lz4_skip);
+    const lz4_frame = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, lz4_payload, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .block_checksum = true,
+    });
+    defer std.testing.allocator.free(lz4_frame);
+    const lz4_stream = try std.mem.concat(std.testing.allocator, u8, &.{ lz4_skip, lz4_frame });
+    defer std.testing.allocator.free(lz4_stream);
+    var lz4_output: [lz4_payload.len]u8 = undefined;
+
+    var lz4_too_small = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = lz4_payload.len - 1,
+        .max_decoded_buffer_len = lz4_payload.len,
+    });
+    defer lz4_too_small.deinit();
+    // Without a content-size field, `expected_output_len` is the only exact-size
+    // contract. Exceeding it during frame preflight should be diagnosed as a
+    // logical size mismatch rather than a generic decoded-buffer limit.
+    try std.testing.expectError(error.SizeMismatch, lz4_too_small.step(lz4_stream, lz4_output[0..0]));
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", lz4_too_small.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_too_small.diagnostics().last_error_phase_name);
+
+    var lz4_too_large = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = lz4_payload.len + 1,
+        .max_decoded_buffer_len = lz4_payload.len + 1,
+    });
+    defer lz4_too_large.deinit();
+    const lz4_initial = try lz4_too_large.step(lz4_stream, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_initial.status);
+    const lz4_pending = try lz4_too_large.step("", &lz4_output);
+    try std.testing.expectEqual(StepResult.Status.need_input, lz4_pending.status);
+    try std.testing.expectEqualSlices(u8, lz4_payload, &lz4_output);
+    try std.testing.expectError(error.SizeMismatch, lz4_too_large.finish());
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", lz4_too_large.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "output", lz4_too_large.diagnostics().last_error_phase_name);
+
+    const zstd_payload = "root-zstd-nosize-size-mismatch";
+    const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 15, "root-zstd-mismatch-skip");
+    defer std.testing.allocator.free(zstd_skip);
+    const zstd_frame = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, zstd_payload, .{
+        .include_content_size = false,
+        .selection = .literal_only,
+        .content_checksum = true,
+    });
+    defer std.testing.allocator.free(zstd_frame.frame);
+    const zstd_stream = try std.mem.concat(std.testing.allocator, u8, &.{ zstd_skip, zstd_frame.frame });
+    defer std.testing.allocator.free(zstd_stream);
+    var zstd_output: [zstd_payload.len]u8 = undefined;
+
+    var zstd_too_small = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = zstd_payload.len - 1,
+        .max_decoded_buffer_len = zstd_payload.len,
+    });
+    defer zstd_too_small.deinit();
+    try std.testing.expectError(error.SizeMismatch, zstd_too_small.step(zstd_stream, zstd_output[0..0]));
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", zstd_too_small.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_too_small.diagnostics().last_error_phase_name);
+
+    var zstd_too_large = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = zstd_payload.len + 1,
+        .max_decoded_buffer_len = zstd_payload.len + 1,
+    });
+    defer zstd_too_large.deinit();
+    const zstd_initial = try zstd_too_large.step(zstd_stream, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_initial.status);
+    const zstd_pending = try zstd_too_large.step("", &zstd_output);
+    try std.testing.expectEqual(StepResult.Status.need_input, zstd_pending.status);
+    try std.testing.expectEqualSlices(u8, zstd_payload, &zstd_output);
+    try std.testing.expectError(error.SizeMismatch, zstd_too_large.finish());
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", zstd_too_large.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "output", zstd_too_large.diagnostics().last_error_phase_name);
+}
+
 test "root native incremental direct-output paths round trip" {
     var lz4_payload: [4096]u8 = undefined;
     var state: u32 = 0x1020_3040;

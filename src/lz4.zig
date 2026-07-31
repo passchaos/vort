@@ -1415,6 +1415,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             }
             break :blk expected - self.output_written;
         } else self.options.max_decoded_buffer_len;
+        const direct_limit_from_expected = frame_expected_len == null and self.options.expected_output_len != null;
 
         var offset = header.payload_offset;
         var first_payload_offset: usize = 0;
@@ -1443,15 +1444,51 @@ pub const NativeIncrementalFrameDecoder = struct {
             const decoded_block_len = if (uncompressed_block)
                 block_len
             else if (block_uses_dictionary)
-                try decodedBlockSizeWithPrefixLimited(payload, dictionary_history, direct_limit - total)
+                decodedBlockSizeWithPrefixLimited(payload, dictionary_history, direct_limit - total) catch |err| switch (err) {
+                    error.OutputLimitExceeded => {
+                        if (direct_limit_from_expected) {
+                            self.recordError(.frame, error.SizeMismatch);
+                            return error.SizeMismatch;
+                        }
+                        return err;
+                    },
+                    else => return err,
+                }
             else if (header.block_independent)
-                try compressedBlockDecodedSizeLimited(payload, 0, direct_limit - total)
+                compressedBlockDecodedSizeLimited(payload, 0, direct_limit - total) catch |err| switch (err) {
+                    error.OutputLimitExceeded => {
+                        if (direct_limit_from_expected) {
+                            self.recordError(.frame, error.SizeMismatch);
+                            return error.SizeMismatch;
+                        }
+                        return err;
+                    },
+                    else => return err,
+                }
             else decoded: {
                 const history_start = if (total <= max_block_history_len) 0 else total - max_block_history_len;
-                const decoded_total = try compressedBlockDecodedSizeLimitedWithHistory(payload, total, history_start, direct_limit);
+                const decoded_total = compressedBlockDecodedSizeLimitedWithHistory(payload, total, history_start, direct_limit) catch |err| switch (err) {
+                    error.OutputLimitExceeded => {
+                        if (direct_limit_from_expected) {
+                            self.recordError(.frame, error.SizeMismatch);
+                            return error.SizeMismatch;
+                        }
+                        return err;
+                    },
+                    else => return err,
+                };
                 break :decoded decoded_total - total;
             };
-            total = try checkedAddWithinLimit(total, decoded_block_len, direct_limit);
+            total = checkedAddWithinLimit(total, decoded_block_len, direct_limit) catch |err| switch (err) {
+                error.OutputLimitExceeded => {
+                    if (direct_limit_from_expected) {
+                        self.recordError(.frame, error.SizeMismatch);
+                        return error.SizeMismatch;
+                    }
+                    return err;
+                },
+                else => return err,
+            };
             try decoded_lens.append(self.allocator, decoded_block_len);
             if (block_count == 0) {
                 first_payload_offset = offset;

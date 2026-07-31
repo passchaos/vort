@@ -1621,6 +1621,7 @@ pub const NativeIncrementalFrameDecoder = struct {
             }
             break :blk expected - self.output_written;
         } else self.options.max_decoded_buffer_len;
+        const direct_limit_from_expected = frame_expected_len == null and self.options.expected_output_len != null;
 
         var offset = header.payload_offset;
         var first_payload_offset: usize = 0;
@@ -1652,7 +1653,16 @@ pub const NativeIncrementalFrameDecoder = struct {
                 const initial_history_len = std.math.add(usize, dictionary_history.len, total) catch return error.IntegerOverflow;
                 break :blk try compressedLiteralOnlyBlockDecodedSize(payload, header.block_size_max, initial_history_len, &preflight_state);
             } else block_len;
-            total = try checkedAddWithinLimit(total, decoded_block_len, direct_limit);
+            total = checkedAddWithinLimit(total, decoded_block_len, direct_limit) catch |err| switch (err) {
+                error.OutputLimitExceeded => {
+                    if (direct_limit_from_expected) {
+                        self.recordError(.frame, error.SizeMismatch);
+                        return error.SizeMismatch;
+                    }
+                    return err;
+                },
+                else => return err,
+            };
             if (block_count == 0) {
                 first_payload_offset = offset;
                 first_payload_len = block_len;
