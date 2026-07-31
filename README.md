@@ -371,6 +371,9 @@ const lz4_stream = try vort.lz4SummarizeNativeStream(lz4_frame);
 _ = lz4_stream.frame_count;
 const lz4_native_size = try vort.lz4DecodedNativeFrameSize(lz4_frame);
 _ = try vort.lz4DecodedNativeFrameSizeLimited(lz4_frame, lz4_native_size);
+const lz4_frame_chunks = [_][]const u8{ lz4_frame[0..4], lz4_frame[4..] };
+var lz4_join_scratch: [1024]u8 = undefined;
+_ = try vort.lz4DecodedNativeConcatenatedFrameChunksSize(&lz4_frame_chunks, &lz4_join_scratch);
 var lz4_block_iter = try vort.lz4IterateNativeFrameBlocks(lz4_frame);
 while (try lz4_block_iter.next()) |block| {
     _ = block.payload_len;
