@@ -8750,6 +8750,40 @@ test "zstd mixed match candidate cache reuses per-position scans" {
     }
 }
 
+test "zstd mixed match candidate cache reuses dictionary scans" {
+    const dict_content = "DICTMATCH1234567890";
+    const unique = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}";
+    const payload = "pfx-" ++ dict_content ++ "-u-" ++ unique ++ "-mid-" ++ unique ++ "-rep-" ++ ("ab" ** 16) ++ "-tail";
+    var cache: MixedMatchCandidateCache = .{};
+    var first: [3]MixedMatchCandidate = undefined;
+    var second: [3]MixedMatchCandidate = undefined;
+    const allowed: MixedMatchKindSet = .{
+        .dictionary = true,
+        .duplicate = true,
+        .repeated = true,
+    };
+    const first_count = try cache.candidatesAt(dict_content, payload, 0, 0, allowed, first[0..]);
+    const second_count = try cache.candidatesAt(dict_content, payload, 0, 0, allowed, second[0..]);
+    try std.testing.expectEqual(first_count, second_count);
+    try std.testing.expectEqual(@as(usize, 2), cache.lookup_count);
+    try std.testing.expectEqual(@as(usize, 1), cache.hit_count);
+    try std.testing.expect(first_count >= 2);
+    var saw_dictionary = false;
+    var saw_non_dictionary = false;
+    for (0..first_count) |i| {
+        try std.testing.expectEqual(first[i].kind, second[i].kind);
+        try std.testing.expectEqual(first[i].literal_len, second[i].literal_len);
+        try std.testing.expectEqual(first[i].offset, second[i].offset);
+        try std.testing.expectEqual(first[i].match_len, second[i].match_len);
+        try std.testing.expectEqual(first[i].literal_end, second[i].literal_end);
+        try std.testing.expectEqual(first[i].payload_len, second[i].payload_len);
+        saw_dictionary = saw_dictionary or first[i].kind == .dictionary;
+        saw_non_dictionary = saw_non_dictionary or first[i].kind != .dictionary;
+    }
+    try std.testing.expect(saw_dictionary);
+    try std.testing.expect(saw_non_dictionary);
+}
+
 test "zstd literal-only writer chooses shortest native match plan" {
     var payload: [160]u8 = undefined;
     var state: u32 = 0x3039;
