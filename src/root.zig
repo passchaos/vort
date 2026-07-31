@@ -2294,6 +2294,12 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     defer zstd_reusable_decoder.deinit();
     const zstd_reusable_scratch = try zstd_reusable_decoder.decodeConcatenatedScratchWithDictionarySet(zstd_stream.items, zstd_dictionary_set);
     try std.testing.expectEqualSlices(u8, zstd_expected, zstd_reusable_scratch);
+    try std.testing.expectEqual(zstd_first_payload.len, try zstdDecodedRawOrRleFrameSizeWithDictionary(zstd_first.frame, zstd_first_dict));
+    try std.testing.expectEqual(zstd_first_payload.len, try zstdDecodedRawOrRleFrameSizeLimitedWithDictionary(zstd_first.frame, zstd_first_payload.len, zstd_first_dict));
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedRawOrRleFrameSizeLimitedWithDictionary(zstd_first.frame, zstd_first_payload.len - 1, zstd_first_dict));
+    try std.testing.expectEqual(zstd_expected.len, try zstdDecodedRawOrRleFrameSizeWithDictionarySet(zstd_stream.items, zstd_dictionary_set));
+    try std.testing.expectEqual(zstd_expected.len, try zstdDecodedRawOrRleFrameSizeLimitedWithDictionarySet(zstd_stream.items, zstd_expected.len, zstd_dictionary_set));
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedRawOrRleFrameSizeLimitedWithDictionarySet(zstd_stream.items, zstd_expected.len - 1, zstd_dictionary_set));
     try std.testing.expectEqual(zstd_first_payload.len, try zstd_reusable_decoder.decodedSizeWithDictionarySet(zstd_first.frame, zstd_dictionary_set));
     try std.testing.expectEqual(zstd_first_payload.len, try zstd_reusable_decoder.decodedSizeLimitedWithDictionarySet(zstd_first.frame, zstd_first_payload.len, zstd_dictionary_set));
     try std.testing.expectError(error.OutputLimitExceeded, zstd_reusable_decoder.decodedSizeLimitedWithDictionarySet(zstd_first.frame, zstd_first_payload.len - 1, zstd_dictionary_set));
