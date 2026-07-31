@@ -124,6 +124,7 @@ Current interpretation:
   repeated-pattern writer cases, a small-depth hash-chain duplicate-candidate writer case,
   no-dictionary mixed duplicate/repeated match selection plus dictionary/native
   match-vs-Huffman size arbitration, smallest native match-plan arbitration,
+  RLE/predefined sequence cost scoring for single and mixed match candidates,
   RLE-literals sections for same-byte sequence literals,
   raw-block-cost-aware sequence selection, plus a file-backed multi-block
   treeless Huffman writer case, then checks

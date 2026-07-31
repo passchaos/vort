@@ -4935,38 +4935,14 @@ fn mixedCandidateLookaheadPayloadLen(
     }
     if (count < 2) return null;
 
-    const literal_code = try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits);
-    const offset_code = try sequenceCodeForValue(offsets[0], &of_base, &of_bits);
-    const match_code = try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits);
-    var rle_compatible = true;
-    for (1..count) |i| {
-        if ((sequenceCodeForValue(literal_lens[i], &ll_base, &ll_bits) catch return try multiSequencePayloadLenWithLiteralEnds(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], current.literal_end)) != literal_code) {
-            rle_compatible = false;
-            break;
-        }
-        if ((sequenceCodeForValue(offsets[i], &of_base, &of_bits) catch return try multiSequencePayloadLenWithLiteralEnds(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], current.literal_end)) != offset_code) {
-            rle_compatible = false;
-            break;
-        }
-        if ((sequenceCodeForValue(match_lens[i], &ml_base, &ml_bits) catch return try multiSequencePayloadLenWithLiteralEnds(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], current.literal_end)) != match_code) {
-            rle_compatible = false;
-            break;
-        }
-    }
-    if (rle_compatible) {
-        return try rleSequencePayloadLenWithLiteralEnds(
-            block,
-            literal_lens[0..count],
-            offsets[0..count],
-            match_lens[0..count],
-            literal_ends[0..count],
-            current.literal_end,
-            literal_code,
-            offset_code,
-            match_code,
-        );
-    }
-    return try multiSequencePayloadLenWithLiteralEnds(block, literal_lens[0..count], offsets[0..count], match_lens[0..count], literal_ends[0..count], current.literal_end);
+    return try bestSequencePayloadLenWithLiteralEnds(
+        block,
+        literal_lens[0..count],
+        offsets[0..count],
+        match_lens[0..count],
+        literal_ends[0..count],
+        current.literal_end,
+    );
 }
 
 fn bestMixedCandidateNoLookahead(
@@ -5388,6 +5364,45 @@ fn multiSequencePayloadLenWithLiteralEnds(
     return try multiSequencePayloadLenInternal(block, literal_lens, offsets, match_lens, literal_ends, tail_start);
 }
 
+fn bestSequencePayloadLenWithLiteralEnds(
+    block: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!usize {
+    // Match-finder scoring must use the same RLE-vs-predefined choice as the
+    // emitter. Otherwise a candidate that encodes smaller with predefined
+    // tables (notably single-sequence blocks, which avoid three RLE symbol
+    // bytes) can be incorrectly discarded before emitBestSequenceCompressedBlock
+    // has a chance to choose the smaller wire representation.
+    var best: ?usize = null;
+    if (rleSequencePayloadLenForValuesWithLiteralEnds(block, literal_lens, offsets, match_lens, literal_ends, tail_start)) |len| {
+        chooseShortestPayloadLen(len, &best);
+    } else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+
+    if (multiSequencePayloadLenWithLiteralEnds(block, literal_lens, offsets, match_lens, literal_ends, tail_start)) |len| {
+        chooseShortestPayloadLen(len, &best);
+    } else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+
+    return best orelse error.CorruptFrame;
+}
+
+fn chooseShortestPayloadLen(candidate: usize, best: *?usize) void {
+    const current = best.* orelse {
+        best.* = candidate;
+        return;
+    };
+    if (candidate < current) best.* = candidate;
+}
+
 fn multiSequencePayloadLenInternal(
     block: []const u8,
     literal_lens: []const usize,
@@ -5468,6 +5483,27 @@ fn singleRleSequencePayloadLen(
     );
 }
 
+fn singleBestSequencePayloadLen(
+    block: []const u8,
+    literal_len: usize,
+    offset: usize,
+    match_len: usize,
+    tail_start: usize,
+) Error!usize {
+    const literal_lens = [_]usize{literal_len};
+    const offsets = [_]usize{offset};
+    const match_lens = [_]usize{match_len};
+    const literal_ends = [_]usize{tail_start};
+    return try bestSequencePayloadLenWithLiteralEnds(
+        block,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        tail_start,
+    );
+}
+
 fn rleSequencePayloadLen(
     block: []const u8,
     literal_lens: []const usize,
@@ -5479,6 +5515,28 @@ fn rleSequencePayloadLen(
     match_code: u8,
 ) Error!usize {
     return try rleSequencePayloadLenInternal(block, literal_lens, offsets, match_lens, null, tail_start, literal_code, offset_code, match_code);
+}
+
+fn rleSequencePayloadLenForValuesWithLiteralEnds(
+    block: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!usize {
+    if (literal_lens.len == 0 or literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
+    return try rleSequencePayloadLenWithLiteralEnds(
+        block,
+        literal_lens,
+        offsets,
+        match_lens,
+        literal_ends,
+        tail_start,
+        try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits),
+        try sequenceCodeForValue(offsets[0], &of_base, &of_bits),
+        try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits),
+    );
 }
 
 fn rleSequencePayloadLenWithLiteralEnds(
@@ -5785,7 +5843,7 @@ fn dictionaryMatchPayloadLenFrom(
     const literal_len = match.block_start - literal_start;
     const match_offset = dictionaryMatchOffset(dictionary_len, frame_offset, match) catch return null;
     const tail_len = block.len - match.block_start - match.len;
-    return singleRleSequencePayloadLen(block, literal_len, match_offset, match.len, block.len - tail_len) catch null;
+    return singleBestSequencePayloadLen(block, literal_len, match_offset, match.len, block.len - tail_len) catch null;
 }
 
 fn findBestDuplicateMatch(block: []const u8) Error!?DuplicateMatch {
@@ -5873,14 +5931,14 @@ fn singleMatchPayloadLen(block: []const u8, match: DuplicateMatch) Error!usize {
 fn singleMatchPayloadLenFrom(block: []const u8, match: DuplicateMatch, literal_start: usize) Error!usize {
     const literal_len = match.second_start - literal_start;
     const offset = match.second_start - match.first_start;
-    return try singleRleSequencePayloadLen(block, literal_len, offset, match.len, match.second_start + match.len);
+    return try singleBestSequencePayloadLen(block, literal_len, offset, match.len, match.second_start + match.len);
 }
 
 fn repeatedPatternPayloadLenFrom(block: []const u8, segment: RepeatedPatternSegment, literal_start: usize) ?usize {
     if (segment.start < literal_start) return null;
     const literal_len = std.math.add(usize, segment.start - literal_start, segment.period) catch return null;
     const tail_start = std.math.add(usize, segment.start + segment.period, segment.match_len) catch return null;
-    return singleRleSequencePayloadLen(block, literal_len, segment.period, segment.match_len, tail_start) catch null;
+    return singleBestSequencePayloadLen(block, literal_len, segment.period, segment.match_len, tail_start) catch null;
 }
 
 fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
@@ -8163,6 +8221,32 @@ test "zstd literal-only writer emits 128-symbol Huffman literals" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd match planner scores single predefined sequence payloads" {
+    const payload = "ab" ** 12;
+    const match: DuplicateMatch = .{
+        .first_start = 0,
+        .second_start = 2,
+        .len = payload.len - 2,
+    };
+    const literal_len = match.second_start;
+    const offset = match.second_start - match.first_start;
+    const tail_start = match.second_start + match.len;
+    const rle_len = try singleRleSequencePayloadLen(payload, literal_len, offset, match.len, tail_start);
+    const predefined_len = try multiSequencePayloadLenWithLiteralEnds(
+        payload,
+        &.{literal_len},
+        &.{offset},
+        &.{match.len},
+        &.{tail_start},
+        tail_start,
+    );
+    try std.testing.expect(predefined_len < rle_len);
+    try std.testing.expectEqual(predefined_len, try singleMatchPayloadLen(payload, match));
+
+    const segment = findRepeatedPatternSegment(payload) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(predefined_len, repeatedPatternPayloadLenFrom(payload, segment, 0) orelse return error.CorruptFrame);
 }
 
 test "zstd literal-only writer keeps two-symbol repeated pattern matches" {
