@@ -17,6 +17,7 @@ const duplicate_hash_invalid = std.math.maxInt(u32);
 const duplicate_hash_candidates = 8;
 const max_bootstrap_sequence_count = 16;
 const max_predefined_sequence_states = 64;
+const mixed_match_path_search_budget = 512;
 const repeated_pattern_period_max = 64;
 const repeated_pattern_start_scan = 48;
 
@@ -4918,48 +4919,147 @@ fn mixedCandidateLookaheadPayloadLen(
     frame_offset: usize,
     candidate: MixedMatchCandidate,
 ) Error!?usize {
-    var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
-    var offsets: [max_bootstrap_sequence_count]usize = undefined;
-    var match_lens: [max_bootstrap_sequence_count]usize = undefined;
-    var literal_ends: [max_bootstrap_sequence_count]usize = undefined;
-    var count: usize = 0;
-    var current = candidate;
-    while (true) {
-        literal_lens[count] = current.literal_len;
-        offsets[count] = current.offset;
-        match_lens[count] = current.match_len;
-        literal_ends[count] = current.literal_end;
-        count += 1;
-        if (count == max_bootstrap_sequence_count or current.literal_end >= block.len) break;
-        current = try bestMixedCandidateNoLookahead(dictionary, block, current.literal_end, frame_offset) orelse break;
-    }
-    if (count < 2) return null;
-
-    return try bestSequencePayloadLenWithLiteralEnds(
-        block,
-        literal_lens[0..count],
-        offsets[0..count],
-        match_lens[0..count],
-        literal_ends[0..count],
-        current.literal_end,
-    );
+    const plan = try bestMixedCandidateLookaheadPlan(dictionary, block, frame_offset, candidate) orelse return null;
+    return plan.payload_len;
 }
 
-fn bestMixedCandidateNoLookahead(
+const MixedMatchLookaheadPlan = struct {
+    literal_lens: [max_bootstrap_sequence_count]usize = undefined,
+    offsets: [max_bootstrap_sequence_count]usize = undefined,
+    match_lens: [max_bootstrap_sequence_count]usize = undefined,
+    literal_ends: [max_bootstrap_sequence_count]usize = undefined,
+    count: usize = 0,
+    tail_start: usize = 0,
+    payload_len: usize = 0,
+};
+
+fn bestMixedCandidateLookaheadPlan(
+    dictionary: []const u8,
+    block: []const u8,
+    frame_offset: usize,
+    first_candidate: MixedMatchCandidate,
+) Error!?MixedMatchLookaheadPlan {
+    var plan: MixedMatchLookaheadPlan = .{};
+    var search_budget: usize = mixed_match_path_search_budget;
+    const best = try bestMixedCandidateLookaheadPlanFrom(dictionary, block, frame_offset, first_candidate, &plan, 0, &search_budget);
+    if (best == null or best.?.count < 2) return null;
+    return best;
+}
+
+fn bestMixedCandidateLookaheadPlanFrom(
+    dictionary: []const u8,
+    block: []const u8,
+    frame_offset: usize,
+    candidate: MixedMatchCandidate,
+    plan: *MixedMatchLookaheadPlan,
+    depth: usize,
+    search_budget: *usize,
+) Error!?MixedMatchLookaheadPlan {
+    if (search_budget.* == 0 or depth >= max_bootstrap_sequence_count) return null;
+    search_budget.* -= 1;
+
+    plan.literal_lens[depth] = candidate.literal_len;
+    plan.offsets[depth] = candidate.offset;
+    plan.match_lens[depth] = candidate.match_len;
+    plan.literal_ends[depth] = candidate.literal_end;
+    const count = depth + 1;
+
+    var best: ?MixedMatchLookaheadPlan = null;
+    if (candidate.literal_end >= block.len or count == max_bootstrap_sequence_count) {
+        best = try finalizeMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end);
+    } else {
+        // Treat "stop matching here and carry the remaining bytes as literals"
+        // as one valid branch once there are enough sequences to form a mixed
+        // block. Extra sequences are not free: their table state transitions and
+        // extra bits can outweigh the literals they remove. Keeping this prefix
+        // candidate also makes the bounded search degrade safely if dense
+        // candidate graphs exhaust the small bootstrap budget.
+        best = try finalizeMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end);
+        var next_candidates: [3]MixedMatchCandidate = undefined;
+        const next_count = try mixedMatchCandidatesAt(dictionary, block, candidate.literal_end, frame_offset, next_candidates[0..]);
+        if (next_count == 0) {
+            return best;
+        } else {
+            for (next_candidates[0..next_count]) |next| {
+                const branch = try bestMixedCandidateLookaheadPlanFrom(
+                    dictionary,
+                    block,
+                    frame_offset,
+                    next,
+                    plan,
+                    count,
+                    search_budget,
+                ) orelse continue;
+                if (mixedMatchLookaheadPlanBetter(branch, best)) best = branch;
+                if (search_budget.* == 0) break;
+            }
+        }
+    }
+
+    plan.count = depth;
+    return best;
+}
+
+fn finalizeMixedMatchLookaheadPlan(
+    block: []const u8,
+    plan: *MixedMatchLookaheadPlan,
+    count: usize,
+    tail_start: usize,
+) Error!?MixedMatchLookaheadPlan {
+    if (count < 2) return null;
+    var finalized = plan.*;
+    finalized.count = count;
+    finalized.tail_start = tail_start;
+    finalized.payload_len = try bestSequencePayloadLenWithLiteralEnds(
+        block,
+        finalized.literal_lens[0..count],
+        finalized.offsets[0..count],
+        finalized.match_lens[0..count],
+        finalized.literal_ends[0..count],
+        tail_start,
+    );
+    return finalized;
+}
+
+fn mixedMatchLookaheadPlanBetter(candidate: MixedMatchLookaheadPlan, current: ?MixedMatchLookaheadPlan) bool {
+    const existing = current orelse return true;
+    if (candidate.payload_len != existing.payload_len) return candidate.payload_len < existing.payload_len;
+    if (candidate.count != existing.count) return candidate.count > existing.count;
+    const candidate_last = candidate.literal_ends[candidate.count - 1];
+    const existing_last = existing.literal_ends[existing.count - 1];
+    return candidate_last > existing_last;
+}
+
+fn mixedMatchCandidatesAt(
     dictionary: []const u8,
     block: []const u8,
     literal_start: usize,
     frame_offset: usize,
-) Error!?MixedMatchCandidate {
-    var best: ?MixedMatchCandidate = null;
-    if (try dictionaryMixedMatchCandidate(dictionary, block, literal_start, frame_offset)) |candidate| best = candidate;
+    out: []MixedMatchCandidate,
+) Error!usize {
+    if (out.len < 3) return error.OutputTooSmall;
+    var count: usize = 0;
+    if (try dictionaryMixedMatchCandidate(dictionary, block, literal_start, frame_offset)) |candidate| {
+        out[count] = candidate;
+        count += 1;
+    }
     if (try duplicateMixedMatchCandidate(block, literal_start)) |candidate| {
-        if (mixedMatchCandidateBetter(candidate, best)) best = candidate;
+        out[count] = candidate;
+        count += 1;
     }
     if (repeatedMixedMatchCandidate(block, literal_start)) |candidate| {
-        if (mixedMatchCandidateBetter(candidate, best)) best = candidate;
+        out[count] = candidate;
+        count += 1;
     }
-    return best;
+    std.mem.sort(MixedMatchCandidate, out[0..count], {}, mixedMatchCandidateSortLessThan);
+    return count;
+}
+
+fn mixedMatchCandidateSortLessThan(_: void, a: MixedMatchCandidate, b: MixedMatchCandidate) bool {
+    if (a.payload_len != b.payload_len) return a.payload_len < b.payload_len;
+    if (a.match_len != b.match_len) return a.match_len > b.match_len;
+    if (a.literal_len != b.literal_len) return a.literal_len < b.literal_len;
+    return mixedMatchKindRank(a.kind) > mixedMatchKindRank(b.kind);
 }
 
 fn mixedMatchCandidateBetter(candidate: MixedMatchCandidate, current: ?MixedMatchCandidate) bool {
@@ -8119,6 +8219,39 @@ test "zstd literal-only writer mixes duplicate and repeated-pattern matches" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd mixed match lookahead explores non-greedy continuations" {
+    const payload =
+        "bbeegfabcceeehaabcdfacefegahabdffgabcccfeggbcddffgah" ++
+        "ccccfeggbcddffgahceegfabcceeehaabcdfacefegahabdffgab" ++
+        "cccfeggbcddfechbcecececececece";
+    const first_start = 22;
+    const first_candidate = repeatedMixedMatchCandidate(payload, first_start) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(MixedMatchKind.repeated, first_candidate.kind);
+    try std.testing.expectEqual(@as(usize, 31), first_candidate.literal_len);
+    try std.testing.expectEqual(@as(usize, 17), first_candidate.offset);
+    try std.testing.expectEqual(@as(usize, 17), first_candidate.match_len);
+    try std.testing.expectEqual(@as(usize, 70), first_candidate.literal_end);
+
+    const greedy_payload_len = try bestSequencePayloadLenWithLiteralEnds(
+        payload,
+        &.{ 31, 52 },
+        &.{ 17, 2 },
+        &.{ 17, 12 },
+        &.{ 70, payload.len },
+        payload.len,
+    );
+    const branch = (try bestMixedCandidateLookaheadPlan(&.{}, payload, 0, first_candidate)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(@as(usize, 3), branch.count);
+    try std.testing.expectEqualSlices(usize, &.{ 31, 32, 16 }, branch.literal_lens[0..branch.count]);
+    try std.testing.expectEqualSlices(usize, &.{ 17, 28, 2 }, branch.offsets[0..branch.count]);
+    try std.testing.expectEqualSlices(usize, &.{ 17, 4, 12 }, branch.match_lens[0..branch.count]);
+    try std.testing.expectEqualSlices(usize, &.{ 70, 106, payload.len }, branch.literal_ends[0..branch.count]);
+    try std.testing.expect(branch.payload_len < greedy_payload_len);
+
+    const lookahead_payload_len = (try mixedCandidateLookaheadPayloadLen(&.{}, payload, 0, first_candidate)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(branch.payload_len, lookahead_payload_len);
 }
 
 test "zstd literal-only writer chooses shortest native match plan" {
