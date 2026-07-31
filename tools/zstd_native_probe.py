@@ -175,8 +175,10 @@ def handcrafted_frames() -> list[tuple[str, bytes, bytes]]:
     raw = b"abc"
     block_header = ((len(raw) << 3) | 1).to_bytes(3, "little")
     descriptor_unused_bit = bytes.fromhex("28b52ffd") + b"\x10\x00" + block_header + raw
+    skippable_only = (0x184D2A50).to_bytes(4, "little") + (3).to_bytes(4, "little") + b"abc"
     return [
         ("descriptor-unused-bit", descriptor_unused_bit, raw),
+        ("skippable-only", skippable_only, b""),
     ]
 
 
