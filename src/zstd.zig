@@ -8559,6 +8559,15 @@ test "zstd native decoder accepts system high-byte Huffman frame" {
     try std.testing.expectEqual(HuffmanLiteralStreams.four, std.meta.activeTag(section.huffman_streams));
     try std.testing.expectEqual(payload.len, section.regenerated_size);
     try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+    const tree = section.huffman_tree orelse return error.CorruptFrame;
+    try std.testing.expectEqual(@as(u4, 9), tree.max_bit_count);
+    try std.testing.expectEqual(@as(usize, 127), @as(usize, tree.symbol_count_minus_one) + 1);
+    try std.testing.expectEqual(@as(u8, 132), tree.nodes[0].symbol);
+    try std.testing.expectEqual(@as(u4, 1), tree.nodes[0].weight);
+    try std.testing.expectEqual(@as(u16, 0), tree.nodes[0].prefix);
+    try std.testing.expectEqual(@as(u8, 238), tree.nodes[tree.symbol_count_minus_one].symbol);
+    try std.testing.expectEqual(@as(u4, 4), tree.nodes[tree.symbol_count_minus_one].weight);
+    try std.testing.expectEqual(@as(u16, 63), tree.nodes[tree.symbol_count_minus_one].prefix);
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, &frame);
     defer std.testing.allocator.free(decoded);
