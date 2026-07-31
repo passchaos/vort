@@ -846,6 +846,51 @@ _ = gzip_cat_chunked_written;
 // defer allocator.free(dict_encoded);
 ```
 
+### Native LZ4/Zstd library knobs
+
+The native LZ4/Zstd APIs are library-first.  CLI commands and probes call the
+same public symbols shown above; applications should use the allocator/append,
+caller-owned slice, reusable scratch, chunked, and incremental decoder APIs
+directly.
+
+| Codec | Option / symbol | Default / range | Use when | Tradeoff |
+| --- | --- | --- | --- | --- |
+| LZ4 native | `Lz4NativeFrameOptions.block_mode` | `.independent` or `.linked` | Consecutive frame blocks share recent history and ratio matters. | `.linked` can improve ratio across block boundaries; `.independent` is simpler for random block handling. |
+| LZ4 native | `Lz4NativeFrameOptions.block_size_id` | `.max4mb`; `.max64kb` / `.max256kb` / `.max1mb` / `.max4mb` | You need a latency/working-set knob for frame block size. | Smaller blocks can reduce latency and direct-output burst size; larger blocks usually reduce framing overhead. |
+| LZ4 native | `Lz4NativeFrameOptions.chain_depth` | `vort.lz4NativeMaxChainDepth` (`16` currently); `0...vort.lz4NativeMaxChainDepth` | You want to trade encode CPU for deeper hash-chain match search. | `0` disables match search and is fastest/least compact; the default enables the deeper parser used by the native bench ratio rows. |
+| LZ4 native | `content_checksum` / `block_checksum` | content checksum on by default; block checksum off by default | You need frame or block corruption detection in the native frame itself. | Checksums add bytes and CPU but give earlier corruption reports. |
+| LZ4 native | `Lz4NativeDictionary` | caller-owned bytes plus non-zero `id` | Payloads share a known prefix/history. | Encoder can emit dictionary references; decoder must be given the matching dictionary or dictionary set. |
+| LZ4 native | `Lz4NativeDictionarySet` | caller-owned slice of dictionaries | Concatenated streams can carry different `Dictionary_ID` values. | Lets decoders resolve each frame without caller-side splitting; missing IDs return `NeedDictionary`. |
+| Zstd native | `ZstdNativeFrameOptions.selection` | `.auto`; `.auto` / `.raw_or_rle` / `.literal_only` | You need deterministic native-subset frame selection. | `.auto` chooses the smaller implemented native mode; explicit modes are useful for tests and predictable behavior. |
+| Zstd native | `ZstdNativeFrameOptions.block_size_max` | `std.compress.zstd.block_size_max`; `1...std.compress.zstd.block_size_max` | You need a latency/seekability/ratio knob. | Smaller blocks reduce per-block latency and direct-output bursts; larger blocks usually improve ratio and reduce headers. |
+| Zstd native | `ZstdNativeFrameOptions.match_search_budget` | `vort.zstdNativeMaxMatchSearchBudget` (`512` currently); `0...vort.zstdNativeMaxMatchSearchBudget` | You want to bound the bootstrap mixed-match planner. | `0` disables generic duplicate/repeated mixed planning while dictionary-only matches can still be used; the default searches more branches for ratio. |
+| Zstd native | `content_checksum` / `include_content_size` | both on by default | You want self-describing frames and content verification. | Disabling them saves bytes when a container already carries size/checksum metadata. |
+| Zstd native | `ZstdNativeDictionary` | caller-owned bytes plus non-zero `id` | Payloads share preset history. | Dictionary-aware native sequence blocks can be smaller than raw storage; decoders must receive the matching dictionary. |
+| Zstd native | `ZstdNativeDictionarySet` | caller-owned slice of dictionaries | Concatenated streams can carry different `Dictionary_ID` values. | Shared decoder APIs resolve per-frame IDs and avoid manual stream splitting. |
+
+For bounded-memory decode, prefer the `*Limited`, exact-size, chunked, and
+incremental forms when the surrounding container knows the expected output
+length or has an allocation budget.  Incremental native decoders expose the
+shared `StepResult` contract: feed compressed bytes, provide caller-owned output
+slices, then call `finish()` when an exact EOF/size check matters.  Direct-output
+paths are fastest when the caller supplies a large enough output slice; if a
+slice is too small for an atomic compressed block, the decoders intentionally
+fall back to bounded scratch and continue draining without losing correctness.
+Dictionary-set chunked APIs additionally accept caller-owned compressed join
+scratch so split input can be decoded without hidden global state.
+
+The focused library benchmark/gate tracks these public surfaces directly:
+
+```sh
+zig build run-native-library-bench
+zig build run-native-library-bench-gate
+```
+
+The gate currently requires the LZ4 chain-depth, Zstd match-budget, dictionary,
+dictionary-set, chunked dictionary-set, reusable decoder, direct-output, and
+small-output fallback rows to round-trip and to preserve the expected size
+relationships.
+
 ## Direction
 
 See `docs/native-format.md` for the initial native Vort frame direction,
