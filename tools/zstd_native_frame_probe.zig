@@ -472,6 +472,17 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_end_mark));
     checked += 1;
 
+    const treeless_without_tree_hex = "28b52ffd200325000033400001";
+    var treeless_without_tree: [treeless_without_tree_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&treeless_without_tree, treeless_without_tree_hex);
+    const treeless_block = try vort.zstdInspectNativeFrameFirstBlock(&treeless_without_tree);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&treeless_without_tree, treeless_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&treeless_without_tree));
+    var treeless_output: [3]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&treeless_without_tree, &treeless_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &treeless_without_tree));
+    checked += 1;
+
     return checked;
 }
 
