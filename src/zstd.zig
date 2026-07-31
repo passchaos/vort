@@ -5137,10 +5137,25 @@ fn emitBestSequenceCompressedBlock(
         tail_start,
     );
 
+    var mixed_block: std.ArrayList(u8) = .empty;
+    defer mixed_block.deinit(allocator);
+    const mixed_ok = try emitMixedSequenceCompressedBlock(
+        allocator,
+        &mixed_block,
+        block,
+        last,
+        literal_lens,
+        offsets,
+        match_lens,
+        literal_ends,
+        tail_start,
+    );
+
     var best: ?[]const u8 = null;
     var best_len: usize = std.math.maxInt(usize);
     chooseShortestPlannedBlock(rle_ok, rle_block.items, &best, &best_len);
     chooseShortestPlannedBlock(predefined_ok, predefined_block.items, &best, &best_len);
+    chooseShortestPlannedBlock(mixed_ok, mixed_block.items, &best, &best_len);
     const best_block = best orelse return false;
     try out.appendSlice(allocator, best_block);
     return true;
@@ -5194,6 +5209,82 @@ fn emitRleSequenceCompressedBlock(
     var sequence_bits: std.ArrayList(u8) = .empty;
     defer sequence_bits.deinit(allocator);
     try emitReverseBitstream(allocator, &sequence_bits, fields[0..field_count]);
+    try payload.appendSlice(allocator, sequence_bits.items);
+
+    const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
+    if (payload.items.len + 3 >= raw_block_len) return false;
+    try emitBlockHeader(allocator, out, 2, payload.items.len, last);
+    try out.appendSlice(allocator, payload.items);
+    return true;
+}
+
+fn emitMixedSequenceCompressedBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!bool {
+    const best = (try bestMixedSequencePlan(
+        block,
+        literal_lens,
+        offsets,
+        match_lens,
+        literal_ends,
+        tail_start,
+    )) orelse return false;
+
+    return try emitSequenceCompressedBlockWithTablePlans(
+        allocator,
+        out,
+        block,
+        last,
+        literal_lens,
+        offsets,
+        match_lens,
+        literal_ends,
+        tail_start,
+        best.plan,
+    );
+}
+
+fn emitSequenceCompressedBlockWithTablePlans(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    plan: SequenceCombinedEmitPlan,
+) Error!bool {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    _ = try emitSequenceLiteralsSection(allocator, &payload, block, literal_lens, literal_ends, tail_start);
+    try emitSequenceCount(allocator, &payload, literal_lens.len);
+    try payload.append(allocator, sequenceModeByte(plan));
+    try appendSequenceTablePayload(allocator, &payload, plan.literal);
+    try appendSequenceTablePayload(allocator, &payload, plan.offset);
+    try appendSequenceTablePayload(allocator, &payload, plan.match);
+
+    var read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    const read_field_count = try sequenceReadFieldsWithTablePlans(
+        read_fields[0..],
+        literal_lens,
+        offsets,
+        match_lens,
+        plan,
+    );
+
+    var sequence_bits: std.ArrayList(u8) = .empty;
+    defer sequence_bits.deinit(allocator);
+    try emitReverseBitstreamFromReadOrder(allocator, &sequence_bits, read_fields[0..read_field_count]);
     try payload.appendSlice(allocator, sequence_bits.items);
 
     const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
@@ -5372,11 +5463,12 @@ fn bestSequencePayloadLenWithLiteralEnds(
     literal_ends: []const usize,
     tail_start: usize,
 ) Error!usize {
-    // Match-finder scoring must use the same RLE-vs-predefined choice as the
-    // emitter. Otherwise a candidate that encodes smaller with predefined
-    // tables (notably single-sequence blocks, which avoid three RLE symbol
-    // bytes) can be incorrectly discarded before emitBestSequenceCompressedBlock
-    // has a chance to choose the smaller wire representation.
+    // Match-finder scoring must use the same RLE/predefined/mixed table choice
+    // as the emitter. Otherwise a candidate that encodes smaller with
+    // predefined tables (notably single-sequence blocks, which avoid three RLE
+    // symbol bytes) or with a mixed table-mode byte can be incorrectly
+    // discarded before emitBestSequenceCompressedBlock has a chance to choose
+    // the smaller wire representation.
     var best: ?usize = null;
     if (rleSequencePayloadLenForValuesWithLiteralEnds(block, literal_lens, offsets, match_lens, literal_ends, tail_start)) |len| {
         chooseShortestPayloadLen(len, &best);
@@ -5392,6 +5484,10 @@ fn bestSequencePayloadLenWithLiteralEnds(
         else => return err,
     }
 
+    if (try bestMixedSequencePlan(block, literal_lens, offsets, match_lens, literal_ends, tail_start)) |candidate| {
+        chooseShortestPayloadLen(candidate.payload_len, &best);
+    }
+
     return best orelse error.CorruptFrame;
 }
 
@@ -5401,6 +5497,318 @@ fn chooseShortestPayloadLen(candidate: usize, best: *?usize) void {
         return;
     };
     if (candidate < current) best.* = candidate;
+}
+
+const SequenceTableKind = enum { literal, offset, match };
+
+const SequenceTableEmitPlan = union(enum) {
+    rle: u8,
+    predefined: PredefinedSequencePlan,
+};
+
+const SequenceCombinedEmitPlan = struct {
+    literal: SequenceTableEmitPlan,
+    offset: SequenceTableEmitPlan,
+    match: SequenceTableEmitPlan,
+};
+
+const SequenceCombinedPlanCandidate = struct {
+    plan: SequenceCombinedEmitPlan,
+    payload_len: usize,
+};
+
+const SequenceTablePlanAlternatives = struct {
+    items: [2]SequenceTableEmitPlan = undefined,
+    len: usize = 0,
+
+    fn add(self: *SequenceTablePlanAlternatives, plan: SequenceTableEmitPlan) Error!void {
+        if (self.len >= self.items.len) return error.CorruptFrame;
+        self.items[self.len] = plan;
+        self.len += 1;
+    }
+};
+
+fn bestMixedSequencePlan(
+    block: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!?SequenceCombinedPlanCandidate {
+    if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
+    if (literal_lens.len != literal_ends.len) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+
+    const literal_alternatives = try sequenceTablePlanAlternatives(literal_lens, .literal);
+    const offset_alternatives = try sequenceTablePlanAlternatives(offsets, .offset);
+    const match_alternatives = try sequenceTablePlanAlternatives(match_lens, .match);
+    if (literal_alternatives.len == 0 or offset_alternatives.len == 0 or match_alternatives.len == 0) return null;
+
+    var best: ?SequenceCombinedPlanCandidate = null;
+    // Only eight combinations are possible because each table family has at
+    // most an RLE and a predefined representation. Trying all of them keeps the
+    // planner exact for this bootstrap subset and avoids baking in heuristics
+    // such as "all-RLE" or "all-predefined" when one family is cheaper in a
+    // different mode than the others.
+    for (literal_alternatives.items[0..literal_alternatives.len]) |literal_plan| {
+        for (offset_alternatives.items[0..offset_alternatives.len]) |offset_plan| {
+            for (match_alternatives.items[0..match_alternatives.len]) |match_plan| {
+                const combined: SequenceCombinedEmitPlan = .{
+                    .literal = literal_plan,
+                    .offset = offset_plan,
+                    .match = match_plan,
+                };
+                if (!sequenceCombinedPlanIsMixed(combined)) continue;
+                const payload_len = sequencePayloadLenWithTablePlans(
+                    block,
+                    literal_lens,
+                    offsets,
+                    match_lens,
+                    literal_ends,
+                    tail_start,
+                    combined,
+                ) catch |err| switch (err) {
+                    error.CorruptFrame => continue,
+                    else => return err,
+                };
+                if (best == null or payload_len < best.?.payload_len) {
+                    best = .{ .plan = combined, .payload_len = payload_len };
+                }
+            }
+        }
+    }
+    return best;
+}
+
+fn sequenceCombinedPlanIsMixed(plan: SequenceCombinedEmitPlan) bool {
+    const literal_mode = sequenceTableMode(plan.literal);
+    const offset_mode = sequenceTableMode(plan.offset);
+    const match_mode = sequenceTableMode(plan.match);
+    return literal_mode != offset_mode or literal_mode != match_mode;
+}
+
+fn sequenceTablePlanAlternatives(values: []const usize, kind: SequenceTableKind) Error!SequenceTablePlanAlternatives {
+    var alternatives: SequenceTablePlanAlternatives = .{};
+    const bases = sequenceTableBases(kind);
+    const bits = sequenceTableBits(kind);
+    if (try rleSequenceCodeForValues(values, bases, bits)) |code| {
+        try alternatives.add(.{ .rle = code });
+    }
+    if (try planPredefinedSequenceValues(values, sequenceTablePredefinedSymbols(kind), sequenceTablePredefinedMinAdditionalBits(kind))) |plan| {
+        try alternatives.add(.{ .predefined = plan });
+    }
+    return alternatives;
+}
+
+fn rleSequenceCodeForValues(values: []const usize, bases: []const usize, bits: []const u8) Error!?u8 {
+    if (values.len == 0) return null;
+    const code = sequenceCodeForValue(values[0], bases, bits) catch |err| switch (err) {
+        error.CorruptFrame => return null,
+        else => return err,
+    };
+    for (values[1..]) |value| {
+        const next_code = sequenceCodeForValue(value, bases, bits) catch |err| switch (err) {
+            error.CorruptFrame => return null,
+            else => return err,
+        };
+        if (next_code != code) return null;
+    }
+    return code;
+}
+
+fn sequencePayloadLenWithTablePlans(
+    block: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: ?[]const usize,
+    tail_start: usize,
+    plan: SequenceCombinedEmitPlan,
+) Error!usize {
+    if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_ends) |ends| {
+        if (ends.len != literal_lens.len) return error.CorruptFrame;
+    }
+
+    const literal_info = try sequenceLiteralsPayloadInfo(block, literal_lens, literal_ends, tail_start);
+    var len = try literalsHeaderLen(literal_info.regenerated_len);
+    len = std.math.add(usize, len, literal_info.payload_len) catch return error.IntegerOverflow;
+    len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
+    len = std.math.add(usize, len, 1) catch return error.IntegerOverflow; // sequence mode byte
+    len = std.math.add(usize, len, sequenceTablePayloadLen(plan.literal)) catch return error.IntegerOverflow;
+    len = std.math.add(usize, len, sequenceTablePayloadLen(plan.offset)) catch return error.IntegerOverflow;
+    len = std.math.add(usize, len, sequenceTablePayloadLen(plan.match)) catch return error.IntegerOverflow;
+
+    var read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    const read_field_count = try sequenceReadFieldsWithTablePlans(
+        read_fields[0..],
+        literal_lens,
+        offsets,
+        match_lens,
+        plan,
+    );
+    var bit_count: usize = 1; // Reverse bitstream end marker.
+    for (read_fields[0..read_field_count]) |field| {
+        bit_count = std.math.add(usize, bit_count, field.bits) catch return error.IntegerOverflow;
+    }
+    return std.math.add(usize, len, (bit_count + 7) / 8) catch return error.IntegerOverflow;
+}
+
+fn sequenceReadFieldsWithTablePlans(
+    out: []BitField,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    plan: SequenceCombinedEmitPlan,
+) Error!usize {
+    if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    try validateSequenceTablePlanLen(plan.literal, literal_lens.len);
+    try validateSequenceTablePlanLen(plan.offset, offsets.len);
+    try validateSequenceTablePlanLen(plan.match, match_lens.len);
+
+    var count: usize = 0;
+    try appendInitialSequenceStateField(out, &count, plan.literal, .literal);
+    try appendInitialSequenceStateField(out, &count, plan.offset, .offset);
+    try appendInitialSequenceStateField(out, &count, plan.match, .match);
+
+    for (0..literal_lens.len) |i| {
+        const literal_symbol = try sequenceTableSymbol(plan.literal, .literal, i);
+        const offset_symbol = try sequenceTableSymbol(plan.offset, .offset, i);
+        const match_symbol = try sequenceTableSymbol(plan.match, .match, i);
+
+        try appendBitField(out, &count, offsets[i] - offset_symbol.base, offset_symbol.additional_bits);
+        try appendBitField(out, &count, match_lens[i] - match_symbol.base, match_symbol.additional_bits);
+        try appendBitField(out, &count, literal_lens[i] - literal_symbol.base, literal_symbol.additional_bits);
+
+        if (i + 1 < literal_lens.len) {
+            try appendSequenceTransitionField(out, &count, plan.literal, .literal, i);
+            try appendSequenceTransitionField(out, &count, plan.match, .match, i);
+            try appendSequenceTransitionField(out, &count, plan.offset, .offset, i);
+        }
+    }
+    return count;
+}
+
+fn appendInitialSequenceStateField(out: []BitField, count: *usize, plan: SequenceTableEmitPlan, kind: SequenceTableKind) Error!void {
+    switch (plan) {
+        .rle => {},
+        .predefined => |predefined| {
+            if (predefined.len == 0) return error.CorruptFrame;
+            try appendBitField(out, count, predefined.states[0], predefinedInitialStateBits(kind));
+        },
+    }
+}
+
+fn appendSequenceTransitionField(out: []BitField, count: *usize, plan: SequenceTableEmitPlan, kind: SequenceTableKind, index: usize) Error!void {
+    switch (plan) {
+        .rle => {},
+        .predefined => |predefined| {
+            if (index + 1 >= predefined.len) return error.CorruptFrame;
+            const symbol = try sequenceTableSymbol(plan, kind, index);
+            if (predefined.states[index + 1] < symbol.next_state) return error.CorruptFrame;
+            try appendBitField(out, count, predefined.states[index + 1] - symbol.next_state, symbol.state_bits);
+        },
+    }
+}
+
+fn validateSequenceTablePlanLen(plan: SequenceTableEmitPlan, len: usize) Error!void {
+    switch (plan) {
+        .rle => {},
+        .predefined => |predefined| if (predefined.len != len) return error.CorruptFrame,
+    }
+}
+
+fn sequenceTableSymbol(plan: SequenceTableEmitPlan, kind: SequenceTableKind, index: usize) Error!SequenceSymbol {
+    return switch (plan) {
+        .rle => |code| sequenceRleSymbol(kind, code),
+        .predefined => |predefined| blk: {
+            if (index >= predefined.len) return error.CorruptFrame;
+            const state = predefined.states[index];
+            const symbols = sequenceTablePredefinedSymbols(kind);
+            if (state >= symbols.len) return error.CorruptFrame;
+            break :blk symbols[state];
+        },
+    };
+}
+
+fn sequenceRleSymbol(kind: SequenceTableKind, code: u8) Error!SequenceSymbol {
+    const bases = sequenceTableBases(kind);
+    const bits = sequenceTableBits(kind);
+    if (code >= bases.len or code >= bits.len) return error.CorruptFrame;
+    return .{
+        .base = bases[code],
+        .additional_bits = bits[code],
+        .next_state = 0,
+        .state_bits = 0,
+    };
+}
+
+fn sequenceModeByte(plan: SequenceCombinedEmitPlan) u8 {
+    return (@as(u8, @intFromEnum(sequenceTableMode(plan.literal))) << 6) |
+        (@as(u8, @intFromEnum(sequenceTableMode(plan.offset))) << 4) |
+        (@as(u8, @intFromEnum(sequenceTableMode(plan.match))) << 2);
+}
+
+fn sequenceTableMode(plan: SequenceTableEmitPlan) SymbolMode {
+    return switch (plan) {
+        .rle => .rle,
+        .predefined => .predefined,
+    };
+}
+
+fn appendSequenceTablePayload(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: SequenceTableEmitPlan) Error!void {
+    switch (plan) {
+        .rle => |code| try out.append(allocator, code),
+        .predefined => {},
+    }
+}
+
+fn sequenceTablePayloadLen(plan: SequenceTableEmitPlan) usize {
+    return switch (plan) {
+        .rle => 1,
+        .predefined => 0,
+    };
+}
+
+fn sequenceTableBases(kind: SequenceTableKind) []const usize {
+    return switch (kind) {
+        .literal => ll_base[0..],
+        .offset => of_base[0..],
+        .match => ml_base[0..],
+    };
+}
+
+fn sequenceTableBits(kind: SequenceTableKind) []const u8 {
+    return switch (kind) {
+        .literal => ll_bits[0..],
+        .offset => of_bits[0..],
+        .match => ml_bits[0..],
+    };
+}
+
+fn sequenceTablePredefinedSymbols(kind: SequenceTableKind) []const SequenceSymbol {
+    return switch (kind) {
+        .literal => default_ll_symbols[0..],
+        .offset => default_of_symbols[0..],
+        .match => default_ml_symbols[0..],
+    };
+}
+
+fn sequenceTablePredefinedMinAdditionalBits(kind: SequenceTableKind) u8 {
+    return switch (kind) {
+        .literal, .match => 0,
+        .offset => 2,
+    };
+}
+
+fn predefinedInitialStateBits(kind: SequenceTableKind) u8 {
+    return switch (kind) {
+        .literal, .match => 6,
+        .offset => 5,
+    };
 }
 
 fn multiSequencePayloadLenInternal(
@@ -8247,6 +8655,63 @@ test "zstd match planner scores single predefined sequence payloads" {
 
     const segment = findRepeatedPatternSegment(payload) orelse return error.CorruptFrame;
     try std.testing.expectEqual(predefined_len, repeatedPatternPayloadLenFrom(payload, segment, 0) orelse return error.CorruptFrame);
+}
+
+test "zstd sequence emitter supports mixed RLE and predefined tables" {
+    var payload: [409]u8 = undefined;
+    var cursor: usize = 0;
+    @memset(payload[cursor..][0..74], 'A');
+    cursor += 74;
+    @memset(payload[cursor..][0..57], 'A');
+    cursor += 57;
+    @memset(payload[cursor..][0..76], 'B');
+    cursor += 76;
+    @memset(payload[cursor..][0..202], 'B');
+    cursor += 202;
+    try std.testing.expectEqual(payload.len, cursor);
+
+    const literal_lens = [_]usize{ 74, 76 };
+    const offsets = [_]usize{ 72, 52 };
+    const match_lens = [_]usize{ 57, 202 };
+    const literal_ends = [_]usize{ 131, payload.len };
+    const mixed = (try bestMixedSequencePlan(&payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(SymbolMode.rle, sequenceTableMode(mixed.plan.literal));
+    try std.testing.expectEqual(SymbolMode.predefined, sequenceTableMode(mixed.plan.offset));
+    try std.testing.expectEqual(SymbolMode.predefined, sequenceTableMode(mixed.plan.match));
+    try std.testing.expect(mixed.payload_len < try multiSequencePayloadLenWithLiteralEnds(&payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len));
+    try std.testing.expectEqual(mixed.payload_len, try bestSequencePayloadLenWithLiteralEnds(&payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len));
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{ .content_checksum = false });
+    try std.testing.expect(try emitBestSequenceCompressedBlock(
+        std.testing.allocator,
+        &frame,
+        &payload,
+        true,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        payload.len,
+    ));
+
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    try std.testing.expectEqual(mixed.payload_len, first_block.payload_len);
+    const block = frame.items[first_block.payload_offset..][0..first_block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
+    try std.testing.expectEqual(@as(u8, 0x40), block[section.sequence_payload_offset]); // LL=RLE, OF/ML=Predefined.
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, std_decoded);
 }
 
 test "zstd literal-only writer keeps two-symbol repeated pattern matches" {
