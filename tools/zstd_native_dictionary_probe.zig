@@ -419,6 +419,18 @@ fn checkMalformedCompressedSequenceTableInspect(allocator: std.mem.Allocator) !v
     try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&frame, &into));
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
 
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+    // This mutation still leaves enough normalized-count structure for public
+    // inspection to identify ML=FSE, but the resulting table/state stream is
+    // invalid during sequence preflight/decode.
+    frame[25] = 0x00;
+    const malformed_state_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    const malformed_state_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, malformed_state_block);
+    try expect(malformed_state_modes.match_length_mode == .compressed);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&frame));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&frame, &into));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
+
     const truncated_table_hex =
         "28b52ffd209aa50000606162636465666768696a6b6c10180210aeb507";
     var truncated_table: [truncated_table_hex.len / 2]u8 = undefined;
