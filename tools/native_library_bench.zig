@@ -2,7 +2,13 @@ const std = @import("std");
 const vort = @import("vort");
 
 const Codec = enum { lz4, zstd };
-const Mode = enum { one_shot, incremental, incremental_direct };
+const Mode = enum {
+    one_shot,
+    incremental,
+    incremental_direct,
+    match_budget_0,
+    match_budget_full,
+};
 
 const Case = struct {
     name: []const u8,
@@ -46,6 +52,7 @@ pub fn main(init: std.process.Init) !void {
     try smokeZstdMultiblockDirectFallback(init.gpa);
     try smokeReusableChunkedDecoders(init.gpa);
     try smokeZstdManyRepeatedSequences(init.gpa);
+    try smokeZstdMatchSearchBudget(init.gpa);
 
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(init.gpa);
@@ -57,6 +64,14 @@ pub fn main(init: std.process.Init) !void {
         try rows.append(init.gpa, try zstdIncrementalRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdIncrementalDirectRow(init.io, init.gpa, case, options.iterations));
     }
+    try rows.append(init.gpa, try zstdMatchBudgetRow(init.io, init.gpa, .match_budget_0, 0, options.iterations));
+    try rows.append(init.gpa, try zstdMatchBudgetRow(
+        init.io,
+        init.gpa,
+        .match_budget_full,
+        vort.zstdNativeMaxMatchSearchBudget,
+        options.iterations,
+    ));
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
@@ -169,7 +184,37 @@ fn zstdIncrementalDirectRow(io: std.Io, allocator: std.mem.Allocator, case: Case
     return makeRow(.zstd, .incremental_direct, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
+fn zstdMatchBudgetRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    match_search_budget: usize,
+    iterations: usize,
+) !Row {
+    const payload = zstd_match_budget_payload;
+    const case: Case = .{ .name = "mixed_budget", .payload = payload };
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = match_search_budget,
+    };
+    const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
+    defer allocator.free(encoded.frame);
+    const decoded = try allocator.alloc(u8, payload.len);
+    defer allocator.free(decoded);
+    try expectRoundTrip(vort.zstdDecodeNativeFrameInto(encoded.frame, decoded), payload, decoded);
+
+    const encode_result = try timeEncodeZstd(io, allocator, payload, options, iterations);
+    const decode_result = try timeDecodeZstdOneShot(io, encoded.frame, decoded, payload, iterations);
+    return makeRow(.zstd, mode, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
 const TimeResult = struct { elapsed_ns: u64, checksum: u64 };
+
+const zstd_match_budget_payload =
+    "bbeegfabcceeehaabcdfacefegahabdffgabcccfeggbcddffgah" ++
+    "ccccfeggbcddffgahceegfabcceeehaabcdfacefegahabdffgab" ++
+    "cccfeggbcddfechbcecececececece";
 
 fn timeEncodeLz4(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, options: vort.Lz4NativeFrameOptions, iterations: usize) !TimeResult {
     var checksum: u64 = 0;
@@ -451,6 +496,26 @@ fn smokeZstdManyRepeatedSequences(allocator: std.mem.Allocator) !void {
     if (decoded_len != payload.items.len) return error.SizeMismatch;
 }
 
+fn smokeZstdMatchSearchBudget(allocator: std.mem.Allocator) !void {
+    const budget0 = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, zstd_match_budget_payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = 0,
+    });
+    defer allocator.free(budget0.frame);
+    const full = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, zstd_match_budget_payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = vort.zstdNativeMaxMatchSearchBudget,
+    });
+    defer allocator.free(full.frame);
+
+    if (full.frame.len >= budget0.frame.len) return error.SizeMismatch;
+    var decoded: [zstd_match_budget_payload.len]u8 = undefined;
+    try expectRoundTrip(vort.zstdDecodeNativeFrameInto(budget0.frame, &decoded), zstd_match_budget_payload, &decoded);
+    try expectRoundTrip(vort.zstdDecodeNativeFrameInto(full.frame, &decoded), zstd_match_budget_payload, &decoded);
+}
+
 fn decodeLz4Incremental(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8) !void {
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.init(allocator);
     defer decoder.deinit();
@@ -556,6 +621,8 @@ fn modeName(mode: Mode) []const u8 {
         .one_shot => "one_shot",
         .incremental => "incremental",
         .incremental_direct => "incremental_direct",
+        .match_budget_0 => "match_budget_0",
+        .match_budget_full => "match_budget_full",
     };
 }
 

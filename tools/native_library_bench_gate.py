@@ -24,8 +24,18 @@ EXPECTED_COLUMNS = [
     "checksum",
 ]
 EXPECTED_CODECS = {"lz4", "zstd"}
-EXPECTED_MODES = {"one_shot", "incremental", "incremental_direct"}
+EXPECTED_MODES = {
+    "one_shot",
+    "incremental",
+    "incremental_direct",
+    "match_budget_0",
+    "match_budget_full",
+}
 EXPECTED_CASES = {"text", "structured", "repetitive"}
+EXPECTED_EXTRA_ROWS = {
+    ("zstd", "match_budget_0", "mixed_budget"),
+    ("zstd", "match_budget_full", "mixed_budget"),
+}
 
 
 def positive_int(row: dict[str, str], key: str) -> int:
@@ -70,9 +80,9 @@ def main() -> int:
     expected = {
         (codec, mode, case)
         for codec in EXPECTED_CODECS
-        for mode in EXPECTED_MODES
+        for mode in {"one_shot", "incremental", "incremental_direct"}
         for case in EXPECTED_CASES
-    }
+    } | EXPECTED_EXTRA_ROWS
     seen: set[tuple[str, str, str]] = set()
     expected_iterations: int | None = None
 
@@ -108,6 +118,15 @@ def main() -> int:
 
     if seen != expected or len(rows) != len(expected):
         raise AssertionError(f"bad codec/mode/case matrix: seen={sorted(seen)!r}")
+
+    row_by_identity = {(row["codec"], row["mode"], row["case"]): row for row in rows}
+    budget0 = row_by_identity[("zstd", "match_budget_0", "mixed_budget")]
+    budget_full = row_by_identity[("zstd", "match_budget_full", "mixed_budget")]
+    if int(budget_full["encoded_bytes"]) >= int(budget0["encoded_bytes"]):
+        raise AssertionError(
+            "expected full zstd match search budget to improve mixed_budget size: "
+            f"budget0={budget0['encoded_bytes']} full={budget_full['encoded_bytes']}"
+        )
 
     print(f"native_library_bench_gate=ok rows={len(rows)} iterations={expected_iterations}")
     return 0
