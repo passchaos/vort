@@ -107,6 +107,14 @@ fn checkHighByteFseHuffman(allocator: std.mem.Allocator) !void {
     try expectPrefixedPayload(appended.items, &payload);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, encoded.frame, payload.len - 1));
+
+    var corrupt_weights = try allocator.dupe(u8, encoded.frame);
+    defer allocator.free(corrupt_weights);
+    corrupt_weights[first_block.payload_offset + 4] ^= 0xff;
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(corrupt_weights));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, corrupt_weights));
+    var corrupt_into: [payload.len]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(corrupt_weights, &corrupt_into));
 }
 
 fn checkSystemZstdHighByteFrame(allocator: std.mem.Allocator) !void {
