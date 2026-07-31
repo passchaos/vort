@@ -417,6 +417,17 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectStreamIteratorError(truncated_payload, error.TruncatedFrame);
     checked += 1;
 
+    const repeat_without_previous_hex = "28b52ffd20042d0000096101fc01";
+    var repeat_without_previous: [repeat_without_previous_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&repeat_without_previous, repeat_without_previous_hex);
+    const repeat_block = try vort.zstdInspectNativeFrameFirstBlock(&repeat_without_previous);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&repeat_without_previous, repeat_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&repeat_without_previous));
+    var repeat_output: [4]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&repeat_without_previous, &repeat_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &repeat_without_previous));
+    checked += 1;
+
     return checked;
 }
 
