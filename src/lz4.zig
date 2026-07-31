@@ -4491,6 +4491,33 @@ test "lz4 hash-chain finder reaches deeper long candidates" {
     try std.testing.expect(best.len >= long.len);
 }
 
+test "lz4 linked hash-chain finder reaches deeper history candidates" {
+    var history: [120]u8 = undefined;
+    @memset(&history, 'h');
+    const long = "AAAABCDEFGHIJKLMNOP";
+    @memcpy(history[0..long.len], long);
+    for (0..12) |i| {
+        const pos = 24 + i * 6;
+        @memcpy(history[pos..][0..4], "AAAA");
+        history[pos + 4] = @intCast('a' + i);
+    }
+
+    var input: [long.len]u8 = undefined;
+    @memcpy(&input, long);
+    var table: [hash_table_len]u32 = undefined;
+    var occupancy_bits: [hash_occupancy_words]u64 = undefined;
+    var chain_table: [chain_table_len]u32 = undefined;
+    @memset(&occupancy_bits, 0);
+
+    _ = insertLinkedHash(&history, &input, 0, &table, &occupancy_bits, &chain_table);
+    for (0..12) |i| {
+        _ = insertLinkedHash(&history, &input, 24 + i * 6, &table, &occupancy_bits, &chain_table);
+    }
+    const best = insertAndFindBestLinked(&history, &input, history.len, &table, &occupancy_bits, &chain_table);
+    try std.testing.expectEqual(@as(usize, 0), best.start);
+    try std.testing.expect(best.len >= long.len);
+}
+
 test "lz4 frame encoder compresses repetitive payloads and round trips" {
     const repeated = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const encoded = try encodePureFrameAlloc(std.testing.allocator, repeated);
