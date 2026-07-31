@@ -36,6 +36,8 @@ EXPECTED_MODES = {
     "dictionary",
     "dictionary_set_plain",
     "dictionary_set",
+    "dictionary_set_chunked_plain",
+    "dictionary_set_chunked",
 }
 EXPECTED_CASES = {"text", "structured", "repetitive"}
 EXPECTED_EXTRA_ROWS = {
@@ -51,6 +53,10 @@ EXPECTED_EXTRA_ROWS = {
     ("lz4", "dictionary_set", "dictionary_set"),
     ("zstd", "dictionary_set_plain", "dictionary_set"),
     ("zstd", "dictionary_set", "dictionary_set"),
+    ("lz4", "dictionary_set_chunked_plain", "dictionary_set_chunked"),
+    ("lz4", "dictionary_set_chunked", "dictionary_set_chunked"),
+    ("zstd", "dictionary_set_chunked_plain", "dictionary_set_chunked"),
+    ("zstd", "dictionary_set_chunked", "dictionary_set_chunked"),
 }
 
 
@@ -167,6 +173,14 @@ def main() -> int:
             raise AssertionError(
                 f"expected {codec} dictionary-set row to improve dictionary_set size: "
                 f"plain={set_plain['encoded_bytes']} dictionary_set={dictionary_set['encoded_bytes']}"
+            )
+
+        chunked_plain = row_by_identity[(codec, "dictionary_set_chunked_plain", "dictionary_set_chunked")]
+        chunked_set = row_by_identity[(codec, "dictionary_set_chunked", "dictionary_set_chunked")]
+        if int(chunked_set["encoded_bytes"]) >= int(chunked_plain["encoded_bytes"]):
+            raise AssertionError(
+                f"expected {codec} chunked dictionary-set row to improve dictionary_set_chunked size: "
+                f"plain={chunked_plain['encoded_bytes']} dictionary_set={chunked_set['encoded_bytes']}"
             )
 
     print(f"native_library_bench_gate=ok rows={len(rows)} iterations={expected_iterations}")

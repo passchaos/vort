@@ -14,6 +14,8 @@ const Mode = enum {
     dictionary,
     dictionary_set_plain,
     dictionary_set,
+    dictionary_set_chunked_plain,
+    dictionary_set_chunked,
 };
 
 const Case = struct {
@@ -62,6 +64,7 @@ pub fn main(init: std.process.Init) !void {
     try smokeZstdMatchSearchBudget(init.gpa);
     try smokeNativeDictionaryBenchRows(init.gpa);
     try smokeNativeDictionarySetBenchRows(init.gpa);
+    try smokeNativeDictionarySetChunkedBenchRows(init.gpa);
 
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(init.gpa);
@@ -97,6 +100,10 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(init.gpa, try lz4DictionarySetRow(init.io, init.gpa, .dictionary_set, true, options.iterations));
     try rows.append(init.gpa, try zstdDictionarySetRow(init.io, init.gpa, .dictionary_set_plain, false, options.iterations));
     try rows.append(init.gpa, try zstdDictionarySetRow(init.io, init.gpa, .dictionary_set, true, options.iterations));
+    try rows.append(init.gpa, try lz4DictionarySetChunkedRow(init.io, init.gpa, .dictionary_set_chunked_plain, false, options.iterations));
+    try rows.append(init.gpa, try lz4DictionarySetChunkedRow(init.io, init.gpa, .dictionary_set_chunked, true, options.iterations));
+    try rows.append(init.gpa, try zstdDictionarySetChunkedRow(init.io, init.gpa, .dictionary_set_chunked_plain, false, options.iterations));
+    try rows.append(init.gpa, try zstdDictionarySetChunkedRow(init.io, init.gpa, .dictionary_set_chunked, true, options.iterations));
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
@@ -389,6 +396,76 @@ fn zstdDictionarySetRow(
     return makeRow(.zstd, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
+fn lz4DictionarySetChunkedRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !Row {
+    const first_dict = vort.Lz4NativeDictionary.init(0x4c5a_4501, lz4_dictionary_set_first_content);
+    const second_dict = vort.Lz4NativeDictionary.init(0x4c5a_4502, lz4_dictionary_set_second_content);
+    const dictionary_set = vort.Lz4NativeDictionarySet.init(&.{ first_dict, second_dict });
+    const case: Case = .{ .name = "dictionary_set_chunked", .payload = lz4_dictionary_set_payload };
+    const options: vort.Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+    };
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    try appendLz4DictionarySetFrames(allocator, &encoded, options, dictionary_set, first_dict, second_dict, use_dictionary_set);
+    const chunks = dictionarySetChunks(encoded.items);
+    const join = try allocator.alloc(u8, encoded.items.len);
+    defer allocator.free(join);
+    const decoded = try allocator.alloc(u8, lz4_dictionary_set_payload.len);
+    defer allocator.free(decoded);
+    if (use_dictionary_set) {
+        try expectRoundTrip(vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&chunks, join, decoded, dictionary_set), lz4_dictionary_set_payload, decoded);
+    } else {
+        try expectRoundTrip(vort.lz4DecodeNativeConcatenatedFrameChunksInto(&chunks, join, decoded), lz4_dictionary_set_payload, decoded);
+    }
+
+    const encode_result = try timeEncodeLz4DictionarySet(io, allocator, options, dictionary_set, first_dict, second_dict, use_dictionary_set, iterations);
+    const decode_result = try timeDecodeLz4DictionarySetChunked(io, &chunks, join, decoded, dictionary_set, use_dictionary_set, iterations);
+    return makeRow(.lz4, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdDictionarySetChunkedRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !Row {
+    const first_dict = vort.ZstdNativeDictionary.init(0x5a53_4501, zstd_dictionary_set_first_content);
+    const second_dict = vort.ZstdNativeDictionary.init(0x5a53_4502, zstd_dictionary_set_second_content);
+    const dictionary_set = vort.ZstdNativeDictionarySet.init(&.{ first_dict, second_dict });
+    const case: Case = .{ .name = "dictionary_set_chunked", .payload = zstd_dictionary_set_payload };
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    try appendZstdDictionarySetFrames(allocator, &encoded, options, dictionary_set, first_dict, second_dict, use_dictionary_set);
+    const chunks = dictionarySetChunks(encoded.items);
+    const join = try allocator.alloc(u8, encoded.items.len);
+    defer allocator.free(join);
+    const decoded = try allocator.alloc(u8, zstd_dictionary_set_payload.len);
+    defer allocator.free(decoded);
+    if (use_dictionary_set) {
+        try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&chunks, join, decoded, dictionary_set), zstd_dictionary_set_payload, decoded);
+    } else {
+        try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameChunksInto(&chunks, join, decoded), zstd_dictionary_set_payload, decoded);
+    }
+
+    const encode_result = try timeEncodeZstdDictionarySet(io, allocator, options, dictionary_set, first_dict, second_dict, use_dictionary_set, iterations);
+    const decode_result = try timeDecodeZstdDictionarySetChunked(io, &chunks, join, decoded, dictionary_set, use_dictionary_set, iterations);
+    return makeRow(.zstd, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
 const TimeResult = struct { elapsed_ns: u64, checksum: u64 };
 
 const lz4_chain_depth_payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 16;
@@ -621,6 +698,50 @@ fn timeDecodeZstdDictionarySetOneShot(
             try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameIntoWithDictionarySet(encoded, decoded, dictionary_set), zstd_dictionary_set_payload, decoded);
         } else {
             try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameInto(encoded, decoded), zstd_dictionary_set_payload, decoded);
+        }
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeLz4DictionarySetChunked(
+    io: std.Io,
+    chunks: []const []const u8,
+    join: []u8,
+    decoded: []u8,
+    dictionary_set: vort.Lz4NativeDictionarySet,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        if (use_dictionary_set) {
+            try expectRoundTrip(vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(chunks, join, decoded, dictionary_set), lz4_dictionary_set_payload, decoded);
+        } else {
+            try expectRoundTrip(vort.lz4DecodeNativeConcatenatedFrameChunksInto(chunks, join, decoded), lz4_dictionary_set_payload, decoded);
+        }
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeZstdDictionarySetChunked(
+    io: std.Io,
+    chunks: []const []const u8,
+    join: []u8,
+    decoded: []u8,
+    dictionary_set: vort.ZstdNativeDictionarySet,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        if (use_dictionary_set) {
+            try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(chunks, join, decoded, dictionary_set), zstd_dictionary_set_payload, decoded);
+        } else {
+            try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameChunksInto(chunks, join, decoded), zstd_dictionary_set_payload, decoded);
         }
         checksum +%= decoded[0];
     }
@@ -973,6 +1094,64 @@ fn smokeNativeDictionarySetBenchRows(allocator: std.mem.Allocator) !void {
     try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameIntoWithDictionarySet(zstd_set_stream.items, &zstd_out, zstd_dictionary_set), zstd_dictionary_set_payload, &zstd_out);
 }
 
+fn smokeNativeDictionarySetChunkedBenchRows(allocator: std.mem.Allocator) !void {
+    const lz4_first_dict = vort.Lz4NativeDictionary.init(0x4c5a_4501, lz4_dictionary_set_first_content);
+    const lz4_second_dict = vort.Lz4NativeDictionary.init(0x4c5a_4502, lz4_dictionary_set_second_content);
+    const lz4_dictionary_set = vort.Lz4NativeDictionarySet.init(&.{ lz4_first_dict, lz4_second_dict });
+    const lz4_options: vort.Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+    };
+    var lz4_plain: std.ArrayList(u8) = .empty;
+    defer lz4_plain.deinit(allocator);
+    try appendLz4DictionarySetFrames(allocator, &lz4_plain, lz4_options, lz4_dictionary_set, lz4_first_dict, lz4_second_dict, false);
+    var lz4_set_stream: std.ArrayList(u8) = .empty;
+    defer lz4_set_stream.deinit(allocator);
+    try appendLz4DictionarySetFrames(allocator, &lz4_set_stream, lz4_options, lz4_dictionary_set, lz4_first_dict, lz4_second_dict, true);
+    const lz4_plain_chunks = dictionarySetChunks(lz4_plain.items);
+    const lz4_set_chunks = dictionarySetChunks(lz4_set_stream.items);
+    const lz4_plain_join = try allocator.alloc(u8, lz4_plain.items.len);
+    defer allocator.free(lz4_plain_join);
+    const lz4_set_join = try allocator.alloc(u8, lz4_set_stream.items.len);
+    defer allocator.free(lz4_set_join);
+    var lz4_out: [lz4_dictionary_set_payload.len]u8 = undefined;
+    try expectRoundTrip(vort.lz4DecodeNativeConcatenatedFrameChunksInto(&lz4_plain_chunks, lz4_plain_join, &lz4_out), lz4_dictionary_set_payload, &lz4_out);
+    try expectRoundTrip(vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&lz4_set_chunks, lz4_set_join, &lz4_out, lz4_dictionary_set), lz4_dictionary_set_payload, &lz4_out);
+
+    const zstd_first_dict = vort.ZstdNativeDictionary.init(0x5a53_4501, zstd_dictionary_set_first_content);
+    const zstd_second_dict = vort.ZstdNativeDictionary.init(0x5a53_4502, zstd_dictionary_set_second_content);
+    const zstd_dictionary_set = vort.ZstdNativeDictionarySet.init(&.{ zstd_first_dict, zstd_second_dict });
+    const zstd_options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+    var zstd_plain: std.ArrayList(u8) = .empty;
+    defer zstd_plain.deinit(allocator);
+    try appendZstdDictionarySetFrames(allocator, &zstd_plain, zstd_options, zstd_dictionary_set, zstd_first_dict, zstd_second_dict, false);
+    var zstd_set_stream: std.ArrayList(u8) = .empty;
+    defer zstd_set_stream.deinit(allocator);
+    try appendZstdDictionarySetFrames(allocator, &zstd_set_stream, zstd_options, zstd_dictionary_set, zstd_first_dict, zstd_second_dict, true);
+    const zstd_plain_chunks = dictionarySetChunks(zstd_plain.items);
+    const zstd_set_chunks = dictionarySetChunks(zstd_set_stream.items);
+    const zstd_plain_join = try allocator.alloc(u8, zstd_plain.items.len);
+    defer allocator.free(zstd_plain_join);
+    const zstd_set_join = try allocator.alloc(u8, zstd_set_stream.items.len);
+    defer allocator.free(zstd_set_join);
+    var zstd_out: [zstd_dictionary_set_payload.len]u8 = undefined;
+    try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameChunksInto(&zstd_plain_chunks, zstd_plain_join, &zstd_out), zstd_dictionary_set_payload, &zstd_out);
+    try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&zstd_set_chunks, zstd_set_join, &zstd_out, zstd_dictionary_set), zstd_dictionary_set_payload, &zstd_out);
+}
+
+fn dictionarySetChunks(encoded: []const u8) [3][]const u8 {
+    const first_end = @max(@as(usize, 1), encoded.len / 3);
+    const second_end = @max(first_end + 1, (encoded.len * 2) / 3);
+    return .{
+        encoded[0..first_end],
+        encoded[first_end..second_end],
+        encoded[second_end..],
+    };
+}
+
 fn appendLz4DictionarySetFrames(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -1132,6 +1311,8 @@ fn modeName(mode: Mode) []const u8 {
         .dictionary => "dictionary",
         .dictionary_set_plain => "dictionary_set_plain",
         .dictionary_set => "dictionary_set",
+        .dictionary_set_chunked_plain => "dictionary_set_chunked_plain",
+        .dictionary_set_chunked => "dictionary_set_chunked",
     };
 }
 
