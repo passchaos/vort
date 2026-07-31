@@ -42,6 +42,7 @@ pub fn main(init: std.process.Init) !void {
 
     try smokeLz4LinkedDirectFallback(init.gpa);
     try smokeZstdMultiblockDirectFallback(init.gpa);
+    try smokeReusableChunkedDecoders(init.gpa);
 
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(init.gpa);
@@ -313,6 +314,48 @@ fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
     const done = try decoder.step("", decoded[17..]);
     if (done.status != .done) return error.SizeMismatch;
     if (!std.mem.eql(u8, payload, &decoded)) return error.SizeMismatch;
+}
+
+fn smokeReusableChunkedDecoders(allocator: std.mem.Allocator) !void {
+    const lz4_payload = "bench-lz4-chunked-reusable";
+    const lz4_encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, lz4_payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+    });
+    defer allocator.free(lz4_encoded);
+    const lz4_chunks = [_][]const u8{
+        lz4_encoded[0..5],
+        lz4_encoded[5..],
+    };
+    const lz4_join = try allocator.alloc(u8, lz4_encoded.len);
+    defer allocator.free(lz4_join);
+    var lz4_decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer lz4_decoder.deinit();
+    const lz4_exact = try lz4_decoder.decodeConcatenatedChunksAllocExactSize(&lz4_chunks, lz4_join, lz4_payload.len);
+    defer allocator.free(lz4_exact);
+    if (!std.mem.eql(u8, lz4_payload, lz4_exact)) return error.SizeMismatch;
+    const lz4_size = try lz4_decoder.decodedConcatenatedChunksSize(&lz4_chunks, lz4_join);
+    if (lz4_size != lz4_payload.len) return error.SizeMismatch;
+
+    const zstd_payload = "bench-zstd-chunked-reusable";
+    const zstd_encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, zstd_payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    });
+    defer allocator.free(zstd_encoded.frame);
+    const zstd_chunks = [_][]const u8{
+        zstd_encoded.frame[0..7],
+        zstd_encoded.frame[7..],
+    };
+    const zstd_join = try allocator.alloc(u8, zstd_encoded.frame.len);
+    defer allocator.free(zstd_join);
+    var zstd_decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer zstd_decoder.deinit();
+    const zstd_exact = try zstd_decoder.decodeConcatenatedChunksAllocExactSize(&zstd_chunks, zstd_join, zstd_payload.len);
+    defer allocator.free(zstd_exact);
+    if (!std.mem.eql(u8, zstd_payload, zstd_exact)) return error.SizeMismatch;
+    const zstd_size = try zstd_decoder.decodedConcatenatedChunksSize(&zstd_chunks, zstd_join);
+    if (zstd_size != zstd_payload.len) return error.SizeMismatch;
 }
 
 fn decodeLz4Incremental(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8) !void {
