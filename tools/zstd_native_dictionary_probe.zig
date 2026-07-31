@@ -34,6 +34,7 @@ pub fn main(init: std.process.Init) !void {
     try checkDictionarySetDirectFallback(init.gpa);
     checked += 1;
     checked += try checkHandcraftedFrameValidation(init.gpa);
+    checked += try checkHandcraftedHeaderAndSkippableValidation(init.gpa);
 
     try stdout.print("zstd_native_dictionary_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -517,6 +518,41 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     return checked;
 }
 
+fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !usize {
+    var checked: usize = 0;
+
+    // Descriptor advertises a 2-byte Dictionary_ID field but only one byte is
+    // present. Keep the window descriptor valid so this specifically covers
+    // field-length accounting, not earlier frame-header parsing.
+    const truncated_dictionary_id = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x02, // Dictionary_ID flag = 2 bytes, no checksum/content-size.
+        0x00, // 1 KiB window descriptor.
+        0x34,
+    };
+    try expectNativeHeaderAndStreamError(allocator, &truncated_dictionary_id, error.TruncatedFrame);
+    checked += 1;
+
+    // Content_Size flag 1 requires a 2-byte size field for a non-single-segment
+    // frame. Supplying one byte makes the header invalid before block parsing.
+    const truncated_content_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x40, // Content_Size flag = 1; window descriptor still follows.
+        0x00,
+        0x03,
+    };
+    try expectNativeHeaderAndStreamError(allocator, &truncated_content_size, error.TruncatedFrame);
+    checked += 1;
+
+    const truncated_skippable = try handcraftedSkippableFrame(allocator, 6, "abc");
+    defer allocator.free(truncated_skippable);
+    try expectError(error.TruncatedFrame, vort.zstdInspectNativeSkippableFrame(truncated_skippable));
+    try expectNativeStreamOnlyError(allocator, truncated_skippable, error.TruncatedFrame);
+    checked += 1;
+
+    return checked;
+}
+
 fn handcraftedRawFrame(
     allocator: std.mem.Allocator,
     claimed_len: usize,
@@ -536,6 +572,17 @@ fn handcraftedRawFrame(
     try frame.append(allocator, @truncate(block_header_value >> 16));
     try frame.appendSlice(allocator, payload);
     try frame.appendSlice(allocator, trailing);
+    return try frame.toOwnedSlice(allocator);
+}
+
+fn handcraftedSkippableFrame(allocator: std.mem.Allocator, claimed_len: u32, payload: []const u8) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(allocator);
+    var header: [8]u8 = undefined;
+    std.mem.writeInt(u32, header[0..4], 0x184d2a50, .little);
+    std.mem.writeInt(u32, header[4..8], claimed_len, .little);
+    try frame.appendSlice(allocator, &header);
+    try frame.appendSlice(allocator, payload);
     return try frame.toOwnedSlice(allocator);
 }
 
@@ -571,4 +618,19 @@ fn expectStreamIteratorError(frame: []const u8, expected: anyerror) !void {
     } else |err| {
         if (err != expected) return err;
     }
+}
+
+fn expectNativeHeaderAndStreamError(allocator: std.mem.Allocator, frame: []const u8, expected: anyerror) !void {
+    try expectError(expected, vort.zstdInspectNativeFrameHeader(frame));
+    try expectNativeStreamOnlyError(allocator, frame, expected);
+}
+
+fn expectNativeStreamOnlyError(allocator: std.mem.Allocator, frame: []const u8, expected: anyerror) !void {
+    try expectError(expected, vort.zstdDecodedNativeFrameSize(frame));
+
+    var output: [1]u8 = undefined;
+    try expectError(expected, vort.zstdDecodeNativeFrameInto(frame, &output));
+    try expectAllocError(allocator, expected, vort.zstdDecodeNativeFrameAlloc(allocator, frame));
+    try expectError(expected, vort.zstdSummarizeNativeStream(frame));
+    try expectStreamIteratorError(frame, expected);
 }
