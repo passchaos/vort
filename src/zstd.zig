@@ -4705,7 +4705,7 @@ fn emitSingleDictionaryMatchCompressedBlock(
     const offsets = [_]usize{match_offset};
     const match_lens = [_]usize{match.len};
     const literal_ends = [_]usize{tail_start};
-    return try emitRleSequenceCompressedBlock(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start);
+    return try emitBestSequenceCompressedBlock(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start);
 }
 
 const MixedMatchKind = enum { dictionary, duplicate, repeated };
@@ -5050,7 +5050,7 @@ fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     const offsets = [_]usize{offset};
     const match_lens = [_]usize{match.len};
     const literal_ends = [_]usize{tail_start};
-    return try emitRleSequenceCompressedBlock(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start);
+    return try emitBestSequenceCompressedBlock(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start);
 }
 
 fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
@@ -5240,7 +5240,7 @@ fn emitMultiSequencePredefinedCompressedBlock(
 ) Error!bool {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return false;
     if (literal_lens.len != literal_ends.len) return false;
-    if (literal_lens.len < 2 or literal_lens.len > max_bootstrap_sequence_count) return false;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return false;
 
     const literal_plan = (try planPredefinedSequenceValues(literal_lens, &default_ll_symbols, 0)) orelse return false;
     const offset_plan = (try planPredefinedSequenceValues(offsets, &default_of_symbols, 2)) orelse return false;
@@ -5397,7 +5397,7 @@ fn multiSequencePayloadLenInternal(
     tail_start: usize,
 ) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
-    if (literal_lens.len < 2 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
     if (literal_ends) |ends| {
         if (ends.len != literal_lens.len) return error.CorruptFrame;
     }
@@ -5895,7 +5895,7 @@ fn emitRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.Ar
     const offsets = [_]usize{pattern.period};
     const match_lens = [_]usize{match_len};
     const literal_ends = [_]usize{tail_start};
-    return try emitRleSequenceCompressedBlock(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start);
+    return try emitBestSequenceCompressedBlock(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start);
 }
 
 fn emitMultiRepeatedPatternCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
@@ -6072,7 +6072,7 @@ fn predefinedSequenceReadFields(
     match_plan: PredefinedSequencePlan,
 ) Error!usize {
     if (literal_plan.len != offset_plan.len or literal_plan.len != match_plan.len) return error.CorruptFrame;
-    const needed = 3 + literal_plan.len * 3 + (literal_plan.len - 1) * 3;
+    const needed = 3 + literal_plan.len * 3 + if (literal_plan.len > 1) (literal_plan.len - 1) * 3 else 0;
     if (out.len < needed) return error.OutputTooSmall;
 
     var count: usize = 0;
@@ -7620,7 +7620,8 @@ test "zstd literal-only writer emits duplicate substring match" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
-    const estimated_payload_len = try singleRleSequencePayloadLen(payload, 29, 23, 17, 46);
+    try std.testing.expectEqual(@as(u8, 0x00), block[section.sequence_payload_offset]);
+    const estimated_payload_len = try multiSequencePayloadLenWithLiteralEnds(payload, &.{29}, &.{23}, &.{17}, &.{46}, 46);
     try std.testing.expectEqual(block_len, estimated_payload_len);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
@@ -8179,7 +8180,8 @@ test "zstd literal-only writer keeps two-symbol repeated pattern matches" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(@as(usize, 1), section.sequence_count);
-    const estimated_payload_len = try singleRleSequencePayloadLen(payload, 2, 2, payload.len - 2, payload.len);
+    try std.testing.expectEqual(@as(u8, 0x00), block[section.sequence_payload_offset]);
+    const estimated_payload_len = try multiSequencePayloadLenWithLiteralEnds(payload, &.{2}, &.{2}, &.{payload.len - 2}, &.{payload.len}, payload.len);
     try std.testing.expectEqual(block_len, estimated_payload_len);
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
