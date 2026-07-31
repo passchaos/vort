@@ -126,7 +126,8 @@ Current interpretation:
   match-vs-Huffman size arbitration, smallest native match-plan arbitration,
   RLE/predefined sequence cost scoring for single and mixed match candidates,
   mixed RLE/predefined sequence-table mode emission,
-  branch-scored mixed duplicate/repeated match lookahead and emission,
+  branch-scored mixed duplicate/repeated and dictionary/duplicate/repeated
+  match lookahead and emission,
   RLE-literals sections for same-byte sequence literals,
   raw-block-cost-aware sequence selection, plus a file-backed multi-block
   treeless Huffman writer case, then checks

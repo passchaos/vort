@@ -4878,6 +4878,7 @@ const MixedMatchLookaheadPlan = struct {
     offsets: [max_bootstrap_sequence_count]usize = undefined,
     match_lens: [max_bootstrap_sequence_count]usize = undefined,
     literal_ends: [max_bootstrap_sequence_count]usize = undefined,
+    kinds: [max_bootstrap_sequence_count]MixedMatchKind = undefined,
     count: usize = 0,
     tail_start: usize = 0,
     payload_len: usize = 0,
@@ -4979,6 +4980,7 @@ fn bestMixedCandidateLookaheadPlanFrom(
     plan.offsets[depth] = candidate.offset;
     plan.match_lens[depth] = candidate.match_len;
     plan.literal_ends[depth] = candidate.literal_end;
+    plan.kinds[depth] = candidate.kind;
     const count = depth + 1;
 
     var best: ?MixedMatchLookaheadPlan = null;
@@ -10933,6 +10935,49 @@ test "zstd native writer mixes dictionary and repeated-pattern matches" {
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(encoded.frame[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
     try std.testing.expect(section.sequence_count >= 2);
+
+    const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .dictionary_id = dict.id,
+    });
+    defer std.testing.allocator.free(raw);
+    try std.testing.expect(encoded.frame.len < raw.len);
+}
+
+test "zstd native writer emits branch-scored dictionary duplicate repeated matches" {
+    const dict_content = "DICTMATCH1234567890";
+    const unique = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}";
+    const dict = NativeDictionary.init(0x6789, dict_content);
+    const payload = "pfx-" ++ dict_content ++ "-u-" ++ unique ++ "-mid-" ++ unique ++ "-rep-" ++ ("ab" ** 16) ++ "-tail";
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    const plan = (try bestMixedMatchLookaheadPlan(dict.content, payload, 0, .{
+        .dictionary = true,
+        .duplicate = true,
+        .repeated = true,
+    }, .{ .kind = .dictionary }, .non_dictionary)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(@as(usize, 3), plan.count);
+    try std.testing.expectEqual(MixedMatchKind.dictionary, plan.kinds[0]);
+    try std.testing.expectEqual(MixedMatchKind.duplicate, plan.kinds[1]);
+    try std.testing.expectEqual(MixedMatchKind.repeated, plan.kinds[2]);
+
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, dict);
+    defer std.testing.allocator.free(encoded.frame);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, encoded.mode);
+
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded.frame, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const first_block = try inspectNativeFrameFirstBlock(encoded.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    try std.testing.expectEqual(plan.payload_len, first_block.payload_len);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded.frame[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    try std.testing.expectEqual(plan.count, section.sequence_count);
 
     const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .content_checksum = false,
