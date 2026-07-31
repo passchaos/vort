@@ -2277,6 +2277,109 @@ test "root native no-size dictionary-set direct-output paths round trip" {
     try zstd_decoder.finish();
 }
 
+test "root native no-size dictionary-set streams diagnose expected size mismatches" {
+    const lz4_first_dict = Lz4NativeDictionary.init(0x5351, "abcdefghijklmnop");
+    const lz4_second_dict = Lz4NativeDictionary.init(0x5352, "QRSTUVWXYZabcdef");
+    const lz4_dictionary_set = Lz4NativeDictionarySet.init(&.{ lz4_first_dict, lz4_second_dict });
+    const lz4_first_payload = "abcdefghijklmnop-nosize-mismatch-one";
+    const lz4_second_payload = "QRSTUVWXYZabcdef-nosize-mismatch-two";
+    const lz4_options: Lz4NativeFrameOptions = .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .block_checksum = true,
+    };
+    const lz4_first = try lz4EncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, lz4_first_payload, lz4_options, lz4_first_dict);
+    defer std.testing.allocator.free(lz4_first);
+    const lz4_second = try lz4EncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, lz4_second_payload, lz4_options, lz4_second_dict);
+    defer std.testing.allocator.free(lz4_second);
+    const lz4_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 5, "root-nosize-set-mismatch-lz4");
+    defer std.testing.allocator.free(lz4_skip);
+    var lz4_stream: std.ArrayList(u8) = .empty;
+    defer lz4_stream.deinit(std.testing.allocator);
+    try lz4_stream.appendSlice(std.testing.allocator, lz4_first);
+    try lz4_stream.appendSlice(std.testing.allocator, lz4_skip);
+    try lz4_stream.appendSlice(std.testing.allocator, lz4_second);
+    const lz4_expected = lz4_first_payload ++ lz4_second_payload;
+    var lz4_output: [lz4_expected.len]u8 = undefined;
+
+    var lz4_too_small = Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, lz4_dictionary_set, .{
+        .expected_output_len = lz4_expected.len - 1,
+        .max_decoded_buffer_len = @max(lz4_first_payload.len, lz4_second_payload.len),
+    });
+    defer lz4_too_small.deinit();
+    // The first frame fits, then the second dictionary-selected no-size frame
+    // proves the caller's total expected length is one byte short. This checks
+    // the cumulative expected-output contract across concatenated members.
+    const lz4_initial = try lz4_too_small.step(lz4_stream.items, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_initial.status);
+    try std.testing.expectError(error.SizeMismatch, lz4_too_small.step("", &lz4_output));
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", lz4_too_small.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_too_small.diagnostics().last_error_phase_name);
+
+    var lz4_too_large = Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, lz4_dictionary_set, .{
+        .expected_output_len = lz4_expected.len + 1,
+        .max_decoded_buffer_len = @max(lz4_first_payload.len, lz4_second_payload.len),
+    });
+    defer lz4_too_large.deinit();
+    const lz4_large_initial = try lz4_too_large.step(lz4_stream.items, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_large_initial.status);
+    const lz4_pending = try lz4_too_large.step("", &lz4_output);
+    try std.testing.expectEqual(StepResult.Status.need_input, lz4_pending.status);
+    try std.testing.expectEqualSlices(u8, lz4_expected, &lz4_output);
+    try std.testing.expectError(error.SizeMismatch, lz4_too_large.finish());
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", lz4_too_large.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "output", lz4_too_large.diagnostics().last_error_phase_name);
+
+    const zstd_first_dict = ZstdNativeDictionary.init(0x6361, "abcdefghijklmnop");
+    const zstd_second_dict = ZstdNativeDictionary.init(0x6362, "QRSTUVWXYZabcdef");
+    const zstd_dictionary_set = ZstdNativeDictionarySet.init(&.{ zstd_first_dict, zstd_second_dict });
+    const zstd_first_payload = "pfx-abcdefghijklmnop-nosize-mismatch-one";
+    const zstd_second_payload = "pfx-QRSTUVWXYZabcdef-nosize-mismatch-two";
+    const zstd_options: ZstdNativeFrameOptions = .{
+        .include_content_size = false,
+        .selection = .literal_only,
+        .content_checksum = true,
+    };
+    const zstd_first = try zstdEncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, zstd_first_payload, zstd_options, zstd_first_dict);
+    defer std.testing.allocator.free(zstd_first.frame);
+    const zstd_second = try zstdEncodeNativeFrameWithDictionaryAlloc(std.testing.allocator, zstd_second_payload, zstd_options, zstd_second_dict);
+    defer std.testing.allocator.free(zstd_second.frame);
+    const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 5, "root-nosize-set-mismatch-zstd");
+    defer std.testing.allocator.free(zstd_skip);
+    var zstd_stream: std.ArrayList(u8) = .empty;
+    defer zstd_stream.deinit(std.testing.allocator);
+    try zstd_stream.appendSlice(std.testing.allocator, zstd_first.frame);
+    try zstd_stream.appendSlice(std.testing.allocator, zstd_skip);
+    try zstd_stream.appendSlice(std.testing.allocator, zstd_second.frame);
+    const zstd_expected = zstd_first_payload ++ zstd_second_payload;
+    var zstd_output: [zstd_expected.len]u8 = undefined;
+
+    var zstd_too_small = ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, zstd_dictionary_set, .{
+        .expected_output_len = zstd_expected.len - 1,
+        .max_decoded_buffer_len = @max(zstd_first_payload.len, zstd_second_payload.len),
+    });
+    defer zstd_too_small.deinit();
+    const zstd_initial = try zstd_too_small.step(zstd_stream.items, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_initial.status);
+    try std.testing.expectError(error.SizeMismatch, zstd_too_small.step("", &zstd_output));
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", zstd_too_small.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_too_small.diagnostics().last_error_phase_name);
+
+    var zstd_too_large = ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, zstd_dictionary_set, .{
+        .expected_output_len = zstd_expected.len + 1,
+        .max_decoded_buffer_len = @max(zstd_first_payload.len, zstd_second_payload.len),
+    });
+    defer zstd_too_large.deinit();
+    const zstd_large_initial = try zstd_too_large.step(zstd_stream.items, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_large_initial.status);
+    const zstd_pending = try zstd_too_large.step("", &zstd_output);
+    try std.testing.expectEqual(StepResult.Status.need_input, zstd_pending.status);
+    try std.testing.expectEqualSlices(u8, zstd_expected, &zstd_output);
+    try std.testing.expectError(error.SizeMismatch, zstd_too_large.finish());
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", zstd_too_large.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "output", zstd_too_large.diagnostics().last_error_phase_name);
+}
+
 test "root lz4 linked direct-output falls back for small output" {
     var lz4_payload: [64 * 1024 + 4096]u8 = undefined;
     var state: u32 = 0x1234_abcd;
