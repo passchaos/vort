@@ -263,6 +263,11 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         max_direct_state = (max_direct_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
         max_direct_huffman_bytes.append((max_direct_state >> 16) % 129)
     max_direct_huffman = bytes(max_direct_huffman_bytes)
+    high_byte_state = 0xFEED_BEEF
+    high_byte_binary = bytearray()
+    for _ in range(1024):
+        high_byte_state = (high_byte_state * 1_664_525 + 1_013_904_223) & 0xFFFF_FFFF
+        high_byte_binary.append(129 + ((high_byte_state >> 16) % 127))
 
     cases: list[tuple[str, bytes]] = [
         ("empty", b""),
@@ -285,6 +290,7 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         ("older-duplicate-candidate", older_candidate_payload),
         ("one-twenty-eight-symbol-huffman", bytes(one_twenty_eight_symbol_huffman)),
         ("max-direct-symbol-huffman", max_direct_huffman),
+        ("high-byte-binary-fallback", bytes(high_byte_binary)),
         (
             "structured-lines",
             b"".join(

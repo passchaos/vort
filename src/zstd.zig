@@ -9419,6 +9419,28 @@ test "zstd literal-only writer emits max direct Huffman symbol set" {
     try std.testing.expect(encoded.len < raw_encoded.len);
 }
 
+test "zstd literal-only writer safely falls back for high-byte binary literals" {
+    var payload: [1024]u8 = undefined;
+    var state: u32 = 0xfeed_beef;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast(129 + ((state >> 16) % 127));
+    }
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(encoded);
+    const first_block = try inspectNativeFrameFirstBlock(encoded);
+    try std.testing.expectEqual(NativeBlockType.raw, first_block.block_type);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, &payload, std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
 test "zstd match planner scores single predefined sequence payloads" {
     const payload = "ab" ** 12;
     const match: DuplicateMatch = .{
