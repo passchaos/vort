@@ -35,6 +35,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkDictionaryFrame(init.gpa);
     checked += 1;
+    try checkDictionarySetStreamInspection(init.gpa);
+    checked += 1;
     try checkSkippableOnlyStream(init.gpa);
     checked += 1;
     checked += try checkInvalidFrameHeaders(init.gpa);
@@ -467,6 +469,64 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
     const multi_decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, multi, dict);
     defer allocator.free(multi_decoded);
     if (!std.mem.eql(u8, multi_payload, multi_decoded)) return error.Lz4ProbeMismatch;
+}
+
+fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
+    const first_dict = vort.Lz4NativeDictionary.init(0x1234_0001, "abcdefghijklmnop");
+    const second_dict = vort.Lz4NativeDictionary.init(0x1234_0002, "QRSTUVWXYZabcdef");
+    const dictionaries = [_]vort.Lz4NativeDictionary{ first_dict, second_dict };
+    const dictionary_set = vort.Lz4NativeDictionarySet.init(&dictionaries);
+    const options: vort.Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+    };
+    const first_payload = "prefix-abcdefghijklmnop-one";
+    const second_payload = "prefix-QRSTUVWXYZabcdef-two";
+
+    const first = try vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, first_payload, options, dictionary_set, first_dict.id);
+    defer allocator.free(first);
+    const second = try vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, second_payload, options, dictionary_set, second_dict.id);
+    defer allocator.free(second);
+
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(allocator);
+    try stream.appendSlice(allocator, first);
+    try stream.appendSlice(allocator, second);
+
+    const summary = try vort.lz4SummarizeNativeStream(stream.items);
+    if (summary.frame_count != 2) return error.Lz4ProbeMismatch;
+    if (summary.block_count != 2) return error.Lz4ProbeSizeMismatch;
+    if (summary.compressed_block_count != 2) return error.Lz4ProbeMismatch;
+
+    var iterator = vort.lz4IterateNativeStream(stream.items);
+    const first_element = (try iterator.next()) orelse return error.Lz4ProbeMismatch;
+    const second_element = (try iterator.next()) orelse return error.Lz4ProbeMismatch;
+    if ((try iterator.next()) != null) return error.Lz4ProbeMismatch;
+
+    const first_frame = switch (first_element) {
+        .frame => |frame| frame,
+        .skippable => return error.Lz4ProbeMismatch,
+    };
+    const second_frame = switch (second_element) {
+        .frame => |frame| frame,
+        .skippable => return error.Lz4ProbeMismatch,
+    };
+    if (first_frame.header.dictionary_id == null or first_frame.header.dictionary_id.? != first_dict.id) return error.Lz4ProbeMismatch;
+    if (second_frame.header.dictionary_id == null or second_frame.header.dictionary_id.? != second_dict.id) return error.Lz4ProbeMismatch;
+
+    var first_blocks = try first_frame.blockIterator();
+    const first_block = (try first_blocks.next()) orelse return error.Lz4ProbeMismatch;
+    if (!first_block.is_compressed or first_block.block_checksum_offset == null) return error.Lz4ProbeMismatch;
+    if ((try first_blocks.next()) != null) return error.Lz4ProbeMismatch;
+
+    var second_blocks = try second_frame.blockIterator();
+    const second_block = (try second_blocks.next()) orelse return error.Lz4ProbeMismatch;
+    if (!second_block.is_compressed or second_block.block_checksum_offset == null) return error.Lz4ProbeMismatch;
+    if ((try second_blocks.next()) != null) return error.Lz4ProbeMismatch;
+
+    const decoded = try vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(allocator, stream.items, dictionary_set);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, first_payload ++ second_payload, decoded)) return error.Lz4ProbeMismatch;
 }
 
 fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
