@@ -1810,6 +1810,10 @@ pub const NativeFrameDecoder = struct {
         return try decodeRawOrRleFrameChunksAlloc(self.allocator, chunks, compressed_scratch);
     }
 
+    pub fn decodeConcatenatedChunksAllocExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error![]u8 {
+        return try decodeRawOrRleFrameChunksAllocExactSize(self.allocator, chunks, compressed_scratch, expected_output_len);
+    }
+
     pub fn decodeConcatenatedChunksAllocLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error![]u8 {
         return try decodeRawOrRleFrameChunksAllocLimited(self.allocator, chunks, compressed_scratch, max_output_len);
     }
@@ -1843,6 +1847,16 @@ pub const NativeFrameDecoder = struct {
 
     pub fn decodeConcatenatedChunksAllocWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error![]u8 {
         return try decodeRawOrRleFrameChunksAllocWithDictionary(self.allocator, chunks, compressed_scratch, dictionary);
+    }
+
+    pub fn decodeConcatenatedChunksAllocExactSizeWithDictionary(
+        self: *NativeFrameDecoder,
+        chunks: []const []const u8,
+        compressed_scratch: []u8,
+        dictionary: NativeDictionary,
+        expected_output_len: usize,
+    ) Error![]u8 {
+        return try decodeRawOrRleFrameChunksAllocWithDictionaryExactSize(self.allocator, chunks, compressed_scratch, dictionary, expected_output_len);
     }
 
     pub fn decodeConcatenatedChunksAllocLimitedWithDictionary(
@@ -1897,6 +1911,16 @@ pub const NativeFrameDecoder = struct {
 
     pub fn decodeConcatenatedChunksAllocWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error![]u8 {
         return try decodeRawOrRleFrameChunksAllocWithDictionarySet(self.allocator, chunks, compressed_scratch, dictionary_set);
+    }
+
+    pub fn decodeConcatenatedChunksAllocExactSizeWithDictionarySet(
+        self: *NativeFrameDecoder,
+        chunks: []const []const u8,
+        compressed_scratch: []u8,
+        dictionary_set: NativeDictionarySet,
+        expected_output_len: usize,
+    ) Error![]u8 {
+        return try decodeRawOrRleFrameChunksAllocWithDictionarySetExactSize(self.allocator, chunks, compressed_scratch, dictionary_set, expected_output_len);
     }
 
     pub fn decodeConcatenatedChunksAllocLimitedWithDictionarySet(

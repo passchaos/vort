@@ -2197,6 +2197,10 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     const lz4_chunked = try lz4DecodeConcatenatedFrameChunksAllocWithDictionarySet(std.testing.allocator, &lz4_chunks, lz4_join, lz4_dictionary_set);
     defer std.testing.allocator.free(lz4_chunked);
     try std.testing.expectEqualSlices(u8, lz4_expected, lz4_chunked);
+    const lz4_reusable_chunked_exact = try lz4_reusable_decoder.decodeConcatenatedChunksAllocExactSizeWithDictionarySet(&lz4_chunks, lz4_join, lz4_dictionary_set, lz4_expected.len);
+    defer std.testing.allocator.free(lz4_reusable_chunked_exact);
+    try std.testing.expectEqualSlices(u8, lz4_expected, lz4_reusable_chunked_exact);
+    try std.testing.expectError(error.SizeMismatch, lz4_reusable_decoder.decodeConcatenatedChunksAllocExactSizeWithDictionarySet(&lz4_chunks, lz4_join, lz4_dictionary_set, lz4_expected.len - 1));
     try std.testing.expectEqual(lz4_expected.len, try lz4DecodedConcatenatedFrameChunksSizeWithDictionarySet(&lz4_chunks, lz4_join, lz4_dictionary_set));
     try std.testing.expectEqual(lz4_expected.len, try lz4DecodedConcatenatedFrameChunksSizeLimitedWithDictionarySet(&lz4_chunks, lz4_join, lz4_expected.len, lz4_dictionary_set));
     try std.testing.expectEqual(lz4_expected.len, try lz4DecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(&lz4_chunks, lz4_join, lz4_dictionary_set));
@@ -2318,6 +2322,10 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     const zstd_chunked = try zstdDecodeRawOrRleFrameChunksAllocWithDictionarySet(std.testing.allocator, &zstd_chunks, zstd_join, zstd_dictionary_set);
     defer std.testing.allocator.free(zstd_chunked);
     try std.testing.expectEqualSlices(u8, zstd_expected, zstd_chunked);
+    const zstd_reusable_chunked_exact = try zstd_reusable_decoder.decodeConcatenatedChunksAllocExactSizeWithDictionarySet(&zstd_chunks, zstd_join, zstd_dictionary_set, zstd_expected.len);
+    defer std.testing.allocator.free(zstd_reusable_chunked_exact);
+    try std.testing.expectEqualSlices(u8, zstd_expected, zstd_reusable_chunked_exact);
+    try std.testing.expectError(error.SizeMismatch, zstd_reusable_decoder.decodeConcatenatedChunksAllocExactSizeWithDictionarySet(&zstd_chunks, zstd_join, zstd_dictionary_set, zstd_expected.len - 1));
     try std.testing.expectEqual(zstd_expected.len, try zstdDecodedRawOrRleFrameChunksSizeWithDictionarySet(&zstd_chunks, zstd_join, zstd_dictionary_set));
     try std.testing.expectEqual(zstd_expected.len, try zstdDecodedRawOrRleFrameChunksSizeLimitedWithDictionarySet(&zstd_chunks, zstd_join, zstd_expected.len, zstd_dictionary_set));
     try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedRawOrRleFrameChunksSizeLimitedWithDictionarySet(&zstd_chunks, zstd_join, zstd_expected.len - 1, zstd_dictionary_set));
