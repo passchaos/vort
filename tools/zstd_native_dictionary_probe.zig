@@ -19,6 +19,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkMatchLengthCompressedSequenceTableInspect(init.gpa);
     checked += 1;
+    try checkRepeatedSequenceTableInspect(init.gpa);
+    checked += 1;
     try checkReusableDictionaryApis(init.gpa);
     checked += 1;
     try checkLaterBlockDictionaryMatch(init.gpa);
@@ -249,6 +251,44 @@ fn matchLengthCompressedFixturePayload(allocator: std.mem.Allocator) ![]u8 {
         for (0..match_len) |_| try payload.append(allocator, payload.items[payload.items.len - 4]);
     }
     return try payload.toOwnedSlice(allocator);
+}
+
+fn checkRepeatedSequenceTableInspect(allocator: std.mem.Allocator) !void {
+    // Two-block fixture: the first compressed block defines LL/OF RLE tables and
+    // uses the predefined ML table; the second block uses Repeat_Mode for all
+    // three sequence tables. This keeps public inspection coverage for table
+    // reuse separate from the heavier encoder-side generation tests.
+    const frame_hex = "28b52ffd600800440000096101500100002a350000096101fc002a";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    const first_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    try expect(first_block.block_type == .compressed);
+    try expect(!first_block.last);
+    try expect(first_modes.sequence_count == 1);
+    try expect(first_modes.literal_length_mode == .rle);
+    try expect(first_modes.offset_mode == .rle);
+    try expect(first_modes.match_length_mode == .predefined);
+
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    const second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+    try expect(second_block.block_type == .compressed);
+    try expect(second_block.last);
+    try expect(second_modes.sequence_count == 1);
+    try expect(second_modes.literal_length_mode == .repeat);
+    try expect(second_modes.offset_mode == .repeat);
+    try expect(second_modes.match_length_mode == .repeat);
+
+    const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(decoded);
+    try expect(decoded.len == 264);
+    for (decoded) |byte| try expect(byte == 'a');
+
+    var into: [264]u8 = undefined;
+    const into_written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
+    try expect(into_written == decoded.len);
+    try expectEqualSlices(decoded, into[0..into_written]);
 }
 
 fn checkLiteralAndOffsetCompressedSequenceTableInspect(
