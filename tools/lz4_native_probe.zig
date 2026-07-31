@@ -38,6 +38,7 @@ pub fn main(init: std.process.Init) !void {
     try checkSkippableOnlyStream(init.gpa);
     checked += 1;
     checked += try checkInvalidFrameHeaders(init.gpa);
+    checked += try checkInvalidFrameBlocks(init.gpa);
 
     try stdout.print("lz4_native_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -461,15 +462,59 @@ fn checkInvalidFrameHeaders(allocator: std.mem.Allocator) !usize {
     return checked;
 }
 
+fn checkInvalidFrameBlocks(allocator: std.mem.Allocator) !usize {
+    var checked: usize = 0;
+
+    const too_large = try frameWithSingleBlock(allocator, 0x60, 0x40, 0x8000_0000 | (64 * 1024 + 1), "", "");
+    defer allocator.free(too_large);
+    try expectNativeFrameBodyError(allocator, too_large, error.CorruptFrame);
+    checked += 1;
+
+    const truncated_payload = try frameWithSingleBlock(allocator, 0x60, 0x40, 0x8000_0000 | 4, "ab", "");
+    defer allocator.free(truncated_payload);
+    try expectNativeFrameBodyError(allocator, truncated_payload, error.TruncatedFrame);
+    checked += 1;
+
+    const truncated_block_checksum = try frameWithSingleBlock(allocator, 0x70, 0x40, 0x8000_0000 | 3, "abc", "\x00\x00");
+    defer allocator.free(truncated_block_checksum);
+    try expectNativeFrameBodyError(allocator, truncated_block_checksum, error.TruncatedFrame);
+    checked += 1;
+
+    return checked;
+}
+
 fn minimalHeaderOnlyFrame(allocator: std.mem.Allocator, flg: u8, bd: u8) ![]u8 {
     var frame: std.ArrayList(u8) = .empty;
     errdefer frame.deinit(allocator);
+    try appendLz4FrameHeader(allocator, &frame, flg, bd);
+    try frame.appendSlice(allocator, &.{ 0, 0, 0, 0 }); // End mark for otherwise header-only frames.
+    return try frame.toOwnedSlice(allocator);
+}
+
+fn frameWithSingleBlock(
+    allocator: std.mem.Allocator,
+    flg: u8,
+    bd: u8,
+    block_header_value: u32,
+    payload: []const u8,
+    trailing: []const u8,
+) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(allocator);
+    try appendLz4FrameHeader(allocator, &frame, flg, bd);
+    var block_header: [4]u8 = undefined;
+    std.mem.writeInt(u32, &block_header, block_header_value, .little);
+    try frame.appendSlice(allocator, &block_header);
+    try frame.appendSlice(allocator, payload);
+    try frame.appendSlice(allocator, trailing);
+    return try frame.toOwnedSlice(allocator);
+}
+
+fn appendLz4FrameHeader(allocator: std.mem.Allocator, frame: *std.ArrayList(u8), flg: u8, bd: u8) !void {
     try frame.appendSlice(allocator, &.{ 0x04, 0x22, 0x4d, 0x18 });
     const descriptor = [_]u8{ flg, bd };
     try frame.appendSlice(allocator, &descriptor);
     try frame.append(allocator, lz4DescriptorChecksum(&descriptor));
-    try frame.appendSlice(allocator, &.{ 0, 0, 0, 0 }); // End mark for otherwise header-only frames.
-    return try frame.toOwnedSlice(allocator);
 }
 
 fn lz4DescriptorChecksum(descriptor: []const u8) u8 {
@@ -492,6 +537,38 @@ fn expectNativeFrameError(allocator: std.mem.Allocator, frame: []const u8, expec
 
     if (vort.lz4DecodeNativeFrameAlloc(allocator, frame)) |decoded| {
         allocator.free(decoded);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    if (vort.lz4SummarizeNativeStream(frame)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    var iterator = vort.lz4IterateNativeStream(frame);
+    if (iterator.next()) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+}
+
+fn expectNativeFrameBodyError(allocator: std.mem.Allocator, frame: []const u8, expected: anyerror) !void {
+    _ = try vort.lz4InspectNativeFrameHeader(frame);
+
+    if (vort.lz4DecodedNativeFrameSize(frame)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    const output = try allocator.alloc(u8, 64 * 1024 + 16);
+    defer allocator.free(output);
+    if (vort.lz4DecodeNativeFrameInto(frame, output)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    if (vort.lz4DecodeNativeFrameAlloc(allocator, frame)) |decoded| {
+        allocator.free(decoded);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    if (vort.lz4SummarizeNativeFrameBlocks(frame)) |_| {
         return error.Lz4ProbeExpectedFrameError;
     } else |err| if (@as(anyerror, err) != expected) return err;
 
