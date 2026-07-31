@@ -15,7 +15,7 @@ const duplicate_hash_bits = 15;
 const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
 const duplicate_hash_candidates = 8;
-const max_bootstrap_sequence_count = 16;
+const max_bootstrap_sequence_count = 32;
 const max_predefined_sequence_states = 64;
 const mixed_match_path_search_budget = 512;
 const repeated_pattern_period_max = 64;
@@ -9958,6 +9958,36 @@ test "zstd literal-only writer emits many repeated-pattern sequences" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd literal-only writer emits more than sixteen repeated-pattern sequences" {
+    const patterns = [_][]const u8{
+        "ab", "cd", "ef", "gh", "ij", "kl", "mn", "op", "qr", "st",
+        "uv", "wx", "yz", "AB", "CD", "EF", "GH", "IJ", "KL", "MN",
+    };
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    for (patterns) |pattern| {
+        for (0..12) |_| try payload.appendSlice(std.testing.allocator, pattern);
+    }
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload.items);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload.items);
+    defer std.testing.allocator.free(raw_encoded);
+
+    var block_offset: usize = 4;
+    _ = try parseRawOrRleFrameHeader(encoded, &block_offset);
+    const block_header = std.mem.readInt(u24, encoded[block_offset..][0..3], .little);
+    const block_len: usize = @intCast(block_header >> 3);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(encoded[block_offset + 3 ..][0..block_len], &frame_state);
+    try std.testing.expectEqual(patterns.len, section.sequence_count);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
 }
 
