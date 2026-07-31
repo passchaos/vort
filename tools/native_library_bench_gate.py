@@ -32,6 +32,8 @@ EXPECTED_MODES = {
     "chain_depth_default",
     "match_budget_0",
     "match_budget_full",
+    "dictionary_plain",
+    "dictionary",
 }
 EXPECTED_CASES = {"text", "structured", "repetitive"}
 EXPECTED_EXTRA_ROWS = {
@@ -39,6 +41,10 @@ EXPECTED_EXTRA_ROWS = {
     ("lz4", "chain_depth_default", "chain_depth"),
     ("zstd", "match_budget_0", "mixed_budget"),
     ("zstd", "match_budget_full", "mixed_budget"),
+    ("lz4", "dictionary_plain", "dictionary"),
+    ("lz4", "dictionary", "dictionary"),
+    ("zstd", "dictionary_plain", "dictionary"),
+    ("zstd", "dictionary", "dictionary"),
 }
 
 
@@ -139,6 +145,15 @@ def main() -> int:
             "expected full zstd match search budget to improve mixed_budget size: "
             f"budget0={budget0['encoded_bytes']} full={budget_full['encoded_bytes']}"
         )
+
+    for codec in ("lz4", "zstd"):
+        plain = row_by_identity[(codec, "dictionary_plain", "dictionary")]
+        dictionary = row_by_identity[(codec, "dictionary", "dictionary")]
+        if int(dictionary["encoded_bytes"]) >= int(plain["encoded_bytes"]):
+            raise AssertionError(
+                f"expected {codec} dictionary row to improve dictionary size: "
+                f"plain={plain['encoded_bytes']} dictionary={dictionary['encoded_bytes']}"
+            )
 
     print(f"native_library_bench_gate=ok rows={len(rows)} iterations={expected_iterations}")
     return 0

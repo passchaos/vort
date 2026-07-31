@@ -10,6 +10,8 @@ const Mode = enum {
     chain_depth_default,
     match_budget_0,
     match_budget_full,
+    dictionary_plain,
+    dictionary,
 };
 
 const Case = struct {
@@ -56,6 +58,7 @@ pub fn main(init: std.process.Init) !void {
     try smokeReusableChunkedDecoders(init.gpa);
     try smokeZstdManyRepeatedSequences(init.gpa);
     try smokeZstdMatchSearchBudget(init.gpa);
+    try smokeNativeDictionaryBenchRows(init.gpa);
 
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(init.gpa);
@@ -83,6 +86,10 @@ pub fn main(init: std.process.Init) !void {
         vort.zstdNativeMaxMatchSearchBudget,
         options.iterations,
     ));
+    try rows.append(init.gpa, try lz4DictionaryRow(init.io, init.gpa, .dictionary_plain, false, options.iterations));
+    try rows.append(init.gpa, try lz4DictionaryRow(init.io, init.gpa, .dictionary, true, options.iterations));
+    try rows.append(init.gpa, try zstdDictionaryRow(init.io, init.gpa, .dictionary_plain, false, options.iterations));
+    try rows.append(init.gpa, try zstdDictionaryRow(init.io, init.gpa, .dictionary, true, options.iterations));
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
@@ -245,6 +252,70 @@ fn zstdMatchBudgetRow(
     return makeRow(.zstd, mode, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
+fn lz4DictionaryRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary: bool,
+    iterations: usize,
+) !Row {
+    const dict = vort.Lz4NativeDictionary.init(0x4c5a_4401, lz4_dictionary_content);
+    const payload = lz4_dictionary_payload;
+    const case: Case = .{ .name = "dictionary", .payload = payload };
+    const options: vort.Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+    };
+    const encoded = if (use_dictionary)
+        try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict)
+    else
+        try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
+    defer allocator.free(encoded);
+    const decoded = try allocator.alloc(u8, payload.len);
+    defer allocator.free(decoded);
+    if (use_dictionary) {
+        try expectRoundTrip(vort.lz4DecodeNativeFrameIntoWithDictionary(encoded, decoded, dict), payload, decoded);
+    } else {
+        try expectRoundTrip(vort.lz4DecodeNativeFrameInto(encoded, decoded), payload, decoded);
+    }
+
+    const encode_result = try timeEncodeLz4Dictionary(io, allocator, payload, options, dict, use_dictionary, iterations);
+    const decode_result = try timeDecodeLz4DictionaryOneShot(io, encoded, decoded, payload, dict, use_dictionary, iterations);
+    return makeRow(.lz4, mode, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdDictionaryRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary: bool,
+    iterations: usize,
+) !Row {
+    const dict = vort.ZstdNativeDictionary.init(0x5a53_4401, zstd_dictionary_content);
+    const payload = zstd_dictionary_payload;
+    const case: Case = .{ .name = "dictionary", .payload = payload };
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+    const encoded = if (use_dictionary)
+        try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict)
+    else
+        try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
+    defer allocator.free(encoded.frame);
+    const decoded = try allocator.alloc(u8, payload.len);
+    defer allocator.free(decoded);
+    if (use_dictionary) {
+        try expectRoundTrip(vort.zstdDecodeNativeFrameIntoWithDictionary(encoded.frame, decoded, dict), payload, decoded);
+    } else {
+        try expectRoundTrip(vort.zstdDecodeNativeFrameInto(encoded.frame, decoded), payload, decoded);
+    }
+
+    const encode_result = try timeEncodeZstdDictionary(io, allocator, payload, options, dict, use_dictionary, iterations);
+    const decode_result = try timeDecodeZstdDictionaryOneShot(io, encoded.frame, decoded, payload, dict, use_dictionary, iterations);
+    return makeRow(.zstd, mode, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
 const TimeResult = struct { elapsed_ns: u64, checksum: u64 };
 
 const lz4_chain_depth_payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 16;
@@ -254,11 +325,38 @@ const zstd_match_budget_payload =
     "ccccfeggbcddffgahceegfabcceeehaabcdfacefegahabdffgab" ++
     "cccfeggbcddfechbcecececececece";
 
+const lz4_dictionary_content = "abcdefghijklmnop";
+const lz4_dictionary_payload = "prefix-abcdefghijklmnop-tail-abcdefghijklmnop";
+const zstd_dictionary_content = "abcdefghijklmnop";
+const zstd_dictionary_payload = "prefix-abcdefghijklmnop-tail-abcdefghijklmnop";
+
 fn timeEncodeLz4(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, options: vort.Lz4NativeFrameOptions, iterations: usize) !TimeResult {
     var checksum: u64 = 0;
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
         const encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
+        checksum +%= encoded.len;
+        allocator.free(encoded);
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeEncodeLz4Dictionary(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    options: vort.Lz4NativeFrameOptions,
+    dict: vort.Lz4NativeDictionary,
+    use_dictionary: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        const encoded = if (use_dictionary)
+            try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict)
+        else
+            try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
         checksum +%= encoded.len;
         allocator.free(encoded);
     }
@@ -276,6 +374,28 @@ fn timeEncodeZstd(io: std.Io, allocator: std.mem.Allocator, payload: []const u8,
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
 }
 
+fn timeEncodeZstdDictionary(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    options: vort.ZstdNativeFrameOptions,
+    dict: vort.ZstdNativeDictionary,
+    use_dictionary: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        const encoded = if (use_dictionary)
+            try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict)
+        else
+            try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
+        checksum +%= encoded.frame.len;
+        allocator.free(encoded.frame);
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
 fn timeDecodeLz4OneShot(io: std.Io, encoded: []const u8, decoded: []u8, expected: []const u8, iterations: usize) !TimeResult {
     var checksum: u64 = 0;
     const start = std.Io.Clock.awake.now(io);
@@ -286,11 +406,55 @@ fn timeDecodeLz4OneShot(io: std.Io, encoded: []const u8, decoded: []u8, expected
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
 }
 
+fn timeDecodeLz4DictionaryOneShot(
+    io: std.Io,
+    encoded: []const u8,
+    decoded: []u8,
+    expected: []const u8,
+    dict: vort.Lz4NativeDictionary,
+    use_dictionary: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        if (use_dictionary) {
+            try expectRoundTrip(vort.lz4DecodeNativeFrameIntoWithDictionary(encoded, decoded, dict), expected, decoded);
+        } else {
+            try expectRoundTrip(vort.lz4DecodeNativeFrameInto(encoded, decoded), expected, decoded);
+        }
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
 fn timeDecodeZstdOneShot(io: std.Io, encoded: []const u8, decoded: []u8, expected: []const u8, iterations: usize) !TimeResult {
     var checksum: u64 = 0;
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
         try expectRoundTrip(vort.zstdDecodeNativeFrameInto(encoded, decoded), expected, decoded);
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeZstdDictionaryOneShot(
+    io: std.Io,
+    encoded: []const u8,
+    decoded: []u8,
+    expected: []const u8,
+    dict: vort.ZstdNativeDictionary,
+    use_dictionary: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        if (use_dictionary) {
+            try expectRoundTrip(vort.zstdDecodeNativeFrameIntoWithDictionary(encoded, decoded, dict), expected, decoded);
+        } else {
+            try expectRoundTrip(vort.zstdDecodeNativeFrameInto(encoded, decoded), expected, decoded);
+        }
         checksum +%= decoded[0];
     }
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
@@ -574,6 +738,36 @@ fn smokeZstdMatchSearchBudget(allocator: std.mem.Allocator) !void {
     try expectRoundTrip(vort.zstdDecodeNativeFrameInto(full.frame, &decoded), zstd_match_budget_payload, &decoded);
 }
 
+fn smokeNativeDictionaryBenchRows(allocator: std.mem.Allocator) !void {
+    const lz4_dict = vort.Lz4NativeDictionary.init(0x4c5a_4401, lz4_dictionary_content);
+    const lz4_options: vort.Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+    };
+    const lz4_plain = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, lz4_dictionary_payload, lz4_options);
+    defer allocator.free(lz4_plain);
+    const lz4_dict_frame = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, lz4_dictionary_payload, lz4_options, lz4_dict);
+    defer allocator.free(lz4_dict_frame);
+    if (lz4_dict_frame.len >= lz4_plain.len) return error.SizeMismatch;
+    var lz4_out: [lz4_dictionary_payload.len]u8 = undefined;
+    try expectRoundTrip(vort.lz4DecodeNativeFrameInto(lz4_plain, &lz4_out), lz4_dictionary_payload, &lz4_out);
+    try expectRoundTrip(vort.lz4DecodeNativeFrameIntoWithDictionary(lz4_dict_frame, &lz4_out, lz4_dict), lz4_dictionary_payload, &lz4_out);
+
+    const zstd_dict = vort.ZstdNativeDictionary.init(0x5a53_4401, zstd_dictionary_content);
+    const zstd_options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+    const zstd_plain = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, zstd_dictionary_payload, zstd_options);
+    defer allocator.free(zstd_plain.frame);
+    const zstd_dict_frame = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, zstd_dictionary_payload, zstd_options, zstd_dict);
+    defer allocator.free(zstd_dict_frame.frame);
+    if (zstd_dict_frame.frame.len >= zstd_plain.frame.len) return error.SizeMismatch;
+    var zstd_out: [zstd_dictionary_payload.len]u8 = undefined;
+    try expectRoundTrip(vort.zstdDecodeNativeFrameInto(zstd_plain.frame, &zstd_out), zstd_dictionary_payload, &zstd_out);
+    try expectRoundTrip(vort.zstdDecodeNativeFrameIntoWithDictionary(zstd_dict_frame.frame, &zstd_out, zstd_dict), zstd_dictionary_payload, &zstd_out);
+}
+
 fn decodeLz4Incremental(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8) !void {
     var decoder = vort.Lz4NativeIncrementalFrameDecoder.init(allocator);
     defer decoder.deinit();
@@ -683,6 +877,8 @@ fn modeName(mode: Mode) []const u8 {
         .chain_depth_default => "chain_depth_default",
         .match_budget_0 => "match_budget_0",
         .match_budget_full => "match_budget_full",
+        .dictionary_plain => "dictionary_plain",
+        .dictionary => "dictionary",
     };
 }
 
