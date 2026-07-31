@@ -551,6 +551,21 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     };
     const join = try allocator.alloc(u8, stream.items.len);
     defer allocator.free(join);
+    const short_join = try allocator.alloc(u8, stream.items.len - 1);
+    defer allocator.free(short_join);
+    var short_join_output: [expected.len]u8 = undefined;
+    if (vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&chunks, short_join, &short_join_output, dictionary_set)) |_| {
+        return error.Lz4ProbeExpectedOutputLimit;
+    } else |err| switch (err) {
+        error.OutputTooSmall => {},
+        else => return err,
+    }
+    if (vort.lz4DecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(&chunks, short_join, dictionary_set)) |_| {
+        return error.Lz4ProbeExpectedOutputLimit;
+    } else |err| switch (err) {
+        error.OutputTooSmall => {},
+        else => return err,
+    }
 
     const chunk_size = try vort.lz4DecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(&chunks, join, dictionary_set);
     if (chunk_size != expected.len) return error.Lz4ProbeSizeMismatch;
