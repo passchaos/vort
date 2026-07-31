@@ -77,6 +77,7 @@ pub fn main(init: std.process.Init) !void {
     try smokeZstdMultiblockDirectFallback(init.gpa);
     try smokeReusableChunkedDecoders(init.gpa);
     try smokeZstdManyRepeatedSequences(init.gpa);
+    try smokeZstdSequenceInspectFixtures(init.gpa);
     try smokeZstdMatchSearchBudget(init.gpa);
     try smokeNativeDictionaryBenchRows(init.gpa);
     try smokeNativeDictionarySetBenchRows(init.gpa);
@@ -1725,6 +1726,41 @@ fn smokeZstdManyRepeatedSequences(allocator: std.mem.Allocator) !void {
     if (!std.mem.eql(u8, payload.items, decoded)) return error.SizeMismatch;
     const decoded_len = try decoder.decodedSize(encoded.frame);
     if (decoded_len != payload.items.len) return error.SizeMismatch;
+}
+
+fn smokeZstdSequenceInspectFixtures(allocator: std.mem.Allocator) !void {
+    const frame_hex =
+        "28b52ffd20a2240100606162636465666768696a6b6c10180210aeb5070b83c3c2c360e030701878383c1cec922d00000001fc3b20";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    const first_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    if (first_modes.literal_length_mode != .predefined or
+        first_modes.offset_mode != .rle or
+        first_modes.match_length_mode != .compressed) return error.SizeMismatch;
+
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    const second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+    if (second_modes.literal_length_mode != .repeat or
+        second_modes.offset_mode != .repeat or
+        second_modes.match_length_mode != .repeat) return error.SizeMismatch;
+
+    const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(decoded);
+    if (decoded.len != 162) return error.SizeMismatch;
+
+    const bad_hex = "28b52ffd209a250100606162636465666768696a6b6c10180210aeb5070b83c3c2c360e030701878383c1cec92";
+    var bad: [bad_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bad, bad_hex);
+    bad[25] ^= 0xff;
+    const bad_block = try vort.zstdInspectNativeFrameFirstBlock(&bad);
+    if (vort.zstdInspectNativeFrameBlockSequenceModes(&bad, bad_block)) |_| {
+        return error.SizeMismatch;
+    } else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
 }
 
 fn smokeZstdMatchSearchBudget(allocator: std.mem.Allocator) !void {
