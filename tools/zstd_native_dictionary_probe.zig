@@ -671,6 +671,12 @@ fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
     try expectError(error.SizeMismatch, reusable_decoder.decodeConcatenatedChunksAppendExactSizeWithDictionarySet(&reusable_appended, &chunks, join, dictionary_set, expected.len - 1));
     try expectError(error.OutputLimitExceeded, reusable_decoder.decodeConcatenatedChunksAppendLimitedWithDictionarySet(&reusable_appended, &chunks, join, expected.len - 1, dictionary_set));
 
+    const missing_set = vort.ZstdNativeDictionarySet.init(&.{first_dict});
+    try expectError(error.NeedDictionary, reusable_decoder.decodeConcatenatedChunksAllocWithDictionarySet(&chunks, join, missing_set));
+    try expectError(error.NeedDictionary, reusable_decoder.decodeConcatenatedChunksScratchWithDictionarySet(&chunks, join, missing_set));
+    reusable_appended.clearRetainingCapacity();
+    try expectError(error.NeedDictionary, reusable_decoder.decodeConcatenatedChunksAppendWithDictionarySet(&reusable_appended, &chunks, join, missing_set));
+
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
         .expected_output_len = expected.len,
         .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
