@@ -50,6 +50,15 @@ fn checkDirectHuffmanBoundaries(allocator: std.mem.Allocator) !void {
     const written = try vort.zstdDecodeNativeFrameInto(encoded.frame, &into);
     try expect(written == payload.len);
     try expectEqualSlices(&payload, &into);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, encoded.frame, payload.len);
+    try expect(appended_written == payload.len);
+    try expectPrefixedPayload(appended.items, &payload);
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, encoded.frame, payload.len - 1));
 }
 
 fn checkHighByteFallback(allocator: std.mem.Allocator) !void {
@@ -76,6 +85,15 @@ fn checkHighByteFallback(allocator: std.mem.Allocator) !void {
     const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, encoded.frame);
     defer allocator.free(decoded);
     try expectEqualSlices(&payload, decoded);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, encoded.frame, payload.len);
+    try expect(appended_written == payload.len);
+    try expectPrefixedPayload(appended.items, &payload);
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, encoded.frame, payload.len - 1));
 }
 
 fn checkSystemZstdHighByteFrame(allocator: std.mem.Allocator) !void {
@@ -127,6 +145,15 @@ fn checkSystemZstdHighByteFrame(allocator: std.mem.Allocator) !void {
     const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
     defer allocator.free(decoded);
     try expectEqualSlices(&payload, decoded);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, &frame, payload.len);
+    try expect(appended_written == payload.len);
+    try expectPrefixedPayload(appended.items, &payload);
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, &frame, payload.len - 1));
 }
 
 fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
@@ -243,6 +270,12 @@ fn expect(ok: bool) !void {
 
 fn expectEqualSlices(expected: []const u8, actual: []const u8) !void {
     if (!std.mem.eql(u8, expected, actual)) return error.ZstdNativeFrameProbeMismatch;
+}
+
+fn expectPrefixedPayload(actual: []const u8, payload: []const u8) !void {
+    if (actual.len != "prefix:".len + payload.len) return error.ZstdNativeFrameProbeMismatch;
+    try expectEqualSlices("prefix:", actual[0.."prefix:".len]);
+    try expectEqualSlices(payload, actual["prefix:".len..]);
 }
 
 fn expectError(expected: anyerror, result: anytype) !void {
