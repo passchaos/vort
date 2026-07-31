@@ -428,6 +428,19 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &repeat_without_previous));
     checked += 1;
 
+    const raw_before_repeat_hex = "28b52ffd2008200000616263642500000001fc01";
+    var raw_before_repeat: [raw_before_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&raw_before_repeat, raw_before_repeat_hex);
+    const raw_block = try vort.zstdInspectNativeFrameFirstBlock(&raw_before_repeat);
+    try expect(raw_block.block_type == .raw);
+    const repeat_after_raw_block = try vort.zstdInspectNativeFrameBlockAt(&raw_before_repeat, raw_block.next_header_offset);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&raw_before_repeat, repeat_after_raw_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&raw_before_repeat));
+    var raw_before_repeat_output: [8]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&raw_before_repeat, &raw_before_repeat_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &raw_before_repeat));
+    checked += 1;
+
     return checked;
 }
 
