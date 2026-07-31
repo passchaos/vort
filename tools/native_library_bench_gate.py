@@ -34,6 +34,8 @@ EXPECTED_MODES = {
     "match_budget_0",
     "match_budget_full",
     "high_byte_binary",
+    "sequence_huffman_literals_plain",
+    "sequence_huffman_literals",
     "dictionary_plain",
     "dictionary",
     "dictionary_set_plain",
@@ -60,6 +62,8 @@ EXPECTED_EXTRA_ROWS = {
     ("zstd", "match_budget_0", "mixed_budget"),
     ("zstd", "match_budget_full", "mixed_budget"),
     ("zstd", "high_byte_binary", "high_byte_binary"),
+    ("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals"),
+    ("zstd", "sequence_huffman_literals", "sequence_huffman_literals"),
     ("lz4", "dictionary_plain", "dictionary"),
     ("lz4", "dictionary", "dictionary"),
     ("zstd", "dictionary_plain", "dictionary"),
@@ -200,6 +204,14 @@ def main() -> int:
     high_byte = row_by_identity[("zstd", "high_byte_binary", "high_byte_binary")]
     if int(high_byte["encoded_bytes"]) >= int(high_byte["input_bytes"]):
         raise AssertionError(f"expected high-byte binary zstd row to use FSE Huffman compression: {high_byte}")
+
+    sequence_plain = row_by_identity[("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals")]
+    sequence_huffman = row_by_identity[("zstd", "sequence_huffman_literals", "sequence_huffman_literals")]
+    if int(sequence_huffman["encoded_bytes"]) >= int(sequence_plain["encoded_bytes"]):
+        raise AssertionError(
+            "expected zstd sequence-Huffman literals row to improve size: "
+            f"plain={sequence_plain['encoded_bytes']} huffman={sequence_huffman['encoded_bytes']}"
+        )
 
     for codec in ("lz4", "zstd"):
         plain = row_by_identity[(codec, "dictionary_plain", "dictionary")]
