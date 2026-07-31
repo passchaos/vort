@@ -4610,7 +4610,9 @@ fn parseRawOrRleFrameHeaderWithOptions(frame: []const u8, offset: *usize, allow_
     offset.* += 1;
 
     if ((descriptor & 0x08) != 0) return error.CorruptFrame;
-    if ((descriptor & 0x10) != 0) return error.UnsupportedZstdFeature;
+    // Bit 4 is unused by the Zstandard frame descriptor. Reference decoders
+    // accept it as a don't-care bit, so native parsing must not reject otherwise
+    // valid frames that set it.
 
     const dictionary_id_flag = descriptor & 0x03;
     const has_checksum = (descriptor & 0x04) != 0;
@@ -7730,6 +7732,27 @@ test "zstd raw/RLE native decoder accepts no-size raw frames" {
     const written = try decodeRawOrRleFrameInto(frame.items, &into_buffer);
     try std.testing.expectEqual(@as(usize, 3), written);
     try std.testing.expectEqualSlices(u8, "abc", into_buffer[0..written]);
+}
+
+test "zstd native decoder accepts descriptor unused bit" {
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try frame.appendSlice(std.testing.allocator, &frame_magic);
+    try frame.append(std.testing.allocator, 0x10); // unused descriptor bit set; no content size, window descriptor follows.
+    try frame.append(std.testing.allocator, 0x00);
+    try emitRawBlock(std.testing.allocator, &frame, "abc", true);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, "abc", std_decoded);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "abc", decoded);
+
+    const header = try inspectNativeFrameHeader(frame.items);
+    try std.testing.expectEqual(@as(?u64, null), header.content_size);
+    try std.testing.expectEqual(@as(u64, 1024), header.window_size);
 }
 
 test "zstd native no-size writer chooses valid window descriptors" {
