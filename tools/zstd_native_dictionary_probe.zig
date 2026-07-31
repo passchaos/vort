@@ -33,6 +33,7 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkDictionarySetDirectFallback(init.gpa);
     checked += 1;
+    checked += try checkHandcraftedFrameValidation(init.gpa);
 
     try stdout.print("zstd_native_dictionary_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -476,6 +477,68 @@ fn checkDictionarySetDirectFallback(allocator: std.mem.Allocator) !void {
     try expectEqualSlices(payload, &output);
 }
 
+fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
+    var checked: usize = 0;
+
+    const checksum_payload = "zstd-checksum";
+    var wrong_checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &wrong_checksum, @as(u32, @truncate(std.hash.XxHash64.hash(0, checksum_payload))) ^ 0x01, .little);
+    const checksum_mismatch = try handcraftedRawFrame(allocator, checksum_payload.len, checksum_payload, &wrong_checksum, true);
+    defer allocator.free(checksum_mismatch);
+    try expect((try vort.zstdDecodedNativeFrameSize(checksum_mismatch)) == checksum_payload.len);
+    var checksum_out: [checksum_payload.len]u8 = undefined;
+    try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameInto(checksum_mismatch, &checksum_out));
+    try expectAllocError(allocator, error.ChecksumMismatch, vort.zstdDecodeNativeFrameAlloc(allocator, checksum_mismatch));
+    const checksum_summary = try vort.zstdSummarizeNativeStream(checksum_mismatch);
+    try expect(checksum_summary.frame_count == 1);
+    try expect(checksum_summary.raw_block_count == 1);
+    checked += 1;
+
+    const truncated_checksum = try handcraftedRawFrame(allocator, checksum_payload.len, checksum_payload, "\x00\x00", true);
+    defer allocator.free(truncated_checksum);
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(truncated_checksum));
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(truncated_checksum, &checksum_out));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, truncated_checksum));
+    try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeStream(truncated_checksum));
+    try expectStreamIteratorError(truncated_checksum, error.TruncatedFrame);
+    checked += 1;
+
+    const truncated_payload = try handcraftedRawFrame(allocator, 4, "ab", "", false);
+    defer allocator.free(truncated_payload);
+    _ = try vort.zstdInspectNativeFrameHeader(truncated_payload);
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(truncated_payload));
+    var payload_out: [4]u8 = undefined;
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(truncated_payload, &payload_out));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, truncated_payload));
+    try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeStream(truncated_payload));
+    try expectStreamIteratorError(truncated_payload, error.TruncatedFrame);
+    checked += 1;
+
+    return checked;
+}
+
+fn handcraftedRawFrame(
+    allocator: std.mem.Allocator,
+    claimed_len: usize,
+    payload: []const u8,
+    trailing: []const u8,
+    content_checksum: bool,
+) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(allocator);
+    try frame.appendSlice(allocator, &.{ 0x28, 0xb5, 0x2f, 0xfd });
+    try frame.append(allocator, if (content_checksum) 0x04 else 0x00);
+    try frame.append(allocator, 0x00); // 1 KiB window descriptor for no-content-size frames.
+    if (claimed_len > std.compress.zstd.block_size_max) return error.ZstdNativeDictionaryProbeMismatch;
+    const block_header_value: u32 = (@as(u32, @intCast(claimed_len)) << 3) | 1;
+    try frame.append(allocator, @truncate(block_header_value));
+    try frame.append(allocator, @truncate(block_header_value >> 8));
+    try frame.append(allocator, @truncate(block_header_value >> 16));
+    try frame.appendSlice(allocator, payload);
+    try frame.appendSlice(allocator, trailing);
+    return try frame.toOwnedSlice(allocator);
+}
+
 fn expect(ok: bool) !void {
     if (!ok) return error.ZstdNativeDictionaryProbeMismatch;
 }
@@ -486,6 +549,24 @@ fn expectEqualSlices(expected: []const u8, actual: []const u8) !void {
 
 fn expectError(expected: anyerror, result: anytype) !void {
     if (result) |_| {
+        return error.ZstdNativeDictionaryProbeExpectedError;
+    } else |err| {
+        if (err != expected) return err;
+    }
+}
+
+fn expectAllocError(allocator: std.mem.Allocator, expected: anyerror, result: anytype) !void {
+    if (result) |decoded| {
+        allocator.free(decoded);
+        return error.ZstdNativeDictionaryProbeExpectedError;
+    } else |err| {
+        if (err != expected) return err;
+    }
+}
+
+fn expectStreamIteratorError(frame: []const u8, expected: anyerror) !void {
+    var iterator = vort.zstdIterateNativeStream(frame);
+    if (iterator.next()) |_| {
         return error.ZstdNativeDictionaryProbeExpectedError;
     } else |err| {
         if (err != expected) return err;
