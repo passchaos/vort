@@ -390,6 +390,9 @@ var lz4_decoder = vort.Lz4NativeFrameDecoder.init(allocator);
 defer lz4_decoder.deinit();
 const lz4_plain = try lz4_decoder.decodeScratch(lz4_frame);
 _ = lz4_plain;
+_ = try lz4_decoder.decodedConcatenatedChunksSize(&lz4_frame_chunks, &lz4_join_scratch);
+const lz4_chunk_plain = try lz4_decoder.decodeConcatenatedChunksScratch(&lz4_frame_chunks, &lz4_join_scratch);
+_ = lz4_chunk_plain;
 var lz4_incremental = vort.Lz4NativeIncrementalFrameDecoder.init(allocator);
 defer lz4_incremental.deinit();
 var lz4_incremental_out: ["payload payload".len]u8 = undefined;
@@ -668,6 +671,9 @@ _ = try vort.zstdDecodedRawOrRleFrameChunksSizeWithDictionarySet(
     zstd_join,
     zstd_dict_set,
 );
+_ = try zstd_decoder.decodedConcatenatedChunksSizeWithDictionarySet(&zstd_chunks, zstd_join, zstd_dict_set);
+const zstd_chunk_plain = try zstd_decoder.decodeConcatenatedChunksScratchWithDictionarySet(&zstd_chunks, zstd_join, zstd_dict_set);
+_ = zstd_chunk_plain;
 var zstd_chunk_out: ["prefix: previous zstd history payload, shared phrase tail".len]u8 = undefined;
 _ = try vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
     &zstd_chunks,
