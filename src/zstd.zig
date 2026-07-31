@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("core.zig");
+const huffman = @import("huffman.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -6270,21 +6271,27 @@ fn smallHuffmanLiteralPlanFromSequence(
     }
     if (tail_start > block.len) return null;
     addBytesToSmallHuffmanLiteralPlan(&plan, block[tail_start..]) orelse return null;
-    if (plan.len < 2 or plan.len > plan.symbols.len) return null;
-    std.mem.sort(u8, plan.symbols[0..plan.len], {}, std.sort.asc(u8));
-    plan.max_symbol = plan.symbols[plan.len - 1];
-    fillSmallHuffmanWeights(&plan) orelse return null;
+    finalizeSmallHuffmanLiteralPlan(&plan) orelse return null;
     return plan;
 }
 
 fn addBytesToSmallHuffmanLiteralPlan(plan: *SmallHuffmanLiteralPlan, bytes: []const u8) ?void {
     for (bytes) |byte| {
-        if (smallHuffmanSymbolIndex(plan.*, byte) != null) continue;
-        if (plan.len == plan.symbols.len) return null;
-        plan.symbols[plan.len] = byte;
-        plan.len += 1;
-        plan.max_symbol = @max(plan.max_symbol, byte);
+        if (plan.frequencies[byte] == 0) {
+            if (plan.len == plan.symbols.len) return null;
+            plan.symbols[plan.len] = byte;
+            plan.len += 1;
+            plan.max_symbol = @max(plan.max_symbol, byte);
+        }
+        plan.frequencies[byte] += 1;
     }
+}
+
+fn finalizeSmallHuffmanLiteralPlan(plan: *SmallHuffmanLiteralPlan) ?void {
+    if (plan.len < 2 or plan.len > plan.symbols.len) return null;
+    plan.max_symbol = 0;
+    for (plan.symbols[0..plan.len]) |symbol| plan.max_symbol = @max(plan.max_symbol, symbol);
+    fillSmallHuffmanWeights(plan) orelse return null;
 }
 
 fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
@@ -6924,6 +6931,7 @@ const SmallHuffmanLiteralPlan = struct {
     // "small direct" and "high-byte FSE" code paths.
     symbols: [256]u8 = undefined,
     weights: [256]u4 = undefined,
+    frequencies: [256]u32 = .{0} ** 256,
     len: usize = 0,
     max_symbol: u8 = 0,
     max_bit_count: u4 = 0,
@@ -6965,29 +6973,50 @@ fn smallHuffmanPlansEqual(a: SmallHuffmanLiteralPlan, b: SmallHuffmanLiteralPlan
 fn smallHuffmanLiteralPlan(block: []const u8) ?SmallHuffmanLiteralPlan {
     if (block.len < 64 or block.len > 0x3ffff) return null;
     var plan: SmallHuffmanLiteralPlan = .{};
-    for (block) |byte| {
-        if (smallHuffmanSymbolIndex(plan, byte) != null) continue;
-        if (plan.len == plan.symbols.len) return null;
-        plan.symbols[plan.len] = byte;
-        plan.len += 1;
-        plan.max_symbol = @max(plan.max_symbol, byte);
-    }
-    if (plan.len < 2 or plan.len > plan.symbols.len) return null;
-    std.mem.sort(u8, plan.symbols[0..plan.len], {}, std.sort.asc(u8));
-    plan.max_symbol = plan.symbols[plan.len - 1];
-    fillSmallHuffmanWeights(&plan) orelse return null;
+    addBytesToSmallHuffmanLiteralPlan(&plan, block) orelse return null;
+    finalizeSmallHuffmanLiteralPlan(&plan) orelse return null;
     return plan;
 }
 
 fn fillSmallHuffmanWeights(plan: *SmallHuffmanLiteralPlan) ?void {
     @memset(plan.weights[0..], 0);
-    plan.max_bit_count = @intCast(std.math.log2_int_ceil(usize, plan.len));
-    const previous_power = @as(usize, 1) << @intCast(plan.max_bit_count - 1);
-    const long_code_count = 2 * (plan.len - previous_power);
-    for (plan.weights[0..plan.len], 0..) |*weight, i| {
-        const bit_count = if (i < long_code_count) plan.max_bit_count else plan.max_bit_count - 1;
-        weight.* = plan.max_bit_count + 1 - bit_count;
+
+    const lengths = huffman.treeCodeLengths(256, &plan.frequencies, 11);
+    var max_bit_count: u4 = 0;
+    for (plan.symbols[0..plan.len]) |symbol| {
+        const bit_count = lengths[symbol];
+        if (bit_count == 0) return null;
+        max_bit_count = @max(max_bit_count, bit_count);
     }
+    plan.max_bit_count = max_bit_count;
+
+    std.mem.sort(u8, plan.symbols[0..plan.len], lengths, smallHuffmanSymbolLess);
+    for (plan.symbols[0..plan.len], 0..) |symbol, i| {
+        plan.weights[i] = plan.max_bit_count + 1 - lengths[symbol];
+    }
+    validateSmallHuffmanLastWeight(plan.*) orelse return null;
+}
+
+fn smallHuffmanSymbolLess(lengths: [256]u4, lhs: u8, rhs: u8) bool {
+    const lhs_bits = lengths[lhs];
+    const rhs_bits = lengths[rhs];
+    if (lhs_bits != rhs_bits) return lhs_bits > rhs_bits;
+    return lhs < rhs;
+}
+
+fn validateSmallHuffmanLastWeight(plan: SmallHuffmanLiteralPlan) ?void {
+    if (plan.len < 2) return null;
+    var weight_power_sum: usize = 0;
+    for (plan.symbols[0..plan.len], plan.weights[0..plan.len]) |symbol, weight| {
+        if (symbol == plan.max_symbol) continue;
+        weight_power_sum += (@as(usize, 1) << @intCast(weight)) >> 1;
+    }
+    if (weight_power_sum == 0 or weight_power_sum >= (@as(usize, 1) << @intCast(plan.max_bit_count))) return null;
+    const remaining = (@as(usize, 1) << @intCast(plan.max_bit_count)) - weight_power_sum;
+    if (!std.math.isPowerOfTwo(remaining)) return null;
+    const reconstructed: u4 = @intCast(std.math.log2_int(usize, remaining) + 1);
+    const max_symbol_index = smallHuffmanSymbolIndex(plan, plan.max_symbol) orelse return null;
+    if (reconstructed != plan.weights[max_symbol_index]) return null;
 }
 
 fn emitSmallHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: SmallHuffmanLiteralPlan) Error!bool {
@@ -10126,9 +10155,23 @@ test "zstd literal-only writer reuses Huffman tree across blocks" {
     const payload = try std.testing.allocator.alloc(u8, std.compress.zstd.block_size_max + 4096);
     defer std.testing.allocator.free(payload);
     var state: u32 = 0x577d_f00d;
-    for (payload) |*byte| {
-        state = state *% 1_664_525 +% 1_013_904_223;
-        byte.* = @intCast(32 + ((state >> 24) % 95));
+    var payload_offset: usize = 0;
+    while (payload_offset < payload.len) {
+        var symbols: [64]u8 = undefined;
+        for (&symbols, 0..) |*symbol, i| {
+            symbol.* = @intCast(32 + i);
+        }
+        var i = symbols.len;
+        while (i > 1) {
+            i -= 1;
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const j: usize = @intCast((state >> 16) % (i + 1));
+            const tmp = symbols[i];
+            symbols[i] = symbols[j];
+            symbols[j] = tmp;
+        }
+        @memcpy(payload[payload_offset..][0..symbols.len], &symbols);
+        payload_offset += symbols.len;
     }
 
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
@@ -10232,6 +10275,36 @@ test "zstd literal-only writer emits 128-symbol Huffman literals" {
     try std.testing.expect(encoded.len < raw_encoded.len);
 }
 
+test "zstd Huffman literal planner favors frequent symbols" {
+    var payload: [4096]u8 = undefined;
+    for (payload[0..26], 0..) |*byte, i| {
+        byte.* = @intCast('A' + i);
+    }
+    var state: u32 = 0x8bad_f00d;
+    for (payload[26..]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if ((state & 0x0f) < 12)
+            'A'
+        else
+            @intCast('B' + ((state >> 8) % 25));
+    }
+
+    const plan = smallHuffmanLiteralPlan(&payload) orelse return error.CorruptFrame;
+    const hot_bits = smallHuffmanBitCount(plan, 'A') orelse return error.CorruptFrame;
+    const cold_bits = smallHuffmanBitCount(plan, 'Z') orelse return error.CorruptFrame;
+    try std.testing.expect(hot_bits < cold_bits);
+
+    const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(raw_encoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
 test "zstd literal-only writer emits max direct Huffman symbol set" {
     var payload: [129 * 64]u8 = undefined;
     for (payload[0..129], 0..) |*byte, i| {
@@ -10296,14 +10369,8 @@ test "zstd literal-only writer emits FSE Huffman tree for high-byte binary liter
     try std.testing.expect(block[section.literal_payload_offset] < 128);
 
     const tree = section.huffman_tree orelse return error.CorruptFrame;
-    try std.testing.expectEqual(@as(u4, 7), tree.max_bit_count);
+    try std.testing.expect(tree.max_bit_count <= 11);
     try std.testing.expectEqual(@as(usize, 127), @as(usize, tree.symbol_count_minus_one) + 1);
-    try std.testing.expectEqual(@as(u8, 129), tree.nodes[0].symbol);
-    try std.testing.expectEqual(@as(u4, 1), tree.nodes[0].weight);
-    try std.testing.expectEqual(@as(u16, 0), tree.nodes[0].prefix);
-    try std.testing.expectEqual(@as(u8, 255), tree.nodes[tree.symbol_count_minus_one].symbol);
-    try std.testing.expectEqual(@as(u4, 2), tree.nodes[tree.symbol_count_minus_one].weight);
-    try std.testing.expectEqual(@as(u16, 63), tree.nodes[tree.symbol_count_minus_one].prefix);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);

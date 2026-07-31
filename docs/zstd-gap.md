@@ -213,8 +213,8 @@ High-byte literal writer note:
   `zstd_native_frame_probe` requires the same public library payload to encode
   as a compressed block rather than the old raw fallback.
 - Remaining high-byte work is quality-of-implementation rather than basic
-  capability: improve Huffman weight selection from the current balanced
-  bootstrap plan, add corpus coverage for mixed high-byte/sequence blocks, and
+  capability: add broader corpus coverage for mixed high-byte/sequence blocks,
+  tune the new frequency-aware Huffman planner against real payloads, and
   compare the generated FSE weight streams against more zstd levels/corpora.
 
 Recommended next comparison steps:

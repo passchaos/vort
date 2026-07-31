@@ -2372,7 +2372,7 @@ fn modeName(mode: Mode) []const u8 {
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
     try writer.writeAll("codec,mode,case,input_bytes,encoded_bytes,iterations,encode_ns,decode_ns,encode_mib_s,decode_mib_s,checksum\n");
     for (rows) |row| {
-        try writer.print("{s},{s},{s},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d}\n", .{
+        try writer.print("{s},{s},{s},{d},{d},{d},{d},{d},{d:.4},{d:.4},{d}\n", .{
             codecName(row.codec),
             modeName(row.mode),
             row.case_name,
