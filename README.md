@@ -663,6 +663,11 @@ _ = try vort.zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(
     zstd_join,
     zstd_dict_set,
 );
+_ = try vort.zstdDecodedRawOrRleFrameChunksSizeWithDictionarySet(
+    &zstd_chunks,
+    zstd_join,
+    zstd_dict_set,
+);
 var zstd_chunk_out: ["prefix: previous zstd history payload, shared phrase tail".len]u8 = undefined;
 _ = try vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
     &zstd_chunks,
