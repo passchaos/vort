@@ -35,6 +35,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkDictionaryFrame(init.gpa);
     checked += 1;
+    try checkSkippableOnlyStream(init.gpa);
+    checked += 1;
 
     try stdout.print("lz4_native_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -403,6 +405,34 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
     const multi_decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, multi, dict);
     defer allocator.free(multi_decoded);
     if (!std.mem.eql(u8, multi_payload, multi_decoded)) return error.Lz4ProbeMismatch;
+}
+
+fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
+    const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 5, "metadata-only");
+    defer allocator.free(skip);
+
+    const decoded = try vort.lz4DecodeNativeConcatenatedFrameAlloc(allocator, skip);
+    defer allocator.free(decoded);
+    if (decoded.len != 0) return error.Lz4ProbeSizeMismatch;
+    const exact = try vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, skip, 0);
+    defer allocator.free(exact);
+    if (exact.len != 0) return error.Lz4ProbeSizeMismatch;
+
+    const summary = try vort.lz4SummarizeNativeStream(skip);
+    if (summary.frame_count != 0) return error.Lz4ProbeMismatch;
+    if (summary.skippable_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (summary.skippable_payload_bytes != "metadata-only".len) return error.Lz4ProbeSizeMismatch;
+
+    var iterator = vort.lz4IterateNativeStream(skip);
+    const element = (try iterator.next()) orelse return error.Lz4ProbeMismatch;
+    switch (element) {
+        .frame => return error.Lz4ProbeMismatch,
+        .skippable => |skippable| {
+            if (skippable.header.skippable_id != 5) return error.Lz4ProbeMismatch;
+            if (!std.mem.eql(u8, skippable.payload, "metadata-only")) return error.Lz4ProbeMismatch;
+        },
+    }
+    if ((try iterator.next()) != null) return error.Lz4ProbeMismatch;
 }
 
 fn expectPayload(case: Case, decoded: []const u8) !void {
