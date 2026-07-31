@@ -569,6 +569,13 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
         error.OutputTooSmall => {},
         else => return err,
     }
+    const truncated_chunks = [_][]const u8{stream.items[0 .. stream.items.len - 1]};
+    if (vort.lz4DecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(&truncated_chunks, join, dictionary_set)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.TruncatedFrame => {},
+        else => return err,
+    }
 
     const chunk_size = try vort.lz4DecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(&chunks, join, dictionary_set);
     if (chunk_size != expected.len) return error.Lz4ProbeSizeMismatch;

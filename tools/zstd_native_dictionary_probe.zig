@@ -632,6 +632,8 @@ fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
     var short_join_output: [expected.len]u8 = undefined;
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&chunks, short_join, &short_join_output, dictionary_set));
     try expectError(error.OutputTooSmall, vort.zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(&chunks, short_join, dictionary_set));
+    const truncated_chunks = [_][]const u8{stream.items[0 .. stream.items.len - 1]};
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(&truncated_chunks, join, dictionary_set));
     var chunked_output: [expected.len]u8 = undefined;
     const chunked_written = try vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&chunks, join, &chunked_output, dictionary_set);
     try expect(chunked_written == expected.len);
