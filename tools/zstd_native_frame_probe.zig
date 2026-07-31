@@ -441,6 +441,29 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &raw_before_repeat));
     checked += 1;
 
+    const missing_sequence_bitstream_hex = "28b52ffd240e3d00000961015401000a";
+    var missing_sequence_bitstream: [missing_sequence_bitstream_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&missing_sequence_bitstream, missing_sequence_bitstream_hex);
+    const missing_bits_block = try vort.zstdInspectNativeFrameFirstBlock(&missing_sequence_bitstream);
+    try expectError(error.TruncatedFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&missing_sequence_bitstream, missing_bits_block));
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(&missing_sequence_bitstream));
+    var missing_bits_output: [14]u8 = undefined;
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(&missing_sequence_bitstream, &missing_bits_output));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &missing_sequence_bitstream));
+    checked += 1;
+
+    const zero_end_mark_hex = "28b52ffd240e4500000961015401000a00";
+    var zero_end_mark: [zero_end_mark_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&zero_end_mark, zero_end_mark_hex);
+    const zero_end_block = try vort.zstdInspectNativeFrameFirstBlock(&zero_end_mark);
+    const zero_end_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&zero_end_mark, zero_end_block);
+    try expect(zero_end_modes.sequence_count == 1);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&zero_end_mark));
+    var zero_end_output: [14]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&zero_end_mark, &zero_end_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_end_mark));
+    checked += 1;
+
     return checked;
 }
 
