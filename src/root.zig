@@ -2014,6 +2014,100 @@ test "root native incremental no-size streams diagnose expected size mismatches"
     try std.testing.expectEqualSlices(u8, "output", zstd_too_large.diagnostics().last_error_phase_name);
 }
 
+test "root native incremental direct-output waits across split block boundaries" {
+    const lz4_payload = ("root-lz4-direct-boundary-" ** 8) ** 8;
+    const lz4_frame = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, lz4_payload, .{
+        .content_checksum = false,
+        .include_content_size = true,
+        .block_checksum = true,
+    });
+    defer std.testing.allocator.free(lz4_frame);
+    const lz4_first_block = (try lz4InspectNativeFrameFirstBlock(lz4_frame)) orelse return error.CorruptFrame;
+    try std.testing.expect(lz4_first_block.is_compressed);
+    try std.testing.expect(lz4_first_block.block_checksum_offset != null);
+    try std.testing.expect(lz4_first_block.payload_len > 2);
+
+    var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = lz4_payload.len,
+        .max_decoded_buffer_len = lz4_payload.len,
+    });
+    defer lz4_decoder.deinit();
+    var lz4_output: [lz4_payload.len]u8 = undefined;
+
+    // Feed the frame in pieces that stop inside the LZ4 block header, payload,
+    // and block checksum. The current incremental facade starts direct output
+    // only after a whole frame is available, so these boundaries should remain
+    // resumable in the public frame phase rather than attempting an early decode.
+    const lz4_block_header_split = lz4_first_block.header_offset + 2;
+    const lz4_payload_split = lz4_first_block.payload_offset + 1;
+    const lz4_checksum_split = lz4_first_block.block_checksum_offset.? + 2;
+    const lz4_first = try lz4_decoder.step(lz4_frame[0..lz4_block_header_split], lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, lz4_first.status);
+    try std.testing.expectEqual(lz4_block_header_split, lz4_first.progress.input_read);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_decoder.diagnostics().phase_name);
+    const lz4_second = try lz4_decoder.step(lz4_frame[lz4_block_header_split..lz4_payload_split], lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, lz4_second.status);
+    try std.testing.expectEqual(lz4_payload_split - lz4_block_header_split, lz4_second.progress.input_read);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_decoder.diagnostics().phase_name);
+    const lz4_third = try lz4_decoder.step(lz4_frame[lz4_payload_split..lz4_checksum_split], lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, lz4_third.status);
+    try std.testing.expectEqual(lz4_checksum_split - lz4_payload_split, lz4_third.progress.input_read);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_decoder.diagnostics().phase_name);
+    const lz4_ready = try lz4_decoder.step(lz4_frame[lz4_checksum_split..], lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_ready.status);
+    try std.testing.expectEqual(lz4_frame.len - lz4_checksum_split, lz4_ready.progress.input_read);
+    try std.testing.expectEqualSlices(u8, "direct_output", lz4_decoder.diagnostics().phase_name);
+    const lz4_done = try lz4_decoder.step("", &lz4_output);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_done.status);
+    try std.testing.expectEqualSlices(u8, lz4_payload, &lz4_output);
+    try lz4_decoder.finish();
+
+    const zstd_payload = ("root-zstd-direct-boundary-" ** 8) ** 8;
+    const zstd_frame = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, zstd_payload, .{
+        .selection = .literal_only,
+        .content_checksum = true,
+    });
+    defer std.testing.allocator.free(zstd_frame.frame);
+    const zstd_first_block = try zstdInspectNativeFrameFirstBlock(zstd_frame.frame);
+    try std.testing.expectEqual(ZstdNativeBlockType.compressed, zstd_first_block.block_type);
+    try std.testing.expect(zstd_first_block.last);
+    try std.testing.expect(zstd_first_block.payload_len > 2);
+
+    var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = zstd_payload.len,
+        .max_decoded_buffer_len = zstd_payload.len,
+    });
+    defer zstd_decoder.deinit();
+    var zstd_output: [zstd_payload.len]u8 = undefined;
+
+    // Zstd has a 3-byte block header and a frame-level content checksum. Split
+    // both, plus the compressed payload, to ensure the same resumable frame
+    // accounting that the LZ4 path guarantees above.
+    const zstd_block_header_split = zstd_first_block.header_offset + 1;
+    const zstd_payload_split = zstd_first_block.payload_offset + 1;
+    const zstd_checksum_split = zstd_first_block.next_header_offset + 2;
+    const zstd_first = try zstd_decoder.step(zstd_frame.frame[0..zstd_block_header_split], zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, zstd_first.status);
+    try std.testing.expectEqual(zstd_block_header_split, zstd_first.progress.input_read);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().phase_name);
+    const zstd_second = try zstd_decoder.step(zstd_frame.frame[zstd_block_header_split..zstd_payload_split], zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, zstd_second.status);
+    try std.testing.expectEqual(zstd_payload_split - zstd_block_header_split, zstd_second.progress.input_read);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().phase_name);
+    const zstd_third = try zstd_decoder.step(zstd_frame.frame[zstd_payload_split..zstd_checksum_split], zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, zstd_third.status);
+    try std.testing.expectEqual(zstd_checksum_split - zstd_payload_split, zstd_third.progress.input_read);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().phase_name);
+    const zstd_ready = try zstd_decoder.step(zstd_frame.frame[zstd_checksum_split..], zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_ready.status);
+    try std.testing.expectEqual(zstd_frame.frame.len - zstd_checksum_split, zstd_ready.progress.input_read);
+    try std.testing.expectEqualSlices(u8, "direct_output", zstd_decoder.diagnostics().phase_name);
+    const zstd_done = try zstd_decoder.step("", &zstd_output);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
+    try std.testing.expectEqualSlices(u8, zstd_payload, &zstd_output);
+    try zstd_decoder.finish();
+}
+
 test "root native incremental direct-output paths round trip" {
     var lz4_payload: [4096]u8 = undefined;
     var state: u32 = 0x1020_3040;
