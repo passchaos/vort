@@ -385,6 +385,13 @@ _ = try vort.lz4DecodeNativeConcatenatedFrameChunksAppend(
     &lz4_frame_chunks,
     &lz4_join_scratch,
 );
+_ = try vort.lz4DecodeNativeConcatenatedFrameChunksAppendExactSize(
+    allocator,
+    &lz4_chunk_appended,
+    &lz4_frame_chunks,
+    &lz4_join_scratch,
+    lz4_native_size,
+);
 var lz4_block_iter = try vort.lz4IterateNativeFrameBlocks(lz4_frame);
 while (try lz4_block_iter.next()) |block| {
     _ = block.payload_len;
@@ -703,6 +710,14 @@ _ = try vort.zstdDecodeNativeConcatenatedFrameChunksAppendWithDictionarySet(
     zstd_join,
     zstd_dict_set,
 );
+_ = try vort.zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(
+    allocator,
+    &zstd_chunk_appended,
+    &zstd_chunks,
+    zstd_join,
+    zstd_dict_set,
+    zstd_stream_plain.len,
+);
 var zstd_chunk_out: ["prefix: previous zstd history payload, shared phrase tail".len]u8 = undefined;
 _ = try vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
     &zstd_chunks,
@@ -895,14 +910,17 @@ and incremental forms when the surrounding container knows the expected output
 length or has an allocation budget. Chunked append helpers decode split
 compressed input into an existing `ArrayList`, so containers can preserve their
 own prefixes/sidecars without constructing a reusable decoder just to avoid an
-alloc-returning API. Incremental native decoders expose the shared `StepResult`
-contract: feed compressed bytes, provide caller-owned output slices, then call
-`finish()` when an exact EOF/size check matters. Direct-output paths are fastest
-when the caller supplies a large enough output slice; if a slice is too small
-for an atomic compressed block, the decoders intentionally fall back to bounded
-scratch and continue draining without losing correctness. Dictionary-set
-chunked APIs additionally accept caller-owned compressed join scratch so split
-input can be decoded without hidden global state.
+alloc-returning API. `*AppendExactSize` variants additionally verify the decoded
+byte count before extending the destination, returning `SizeMismatch` for
+container-advertised lengths that do not match the stream. Incremental native
+decoders expose the shared `StepResult` contract: feed compressed bytes, provide
+caller-owned output slices, then call `finish()` when an exact EOF/size check
+matters. Direct-output paths are fastest when the caller supplies a large enough
+output slice; if a slice is too small for an atomic compressed block, the
+decoders intentionally fall back to bounded scratch and continue draining
+without losing correctness. Dictionary-set chunked APIs additionally accept
+caller-owned compressed join scratch so split input can be decoded without
+hidden global state.
 
 The focused library benchmark/gate tracks these public surfaces directly:
 
