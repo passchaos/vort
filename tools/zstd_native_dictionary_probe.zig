@@ -647,6 +647,30 @@ fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(allocator, &chunked_appended, &chunks, join, dictionary_set, expected.len - 1));
     try expectError(error.OutputLimitExceeded, vort.zstdDecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet(allocator, &chunked_appended, &chunks, join, expected.len - 1, dictionary_set));
 
+    var reusable_decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer reusable_decoder.deinit();
+    const reusable_exact = try reusable_decoder.decodeConcatenatedChunksAllocExactSizeWithDictionarySet(&chunks, join, dictionary_set, expected.len);
+    defer allocator.free(reusable_exact);
+    try expectEqualSlices(expected, reusable_exact);
+    try expectError(error.SizeMismatch, reusable_decoder.decodeConcatenatedChunksAllocExactSizeWithDictionarySet(&chunks, join, dictionary_set, expected.len - 1));
+    const reusable_limited = try reusable_decoder.decodeConcatenatedChunksAllocLimitedWithDictionarySet(&chunks, join, expected.len, dictionary_set);
+    defer allocator.free(reusable_limited);
+    try expectEqualSlices(expected, reusable_limited);
+    try expectError(error.OutputLimitExceeded, reusable_decoder.decodeConcatenatedChunksAllocLimitedWithDictionarySet(&chunks, join, expected.len - 1, dictionary_set));
+    const reusable_scratch = try reusable_decoder.decodeConcatenatedChunksScratchLimitedWithDictionarySet(&chunks, join, expected.len, dictionary_set);
+    try expectEqualSlices(expected, reusable_scratch);
+    try expectError(error.OutputLimitExceeded, reusable_decoder.decodeConcatenatedChunksScratchLimitedWithDictionarySet(&chunks, join, expected.len - 1, dictionary_set));
+    var reusable_appended: std.ArrayList(u8) = .empty;
+    defer reusable_appended.deinit(allocator);
+    try reusable_appended.appendSlice(allocator, "prefix:");
+    const reusable_appended_written = try reusable_decoder.decodeConcatenatedChunksAppendExactSizeWithDictionarySet(&reusable_appended, &chunks, join, dictionary_set, expected.len);
+    try expect(reusable_appended_written == expected.len);
+    try expectEqualSlices("prefix:", reusable_appended.items[0.."prefix:".len]);
+    try expectEqualSlices(expected, reusable_appended.items["prefix:".len..]);
+    reusable_appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, reusable_decoder.decodeConcatenatedChunksAppendExactSizeWithDictionarySet(&reusable_appended, &chunks, join, dictionary_set, expected.len - 1));
+    try expectError(error.OutputLimitExceeded, reusable_decoder.decodeConcatenatedChunksAppendLimitedWithDictionarySet(&reusable_appended, &chunks, join, expected.len - 1, dictionary_set));
+
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
         .expected_output_len = expected.len,
         .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
