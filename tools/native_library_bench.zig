@@ -43,6 +43,7 @@ pub fn main(init: std.process.Init) !void {
     try smokeLz4LinkedDirectFallback(init.gpa);
     try smokeZstdMultiblockDirectFallback(init.gpa);
     try smokeReusableChunkedDecoders(init.gpa);
+    try smokeZstdManyRepeatedSequences(init.gpa);
 
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(init.gpa);
@@ -356,6 +357,35 @@ fn smokeReusableChunkedDecoders(allocator: std.mem.Allocator) !void {
     if (!std.mem.eql(u8, zstd_payload, zstd_exact)) return error.SizeMismatch;
     const zstd_size = try zstd_decoder.decodedConcatenatedChunksSize(&zstd_chunks, zstd_join);
     if (zstd_size != zstd_payload.len) return error.SizeMismatch;
+}
+
+fn smokeZstdManyRepeatedSequences(allocator: std.mem.Allocator) !void {
+    const patterns = [_][]const u8{
+        "ab", "cd", "ef", "gh", "ij", "kl", "mn", "op", "qr", "st",
+        "uv", "wx", "yz", "AB", "CD", "EF", "GH", "IJ", "KL", "MN",
+    };
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    for (patterns) |pattern| {
+        for (0..12) |_| try payload.appendSlice(allocator, pattern);
+    }
+
+    const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload.items, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    });
+    defer allocator.free(encoded.frame);
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(encoded.frame);
+    if (first_block.block_type != .compressed) return error.SizeMismatch;
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(encoded.frame);
+    if (summary.compressed_block_count != 1) return error.SizeMismatch;
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const decoded = try decoder.decodeScratch(encoded.frame);
+    if (!std.mem.eql(u8, payload.items, decoded)) return error.SizeMismatch;
+    const decoded_len = try decoder.decodedSize(encoded.frame);
+    if (decoded_len != payload.items.len) return error.SizeMismatch;
 }
 
 fn decodeLz4Incremental(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8) !void {
