@@ -376,6 +376,15 @@ _ = try vort.lz4DecodedNativeFrameSizeLimited(lz4_frame, lz4_native_size);
 const lz4_frame_chunks = [_][]const u8{ lz4_frame[0..4], lz4_frame[4..] };
 var lz4_join_scratch: [1024]u8 = undefined;
 _ = try vort.lz4DecodedNativeConcatenatedFrameChunksSize(&lz4_frame_chunks, &lz4_join_scratch);
+var lz4_chunk_appended: std.ArrayList(u8) = .empty;
+defer lz4_chunk_appended.deinit(allocator);
+try lz4_chunk_appended.appendSlice(allocator, "prefix:");
+_ = try vort.lz4DecodeNativeConcatenatedFrameChunksAppend(
+    allocator,
+    &lz4_chunk_appended,
+    &lz4_frame_chunks,
+    &lz4_join_scratch,
+);
 var lz4_block_iter = try vort.lz4IterateNativeFrameBlocks(lz4_frame);
 while (try lz4_block_iter.next()) |block| {
     _ = block.payload_len;
@@ -684,6 +693,16 @@ _ = try vort.zstdDecodedRawOrRleFrameChunksSizeWithDictionarySet(
 _ = try zstd_decoder.decodedConcatenatedChunksSizeWithDictionarySet(&zstd_chunks, zstd_join, zstd_dict_set);
 const zstd_chunk_plain = try zstd_decoder.decodeConcatenatedChunksScratchWithDictionarySet(&zstd_chunks, zstd_join, zstd_dict_set);
 _ = zstd_chunk_plain;
+var zstd_chunk_appended: std.ArrayList(u8) = .empty;
+defer zstd_chunk_appended.deinit(allocator);
+try zstd_chunk_appended.appendSlice(allocator, "prefix:");
+_ = try vort.zstdDecodeNativeConcatenatedFrameChunksAppendWithDictionarySet(
+    allocator,
+    &zstd_chunk_appended,
+    &zstd_chunks,
+    zstd_join,
+    zstd_dict_set,
+);
 var zstd_chunk_out: ["prefix: previous zstd history payload, shared phrase tail".len]u8 = undefined;
 _ = try vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
     &zstd_chunks,
@@ -871,16 +890,19 @@ directly.
 | Zstd native | `ZstdNativeDictionary` | caller-owned bytes plus non-zero `id` | Payloads share preset history. | Dictionary-aware native sequence blocks can be smaller than raw storage; decoders must receive the matching dictionary. |
 | Zstd native | `ZstdNativeDictionarySet` | caller-owned slice of dictionaries | Concatenated streams can carry different `Dictionary_ID` values. | Shared decoder APIs resolve per-frame IDs and avoid manual stream splitting. |
 
-For bounded-memory decode, prefer the `*Limited`, exact-size, chunked, and
-incremental forms when the surrounding container knows the expected output
-length or has an allocation budget.  Incremental native decoders expose the
-shared `StepResult` contract: feed compressed bytes, provide caller-owned output
-slices, then call `finish()` when an exact EOF/size check matters.  Direct-output
-paths are fastest when the caller supplies a large enough output slice; if a
-slice is too small for an atomic compressed block, the decoders intentionally
-fall back to bounded scratch and continue draining without losing correctness.
-Dictionary-set chunked APIs additionally accept caller-owned compressed join
-scratch so split input can be decoded without hidden global state.
+For bounded-memory decode, prefer the `*Limited`, exact-size, chunked, append,
+and incremental forms when the surrounding container knows the expected output
+length or has an allocation budget. Chunked append helpers decode split
+compressed input into an existing `ArrayList`, so containers can preserve their
+own prefixes/sidecars without constructing a reusable decoder just to avoid an
+alloc-returning API. Incremental native decoders expose the shared `StepResult`
+contract: feed compressed bytes, provide caller-owned output slices, then call
+`finish()` when an exact EOF/size check matters. Direct-output paths are fastest
+when the caller supplies a large enough output slice; if a slice is too small
+for an atomic compressed block, the decoders intentionally fall back to bounded
+scratch and continue draining without losing correctness. Dictionary-set
+chunked APIs additionally accept caller-owned compressed join scratch so split
+input can be decoded without hidden global state.
 
 The focused library benchmark/gate tracks these public surfaces directly:
 
