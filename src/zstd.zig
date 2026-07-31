@@ -6429,6 +6429,20 @@ const SequenceTableKind = enum { literal, offset, match };
 const SequenceTableEmitPlan = union(enum) {
     rle: u8,
     predefined: PredefinedSequencePlan,
+    compressed: CompressedSequencePlan,
+};
+
+const CompressedSequencePlan = struct {
+    len: usize = 0,
+    accuracy_log: u8 = 0,
+    codes: [max_bootstrap_sequence_count]u8 = undefined,
+    initial_state: usize = 0,
+    next_states: [max_bootstrap_sequence_count]usize = undefined,
+    state_bits: [max_bootstrap_sequence_count]u8 = undefined,
+    transition_values: [max_bootstrap_sequence_count]usize = undefined,
+    transition_bits: [max_bootstrap_sequence_count]u8 = undefined,
+    table_payload: [64]u8 = undefined,
+    table_payload_len: usize = 0,
 };
 
 const SequenceCombinedEmitPlan = struct {
@@ -6443,7 +6457,7 @@ const SequenceCombinedPlanCandidate = struct {
 };
 
 const SequenceTablePlanAlternatives = struct {
-    items: [2]SequenceTableEmitPlan = undefined,
+    items: [3]SequenceTableEmitPlan = undefined,
     len: usize = 0,
 
     fn add(self: *SequenceTablePlanAlternatives, plan: SequenceTableEmitPlan) Error!void {
@@ -6471,11 +6485,11 @@ fn bestMixedSequencePlan(
     if (literal_alternatives.len == 0 or offset_alternatives.len == 0 or match_alternatives.len == 0) return null;
 
     var best: ?SequenceCombinedPlanCandidate = null;
-    // Only eight combinations are possible because each table family has at
-    // most an RLE and a predefined representation. Trying all of them keeps the
-    // planner exact for this bootstrap subset and avoids baking in heuristics
-    // such as "all-RLE" or "all-predefined" when one family is cheaper in a
-    // different mode than the others.
+    // The bootstrap table families expose only a few alternatives (RLE,
+    // predefined, and limited compressed FSE). Trying all combinations keeps the
+    // planner exact for this subset and avoids baking in heuristics such as
+    // "all-RLE" or "all-predefined" when one family is cheaper in a different
+    // mode than the others.
     for (literal_alternatives.items[0..literal_alternatives.len]) |literal_plan| {
         for (offset_alternatives.items[0..offset_alternatives.len]) |offset_plan| {
             for (match_alternatives.items[0..match_alternatives.len]) |match_plan| {
@@ -6523,6 +6537,9 @@ fn sequenceTablePlanAlternatives(values: []const usize, kind: SequenceTableKind)
     if (try planPredefinedSequenceValues(values, sequenceTablePredefinedSymbols(kind), sequenceTablePredefinedMinAdditionalBits(kind))) |plan| {
         try alternatives.add(.{ .predefined = plan });
     }
+    if (try planCompressedSequenceValues(values, kind)) |plan| {
+        try alternatives.add(.{ .compressed = plan });
+    }
     return alternatives;
 }
 
@@ -6540,6 +6557,119 @@ fn rleSequenceCodeForValues(values: []const usize, bases: []const usize, bits: [
         if (next_code != code) return null;
     }
     return code;
+}
+
+fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) Error!?CompressedSequencePlan {
+    if (values.len < 3 or values.len > max_bootstrap_sequence_count) return null;
+    const bases = sequenceTableBases(kind);
+    const bits = sequenceTableBits(kind);
+
+    var plan: CompressedSequencePlan = .{ .len = values.len, .accuracy_log = 5 };
+    var counts: [max_fse_compression_symbol + 1]u32 = .{0} ** (max_fse_compression_symbol + 1);
+    var max_code: u8 = 0;
+    for (values, 0..) |value, i| {
+        const code = sequenceCodeForValue(value, bases, bits) catch |err| switch (err) {
+            error.CorruptFrame => return null,
+            else => return err,
+        };
+        if (code > max_fse_compression_symbol) return null;
+        plan.codes[i] = code;
+        counts[code] += 1;
+        max_code = @max(max_code, code);
+    }
+
+    var max_count: u32 = 0;
+    var non_zero_count: usize = 0;
+    for (counts[0 .. @as(usize, max_code) + 1]) |count| {
+        if (count != 0) non_zero_count += 1;
+        max_count = @max(max_count, count);
+    }
+    if (non_zero_count < 2 or non_zero_count > (@as(usize, 1) << @intCast(plan.accuracy_log))) return null;
+    // RLE and predefined modes are already cheaper for these degenerate shapes;
+    // keep the compressed table candidate for cases with enough repeated code
+    // distribution to amortize the normalized-count header.
+    if (max_count == values.len or max_count == 1) return null;
+
+    var normalized: [max_fse_compression_symbol + 1]i16 = .{0} ** (max_fse_compression_symbol + 1);
+    normalizeFseCounts(
+        counts[0 .. @as(usize, max_code) + 1],
+        values.len,
+        plan.accuracy_log,
+        normalized[0 .. @as(usize, max_code) + 1],
+    ) orelse return null;
+
+    emitFseNormalizedCountFixed(
+        &plan.table_payload,
+        &plan.table_payload_len,
+        normalized[0 .. @as(usize, max_code) + 1],
+        max_code,
+        plan.accuracy_log,
+    ) catch |err| switch (err) {
+        error.OutputTooSmall => return null,
+        else => return err,
+    };
+
+    var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
+    const table_len = try buildFseDecodeTableFromNormalized(
+        normalized[0 .. @as(usize, max_code) + 1],
+        plan.accuracy_log,
+        &entries,
+    );
+    try fillCompressedSequenceTransitions(&plan, entries[0..table_len]);
+    return plan;
+}
+
+fn buildFseDecodeTableFromNormalized(
+    normalized: []const i16,
+    table_log: u8,
+    entries: *[max_sequence_fse_table_size]FseTableEntry,
+) Error!usize {
+    const table_len: usize = @as(usize, 1) << @intCast(table_log);
+    if (table_len > entries.len) return error.UnsupportedZstdFeature;
+    var values: [max_fse_compression_symbol + 1]u16 = undefined;
+    if (normalized.len > values.len) return error.UnsupportedZstdFeature;
+    for (normalized, 0..) |value, i| {
+        if (value < -1) return error.CorruptFrame;
+        values[i] = if (value == -1) 0 else @intCast(value + 1);
+    }
+    try buildFseTable(values[0..normalized.len], entries[0..table_len]);
+    return table_len;
+}
+
+fn fillCompressedSequenceTransitions(plan: *CompressedSequencePlan, entries: []const FseTableEntry) Error!void {
+    if (plan.len == 0) return error.CorruptFrame;
+    const last_state = findCompressedSequenceState(entries, plan.codes[plan.len - 1], null) orelse return error.CorruptFrame;
+    var next_state = last_state;
+    plan.next_states[plan.len - 1] = entries[last_state].baseline;
+    plan.state_bits[plan.len - 1] = entries[last_state].bits;
+
+    var i = plan.len - 1;
+    while (i > 0) {
+        i -= 1;
+        const state = findCompressedSequenceState(entries, plan.codes[i], next_state) orelse return error.CorruptFrame;
+        const entry = entries[state];
+        if (next_state < entry.baseline) return error.CorruptFrame;
+        const transition = next_state - entry.baseline;
+        if (transition >= (@as(usize, 1) << @intCast(entry.bits))) return error.CorruptFrame;
+        plan.transition_values[i] = transition;
+        plan.transition_bits[i] = entry.bits;
+        plan.next_states[i] = entry.baseline;
+        plan.state_bits[i] = entry.bits;
+        next_state = state;
+    }
+    plan.initial_state = next_state;
+}
+
+fn findCompressedSequenceState(entries: []const FseTableEntry, code: u8, maybe_next_state: ?usize) ?usize {
+    for (entries, 0..) |entry, state| {
+        if (entry.symbol != code) continue;
+        if (maybe_next_state) |next_state| {
+            if (next_state < entry.baseline) continue;
+            if (next_state - entry.baseline >= (@as(usize, 1) << @intCast(entry.bits))) continue;
+        }
+        return state;
+    }
+    return null;
 }
 
 fn sequencePayloadLenWithTablePlans(
@@ -6622,6 +6752,10 @@ fn appendInitialSequenceStateField(out: []BitField, count: *usize, plan: Sequenc
             if (predefined.len == 0) return error.CorruptFrame;
             try appendBitField(out, count, predefined.states[0], predefinedInitialStateBits(kind));
         },
+        .compressed => |compressed| {
+            if (compressed.len == 0) return error.CorruptFrame;
+            try appendBitField(out, count, compressed.initial_state, compressed.accuracy_log);
+        },
     }
 }
 
@@ -6634,6 +6768,10 @@ fn appendSequenceTransitionField(out: []BitField, count: *usize, plan: SequenceT
             if (predefined.states[index + 1] < symbol.next_state) return error.CorruptFrame;
             try appendBitField(out, count, predefined.states[index + 1] - symbol.next_state, symbol.state_bits);
         },
+        .compressed => |compressed| {
+            if (index + 1 >= compressed.len) return error.CorruptFrame;
+            try appendBitField(out, count, compressed.transition_values[index], compressed.transition_bits[index]);
+        },
     }
 }
 
@@ -6641,6 +6779,7 @@ fn validateSequenceTablePlanLen(plan: SequenceTableEmitPlan, len: usize) Error!v
     switch (plan) {
         .rle => {},
         .predefined => |predefined| if (predefined.len != len) return error.CorruptFrame,
+        .compressed => |compressed| if (compressed.len != len) return error.CorruptFrame,
     }
 }
 
@@ -6653,6 +6792,13 @@ fn sequenceTableSymbol(plan: SequenceTableEmitPlan, kind: SequenceTableKind, ind
             const symbols = sequenceTablePredefinedSymbols(kind);
             if (state >= symbols.len) return error.CorruptFrame;
             break :blk symbols[state];
+        },
+        .compressed => |compressed| blk: {
+            if (index >= compressed.len) return error.CorruptFrame;
+            var symbol = try sequenceRleSymbol(kind, compressed.codes[index]);
+            symbol.next_state = compressed.next_states[index];
+            symbol.state_bits = compressed.state_bits[index];
+            break :blk symbol;
         },
     };
 }
@@ -6679,6 +6825,7 @@ fn sequenceTableMode(plan: SequenceTableEmitPlan) SymbolMode {
     return switch (plan) {
         .rle => .rle,
         .predefined => .predefined,
+        .compressed => .compressed,
     };
 }
 
@@ -6686,6 +6833,7 @@ fn appendSequenceTablePayload(allocator: std.mem.Allocator, out: *std.ArrayList(
     switch (plan) {
         .rle => |code| try out.append(allocator, code),
         .predefined => {},
+        .compressed => |compressed| try out.appendSlice(allocator, compressed.table_payload[0..compressed.table_payload_len]),
     }
 }
 
@@ -6693,6 +6841,7 @@ fn sequenceTablePayloadLen(plan: SequenceTableEmitPlan) usize {
     return switch (plan) {
         .rle => 1,
         .predefined => 0,
+        .compressed => |compressed| compressed.table_payload_len,
     };
 }
 
@@ -7089,7 +7238,9 @@ fn emitHuffmanLiteralsSectionWithPlan(
 
 const huffman_weight_fse_table_log = 6;
 const huffman_weight_symbol_max = 15;
-const huffman_weight_fse_table_size = 1 << huffman_weight_fse_table_log;
+const max_fse_compression_table_log = 9;
+const max_fse_compression_table_size = 1 << max_fse_compression_table_log;
+const max_fse_compression_symbol = 63;
 
 const FseCompressionTransform = struct {
     delta_find_state: i32 = 0,
@@ -7097,10 +7248,11 @@ const FseCompressionTransform = struct {
 };
 
 const FseCompressionTable = struct {
-    state_table: [huffman_weight_fse_table_size]u16 = undefined,
-    transforms: [huffman_weight_symbol_max + 1]FseCompressionTransform =
-        [_]FseCompressionTransform{.{}} ** (huffman_weight_symbol_max + 1),
-    table_log: u8 = huffman_weight_fse_table_log,
+    state_table: [max_fse_compression_table_size]u16 = undefined,
+    transforms: [max_fse_compression_symbol + 1]FseCompressionTransform =
+        [_]FseCompressionTransform{.{}} ** (max_fse_compression_symbol + 1),
+    table_log: u8 = 0,
+    table_len: usize = 0,
     max_symbol: u8 = 0,
 };
 
@@ -7255,7 +7407,7 @@ fn emitFseNormalizedCount(
     max_symbol: u8,
     table_log: u8,
 ) Error!void {
-    if (table_log < 5 or table_log > huffman_weight_fse_table_log) return error.UnsupportedZstdFeature;
+    if (table_log < 5 or table_log > max_fse_compression_table_log) return error.UnsupportedZstdFeature;
     if (normalized.len != @as(usize, max_symbol) + 1) return error.CorruptFrame;
 
     // FSE normalized-count headers are a small forward bitstream. This mirrors
@@ -7279,6 +7431,7 @@ fn emitFseNormalizedCount(
             while (symbol >= run_start + 24) {
                 run_start += 24;
                 bit_stream += @as(u64, 0xffff) << @intCast(bit_count);
+                bit_count += 16;
                 try flushFseNormalizedCountBits(allocator, out, &bit_stream, &bit_count);
             }
             while (symbol >= run_start + 3) {
@@ -7318,6 +7471,76 @@ fn emitFseNormalizedCount(
     }
 }
 
+fn emitFseNormalizedCountFixed(
+    out: []u8,
+    written: *usize,
+    normalized: []const i16,
+    max_symbol: u8,
+    table_log: u8,
+) Error!void {
+    if (table_log < 5 or table_log > max_fse_compression_table_log) return error.UnsupportedZstdFeature;
+    if (normalized.len != @as(usize, max_symbol) + 1) return error.CorruptFrame;
+    written.* = 0;
+
+    var bit_stream: u64 = @as(u64, table_log - 5);
+    var bit_count: u8 = 4;
+    var remaining: i32 = (@as(i32, 1) << @intCast(table_log)) + 1;
+    var threshold: i32 = @as(i32, 1) << @intCast(table_log);
+    var nb_bits: u8 = table_log + 1;
+    var symbol: usize = 0;
+    var previous_is_zero = false;
+
+    while (symbol < normalized.len and remaining > 1) {
+        if (previous_is_zero) {
+            const start = symbol;
+            while (symbol < normalized.len and normalized[symbol] == 0) : (symbol += 1) {}
+            if (symbol == normalized.len) return error.CorruptFrame;
+            var run_start = start;
+            while (symbol >= run_start + 24) {
+                run_start += 24;
+                bit_stream += @as(u64, 0xffff) << @intCast(bit_count);
+                bit_count += 16;
+                try flushFseNormalizedCountBitsFixed(out, written, &bit_stream, &bit_count);
+            }
+            while (symbol >= run_start + 3) {
+                run_start += 3;
+                bit_stream += @as(u64, 3) << @intCast(bit_count);
+                bit_count += 2;
+            }
+            bit_stream += @as(u64, @intCast(symbol - run_start)) << @intCast(bit_count);
+            bit_count += 2;
+            if (bit_count > 16) try flushFseNormalizedCountBitsFixed(out, written, &bit_stream, &bit_count);
+        }
+
+        var count: i32 = normalized[symbol];
+        symbol += 1;
+        const max = (2 * threshold - 1) - remaining;
+        remaining -= @intCast(@abs(count));
+        count += 1;
+        if (count >= threshold) count += max;
+        if (count < 0) return error.CorruptFrame;
+        bit_stream += @as(u64, @intCast(count)) << @intCast(bit_count);
+        bit_count += nb_bits;
+        if (count < max) bit_count -= 1;
+        previous_is_zero = count == 1;
+        if (remaining < 1) return error.CorruptFrame;
+        while (remaining < threshold) {
+            nb_bits -= 1;
+            threshold >>= 1;
+        }
+        if (bit_count > 16) try flushFseNormalizedCountBitsFixed(out, written, &bit_stream, &bit_count);
+    }
+
+    if (remaining != 1) return error.CorruptFrame;
+    const byte_count = (@as(usize, bit_count) + 7) / 8;
+    for (0..byte_count) |_| {
+        if (written.* >= out.len) return error.OutputTooSmall;
+        out[written.*] = @truncate(bit_stream);
+        written.* += 1;
+        bit_stream >>= 8;
+    }
+}
+
 fn flushFseNormalizedCountBits(allocator: std.mem.Allocator, out: *std.ArrayList(u8), bit_stream: *u64, bit_count: *u8) Error!void {
     try out.append(allocator, @truncate(bit_stream.*));
     try out.append(allocator, @truncate(bit_stream.* >> 8));
@@ -7325,25 +7548,35 @@ fn flushFseNormalizedCountBits(allocator: std.mem.Allocator, out: *std.ArrayList
     bit_count.* -= 16;
 }
 
+fn flushFseNormalizedCountBitsFixed(out: []u8, written: *usize, bit_stream: *u64, bit_count: *u8) Error!void {
+    if (out.len - written.* < 2) return error.OutputTooSmall;
+    out[written.*] = @truncate(bit_stream.*);
+    out[written.* + 1] = @truncate(bit_stream.* >> 8);
+    written.* += 2;
+    bit_stream.* >>= 16;
+    bit_count.* -= 16;
+}
+
 fn buildFseCompressionTable(normalized: []const i16, max_symbol: u8, table_log: u8) Error!FseCompressionTable {
     if (normalized.len != @as(usize, max_symbol) + 1) return error.CorruptFrame;
-    if (table_log != huffman_weight_fse_table_log) return error.UnsupportedZstdFeature;
-    const table_size = huffman_weight_fse_table_size;
+    if (table_log > max_fse_compression_table_log or max_symbol > max_fse_compression_symbol) return error.UnsupportedZstdFeature;
+    const table_size: usize = @as(usize, 1) << @intCast(table_log);
     const table_mask = table_size - 1;
     const step = (table_size >> 1) + (table_size >> 3) + 3;
 
     var table: FseCompressionTable = .{
         .table_log = table_log,
+        .table_len = table_size,
         .max_symbol = max_symbol,
     };
-    var table_symbols: [huffman_weight_fse_table_size]u8 = undefined;
+    var table_symbols: [max_fse_compression_table_size]u8 = undefined;
     var high_threshold: usize = table_size - 1;
 
     // The compressor table is the inverse of the decode table built earlier in
     // this file: spread symbols with the same step, sort each symbol's states
     // into `state_table`, then derive transforms that decide how many low bits
     // of the current state are emitted before moving to the next state.
-    var cumul: [huffman_weight_symbol_max + 2]u16 = .{0} ** (huffman_weight_symbol_max + 2);
+    var cumul: [max_fse_compression_symbol + 2]u16 = .{0} ** (max_fse_compression_symbol + 2);
     for (normalized, 0..) |value, i| {
         if (value < -1) return error.CorruptFrame;
         if (value == -1) {
@@ -7381,10 +7614,10 @@ fn buildFseCompressionTable(normalized: []const i16, max_symbol: u8, table_log: 
         const transform = &table.transforms[symbol];
         switch (value) {
             0 => {
-                transform.delta_nb_bits = ((@as(i32, table_log) + 1) << 16) - @as(i32, table_size);
+                transform.delta_nb_bits = ((@as(i32, table_log) + 1) << 16) - @as(i32, @intCast(table_size));
             },
             -1, 1 => {
-                transform.delta_nb_bits = (@as(i32, table_log) << 16) - @as(i32, table_size);
+                transform.delta_nb_bits = (@as(i32, table_log) << 16) - @as(i32, @intCast(table_size));
                 transform.delta_find_state = total - 1;
                 total += 1;
             },
@@ -7483,7 +7716,7 @@ fn fseNextState(table: FseCompressionTable, value: usize, shift_bits: usize, del
     const signed_index = @as(i32, @intCast(shifted)) + delta_find_state;
     if (signed_index < 0) return error.CorruptFrame;
     const index: usize = @intCast(signed_index);
-    if (index >= table.state_table.len) return error.CorruptFrame;
+    if (index >= table.table_len) return error.CorruptFrame;
     return table.state_table[index];
 }
 
@@ -10463,6 +10696,67 @@ test "zstd sequence emitter supports mixed RLE and predefined tables" {
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(std_decoded);
     try std.testing.expectEqualSlices(u8, &payload, std_decoded);
+}
+
+test "zstd sequence emitter supports compressed FSE literal-length table" {
+    const literal_lens = [_]usize{ 2, 3, 2, 4, 3, 2, 4, 3 };
+    const offsets = [_]usize{ 2, 2, 2, 2, 2, 2, 2, 2 };
+    const match_lens = [_]usize{ 8, 8, 8, 8, 8, 8, 8, 8 };
+    var literal_ends: [literal_lens.len]usize = undefined;
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    for (literal_lens, 0..) |literal_len, i| {
+        switch (literal_len) {
+            2 => try payload.appendSlice(std.testing.allocator, "ab"),
+            3 => try payload.appendSlice(std.testing.allocator, "xab"),
+            4 => try payload.appendSlice(std.testing.allocator, "xyab"),
+            else => unreachable,
+        }
+        try payload.appendSlice(std.testing.allocator, "ab" ** 4);
+        literal_ends[i] = payload.items.len;
+    }
+
+    const literal_plan = (try planCompressedSequenceValues(&literal_lens, .literal)) orelse return error.CorruptFrame;
+    const plan: SequenceCombinedEmitPlan = .{
+        .literal = .{ .compressed = literal_plan },
+        .offset = .{ .rle = try sequenceCodeForValue(2, &of_base, &of_bits) },
+        .match = .{ .rle = try sequenceCodeForValue(8, &ml_base, &ml_bits) },
+    };
+    try std.testing.expectEqual(SymbolMode.compressed, sequenceTableMode(plan.literal));
+    try std.testing.expect(literal_plan.table_payload_len > 0);
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.items.len, .{ .content_checksum = false });
+    try std.testing.expect(try emitSequenceCompressedBlockWithTablePlans(
+        std.testing.allocator,
+        &frame,
+        payload.items,
+        true,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        payload.items.len,
+        plan,
+    ));
+
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    const block = frame.items[first_block.payload_offset..][0..first_block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(literal_lens.len, section.sequence_count);
+    try std.testing.expectEqual(@as(u8, 0x94), block[section.sequence_payload_offset]); // LL=FSE, OF/ML=RLE.
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, std_decoded);
 }
 
 test "zstd literal-only writer keeps two-symbol repeated pattern matches" {

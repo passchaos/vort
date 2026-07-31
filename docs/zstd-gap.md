@@ -126,7 +126,7 @@ Current interpretation:
   no-dictionary mixed duplicate/repeated match selection plus dictionary/native
   match-vs-Huffman size arbitration, smallest native match-plan arbitration,
   RLE/predefined sequence cost scoring for single and mixed match candidates,
-  mixed RLE/predefined sequence-table mode emission,
+  mixed RLE/predefined plus limited compressed-FSE sequence-table mode emission,
   branch-scored mixed duplicate/repeated and dictionary/duplicate/repeated
   match lookahead and emission,
   RLE-literals sections for same-byte sequence literals,
