@@ -227,6 +227,19 @@ fn checkBlockRoundTrip(allocator: std.mem.Allocator, case: Case) !void {
     const decoded = try vort.lz4DecodeBlockAlloc(allocator, block, case.payload.len);
     defer allocator.free(decoded);
     try expectPayload(case, decoded);
+
+    const depth_block = try vort.lz4EncodeBlockWithChainDepthAlloc(allocator, case.payload, 4);
+    defer allocator.free(depth_block);
+    const depth_decoded = try vort.lz4DecodeBlockAlloc(allocator, depth_block, case.payload.len);
+    defer allocator.free(depth_decoded);
+    try expectPayload(case, depth_decoded);
+
+    var encoder = try vort.Lz4BlockEncoder.init(allocator);
+    defer encoder.deinit();
+    const scratch = try encoder.encodeScratchWithChainDepth(case.payload, 4);
+    const scratch_decoded = try vort.lz4DecodeBlockAlloc(allocator, scratch, case.payload.len);
+    defer allocator.free(scratch_decoded);
+    try expectPayload(case, scratch_decoded);
 }
 
 fn checkPrefixPreflight(allocator: std.mem.Allocator) !void {
@@ -298,6 +311,10 @@ fn checkPrefixEncoder(allocator: std.mem.Allocator) !void {
     defer allocator.free(encoded_into);
     const written = try vort.lz4EncodeBlockWithPrefixIntoSlice(allocator, payload, prefix, encoded_into);
     if (!std.mem.eql(u8, encoded, encoded_into[0..written])) return error.Lz4ProbeMismatch;
+    const depth_written = try vort.lz4EncodeBlockWithPrefixIntoSliceAndChainDepth(allocator, payload, prefix, encoded_into, 4);
+    const depth_decoded = try vort.lz4DecodeBlockWithPrefixAlloc(allocator, encoded_into[0..depth_written], payload.len, prefix);
+    defer allocator.free(depth_decoded);
+    if (!std.mem.eql(u8, payload, depth_decoded)) return error.Lz4ProbeMismatch;
     if (vort.lz4EncodeBlockWithPrefixIntoSlice(allocator, payload, prefix, encoded_into[0 .. written - 1])) |_| {
         return error.Lz4ProbeExpectedOutputLimit;
     } else |err| switch (err) {
