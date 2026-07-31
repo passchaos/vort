@@ -117,6 +117,13 @@ fn checkSystemZstdHighByteFrame(allocator: std.mem.Allocator) !void {
 
     const decoded_size = try vort.zstdDecodedNativeFrameSize(&frame);
     try expect(decoded_size == payload.len);
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .compressed);
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
+    try expect(summary.block_count == 1);
+    try expect(summary.compressed_block_count == 1);
+    try expect(summary.raw_block_count == 0);
+    try expect(summary.rle_block_count == 0);
     const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
     defer allocator.free(decoded);
     try expectEqualSlices(&payload, decoded);
