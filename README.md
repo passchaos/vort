@@ -959,7 +959,10 @@ The gate currently requires the LZ4 chain-depth, Zstd match-budget, high-byte
 FSE Huffman, Zstd sequence-Huffman literal, dictionary, dictionary-set, chunked
 dictionary-set, chunked append, chunked append exact-size, reusable decoder,
 reusable append exact-size, direct-output, and small-output fallback rows to
-round-trip and to preserve the expected size relationships.
+round-trip and to preserve the expected size relationships. The heavier
+limited compressed-FSE sequence-table path is covered by
+`run-zstd-native-dictionary-probe`, keeping the regular native library bench
+gate fast enough for Debug smoke runs.
 
 ## Direction
 
