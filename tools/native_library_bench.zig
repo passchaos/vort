@@ -41,6 +41,7 @@ pub fn main(init: std.process.Init) !void {
     };
 
     try smokeLz4LinkedDirectFallback(init.gpa);
+    try smokeLz4DeepHashChain(init.gpa);
     try smokeZstdMultiblockDirectFallback(init.gpa);
     try smokeReusableChunkedDecoders(init.gpa);
     try smokeZstdManyRepeatedSequences(init.gpa);
@@ -289,6 +290,34 @@ fn smokeLz4LinkedDirectFallback(allocator: std.mem.Allocator) !void {
     const done = try decoder.step("", decoded[64 * 1024 + 127 ..]);
     if (done.status != .done) return error.SizeMismatch;
     if (!std.mem.eql(u8, &payload, &decoded)) return error.SizeMismatch;
+}
+
+fn smokeLz4DeepHashChain(allocator: std.mem.Allocator) !void {
+    var payload: [160]u8 = undefined;
+    @memset(&payload, 'z');
+    const long = "AAAABCDEFGHIJKLMNOP";
+    const target_start = 120;
+    @memcpy(payload[0..long.len], long);
+    @memcpy(payload[target_start..][0..long.len], long);
+    for (0..12) |i| {
+        const pos = 24 + i * 6;
+        @memcpy(payload[pos..][0..4], "AAAA");
+        payload[pos + 4] = @intCast('a' + i);
+    }
+
+    const encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, &payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+    });
+    defer allocator.free(encoded);
+    const first_block = (try vort.lz4InspectNativeFrameFirstBlock(encoded)) orelse return error.SizeMismatch;
+    if (!first_block.is_compressed) return error.SizeMismatch;
+    if (encoded.len >= try vort.lz4EncodedNativeFrameBound(payload.len)) return error.SizeMismatch;
+
+    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const decoded = try decoder.decodeScratch(encoded);
+    if (!std.mem.eql(u8, &payload, decoded)) return error.SizeMismatch;
 }
 
 fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
