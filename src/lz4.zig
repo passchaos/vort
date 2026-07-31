@@ -17,7 +17,11 @@ const hash_occupancy_words = hash_table_len / @bitSizeOf(u64);
 const chain_table_len = max_block_history_len;
 const chain_table_mask = chain_table_len - 1;
 const invalid_pos = std.math.maxInt(u32);
-const max_chain_depth = 8;
+// Keep the bootstrap parser bounded while allowing it to see past a small run
+// of same-hash short candidates. Several real structured payloads place the
+// long repeat just behind many shallow four-byte hash hits; depth 16 keeps the
+// search cheap but avoids truncating those obvious wins.
+const max_chain_depth = 16;
 const good_match_len = 64;
 const lazy_extra_gain = 1;
 
@@ -4454,6 +4458,37 @@ test "lz4 native decoder covers liblz4 generated corpus shapes" {
             }
         }
     }
+}
+
+test "lz4 hash-chain finder reaches deeper long candidates" {
+    var payload: [160]u8 = undefined;
+    @memset(&payload, 'z');
+    const long = "AAAABCDEFGHIJKLMNOP";
+    const target_start = 120;
+    @memcpy(payload[0..long.len], long);
+    @memcpy(payload[target_start..][0..long.len], long);
+
+    // All of these candidates share the same four-byte hash prefix as the
+    // target, but they diverge immediately after it. The useful long match at
+    // offset 0 is deliberately older than the previous depth-8 chain cap.
+    for (0..12) |i| {
+        const pos = 24 + i * 6;
+        @memcpy(payload[pos..][0..4], "AAAA");
+        payload[pos + 4] = @intCast('a' + i);
+    }
+
+    var table: [hash_table_len]u32 = undefined;
+    var occupancy_bits: [hash_occupancy_words]u64 = undefined;
+    var chain_table: [chain_table_len]u32 = undefined;
+    @memset(&occupancy_bits, 0);
+
+    _ = insertHash(&payload, 0, &table, &occupancy_bits, &chain_table);
+    for (0..12) |i| {
+        _ = insertHash(&payload, 24 + i * 6, &table, &occupancy_bits, &chain_table);
+    }
+    const best = insertAndFindBest(&payload, target_start, &table, &occupancy_bits, &chain_table);
+    try std.testing.expectEqual(@as(usize, 0), best.start);
+    try std.testing.expect(best.len >= long.len);
 }
 
 test "lz4 frame encoder compresses repetitive payloads and round trips" {
