@@ -526,7 +526,58 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
 
     const decoded = try vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(allocator, stream.items, dictionary_set);
     defer allocator.free(decoded);
-    if (!std.mem.eql(u8, first_payload ++ second_payload, decoded)) return error.Lz4ProbeMismatch;
+    const expected = first_payload ++ second_payload;
+    if (!std.mem.eql(u8, expected, decoded)) return error.Lz4ProbeMismatch;
+
+    const chunks = [_][]const u8{
+        stream.items[0..5],
+        stream.items[5 .. first.len + 3],
+        stream.items[first.len + 3 .. first.len + second.len / 2],
+        stream.items[first.len + second.len / 2 ..],
+    };
+    const join = try allocator.alloc(u8, stream.items.len);
+    defer allocator.free(join);
+
+    const chunk_size = try vort.lz4DecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(&chunks, join, dictionary_set);
+    if (chunk_size != expected.len) return error.Lz4ProbeSizeMismatch;
+    const chunk_limited_size = try vort.lz4DecodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet(&chunks, join, expected.len, dictionary_set);
+    if (chunk_limited_size != expected.len) return error.Lz4ProbeSizeMismatch;
+    if (vort.lz4DecodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet(&chunks, join, expected.len - 1, dictionary_set)) |_| {
+        return error.Lz4ProbeExpectedOutputLimit;
+    } else |err| switch (err) {
+        error.OutputLimitExceeded => {},
+        else => return err,
+    }
+
+    const chunk_exact = try vort.lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySetExactSize(allocator, &chunks, join, dictionary_set, expected.len);
+    defer allocator.free(chunk_exact);
+    if (!std.mem.eql(u8, expected, chunk_exact)) return error.Lz4ProbeMismatch;
+    if (vort.lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySetExactSize(allocator, &chunks, join, dictionary_set, expected.len + 1)) |wrong| {
+        allocator.free(wrong);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.SizeMismatch => {},
+        else => return err,
+    }
+
+    var into: [expected.len]u8 = undefined;
+    const into_written = try vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&chunks, join, &into, dictionary_set);
+    if (into_written != expected.len or !std.mem.eql(u8, expected, &into)) return error.Lz4ProbeMismatch;
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try vort.lz4DecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(allocator, &appended, &chunks, join, dictionary_set, expected.len);
+    if (appended_written != expected.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, appended.items, "prefix:" ++ expected)) return error.Lz4ProbeMismatch;
+
+    if (vort.lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySet(allocator, &chunks, join, vort.Lz4NativeDictionarySet.init(&.{first_dict}))) |missing| {
+        allocator.free(missing);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.NeedDictionary => {},
+        else => return err,
+    }
 }
 
 fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
