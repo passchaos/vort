@@ -1805,6 +1805,48 @@ pub const NativeFrameDecoder = struct {
     pub const decodeConcatenatedAppendWithDictionarySet = decodeAppendWithDictionarySet;
     pub const decodeConcatenatedAppendLimitedWithDictionarySet = decodeAppendLimitedWithDictionarySet;
     pub const decodeConcatenatedIntoSliceWithDictionarySet = decodeIntoSliceWithDictionarySet;
+
+    pub fn decodedConcatenatedChunksSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameChunksSize(chunks, compressed_scratch);
+    }
+
+    pub fn decodedConcatenatedChunksSizeLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameChunksSizeLimited(chunks, compressed_scratch, max_output_len);
+    }
+
+    pub fn decodedConcatenatedChunksSizeWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameChunksSizeWithDictionary(chunks, compressed_scratch, dictionary);
+    }
+
+    pub fn decodedConcatenatedChunksSizeLimitedWithDictionary(
+        self: *NativeFrameDecoder,
+        chunks: []const []const u8,
+        compressed_scratch: []u8,
+        max_output_len: usize,
+        dictionary: NativeDictionary,
+    ) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameChunksSizeLimitedWithDictionary(chunks, compressed_scratch, max_output_len, dictionary);
+    }
+
+    pub fn decodedConcatenatedChunksSizeWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameChunksSizeWithDictionarySet(chunks, compressed_scratch, dictionary_set);
+    }
+
+    pub fn decodedConcatenatedChunksSizeLimitedWithDictionarySet(
+        self: *NativeFrameDecoder,
+        chunks: []const []const u8,
+        compressed_scratch: []u8,
+        max_output_len: usize,
+        dictionary_set: NativeDictionarySet,
+    ) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameChunksSizeLimitedWithDictionarySet(chunks, compressed_scratch, max_output_len, dictionary_set);
+    }
 };
 
 /// Compress a complete Zstandard frame using the reference-compatible libzstd

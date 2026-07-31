@@ -1750,6 +1750,48 @@ pub const NativeFrameDecoder = struct {
         _ = self;
         return try decodeConcatenatedFrameIntoWithDictionarySet(frames, output, dictionary_set);
     }
+
+    pub fn decodedConcatenatedChunksSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+        _ = self;
+        return try decodedConcatenatedFrameChunksSize(chunks, compressed_scratch);
+    }
+
+    pub fn decodedConcatenatedChunksSizeLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+        _ = self;
+        return try decodedConcatenatedFrameChunksSizeLimited(chunks, compressed_scratch, max_output_len);
+    }
+
+    pub fn decodedConcatenatedChunksSizeWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error!usize {
+        _ = self;
+        return try decodedConcatenatedFrameChunksSizeWithDictionary(chunks, compressed_scratch, dictionary);
+    }
+
+    pub fn decodedConcatenatedChunksSizeLimitedWithDictionary(
+        self: *NativeFrameDecoder,
+        chunks: []const []const u8,
+        compressed_scratch: []u8,
+        max_output_len: usize,
+        dictionary: NativeDictionary,
+    ) Error!usize {
+        _ = self;
+        return try decodedConcatenatedFrameChunksSizeLimitedWithDictionary(chunks, compressed_scratch, max_output_len, dictionary);
+    }
+
+    pub fn decodedConcatenatedChunksSizeWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
+        _ = self;
+        return try decodedConcatenatedFrameChunksSizeWithDictionarySet(chunks, compressed_scratch, dictionary_set);
+    }
+
+    pub fn decodedConcatenatedChunksSizeLimitedWithDictionarySet(
+        self: *NativeFrameDecoder,
+        chunks: []const []const u8,
+        compressed_scratch: []u8,
+        max_output_len: usize,
+        dictionary_set: NativeDictionarySet,
+    ) Error!usize {
+        _ = self;
+        return try decodedConcatenatedFrameChunksSizeLimitedWithDictionarySet(chunks, compressed_scratch, max_output_len, dictionary_set);
+    }
 };
 
 pub fn decodeConcatenatedFrameAlloc(allocator: std.mem.Allocator, frames: []const u8) Error![]u8 {
