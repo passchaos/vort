@@ -18,6 +18,10 @@ const Mode = enum {
     dictionary_set,
     dictionary_set_chunked_plain,
     dictionary_set_chunked,
+    dictionary_set_chunked_append_plain,
+    dictionary_set_chunked_append,
+    dictionary_set_chunked_append_exact_plain,
+    dictionary_set_chunked_append_exact,
     dictionary_set_reusable_plain,
     dictionary_set_reusable,
     dictionary_set_direct_plain,
@@ -115,6 +119,14 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(init.gpa, try lz4DictionarySetChunkedRow(init.io, init.gpa, .dictionary_set_chunked, true, options.iterations));
     try rows.append(init.gpa, try zstdDictionarySetChunkedRow(init.io, init.gpa, .dictionary_set_chunked_plain, false, options.iterations));
     try rows.append(init.gpa, try zstdDictionarySetChunkedRow(init.io, init.gpa, .dictionary_set_chunked, true, options.iterations));
+    try rows.append(init.gpa, try lz4DictionarySetChunkedAppendRow(init.io, init.gpa, .dictionary_set_chunked_append_plain, false, false, options.iterations));
+    try rows.append(init.gpa, try lz4DictionarySetChunkedAppendRow(init.io, init.gpa, .dictionary_set_chunked_append, true, false, options.iterations));
+    try rows.append(init.gpa, try zstdDictionarySetChunkedAppendRow(init.io, init.gpa, .dictionary_set_chunked_append_plain, false, false, options.iterations));
+    try rows.append(init.gpa, try zstdDictionarySetChunkedAppendRow(init.io, init.gpa, .dictionary_set_chunked_append, true, false, options.iterations));
+    try rows.append(init.gpa, try lz4DictionarySetChunkedAppendRow(init.io, init.gpa, .dictionary_set_chunked_append_exact_plain, false, true, options.iterations));
+    try rows.append(init.gpa, try lz4DictionarySetChunkedAppendRow(init.io, init.gpa, .dictionary_set_chunked_append_exact, true, true, options.iterations));
+    try rows.append(init.gpa, try zstdDictionarySetChunkedAppendRow(init.io, init.gpa, .dictionary_set_chunked_append_exact_plain, false, true, options.iterations));
+    try rows.append(init.gpa, try zstdDictionarySetChunkedAppendRow(init.io, init.gpa, .dictionary_set_chunked_append_exact, true, true, options.iterations));
     try rows.append(init.gpa, try lz4DictionarySetReusableChunkedRow(init.io, init.gpa, .dictionary_set_reusable_plain, false, options.iterations));
     try rows.append(init.gpa, try lz4DictionarySetReusableChunkedRow(init.io, init.gpa, .dictionary_set_reusable, true, options.iterations));
     try rows.append(init.gpa, try zstdDictionarySetReusableChunkedRow(init.io, init.gpa, .dictionary_set_reusable_plain, false, options.iterations));
@@ -533,6 +545,74 @@ fn zstdDictionarySetChunkedRow(
 
     const encode_result = try timeEncodeZstdDictionarySet(io, allocator, options, dictionary_set, first_dict, second_dict, use_dictionary_set, iterations);
     const decode_result = try timeDecodeZstdDictionarySetChunked(io, &chunks, join, decoded, dictionary_set, use_dictionary_set, iterations);
+    return makeRow(.zstd, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn lz4DictionarySetChunkedAppendRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary_set: bool,
+    exact_size: bool,
+    iterations: usize,
+) !Row {
+    const first_dict = vort.Lz4NativeDictionary.init(0x4c5a_4501, lz4_dictionary_set_first_content);
+    const second_dict = vort.Lz4NativeDictionary.init(0x4c5a_4502, lz4_dictionary_set_second_content);
+    const dictionary_set = vort.Lz4NativeDictionarySet.init(&.{ first_dict, second_dict });
+    const case: Case = .{ .name = if (exact_size) "dictionary_set_chunked_append_exact" else "dictionary_set_chunked_append", .payload = lz4_dictionary_set_payload };
+    const options: vort.Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+    };
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    try appendLz4DictionarySetFrames(allocator, &encoded, options, dictionary_set, first_dict, second_dict, use_dictionary_set);
+    const chunks = dictionarySetChunks(encoded.items);
+    const join = try allocator.alloc(u8, encoded.items.len);
+    defer allocator.free(join);
+    if (use_dictionary_set) {
+        try verifyLz4DictionarySetChunkedAppend(allocator, &chunks, join, dictionary_set, true, exact_size);
+    } else {
+        try verifyLz4DictionarySetChunkedAppend(allocator, &chunks, join, dictionary_set, false, exact_size);
+    }
+
+    const encode_result = try timeEncodeLz4DictionarySet(io, allocator, options, dictionary_set, first_dict, second_dict, use_dictionary_set, iterations);
+    const decode_result = try timeDecodeLz4DictionarySetChunkedAppend(io, allocator, &chunks, join, dictionary_set, use_dictionary_set, exact_size, iterations);
+    return makeRow(.lz4, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdDictionarySetChunkedAppendRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary_set: bool,
+    exact_size: bool,
+    iterations: usize,
+) !Row {
+    const first_dict = vort.ZstdNativeDictionary.init(0x5a53_4501, zstd_dictionary_set_first_content);
+    const second_dict = vort.ZstdNativeDictionary.init(0x5a53_4502, zstd_dictionary_set_second_content);
+    const dictionary_set = vort.ZstdNativeDictionarySet.init(&.{ first_dict, second_dict });
+    const case: Case = .{ .name = if (exact_size) "dictionary_set_chunked_append_exact" else "dictionary_set_chunked_append", .payload = zstd_dictionary_set_payload };
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    try appendZstdDictionarySetFrames(allocator, &encoded, options, dictionary_set, first_dict, second_dict, use_dictionary_set);
+    const chunks = dictionarySetChunks(encoded.items);
+    const join = try allocator.alloc(u8, encoded.items.len);
+    defer allocator.free(join);
+    if (use_dictionary_set) {
+        try verifyZstdDictionarySetChunkedAppend(allocator, &chunks, join, dictionary_set, true, exact_size);
+    } else {
+        try verifyZstdDictionarySetChunkedAppend(allocator, &chunks, join, dictionary_set, false, exact_size);
+    }
+
+    const encode_result = try timeEncodeZstdDictionarySet(io, allocator, options, dictionary_set, first_dict, second_dict, use_dictionary_set, iterations);
+    const decode_result = try timeDecodeZstdDictionarySetChunkedAppend(io, allocator, &chunks, join, dictionary_set, use_dictionary_set, exact_size, iterations);
     return makeRow(.zstd, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
@@ -1013,6 +1093,48 @@ fn timeDecodeZstdDictionarySetChunked(
             try expectRoundTrip(vort.zstdDecodeNativeConcatenatedFrameChunksInto(chunks, join, decoded), zstd_dictionary_set_payload, decoded);
         }
         checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeLz4DictionarySetChunkedAppend(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+    join: []u8,
+    dictionary_set: vort.Lz4NativeDictionarySet,
+    use_dictionary_set: bool,
+    exact_size: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        try verifyLz4DictionarySetChunkedAppendInto(allocator, &out, chunks, join, dictionary_set, use_dictionary_set, exact_size);
+        checksum +%= out.items["prefix:".len];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeZstdDictionarySetChunkedAppend(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+    join: []u8,
+    dictionary_set: vort.ZstdNativeDictionarySet,
+    use_dictionary_set: bool,
+    exact_size: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        try verifyZstdDictionarySetChunkedAppendInto(allocator, &out, chunks, join, dictionary_set, use_dictionary_set, exact_size);
+        checksum +%= out.items["prefix:".len];
     }
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
 }
@@ -1826,6 +1948,128 @@ fn drainIncremental(decoder: anytype, encoded: []const u8, decoded: []u8) !void 
     if (out_offset != decoded.len) return error.SizeMismatch;
 }
 
+fn verifyLz4DictionarySetChunkedAppend(
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+    join: []u8,
+    dictionary_set: vort.Lz4NativeDictionarySet,
+    use_dictionary_set: bool,
+    exact_size: bool,
+) !void {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
+    try verifyLz4DictionarySetChunkedAppendInto(allocator, &out, chunks, join, dictionary_set, use_dictionary_set, exact_size);
+}
+
+fn verifyLz4DictionarySetChunkedAppendInto(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+    join: []u8,
+    dictionary_set: vort.Lz4NativeDictionarySet,
+    use_dictionary_set: bool,
+    exact_size: bool,
+) !void {
+    out.clearRetainingCapacity();
+    try out.appendSlice(allocator, "prefix:");
+    const written = if (use_dictionary_set)
+        if (exact_size)
+            try vort.lz4DecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(
+                allocator,
+                out,
+                chunks,
+                join,
+                dictionary_set,
+                lz4_dictionary_set_payload.len,
+            )
+        else
+            try vort.lz4DecodeNativeConcatenatedFrameChunksAppendWithDictionarySet(
+                allocator,
+                out,
+                chunks,
+                join,
+                dictionary_set,
+            )
+    else if (exact_size)
+        try vort.lz4DecodeNativeConcatenatedFrameChunksAppendExactSize(
+            allocator,
+            out,
+            chunks,
+            join,
+            lz4_dictionary_set_payload.len,
+        )
+    else
+        try vort.lz4DecodeNativeConcatenatedFrameChunksAppend(
+            allocator,
+            out,
+            chunks,
+            join,
+        );
+    if (written != lz4_dictionary_set_payload.len) return error.SizeMismatch;
+    if (!std.mem.eql(u8, out.items, "prefix:" ++ lz4_dictionary_set_payload)) return error.SizeMismatch;
+}
+
+fn verifyZstdDictionarySetChunkedAppend(
+    allocator: std.mem.Allocator,
+    chunks: []const []const u8,
+    join: []u8,
+    dictionary_set: vort.ZstdNativeDictionarySet,
+    use_dictionary_set: bool,
+    exact_size: bool,
+) !void {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
+    try verifyZstdDictionarySetChunkedAppendInto(allocator, &out, chunks, join, dictionary_set, use_dictionary_set, exact_size);
+}
+
+fn verifyZstdDictionarySetChunkedAppendInto(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+    join: []u8,
+    dictionary_set: vort.ZstdNativeDictionarySet,
+    use_dictionary_set: bool,
+    exact_size: bool,
+) !void {
+    out.clearRetainingCapacity();
+    try out.appendSlice(allocator, "prefix:");
+    const written = if (use_dictionary_set)
+        if (exact_size)
+            try vort.zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(
+                allocator,
+                out,
+                chunks,
+                join,
+                dictionary_set,
+                zstd_dictionary_set_payload.len,
+            )
+        else
+            try vort.zstdDecodeNativeConcatenatedFrameChunksAppendWithDictionarySet(
+                allocator,
+                out,
+                chunks,
+                join,
+                dictionary_set,
+            )
+    else if (exact_size)
+        try vort.zstdDecodeNativeConcatenatedFrameChunksAppendExactSize(
+            allocator,
+            out,
+            chunks,
+            join,
+            zstd_dictionary_set_payload.len,
+        )
+    else
+        try vort.zstdDecodeNativeConcatenatedFrameChunksAppend(
+            allocator,
+            out,
+            chunks,
+            join,
+        );
+    if (written != zstd_dictionary_set_payload.len) return error.SizeMismatch;
+    if (!std.mem.eql(u8, out.items, "prefix:" ++ zstd_dictionary_set_payload)) return error.SizeMismatch;
+}
+
 fn expectRoundTrip(written_result: anytype, expected: []const u8, decoded: []u8) !void {
     const written = try written_result;
     if (written != expected.len) return error.SizeMismatch;
@@ -1884,6 +2128,10 @@ fn modeName(mode: Mode) []const u8 {
         .dictionary_set => "dictionary_set",
         .dictionary_set_chunked_plain => "dictionary_set_chunked_plain",
         .dictionary_set_chunked => "dictionary_set_chunked",
+        .dictionary_set_chunked_append_plain => "dictionary_set_chunked_append_plain",
+        .dictionary_set_chunked_append => "dictionary_set_chunked_append",
+        .dictionary_set_chunked_append_exact_plain => "dictionary_set_chunked_append_exact_plain",
+        .dictionary_set_chunked_append_exact => "dictionary_set_chunked_append_exact",
         .dictionary_set_reusable_plain => "dictionary_set_reusable_plain",
         .dictionary_set_reusable => "dictionary_set_reusable",
         .dictionary_set_direct_plain => "dictionary_set_direct_plain",

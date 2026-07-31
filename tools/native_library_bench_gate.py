@@ -40,6 +40,10 @@ EXPECTED_MODES = {
     "dictionary_set",
     "dictionary_set_chunked_plain",
     "dictionary_set_chunked",
+    "dictionary_set_chunked_append_plain",
+    "dictionary_set_chunked_append",
+    "dictionary_set_chunked_append_exact_plain",
+    "dictionary_set_chunked_append_exact",
     "dictionary_set_reusable_plain",
     "dictionary_set_reusable",
     "dictionary_set_direct_plain",
@@ -66,6 +70,14 @@ EXPECTED_EXTRA_ROWS = {
     ("lz4", "dictionary_set_chunked", "dictionary_set_chunked"),
     ("zstd", "dictionary_set_chunked_plain", "dictionary_set_chunked"),
     ("zstd", "dictionary_set_chunked", "dictionary_set_chunked"),
+    ("lz4", "dictionary_set_chunked_append_plain", "dictionary_set_chunked_append"),
+    ("lz4", "dictionary_set_chunked_append", "dictionary_set_chunked_append"),
+    ("zstd", "dictionary_set_chunked_append_plain", "dictionary_set_chunked_append"),
+    ("zstd", "dictionary_set_chunked_append", "dictionary_set_chunked_append"),
+    ("lz4", "dictionary_set_chunked_append_exact_plain", "dictionary_set_chunked_append_exact"),
+    ("lz4", "dictionary_set_chunked_append_exact", "dictionary_set_chunked_append_exact"),
+    ("zstd", "dictionary_set_chunked_append_exact_plain", "dictionary_set_chunked_append_exact"),
+    ("zstd", "dictionary_set_chunked_append_exact", "dictionary_set_chunked_append_exact"),
     ("lz4", "dictionary_set_reusable_plain", "dictionary_set_reusable"),
     ("lz4", "dictionary_set_reusable", "dictionary_set_reusable"),
     ("zstd", "dictionary_set_reusable_plain", "dictionary_set_reusable"),
@@ -206,6 +218,22 @@ def main() -> int:
             raise AssertionError(
                 f"expected {codec} chunked dictionary-set row to improve dictionary_set_chunked size: "
                 f"plain={chunked_plain['encoded_bytes']} dictionary_set={chunked_set['encoded_bytes']}"
+            )
+
+        append_plain = row_by_identity[(codec, "dictionary_set_chunked_append_plain", "dictionary_set_chunked_append")]
+        append_set = row_by_identity[(codec, "dictionary_set_chunked_append", "dictionary_set_chunked_append")]
+        if int(append_set["encoded_bytes"]) >= int(append_plain["encoded_bytes"]):
+            raise AssertionError(
+                f"expected {codec} chunked append dictionary-set row to improve dictionary_set_chunked_append size: "
+                f"plain={append_plain['encoded_bytes']} dictionary_set={append_set['encoded_bytes']}"
+            )
+
+        append_exact_plain = row_by_identity[(codec, "dictionary_set_chunked_append_exact_plain", "dictionary_set_chunked_append_exact")]
+        append_exact_set = row_by_identity[(codec, "dictionary_set_chunked_append_exact", "dictionary_set_chunked_append_exact")]
+        if int(append_exact_set["encoded_bytes"]) >= int(append_exact_plain["encoded_bytes"]):
+            raise AssertionError(
+                f"expected {codec} chunked append exact dictionary-set row to improve dictionary_set_chunked_append_exact size: "
+                f"plain={append_exact_plain['encoded_bytes']} dictionary_set={append_exact_set['encoded_bytes']}"
             )
 
         reusable_plain = row_by_identity[(codec, "dictionary_set_reusable_plain", "dictionary_set_reusable")]
