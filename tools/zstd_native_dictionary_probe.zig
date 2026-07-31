@@ -87,11 +87,7 @@ fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
     defer allocator.free(raw);
     try expect(encoded.frame.len < raw.len);
 
-    const bound = try vort.zstdEncodedNativeFrameBoundWithOptions(payload.len, .{
-        .selection = .literal_only,
-        .content_checksum = false,
-        .dictionary_id = dict.id,
-    });
+    const bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(payload.len, options, dict);
     const into = try allocator.alloc(u8, bound);
     defer allocator.free(into);
     const into_result = try vort.zstdEncodeNativeFrameIntoSliceWithDictionary(allocator, payload, options, dict, into);
@@ -270,6 +266,11 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
     const written = try vort.zstdDecodeNativeConcatenatedFrameIntoWithDictionary(stream.items, &into, dict);
     try expect(written == into.len);
     try expectEqualSlices(first_payload ++ second_payload, &into);
+
+    const dictionary_set = vort.ZstdNativeDictionarySet.init(&.{dict});
+    const set_bound = try vort.zstdEncodedNativeFrameBoundWithDictionarySet(first_payload.len, options, dictionary_set, dict.id);
+    try expect(first.frame.len <= set_bound);
+    try expectError(error.NeedDictionary, vort.zstdEncodedNativeFrameBoundWithDictionarySet(first_payload.len, options, dictionary_set, 0xeeee));
 }
 
 fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
