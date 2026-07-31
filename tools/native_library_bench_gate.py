@@ -46,6 +46,8 @@ EXPECTED_MODES = {
     "dictionary_set_chunked_append_exact",
     "dictionary_set_reusable_plain",
     "dictionary_set_reusable",
+    "dictionary_set_reusable_append_exact_plain",
+    "dictionary_set_reusable_append_exact",
     "dictionary_set_direct_plain",
     "dictionary_set_direct",
     "dictionary_set_fallback_plain",
@@ -82,6 +84,10 @@ EXPECTED_EXTRA_ROWS = {
     ("lz4", "dictionary_set_reusable", "dictionary_set_reusable"),
     ("zstd", "dictionary_set_reusable_plain", "dictionary_set_reusable"),
     ("zstd", "dictionary_set_reusable", "dictionary_set_reusable"),
+    ("lz4", "dictionary_set_reusable_append_exact_plain", "dictionary_set_reusable_append_exact"),
+    ("lz4", "dictionary_set_reusable_append_exact", "dictionary_set_reusable_append_exact"),
+    ("zstd", "dictionary_set_reusable_append_exact_plain", "dictionary_set_reusable_append_exact"),
+    ("zstd", "dictionary_set_reusable_append_exact", "dictionary_set_reusable_append_exact"),
     ("lz4", "dictionary_set_direct_plain", "dictionary_set_direct"),
     ("lz4", "dictionary_set_direct", "dictionary_set_direct"),
     ("zstd", "dictionary_set_direct_plain", "dictionary_set_direct"),
@@ -242,6 +248,14 @@ def main() -> int:
             raise AssertionError(
                 f"expected {codec} reusable dictionary-set row to improve dictionary_set_reusable size: "
                 f"plain={reusable_plain['encoded_bytes']} dictionary_set={reusable_set['encoded_bytes']}"
+            )
+
+        reusable_append_exact_plain = row_by_identity[(codec, "dictionary_set_reusable_append_exact_plain", "dictionary_set_reusable_append_exact")]
+        reusable_append_exact_set = row_by_identity[(codec, "dictionary_set_reusable_append_exact", "dictionary_set_reusable_append_exact")]
+        if int(reusable_append_exact_set["encoded_bytes"]) >= int(reusable_append_exact_plain["encoded_bytes"]):
+            raise AssertionError(
+                f"expected {codec} reusable append exact dictionary-set row to improve dictionary_set_reusable_append_exact size: "
+                f"plain={reusable_append_exact_plain['encoded_bytes']} dictionary_set={reusable_append_exact_set['encoded_bytes']}"
             )
 
         direct_plain = row_by_identity[(codec, "dictionary_set_direct_plain", "dictionary_set_direct")]
