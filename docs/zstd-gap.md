@@ -199,6 +199,25 @@ Current interpretation:
   with an optional `--limit`
   for focused file payloads when investigating real corpus failures.
 
+High-byte literal writer note:
+
+- The direct Huffman writer is intentionally capped at
+  `zstdNativeMaxDirectHuffmanSymbol == 128`, because Zstandard direct Huffman
+  headers encode `symbol_count - 1` in one byte and cannot describe full
+  `0...255` weight tables. High-byte binary payloads therefore require
+  FSE-compressed Huffman weights.
+- A correct high-byte implementation must validate both decoders: system
+  `zstd` and Vort's native Huffman literal cursor. The FSE table header and
+  reverse weight bitstream are not sufficient by themselves; the resulting
+  `HuffmanTree` prefix assignment must also match the literal bitstream emitted
+  by `emitSmallHuffmanStream`.
+- The next implementation slice should first add a private round-trip fixture
+  that decodes the candidate FSE-compressed weight table into the exact intended
+  weights (`0` for absent symbols, the selected high-byte weights, and the
+  spec-reconstructed last weight). Only after that fixture passes should the
+  writer switch `zstd_native_frame_probe`'s `high_byte_binary` case from raw
+  fallback to a compressed block.
+
 Recommended next comparison steps:
 
 1. Add library-level decode throughput rows for zstd and Vort native/zlib/raw
