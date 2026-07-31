@@ -34,6 +34,8 @@ EXPECTED_MODES = {
     "match_budget_full",
     "dictionary_plain",
     "dictionary",
+    "dictionary_set_plain",
+    "dictionary_set",
 }
 EXPECTED_CASES = {"text", "structured", "repetitive"}
 EXPECTED_EXTRA_ROWS = {
@@ -45,6 +47,10 @@ EXPECTED_EXTRA_ROWS = {
     ("lz4", "dictionary", "dictionary"),
     ("zstd", "dictionary_plain", "dictionary"),
     ("zstd", "dictionary", "dictionary"),
+    ("lz4", "dictionary_set_plain", "dictionary_set"),
+    ("lz4", "dictionary_set", "dictionary_set"),
+    ("zstd", "dictionary_set_plain", "dictionary_set"),
+    ("zstd", "dictionary_set", "dictionary_set"),
 }
 
 
@@ -153,6 +159,14 @@ def main() -> int:
             raise AssertionError(
                 f"expected {codec} dictionary row to improve dictionary size: "
                 f"plain={plain['encoded_bytes']} dictionary={dictionary['encoded_bytes']}"
+            )
+
+        set_plain = row_by_identity[(codec, "dictionary_set_plain", "dictionary_set")]
+        dictionary_set = row_by_identity[(codec, "dictionary_set", "dictionary_set")]
+        if int(dictionary_set["encoded_bytes"]) >= int(set_plain["encoded_bytes"]):
+            raise AssertionError(
+                f"expected {codec} dictionary-set row to improve dictionary_set size: "
+                f"plain={set_plain['encoded_bytes']} dictionary_set={dictionary_set['encoded_bytes']}"
             )
 
     print(f"native_library_bench_gate=ok rows={len(rows)} iterations={expected_iterations}")
