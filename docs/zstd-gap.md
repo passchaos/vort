@@ -127,7 +127,7 @@ Current interpretation:
   match-vs-Huffman size arbitration, smallest native match-plan arbitration,
   RLE/predefined sequence cost scoring for single and mixed match candidates,
   mixed RLE/predefined plus limited compressed-FSE sequence-table mode emission
-  (LL covered by public dictionary probe, OF/ML by focused unit round-trips),
+  (LL/OF covered by public dictionary probe, ML by focused unit round-trips),
   branch-scored mixed duplicate/repeated and dictionary/duplicate/repeated
   match lookahead and emission,
   RLE-literals sections for same-byte sequence literals,
@@ -196,7 +196,7 @@ Current interpretation:
   CLI-specific chunking. `run-lz4-native-dictionary-probe` and
   `run-zstd-native-dictionary-probe` exercise the public dictionary APIs,
   top-level and reusable chunked append/exact-size append decode helpers,
-  public sequence-mode inspection for LL=FSE blocks, and direct-output fallback
+  public sequence-mode inspection for LL/OF=FSE blocks, and direct-output fallback
   paths directly, while the generated-corpus probe
   accepts repeated `--path` arguments or bounded recursive `--dir` discovery
   with an optional `--limit`

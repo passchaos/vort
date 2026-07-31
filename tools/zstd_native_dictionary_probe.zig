@@ -204,6 +204,17 @@ fn appendHighByteLiteralRun(allocator: std.mem.Allocator, out: *std.ArrayList(u8
 }
 
 fn checkCompressedSequenceTableInspect(allocator: std.mem.Allocator) !void {
+    try checkLiteralAndOffsetCompressedSequenceTableInspect(allocator, 4, 20, .compressed, .predefined);
+    try checkLiteralAndOffsetCompressedSequenceTableInspect(allocator, 5, 21, .compressed, .compressed);
+}
+
+fn checkLiteralAndOffsetCompressedSequenceTableInspect(
+    allocator: std.mem.Allocator,
+    case_index: usize,
+    expected_sequences: usize,
+    expected_literal_mode: vort.ZstdNativeSequenceTableMode,
+    expected_offset_mode: vort.ZstdNativeSequenceTableMode,
+) !void {
     var dict_bytes: [32]u8 = undefined;
     var dict_state: u32 = 0x1234_5678;
     for (&dict_bytes) |*byte| {
@@ -214,8 +225,8 @@ fn checkCompressedSequenceTableInspect(allocator: std.mem.Allocator) !void {
     const dict = vort.ZstdNativeDictionary.init(0x4433_2214, &dict_bytes);
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    var state: u32 = @truncate(4 *% 747_796_405 +% 2_891_336_453);
-    for (0..20) |_| {
+    var state: u32 = @truncate(case_index *% 747_796_405 +% 2_891_336_453);
+    for (0..expected_sequences) |_| {
         state = state *% 1_664_525 +% 1_013_904_223;
         const literal_len: usize = @intCast(1 + ((state >> 24) % 8));
         for (0..literal_len) |_| {
@@ -234,9 +245,9 @@ fn checkCompressedSequenceTableInspect(allocator: std.mem.Allocator) !void {
     defer allocator.free(encoded.frame);
     const first_block = try vort.zstdInspectNativeFrameFirstBlock(encoded.frame);
     const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(encoded.frame, first_block);
-    try expect(modes.sequence_count == 20);
-    try expect(modes.literal_length_mode == .compressed);
-    try expect(modes.offset_mode == .predefined);
+    try expect(modes.sequence_count == expected_sequences);
+    try expect(modes.literal_length_mode == expected_literal_mode);
+    try expect(modes.offset_mode == expected_offset_mode);
     try expect(modes.match_length_mode == .rle);
 
     const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
