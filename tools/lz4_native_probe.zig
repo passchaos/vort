@@ -607,7 +607,29 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
         else => return err,
     }
 
-    if (vort.lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySet(allocator, &chunks, join, vort.Lz4NativeDictionarySet.init(&.{first_dict}))) |missing| {
+    const missing_set = vort.Lz4NativeDictionarySet.init(&.{first_dict});
+    if (reusable.decodeConcatenatedChunksAllocWithDictionarySet(&chunks, join, missing_set)) |missing| {
+        allocator.free(missing);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.NeedDictionary => {},
+        else => return err,
+    }
+    if (reusable.decodeConcatenatedChunksScratchWithDictionarySet(&chunks, join, missing_set)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.NeedDictionary => {},
+        else => return err,
+    }
+    reusable_appended.clearRetainingCapacity();
+    if (reusable.decodeConcatenatedChunksAppendWithDictionarySet(&reusable_appended, &chunks, join, missing_set)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.NeedDictionary => {},
+        else => return err,
+    }
+
+    if (vort.lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySet(allocator, &chunks, join, missing_set)) |missing| {
         allocator.free(missing);
         return error.Lz4ProbeExpectedFrameError;
     } else |err| switch (err) {
