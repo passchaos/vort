@@ -6683,6 +6683,12 @@ fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) 
         error.OutputTooSmall => return null,
         else => return err,
     };
+    // A compressed sequence table pays an upfront normalized-count header before
+    // it can save state-transition bits. For small bootstrap blocks, reject
+    // candidates whose table header alone is no smaller than one byte per
+    // sequence; RLE/predefined modes remain available and avoid the FSE setup
+    // cost in those cases.
+    if (plan.table_payload_len >= values.len) return null;
 
     var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
     const table_len = try buildFseDecodeTableFromNormalized(
