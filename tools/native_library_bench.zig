@@ -6,6 +6,7 @@ const Mode = enum {
     one_shot,
     incremental,
     incremental_direct,
+    incremental_fallback,
     chain_depth_0,
     chain_depth_default,
     match_budget_0,
@@ -76,9 +77,11 @@ pub fn main(init: std.process.Init) !void {
         try rows.append(init.gpa, try lz4OneShotRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try lz4IncrementalRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try lz4IncrementalDirectRow(init.io, init.gpa, case, options.iterations));
+        try rows.append(init.gpa, try lz4IncrementalFallbackRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdOneShotRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdIncrementalRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdIncrementalDirectRow(init.io, init.gpa, case, options.iterations));
+        try rows.append(init.gpa, try zstdIncrementalFallbackRow(init.io, init.gpa, case, options.iterations));
     }
     try rows.append(init.gpa, try lz4ChainDepthRow(init.io, init.gpa, .chain_depth_0, 0, options.iterations));
     try rows.append(init.gpa, try lz4ChainDepthRow(
@@ -187,6 +190,19 @@ fn lz4IncrementalDirectRow(io: std.Io, allocator: std.mem.Allocator, case: Case,
     return makeRow(.lz4, .incremental_direct, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
+fn lz4IncrementalFallbackRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
+    const options: vort.Lz4NativeFrameOptions = .{ .content_checksum = false, .block_checksum = true };
+    const encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, case.payload, options);
+    defer allocator.free(encoded);
+    const decoded = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(decoded);
+    try decodeLz4IncrementalFallback(allocator, encoded, decoded, case.payload);
+
+    const decode_result = try timeDecodeLz4IncrementalFallback(io, allocator, encoded, decoded, case.payload, iterations);
+    const encode_result = try timeEncodeLz4(io, allocator, case.payload, options, iterations);
+    return makeRow(.lz4, .incremental_fallback, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
 fn zstdOneShotRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
     const options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only, .content_checksum = false };
     const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, case.payload, options);
@@ -226,6 +242,19 @@ fn zstdIncrementalDirectRow(io: std.Io, allocator: std.mem.Allocator, case: Case
     const decode_result = try timeDecodeZstdIncrementalDirect(io, allocator, encoded.frame, decoded, case.payload, iterations);
     const encode_result = try timeEncodeZstd(io, allocator, case.payload, options, iterations);
     return makeRow(.zstd, .incremental_direct, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdIncrementalFallbackRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
+    const options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only, .content_checksum = false };
+    const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, case.payload, options);
+    defer allocator.free(encoded.frame);
+    const decoded = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(decoded);
+    try decodeZstdIncrementalFallback(allocator, encoded.frame, decoded, case.payload);
+
+    const decode_result = try timeDecodeZstdIncrementalFallback(io, allocator, encoded.frame, decoded, case.payload, iterations);
+    const encode_result = try timeEncodeZstd(io, allocator, case.payload, options, iterations);
+    return makeRow(.zstd, .incremental_fallback, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
 fn lz4ChainDepthRow(
@@ -1020,6 +1049,26 @@ fn timeDecodeZstdIncrementalDirect(io: std.Io, allocator: std.mem.Allocator, enc
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
 }
 
+fn timeDecodeLz4IncrementalFallback(io: std.Io, allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8, expected: []const u8, iterations: usize) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        try decodeLz4IncrementalFallback(allocator, encoded, decoded, expected);
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeZstdIncrementalFallback(io: std.Io, allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8, expected: []const u8, iterations: usize) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        try decodeZstdIncrementalFallback(allocator, encoded, decoded, expected);
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
 fn smokeLz4LinkedDirectFallback(allocator: std.mem.Allocator) !void {
     var payload: [64 * 1024 + 4096]u8 = undefined;
     var state: u32 = 0x1234_abcd;
@@ -1479,6 +1528,24 @@ fn decodeZstdIncrementalDirect(allocator: std.mem.Allocator, encoded: []const u8
     if (done.status != .done or done.progress.output_written != decoded.len) return error.SizeMismatch;
 }
 
+fn decodeLz4IncrementalFallback(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8, expected: []const u8) !void {
+    var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = decoded.len,
+        .max_decoded_buffer_len = decoded.len,
+    });
+    defer decoder.deinit();
+    try drainIncrementalFallback(&decoder, encoded, decoded, expected);
+}
+
+fn decodeZstdIncrementalFallback(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8, expected: []const u8) !void {
+    var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = decoded.len,
+        .max_decoded_buffer_len = decoded.len,
+    });
+    defer decoder.deinit();
+    try drainIncrementalFallback(&decoder, encoded, decoded, expected);
+}
+
 fn decodeLz4DictionarySetDirect(
     allocator: std.mem.Allocator,
     encoded: []const u8,
@@ -1519,6 +1586,27 @@ fn decodeZstdDictionarySetDirect(
         });
     defer decoder.deinit();
     try drainDirectDictionarySet(&decoder, encoded, decoded, zstd_dictionary_set_payload);
+}
+
+fn drainIncrementalFallback(decoder: anytype, encoded: []const u8, decoded: []u8, expected: []const u8) !void {
+    const initial = try decoder.step(encoded, decoded[0..0]);
+    if (initial.status != .need_output) return error.SizeMismatch;
+
+    var written: usize = 0;
+    const first_len = @min(decoded.len, @max(@as(usize, 1), decoded.len / 32));
+    const first = try decoder.step("", decoded[0..first_len]);
+    written += first.progress.output_written;
+    if (first.status != .need_output or written != first_len) return error.SizeMismatch;
+    if (decoder.decoded_scratch.items.len != expected.len) return error.SizeMismatch;
+
+    while (true) {
+        const result = try decoder.step("", decoded[written..]);
+        written += result.progress.output_written;
+        if (result.status == .done) break;
+        if (result.status != .need_output or result.progress.output_written == 0) return error.SizeMismatch;
+    }
+    if (written != expected.len) return error.SizeMismatch;
+    if (!std.mem.eql(u8, expected, decoded[0..written])) return error.SizeMismatch;
 }
 
 fn drainDirectDictionarySet(decoder: anytype, encoded: []const u8, decoded: []u8, expected: []const u8) !void {
@@ -1604,6 +1692,7 @@ fn modeName(mode: Mode) []const u8 {
         .one_shot => "one_shot",
         .incremental => "incremental",
         .incremental_direct => "incremental_direct",
+        .incremental_fallback => "incremental_fallback",
         .chain_depth_0 => "chain_depth_0",
         .chain_depth_default => "chain_depth_default",
         .match_budget_0 => "match_budget_0",

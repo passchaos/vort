@@ -28,6 +28,7 @@ EXPECTED_MODES = {
     "one_shot",
     "incremental",
     "incremental_direct",
+    "incremental_fallback",
     "chain_depth_0",
     "chain_depth_default",
     "match_budget_0",
@@ -114,7 +115,7 @@ def main() -> int:
     expected = {
         (codec, mode, case)
         for codec in EXPECTED_CODECS
-        for mode in {"one_shot", "incremental", "incremental_direct"}
+        for mode in {"one_shot", "incremental", "incremental_direct", "incremental_fallback"}
         for case in EXPECTED_CASES
     } | EXPECTED_EXTRA_ROWS
     seen: set[tuple[str, str, str]] = set()
