@@ -20,8 +20,10 @@ const max_predefined_sequence_states = 64;
 const mixed_match_path_search_budget = 512;
 const repeated_pattern_period_max = 64;
 const repeated_pattern_start_scan = 48;
+const max_direct_huffman_symbol = 128;
 
 pub const native_max_match_search_budget: usize = mixed_match_path_search_budget;
+pub const native_max_direct_huffman_symbol: u8 = max_direct_huffman_symbol;
 
 const ll_base = [_]usize{
     0,      1,      2,      3,       4,     5,     6,     7,
@@ -6584,10 +6586,11 @@ fn sequenceCountLen(count: usize) Error!usize {
 }
 
 const SmallHuffmanLiteralPlan = struct {
-    // Direct Huffman tree headers can describe symbols 0...128: the header
-    // byte stores `encoded_symbol_count = symbol_count - 1`, so 255 encodes a
-    // 129-symbol direct tree. Higher byte values require FSE-compressed
-    // Huffman weights, which the bootstrap native writer does not emit yet.
+    // Direct Huffman tree headers can describe symbols
+    // 0...native_max_direct_huffman_symbol: the header byte stores
+    // `encoded_symbol_count = symbol_count - 1`, so 255 encodes a 129-symbol
+    // direct tree. Higher byte values require FSE-compressed Huffman weights,
+    // which the bootstrap native writer does not emit yet.
     symbols: [129]u8 = undefined,
     weights: [129]u4 = undefined,
     len: usize = 0,
@@ -6681,7 +6684,7 @@ fn smallHuffmanLiteralPlan(block: []const u8) ?SmallHuffmanLiteralPlan {
         plan.max_symbol = @max(plan.max_symbol, byte);
     }
     if (plan.len < 2 or plan.len > plan.symbols.len) return null;
-    if (plan.max_symbol > 128) return null;
+    if (plan.max_symbol > native_max_direct_huffman_symbol) return null;
     std.mem.sort(u8, plan.symbols[0..plan.len], {}, std.sort.asc(u8));
     plan.max_symbol = plan.symbols[plan.len - 1];
     fillSmallHuffmanWeights(&plan) orelse return null;
