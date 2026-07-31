@@ -4720,6 +4720,30 @@ const MixedMatchCandidate = struct {
     kind: MixedMatchKind,
 };
 
+const MixedMatchKindSet = struct {
+    dictionary: bool = false,
+    duplicate: bool = false,
+    repeated: bool = false,
+
+    fn contains(self: MixedMatchKindSet, kind: MixedMatchKind) bool {
+        return switch (kind) {
+            .dictionary => self.dictionary,
+            .duplicate => self.duplicate,
+            .repeated => self.repeated,
+        };
+    }
+};
+
+const MixedMatchRequirement = union(enum) {
+    kind: MixedMatchKind,
+    non_dictionary,
+};
+
+const MixedMatchLookaheadRequirements = struct {
+    first: MixedMatchRequirement,
+    second: MixedMatchRequirement,
+};
+
 fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -4728,38 +4752,17 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     dictionary: NativeDictionary,
     frame_offset: usize,
 ) Error!bool {
-    var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
-    var offsets: [max_bootstrap_sequence_count]usize = undefined;
-    var match_lens: [max_bootstrap_sequence_count]usize = undefined;
-    var literal_ends: [max_bootstrap_sequence_count]usize = undefined;
-    var count: usize = 0;
-    var literal_start: usize = 0;
-    var has_dictionary_match = false;
-    var has_non_dictionary_match = false;
-
-    while (count < max_bootstrap_sequence_count and literal_start < block.len) {
-        const candidate = try bestMixedDictionaryDuplicateCandidate(dictionary.content, block, literal_start, frame_offset) orelse break;
-        literal_lens[count] = candidate.literal_len;
-        offsets[count] = candidate.offset;
-        match_lens[count] = candidate.match_len;
-        literal_ends[count] = candidate.literal_end;
-        literal_start = candidate.literal_end;
-        has_dictionary_match = has_dictionary_match or candidate.kind == .dictionary;
-        has_non_dictionary_match = has_non_dictionary_match or candidate.kind != .dictionary;
-        count += 1;
-    }
-
-    if (count < 2 or !has_dictionary_match or !has_non_dictionary_match) return false;
-    return try emitBestSequenceCompressedBlock(
+    const plan = try bestMixedMatchLookaheadPlan(dictionary.content, block, frame_offset, .{
+        .dictionary = true,
+        .duplicate = true,
+        .repeated = true,
+    }, .{ .kind = .dictionary }, .non_dictionary) orelse return false;
+    return try emitBestSequenceCompressedBlockFromLookaheadPlan(
         allocator,
         out,
         block,
         last,
-        literal_lens[0..count],
-        offsets[0..count],
-        match_lens[0..count],
-        literal_ends[0..count],
-        literal_start,
+        plan,
     );
 }
 
@@ -4769,64 +4772,38 @@ fn emitMixedDuplicateRepeatedMatchCompressedBlock(
     block: []const u8,
     last: bool,
 ) Error!bool {
-    var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
-    var offsets: [max_bootstrap_sequence_count]usize = undefined;
-    var match_lens: [max_bootstrap_sequence_count]usize = undefined;
-    var literal_ends: [max_bootstrap_sequence_count]usize = undefined;
-    var count: usize = 0;
-    var literal_start: usize = 0;
-    var has_duplicate_match = false;
-    var has_repeated_match = false;
+    const plan = try bestMixedMatchLookaheadPlan(&.{}, block, 0, .{
+        .dictionary = false,
+        .duplicate = true,
+        .repeated = true,
+    }, .{ .kind = .duplicate }, .{ .kind = .repeated }) orelse return false;
+    return try emitBestSequenceCompressedBlockFromLookaheadPlan(
+        allocator,
+        out,
+        block,
+        last,
+        plan,
+    );
+}
 
-    while (count < max_bootstrap_sequence_count and literal_start < block.len) {
-        const candidate = try bestMixedDuplicateRepeatedCandidate(block, literal_start) orelse break;
-        literal_lens[count] = candidate.literal_len;
-        offsets[count] = candidate.offset;
-        match_lens[count] = candidate.match_len;
-        literal_ends[count] = candidate.literal_end;
-        literal_start = candidate.literal_end;
-        has_duplicate_match = has_duplicate_match or candidate.kind == .duplicate;
-        has_repeated_match = has_repeated_match or candidate.kind == .repeated;
-        count += 1;
-    }
-
-    if (count < 2 or !has_duplicate_match or !has_repeated_match) return false;
+fn emitBestSequenceCompressedBlockFromLookaheadPlan(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    plan: MixedMatchLookaheadPlan,
+) Error!bool {
     return try emitBestSequenceCompressedBlock(
         allocator,
         out,
         block,
         last,
-        literal_lens[0..count],
-        offsets[0..count],
-        match_lens[0..count],
-        literal_ends[0..count],
-        literal_start,
+        plan.literal_lens[0..plan.count],
+        plan.offsets[0..plan.count],
+        plan.match_lens[0..plan.count],
+        plan.literal_ends[0..plan.count],
+        plan.tail_start,
     );
-}
-
-fn bestMixedDuplicateRepeatedCandidate(block: []const u8, literal_start: usize) Error!?MixedMatchCandidate {
-    var candidates: [2]MixedMatchCandidate = undefined;
-    var candidate_count: usize = 0;
-
-    if (try duplicateMixedMatchCandidate(block, literal_start)) |candidate| {
-        candidates[candidate_count] = candidate;
-        candidate_count += 1;
-    }
-    if (repeatedMixedMatchCandidate(block, literal_start)) |candidate| {
-        candidates[candidate_count] = candidate;
-        candidate_count += 1;
-    }
-
-    var best: ?MixedMatchCandidate = null;
-    var best_score: usize = std.math.maxInt(usize);
-    for (candidates[0..candidate_count]) |candidate| {
-        const score = try mixedCandidateLookaheadPayloadLen(&.{}, block, 0, candidate) orelse candidate.payload_len;
-        if (score < best_score or (score == best_score and mixedMatchCandidateBetter(candidate, best))) {
-            best = candidate;
-            best_score = score;
-        }
-    }
-    return best;
 }
 
 fn dictionaryMixedMatchCandidate(
@@ -4845,40 +4822,6 @@ fn dictionaryMixedMatchCandidate(
         .payload_len = payload_len,
         .kind = .dictionary,
     };
-}
-
-fn bestMixedDictionaryDuplicateCandidate(
-    dictionary: []const u8,
-    block: []const u8,
-    literal_start: usize,
-    frame_offset: usize,
-) Error!?MixedMatchCandidate {
-    var candidates: [3]MixedMatchCandidate = undefined;
-    var candidate_count: usize = 0;
-
-    if (try dictionaryMixedMatchCandidate(dictionary, block, literal_start, frame_offset)) |candidate| {
-        candidates[candidate_count] = candidate;
-        candidate_count += 1;
-    }
-    if (try duplicateMixedMatchCandidate(block, literal_start)) |candidate| {
-        candidates[candidate_count] = candidate;
-        candidate_count += 1;
-    }
-    if (repeatedMixedMatchCandidate(block, literal_start)) |candidate| {
-        candidates[candidate_count] = candidate;
-        candidate_count += 1;
-    }
-
-    var best: ?MixedMatchCandidate = null;
-    var best_score: usize = std.math.maxInt(usize);
-    for (candidates[0..candidate_count]) |candidate| {
-        const score = try mixedCandidateLookaheadPayloadLen(dictionary, block, frame_offset, candidate) orelse candidate.payload_len;
-        if (score < best_score or (score == best_score and mixedMatchCandidateBetter(candidate, best))) {
-            best = candidate;
-            best_score = score;
-        }
-    }
-    return best;
 }
 
 fn duplicateMixedMatchCandidate(block: []const u8, literal_start: usize) Error!?MixedMatchCandidate {
@@ -4919,7 +4862,14 @@ fn mixedCandidateLookaheadPayloadLen(
     frame_offset: usize,
     candidate: MixedMatchCandidate,
 ) Error!?usize {
-    const plan = try bestMixedCandidateLookaheadPlan(dictionary, block, frame_offset, candidate) orelse return null;
+    const plan = try bestMixedCandidateLookaheadPlanFromFirst(
+        dictionary,
+        block,
+        frame_offset,
+        .{ .dictionary = true, .duplicate = true, .repeated = true },
+        null,
+        candidate,
+    ) orelse return null;
     return plan.payload_len;
 }
 
@@ -4939,9 +4889,71 @@ fn bestMixedCandidateLookaheadPlan(
     frame_offset: usize,
     first_candidate: MixedMatchCandidate,
 ) Error!?MixedMatchLookaheadPlan {
+    return try bestMixedCandidateLookaheadPlanFromFirst(
+        dictionary,
+        block,
+        frame_offset,
+        .{ .dictionary = true, .duplicate = true, .repeated = true },
+        null,
+        first_candidate,
+    );
+}
+
+fn bestMixedMatchLookaheadPlan(
+    dictionary: []const u8,
+    block: []const u8,
+    frame_offset: usize,
+    allowed: MixedMatchKindSet,
+    required_first: MixedMatchRequirement,
+    required_second: MixedMatchRequirement,
+) Error!?MixedMatchLookaheadPlan {
+    var first_candidates: [3]MixedMatchCandidate = undefined;
+    const first_count = try mixedMatchCandidatesAt(dictionary, block, 0, frame_offset, allowed, first_candidates[0..]);
+    if (first_count == 0) return null;
+
+    const requirements: MixedMatchLookaheadRequirements = .{
+        .first = required_first,
+        .second = required_second,
+    };
+    var best: ?MixedMatchLookaheadPlan = null;
+    for (first_candidates[0..first_count]) |candidate| {
+        const plan = try bestMixedCandidateLookaheadPlanFromFirst(
+            dictionary,
+            block,
+            frame_offset,
+            allowed,
+            requirements,
+            candidate,
+        ) orelse continue;
+        if (mixedMatchLookaheadPlanBetter(plan, best)) best = plan;
+    }
+    return best;
+}
+
+fn bestMixedCandidateLookaheadPlanFromFirst(
+    dictionary: []const u8,
+    block: []const u8,
+    frame_offset: usize,
+    allowed: MixedMatchKindSet,
+    requirements: ?MixedMatchLookaheadRequirements,
+    first_candidate: MixedMatchCandidate,
+) Error!?MixedMatchLookaheadPlan {
+    if (!allowed.contains(first_candidate.kind)) return null;
     var plan: MixedMatchLookaheadPlan = .{};
     var search_budget: usize = mixed_match_path_search_budget;
-    const best = try bestMixedCandidateLookaheadPlanFrom(dictionary, block, frame_offset, first_candidate, &plan, 0, &search_budget);
+    var seen: MixedMatchKindSet = .{};
+    const best = try bestMixedCandidateLookaheadPlanFrom(
+        dictionary,
+        block,
+        frame_offset,
+        allowed,
+        requirements,
+        first_candidate,
+        &plan,
+        0,
+        &search_budget,
+        &seen,
+    );
     if (best == null or best.?.count < 2) return null;
     return best;
 }
@@ -4950,14 +4962,19 @@ fn bestMixedCandidateLookaheadPlanFrom(
     dictionary: []const u8,
     block: []const u8,
     frame_offset: usize,
+    allowed: MixedMatchKindSet,
+    requirements: ?MixedMatchLookaheadRequirements,
     candidate: MixedMatchCandidate,
     plan: *MixedMatchLookaheadPlan,
     depth: usize,
     search_budget: *usize,
+    seen: *MixedMatchKindSet,
 ) Error!?MixedMatchLookaheadPlan {
     if (search_budget.* == 0 or depth >= max_bootstrap_sequence_count) return null;
     search_budget.* -= 1;
 
+    const previous_seen = seen.*;
+    noteMixedMatchKind(seen, candidate.kind);
     plan.literal_lens[depth] = candidate.literal_len;
     plan.offsets[depth] = candidate.offset;
     plan.match_lens[depth] = candidate.match_len;
@@ -4966,7 +4983,7 @@ fn bestMixedCandidateLookaheadPlanFrom(
 
     var best: ?MixedMatchLookaheadPlan = null;
     if (candidate.literal_end >= block.len or count == max_bootstrap_sequence_count) {
-        best = try finalizeMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end);
+        best = try finalizeMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements);
     } else {
         // Treat "stop matching here and carry the remaining bytes as literals"
         // as one valid branch once there are enough sequences to form a mixed
@@ -4974,10 +4991,11 @@ fn bestMixedCandidateLookaheadPlanFrom(
         // extra bits can outweigh the literals they remove. Keeping this prefix
         // candidate also makes the bounded search degrade safely if dense
         // candidate graphs exhaust the small bootstrap budget.
-        best = try finalizeMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end);
+        best = try finalizeMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements);
         var next_candidates: [3]MixedMatchCandidate = undefined;
-        const next_count = try mixedMatchCandidatesAt(dictionary, block, candidate.literal_end, frame_offset, next_candidates[0..]);
+        const next_count = try mixedMatchCandidatesAt(dictionary, block, candidate.literal_end, frame_offset, allowed, next_candidates[0..]);
         if (next_count == 0) {
+            seen.* = previous_seen;
             return best;
         } else {
             for (next_candidates[0..next_count]) |next| {
@@ -4985,10 +5003,13 @@ fn bestMixedCandidateLookaheadPlanFrom(
                     dictionary,
                     block,
                     frame_offset,
+                    allowed,
+                    requirements,
                     next,
                     plan,
                     count,
                     search_budget,
+                    seen,
                 ) orelse continue;
                 if (mixedMatchLookaheadPlanBetter(branch, best)) best = branch;
                 if (search_budget.* == 0) break;
@@ -4997,6 +5018,7 @@ fn bestMixedCandidateLookaheadPlanFrom(
     }
 
     plan.count = depth;
+    seen.* = previous_seen;
     return best;
 }
 
@@ -5005,8 +5027,14 @@ fn finalizeMixedMatchLookaheadPlan(
     plan: *MixedMatchLookaheadPlan,
     count: usize,
     tail_start: usize,
+    seen: MixedMatchKindSet,
+    requirements: ?MixedMatchLookaheadRequirements,
 ) Error!?MixedMatchLookaheadPlan {
     if (count < 2) return null;
+    if (requirements) |required| {
+        if (!mixedMatchRequirementMet(seen, required.first) or
+            !mixedMatchRequirementMet(seen, required.second)) return null;
+    }
     var finalized = plan.*;
     finalized.count = count;
     finalized.tail_start = tail_start;
@@ -5019,6 +5047,21 @@ fn finalizeMixedMatchLookaheadPlan(
         tail_start,
     );
     return finalized;
+}
+
+fn noteMixedMatchKind(seen: *MixedMatchKindSet, kind: MixedMatchKind) void {
+    switch (kind) {
+        .dictionary => seen.dictionary = true,
+        .duplicate => seen.duplicate = true,
+        .repeated => seen.repeated = true,
+    }
+}
+
+fn mixedMatchRequirementMet(seen: MixedMatchKindSet, requirement: MixedMatchRequirement) bool {
+    return switch (requirement) {
+        .kind => |kind| seen.contains(kind),
+        .non_dictionary => seen.duplicate or seen.repeated,
+    };
 }
 
 fn mixedMatchLookaheadPlanBetter(candidate: MixedMatchLookaheadPlan, current: ?MixedMatchLookaheadPlan) bool {
@@ -5035,21 +5078,28 @@ fn mixedMatchCandidatesAt(
     block: []const u8,
     literal_start: usize,
     frame_offset: usize,
+    allowed: MixedMatchKindSet,
     out: []MixedMatchCandidate,
 ) Error!usize {
     if (out.len < 3) return error.OutputTooSmall;
     var count: usize = 0;
-    if (try dictionaryMixedMatchCandidate(dictionary, block, literal_start, frame_offset)) |candidate| {
-        out[count] = candidate;
-        count += 1;
+    if (allowed.dictionary) {
+        if (try dictionaryMixedMatchCandidate(dictionary, block, literal_start, frame_offset)) |candidate| {
+            out[count] = candidate;
+            count += 1;
+        }
     }
-    if (try duplicateMixedMatchCandidate(block, literal_start)) |candidate| {
-        out[count] = candidate;
-        count += 1;
+    if (allowed.duplicate) {
+        if (try duplicateMixedMatchCandidate(block, literal_start)) |candidate| {
+            out[count] = candidate;
+            count += 1;
+        }
     }
-    if (repeatedMixedMatchCandidate(block, literal_start)) |candidate| {
-        out[count] = candidate;
-        count += 1;
+    if (allowed.repeated) {
+        if (repeatedMixedMatchCandidate(block, literal_start)) |candidate| {
+            out[count] = candidate;
+            count += 1;
+        }
     }
     std.mem.sort(MixedMatchCandidate, out[0..count], {}, mixedMatchCandidateSortLessThan);
     return count;
@@ -8252,6 +8302,27 @@ test "zstd mixed match lookahead explores non-greedy continuations" {
 
     const lookahead_payload_len = (try mixedCandidateLookaheadPayloadLen(&.{}, payload, 0, first_candidate)) orelse return error.CorruptFrame;
     try std.testing.expectEqual(branch.payload_len, lookahead_payload_len);
+
+    const emitted_plan = (try bestMixedMatchLookaheadPlan(&.{}, payload, 0, .{
+        .dictionary = false,
+        .duplicate = true,
+        .repeated = true,
+    }, .{ .kind = .duplicate }, .{ .kind = .repeated })) orelse return error.CorruptFrame;
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{ .content_checksum = false });
+    try std.testing.expect(try emitMixedDuplicateRepeatedMatchCompressedBlock(std.testing.allocator, &frame, payload, true));
+
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    try std.testing.expectEqual(emitted_plan.payload_len, first_block.payload_len);
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(frame.items[first_block.payload_offset..][0..first_block.payload_len], &frame_state);
+    try std.testing.expectEqual(emitted_plan.count, section.sequence_count);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "zstd literal-only writer chooses shortest native match plan" {
@@ -8281,8 +8352,15 @@ test "zstd literal-only writer chooses shortest native match plan" {
     var frame_state: SequenceFrameState = .{};
     const block = encoded[first_block.payload_offset..][0..first_block.payload_len];
     const section = try parseLiteralsSection(block, &frame_state);
-    try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
-    const estimated_payload_len = try multiSequencePayloadLen(&payload, &.{ 62, 7 }, &.{ 2, 7 }, &.{ 78, 13 }, payload.len);
+    try std.testing.expectEqual(@as(usize, 3), section.sequence_count);
+    const estimated_payload_len = try bestSequencePayloadLenWithLiteralEnds(
+        &payload,
+        &.{ 20, 26, 7 },
+        &.{ 20, 2, 7 },
+        &.{ 16, 78, 13 },
+        &.{ 36, 140, payload.len },
+        payload.len,
+    );
     try std.testing.expectEqual(estimated_payload_len, first_block.payload_len);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
