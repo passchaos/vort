@@ -147,6 +147,15 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
     defer allocator.free(set_into);
     const set_into_written = try vort.lz4EncodeNativeFrameIntoSliceWithDictionarySet(allocator, first_payload, options, dictionary_set, dict.id, set_into);
     try expectEqualSlices(first, set_into[0..set_into_written]);
+    var set_encoder = try vort.Lz4NativeFrameEncoder.init(allocator);
+    defer set_encoder.deinit();
+    const reusable_set_encoded = try set_encoder.encodeWithDictionarySetAlloc(first_payload, options, dictionary_set, dict.id);
+    defer allocator.free(reusable_set_encoded);
+    try expectEqualSlices(first, reusable_set_encoded);
+    const reusable_set_scratch = try set_encoder.encodeScratchWithDictionarySet(first_payload, options, dictionary_set, dict.id);
+    try expectEqualSlices(first, reusable_set_scratch);
+    const reusable_set_into_written = try set_encoder.encodeIntoSliceWithDictionarySet(first_payload, options, dictionary_set, dict.id, set_into);
+    try expectEqualSlices(first, set_into[0..reusable_set_into_written]);
     try expectError(error.NeedDictionary, vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, first_payload, options, dictionary_set, 0xeeee));
 }
 

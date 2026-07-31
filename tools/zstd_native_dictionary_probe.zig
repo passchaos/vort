@@ -285,6 +285,18 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
     const set_into_result = try vort.zstdEncodeNativeFrameIntoSliceWithDictionarySet(allocator, first_payload, options, dictionary_set, dict.id, set_into);
     try expect(set_into_result.mode == first.mode);
     try expectEqualSlices(first.frame, set_into[0..set_into_result.written]);
+    var set_encoder = vort.ZstdNativeFrameEncoder.init(allocator);
+    defer set_encoder.deinit();
+    const reusable_set_encoded = try set_encoder.encodeWithDictionarySetAlloc(first_payload, options, dictionary_set, dict.id);
+    defer allocator.free(reusable_set_encoded.frame);
+    try expect(reusable_set_encoded.mode == first.mode);
+    try expectEqualSlices(first.frame, reusable_set_encoded.frame);
+    const reusable_set_scratch = try set_encoder.encodeScratchWithDictionarySet(first_payload, options, dictionary_set, dict.id);
+    try expect(reusable_set_scratch.mode == first.mode);
+    try expectEqualSlices(first.frame, reusable_set_scratch.frame);
+    const reusable_set_into_result = try set_encoder.encodeIntoSliceWithDictionarySet(first_payload, options, dictionary_set, dict.id, set_into);
+    try expect(reusable_set_into_result.mode == first.mode);
+    try expectEqualSlices(first.frame, set_into[0..reusable_set_into_result.written]);
     try expectError(error.NeedDictionary, vort.zstdEncodeNativeFrameWithDictionarySetAlloc(allocator, first_payload, options, dictionary_set, 0xeeee));
 }
 
