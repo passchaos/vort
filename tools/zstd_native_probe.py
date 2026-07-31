@@ -372,7 +372,7 @@ def generated_payloads() -> list[tuple[str, bytes]]:
         ("older-duplicate-candidate", older_candidate_payload),
         ("one-twenty-eight-symbol-huffman", bytes(one_twenty_eight_symbol_huffman)),
         ("max-direct-symbol-huffman", max_direct_huffman),
-        ("high-byte-binary-fallback", high_byte_binary),
+        ("high-byte-binary-fse-huffman", high_byte_binary),
         (
             "structured-lines",
             b"".join(

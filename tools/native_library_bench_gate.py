@@ -198,8 +198,8 @@ def main() -> int:
         )
 
     high_byte = row_by_identity[("zstd", "high_byte_binary", "high_byte_binary")]
-    if int(high_byte["encoded_bytes"]) <= int(high_byte["input_bytes"]):
-        raise AssertionError(f"expected high-byte binary zstd row to use raw fallback overhead: {high_byte}")
+    if int(high_byte["encoded_bytes"]) >= int(high_byte["input_bytes"]):
+        raise AssertionError(f"expected high-byte binary zstd row to use FSE Huffman compression: {high_byte}")
 
     for codec in ("lz4", "zstd"):
         plain = row_by_identity[(codec, "dictionary_plain", "dictionary")]

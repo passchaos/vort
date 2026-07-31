@@ -121,7 +121,7 @@ Current interpretation:
   byte payloads through `encode-zstd-native-bytes-hex` in `auto`, `raw_or_rle`,
   and `literal_only` modes, including both 4-divisible and non-4-divisible
   four-stream Huffman literal payloads, the max direct Huffman symbol set
-  (`0...128`), long-period and long-prefix
+  (`0...128`) plus FSE-Huffman high-byte literal blocks, long-period and long-prefix
   repeated-pattern writer cases, a small-depth hash-chain duplicate-candidate writer case,
   no-dictionary mixed duplicate/repeated match selection plus dictionary/native
   match-vs-Huffman size arbitration, smallest native match-plan arbitration,
@@ -201,22 +201,20 @@ Current interpretation:
 
 High-byte literal writer note:
 
-- The direct Huffman writer is intentionally capped at
+- The direct Huffman writer remains capped at
   `zstdNativeMaxDirectHuffmanSymbol == 128`, because Zstandard direct Huffman
   headers encode `symbol_count - 1` in one byte and cannot describe full
-  `0...255` weight tables. High-byte binary payloads therefore require
-  FSE-compressed Huffman weights.
-- A correct high-byte implementation must validate both decoders: system
-  `zstd` and Vort's native Huffman literal cursor. The FSE table header and
-  reverse weight bitstream are not sufficient by themselves; the resulting
-  `HuffmanTree` prefix assignment must also match the literal bitstream emitted
-  by `emitSmallHuffmanStream`.
-- The next implementation slice should first add a private round-trip fixture
-  that decodes the candidate FSE-compressed weight table into the exact intended
-  weights (`0` for absent symbols, the selected high-byte weights, and the
-  spec-reconstructed last weight). Only after that fixture passes should the
-  writer switch `zstd_native_frame_probe`'s `high_byte_binary` case from raw
-  fallback to a compressed block.
+  `0...255` weight tables. High-byte literal-only blocks now use
+  FSE-compressed Huffman weights when that candidate beats raw storage.
+- The high-byte path is validated through both decoders: system `zstd` and
+  Vort's native Huffman literal cursor. The unit fixture now checks the parsed
+  FSE Huffman tree shape for a deterministic high-byte payload, and
+  `zstd_native_frame_probe` requires the same public library payload to encode
+  as a compressed block rather than the old raw fallback.
+- Remaining high-byte work is quality-of-implementation rather than basic
+  capability: improve Huffman weight selection from the current balanced
+  bootstrap plan, add corpus coverage for mixed high-byte/sequence blocks, and
+  compare the generated FSE weight streams against more zstd levels/corpora.
 
 Recommended next comparison steps:
 

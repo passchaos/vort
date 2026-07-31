@@ -347,7 +347,8 @@ fn zstdHighByteBinaryRow(io: std.Io, allocator: std.mem.Allocator, iterations: u
     try expectRoundTrip(vort.zstdDecodeNativeFrameInto(encoded.frame, decoded), payload, decoded);
 
     const first_block = try vort.zstdInspectNativeFrameFirstBlock(encoded.frame);
-    if (first_block.block_type != .raw) return error.SizeMismatch;
+    if (first_block.block_type != .compressed) return error.SizeMismatch;
+    if (first_block.payload_len >= payload.len) return error.SizeMismatch;
 
     const encode_result = try timeEncodeZstd(io, allocator, payload, options, iterations);
     const decode_result = try timeDecodeZstdOneShot(io, encoded.frame, decoded, payload, iterations);

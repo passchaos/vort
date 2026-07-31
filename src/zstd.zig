@@ -6747,13 +6747,13 @@ fn sequenceCountLen(count: usize) Error!usize {
 }
 
 const SmallHuffmanLiteralPlan = struct {
-    // Direct Huffman tree headers can describe symbols
-    // 0...native_max_direct_huffman_symbol: the header byte stores
-    // `encoded_symbol_count = symbol_count - 1`, so 255 encodes a 129-symbol
-    // direct tree. Higher byte values require FSE-compressed Huffman weights,
-    // which the bootstrap native writer does not emit yet.
-    symbols: [129]u8 = undefined,
-    weights: [129]u4 = undefined,
+    // Direct Huffman tree headers can describe symbols only through
+    // `native_max_direct_huffman_symbol`; larger alphabets are serialized with
+    // FSE-compressed Huffman weights. Keep the plan itself full-width so the
+    // literal bitstream builder and tree re-use logic do not need separate
+    // "small direct" and "high-byte FSE" code paths.
+    symbols: [256]u8 = undefined,
+    weights: [256]u4 = undefined,
     len: usize = 0,
     max_symbol: u8 = 0,
     max_bit_count: u4 = 0,
@@ -6768,7 +6768,7 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
     const reuse_previous_tree = if (state.previous_huffman_plan) |previous| smallHuffmanPlansEqual(previous, plan) else false;
     var huffman_tree: std.ArrayList(u8) = .empty;
     defer huffman_tree.deinit(allocator);
-    if (!reuse_previous_tree) try emitSmallHuffmanTree(allocator, &huffman_tree, plan);
+    if (!reuse_previous_tree and !try emitSmallHuffmanTree(allocator, &huffman_tree, plan)) return false;
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
@@ -6845,7 +6845,6 @@ fn smallHuffmanLiteralPlan(block: []const u8) ?SmallHuffmanLiteralPlan {
         plan.max_symbol = @max(plan.max_symbol, byte);
     }
     if (plan.len < 2 or plan.len > plan.symbols.len) return null;
-    if (plan.max_symbol > native_max_direct_huffman_symbol) return null;
     std.mem.sort(u8, plan.symbols[0..plan.len], {}, std.sort.asc(u8));
     plan.max_symbol = plan.symbols[plan.len - 1];
     fillSmallHuffmanWeights(&plan) orelse return null;
@@ -6863,7 +6862,10 @@ fn fillSmallHuffmanWeights(plan: *SmallHuffmanLiteralPlan) ?void {
     }
 }
 
-fn emitSmallHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: SmallHuffmanLiteralPlan) Error!void {
+fn emitSmallHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: SmallHuffmanLiteralPlan) Error!bool {
+    if (plan.max_symbol > native_max_direct_huffman_symbol) {
+        return try emitFseHuffmanTree(allocator, out, plan);
+    }
     try out.append(allocator, 127 + plan.max_symbol); // direct Huffman weights for symbols 0..max_symbol-1.
     const weights_byte_count: usize = (@as(usize, plan.max_symbol) + 1) / 2;
     for (0..weights_byte_count) |i| {
@@ -6873,6 +6875,407 @@ fn emitSmallHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), p
         const odd_weight: u8 = smallHuffmanExplicitWeight(plan, odd_symbol);
         try out.append(allocator, (even_weight << 4) | odd_weight);
     }
+    return true;
+}
+
+const huffman_weight_fse_table_log = 6;
+const huffman_weight_symbol_max = 15;
+const huffman_weight_fse_table_size = 1 << huffman_weight_fse_table_log;
+
+const FseCompressionTransform = struct {
+    delta_find_state: i32 = 0,
+    delta_nb_bits: i32 = 0,
+};
+
+const FseCompressionTable = struct {
+    state_table: [huffman_weight_fse_table_size]u16 = undefined,
+    transforms: [huffman_weight_symbol_max + 1]FseCompressionTransform =
+        [_]FseCompressionTransform{.{}} ** (huffman_weight_symbol_max + 1),
+    table_log: u8 = huffman_weight_fse_table_log,
+    max_symbol: u8 = 0,
+};
+
+const ReverseBitstreamWriter = struct {
+    accumulator: usize = 0,
+    bit_count: u6 = 0,
+
+    fn addBits(self: *ReverseBitstreamWriter, allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: usize, bits: u8) Error!void {
+        if (bits == 0) return;
+        if (bits > @bitSizeOf(usize)) return error.UnsupportedZstdFeature;
+        const mask = (@as(usize, 1) << @intCast(bits)) - 1;
+        self.accumulator |= (value & mask) << self.bit_count;
+        self.bit_count += @intCast(bits);
+        while (self.bit_count >= 8) {
+            try out.append(allocator, @truncate(self.accumulator));
+            self.accumulator >>= 8;
+            self.bit_count -= 8;
+        }
+    }
+
+    fn finish(self: *ReverseBitstreamWriter, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) Error!void {
+        self.accumulator |= @as(usize, 1) << self.bit_count;
+        self.bit_count += 1;
+        while (self.bit_count > 0) {
+            try out.append(allocator, @truncate(self.accumulator));
+            if (self.bit_count <= 8) break;
+            self.accumulator >>= 8;
+            self.bit_count -= 8;
+        }
+        self.* = .{};
+    }
+};
+
+fn emitFseHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: SmallHuffmanLiteralPlan) Error!bool {
+    if (plan.max_symbol <= native_max_direct_huffman_symbol) return error.CorruptFrame;
+
+    var weights: [255]u8 = undefined;
+    // Zstandard does not serialize the final Huffman weight. The decoder
+    // reconstructs it from the power sum so that the complete tree exactly
+    // fills the next power-of-two prefix space; keeping the highest symbol as
+    // that reconstructed entry mirrors the direct-header path above.
+    const weight_count: usize = plan.max_symbol;
+    for (weights[0..weight_count], 0..) |*weight, symbol| {
+        weight.* = smallHuffmanExplicitWeight(plan, @intCast(symbol));
+    }
+
+    var compressed: std.ArrayList(u8) = .empty;
+    defer compressed.deinit(allocator);
+    if (!try emitFseCompressedHuffmanWeights(allocator, &compressed, weights[0..weight_count])) return false;
+    if (compressed.items.len == 0 or compressed.items.len > 127) return false;
+
+    try out.append(allocator, @intCast(compressed.items.len));
+    try out.appendSlice(allocator, compressed.items);
+    return true;
+}
+
+fn emitFseCompressedHuffmanWeights(allocator: std.mem.Allocator, out: *std.ArrayList(u8), weights: []const u8) Error!bool {
+    if (weights.len <= 2) return false;
+
+    var counts: [huffman_weight_symbol_max + 1]u32 = .{0} ** (huffman_weight_symbol_max + 1);
+    var max_symbol: u8 = 0;
+    for (weights) |weight| {
+        if (weight > huffman_weight_symbol_max) return error.UnsupportedZstdFeature;
+        counts[weight] += 1;
+        max_symbol = @max(max_symbol, weight);
+    }
+
+    var max_count: u32 = 0;
+    for (counts[0 .. @as(usize, max_symbol) + 1]) |count| max_count = @max(max_count, count);
+    // Match zstd's Huffman-table writer behavior: all-one-symbol and
+    // all-unique weight streams are not useful FSE payloads. For high-byte
+    // direct-tree overflow we prefer a safe raw-block fallback over emitting a
+    // malformed or non-beneficial Huffman tree.
+    if (max_count == weights.len or max_count == 1) return false;
+
+    var normalized: [huffman_weight_symbol_max + 1]i16 = .{0} ** (huffman_weight_symbol_max + 1);
+    normalizeFseCounts(
+        counts[0 .. @as(usize, max_symbol) + 1],
+        weights.len,
+        huffman_weight_fse_table_log,
+        normalized[0 .. @as(usize, max_symbol) + 1],
+    ) orelse return false;
+
+    try emitFseNormalizedCount(
+        allocator,
+        out,
+        normalized[0 .. @as(usize, max_symbol) + 1],
+        max_symbol,
+        huffman_weight_fse_table_log,
+    );
+
+    const table = try buildFseCompressionTable(
+        normalized[0 .. @as(usize, max_symbol) + 1],
+        max_symbol,
+        huffman_weight_fse_table_log,
+    );
+    const bitstream_start = out.items.len;
+    try emitFseCompressedSymbols(allocator, out, weights, table);
+    return out.items.len > bitstream_start;
+}
+
+fn normalizeFseCounts(counts: []const u32, total: usize, table_log: u8, normalized: []i16) ?void {
+    if (counts.len != normalized.len or total == 0) return null;
+    const table_size: i32 = @as(i32, 1) << @intCast(table_log);
+
+    // This intentionally simple normalizer favors validity and determinism over
+    // zstd's exact probability tuning. Every present weight gets at least one
+    // state, then the most common or currently-largest symbols absorb rounding
+    // error so the probabilities sum exactly to the FSE table size.
+    var sum: i32 = 0;
+    var largest: usize = 0;
+    var largest_count: u32 = 0;
+    var non_zero_count: usize = 0;
+    for (counts, 0..) |count, symbol| {
+        if (count == 0) {
+            normalized[symbol] = 0;
+            continue;
+        }
+        non_zero_count += 1;
+        if (count > largest_count) {
+            largest = symbol;
+            largest_count = count;
+        }
+        const scaled = (@as(u64, count) * @as(u64, @intCast(table_size))) / total;
+        const value: i16 = @intCast(@max(@as(u64, 1), scaled));
+        normalized[symbol] = value;
+        sum += value;
+    }
+    if (non_zero_count == 0 or non_zero_count > @as(usize, @intCast(table_size))) return null;
+
+    var diff = table_size - sum;
+    if (diff > 0) {
+        normalized[largest] += @intCast(diff);
+    } else {
+        while (diff < 0) {
+            var reduce: ?usize = null;
+            for (normalized, 0..) |value, symbol| {
+                if (value <= 1) continue;
+                if (reduce == null or value > normalized[reduce.?]) reduce = symbol;
+            }
+            const symbol = reduce orelse return null;
+            normalized[symbol] -= 1;
+            diff += 1;
+        }
+    }
+}
+
+fn emitFseNormalizedCount(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    normalized: []const i16,
+    max_symbol: u8,
+    table_log: u8,
+) Error!void {
+    if (table_log < 5 or table_log > huffman_weight_fse_table_log) return error.UnsupportedZstdFeature;
+    if (normalized.len != @as(usize, max_symbol) + 1) return error.CorruptFrame;
+
+    // FSE normalized-count headers are a small forward bitstream. This mirrors
+    // the zstd wire transform (`count + 1`, threshold-dependent bit width, and
+    // compact zero-run coding) so Zig's std decoder can reuse its existing
+    // Table.decode path without a Vort-specific side channel.
+    var bit_stream: u64 = @as(u64, table_log - 5);
+    var bit_count: u8 = 4;
+    var remaining: i32 = (@as(i32, 1) << @intCast(table_log)) + 1;
+    var threshold: i32 = @as(i32, 1) << @intCast(table_log);
+    var nb_bits: u8 = table_log + 1;
+    var symbol: usize = 0;
+    var previous_is_zero = false;
+
+    while (symbol < normalized.len and remaining > 1) {
+        if (previous_is_zero) {
+            const start = symbol;
+            while (symbol < normalized.len and normalized[symbol] == 0) : (symbol += 1) {}
+            if (symbol == normalized.len) return error.CorruptFrame;
+            var run_start = start;
+            while (symbol >= run_start + 24) {
+                run_start += 24;
+                bit_stream += @as(u64, 0xffff) << @intCast(bit_count);
+                try flushFseNormalizedCountBits(allocator, out, &bit_stream, &bit_count);
+            }
+            while (symbol >= run_start + 3) {
+                run_start += 3;
+                bit_stream += @as(u64, 3) << @intCast(bit_count);
+                bit_count += 2;
+            }
+            bit_stream += @as(u64, @intCast(symbol - run_start)) << @intCast(bit_count);
+            bit_count += 2;
+            if (bit_count > 16) try flushFseNormalizedCountBits(allocator, out, &bit_stream, &bit_count);
+        }
+
+        var count: i32 = normalized[symbol];
+        symbol += 1;
+        const max = (2 * threshold - 1) - remaining;
+        remaining -= @intCast(@abs(count));
+        count += 1;
+        if (count >= threshold) count += max;
+        if (count < 0) return error.CorruptFrame;
+        bit_stream += @as(u64, @intCast(count)) << @intCast(bit_count);
+        bit_count += nb_bits;
+        if (count < max) bit_count -= 1;
+        previous_is_zero = count == 1;
+        if (remaining < 1) return error.CorruptFrame;
+        while (remaining < threshold) {
+            nb_bits -= 1;
+            threshold >>= 1;
+        }
+        if (bit_count > 16) try flushFseNormalizedCountBits(allocator, out, &bit_stream, &bit_count);
+    }
+
+    if (remaining != 1) return error.CorruptFrame;
+    const byte_count = (@as(usize, bit_count) + 7) / 8;
+    for (0..byte_count) |_| {
+        try out.append(allocator, @truncate(bit_stream));
+        bit_stream >>= 8;
+    }
+}
+
+fn flushFseNormalizedCountBits(allocator: std.mem.Allocator, out: *std.ArrayList(u8), bit_stream: *u64, bit_count: *u8) Error!void {
+    try out.append(allocator, @truncate(bit_stream.*));
+    try out.append(allocator, @truncate(bit_stream.* >> 8));
+    bit_stream.* >>= 16;
+    bit_count.* -= 16;
+}
+
+fn buildFseCompressionTable(normalized: []const i16, max_symbol: u8, table_log: u8) Error!FseCompressionTable {
+    if (normalized.len != @as(usize, max_symbol) + 1) return error.CorruptFrame;
+    if (table_log != huffman_weight_fse_table_log) return error.UnsupportedZstdFeature;
+    const table_size = huffman_weight_fse_table_size;
+    const table_mask = table_size - 1;
+    const step = (table_size >> 1) + (table_size >> 3) + 3;
+
+    var table: FseCompressionTable = .{
+        .table_log = table_log,
+        .max_symbol = max_symbol,
+    };
+    var table_symbols: [huffman_weight_fse_table_size]u8 = undefined;
+    var high_threshold: usize = table_size - 1;
+
+    // The compressor table is the inverse of the decode table built earlier in
+    // this file: spread symbols with the same step, sort each symbol's states
+    // into `state_table`, then derive transforms that decide how many low bits
+    // of the current state are emitted before moving to the next state.
+    var cumul: [huffman_weight_symbol_max + 2]u16 = .{0} ** (huffman_weight_symbol_max + 2);
+    for (normalized, 0..) |value, i| {
+        if (value < -1) return error.CorruptFrame;
+        if (value == -1) {
+            cumul[i + 1] = cumul[i] + 1;
+            table_symbols[high_threshold] = @intCast(i);
+            high_threshold -= 1;
+        } else {
+            cumul[i + 1] = cumul[i] + @as(u16, @intCast(value));
+        }
+    }
+
+    var position: usize = 0;
+    for (normalized, 0..) |value, symbol| {
+        if (value <= 0) continue;
+        for (0..@as(usize, @intCast(value))) |_| {
+            table_symbols[position] = @intCast(symbol);
+            position = (position + step) & table_mask;
+            while (position > high_threshold) {
+                position = (position + step) & table_mask;
+            }
+        }
+    }
+    if (position != 0) return error.CorruptFrame;
+
+    var next = cumul;
+    for (table_symbols[0..table_size], 0..) |symbol, state| {
+        const index = next[symbol];
+        if (index >= table_size) return error.CorruptFrame;
+        table.state_table[index] = @intCast(table_size + state);
+        next[symbol] += 1;
+    }
+
+    var total: i32 = 0;
+    for (normalized, 0..) |value, symbol| {
+        const transform = &table.transforms[symbol];
+        switch (value) {
+            0 => {
+                transform.delta_nb_bits = ((@as(i32, table_log) + 1) << 16) - @as(i32, table_size);
+            },
+            -1, 1 => {
+                transform.delta_nb_bits = (@as(i32, table_log) << 16) - @as(i32, table_size);
+                transform.delta_find_state = total - 1;
+                total += 1;
+            },
+            else => {
+                const probability: u32 = @intCast(value);
+                const max_bits_out: i32 = @as(i32, table_log) - @as(i32, @intCast(std.math.log2_int(u32, probability - 1)));
+                const min_state_plus: i32 = @as(i32, @intCast(probability)) << @intCast(max_bits_out);
+                transform.delta_nb_bits = (max_bits_out << 16) - min_state_plus;
+                transform.delta_find_state = total - @as(i32, @intCast(probability));
+                total += @intCast(probability);
+            },
+        }
+    }
+    if (total != table_size) return error.CorruptFrame;
+    return table;
+}
+
+fn emitFseCompressedSymbols(allocator: std.mem.Allocator, out: *std.ArrayList(u8), symbols: []const u8, table: FseCompressionTable) Error!void {
+    if (symbols.len <= 2) return error.UnsupportedZstdFeature;
+    var writer: ReverseBitstreamWriter = .{};
+    var index = symbols.len;
+    var state_1: usize = undefined;
+    var state_2: usize = undefined;
+
+    // FSE stores two interleaved states in reverse source order. The last one or
+    // two symbols seed the states for free; earlier symbols emit low state bits,
+    // and the final two states are flushed into the reverse bitstream so the
+    // decoder can recover them before replaying symbols forward.
+    if ((symbols.len & 1) != 0) {
+        index -= 1;
+        state_1 = try fseInitialState(table, symbols[index]);
+        index -= 1;
+        state_2 = try fseInitialState(table, symbols[index]);
+        index -= 1;
+        try fseEncodeSymbol(allocator, out, &writer, table, &state_1, symbols[index]);
+    } else {
+        index -= 1;
+        state_2 = try fseInitialState(table, symbols[index]);
+        index -= 1;
+        state_1 = try fseInitialState(table, symbols[index]);
+    }
+
+    var remaining = symbols.len - 2;
+    if ((symbols.len & 1) != 0) remaining -= 1;
+    if ((remaining & 2) != 0) {
+        index -= 1;
+        try fseEncodeSymbol(allocator, out, &writer, table, &state_2, symbols[index]);
+        index -= 1;
+        try fseEncodeSymbol(allocator, out, &writer, table, &state_1, symbols[index]);
+        remaining -= 2;
+    }
+
+    while (index > 0) {
+        index -= 1;
+        try fseEncodeSymbol(allocator, out, &writer, table, &state_2, symbols[index]);
+        index -= 1;
+        try fseEncodeSymbol(allocator, out, &writer, table, &state_1, symbols[index]);
+        if (index > 0) {
+            index -= 1;
+            try fseEncodeSymbol(allocator, out, &writer, table, &state_2, symbols[index]);
+            index -= 1;
+            try fseEncodeSymbol(allocator, out, &writer, table, &state_1, symbols[index]);
+        }
+    }
+
+    try writer.addBits(allocator, out, state_2, table.table_log);
+    try writer.addBits(allocator, out, state_1, table.table_log);
+    try writer.finish(allocator, out);
+}
+
+fn fseInitialState(table: FseCompressionTable, symbol: u8) Error!usize {
+    if (symbol > table.max_symbol) return error.CorruptFrame;
+    const transform = table.transforms[symbol];
+    const nb_bits_out: usize = @intCast(@divTrunc(transform.delta_nb_bits + (1 << 15), 1 << 16));
+    const value: usize = @intCast((@as(i32, @intCast(nb_bits_out)) << 16) - transform.delta_nb_bits);
+    return try fseNextState(table, value, nb_bits_out, transform.delta_find_state);
+}
+
+fn fseEncodeSymbol(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    writer: *ReverseBitstreamWriter,
+    table: FseCompressionTable,
+    state: *usize,
+    symbol: u8,
+) Error!void {
+    if (symbol > table.max_symbol) return error.CorruptFrame;
+    const transform = table.transforms[symbol];
+    const nb_bits_out: usize = @intCast((@as(i32, @intCast(state.*)) + transform.delta_nb_bits) >> 16);
+    try writer.addBits(allocator, out, state.*, @intCast(nb_bits_out));
+    state.* = try fseNextState(table, state.* >> @intCast(nb_bits_out), 0, transform.delta_find_state);
+}
+
+fn fseNextState(table: FseCompressionTable, value: usize, shift_bits: usize, delta_find_state: i32) Error!usize {
+    const shifted = value >> @intCast(shift_bits);
+    const signed_index = @as(i32, @intCast(shifted)) + delta_find_state;
+    if (signed_index < 0) return error.CorruptFrame;
+    const index: usize = @intCast(signed_index);
+    if (index >= table.state_table.len) return error.CorruptFrame;
+    return table.state_table[index];
 }
 
 fn smallHuffmanExplicitWeight(plan: SmallHuffmanLiteralPlan, symbol: u8) u4 {
@@ -9689,7 +10092,7 @@ test "zstd literal-only writer emits max direct Huffman symbol set" {
     try std.testing.expect(encoded.len < raw_encoded.len);
 }
 
-test "zstd literal-only writer safely falls back for high-byte binary literals" {
+test "zstd literal-only writer emits FSE Huffman tree for high-byte binary literals" {
     var payload: [1024]u8 = undefined;
     var state: u32 = 0xfeed_beef;
     for (&payload) |*byte| {
@@ -9699,8 +10102,27 @@ test "zstd literal-only writer safely falls back for high-byte binary literals" 
 
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, &payload);
     defer std.testing.allocator.free(encoded);
+    const raw_encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(raw_encoded);
     const first_block = try inspectNativeFrameFirstBlock(encoded);
-    try std.testing.expectEqual(NativeBlockType.raw, first_block.block_type);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+
+    const block = encoded[first_block.payload_offset..][0..first_block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(LiteralsKind.compressed, section.kind);
+    try std.testing.expectEqual(@as(usize, 0), section.sequence_count);
+    try std.testing.expect(block[section.literal_payload_offset] < 128);
+
+    const tree = section.huffman_tree orelse return error.CorruptFrame;
+    try std.testing.expectEqual(@as(u4, 7), tree.max_bit_count);
+    try std.testing.expectEqual(@as(usize, 127), @as(usize, tree.symbol_count_minus_one) + 1);
+    try std.testing.expectEqual(@as(u8, 129), tree.nodes[0].symbol);
+    try std.testing.expectEqual(@as(u4, 1), tree.nodes[0].weight);
+    try std.testing.expectEqual(@as(u16, 0), tree.nodes[0].prefix);
+    try std.testing.expectEqual(@as(u8, 255), tree.nodes[tree.symbol_count_minus_one].symbol);
+    try std.testing.expectEqual(@as(u4, 2), tree.nodes[tree.symbol_count_minus_one].weight);
+    try std.testing.expectEqual(@as(u16, 63), tree.nodes[tree.symbol_count_minus_one].prefix);
 
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(std_decoded);
@@ -9709,6 +10131,7 @@ test "zstd literal-only writer safely falls back for high-byte binary literals" 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
+    try std.testing.expect(encoded.len < raw_encoded.len);
 }
 
 test "zstd match planner scores single predefined sequence payloads" {
