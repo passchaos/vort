@@ -33,6 +33,7 @@ EXPECTED_MODES = {
     "chain_depth_default",
     "match_budget_0",
     "match_budget_full",
+    "high_byte_binary",
     "dictionary_plain",
     "dictionary",
     "dictionary_set_plain",
@@ -52,6 +53,7 @@ EXPECTED_EXTRA_ROWS = {
     ("lz4", "chain_depth_default", "chain_depth"),
     ("zstd", "match_budget_0", "mixed_budget"),
     ("zstd", "match_budget_full", "mixed_budget"),
+    ("zstd", "high_byte_binary", "high_byte_binary"),
     ("lz4", "dictionary_plain", "dictionary"),
     ("lz4", "dictionary", "dictionary"),
     ("zstd", "dictionary_plain", "dictionary"),
@@ -176,6 +178,10 @@ def main() -> int:
             "expected full zstd match search budget to improve mixed_budget size: "
             f"budget0={budget0['encoded_bytes']} full={budget_full['encoded_bytes']}"
         )
+
+    high_byte = row_by_identity[("zstd", "high_byte_binary", "high_byte_binary")]
+    if int(high_byte["encoded_bytes"]) <= int(high_byte["input_bytes"]):
+        raise AssertionError(f"expected high-byte binary zstd row to use raw fallback overhead: {high_byte}")
 
     for codec in ("lz4", "zstd"):
         plain = row_by_identity[(codec, "dictionary_plain", "dictionary")]

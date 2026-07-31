@@ -11,6 +11,7 @@ const Mode = enum {
     chain_depth_default,
     match_budget_0,
     match_budget_full,
+    high_byte_binary,
     dictionary_plain,
     dictionary,
     dictionary_set_plain,
@@ -101,6 +102,7 @@ pub fn main(init: std.process.Init) !void {
         vort.zstdNativeMaxMatchSearchBudget,
         options.iterations,
     ));
+    try rows.append(init.gpa, try zstdHighByteBinaryRow(init.io, init.gpa, options.iterations));
     try rows.append(init.gpa, try lz4DictionaryRow(init.io, init.gpa, .dictionary_plain, false, options.iterations));
     try rows.append(init.gpa, try lz4DictionaryRow(init.io, init.gpa, .dictionary, true, options.iterations));
     try rows.append(init.gpa, try zstdDictionaryRow(init.io, init.gpa, .dictionary_plain, false, options.iterations));
@@ -311,6 +313,27 @@ fn zstdMatchBudgetRow(
     const encode_result = try timeEncodeZstd(io, allocator, payload, options, iterations);
     const decode_result = try timeDecodeZstdOneShot(io, encoded.frame, decoded, payload, iterations);
     return makeRow(.zstd, mode, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdHighByteBinaryRow(io: std.Io, allocator: std.mem.Allocator, iterations: usize) !Row {
+    const payload = &zstd_high_byte_binary_payload;
+    const case: Case = .{ .name = "high_byte_binary", .payload = payload };
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+    const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
+    defer allocator.free(encoded.frame);
+    const decoded = try allocator.alloc(u8, payload.len);
+    defer allocator.free(decoded);
+    try expectRoundTrip(vort.zstdDecodeNativeFrameInto(encoded.frame, decoded), payload, decoded);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(encoded.frame);
+    if (first_block.block_type != .raw) return error.SizeMismatch;
+
+    const encode_result = try timeEncodeZstd(io, allocator, payload, options, iterations);
+    const decode_result = try timeDecodeZstdOneShot(io, encoded.frame, decoded, payload, iterations);
+    return makeRow(.zstd, .high_byte_binary, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
 fn lz4DictionaryRow(
@@ -708,6 +731,8 @@ const zstd_match_budget_payload =
     "ccccfeggbcddffgahceegfabcceeehaabcdfacefegahabdffgab" ++
     "cccfeggbcddfechbcecececececece";
 
+const zstd_high_byte_binary_payload = makeZstdHighByteBinaryPayload();
+
 const lz4_dictionary_content = "abcdefghijklmnop";
 const lz4_dictionary_payload = "prefix-abcdefghijklmnop-tail-abcdefghijklmnop";
 const zstd_dictionary_content = "abcdefghijklmnop";
@@ -722,6 +747,17 @@ const zstd_dictionary_set_second_content = "QRSTUVWXYZabcdef";
 const zstd_dictionary_set_first_payload = "prefix-abcdefghijklmnop-set-one";
 const zstd_dictionary_set_second_payload = "prefix-QRSTUVWXYZabcdef-set-two";
 const zstd_dictionary_set_payload = zstd_dictionary_set_first_payload ++ zstd_dictionary_set_second_payload;
+
+fn makeZstdHighByteBinaryPayload() [1024]u8 {
+    @setEvalBranchQuota(4096);
+    var payload: [1024]u8 = undefined;
+    var state: u32 = 0xfeed_beef;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast(129 + ((state >> 16) % 127));
+    }
+    return payload;
+}
 
 fn timeEncodeLz4(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, options: vort.Lz4NativeFrameOptions, iterations: usize) !TimeResult {
     var checksum: u64 = 0;
@@ -1841,6 +1877,7 @@ fn modeName(mode: Mode) []const u8 {
         .chain_depth_default => "chain_depth_default",
         .match_budget_0 => "match_budget_0",
         .match_budget_full => "match_budget_full",
+        .high_byte_binary => "high_byte_binary",
         .dictionary_plain => "dictionary_plain",
         .dictionary => "dictionary",
         .dictionary_set_plain => "dictionary_set_plain",
