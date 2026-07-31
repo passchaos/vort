@@ -401,10 +401,17 @@ var lz4_bounded_incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOpti
 defer lz4_bounded_incremental.deinit();
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
 const lz4_dict = vort.Lz4NativeDictionary.init(0x1234, "previous lz4 history");
+const lz4_dict_options: vort.Lz4NativeFrameOptions = .{ .content_checksum = false };
+const lz4_dict_bound = try vort.lz4EncodedNativeFrameBoundWithDictionary(
+    "previous lz4 history payload".len,
+    lz4_dict_options,
+    lz4_dict,
+);
+_ = lz4_dict_bound;
 const lz4_dict_frame = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(
     allocator,
     "previous lz4 history payload",
-    .{ .content_checksum = false },
+    lz4_dict_options,
     lz4_dict,
 );
 defer allocator.free(lz4_dict_frame);
@@ -412,6 +419,13 @@ const lz4_dict_plain = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocato
 defer allocator.free(lz4_dict_plain);
 const lz4_dicts = [_]vort.Lz4NativeDictionary{lz4_dict};
 const lz4_dict_set = vort.Lz4NativeDictionarySet.init(&lz4_dicts);
+const lz4_dict_set_bound = try vort.lz4EncodedNativeFrameBoundWithDictionarySet(
+    "previous lz4 history payload".len,
+    lz4_dict_options,
+    lz4_dict_set,
+    lz4_dict.id,
+);
+_ = lz4_dict_set_bound;
 const lz4_stream_plain = try vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(
     allocator,
     lz4_dict_frame,
@@ -495,10 +509,17 @@ var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOp
 defer zstd_bounded_incremental.deinit();
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
 const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history shared phrase");
+const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
+const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
+    "prefix: previous zstd history payload, shared phrase tail".len,
+    zstd_dict_options,
+    zstd_dict,
+);
+_ = zstd_dict_bound;
 const zstd_dict_frame = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(
     allocator,
     "prefix: previous zstd history payload, shared phrase tail",
-    .{ .selection = .literal_only },
+    zstd_dict_options,
     zstd_dict,
 );
 defer allocator.free(zstd_dict_frame.frame);
@@ -511,6 +532,13 @@ defer allocator.free(zstd_dict_plain);
 _ = zstd_dict_plain;
 const zstd_dicts = [_]vort.ZstdNativeDictionary{zstd_dict};
 const zstd_dict_set = vort.ZstdNativeDictionarySet.init(&zstd_dicts);
+const zstd_dict_set_bound = try vort.zstdEncodedNativeFrameBoundWithDictionarySet(
+    "prefix: previous zstd history payload, shared phrase tail".len,
+    zstd_dict_options,
+    zstd_dict_set,
+    zstd_dict.id,
+);
+_ = zstd_dict_set_bound;
 const zstd_stream_plain = try vort.zstdDecodeNativeConcatenatedFrameAllocWithDictionarySet(
     allocator,
     zstd_dict_frame.frame,
