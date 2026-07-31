@@ -6103,9 +6103,46 @@ fn emitSequenceLiteralsSection(
         return info;
     }
 
+    if (try emitSequenceHuffmanLiteralsSection(allocator, out, block, literal_lens, literal_ends, tail_start, info)) {
+        return info;
+    }
+
     try emitLiteralsHeader(allocator, out, .raw, info.regenerated_len);
     try appendSequenceRawLiterals(allocator, out, block, literal_lens, literal_ends, tail_start);
     return info;
+}
+
+fn emitSequenceHuffmanLiteralsSection(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    literal_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    info: SequenceLiteralsInfo,
+) Error!bool {
+    if (info.regenerated_len < 64) return false;
+    var literals: std.ArrayList(u8) = .empty;
+    defer literals.deinit(allocator);
+    try literals.ensureTotalCapacity(allocator, info.regenerated_len);
+    try appendSequenceRawLiterals(allocator, &literals, block, literal_lens, literal_ends, tail_start);
+    if (literals.items.len != info.regenerated_len) return error.CorruptFrame;
+
+    const plan = smallHuffmanLiteralPlan(literals.items) orelse return false;
+    if (plan.max_symbol > native_max_direct_huffman_symbol) return false;
+    var huffman_tree: std.ArrayList(u8) = .empty;
+    defer huffman_tree.deinit(allocator);
+    if (!try emitSmallHuffmanTree(allocator, &huffman_tree, plan)) return false;
+
+    var compressed: std.ArrayList(u8) = .empty;
+    defer compressed.deinit(allocator);
+    try emitHuffmanLiteralsSectionWithPlan(allocator, &compressed, literals.items, plan, huffman_tree.items, false);
+
+    const raw_header_len = try literalsHeaderLen(info.regenerated_len);
+    const raw_len = std.math.add(usize, raw_header_len, info.payload_len) catch return error.IntegerOverflow;
+    if (compressed.items.len >= raw_len) return false;
+    try out.appendSlice(allocator, compressed.items);
+    return true;
 }
 
 fn appendSequenceRawLiterals(
@@ -6164,6 +6201,145 @@ fn sequenceLiteralsInfo(
         info.payload_len = 1;
     }
     return info;
+}
+
+fn sequenceLiteralsPayloadSectionLen(
+    block: []const u8,
+    literal_lens: []const usize,
+    literal_ends: ?[]const usize,
+    tail_start: usize,
+) Error!usize {
+    const info = try sequenceLiteralsPayloadInfo(block, literal_lens, literal_ends, tail_start);
+    var best = std.math.add(usize, try literalsHeaderLen(info.regenerated_len), info.payload_len) catch return error.IntegerOverflow;
+    if (literal_ends) |ends| {
+        if (try sequenceHuffmanLiteralsSectionLen(block, literal_lens, ends, tail_start, info)) |candidate| {
+            if (candidate < best) best = candidate;
+        }
+    }
+    return best;
+}
+
+fn sequenceHuffmanLiteralsSectionLen(
+    block: []const u8,
+    literal_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    info: SequenceLiteralsInfo,
+) Error!?usize {
+    if (info.rle_byte != null or info.regenerated_len < 64) return null;
+    const plan = smallHuffmanLiteralPlanFromSequence(block, literal_lens, literal_ends, tail_start, info.regenerated_len) orelse return null;
+    if (plan.max_symbol > native_max_direct_huffman_symbol) return null;
+    const tree_len = 1 + ((@as(usize, plan.max_symbol) + 1) / 2);
+    const streams_len = try smallHuffmanLiteralStreamsSerializedLenFromSequence(
+        block,
+        literal_lens,
+        literal_ends,
+        tail_start,
+        info.regenerated_len,
+        plan,
+    );
+    const compressed_size = std.math.add(usize, tree_len, streams_len) catch return error.IntegerOverflow;
+    const header_len = try huffmanLiteralsHeaderLen(info.regenerated_len, compressed_size);
+    return std.math.add(usize, header_len, compressed_size) catch return error.IntegerOverflow;
+}
+
+fn huffmanLiteralsHeaderLen(regenerated_size: usize, compressed_size: usize) Error!usize {
+    if (compressed_size == 0) return error.UnsupportedZstdFeature;
+    if (regenerated_size <= 0x3ff and compressed_size <= 0x3ff) return 3;
+    if (regenerated_size <= 0x3fff and compressed_size <= 0x3fff) return 4;
+    if (regenerated_size <= 0x3ffff and compressed_size <= 0x3ffff) return 5;
+    return error.UnsupportedZstdFeature;
+}
+
+fn smallHuffmanLiteralPlanFromSequence(
+    block: []const u8,
+    literal_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    regenerated_len: usize,
+) ?SmallHuffmanLiteralPlan {
+    if (regenerated_len < 64 or regenerated_len > 0x3ffff) return null;
+    if (literal_lens.len != literal_ends.len) return null;
+    var plan: SmallHuffmanLiteralPlan = .{};
+    var literal_start: usize = 0;
+    for (literal_lens, 0..) |literal_len, i| {
+        if (literal_start > block.len or literal_len > block.len - literal_start) return null;
+        addBytesToSmallHuffmanLiteralPlan(&plan, block[literal_start..][0..literal_len]) orelse return null;
+        if (literal_ends[i] < literal_start + literal_len or literal_ends[i] > block.len) return null;
+        literal_start = literal_ends[i];
+    }
+    if (tail_start > block.len) return null;
+    addBytesToSmallHuffmanLiteralPlan(&plan, block[tail_start..]) orelse return null;
+    if (plan.len < 2 or plan.len > plan.symbols.len) return null;
+    std.mem.sort(u8, plan.symbols[0..plan.len], {}, std.sort.asc(u8));
+    plan.max_symbol = plan.symbols[plan.len - 1];
+    fillSmallHuffmanWeights(&plan) orelse return null;
+    return plan;
+}
+
+fn addBytesToSmallHuffmanLiteralPlan(plan: *SmallHuffmanLiteralPlan, bytes: []const u8) ?void {
+    for (bytes) |byte| {
+        if (smallHuffmanSymbolIndex(plan.*, byte) != null) continue;
+        if (plan.len == plan.symbols.len) return null;
+        plan.symbols[plan.len] = byte;
+        plan.len += 1;
+        plan.max_symbol = @max(plan.max_symbol, byte);
+    }
+}
+
+fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
+    block: []const u8,
+    literal_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    regenerated_len: usize,
+    plan: SmallHuffmanLiteralPlan,
+) Error!usize {
+    var bit_counts: [4]usize = .{ 0, 0, 0, 0 };
+    var literal_index: usize = 0;
+    const segment_len = if (regenerated_len <= 1023) regenerated_len else (regenerated_len + 3) / 4;
+    var literal_start: usize = 0;
+    for (literal_lens, 0..) |literal_len, i| {
+        if (literal_start > block.len or literal_len > block.len - literal_start) return error.CorruptFrame;
+        try addSmallHuffmanStreamBits(block[literal_start..][0..literal_len], plan, regenerated_len, segment_len, &literal_index, &bit_counts);
+        if (literal_ends[i] < literal_start + literal_len or literal_ends[i] > block.len) return error.CorruptFrame;
+        literal_start = literal_ends[i];
+    }
+    if (tail_start > block.len) return error.CorruptFrame;
+    try addSmallHuffmanStreamBits(block[tail_start..], plan, regenerated_len, segment_len, &literal_index, &bit_counts);
+    if (literal_index != regenerated_len) return error.CorruptFrame;
+
+    if (regenerated_len <= 1023) {
+        return (bit_counts[0] + 1 + 7) / 8;
+    }
+
+    var len: usize = 6;
+    for (bit_counts) |bits| {
+        const stream_len = (bits + 1 + 7) / 8;
+        if (stream_len > std.math.maxInt(u16)) return error.UnsupportedZstdFeature;
+        len = std.math.add(usize, len, stream_len) catch return error.IntegerOverflow;
+    }
+    return len;
+}
+
+fn addSmallHuffmanStreamBits(
+    bytes: []const u8,
+    plan: SmallHuffmanLiteralPlan,
+    regenerated_len: usize,
+    segment_len: usize,
+    literal_index: *usize,
+    bit_counts: *[4]usize,
+) Error!void {
+    for (bytes) |byte| {
+        if (literal_index.* >= regenerated_len) return error.CorruptFrame;
+        const stream_index = if (regenerated_len <= 1023)
+            0
+        else
+            @min(literal_index.* / segment_len, 3);
+        const bits = smallHuffmanBitCount(plan, byte) orelse return error.CorruptFrame;
+        bit_counts[stream_index] = std.math.add(usize, bit_counts[stream_index], bits) catch return error.IntegerOverflow;
+        literal_index.* += 1;
+    }
 }
 
 fn updateLiteralRunInfo(bytes: []const u8, first_literal_byte: *u8, have_literal_byte: *bool, all_same: *bool) void {
@@ -6375,9 +6551,7 @@ fn sequencePayloadLenWithTablePlans(
         if (ends.len != literal_lens.len) return error.CorruptFrame;
     }
 
-    const literal_info = try sequenceLiteralsPayloadInfo(block, literal_lens, literal_ends, tail_start);
-    var len = try literalsHeaderLen(literal_info.regenerated_len);
-    len = std.math.add(usize, len, literal_info.payload_len) catch return error.IntegerOverflow;
+    var len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
     len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, 1) catch return error.IntegerOverflow; // sequence mode byte
     len = std.math.add(usize, len, sequenceTablePayloadLen(plan.literal)) catch return error.IntegerOverflow;
@@ -6571,9 +6745,7 @@ fn multiSequencePayloadLenInternal(
     const offset_plan = (try planPredefinedSequenceValues(offsets, &default_of_symbols, 2)) orelse return error.CorruptFrame;
     const match_plan = (try planPredefinedSequenceValues(match_lens, &default_ml_symbols, 0)) orelse return error.CorruptFrame;
 
-    const literal_info = try sequenceLiteralsPayloadInfo(block, literal_lens, literal_ends, tail_start);
-    var len = try literalsHeaderLen(literal_info.regenerated_len);
-    len = std.math.add(usize, len, literal_info.payload_len) catch return error.IntegerOverflow;
+    var len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
     len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, 1) catch return error.IntegerOverflow; // sequence mode byte
 
@@ -6721,7 +6893,6 @@ fn rleSequencePayloadLenInternal(
         if (ends.len != literal_lens.len) return error.CorruptFrame;
     }
 
-    const literal_info = try sequenceLiteralsPayloadInfo(block, literal_lens, literal_ends, tail_start);
     var bit_count: usize = 1; // Reverse bitstream end marker.
     for (literal_lens, 0..) |literal_len, i| {
         if (try sequenceCodeForValue(literal_len, &ll_base, &ll_bits) != literal_code) return error.CorruptFrame;
@@ -6732,8 +6903,7 @@ fn rleSequencePayloadLenInternal(
         bit_count = std.math.add(usize, bit_count, of_bits[offset_code]) catch return error.IntegerOverflow;
     }
 
-    var len = try literalsHeaderLen(literal_info.regenerated_len);
-    len = std.math.add(usize, len, literal_info.payload_len) catch return error.IntegerOverflow;
+    var len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
     len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, 1 + 3) catch return error.IntegerOverflow; // modes + three RLE symbol codes.
     return std.math.add(usize, len, (bit_count + 7) / 8) catch return error.IntegerOverflow;
@@ -6772,49 +6942,7 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    if (block.len <= 1023) {
-        var stream: std.ArrayList(u8) = .empty;
-        defer stream.deinit(allocator);
-        try emitSmallHuffmanStream(allocator, &stream, block, plan);
-        const compressed_size = huffman_tree.items.len + stream.items.len;
-        try emitHuffmanLiteralsHeader(allocator, &payload, block.len, compressed_size, reuse_previous_tree);
-        try payload.appendSlice(allocator, huffman_tree.items);
-        try payload.appendSlice(allocator, stream.items);
-    } else {
-        var streams: [4]std.ArrayList(u8) = .{ .empty, .empty, .empty, .empty };
-        defer for (&streams) |*stream| stream.deinit(allocator);
-        // Zstandard four-stream literals split regenerated output with the first
-        // three streams covering ceil(size / 4) bytes and the fourth stream
-        // covering the remainder. Matching that layout lets the decoder switch
-        // streams exactly when each reverse bitstream reaches its end mark,
-        // including for non-4-divisible literal counts.
-        const segment_len = (block.len + 3) / 4;
-        const segment_1_end = segment_len;
-        const segment_2_end = segment_len * 2;
-        const segment_3_end = segment_len * 3;
-        const segments = [_][]const u8{
-            block[0..segment_1_end],
-            block[segment_1_end..segment_2_end],
-            block[segment_2_end..segment_3_end],
-            block[segment_3_end..],
-        };
-        for (&streams, segments) |*stream, segment| {
-            try emitSmallHuffmanStream(allocator, stream, segment, plan);
-        }
-        const compressed_size = huffman_tree.items.len + 6 +
-            streams[0].items.len + streams[1].items.len + streams[2].items.len + streams[3].items.len;
-        if (streams[0].items.len > std.math.maxInt(u16) or
-            streams[1].items.len > std.math.maxInt(u16) or
-            streams[2].items.len > std.math.maxInt(u16)) return false;
-        try emitHuffmanLiteralsHeader(allocator, &payload, block.len, compressed_size, reuse_previous_tree);
-        try payload.appendSlice(allocator, huffman_tree.items);
-        var stream_lengths: [6]u8 = undefined;
-        std.mem.writeInt(u16, stream_lengths[0..2], @intCast(streams[0].items.len), .little);
-        std.mem.writeInt(u16, stream_lengths[2..4], @intCast(streams[1].items.len), .little);
-        std.mem.writeInt(u16, stream_lengths[4..6], @intCast(streams[2].items.len), .little);
-        try payload.appendSlice(allocator, &stream_lengths);
-        for (&streams) |*stream| try payload.appendSlice(allocator, stream.items);
-    }
+    try emitHuffmanLiteralsSectionWithPlan(allocator, &payload, block, plan, huffman_tree.items, reuse_previous_tree);
     try payload.append(allocator, 0); // sequence_count=0: this block is literals-only.
 
     if (payload.items.len >= block.len) return false;
@@ -6876,6 +7004,59 @@ fn emitSmallHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), p
         try out.append(allocator, (even_weight << 4) | odd_weight);
     }
     return true;
+}
+
+fn emitHuffmanLiteralsSectionWithPlan(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    literals: []const u8,
+    plan: SmallHuffmanLiteralPlan,
+    huffman_tree: []const u8,
+    reuse_previous_tree: bool,
+) Error!void {
+    if (literals.len <= 1023) {
+        var stream: std.ArrayList(u8) = .empty;
+        defer stream.deinit(allocator);
+        try emitSmallHuffmanStream(allocator, &stream, literals, plan);
+        const compressed_size = huffman_tree.len + stream.items.len;
+        try emitHuffmanLiteralsHeader(allocator, out, literals.len, compressed_size, reuse_previous_tree);
+        try out.appendSlice(allocator, huffman_tree);
+        try out.appendSlice(allocator, stream.items);
+    } else {
+        var streams: [4]std.ArrayList(u8) = .{ .empty, .empty, .empty, .empty };
+        defer for (&streams) |*stream| stream.deinit(allocator);
+        // Zstandard four-stream literals split regenerated output with the first
+        // three streams covering ceil(size / 4) bytes and the fourth stream
+        // covering the remainder. Matching that layout lets the decoder switch
+        // streams exactly when each reverse bitstream reaches its end mark,
+        // including for non-4-divisible literal counts.
+        const segment_len = (literals.len + 3) / 4;
+        const segment_1_end = segment_len;
+        const segment_2_end = segment_len * 2;
+        const segment_3_end = segment_len * 3;
+        const segments = [_][]const u8{
+            literals[0..segment_1_end],
+            literals[segment_1_end..segment_2_end],
+            literals[segment_2_end..segment_3_end],
+            literals[segment_3_end..],
+        };
+        for (&streams, segments) |*stream, segment| {
+            try emitSmallHuffmanStream(allocator, stream, segment, plan);
+        }
+        const compressed_size = huffman_tree.len + 6 +
+            streams[0].items.len + streams[1].items.len + streams[2].items.len + streams[3].items.len;
+        if (streams[0].items.len > std.math.maxInt(u16) or
+            streams[1].items.len > std.math.maxInt(u16) or
+            streams[2].items.len > std.math.maxInt(u16)) return error.UnsupportedZstdFeature;
+        try emitHuffmanLiteralsHeader(allocator, out, literals.len, compressed_size, reuse_previous_tree);
+        try out.appendSlice(allocator, huffman_tree);
+        var stream_lengths: [6]u8 = undefined;
+        std.mem.writeInt(u16, stream_lengths[0..2], @intCast(streams[0].items.len), .little);
+        std.mem.writeInt(u16, stream_lengths[2..4], @intCast(streams[1].items.len), .little);
+        std.mem.writeInt(u16, stream_lengths[4..6], @intCast(streams[2].items.len), .little);
+        try out.appendSlice(allocator, &stream_lengths);
+        for (&streams) |*stream| try out.appendSlice(allocator, stream.items);
+    }
 }
 
 const huffman_weight_fse_table_log = 6;
@@ -10205,6 +10386,7 @@ test "zstd sequence emitter supports mixed RLE and predefined tables" {
     const block = frame.items[first_block.payload_offset..][0..first_block.payload_len];
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(@as(usize, literal_lens[0] + literal_lens[1]), section.regenerated_size);
     try std.testing.expectEqual(@as(usize, 2), section.sequence_count);
     try std.testing.expectEqual(@as(u8, 0x40), block[section.sequence_payload_offset]); // LL=RLE, OF/ML=Predefined.
 
@@ -12174,7 +12356,7 @@ test "zstd native writer uses preset dictionary history after first block" {
 }
 
 test "zstd native writer chooses Huffman over larger dictionary match" {
-    const dict = NativeDictionary.init(0x4568, "shortdictabcdefgh");
+    const dict = NativeDictionary.init(0x4568, "ABABABABabcdefgh");
     var payload: [192]u8 = undefined;
     var state: u8 = 1;
     for (&payload) |*byte| {
@@ -12182,7 +12364,7 @@ test "zstd native writer chooses Huffman over larger dictionary match" {
         const feedback: u8 = ((state >> 0) ^ (state >> 2) ^ (state >> 3) ^ (state >> 4)) & 1;
         state = (state >> 1) | (feedback << 7);
     }
-    @memcpy(payload[64..80], dict.content[0..16]);
+    @memcpy(payload[64..72], dict.content[0..8]);
 
     const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, &payload, .{
         .selection = .literal_only,

@@ -40,6 +40,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   dictionary/native-match-vs-Huffman arbitration,
   smallest native match-plan arbitration across independent bootstrap emitters,
   RLE-literals sections for same-byte sequence literals,
+  Huffman-compressed literals inside sequence blocks when the literal payload is compressible,
   raw-block-cost-aware compressed-block selection
   (falling back to raw/RLE blocks when compressed blocks would expand, for
   broad zstd CLI compatibility), plus deterministic smallest-mode

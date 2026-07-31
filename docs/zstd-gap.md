@@ -130,6 +130,7 @@ Current interpretation:
   branch-scored mixed duplicate/repeated and dictionary/duplicate/repeated
   match lookahead and emission,
   RLE-literals sections for same-byte sequence literals,
+  Huffman-compressed literals inside sequence blocks when the literal payload is compressible,
   raw-block-cost-aware sequence selection, plus a file-backed multi-block
   treeless Huffman writer case, then checks
   both system zstd decode and Vort native decode, with `size-zstd-native-hex`
