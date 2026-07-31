@@ -266,6 +266,7 @@ pub const zstdEncodeSkippableFrameAlloc = zstd.encodeSkippableFrameAlloc;
 pub const zstdEncodeSkippableFrameAppend = zstd.encodeSkippableFrameAppend;
 pub const zstdEncodeSkippableFrameIntoSlice = zstd.encodeSkippableFrameIntoSlice;
 pub const ZstdNativeFrameOptions = zstd.NativeFrameOptions;
+pub const zstdNativeMaxMatchSearchBudget = zstd.native_max_match_search_budget;
 pub const ZstdNativeFrameSelection = zstd.NativeFrameSelection;
 pub const ZstdNativeFrameMode = zstd.NativeFrameMode;
 pub const ZstdNativeFrameEncodeResult = zstd.NativeFrameEncodeResult;
@@ -1178,6 +1179,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodeSkippableFrameAppend;
     _ = zstdEncodeSkippableFrameIntoSlice;
     _ = ZstdNativeFrameOptions;
+    _ = zstdNativeMaxMatchSearchBudget;
     _ = ZstdNativeFrameSelection;
     _ = ZstdNativeFrameMode;
     _ = ZstdNativeFrameEncodeResult;

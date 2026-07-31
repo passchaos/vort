@@ -21,6 +21,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkMixedDictionaryRepeatedMatch(init.gpa);
     checked += 1;
+    try checkMatchSearchBudget(init.gpa);
+    checked += 1;
     try checkRepeatedBeforeDictionaryMatch(init.gpa);
     checked += 1;
     try checkConcatenatedDictionaryApis(init.gpa);
@@ -219,6 +221,57 @@ fn checkMixedDictionaryRepeatedMatch(allocator: std.mem.Allocator) !void {
     const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
     defer allocator.free(decoded);
     try expectEqualSlices(payload, decoded);
+}
+
+fn checkMatchSearchBudget(allocator: std.mem.Allocator) !void {
+    const dict_content = "DICTMATCH1234567890";
+    const unique = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}";
+    const dict = vort.ZstdNativeDictionary.init(0x9E, dict_content);
+    const payload = "pfx-" ++ dict_content ++ "-u-" ++ unique ++ "-mid-" ++ unique ++ "-rep-" ++ ("ab" ** 16) ++ "-tail";
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    const full = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict);
+    defer allocator.free(full.frame);
+    const disabled = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = 0,
+    }, dict);
+    defer allocator.free(disabled.frame);
+    const shallow = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = 2,
+    }, dict);
+    defer allocator.free(shallow.frame);
+    const enough = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = 3,
+    }, dict);
+    defer allocator.free(enough.frame);
+
+    try expect(full.frame.len == enough.frame.len);
+    try expect(disabled.frame.len > shallow.frame.len);
+    try expect(shallow.frame.len > full.frame.len);
+    try expect((try vort.zstdInspectNativeFrameFirstBlock(full.frame)).payload_len <
+        (try vort.zstdInspectNativeFrameFirstBlock(disabled.frame)).payload_len);
+
+    const full_decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, full.frame, dict);
+    defer allocator.free(full_decoded);
+    try expectEqualSlices(payload, full_decoded);
+    const disabled_decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, disabled.frame, dict);
+    defer allocator.free(disabled_decoded);
+    try expectEqualSlices(payload, disabled_decoded);
+
+    try expectError(error.InvalidBlockPlan, vort.zstdEncodedNativeFrameBoundWithDictionary(payload.len, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = vort.zstdNativeMaxMatchSearchBudget + 1,
+    }, dict));
 }
 
 fn checkRepeatedBeforeDictionaryMatch(allocator: std.mem.Allocator) !void {

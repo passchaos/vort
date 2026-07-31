@@ -186,7 +186,8 @@ Current interpretation:
   now encode through a dictionary set by Dictionary_ID and compute dictionary- or
   dictionary-set-aware frame bounds for caller-owned output buffers. Callers can inspect
   Dictionary_ID metadata before decode. The native writer also exposes a
-  block-size option, and the public native stream/block iterators expose
+  block-size option plus a bounded mixed-match search budget for library callers
+  that need to trade branch-scored ratio work against encode latency, and the public native stream/block iterators expose
   zero-allocation frame, block, and skippable-frame inspection so future
   latency/ratio sweeps can share the same library API rather than relying on
   CLI-specific chunking. `run-lz4-native-dictionary-probe` and

@@ -519,11 +519,15 @@ const lz4_block_plain = try lz4_block_decoder.decodeWithPrefixScratch(lz4_block,
 _ = lz4_block_plain;
 
 // Native-subset Zstd APIs expose the same alloc/append/into/scratch style plus
-// mode reporting. The block size option lets callers trade ratio for latency or
-// seekability without going through the CLI.
+// mode reporting. The block size and match-search budget options let callers
+// trade ratio, encode latency, and seekability without going through the CLI.
 const zstd_options: vort.ZstdNativeFrameOptions = .{
     .selection = .auto,
     .block_size_max = 32 * 1024,
+    // 0 disables mixed dictionary/duplicate/repeated lookahead; values up to
+    // the default keep more ratio-seeking branches at higher planning cost.
+    // Dictionary-only matches remain available even when the budget is 0.
+    .match_search_budget = vort.zstdNativeMaxMatchSearchBudget,
 };
 var zstd_encoder = vort.ZstdNativeFrameEncoder.init(allocator);
 defer zstd_encoder.deinit();

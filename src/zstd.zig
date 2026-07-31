@@ -21,6 +21,8 @@ const mixed_match_path_search_budget = 512;
 const repeated_pattern_period_max = 64;
 const repeated_pattern_start_scan = 48;
 
+pub const native_max_match_search_budget: usize = mixed_match_path_search_budget;
+
 const ll_base = [_]usize{
     0,      1,      2,      3,       4,     5,     6,     7,
     8,      9,      10,     11,      12,    13,    14,    15,
@@ -107,6 +109,14 @@ pub const NativeFrameOptions = struct {
     selection: NativeFrameSelection = .auto,
     block_size_max: usize = std.compress.zstd.block_size_max,
     dictionary_id: u32 = 0,
+    /// Maximum branch states visited by the bootstrap mixed-match planner.
+    ///
+    /// Lower values trade away ratio-seeking lookahead for predictable encode
+    /// latency. A value of zero disables generic duplicate/repeated match
+    /// planning and mixed dictionary/duplicate/repeated branch search; explicit
+    /// dictionary-only match emitters remain available when callers provide a
+    /// dictionary.
+    match_search_budget: usize = mixed_match_path_search_budget,
 };
 
 pub const NativeDictionary = struct {
@@ -161,6 +171,7 @@ pub fn encodedNativeFrameBound(input_len: usize) Error!usize {
 
 pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrameOptions) Error!usize {
     const block_size_max = try nativeBlockSizeMax(options);
+    _ = try nativeMatchSearchBudget(options);
     const dictionary_id_len = nativeDictionaryIdFieldLen(options.dictionary_id);
     const frame_header_len: usize = if (options.include_content_size)
         4 + 1 + dictionary_id_len + 8
@@ -252,6 +263,11 @@ pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!u
 fn nativeBlockSizeMax(options: NativeFrameOptions) Error!usize {
     if (options.block_size_max == 0 or options.block_size_max > std.compress.zstd.block_size_max) return error.InvalidBlockPlan;
     return options.block_size_max;
+}
+
+fn nativeMatchSearchBudget(options: NativeFrameOptions) Error!usize {
+    if (options.match_search_budget > mixed_match_path_search_budget) return error.InvalidBlockPlan;
+    return options.match_search_budget;
 }
 
 fn nativeDictionaryIdFlag(dictionary_id: u32) u2 {
@@ -2149,6 +2165,7 @@ pub fn encodeRawOrRleFrameAppend(
     input: []const u8,
     options: NativeFrameOptions,
 ) Error!void {
+    _ = try nativeMatchSearchBudget(options);
     try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), options);
     const block_size_max = try nativeBlockSizeMax(options);
     if (input.len == 0) {
@@ -2216,17 +2233,18 @@ fn encodeLiteralOnlyFrameAppendWithDictionaryInternal(
     dictionary: ?NativeDictionary,
 ) Error!void {
     const frame_options = optionsWithNativeDictionary(options, dictionary);
+    const match_search_budget = try nativeMatchSearchBudget(frame_options);
     try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), frame_options);
 
     var offset: usize = 0;
     const block_size_max = try nativeBlockSizeMax(frame_options);
     var encoder_state: LiteralOnlyEncoderState = .{};
     if (input.len == 0) {
-        try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, "", true, &encoder_state, dictionary, 0);
+        try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, "", true, &encoder_state, dictionary, 0, match_search_budget);
     } else {
         while (offset < input.len) {
             const block_end = @min(input.len, offset + block_size_max);
-            try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, input[offset..block_end], block_end == input.len, &encoder_state, dictionary, offset);
+            try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, input[offset..block_end], block_end == input.len, &encoder_state, dictionary, offset, match_search_budget);
             offset = block_end;
         }
     }
@@ -4830,7 +4848,7 @@ fn emitBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []con
 }
 
 fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *LiteralOnlyEncoderState) Error!void {
-    return try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, block, last, state, null, 0);
+    return try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, block, last, state, null, 0, mixed_match_path_search_budget);
 }
 
 fn emitLiteralOnlyCompressedBlockWithDictionary(
@@ -4841,11 +4859,12 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     state: *LiteralOnlyEncoderState,
     dictionary: ?NativeDictionary,
     frame_offset: usize,
+    match_search_budget: usize,
 ) Error!void {
     var dictionary_block: std.ArrayList(u8) = .empty;
     defer dictionary_block.deinit(allocator);
     const dictionary_ok = if (dictionary) |dict|
-        try emitDictionaryMatchCompressedBlock(allocator, &dictionary_block, block, last, dict, frame_offset)
+        try emitDictionaryMatchCompressedBlock(allocator, &dictionary_block, block, last, dict, frame_offset, match_search_budget)
     else
         false;
 
@@ -4856,7 +4875,7 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
 
     var match_block: std.ArrayList(u8) = .empty;
     defer match_block.deinit(allocator);
-    const match_ok = try emitNativeMatchCompressedBlock(allocator, &match_block, block, last);
+    const match_ok = try emitNativeMatchCompressedBlock(allocator, &match_block, block, last, match_search_budget);
 
     const CandidateKind = enum { dictionary, huffman, match };
     var best_kind: ?CandidateKind = null;
@@ -4926,13 +4945,15 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     try out.appendSlice(allocator, payload.items);
 }
 
-fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
+fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize) Error!bool {
+    if (match_search_budget == 0) return false;
+
     // The bootstrap match emitters are intentionally independent heuristics.
     // Plan all successful candidates and then copy the smallest encoded block so
     // a broad mixed plan cannot hide a tighter single-family plan found later.
     var mixed_block: std.ArrayList(u8) = .empty;
     defer mixed_block.deinit(allocator);
-    const mixed_ok = try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &mixed_block, block, last);
+    const mixed_ok = try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &mixed_block, block, last, match_search_budget);
 
     var repeated_block: std.ArrayList(u8) = .empty;
     defer repeated_block.deinit(allocator);
@@ -4965,10 +4986,11 @@ fn emitDictionaryMatchCompressedBlock(
     last: bool,
     dictionary: NativeDictionary,
     frame_offset: usize,
+    match_search_budget: usize,
 ) Error!bool {
     var mixed_block: std.ArrayList(u8) = .empty;
     defer mixed_block.deinit(allocator);
-    const mixed_ok = try emitMixedDictionaryDuplicateMatchCompressedBlock(allocator, &mixed_block, block, last, dictionary, frame_offset);
+    const mixed_ok = try emitMixedDictionaryDuplicateMatchCompressedBlock(allocator, &mixed_block, block, last, dictionary, frame_offset, match_search_budget);
 
     var multi_block: std.ArrayList(u8) = .empty;
     defer multi_block.deinit(allocator);
@@ -5062,12 +5084,13 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     last: bool,
     dictionary: NativeDictionary,
     frame_offset: usize,
+    match_search_budget: usize,
 ) Error!bool {
     const plan = try bestMixedMatchLookaheadPlan(dictionary.content, block, frame_offset, .{
         .dictionary = true,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .dictionary }, .non_dictionary) orelse return false;
+    }, .{ .kind = .dictionary }, .non_dictionary, match_search_budget) orelse return false;
     return try emitBestSequenceCompressedBlockFromLookaheadPlan(
         allocator,
         out,
@@ -5082,12 +5105,13 @@ fn emitMixedDuplicateRepeatedMatchCompressedBlock(
     out: *std.ArrayList(u8),
     block: []const u8,
     last: bool,
+    match_search_budget: usize,
 ) Error!bool {
     const plan = try bestMixedMatchLookaheadPlan(&.{}, block, 0, .{
         .dictionary = false,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .duplicate }, .{ .kind = .repeated }) orelse return false;
+    }, .{ .kind = .duplicate }, .{ .kind = .repeated }, match_search_budget) orelse return false;
     return try emitBestSequenceCompressedBlockFromLookaheadPlan(
         allocator,
         out,
@@ -5264,7 +5288,9 @@ fn bestMixedMatchLookaheadPlan(
     allowed: MixedMatchKindSet,
     required_first: MixedMatchRequirement,
     required_second: MixedMatchRequirement,
+    match_search_budget: usize,
 ) Error!?MixedMatchLookaheadPlan {
+    if (match_search_budget == 0) return null;
     var first_candidates: [3]MixedMatchCandidate = undefined;
     var candidate_cache: MixedMatchCandidateCache = .{};
     const first_count = try candidate_cache.candidatesAt(dictionary, block, 0, frame_offset, allowed, first_candidates[0..]);
@@ -5284,6 +5310,7 @@ fn bestMixedMatchLookaheadPlan(
             requirements,
             &candidate_cache,
             candidate,
+            match_search_budget,
         ) orelse continue;
         if (mixedMatchLookaheadPlanBetter(plan, best)) best = plan;
     }
@@ -5307,6 +5334,7 @@ fn bestMixedCandidateLookaheadPlanFromFirst(
         requirements,
         &candidate_cache,
         first_candidate,
+        mixed_match_path_search_budget,
     );
 }
 
@@ -5318,10 +5346,12 @@ fn bestMixedCandidateLookaheadPlanFromFirstWithCache(
     requirements: ?MixedMatchLookaheadRequirements,
     candidate_cache: *MixedMatchCandidateCache,
     first_candidate: MixedMatchCandidate,
+    match_search_budget: usize,
 ) Error!?MixedMatchLookaheadPlan {
+    if (match_search_budget == 0) return null;
     if (!allowed.contains(first_candidate.kind)) return null;
     var plan: MixedMatchLookaheadPlan = .{};
-    var search_budget: usize = mixed_match_path_search_budget;
+    var search_budget: usize = match_search_budget;
     var seen: MixedMatchKindSet = .{};
     const best = try bestMixedCandidateLookaheadPlanFrom(
         dictionary,
@@ -6711,13 +6741,15 @@ fn smallHuffmanBitCount(plan: SmallHuffmanLiteralPlan, symbol: u8) ?u8 {
 }
 
 fn emitSmallHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, plan: SmallHuffmanLiteralPlan) Error!void {
+    const lookup = try smallHuffmanLiteralLookup(plan);
     var accumulator: usize = 0;
     var bit_count: u6 = 0;
     var i = block.len;
     while (i > 0) {
         i -= 1;
-        const bits = smallHuffmanBitCount(plan, block[i]) orelse return error.CorruptFrame;
-        const code = smallHuffmanCode(plan, block[i]) orelse return error.CorruptFrame;
+        const bits = lookup.bit_counts[block[i]];
+        if (bits == 0) return error.CorruptFrame;
+        const code = lookup.codes[block[i]];
         accumulator |= code << bit_count;
         bit_count += @intCast(bits);
         while (bit_count >= 8) {
@@ -6734,6 +6766,23 @@ fn emitSmallHuffmanStream(allocator: std.mem.Allocator, out: *std.ArrayList(u8),
         accumulator >>= 8;
         bit_count -= 8;
     }
+}
+
+const SmallHuffmanLiteralLookup = struct {
+    codes: [256]usize = [_]usize{0} ** 256,
+    bit_counts: [256]u8 = [_]u8{0} ** 256,
+};
+
+fn smallHuffmanLiteralLookup(plan: SmallHuffmanLiteralPlan) Error!SmallHuffmanLiteralLookup {
+    var lookup: SmallHuffmanLiteralLookup = .{};
+    for (plan.symbols[0..plan.len]) |symbol| {
+        // Encoding walks literals in reverse and consults the code for every
+        // byte. Precomputing a dense byte lookup once per block avoids scanning
+        // the sorted symbol list for each literal on 4-stream probe payloads.
+        lookup.codes[symbol] = smallHuffmanCode(plan, symbol) orelse return error.CorruptFrame;
+        lookup.bit_counts[symbol] = smallHuffmanBitCount(plan, symbol) orelse return error.CorruptFrame;
+    }
+    return lookup;
 }
 
 const DuplicateMatch = struct {
@@ -6824,6 +6873,7 @@ fn findBestDuplicateMatchIn(block: []const u8, start_min: usize) Error!?Duplicat
             while (second + len < block.len and block[first + len] == block[second + len]) : (len += 1) {}
             if (len >= 8) {
                 const candidate: DuplicateMatch = .{ .first_start = first, .second_start = second, .len = len };
+                if (duplicateMatchCannotBeat(candidate, best)) continue;
                 const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
                 if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
                     best = candidate;
@@ -6866,6 +6916,7 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
             if (len < 8) continue;
 
             const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
+            if (duplicateMatchCannotBeat(candidate, best)) continue;
             const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
             if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
                 best = candidate;
@@ -6874,6 +6925,22 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
         }
     }
     return best;
+}
+
+fn duplicateMatchCannotBeat(candidate: DuplicateMatch, current: ?DuplicateMatch) bool {
+    const existing = current orelse return false;
+    if (candidate.len < existing.len) return true;
+    if (candidate.len > existing.len) return false;
+
+    // Equal-length matches regenerate the same total literal bytes. A later
+    // match with an equal-or-larger offset cannot improve the sequence payload:
+    // it has a literal length that is at least as large and an offset code that
+    // is no cheaper. Skipping these common hash-collision candidates keeps the
+    // bootstrap large-block finder bounded on high-entropy Huffman-friendly
+    // payloads while preserving closer equal-length matches.
+    const candidate_offset = candidate.second_start - candidate.first_start;
+    const existing_offset = existing.second_start - existing.first_start;
+    return candidate.second_start >= existing.second_start and candidate_offset >= existing_offset;
 }
 
 fn duplicateHash8(bytes: *const [8]u8) usize {
@@ -7728,6 +7795,8 @@ test "zstd native no-size writer chooses valid window descriptors" {
     try std.testing.expectEqualSlices(u8, small_block_payload, small_decoded);
     try std.testing.expectError(error.InvalidBlockPlan, encodedNativeFrameBoundWithOptions(1, .{ .block_size_max = 0 }));
     try std.testing.expectError(error.InvalidBlockPlan, encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, "x", .{ .block_size_max = std.compress.zstd.block_size_max + 1 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedNativeFrameBoundWithOptions(1, .{ .match_search_budget = mixed_match_path_search_budget + 1 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, "x", .{ .match_search_budget = mixed_match_path_search_budget + 1 }));
 }
 
 test "zstd native decoder accepts literal-only compressed blocks" {
@@ -8707,11 +8776,11 @@ test "zstd mixed match lookahead explores non-greedy continuations" {
         .dictionary = false,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .duplicate }, .{ .kind = .repeated })) orelse return error.CorruptFrame;
+    }, .{ .kind = .duplicate }, .{ .kind = .repeated }, mixed_match_path_search_budget)) orelse return error.CorruptFrame;
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
     try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{ .content_checksum = false });
-    try std.testing.expect(try emitMixedDuplicateRepeatedMatchCompressedBlock(std.testing.allocator, &frame, payload, true));
+    try std.testing.expect(try emitMixedDuplicateRepeatedMatchCompressedBlock(std.testing.allocator, &frame, payload, true, mixed_match_path_search_budget));
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
     try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
@@ -11448,7 +11517,7 @@ test "zstd native writer emits branch-scored dictionary duplicate repeated match
         .dictionary = true,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .dictionary }, .non_dictionary)) orelse return error.CorruptFrame;
+    }, .{ .kind = .dictionary }, .non_dictionary, mixed_match_path_search_budget)) orelse return error.CorruptFrame;
     try std.testing.expectEqual(@as(usize, 3), plan.count);
     try std.testing.expectEqual(MixedMatchKind.dictionary, plan.kinds[0]);
     try std.testing.expectEqual(MixedMatchKind.duplicate, plan.kinds[1]);
@@ -11475,6 +11544,54 @@ test "zstd native writer emits branch-scored dictionary duplicate repeated match
     });
     defer std.testing.allocator.free(raw);
     try std.testing.expect(encoded.frame.len < raw.len);
+}
+
+test "zstd native match search budget controls mixed planner" {
+    const dict_content = "DICTMATCH1234567890";
+    const unique = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}";
+    const dict = NativeDictionary.init(0x678a, dict_content);
+    const payload = "pfx-" ++ dict_content ++ "-u-" ++ unique ++ "-mid-" ++ unique ++ "-rep-" ++ ("ab" ** 16) ++ "-tail";
+    const options: NativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    const full = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, options, dict);
+    defer std.testing.allocator.free(full.frame);
+    const disabled = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = 0,
+    }, dict);
+    defer std.testing.allocator.free(disabled.frame);
+    const shallow = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = 2,
+    }, dict);
+    defer std.testing.allocator.free(shallow.frame);
+    const enough = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = 3,
+    }, dict);
+    defer std.testing.allocator.free(enough.frame);
+
+    try std.testing.expectEqual(full.frame.len, enough.frame.len);
+    try std.testing.expect(disabled.frame.len > shallow.frame.len);
+    try std.testing.expect(shallow.frame.len > full.frame.len);
+
+    inline for (.{ full.frame, disabled.frame, shallow.frame, enough.frame }) |frame| {
+        const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, frame, dict);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+    }
+
+    const full_block = try inspectNativeFrameFirstBlock(full.frame);
+    const disabled_block = try inspectNativeFrameFirstBlock(disabled.frame);
+    try std.testing.expectEqual(NativeBlockType.compressed, full_block.block_type);
+    try std.testing.expectEqual(NativeBlockType.compressed, disabled_block.block_type);
+    try std.testing.expect(full_block.payload_len < disabled_block.payload_len);
 }
 
 test "zstd native raw/RLE decoder handles fallback frames and skippable frames" {
