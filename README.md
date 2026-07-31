@@ -510,6 +510,7 @@ _ = try vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
 var lz4_block_encoder = try vort.Lz4BlockEncoder.init(allocator);
 defer lz4_block_encoder.deinit();
 const lz4_block = try lz4_block_encoder.encodeWithPrefixScratch("payload", "previous payload history");
+_ = try lz4_block_encoder.encodeWithPrefixScratchAndChainDepth("payload", "previous payload history", lz4_dict_options.chain_depth);
 var lz4_block_decoder = vort.Lz4BlockDecoder.init(allocator);
 defer lz4_block_decoder.deinit();
 const lz4_block_plain = try lz4_block_decoder.decodeWithPrefixScratch(lz4_block, "payload".len, "previous payload history");

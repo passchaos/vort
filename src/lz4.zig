@@ -3299,10 +3299,24 @@ pub const BlockEncoder = struct {
         return out.toOwnedSlice(self.allocator);
     }
 
+    pub fn encodeWithChainDepthAlloc(self: *BlockEncoder, input: []const u8, chain_depth: u8) Error![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        _ = try self.appendWithChainDepth(&out, input, chain_depth);
+        return out.toOwnedSlice(self.allocator);
+    }
+
     pub fn encodeWithPrefixAlloc(self: *BlockEncoder, input: []const u8, prefix: []const u8) Error![]u8 {
         var out: std.ArrayList(u8) = .empty;
         errdefer out.deinit(self.allocator);
         _ = try self.appendWithPrefix(&out, input, prefix);
+        return out.toOwnedSlice(self.allocator);
+    }
+
+    pub fn encodeWithPrefixAndChainDepthAlloc(self: *BlockEncoder, input: []const u8, prefix: []const u8, chain_depth: u8) Error![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        _ = try self.appendWithPrefixAndChainDepth(&out, input, prefix, chain_depth);
         return out.toOwnedSlice(self.allocator);
     }
 
@@ -3334,9 +3348,27 @@ pub const BlockEncoder = struct {
         return self.output_scratch.items;
     }
 
+    pub fn encodeScratchWithChainDepth(self: *BlockEncoder, input: []const u8, chain_depth: u8) Error![]const u8 {
+        self.output_scratch.clearRetainingCapacity();
+        _ = self.appendWithChainDepth(&self.output_scratch, input, chain_depth) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        return self.output_scratch.items;
+    }
+
     pub fn encodeWithPrefixScratch(self: *BlockEncoder, input: []const u8, prefix: []const u8) Error![]const u8 {
         self.output_scratch.clearRetainingCapacity();
         _ = self.appendWithPrefix(&self.output_scratch, input, prefix) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        return self.output_scratch.items;
+    }
+
+    pub fn encodeWithPrefixScratchAndChainDepth(self: *BlockEncoder, input: []const u8, prefix: []const u8, chain_depth: u8) Error![]const u8 {
+        self.output_scratch.clearRetainingCapacity();
+        _ = self.appendWithPrefixAndChainDepth(&self.output_scratch, input, prefix, chain_depth) catch |err| {
             self.output_scratch.clearRetainingCapacity();
             return err;
         };
@@ -3350,8 +3382,22 @@ pub const BlockEncoder = struct {
         return scratch.len;
     }
 
+    pub fn encodeIntoSliceWithChainDepth(self: *BlockEncoder, input: []const u8, output: []u8, chain_depth: u8) Error!usize {
+        const scratch = try self.encodeScratchWithChainDepth(input, chain_depth);
+        if (output.len < scratch.len) return error.OutputTooSmall;
+        @memcpy(output[0..scratch.len], scratch);
+        return scratch.len;
+    }
+
     pub fn encodeWithPrefixIntoSlice(self: *BlockEncoder, input: []const u8, prefix: []const u8, output: []u8) Error!usize {
         const scratch = try self.encodeWithPrefixScratch(input, prefix);
+        if (output.len < scratch.len) return error.OutputTooSmall;
+        @memcpy(output[0..scratch.len], scratch);
+        return scratch.len;
+    }
+
+    pub fn encodeWithPrefixIntoSliceAndChainDepth(self: *BlockEncoder, input: []const u8, prefix: []const u8, output: []u8, chain_depth: u8) Error!usize {
+        const scratch = try self.encodeWithPrefixScratchAndChainDepth(input, prefix, chain_depth);
         if (output.len < scratch.len) return error.OutputTooSmall;
         @memcpy(output[0..scratch.len], scratch);
         return scratch.len;
@@ -4572,6 +4618,51 @@ test "lz4 native frame validates chain depth option" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+test "lz4 block encoder exposes chain depth helpers" {
+    var payload: [160]u8 = undefined;
+    @memset(&payload, 'z');
+    const long = "AAAABCDEFGHIJKLMNOP";
+    const target_start = 120;
+    @memcpy(payload[0..long.len], long);
+    @memcpy(payload[target_start..][0..long.len], long);
+    for (0..12) |i| {
+        const pos = 24 + i * 6;
+        @memcpy(payload[pos..][0..4], "AAAA");
+        payload[pos + 4] = @intCast('a' + i);
+    }
+
+    var encoder = try BlockEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const encoded = try encoder.encodeScratchWithChainDepth(&payload, max_chain_depth);
+    const decoded = try decodeBlockAlloc(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+
+    const out = try std.testing.allocator.alloc(u8, try encodedBlockBound(payload.len));
+    defer std.testing.allocator.free(out);
+    const written = try encoder.encodeIntoSliceWithChainDepth(&payload, out, max_chain_depth);
+    try std.testing.expectEqualSlices(u8, encoded, out[0..written]);
+    try std.testing.expectError(error.OutputTooSmall, encoder.encodeIntoSliceWithChainDepth(&payload, out[0 .. written - 1], max_chain_depth));
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeScratchWithChainDepth(&payload, max_chain_depth + 1));
+
+    var history: [120]u8 = undefined;
+    @memset(&history, 'h');
+    @memcpy(history[0..long.len], long);
+    for (0..12) |i| {
+        const pos = 24 + i * 6;
+        @memcpy(history[pos..][0..4], "AAAA");
+        history[pos + 4] = @intCast('a' + i);
+    }
+    var input: [long.len]u8 = undefined;
+    @memcpy(&input, long);
+    const linked = try encoder.encodeWithPrefixScratchAndChainDepth(&input, &history, max_chain_depth);
+    const linked_decoded = try decodeBlockWithPrefixAlloc(std.testing.allocator, linked, input.len, &history);
+    defer std.testing.allocator.free(linked_decoded);
+    try std.testing.expectEqualSlices(u8, &input, linked_decoded);
+    const linked_written = try encoder.encodeWithPrefixIntoSliceAndChainDepth(&input, &history, out, max_chain_depth);
+    try std.testing.expectEqualSlices(u8, linked, out[0..linked_written]);
 }
 
 test "lz4 frame encoder compresses repetitive payloads and round trips" {
