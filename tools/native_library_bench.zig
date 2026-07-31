@@ -42,6 +42,7 @@ pub fn main(init: std.process.Init) !void {
 
     try smokeLz4LinkedDirectFallback(init.gpa);
     try smokeLz4DeepHashChain(init.gpa);
+    try smokeLz4LinkedDeepHashChain(init.gpa);
     try smokeZstdMultiblockDirectFallback(init.gpa);
     try smokeReusableChunkedDecoders(init.gpa);
     try smokeZstdManyRepeatedSequences(init.gpa);
@@ -318,6 +319,39 @@ fn smokeLz4DeepHashChain(allocator: std.mem.Allocator) !void {
     defer decoder.deinit();
     const decoded = try decoder.decodeScratch(encoded);
     if (!std.mem.eql(u8, &payload, decoded)) return error.SizeMismatch;
+}
+
+fn smokeLz4LinkedDeepHashChain(allocator: std.mem.Allocator) !void {
+    var long: [512]u8 = undefined;
+    @memcpy(long[0..4], "AAAA");
+    for (long[4..], 0..) |*byte, i| byte.* = @intCast('A' + (i % 23));
+
+    const payload = try allocator.alloc(u8, 64 * 1024 + long.len);
+    defer allocator.free(payload);
+    @memset(payload, 'z');
+    @memcpy(payload[0..long.len], &long);
+    for (0..12) |i| {
+        const pos = 1024 + i * 6;
+        @memcpy(payload[pos..][0..4], "AAAA");
+        payload[pos + 4] = @intCast('a' + i);
+    }
+    @memcpy(payload[64 * 1024 ..][0..long.len], &long);
+
+    const encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+        .block_mode = .linked,
+        .block_size_id = .max64kb,
+    });
+    defer allocator.free(encoded);
+    const first_block = (try vort.lz4InspectNativeFrameFirstBlock(encoded)) orelse return error.SizeMismatch;
+    const second_block = (try vort.lz4InspectNativeFrameBlockAt(encoded, first_block.next_header_offset)) orelse return error.SizeMismatch;
+    if (!second_block.is_compressed) return error.SizeMismatch;
+
+    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const decoded = try decoder.decodeScratch(encoded);
+    if (!std.mem.eql(u8, payload, decoded)) return error.SizeMismatch;
 }
 
 fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
