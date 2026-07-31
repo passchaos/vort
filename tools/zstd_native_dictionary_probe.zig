@@ -27,6 +27,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkOffsetCompressedThenRepeatedSequenceTableInspect(init.gpa);
     checked += 1;
+    try checkMalformedCompressedSequenceTableInspect(init.gpa);
+    checked += 1;
     try checkReusableDictionaryApis(init.gpa);
     checked += 1;
     try checkLaterBlockDictionaryMatch(init.gpa);
@@ -398,6 +400,24 @@ fn checkOffsetCompressedThenRepeatedSequenceTableInspect(allocator: std.mem.Allo
     const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
     defer allocator.free(decoded);
     try expect(decoded.len == 148);
+}
+
+fn checkMalformedCompressedSequenceTableInspect(allocator: std.mem.Allocator) !void {
+    const frame_hex =
+        "28b52ffd209a250100606162636465666768696a6b6c10180210aeb5070b83c3c2c360e030701878383c1cec92";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    // Corrupt the first byte of the ML FSE normalized-count header. This should
+    // fail while parsing the sequence table, before sequence execution.
+    frame[25] ^= 0xff;
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&frame));
+
+    var into: [154]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&frame, &into));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
 }
 
 fn checkLiteralAndOffsetCompressedSequenceTableInspect(
@@ -961,6 +981,15 @@ fn expectEqualSlices(expected: []const u8, actual: []const u8) !void {
 
 fn expectError(expected: anyerror, result: anytype) !void {
     if (result) |_| {
+        return error.ZstdNativeDictionaryProbeExpectedError;
+    } else |err| {
+        if (err != expected) return err;
+    }
+}
+
+fn expectAllocError(allocator: std.mem.Allocator, expected: anyerror, result: anytype) !void {
+    if (result) |decoded| {
+        allocator.free(decoded);
         return error.ZstdNativeDictionaryProbeExpectedError;
     } else |err| {
         if (err != expected) return err;
