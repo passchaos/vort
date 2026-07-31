@@ -571,6 +571,21 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     if (appended_written != expected.len) return error.Lz4ProbeSizeMismatch;
     if (!std.mem.eql(u8, appended.items, "prefix:" ++ expected)) return error.Lz4ProbeMismatch;
 
+    var reusable = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer reusable.deinit();
+    const reusable_exact = try reusable.decodeConcatenatedChunksAllocExactSizeWithDictionarySet(&chunks, join, dictionary_set, expected.len);
+    defer allocator.free(reusable_exact);
+    if (!std.mem.eql(u8, expected, reusable_exact)) return error.Lz4ProbeMismatch;
+    const reusable_scratch = try reusable.decodeConcatenatedChunksScratchWithDictionarySet(&chunks, join, dictionary_set);
+    if (!std.mem.eql(u8, expected, reusable_scratch)) return error.Lz4ProbeMismatch;
+    var reusable_appended: std.ArrayList(u8) = .empty;
+    defer reusable_appended.deinit(allocator);
+    try reusable_appended.appendSlice(allocator, "prefix:");
+    const reusable_appended_written = try reusable.decodeConcatenatedChunksAppendWithDictionarySet(&reusable_appended, &chunks, join, dictionary_set);
+    if (reusable_appended_written != expected.len or !std.mem.eql(u8, reusable_appended.items, "prefix:" ++ expected)) {
+        return error.Lz4ProbeMismatch;
+    }
+
     if (vort.lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySet(allocator, &chunks, join, vort.Lz4NativeDictionarySet.init(&.{first_dict}))) |missing| {
         allocator.free(missing);
         return error.Lz4ProbeExpectedFrameError;
