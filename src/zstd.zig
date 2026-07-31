@@ -6629,6 +6629,11 @@ fn rleSequenceCodeForValues(values: []const usize, bases: []const usize, bits: [
 }
 
 fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) Error!?CompressedSequencePlan {
+    // Keep the first compressed-table writer slice deliberately narrow. Literal
+    // lengths have no repeat-offset side effects, and the current tests/probes
+    // validate LL=FSE with OF/ML in simpler modes. Offset/match FSE emission can
+    // be enabled once we have equally focused coverage for those state streams.
+    if (kind != .literal) return null;
     if (values.len < 3 or values.len > max_bootstrap_sequence_count) return null;
     const bases = sequenceTableBases(kind);
     const bits = sequenceTableBits(kind);
