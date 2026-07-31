@@ -17,6 +17,7 @@ const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
 const duplicate_hash_candidates = 8;
 const max_bootstrap_sequence_count = 32;
+const min_compressed_sequence_table_count = 12;
 const max_predefined_sequence_states = 64;
 const mixed_match_path_search_budget = 512;
 const repeated_pattern_period_max = 64;
@@ -6634,7 +6635,7 @@ fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) 
     // validate LL=FSE with OF/ML in simpler modes. Offset/match FSE emission can
     // be enabled once we have equally focused coverage for those state streams.
     if (kind != .literal) return null;
-    if (values.len < 3 or values.len > max_bootstrap_sequence_count) return null;
+    if (values.len < min_compressed_sequence_table_count or values.len > max_bootstrap_sequence_count) return null;
     const bases = sequenceTableBases(kind);
     const bits = sequenceTableBits(kind);
 
@@ -10773,9 +10774,9 @@ test "zstd sequence emitter supports mixed RLE and predefined tables" {
 }
 
 test "zstd sequence emitter supports compressed FSE literal-length table" {
-    const literal_lens = [_]usize{ 2, 3, 2, 4, 3, 2, 4, 3 };
-    const offsets = [_]usize{ 2, 2, 2, 2, 2, 2, 2, 2 };
-    const match_lens = [_]usize{ 8, 8, 8, 8, 8, 8, 8, 8 };
+    const literal_lens = [_]usize{ 2, 3, 2, 4, 3, 2, 4, 3, 2, 3, 2, 4, 3, 2, 4, 3 };
+    const offsets = [_]usize{ 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 };
+    const match_lens = [_]usize{ 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8 };
     var literal_ends: [literal_lens.len]usize = undefined;
 
     var payload: std.ArrayList(u8) = .empty;
