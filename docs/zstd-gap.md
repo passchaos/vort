@@ -193,9 +193,10 @@ Current interpretation:
   latency/ratio sweeps can share the same library API rather than relying on
   CLI-specific chunking. `run-lz4-native-dictionary-probe` and
   `run-zstd-native-dictionary-probe` exercise the public dictionary APIs,
-  chunked append/exact-size append decode helpers, and direct-output fallback
-  paths directly, while the generated-corpus probe accepts repeated `--path`
-  arguments or bounded recursive `--dir` discovery with an optional `--limit`
+  top-level and reusable chunked append/exact-size append decode helpers, and
+  direct-output fallback paths directly, while the generated-corpus probe
+  accepts repeated `--path` arguments or bounded recursive `--dir` discovery
+  with an optional `--limit`
   for focused file payloads when investigating real corpus failures.
 
 Recommended next comparison steps:

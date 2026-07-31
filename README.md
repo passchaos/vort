@@ -952,8 +952,9 @@ zig build run-native-library-bench-gate
 
 The gate currently requires the LZ4 chain-depth, Zstd match-budget, dictionary,
 dictionary-set, chunked dictionary-set, chunked append, chunked append
-exact-size, reusable decoder, direct-output, and small-output fallback rows to
-round-trip and to preserve the expected size relationships.
+exact-size, reusable decoder, reusable append exact-size, direct-output, and
+small-output fallback rows to round-trip and to preserve the expected size
+relationships.
 
 ## Direction
 
