@@ -15,6 +15,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkTreelessRepeatHuffmanLiterals(init.gpa);
     checked += 1;
+    try checkRepeatOffsetAdditionalBits(init.gpa);
+    checked += 1;
     try checkSplitHeaderIncremental(init.gpa);
     checked += 1;
     try checkSplitSkippableHeaderIncremental(init.gpa);
@@ -208,6 +210,36 @@ fn checkTreelessRepeatHuffmanLiterals(allocator: std.mem.Allocator) !void {
     const into_written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
     try expect(into_written == payload.len);
     try expectEqualSlices(payload, &into);
+}
+
+fn checkRepeatOffsetAdditionalBits(allocator: std.mem.Allocator) !void {
+    // Handcrafted one-sequence frame where OF=RLE uses offset code 2. The
+    // reverse bitstream supplies the two extra offset bits, selecting the
+    // smallest offset=4 case and protecting repeat-offset/additional-bit decode
+    // through the public frame APIs.
+    const frame_hex = "28b52ffd240e4500000961015401020a04005ee3cf";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    try expect(first_block.block_type == .compressed);
+    try expect(first_block.last);
+    try expect(modes.literals_kind == .rle);
+    try expect(modes.sequence_count == 1);
+    try expect(modes.literal_length_mode == .rle);
+    try expect(modes.offset_mode == .rle);
+    try expect(modes.match_length_mode == .rle);
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == 14);
+
+    const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(decoded);
+    try expectEqualSlices("aaaaaaaaaaaaaa", decoded);
+
+    var into: [14]u8 = undefined;
+    const into_written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
+    try expect(into_written == decoded.len);
+    try expectEqualSlices(decoded, into[0..into_written]);
 }
 
 fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {
