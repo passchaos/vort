@@ -5466,8 +5466,11 @@ fn mixedMatchCandidatesAt(
     allowed: MixedMatchKindSet,
     out: []MixedMatchCandidate,
 ) Error!usize {
-    var cache: MixedMatchCandidateCache = .{};
-    return try cache.candidatesAt(dictionary, block, literal_start, frame_offset, allowed, out);
+    // This helper is used by tests/probes that need one deterministic candidate
+    // snapshot. The recursive planner passes an explicit MixedMatchCandidateCache
+    // through its call tree so repeated positions share scan results; allocating a
+    // fresh full-size cache here would only add stack pressure without reuse.
+    return try mixedMatchCandidatesAtUncached(dictionary, block, literal_start, frame_offset, allowed, out);
 }
 
 fn mixedMatchCandidatesAtUncached(
