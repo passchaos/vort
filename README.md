@@ -411,6 +411,15 @@ _ = lz4_plain;
 _ = try lz4_decoder.decodedConcatenatedChunksSize(&lz4_frame_chunks, &lz4_join_scratch);
 const lz4_chunk_plain = try lz4_decoder.decodeConcatenatedChunksScratch(&lz4_frame_chunks, &lz4_join_scratch);
 _ = lz4_chunk_plain;
+var lz4_reusable_chunk_appended: std.ArrayList(u8) = .empty;
+defer lz4_reusable_chunk_appended.deinit(allocator);
+try lz4_reusable_chunk_appended.appendSlice(allocator, "prefix:");
+_ = try lz4_decoder.decodeConcatenatedChunksAppendExactSize(
+    &lz4_reusable_chunk_appended,
+    &lz4_frame_chunks,
+    &lz4_join_scratch,
+    lz4_native_size,
+);
 var lz4_incremental = vort.Lz4NativeIncrementalFrameDecoder.init(allocator);
 defer lz4_incremental.deinit();
 var lz4_incremental_out: ["payload payload".len]u8 = undefined;
@@ -725,6 +734,16 @@ _ = try vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
     &zstd_chunk_out,
     zstd_dict_set,
 );
+var zstd_reusable_chunk_appended: std.ArrayList(u8) = .empty;
+defer zstd_reusable_chunk_appended.deinit(allocator);
+try zstd_reusable_chunk_appended.appendSlice(allocator, "prefix:");
+_ = try zstd_decoder.decodeConcatenatedChunksAppendExactSizeWithDictionarySet(
+    &zstd_reusable_chunk_appended,
+    &zstd_chunks,
+    zstd_join,
+    zstd_dict_set,
+    zstd_stream_plain.len,
+);
 
 const zlib_bytes = try vort.encodeZlibFixedAlloc(allocator, "payload");
 defer allocator.free(zlib_bytes);
@@ -912,15 +931,17 @@ compressed input into an existing `ArrayList`, so containers can preserve their
 own prefixes/sidecars without constructing a reusable decoder just to avoid an
 alloc-returning API. `*AppendExactSize` variants additionally verify the decoded
 byte count before extending the destination, returning `SizeMismatch` for
-container-advertised lengths that do not match the stream. Incremental native
-decoders expose the shared `StepResult` contract: feed compressed bytes, provide
-caller-owned output slices, then call `finish()` when an exact EOF/size check
-matters. Direct-output paths are fastest when the caller supplies a large enough
-output slice; if a slice is too small for an atomic compressed block, the
-decoders intentionally fall back to bounded scratch and continue draining
-without losing correctness. Dictionary-set chunked APIs additionally accept
-caller-owned compressed join scratch so split input can be decoded without
-hidden global state.
+container-advertised lengths that do not match the stream. Reusable
+`NativeFrameDecoder` values expose the same append exact-size helpers, so callers
+can keep decoder-owned scratch capacity while still appending into their own
+output buffers. Incremental native decoders expose the shared `StepResult`
+contract: feed compressed bytes, provide caller-owned output slices, then call
+`finish()` when an exact EOF/size check matters. Direct-output paths are fastest
+when the caller supplies a large enough output slice; if a slice is too small
+for an atomic compressed block, the decoders intentionally fall back to bounded
+scratch and continue draining without losing correctness. Dictionary-set
+chunked APIs additionally accept caller-owned compressed join scratch so split
+input can be decoded without hidden global state.
 
 The focused library benchmark/gate tracks these public surfaces directly:
 
