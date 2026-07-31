@@ -40,6 +40,8 @@ EXPECTED_MODES = {
     "dictionary_set_chunked",
     "dictionary_set_reusable_plain",
     "dictionary_set_reusable",
+    "dictionary_set_direct_plain",
+    "dictionary_set_direct",
 }
 EXPECTED_CASES = {"text", "structured", "repetitive"}
 EXPECTED_EXTRA_ROWS = {
@@ -63,6 +65,10 @@ EXPECTED_EXTRA_ROWS = {
     ("lz4", "dictionary_set_reusable", "dictionary_set_reusable"),
     ("zstd", "dictionary_set_reusable_plain", "dictionary_set_reusable"),
     ("zstd", "dictionary_set_reusable", "dictionary_set_reusable"),
+    ("lz4", "dictionary_set_direct_plain", "dictionary_set_direct"),
+    ("lz4", "dictionary_set_direct", "dictionary_set_direct"),
+    ("zstd", "dictionary_set_direct_plain", "dictionary_set_direct"),
+    ("zstd", "dictionary_set_direct", "dictionary_set_direct"),
 }
 
 
@@ -195,6 +201,14 @@ def main() -> int:
             raise AssertionError(
                 f"expected {codec} reusable dictionary-set row to improve dictionary_set_reusable size: "
                 f"plain={reusable_plain['encoded_bytes']} dictionary_set={reusable_set['encoded_bytes']}"
+            )
+
+        direct_plain = row_by_identity[(codec, "dictionary_set_direct_plain", "dictionary_set_direct")]
+        direct_set = row_by_identity[(codec, "dictionary_set_direct", "dictionary_set_direct")]
+        if int(direct_set["encoded_bytes"]) >= int(direct_plain["encoded_bytes"]):
+            raise AssertionError(
+                f"expected {codec} direct dictionary-set row to improve dictionary_set_direct size: "
+                f"plain={direct_plain['encoded_bytes']} dictionary_set={direct_set['encoded_bytes']}"
             )
 
     print(f"native_library_bench_gate=ok rows={len(rows)} iterations={expected_iterations}")
