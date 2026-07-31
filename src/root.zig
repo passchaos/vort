@@ -1751,6 +1751,40 @@ test "root native incremental decoders reject truncated skippable metadata on fi
     try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().last_error_phase_name);
 }
 
+test "root native incremental decoders finish skippable-only streams with zero expected output" {
+    const lz4_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 6, "root-lz4-skippable-only");
+    defer std.testing.allocator.free(lz4_skip);
+    var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer lz4_decoder.deinit();
+    var lz4_output: [1]u8 = undefined;
+    const lz4_done = try lz4_decoder.step(lz4_skip, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_done.status);
+    try std.testing.expectEqual(lz4_skip.len, lz4_done.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_done.progress.output_written);
+    try std.testing.expectEqual(lz4_skip.len, lz4_decoder.diagnostics().frame_input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_decoder.diagnostics().output_written);
+    try lz4_decoder.finish();
+
+    const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 7, "root-zstd-skippable-only");
+    defer std.testing.allocator.free(zstd_skip);
+    var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer zstd_decoder.deinit();
+    var zstd_output: [1]u8 = undefined;
+    const zstd_done = try zstd_decoder.step(zstd_skip, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
+    try std.testing.expectEqual(zstd_skip.len, zstd_done.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_done.progress.output_written);
+    try std.testing.expectEqual(zstd_skip.len, zstd_decoder.diagnostics().frame_input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_decoder.diagnostics().output_written);
+    try zstd_decoder.finish();
+}
+
 test "root native incremental decoders handle consecutive split skippable frames" {
     const lz4_payload = "root-lz4-consecutive-skippables";
     const lz4_first_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 8, "root-lz4-first-skip");
