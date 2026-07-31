@@ -590,7 +590,45 @@ fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
     try stream.appendSlice(allocator, skip);
     try stream.appendSlice(allocator, second.frame);
 
+    const summary = try vort.zstdSummarizeNativeStream(stream.items);
+    try expect(summary.frame_count == 2);
+    try expect(summary.skippable_frame_count == 1);
+    try expect(summary.skippable_payload_bytes == "probe-nosize-set-zstd".len);
+    var iterator = vort.zstdIterateNativeStream(stream.items);
+    const first_element = (try iterator.next()) orelse return error.ZstdNativeDictionaryProbeMismatch;
+    const skip_element = (try iterator.next()) orelse return error.ZstdNativeDictionaryProbeMismatch;
+    const second_element = (try iterator.next()) orelse return error.ZstdNativeDictionaryProbeMismatch;
+    try expect((try iterator.next()) == null);
+    switch (first_element) {
+        .frame => |frame| try expect(frame.header.dictionary_id == first_dict.id),
+        .skippable => return error.ZstdNativeDictionaryProbeMismatch,
+    }
+    switch (skip_element) {
+        .frame => return error.ZstdNativeDictionaryProbeMismatch,
+        .skippable => |skippable| {
+            try expect(skippable.header.skippable_id == 4);
+            try expectEqualSlices("probe-nosize-set-zstd", skippable.payload);
+        },
+    }
+    switch (second_element) {
+        .frame => |frame| try expect(frame.header.dictionary_id == second_dict.id),
+        .skippable => return error.ZstdNativeDictionaryProbeMismatch,
+    }
+
     const expected = first_payload ++ second_payload;
+    const chunks = [_][]const u8{
+        stream.items[0..9],
+        stream.items[9 .. first.frame.len + 2],
+        stream.items[first.frame.len + 2 .. first.frame.len + skip.len + 4],
+        stream.items[first.frame.len + skip.len + 4 ..],
+    };
+    const join = try allocator.alloc(u8, stream.items.len);
+    defer allocator.free(join);
+    var chunked_output: [expected.len]u8 = undefined;
+    const chunked_written = try vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&chunks, join, &chunked_output, dictionary_set);
+    try expect(chunked_written == expected.len);
+    try expectEqualSlices(expected, &chunked_output);
+
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
         .expected_output_len = expected.len,
         .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
