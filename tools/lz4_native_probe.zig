@@ -167,6 +167,21 @@ fn checkFrameRoundTrips(allocator: std.mem.Allocator, case: Case) !void {
     const native_decoded = try vort.lz4DecodeNativeFrameAlloc(allocator, lib_frame);
     defer allocator.free(native_decoded);
     try expectPayload(case, native_decoded);
+    var lib_appended: std.ArrayList(u8) = .empty;
+    defer lib_appended.deinit(allocator);
+    try lib_appended.appendSlice(allocator, "prefix:");
+    const lib_appended_written = try vort.lz4DecodeFrameAppendExactSize(allocator, &lib_appended, lib_frame, case.payload.len);
+    if (lib_appended_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (lib_appended.items.len != "prefix:".len + case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, lib_appended.items[0.."prefix:".len], "prefix:")) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, lib_appended.items["prefix:".len..], case.payload)) return error.Lz4ProbeMismatch;
+    lib_appended.clearRetainingCapacity();
+    if (vort.lz4DecodeFrameAppendExactSize(allocator, &lib_appended, lib_frame, case.payload.len + 1)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.SizeMismatch => {},
+        else => return err,
+    }
 
     const native_frame = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, case.payload, .{
         .content_checksum = true,
@@ -177,6 +192,21 @@ fn checkFrameRoundTrips(allocator: std.mem.Allocator, case: Case) !void {
     const lib_decoded = try vort.lz4DecodeFrameAlloc(allocator, native_frame);
     defer allocator.free(lib_decoded);
     try expectPayload(case, lib_decoded);
+    var native_appended: std.ArrayList(u8) = .empty;
+    defer native_appended.deinit(allocator);
+    try native_appended.appendSlice(allocator, "prefix:");
+    const native_appended_written = try vort.lz4DecodeNativeFrameAppendExactSize(allocator, &native_appended, native_frame, case.payload.len);
+    if (native_appended_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (native_appended.items.len != "prefix:".len + case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, native_appended.items[0.."prefix:".len], "prefix:")) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, native_appended.items["prefix:".len..], case.payload)) return error.Lz4ProbeMismatch;
+    native_appended.clearRetainingCapacity();
+    if (vort.lz4DecodeNativeFrameAppendExactSize(allocator, &native_appended, native_frame, case.payload.len + 1)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.SizeMismatch => {},
+        else => return err,
+    }
 
     const shallow_chain_frame = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, case.payload, .{
         .content_checksum = false,
