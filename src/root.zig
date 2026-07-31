@@ -2108,6 +2108,76 @@ test "root native incremental direct-output waits across split block boundaries"
     try zstd_decoder.finish();
 }
 
+test "root native incremental direct-output reports checksum mismatches" {
+    const lz4_payload = ("root-lz4-direct-checksum-" ** 8) ** 8;
+    const lz4_block_frame = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, lz4_payload, .{
+        .content_checksum = false,
+        .include_content_size = true,
+        .block_checksum = true,
+    });
+    defer std.testing.allocator.free(lz4_block_frame);
+    const lz4_first_block = (try lz4InspectNativeFrameFirstBlock(lz4_block_frame)) orelse return error.CorruptFrame;
+    try std.testing.expect(lz4_first_block.block_checksum_offset != null);
+    var lz4_bad_block = try std.testing.allocator.dupe(u8, lz4_block_frame);
+    defer std.testing.allocator.free(lz4_bad_block);
+    lz4_bad_block[lz4_first_block.block_checksum_offset.?] ^= 0x01;
+
+    var lz4_block_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = lz4_payload.len,
+        .max_decoded_buffer_len = lz4_payload.len,
+    });
+    defer lz4_block_decoder.deinit();
+    var lz4_output: [lz4_payload.len]u8 = undefined;
+    try std.testing.expectError(error.ChecksumMismatch, lz4_block_decoder.step(lz4_bad_block, lz4_output[0..0]));
+    try std.testing.expectEqualSlices(u8, "ChecksumMismatch", lz4_block_decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_block_decoder.diagnostics().last_error_phase_name);
+
+    const lz4_content_frame = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, lz4_payload, .{
+        .content_checksum = true,
+        .include_content_size = false,
+        .block_checksum = true,
+    });
+    defer std.testing.allocator.free(lz4_content_frame);
+    var lz4_bad_content = try std.testing.allocator.dupe(u8, lz4_content_frame);
+    defer std.testing.allocator.free(lz4_bad_content);
+    lz4_bad_content[lz4_bad_content.len - 1] ^= 0x01;
+    var lz4_content_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = lz4_payload.len,
+        .max_decoded_buffer_len = lz4_payload.len,
+    });
+    defer lz4_content_decoder.deinit();
+    const lz4_ready = try lz4_content_decoder.step(lz4_bad_content, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_ready.status);
+    try std.testing.expectEqualSlices(u8, "direct_output", lz4_content_decoder.diagnostics().phase_name);
+    try std.testing.expectError(error.ChecksumMismatch, lz4_content_decoder.step("", &lz4_output));
+    try std.testing.expectEqualSlices(u8, "ChecksumMismatch", lz4_content_decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "direct_output", lz4_content_decoder.diagnostics().last_error_phase_name);
+
+    const zstd_payload = ("root-zstd-direct-checksum-" ** 8) ** 8;
+    const zstd_frame = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, zstd_payload, .{
+        .include_content_size = false,
+        .selection = .literal_only,
+        .content_checksum = true,
+    });
+    defer std.testing.allocator.free(zstd_frame.frame);
+    var zstd_bad_content = try std.testing.allocator.dupe(u8, zstd_frame.frame);
+    defer std.testing.allocator.free(zstd_bad_content);
+    zstd_bad_content[zstd_bad_content.len - 1] ^= 0x01;
+
+    var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = zstd_payload.len,
+        .max_decoded_buffer_len = zstd_payload.len,
+    });
+    defer zstd_decoder.deinit();
+    var zstd_output: [zstd_payload.len]u8 = undefined;
+    const zstd_ready = try zstd_decoder.step(zstd_bad_content, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_ready.status);
+    try std.testing.expectEqualSlices(u8, "direct_output", zstd_decoder.diagnostics().phase_name);
+    try std.testing.expectError(error.ChecksumMismatch, zstd_decoder.step("", &zstd_output));
+    try std.testing.expectEqualSlices(u8, "ChecksumMismatch", zstd_decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "direct_output", zstd_decoder.diagnostics().last_error_phase_name);
+}
+
 test "root native incremental direct-output paths round trip" {
     var lz4_payload: [4096]u8 = undefined;
     var state: u32 = 0x1020_3040;
