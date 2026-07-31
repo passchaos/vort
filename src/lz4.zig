@@ -22,6 +22,7 @@ const invalid_pos = std.math.maxInt(u32);
 // long repeat just behind many shallow four-byte hash hits; depth 16 keeps the
 // search cheap but avoids truncating those obvious wins.
 const max_chain_depth = 16;
+pub const native_max_chain_depth: u8 = max_chain_depth;
 const good_match_len = 64;
 const lazy_extra_gain = 1;
 
@@ -68,7 +69,7 @@ pub const NativeFrameOptions = struct {
     dictionary_id: ?u32 = null,
     /// Maximum hash-chain candidates to inspect per position. Lower values
     /// favor encode speed; the default keeps the deeper-ratio parser enabled.
-    chain_depth: u8 = max_chain_depth,
+    chain_depth: u8 = native_max_chain_depth,
 };
 
 pub const NativeDictionary = struct {

@@ -72,7 +72,7 @@ pub fn main(init: std.process.Init) !void {
         init.io,
         init.gpa,
         .chain_depth_default,
-        @as(vort.Lz4NativeFrameOptions, .{}).chain_depth,
+        vort.lz4NativeMaxChainDepth,
         options.iterations,
     ));
     try rows.append(init.gpa, try zstdMatchBudgetRow(init.io, init.gpa, .match_budget_0, 0, options.iterations));
@@ -447,7 +447,7 @@ fn smokeLz4ChainDepthBudget(allocator: std.mem.Allocator) !void {
     const default_depth = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, lz4_chain_depth_payload, .{
         .content_checksum = false,
         .block_checksum = true,
-        .chain_depth = @as(vort.Lz4NativeFrameOptions, .{}).chain_depth,
+        .chain_depth = vort.lz4NativeMaxChainDepth,
     });
     defer allocator.free(default_depth);
 

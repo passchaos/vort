@@ -51,6 +51,7 @@ pub const lz4EncodeSkippableFrameAppend = lz4.encodeSkippableFrameAppend;
 pub const lz4EncodeSkippableFrameIntoSlice = lz4.encodeSkippableFrameIntoSlice;
 pub const Lz4LibFrameOptions = lz4.LibFrameOptions;
 pub const Lz4NativeFrameOptions = lz4.NativeFrameOptions;
+pub const lz4NativeMaxChainDepth = lz4.native_max_chain_depth;
 pub const Lz4NativeFrameHeader = lz4.NativeFrameHeader;
 pub const Lz4NativeFrameBlockHeader = lz4.NativeFrameBlockHeader;
 pub const Lz4NativeFrameBlockSummary = lz4.NativeFrameBlockSummary;
@@ -971,6 +972,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4EncodeSkippableFrameIntoSlice;
     _ = Lz4LibFrameOptions;
     _ = Lz4NativeFrameOptions;
+    _ = lz4NativeMaxChainDepth;
     _ = Lz4NativeFrameHeader;
     _ = Lz4NativeFrameBlockHeader;
     _ = Lz4NativeFrameBlockSummary;
