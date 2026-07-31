@@ -6631,10 +6631,12 @@ fn rleSequenceCodeForValues(values: []const usize, bases: []const usize, bits: [
 
 fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) Error!?CompressedSequencePlan {
     // Keep the first compressed-table writer slice deliberately narrow. Literal
-    // lengths have no repeat-offset side effects, and the current tests/probes
-    // validate LL=FSE with OF/ML in simpler modes. Offset/match FSE emission can
-    // be enabled once we have equally focused coverage for those state streams.
-    if (kind != .literal) return null;
+    // lengths have no repeat-offset side effects. Offset tables are enabled
+    // only for absolute offsets (code extra bits > 1) so the compressed state
+    // stream cannot accidentally exercise the repeat-offset special cases.
+    // Match-length FSE emission can be enabled once it has equally focused
+    // coverage for that state stream.
+    if (kind == .match) return null;
     if (values.len < min_compressed_sequence_table_count or values.len > max_bootstrap_sequence_count) return null;
     const bases = sequenceTableBases(kind);
     const bits = sequenceTableBits(kind);
@@ -6648,6 +6650,7 @@ fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) 
             else => return err,
         };
         if (code > max_fse_compression_symbol) return null;
+        if (kind == .offset and of_bits[code] <= 1) return null;
         plan.codes[i] = code;
         counts[code] += 1;
         max_code = @max(max_code, code);
@@ -10824,6 +10827,65 @@ test "zstd sequence emitter supports compressed FSE literal-length table" {
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(literal_lens.len, section.sequence_count);
     try std.testing.expectEqual(@as(u8, 0x94), block[section.sequence_payload_offset]); // LL=FSE, OF/ML=RLE.
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, std_decoded);
+}
+
+test "zstd sequence emitter supports compressed FSE absolute-offset table" {
+    const literal_lens = [_]usize{ 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    const offsets = [_]usize{ 4, 8, 4, 12, 8, 4, 12, 8, 4, 8, 4, 12, 8, 4, 12, 8 };
+    const match_lens = [_]usize{ 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8 };
+    var literal_ends: [literal_lens.len]usize = undefined;
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    for (offsets, 0..) |offset, i| {
+        if (literal_lens[i] != 0) try payload.appendSlice(std.testing.allocator, "abcdefghijkl");
+        for (0..match_lens[i]) |_| {
+            try payload.append(std.testing.allocator, payload.items[payload.items.len - offset]);
+        }
+        literal_ends[i] = payload.items.len;
+    }
+
+    const literal_plan = (try planPredefinedSequenceValues(&literal_lens, &default_ll_symbols, 0)) orelse return error.CorruptFrame;
+    const offset_plan = (try planCompressedSequenceValues(&offsets, .offset)) orelse return error.CorruptFrame;
+    const plan: SequenceCombinedEmitPlan = .{
+        .literal = .{ .predefined = literal_plan },
+        .offset = .{ .compressed = offset_plan },
+        .match = .{ .rle = try sequenceCodeForValue(8, &ml_base, &ml_bits) },
+    };
+    try std.testing.expectEqual(SymbolMode.compressed, sequenceTableMode(plan.offset));
+    try std.testing.expect(offset_plan.table_payload_len > 0);
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.items.len, .{ .content_checksum = false });
+    try std.testing.expect(try emitSequenceCompressedBlockWithTablePlans(
+        std.testing.allocator,
+        &frame,
+        payload.items,
+        true,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        payload.items.len,
+        plan,
+    ));
+
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    const block = frame.items[first_block.payload_offset..][0..first_block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(literal_lens.len, section.sequence_count);
+    try std.testing.expectEqual(@as(u8, 0x24), block[section.sequence_payload_offset]); // LL=Predefined, OF=FSE, ML=RLE.
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(decoded);
