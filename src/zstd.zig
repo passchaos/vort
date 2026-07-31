@@ -4810,6 +4810,12 @@ const MixedMatchKindSet = struct {
             .repeated => self.repeated,
         };
     }
+
+    fn eql(self: MixedMatchKindSet, other: MixedMatchKindSet) bool {
+        return self.dictionary == other.dictionary and
+            self.duplicate == other.duplicate and
+            self.repeated == other.repeated;
+    }
 };
 
 const MixedMatchRequirement = union(enum) {
@@ -4962,6 +4968,52 @@ const MixedMatchLookaheadPlan = struct {
     payload_len: usize = 0,
 };
 
+const MixedMatchCandidateCacheEntry = struct {
+    literal_start: usize = 0,
+    allowed: MixedMatchKindSet = .{},
+    candidates: [3]MixedMatchCandidate = undefined,
+    count: usize = 0,
+};
+
+const MixedMatchCandidateCache = struct {
+    entries: [mixed_match_path_search_budget]MixedMatchCandidateCacheEntry = undefined,
+    len: usize = 0,
+    lookup_count: usize = 0,
+    hit_count: usize = 0,
+
+    fn candidatesAt(
+        self: *MixedMatchCandidateCache,
+        dictionary: []const u8,
+        block: []const u8,
+        literal_start: usize,
+        frame_offset: usize,
+        allowed: MixedMatchKindSet,
+        out: []MixedMatchCandidate,
+    ) Error!usize {
+        if (out.len < 3) return error.OutputTooSmall;
+        self.lookup_count += 1;
+        for (self.entries[0..self.len]) |entry| {
+            if (entry.literal_start == literal_start and entry.allowed.eql(allowed)) {
+                self.hit_count += 1;
+                @memcpy(out[0..entry.count], entry.candidates[0..entry.count]);
+                return entry.count;
+            }
+        }
+
+        const count = try mixedMatchCandidatesAtUncached(dictionary, block, literal_start, frame_offset, allowed, out);
+        if (self.len < self.entries.len) {
+            self.entries[self.len] = .{
+                .literal_start = literal_start,
+                .allowed = allowed,
+                .count = count,
+            };
+            @memcpy(self.entries[self.len].candidates[0..count], out[0..count]);
+            self.len += 1;
+        }
+        return count;
+    }
+};
+
 fn bestMixedCandidateLookaheadPlan(
     dictionary: []const u8,
     block: []const u8,
@@ -4987,7 +5039,8 @@ fn bestMixedMatchLookaheadPlan(
     required_second: MixedMatchRequirement,
 ) Error!?MixedMatchLookaheadPlan {
     var first_candidates: [3]MixedMatchCandidate = undefined;
-    const first_count = try mixedMatchCandidatesAt(dictionary, block, 0, frame_offset, allowed, first_candidates[0..]);
+    var candidate_cache: MixedMatchCandidateCache = .{};
+    const first_count = try candidate_cache.candidatesAt(dictionary, block, 0, frame_offset, allowed, first_candidates[0..]);
     if (first_count == 0) return null;
 
     const requirements: MixedMatchLookaheadRequirements = .{
@@ -4996,12 +5049,13 @@ fn bestMixedMatchLookaheadPlan(
     };
     var best: ?MixedMatchLookaheadPlan = null;
     for (first_candidates[0..first_count]) |candidate| {
-        const plan = try bestMixedCandidateLookaheadPlanFromFirst(
+        const plan = try bestMixedCandidateLookaheadPlanFromFirstWithCache(
             dictionary,
             block,
             frame_offset,
             allowed,
             requirements,
+            &candidate_cache,
             candidate,
         ) orelse continue;
         if (mixedMatchLookaheadPlanBetter(plan, best)) best = plan;
@@ -5017,6 +5071,27 @@ fn bestMixedCandidateLookaheadPlanFromFirst(
     requirements: ?MixedMatchLookaheadRequirements,
     first_candidate: MixedMatchCandidate,
 ) Error!?MixedMatchLookaheadPlan {
+    var candidate_cache: MixedMatchCandidateCache = .{};
+    return try bestMixedCandidateLookaheadPlanFromFirstWithCache(
+        dictionary,
+        block,
+        frame_offset,
+        allowed,
+        requirements,
+        &candidate_cache,
+        first_candidate,
+    );
+}
+
+fn bestMixedCandidateLookaheadPlanFromFirstWithCache(
+    dictionary: []const u8,
+    block: []const u8,
+    frame_offset: usize,
+    allowed: MixedMatchKindSet,
+    requirements: ?MixedMatchLookaheadRequirements,
+    candidate_cache: *MixedMatchCandidateCache,
+    first_candidate: MixedMatchCandidate,
+) Error!?MixedMatchLookaheadPlan {
     if (!allowed.contains(first_candidate.kind)) return null;
     var plan: MixedMatchLookaheadPlan = .{};
     var search_budget: usize = mixed_match_path_search_budget;
@@ -5027,6 +5102,7 @@ fn bestMixedCandidateLookaheadPlanFromFirst(
         frame_offset,
         allowed,
         requirements,
+        candidate_cache,
         first_candidate,
         &plan,
         0,
@@ -5043,6 +5119,7 @@ fn bestMixedCandidateLookaheadPlanFrom(
     frame_offset: usize,
     allowed: MixedMatchKindSet,
     requirements: ?MixedMatchLookaheadRequirements,
+    candidate_cache: *MixedMatchCandidateCache,
     candidate: MixedMatchCandidate,
     plan: *MixedMatchLookaheadPlan,
     depth: usize,
@@ -5073,7 +5150,7 @@ fn bestMixedCandidateLookaheadPlanFrom(
         // candidate graphs exhaust the small bootstrap budget.
         best = try finalizeMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements);
         var next_candidates: [3]MixedMatchCandidate = undefined;
-        const next_count = try mixedMatchCandidatesAt(dictionary, block, candidate.literal_end, frame_offset, allowed, next_candidates[0..]);
+        const next_count = try candidate_cache.candidatesAt(dictionary, block, candidate.literal_end, frame_offset, allowed, next_candidates[0..]);
         if (next_count == 0) {
             seen.* = previous_seen;
             return best;
@@ -5085,6 +5162,7 @@ fn bestMixedCandidateLookaheadPlanFrom(
                     frame_offset,
                     allowed,
                     requirements,
+                    candidate_cache,
                     next,
                     plan,
                     count,
@@ -5154,6 +5232,18 @@ fn mixedMatchLookaheadPlanBetter(candidate: MixedMatchLookaheadPlan, current: ?M
 }
 
 fn mixedMatchCandidatesAt(
+    dictionary: []const u8,
+    block: []const u8,
+    literal_start: usize,
+    frame_offset: usize,
+    allowed: MixedMatchKindSet,
+    out: []MixedMatchCandidate,
+) Error!usize {
+    var cache: MixedMatchCandidateCache = .{};
+    return try cache.candidatesAt(dictionary, block, literal_start, frame_offset, allowed, out);
+}
+
+fn mixedMatchCandidatesAtUncached(
     dictionary: []const u8,
     block: []const u8,
     literal_start: usize,
@@ -8403,6 +8493,34 @@ test "zstd mixed match lookahead explores non-greedy continuations" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "zstd mixed match candidate cache reuses per-position scans" {
+    const payload =
+        "bbeegfabcceeehaabcdfacefegahabdffgabcccfeggbcddffgah" ++
+        "ccccfeggbcddffgahceegfabcceeehaabcdfacefegahabdffgab" ++
+        "cccfeggbcddfechbcecececececece";
+    var cache: MixedMatchCandidateCache = .{};
+    var first: [3]MixedMatchCandidate = undefined;
+    var second: [3]MixedMatchCandidate = undefined;
+    const allowed: MixedMatchKindSet = .{
+        .dictionary = false,
+        .duplicate = true,
+        .repeated = true,
+    };
+    const first_count = try cache.candidatesAt(&.{}, payload, 70, 0, allowed, first[0..]);
+    const second_count = try cache.candidatesAt(&.{}, payload, 70, 0, allowed, second[0..]);
+    try std.testing.expectEqual(first_count, second_count);
+    try std.testing.expectEqual(@as(usize, 2), cache.lookup_count);
+    try std.testing.expectEqual(@as(usize, 1), cache.hit_count);
+    for (0..first_count) |i| {
+        try std.testing.expectEqual(first[i].kind, second[i].kind);
+        try std.testing.expectEqual(first[i].literal_len, second[i].literal_len);
+        try std.testing.expectEqual(first[i].offset, second[i].offset);
+        try std.testing.expectEqual(first[i].match_len, second[i].match_len);
+        try std.testing.expectEqual(first[i].literal_end, second[i].literal_end);
+        try std.testing.expectEqual(first[i].payload_len, second[i].payload_len);
+    }
 }
 
 test "zstd literal-only writer chooses shortest native match plan" {
