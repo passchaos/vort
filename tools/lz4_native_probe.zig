@@ -578,12 +578,33 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     if (!std.mem.eql(u8, expected, reusable_exact)) return error.Lz4ProbeMismatch;
     const reusable_scratch = try reusable.decodeConcatenatedChunksScratchWithDictionarySet(&chunks, join, dictionary_set);
     if (!std.mem.eql(u8, expected, reusable_scratch)) return error.Lz4ProbeMismatch;
+    const reusable_limited_scratch = try reusable.decodeConcatenatedChunksScratchLimitedWithDictionarySet(&chunks, join, expected.len, dictionary_set);
+    if (!std.mem.eql(u8, expected, reusable_limited_scratch)) return error.Lz4ProbeMismatch;
+    if (reusable.decodeConcatenatedChunksScratchLimitedWithDictionarySet(&chunks, join, expected.len - 1, dictionary_set)) |_| {
+        return error.Lz4ProbeExpectedOutputLimit;
+    } else |err| switch (err) {
+        error.OutputLimitExceeded => {},
+        else => return err,
+    }
     var reusable_appended: std.ArrayList(u8) = .empty;
     defer reusable_appended.deinit(allocator);
     try reusable_appended.appendSlice(allocator, "prefix:");
     const reusable_appended_written = try reusable.decodeConcatenatedChunksAppendWithDictionarySet(&reusable_appended, &chunks, join, dictionary_set);
     if (reusable_appended_written != expected.len or !std.mem.eql(u8, reusable_appended.items, "prefix:" ++ expected)) {
         return error.Lz4ProbeMismatch;
+    }
+    reusable_appended.clearRetainingCapacity();
+    try reusable_appended.appendSlice(allocator, "prefix:");
+    const reusable_limited_appended_written = try reusable.decodeConcatenatedChunksAppendLimitedWithDictionarySet(&reusable_appended, &chunks, join, expected.len, dictionary_set);
+    if (reusable_limited_appended_written != expected.len or !std.mem.eql(u8, reusable_appended.items, "prefix:" ++ expected)) {
+        return error.Lz4ProbeMismatch;
+    }
+    reusable_appended.clearRetainingCapacity();
+    if (reusable.decodeConcatenatedChunksAppendLimitedWithDictionarySet(&reusable_appended, &chunks, join, expected.len - 1, dictionary_set)) |_| {
+        return error.Lz4ProbeExpectedOutputLimit;
+    } else |err| switch (err) {
+        error.OutputLimitExceeded => {},
+        else => return err,
     }
 
     if (vort.lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySet(allocator, &chunks, join, vort.Lz4NativeDictionarySet.init(&.{first_dict}))) |missing| {
