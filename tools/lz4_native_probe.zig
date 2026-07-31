@@ -37,6 +37,7 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkSkippableOnlyStream(init.gpa);
     checked += 1;
+    checked += try checkInvalidFrameHeaders(init.gpa);
 
     try stdout.print("lz4_native_probe_ok cases={d}\n", .{checked});
     try stdout.flush();
@@ -433,6 +434,75 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
         },
     }
     if ((try iterator.next()) != null) return error.Lz4ProbeMismatch;
+}
+
+fn checkInvalidFrameHeaders(allocator: std.mem.Allocator) !usize {
+    const cases = [_]struct {
+        name: []const u8,
+        flg: u8,
+        bd: u8,
+        expected: anyerror,
+    }{
+        // FLG bit 1 is reserved by the LZ4 frame format. Compute a matching
+        // header checksum so this verifies reserved-bit handling rather than
+        // accidentally passing through the checksum-mismatch path.
+        .{ .name = "flg-reserved-bit", .flg = 0x62, .bd = 0x70, .expected = error.CorruptFrame },
+        .{ .name = "bd-reserved-bit", .flg = 0x60, .bd = 0x71, .expected = error.CorruptFrame },
+        .{ .name = "unsupported-version", .flg = 0x20, .bd = 0x70, .expected = error.UnsupportedVersion },
+    };
+
+    var checked: usize = 0;
+    for (cases) |case| {
+        const frame = try minimalHeaderOnlyFrame(allocator, case.flg, case.bd);
+        defer allocator.free(frame);
+        try expectNativeFrameError(allocator, frame, case.expected);
+        checked += 1;
+    }
+    return checked;
+}
+
+fn minimalHeaderOnlyFrame(allocator: std.mem.Allocator, flg: u8, bd: u8) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(allocator);
+    try frame.appendSlice(allocator, &.{ 0x04, 0x22, 0x4d, 0x18 });
+    const descriptor = [_]u8{ flg, bd };
+    try frame.appendSlice(allocator, &descriptor);
+    try frame.append(allocator, lz4DescriptorChecksum(&descriptor));
+    try frame.appendSlice(allocator, &.{ 0, 0, 0, 0 }); // End mark for otherwise header-only frames.
+    return try frame.toOwnedSlice(allocator);
+}
+
+fn lz4DescriptorChecksum(descriptor: []const u8) u8 {
+    return @truncate(std.hash.XxHash32.hash(0, descriptor) >> 8);
+}
+
+fn expectNativeFrameError(allocator: std.mem.Allocator, frame: []const u8, expected: anyerror) !void {
+    if (vort.lz4InspectNativeFrameHeader(frame)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    if (vort.lz4DecodedNativeFrameSize(frame)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    var output: [1]u8 = undefined;
+    if (vort.lz4DecodeNativeFrameInto(frame, &output)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    if (vort.lz4DecodeNativeFrameAlloc(allocator, frame)) |decoded| {
+        allocator.free(decoded);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    if (vort.lz4SummarizeNativeStream(frame)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    var iterator = vort.lz4IterateNativeStream(frame);
+    if (iterator.next()) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
 }
 
 fn expectPayload(case: Case, decoded: []const u8) !void {
