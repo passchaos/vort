@@ -485,21 +485,27 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
 
     const first = try vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, first_payload, options, dictionary_set, first_dict.id);
     defer allocator.free(first);
+    const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 3, "dict-set-metadata");
+    defer allocator.free(skip);
     const second = try vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, second_payload, options, dictionary_set, second_dict.id);
     defer allocator.free(second);
 
     var stream: std.ArrayList(u8) = .empty;
     defer stream.deinit(allocator);
     try stream.appendSlice(allocator, first);
+    try stream.appendSlice(allocator, skip);
     try stream.appendSlice(allocator, second);
 
     const summary = try vort.lz4SummarizeNativeStream(stream.items);
     if (summary.frame_count != 2) return error.Lz4ProbeMismatch;
+    if (summary.skippable_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (summary.skippable_payload_bytes != "dict-set-metadata".len) return error.Lz4ProbeSizeMismatch;
     if (summary.block_count != 2) return error.Lz4ProbeSizeMismatch;
     if (summary.compressed_block_count != 2) return error.Lz4ProbeMismatch;
 
     var iterator = vort.lz4IterateNativeStream(stream.items);
     const first_element = (try iterator.next()) orelse return error.Lz4ProbeMismatch;
+    const skip_element = (try iterator.next()) orelse return error.Lz4ProbeMismatch;
     const second_element = (try iterator.next()) orelse return error.Lz4ProbeMismatch;
     if ((try iterator.next()) != null) return error.Lz4ProbeMismatch;
 
@@ -507,6 +513,13 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
         .frame => |frame| frame,
         .skippable => return error.Lz4ProbeMismatch,
     };
+    switch (skip_element) {
+        .frame => return error.Lz4ProbeMismatch,
+        .skippable => |skippable| {
+            if (skippable.header.skippable_id != 3) return error.Lz4ProbeMismatch;
+            if (!std.mem.eql(u8, skippable.payload, "dict-set-metadata")) return error.Lz4ProbeMismatch;
+        },
+    }
     const second_frame = switch (second_element) {
         .frame => |frame| frame,
         .skippable => return error.Lz4ProbeMismatch,
@@ -529,11 +542,12 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     const expected = first_payload ++ second_payload;
     if (!std.mem.eql(u8, expected, decoded)) return error.Lz4ProbeMismatch;
 
+    const second_start = first.len + skip.len;
     const chunks = [_][]const u8{
         stream.items[0..5],
         stream.items[5 .. first.len + 3],
-        stream.items[first.len + 3 .. first.len + second.len / 2],
-        stream.items[first.len + second.len / 2 ..],
+        stream.items[first.len + 3 .. second_start + second.len / 2],
+        stream.items[second_start + second.len / 2 ..],
     };
     const join = try allocator.alloc(u8, stream.items.len);
     defer allocator.free(join);
