@@ -2544,6 +2544,92 @@ test "root native no-size dictionary-set streams diagnose expected size mismatch
     try std.testing.expectEqualSlices(u8, "output", zstd_too_large.diagnostics().last_error_phase_name);
 }
 
+test "root native no-size dictionary-set streams diagnose missing later dictionaries" {
+    const lz4_first_dict = Lz4NativeDictionary.init(0x5451, "abcdefghijklmnop");
+    const lz4_second_dict = Lz4NativeDictionary.init(0x5452, "QRSTUVWXYZabcdef");
+    const lz4_full_set = Lz4NativeDictionarySet.init(&.{ lz4_first_dict, lz4_second_dict });
+    const lz4_missing_set = Lz4NativeDictionarySet.init(&.{lz4_first_dict});
+    const lz4_first_payload = "abcdefghijklmnop-nosize-present-one";
+    const lz4_second_payload = "QRSTUVWXYZabcdef-nosize-missing-two";
+    const lz4_options: Lz4NativeFrameOptions = .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .block_checksum = true,
+    };
+    const lz4_first = try lz4EncodeNativeFrameWithDictionarySetAlloc(std.testing.allocator, lz4_first_payload, lz4_options, lz4_full_set, lz4_first_dict.id);
+    defer std.testing.allocator.free(lz4_first);
+    const lz4_second = try lz4EncodeNativeFrameWithDictionarySetAlloc(std.testing.allocator, lz4_second_payload, lz4_options, lz4_full_set, lz4_second_dict.id);
+    defer std.testing.allocator.free(lz4_second);
+    const lz4_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 6, "root-nosize-set-missing-lz4");
+    defer std.testing.allocator.free(lz4_skip);
+    var lz4_stream: std.ArrayList(u8) = .empty;
+    defer lz4_stream.deinit(std.testing.allocator);
+    try lz4_stream.appendSlice(std.testing.allocator, lz4_first);
+    try lz4_stream.appendSlice(std.testing.allocator, lz4_skip);
+    try lz4_stream.appendSlice(std.testing.allocator, lz4_second);
+    const lz4_expected = lz4_first_payload ++ lz4_second_payload;
+    var lz4_output: [lz4_expected.len]u8 = undefined;
+
+    var lz4_missing = Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, lz4_missing_set, .{
+        .expected_output_len = lz4_expected.len,
+        .max_decoded_buffer_len = @max(lz4_first_payload.len, lz4_second_payload.len),
+    });
+    defer lz4_missing.deinit();
+    // The first dictionary is available, so callers can drain the first no-size
+    // frame. The missing dictionary for the later frame must then be reported in
+    // the frame phase without being masked by the still-unsatisfied expected
+    // output length.
+    const lz4_initial = try lz4_missing.step(lz4_stream.items, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_initial.status);
+    const lz4_split = 5;
+    const lz4_first_out = try lz4_missing.step("", lz4_output[0..lz4_split]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_first_out.status);
+    try std.testing.expectError(error.NeedDictionary, lz4_missing.step("", lz4_output[lz4_split..]));
+    try std.testing.expectEqualSlices(u8, lz4_first_payload, lz4_output[0..lz4_first_payload.len]);
+    try std.testing.expectEqualSlices(u8, "NeedDictionary", lz4_missing.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_missing.diagnostics().last_error_phase_name);
+
+    const zstd_first_dict = ZstdNativeDictionary.init(0x6461, "abcdefghijklmnop");
+    const zstd_second_dict = ZstdNativeDictionary.init(0x6462, "QRSTUVWXYZabcdef");
+    const zstd_full_set = ZstdNativeDictionarySet.init(&.{ zstd_first_dict, zstd_second_dict });
+    const zstd_missing_set = ZstdNativeDictionarySet.init(&.{zstd_first_dict});
+    const zstd_first_payload = "pfx-abcdefghijklmnop-nosize-present-one";
+    const zstd_second_payload = "pfx-QRSTUVWXYZabcdef-nosize-missing-two";
+    const zstd_options: ZstdNativeFrameOptions = .{
+        .include_content_size = false,
+        .selection = .literal_only,
+        .content_checksum = true,
+    };
+    const zstd_first = try zstdEncodeNativeFrameWithDictionarySetAlloc(std.testing.allocator, zstd_first_payload, zstd_options, zstd_full_set, zstd_first_dict.id);
+    defer std.testing.allocator.free(zstd_first.frame);
+    const zstd_second = try zstdEncodeNativeFrameWithDictionarySetAlloc(std.testing.allocator, zstd_second_payload, zstd_options, zstd_full_set, zstd_second_dict.id);
+    defer std.testing.allocator.free(zstd_second.frame);
+    const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 6, "root-nosize-set-missing-zstd");
+    defer std.testing.allocator.free(zstd_skip);
+    var zstd_stream: std.ArrayList(u8) = .empty;
+    defer zstd_stream.deinit(std.testing.allocator);
+    try zstd_stream.appendSlice(std.testing.allocator, zstd_first.frame);
+    try zstd_stream.appendSlice(std.testing.allocator, zstd_skip);
+    try zstd_stream.appendSlice(std.testing.allocator, zstd_second.frame);
+    const zstd_expected = zstd_first_payload ++ zstd_second_payload;
+    var zstd_output: [zstd_expected.len]u8 = undefined;
+
+    var zstd_missing = ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(std.testing.allocator, zstd_missing_set, .{
+        .expected_output_len = zstd_expected.len,
+        .max_decoded_buffer_len = @max(zstd_first_payload.len, zstd_second_payload.len),
+    });
+    defer zstd_missing.deinit();
+    const zstd_initial = try zstd_missing.step(zstd_stream.items, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_initial.status);
+    const zstd_split = 5;
+    const zstd_first_out = try zstd_missing.step("", zstd_output[0..zstd_split]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_first_out.status);
+    try std.testing.expectError(error.NeedDictionary, zstd_missing.step("", zstd_output[zstd_split..]));
+    try std.testing.expectEqualSlices(u8, zstd_first_payload, zstd_output[0..zstd_first_payload.len]);
+    try std.testing.expectEqualSlices(u8, "NeedDictionary", zstd_missing.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_missing.diagnostics().last_error_phase_name);
+}
+
 test "root lz4 linked direct-output falls back for small output" {
     var lz4_payload: [64 * 1024 + 4096]u8 = undefined;
     var state: u32 = 0x1234_abcd;
