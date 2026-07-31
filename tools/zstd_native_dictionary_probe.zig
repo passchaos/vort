@@ -13,6 +13,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkDictionarySequenceHuffmanLiterals(init.gpa);
     checked += 1;
+    try checkDictionaryHighByteSequenceHuffmanLiterals(init.gpa);
+    checked += 1;
     try checkReusableDictionaryApis(init.gpa);
     checked += 1;
     try checkLaterBlockDictionaryMatch(init.gpa);
@@ -144,6 +146,59 @@ fn checkDictionarySequenceHuffmanLiterals(allocator: std.mem.Allocator) !void {
     });
     defer allocator.free(raw);
     try expect(encoded.frame.len < raw.len);
+}
+
+fn checkDictionaryHighByteSequenceHuffmanLiterals(allocator: std.mem.Allocator) !void {
+    var dict_bytes: [256]u8 = undefined;
+    var state: u32 = 0x1234_abcd;
+    for (&dict_bytes) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+
+    const dict = vort.ZstdNativeDictionary.init(0x4433_2213, &dict_bytes);
+    var payload_buffer: std.ArrayList(u8) = .empty;
+    defer payload_buffer.deinit(allocator);
+    try appendHighByteLiteralRun(allocator, &payload_buffer, 384, 0xfeed_beef);
+    try payload_buffer.appendSlice(allocator, &dict_bytes);
+    try appendHighByteLiteralRun(allocator, &payload_buffer, 384, 0x0bad_cafe);
+    const payload = payload_buffer.items;
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = 0,
+    };
+
+    const encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict);
+    defer allocator.free(encoded.frame);
+    try expect(encoded.mode == .literal_only);
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameAlloc(allocator, encoded.frame));
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(encoded.frame);
+    try expect(first_block.block_type == .compressed);
+    const literal_header = encoded.frame[first_block.payload_offset];
+    try expect((literal_header & 0x03) == 2); // compressed Huffman literals.
+    const huffman_header = encoded.frame[first_block.payload_offset + 3];
+    try expect(huffman_header < 128); // FSE-compressed Huffman weights, not direct weights.
+
+    const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
+    defer allocator.free(decoded);
+    try expectEqualSlices(payload, decoded);
+
+    const raw = try vort.zstdEncodeRawOrRleFrameWithOptionsAlloc(allocator, payload, .{
+        .content_checksum = false,
+        .dictionary_id = dict.id,
+    });
+    defer allocator.free(raw);
+    try expect(encoded.frame.len < raw.len);
+}
+
+fn appendHighByteLiteralRun(allocator: std.mem.Allocator, out: *std.ArrayList(u8), len: usize, seed: u32) !void {
+    var state = seed;
+    for (0..len) |_| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        try out.append(allocator, @intCast(129 + ((state >> 16) % 127)));
+    }
 }
 
 fn checkReusableDictionaryApis(allocator: std.mem.Allocator) !void {

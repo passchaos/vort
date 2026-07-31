@@ -131,7 +131,7 @@ Current interpretation:
   match lookahead and emission,
   RLE-literals sections for same-byte sequence literals,
   Huffman-compressed literals inside sequence blocks when the literal payload is compressible,
-  raw-block-cost-aware sequence selection, plus a file-backed multi-block
+  including high-byte FSE-Huffman sequence literals, raw-block-cost-aware sequence selection, plus a file-backed multi-block
   treeless Huffman writer case, then checks
   both system zstd decode and Vort native decode, with `size-zstd-native-hex`
   preflight checked before each native decode. The native decoder accepts
@@ -205,7 +205,7 @@ High-byte literal writer note:
 - The direct Huffman writer remains capped at
   `zstdNativeMaxDirectHuffmanSymbol == 128`, because Zstandard direct Huffman
   headers encode `symbol_count - 1` in one byte and cannot describe full
-  `0...255` weight tables. High-byte literal-only blocks now use
+  `0...255` weight tables. High-byte literal-only and sequence-literal blocks now use
   FSE-compressed Huffman weights when that candidate beats raw storage.
 - The high-byte path is validated through both decoders: system `zstd` and
   Vort's native Huffman literal cursor. The unit fixture now checks the parsed
@@ -213,9 +213,9 @@ High-byte literal writer note:
   `zstd_native_frame_probe` requires the same public library payload to encode
   as a compressed block rather than the old raw fallback.
 - Remaining high-byte work is quality-of-implementation rather than basic
-  capability: add broader corpus coverage for mixed high-byte/sequence blocks,
-  tune the new frequency-aware Huffman planner against real payloads, and
-  compare the generated FSE weight streams against more zstd levels/corpora.
+  capability: broaden real-corpus coverage for high-byte/sequence blocks, tune
+  the new frequency-aware Huffman planner against real payloads, and compare the
+  generated FSE weight streams against more zstd levels/corpora.
 
 Recommended next comparison steps:
 

@@ -6130,7 +6130,6 @@ fn emitSequenceHuffmanLiteralsSection(
     if (literals.items.len != info.regenerated_len) return error.CorruptFrame;
 
     const plan = smallHuffmanLiteralPlan(literals.items) orelse return false;
-    if (plan.max_symbol > native_max_direct_huffman_symbol) return false;
     var huffman_tree: std.ArrayList(u8) = .empty;
     defer huffman_tree.deinit(allocator);
     if (!try emitSmallHuffmanTree(allocator, &huffman_tree, plan)) return false;
