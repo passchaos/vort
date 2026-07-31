@@ -242,8 +242,37 @@ fn checkFrameRoundTrips(allocator: std.mem.Allocator, case: Case) !void {
         const linked_decoded = try vort.lz4DecodeNativeFrameAlloc(allocator, linked_native_frame);
         defer allocator.free(linked_decoded);
         try expectPayload(case, linked_decoded);
+        try checkLinkedFrameInspection(case, linked_native_frame);
         try checkLinkedDirectFallback(allocator, case, linked_native_frame);
     }
+}
+
+fn checkLinkedFrameInspection(case: Case, frame: []const u8) !void {
+    const header = try vort.lz4InspectNativeFrameHeader(frame);
+    if (header.block_independent) return error.Lz4ProbeMismatch;
+    if (!header.block_checksum or !header.content_checksum) return error.Lz4ProbeMismatch;
+    if (header.expected_content_size == null or header.expected_content_size.? != case.payload.len) return error.Lz4ProbeSizeMismatch;
+
+    const summary = try vort.lz4SummarizeNativeFrameBlocks(frame);
+    if (summary.block_count < 2) return error.Lz4ProbeSizeMismatch;
+    if (summary.compressed_block_count == 0) return error.Lz4ProbeMismatch;
+    if (summary.raw_block_count == 0) return error.Lz4ProbeMismatch;
+
+    var iterator = try vort.lz4IterateNativeFrameBlocks(frame);
+    var iterated_blocks: usize = 0;
+    var iterated_payload_bytes: usize = 0;
+    var saw_compressed = false;
+    var saw_raw = false;
+    while (try iterator.next()) |block| {
+        iterated_blocks += 1;
+        iterated_payload_bytes += block.payload_len;
+        saw_compressed = saw_compressed or block.is_compressed;
+        saw_raw = saw_raw or !block.is_compressed;
+        if (block.block_checksum_offset == null) return error.Lz4ProbeMismatch;
+    }
+    if (iterated_blocks != summary.block_count) return error.Lz4ProbeSizeMismatch;
+    if (iterated_payload_bytes != summary.payload_bytes) return error.Lz4ProbeSizeMismatch;
+    if (!saw_compressed or !saw_raw) return error.Lz4ProbeMismatch;
 }
 
 fn checkLinkedDirectFallback(allocator: std.mem.Allocator, case: Case, frame: []const u8) !void {
