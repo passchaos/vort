@@ -13,6 +13,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkSystemZstdHighByteFrame(init.gpa);
     checked += 1;
+    try checkSplitHeaderIncremental(init.gpa);
+    checked += 1;
     checked += try checkHandcraftedFrameValidation(init.gpa);
     checked += try checkHandcraftedHeaderAndSkippableValidation(init.gpa);
 
@@ -155,6 +157,32 @@ fn checkSystemZstdHighByteFrame(allocator: std.mem.Allocator) !void {
     try expectPrefixedPayload(appended.items, &payload);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, &frame, payload.len - 1));
+}
+
+fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {
+    const payload = "split-header-zstd-native";
+    const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    });
+    defer allocator.free(encoded.frame);
+
+    var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+    var output: [payload.len]u8 = undefined;
+    const partial = try decoder.step(encoded.frame[0..2], output[0..0]);
+    try expect(partial.status == .need_input);
+    try expect(partial.progress.input_read == 2);
+    try expect(partial.progress.output_written == 0);
+    try expectEqualSlices("frame", decoder.diagnostics().phase_name);
+
+    const done = try decoder.step(encoded.frame[2..], &output);
+    try expect(done.status == .done);
+    try expectEqualSlices(payload, &output);
+    try decoder.finish();
 }
 
 fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
