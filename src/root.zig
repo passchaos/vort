@@ -1705,6 +1705,52 @@ test "root native incremental decoders wait on split skippable headers" {
     try zstd_decoder.finish();
 }
 
+test "root native incremental decoders reject truncated skippable metadata on finish" {
+    const lz4_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 6, "root-lz4-truncated-skippable");
+    defer std.testing.allocator.free(lz4_skip);
+    const lz4_truncated = lz4_skip[0 .. lz4_skip.len - 1];
+
+    var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer lz4_decoder.deinit();
+    var lz4_output: [1]u8 = undefined;
+
+    // The full skippable header is present, but the advertised metadata body is
+    // one byte short. `step` must keep the stream resumable; `finish` is the
+    // caller's explicit signal that no more input is coming and should surface
+    // the truncation with frame-phase diagnostics.
+    const lz4_wait = try lz4_decoder.step(lz4_truncated, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, lz4_wait.status);
+    try std.testing.expectEqual(lz4_truncated.len, lz4_wait.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_wait.progress.output_written);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_decoder.diagnostics().phase_name);
+    try std.testing.expectError(error.TruncatedFrame, lz4_decoder.finish());
+    try std.testing.expectEqualSlices(u8, "TruncatedFrame", lz4_decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_decoder.diagnostics().last_error_phase_name);
+
+    const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 7, "root-zstd-truncated-skippable");
+    defer std.testing.allocator.free(zstd_skip);
+    const zstd_truncated = zstd_skip[0 .. zstd_skip.len - 1];
+
+    var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer zstd_decoder.deinit();
+    var zstd_output: [1]u8 = undefined;
+
+    const zstd_wait = try zstd_decoder.step(zstd_truncated, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, zstd_wait.status);
+    try std.testing.expectEqual(zstd_truncated.len, zstd_wait.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_wait.progress.output_written);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().phase_name);
+    try std.testing.expectError(error.TruncatedFrame, zstd_decoder.finish());
+    try std.testing.expectEqualSlices(u8, "TruncatedFrame", zstd_decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().last_error_phase_name);
+}
+
 test "root native incremental direct-output paths round trip" {
     var lz4_payload: [4096]u8 = undefined;
     var state: u32 = 0x1020_3040;
