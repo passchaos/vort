@@ -173,6 +173,26 @@ fn checkFrameRoundTrips(allocator: std.mem.Allocator, case: Case) !void {
     defer allocator.free(lib_decoded);
     try expectPayload(case, lib_decoded);
 
+    const shallow_chain_frame = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, case.payload, .{
+        .content_checksum = false,
+        .include_content_size = true,
+        .block_checksum = true,
+        .chain_depth = 4,
+    });
+    defer allocator.free(shallow_chain_frame);
+    const shallow_decoded = try vort.lz4DecodeNativeFrameAlloc(allocator, shallow_chain_frame);
+    defer allocator.free(shallow_decoded);
+    try expectPayload(case, shallow_decoded);
+    if (vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, case.payload, .{
+        .chain_depth = 255,
+    })) |invalid_frame| {
+        allocator.free(invalid_frame);
+        return error.Lz4ProbeExpectedInvalidBlockPlan;
+    } else |err| switch (err) {
+        error.InvalidBlockPlan => {},
+        else => return err,
+    }
+
     if (case.payload.len > 64 * 1024) {
         const linked_native_frame = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, case.payload, .{
             .content_checksum = true,
