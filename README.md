@@ -369,6 +369,8 @@ const lz4_blocks = try vort.lz4SummarizeNativeFrameBlocks(lz4_frame);
 _ = lz4_blocks.block_count;
 const lz4_stream = try vort.lz4SummarizeNativeStream(lz4_frame);
 _ = lz4_stream.frame_count;
+const lz4_native_size = try vort.lz4DecodedNativeFrameSize(lz4_frame);
+_ = try vort.lz4DecodedNativeFrameSizeLimited(lz4_frame, lz4_native_size);
 var lz4_block_iter = try vort.lz4IterateNativeFrameBlocks(lz4_frame);
 while (try lz4_block_iter.next()) |block| {
     _ = block.payload_len;

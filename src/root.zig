@@ -108,6 +108,8 @@ pub const lz4DecodeNativeFrameAppendLimited = lz4.decodeNativeFrameAppendLimited
 pub const lz4DecodeNativeFrameAllocLimited = lz4.decodeNativeFrameAllocLimited;
 pub const lz4DecodeNativeFrameAllocExactSize = lz4.decodeNativeFrameAllocExactSize;
 pub const lz4DecodeNativeFrameInto = lz4.decodeNativeFrameInto;
+pub const lz4DecodedNativeFrameSize = lz4.decodedNativeFrameSize;
+pub const lz4DecodedNativeFrameSizeLimited = lz4.decodedNativeFrameSizeLimited;
 pub const lz4DecodeNativeFrameAllocWithDictionary = lz4.decodeNativeFrameAllocWithDictionary;
 pub const lz4DecodeNativeFrameAppendWithDictionary = lz4.decodeNativeFrameAppendWithDictionary;
 pub const lz4DecodeNativeFrameAppendLimitedWithDictionary = lz4.decodeNativeFrameAppendLimitedWithDictionary;
@@ -166,6 +168,8 @@ pub const lz4DecodeNativeConcatenatedFrameAppendLimited = lz4.decodeNativeConcat
 pub const lz4DecodeNativeConcatenatedFrameAllocLimited = lz4.decodeNativeConcatenatedFrameAllocLimited;
 pub const lz4DecodeNativeConcatenatedFrameAllocExactSize = lz4.decodeNativeConcatenatedFrameAllocExactSize;
 pub const lz4DecodeNativeConcatenatedFrameInto = lz4.decodeNativeConcatenatedFrameInto;
+pub const lz4DecodedNativeConcatenatedFrameSize = lz4.decodedNativeConcatenatedFrameSize;
+pub const lz4DecodedNativeConcatenatedFrameSizeLimited = lz4.decodedNativeConcatenatedFrameSizeLimited;
 pub const lz4DecodeNativeConcatenatedFrameAllocWithDictionary = lz4.decodeNativeConcatenatedFrameAllocWithDictionary;
 pub const lz4DecodeNativeConcatenatedFrameAppendWithDictionary = lz4.decodeNativeConcatenatedFrameAppendWithDictionary;
 pub const lz4DecodeNativeConcatenatedFrameAppendLimitedWithDictionary = lz4.decodeNativeConcatenatedFrameAppendLimitedWithDictionary;
@@ -988,6 +992,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeNativeFrameAllocLimited;
     _ = lz4DecodeNativeFrameAllocExactSize;
     _ = lz4DecodeNativeFrameAllocWithDictionary;
+    _ = lz4DecodedNativeFrameSize;
+    _ = lz4DecodedNativeFrameSizeLimited;
     _ = lz4DecodeNativeFrameAppendWithDictionary;
     _ = lz4DecodeNativeFrameAppendLimitedWithDictionary;
     _ = lz4DecodeNativeFrameAllocLimitedWithDictionary;
@@ -1045,6 +1051,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeNativeConcatenatedFrameAppendLimited;
     _ = lz4DecodeNativeConcatenatedFrameAllocLimited;
     _ = lz4DecodeNativeConcatenatedFrameAllocExactSize;
+    _ = lz4DecodedNativeConcatenatedFrameSize;
+    _ = lz4DecodedNativeConcatenatedFrameSizeLimited;
     _ = lz4DecodeNativeConcatenatedFrameAllocWithDictionary;
     _ = lz4DecodeNativeConcatenatedFrameAppendWithDictionary;
     _ = lz4DecodeNativeConcatenatedFrameAppendLimitedWithDictionary;
@@ -1280,6 +1288,24 @@ test "root lz4 lib frame options round trip" {
     const native_with_options_decoded = try lz4DecodeNativeFrameAlloc(std.testing.allocator, native_with_options);
     defer std.testing.allocator.free(native_with_options_decoded);
     try std.testing.expectEqualSlices(u8, payload, native_with_options_decoded);
+    try std.testing.expectEqual(payload.len, try lz4DecodedNativeFrameSize(native_with_options));
+    try std.testing.expectEqual(payload.len, try lz4DecodedNativeFrameSizeLimited(native_with_options, payload.len));
+    try std.testing.expectError(error.OutputLimitExceeded, lz4DecodedNativeFrameSizeLimited(native_with_options, payload.len - 1));
+
+    const native_second = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, "second", .{
+        .include_content_size = false,
+        .content_checksum = false,
+        .block_size_id = .max64kb,
+    });
+    defer std.testing.allocator.free(native_second);
+    var native_stream: std.ArrayList(u8) = .empty;
+    defer native_stream.deinit(std.testing.allocator);
+    try native_stream.appendSlice(std.testing.allocator, native_with_options);
+    try native_stream.appendSlice(std.testing.allocator, native_second);
+    const native_stream_len = payload.len + "second".len;
+    try std.testing.expectEqual(native_stream_len, try lz4DecodedNativeConcatenatedFrameSize(native_stream.items));
+    try std.testing.expectEqual(native_stream_len, try lz4DecodedNativeConcatenatedFrameSizeLimited(native_stream.items, native_stream_len));
+    try std.testing.expectError(error.OutputLimitExceeded, lz4DecodedNativeConcatenatedFrameSizeLimited(native_stream.items, native_stream_len - 1));
     try std.testing.expect(native_encoded.len <= try lz4EncodedNativeFrameBound(payload.len));
     try std.testing.expect(native_encoded.len <= try lz4EncodedNativeFrameBoundWithOptions(payload.len, .{
         .block_size_id = .max64kb,
