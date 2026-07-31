@@ -298,6 +298,31 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
     try expect(reusable_set_into_result.mode == first.mode);
     try expectEqualSlices(first.frame, set_into[0..reusable_set_into_result.written]);
     try expectError(error.NeedDictionary, vort.zstdEncodeNativeFrameWithDictionarySetAlloc(allocator, first_payload, options, dictionary_set, 0xeeee));
+
+    const chunks = [_][]const u8{
+        stream.items[0..7],
+        stream.items[7 .. stream.items.len - 4],
+        stream.items[stream.items.len - 4 ..],
+    };
+    const join = try allocator.alloc(u8, stream.items.len);
+    defer allocator.free(join);
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const chunked_exact = try decoder.decodeConcatenatedChunksAllocExactSizeWithDictionarySet(&chunks, join, dictionary_set, decoded.len);
+    defer allocator.free(chunked_exact);
+    try expectEqualSlices(decoded, chunked_exact);
+    const chunked_scratch = try decoder.decodeConcatenatedChunksScratchWithDictionarySet(&chunks, join, dictionary_set);
+    try expectEqualSlices(decoded, chunked_scratch);
+    var chunked_appended: std.ArrayList(u8) = .empty;
+    defer chunked_appended.deinit(allocator);
+    try chunked_appended.appendSlice(allocator, "prefix:");
+    try expect((try decoder.decodeConcatenatedChunksAppendWithDictionarySet(&chunked_appended, &chunks, join, dictionary_set)) == decoded.len);
+    try expectEqualSlices("prefix:", chunked_appended.items[0.."prefix:".len]);
+    try expectEqualSlices(decoded, chunked_appended.items["prefix:".len..]);
+    const chunked_size = try decoder.decodedConcatenatedChunksSizeWithDictionarySet(&chunks, join, dictionary_set);
+    try expect(chunked_size == decoded.len);
+    const chunked_limited_size = try decoder.decodedConcatenatedChunksSizeLimitedWithDictionarySet(&chunks, join, decoded.len, dictionary_set);
+    try expect(chunked_limited_size == decoded.len);
 }
 
 fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {

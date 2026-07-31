@@ -157,6 +157,29 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
     const reusable_set_into_written = try set_encoder.encodeIntoSliceWithDictionarySet(first_payload, options, dictionary_set, dict.id, set_into);
     try expectEqualSlices(first, set_into[0..reusable_set_into_written]);
     try expectError(error.NeedDictionary, vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, first_payload, options, dictionary_set, 0xeeee));
+
+    const chunks = [_][]const u8{
+        stream.items[0..5],
+        stream.items[5 .. stream.items.len - 3],
+        stream.items[stream.items.len - 3 ..],
+    };
+    const join = try allocator.alloc(u8, stream.items.len);
+    defer allocator.free(join);
+    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const chunked_exact = try decoder.decodeConcatenatedChunksAllocExactSizeWithDictionarySet(&chunks, join, dictionary_set, expected.len);
+    defer allocator.free(chunked_exact);
+    try expectEqualSlices(expected, chunked_exact);
+    const chunked_scratch = try decoder.decodeConcatenatedChunksScratchWithDictionarySet(&chunks, join, dictionary_set);
+    try expectEqualSlices(expected, chunked_scratch);
+    var chunked_appended: std.ArrayList(u8) = .empty;
+    defer chunked_appended.deinit(allocator);
+    try chunked_appended.appendSlice(allocator, "prefix:");
+    try expect((try decoder.decodeConcatenatedChunksAppendWithDictionarySet(&chunked_appended, &chunks, join, dictionary_set)) == expected.len);
+    try expectEqualSlices("prefix:" ++ expected, chunked_appended.items);
+    var chunked_into: [expected.len]u8 = undefined;
+    try expect((try decoder.decodeConcatenatedChunksIntoSliceWithDictionarySet(&chunks, join, &chunked_into, dictionary_set)) == expected.len);
+    try expectEqualSlices(expected, &chunked_into);
 }
 
 fn checkReusableDictionaryApis(allocator: std.mem.Allocator) !void {
