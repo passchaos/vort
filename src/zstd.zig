@@ -1781,6 +1781,36 @@ pub const NativeFrameDecoder = struct {
         return try decodeRawOrRleFrameIntoWithDictionarySet(frame, output, dictionary_set);
     }
 
+    pub fn decodedSize(self: *NativeFrameDecoder, frame: []const u8) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameSize(frame);
+    }
+
+    pub fn decodedSizeLimited(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize) Error!usize {
+        _ = self;
+        return try rawOrRleDecodedSizeLimited(frame, max_output_len);
+    }
+
+    pub fn decodedSizeWithDictionary(self: *NativeFrameDecoder, frame: []const u8, dictionary: NativeDictionary) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameSizeWithDictionary(frame, dictionary);
+    }
+
+    pub fn decodedSizeLimitedWithDictionary(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary: NativeDictionary) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameSizeLimitedWithDictionary(frame, max_output_len, dictionary);
+    }
+
+    pub fn decodedSizeWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameSizeWithDictionarySet(frame, dictionary_set);
+    }
+
+    pub fn decodedSizeLimitedWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, max_output_len: usize, dictionary_set: NativeDictionarySet) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameSizeLimitedWithDictionarySet(frame, max_output_len, dictionary_set);
+    }
+
     pub const decodeConcatenatedAlloc = decodeAlloc;
     pub const decodeConcatenatedAllocExactSize = decodeAllocExactSize;
     pub const decodeConcatenatedAllocLimited = decodeAllocLimited;
@@ -1805,6 +1835,36 @@ pub const NativeFrameDecoder = struct {
     pub const decodeConcatenatedAppendWithDictionarySet = decodeAppendWithDictionarySet;
     pub const decodeConcatenatedAppendLimitedWithDictionarySet = decodeAppendLimitedWithDictionarySet;
     pub const decodeConcatenatedIntoSliceWithDictionarySet = decodeIntoSliceWithDictionarySet;
+
+    pub fn decodedConcatenatedSize(self: *NativeFrameDecoder, frames: []const u8) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameSize(frames);
+    }
+
+    pub fn decodedConcatenatedSizeLimited(self: *NativeFrameDecoder, frames: []const u8, max_output_len: usize) Error!usize {
+        _ = self;
+        return try rawOrRleDecodedSizeLimited(frames, max_output_len);
+    }
+
+    pub fn decodedConcatenatedSizeWithDictionary(self: *NativeFrameDecoder, frames: []const u8, dictionary: NativeDictionary) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameSizeWithDictionary(frames, dictionary);
+    }
+
+    pub fn decodedConcatenatedSizeLimitedWithDictionary(self: *NativeFrameDecoder, frames: []const u8, max_output_len: usize, dictionary: NativeDictionary) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameSizeLimitedWithDictionary(frames, max_output_len, dictionary);
+    }
+
+    pub fn decodedConcatenatedSizeWithDictionarySet(self: *NativeFrameDecoder, frames: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameSizeWithDictionarySet(frames, dictionary_set);
+    }
+
+    pub fn decodedConcatenatedSizeLimitedWithDictionarySet(self: *NativeFrameDecoder, frames: []const u8, max_output_len: usize, dictionary_set: NativeDictionarySet) Error!usize {
+        _ = self;
+        return try decodedRawOrRleFrameSizeLimitedWithDictionarySet(frames, max_output_len, dictionary_set);
+    }
 
     pub fn decodeConcatenatedChunksAlloc(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
         return try decodeRawOrRleFrameChunksAlloc(self.allocator, chunks, compressed_scratch);

@@ -2163,6 +2163,12 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     defer lz4_reusable_decoder.deinit();
     const lz4_reusable_scratch = try lz4_reusable_decoder.decodeConcatenatedScratchWithDictionarySet(lz4_stream.items, lz4_dictionary_set);
     try std.testing.expectEqualSlices(u8, lz4_expected, lz4_reusable_scratch);
+    try std.testing.expectEqual(lz4_first_payload.len, try lz4_reusable_decoder.decodedSizeWithDictionarySet(lz4_first, lz4_dictionary_set));
+    try std.testing.expectEqual(lz4_first_payload.len, try lz4_reusable_decoder.decodedSizeLimitedWithDictionarySet(lz4_first, lz4_first_payload.len, lz4_dictionary_set));
+    try std.testing.expectError(error.OutputLimitExceeded, lz4_reusable_decoder.decodedSizeLimitedWithDictionarySet(lz4_first, lz4_first_payload.len - 1, lz4_dictionary_set));
+    try std.testing.expectEqual(lz4_expected.len, try lz4_reusable_decoder.decodedConcatenatedSizeWithDictionarySet(lz4_stream.items, lz4_dictionary_set));
+    try std.testing.expectEqual(lz4_expected.len, try lz4_reusable_decoder.decodedConcatenatedSizeLimitedWithDictionarySet(lz4_stream.items, lz4_expected.len, lz4_dictionary_set));
+    try std.testing.expectError(error.OutputLimitExceeded, lz4_reusable_decoder.decodedConcatenatedSizeLimitedWithDictionarySet(lz4_stream.items, lz4_expected.len - 1, lz4_dictionary_set));
     var lz4_reusable_append: std.ArrayList(u8) = .empty;
     defer lz4_reusable_append.deinit(std.testing.allocator);
     try lz4_reusable_append.appendSlice(std.testing.allocator, "prefix:");
@@ -2288,6 +2294,12 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     defer zstd_reusable_decoder.deinit();
     const zstd_reusable_scratch = try zstd_reusable_decoder.decodeConcatenatedScratchWithDictionarySet(zstd_stream.items, zstd_dictionary_set);
     try std.testing.expectEqualSlices(u8, zstd_expected, zstd_reusable_scratch);
+    try std.testing.expectEqual(zstd_first_payload.len, try zstd_reusable_decoder.decodedSizeWithDictionarySet(zstd_first.frame, zstd_dictionary_set));
+    try std.testing.expectEqual(zstd_first_payload.len, try zstd_reusable_decoder.decodedSizeLimitedWithDictionarySet(zstd_first.frame, zstd_first_payload.len, zstd_dictionary_set));
+    try std.testing.expectError(error.OutputLimitExceeded, zstd_reusable_decoder.decodedSizeLimitedWithDictionarySet(zstd_first.frame, zstd_first_payload.len - 1, zstd_dictionary_set));
+    try std.testing.expectEqual(zstd_expected.len, try zstd_reusable_decoder.decodedConcatenatedSizeWithDictionarySet(zstd_stream.items, zstd_dictionary_set));
+    try std.testing.expectEqual(zstd_expected.len, try zstd_reusable_decoder.decodedConcatenatedSizeLimitedWithDictionarySet(zstd_stream.items, zstd_expected.len, zstd_dictionary_set));
+    try std.testing.expectError(error.OutputLimitExceeded, zstd_reusable_decoder.decodedConcatenatedSizeLimitedWithDictionarySet(zstd_stream.items, zstd_expected.len - 1, zstd_dictionary_set));
     var zstd_reusable_append: std.ArrayList(u8) = .empty;
     defer zstd_reusable_append.deinit(std.testing.allocator);
     try zstd_reusable_append.appendSlice(std.testing.allocator, "prefix:");
