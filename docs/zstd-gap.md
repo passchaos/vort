@@ -178,7 +178,9 @@ Current interpretation:
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
-  while remaining decodable through explicit dictionary APIs. Callers can inspect
+  while remaining decodable through explicit dictionary APIs. Public helpers can
+  now encode through a dictionary set by Dictionary_ID and compute dictionary- or
+  dictionary-set-aware frame bounds for caller-owned output buffers. Callers can inspect
   Dictionary_ID metadata before decode. The native writer also exposes a
   block-size option, and the public native stream/block iterators expose
   zero-allocation frame, block, and skippable-frame inspection so future
