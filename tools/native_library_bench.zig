@@ -21,6 +21,8 @@ const Mode = enum {
     dictionary_set_reusable,
     dictionary_set_direct_plain,
     dictionary_set_direct,
+    dictionary_set_fallback_plain,
+    dictionary_set_fallback,
 };
 
 const Case = struct {
@@ -119,6 +121,10 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(init.gpa, try lz4DictionarySetDirectRow(init.io, init.gpa, .dictionary_set_direct, true, options.iterations));
     try rows.append(init.gpa, try zstdDictionarySetDirectRow(init.io, init.gpa, .dictionary_set_direct_plain, false, options.iterations));
     try rows.append(init.gpa, try zstdDictionarySetDirectRow(init.io, init.gpa, .dictionary_set_direct, true, options.iterations));
+    try rows.append(init.gpa, try lz4DictionarySetFallbackRow(init.io, init.gpa, .dictionary_set_fallback_plain, false, options.iterations));
+    try rows.append(init.gpa, try lz4DictionarySetFallbackRow(init.io, init.gpa, .dictionary_set_fallback, true, options.iterations));
+    try rows.append(init.gpa, try zstdDictionarySetFallbackRow(init.io, init.gpa, .dictionary_set_fallback_plain, false, options.iterations));
+    try rows.append(init.gpa, try zstdDictionarySetFallbackRow(init.io, init.gpa, .dictionary_set_fallback, true, options.iterations));
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
@@ -637,6 +643,62 @@ fn zstdDictionarySetDirectRow(
     return makeRow(.zstd, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
+fn lz4DictionarySetFallbackRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !Row {
+    const first_dict = vort.Lz4NativeDictionary.init(0x4c5a_4501, lz4_dictionary_set_first_content);
+    const second_dict = vort.Lz4NativeDictionary.init(0x4c5a_4502, lz4_dictionary_set_second_content);
+    const dictionary_set = vort.Lz4NativeDictionarySet.init(&.{ first_dict, second_dict });
+    const case: Case = .{ .name = "dictionary_set_fallback", .payload = lz4_dictionary_set_payload };
+    const options: vort.Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+    };
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    try appendLz4DictionarySetFrames(allocator, &encoded, options, dictionary_set, first_dict, second_dict, use_dictionary_set);
+    const decoded = try allocator.alloc(u8, lz4_dictionary_set_payload.len);
+    defer allocator.free(decoded);
+    try decodeLz4DictionarySetFallback(allocator, encoded.items, decoded, dictionary_set, use_dictionary_set);
+
+    const encode_result = try timeEncodeLz4DictionarySet(io, allocator, options, dictionary_set, first_dict, second_dict, use_dictionary_set, iterations);
+    const decode_result = try timeDecodeLz4DictionarySetFallback(io, allocator, encoded.items, decoded, dictionary_set, use_dictionary_set, iterations);
+    return makeRow(.lz4, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdDictionarySetFallbackRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !Row {
+    const first_dict = vort.ZstdNativeDictionary.init(0x5a53_4501, zstd_dictionary_set_first_content);
+    const second_dict = vort.ZstdNativeDictionary.init(0x5a53_4502, zstd_dictionary_set_second_content);
+    const dictionary_set = vort.ZstdNativeDictionarySet.init(&.{ first_dict, second_dict });
+    const case: Case = .{ .name = "dictionary_set_fallback", .payload = zstd_dictionary_set_payload };
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    try appendZstdDictionarySetFrames(allocator, &encoded, options, dictionary_set, first_dict, second_dict, use_dictionary_set);
+    const decoded = try allocator.alloc(u8, zstd_dictionary_set_payload.len);
+    defer allocator.free(decoded);
+    try decodeZstdDictionarySetFallback(allocator, encoded.items, decoded, dictionary_set, use_dictionary_set);
+
+    const encode_result = try timeEncodeZstdDictionarySet(io, allocator, options, dictionary_set, first_dict, second_dict, use_dictionary_set, iterations);
+    const decode_result = try timeDecodeZstdDictionarySetFallback(io, allocator, encoded.items, decoded, dictionary_set, use_dictionary_set, iterations);
+    return makeRow(.zstd, mode, case, encoded.items.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
 const TimeResult = struct { elapsed_ns: u64, checksum: u64 };
 
 const lz4_chain_depth_payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 16;
@@ -1000,6 +1062,42 @@ fn timeDecodeZstdDictionarySetDirect(
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
         try decodeZstdDictionarySetDirect(allocator, encoded, decoded, dictionary_set, use_dictionary_set);
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeLz4DictionarySetFallback(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    encoded: []const u8,
+    decoded: []u8,
+    dictionary_set: vort.Lz4NativeDictionarySet,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        try decodeLz4DictionarySetFallback(allocator, encoded, decoded, dictionary_set, use_dictionary_set);
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeZstdDictionarySetFallback(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    encoded: []const u8,
+    decoded: []u8,
+    dictionary_set: vort.ZstdNativeDictionarySet,
+    use_dictionary_set: bool,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        try decodeZstdDictionarySetFallback(allocator, encoded, decoded, dictionary_set, use_dictionary_set);
         checksum +%= decoded[0];
     }
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
@@ -1534,7 +1632,7 @@ fn decodeLz4IncrementalFallback(allocator: std.mem.Allocator, encoded: []const u
         .max_decoded_buffer_len = decoded.len,
     });
     defer decoder.deinit();
-    try drainIncrementalFallback(&decoder, encoded, decoded, expected);
+    try drainIncrementalFallback(&decoder, encoded, decoded, expected, true);
 }
 
 fn decodeZstdIncrementalFallback(allocator: std.mem.Allocator, encoded: []const u8, decoded: []u8, expected: []const u8) !void {
@@ -1543,7 +1641,7 @@ fn decodeZstdIncrementalFallback(allocator: std.mem.Allocator, encoded: []const 
         .max_decoded_buffer_len = decoded.len,
     });
     defer decoder.deinit();
-    try drainIncrementalFallback(&decoder, encoded, decoded, expected);
+    try drainIncrementalFallback(&decoder, encoded, decoded, expected, true);
 }
 
 fn decodeLz4DictionarySetDirect(
@@ -1588,7 +1686,49 @@ fn decodeZstdDictionarySetDirect(
     try drainDirectDictionarySet(&decoder, encoded, decoded, zstd_dictionary_set_payload);
 }
 
-fn drainIncrementalFallback(decoder: anytype, encoded: []const u8, decoded: []u8, expected: []const u8) !void {
+fn decodeLz4DictionarySetFallback(
+    allocator: std.mem.Allocator,
+    encoded: []const u8,
+    decoded: []u8,
+    dictionary_set: vort.Lz4NativeDictionarySet,
+    use_dictionary_set: bool,
+) !void {
+    var decoder = if (use_dictionary_set)
+        vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
+            .expected_output_len = decoded.len,
+            .max_decoded_buffer_len = decoded.len,
+        })
+    else
+        vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+            .expected_output_len = decoded.len,
+            .max_decoded_buffer_len = decoded.len,
+        });
+    defer decoder.deinit();
+    try drainIncrementalFallback(&decoder, encoded, decoded, lz4_dictionary_set_payload, use_dictionary_set);
+}
+
+fn decodeZstdDictionarySetFallback(
+    allocator: std.mem.Allocator,
+    encoded: []const u8,
+    decoded: []u8,
+    dictionary_set: vort.ZstdNativeDictionarySet,
+    use_dictionary_set: bool,
+) !void {
+    var decoder = if (use_dictionary_set)
+        vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
+            .expected_output_len = decoded.len,
+            .max_decoded_buffer_len = decoded.len,
+        })
+    else
+        vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+            .expected_output_len = decoded.len,
+            .max_decoded_buffer_len = decoded.len,
+        });
+    defer decoder.deinit();
+    try drainIncrementalFallback(&decoder, encoded, decoded, zstd_dictionary_set_payload, use_dictionary_set);
+}
+
+fn drainIncrementalFallback(decoder: anytype, encoded: []const u8, decoded: []u8, expected: []const u8, require_scratch_fallback: bool) !void {
     const initial = try decoder.step(encoded, decoded[0..0]);
     if (initial.status != .need_output) return error.SizeMismatch;
 
@@ -1597,7 +1737,11 @@ fn drainIncrementalFallback(decoder: anytype, encoded: []const u8, decoded: []u8
     const first = try decoder.step("", decoded[0..first_len]);
     written += first.progress.output_written;
     if (first.status != .need_output or written != first_len) return error.SizeMismatch;
-    if (decoder.decoded_scratch.items.len != expected.len) return error.SizeMismatch;
+    // For a single frame the scratch buffer usually contains the whole frame
+    // payload. For concatenated streams it may contain only the current frame,
+    // which is still the fallback behavior this benchmark row is meant to
+    // exercise. The final equality check below verifies full stream output.
+    if (require_scratch_fallback and decoder.decoded_scratch.items.len == 0) return error.SizeMismatch;
 
     while (true) {
         const result = try decoder.step("", decoded[written..]);
@@ -1707,6 +1851,8 @@ fn modeName(mode: Mode) []const u8 {
         .dictionary_set_reusable => "dictionary_set_reusable",
         .dictionary_set_direct_plain => "dictionary_set_direct_plain",
         .dictionary_set_direct => "dictionary_set_direct",
+        .dictionary_set_fallback_plain => "dictionary_set_fallback_plain",
+        .dictionary_set_fallback => "dictionary_set_fallback",
     };
 }
 

@@ -43,6 +43,8 @@ EXPECTED_MODES = {
     "dictionary_set_reusable",
     "dictionary_set_direct_plain",
     "dictionary_set_direct",
+    "dictionary_set_fallback_plain",
+    "dictionary_set_fallback",
 }
 EXPECTED_CASES = {"text", "structured", "repetitive"}
 EXPECTED_EXTRA_ROWS = {
@@ -70,6 +72,10 @@ EXPECTED_EXTRA_ROWS = {
     ("lz4", "dictionary_set_direct", "dictionary_set_direct"),
     ("zstd", "dictionary_set_direct_plain", "dictionary_set_direct"),
     ("zstd", "dictionary_set_direct", "dictionary_set_direct"),
+    ("lz4", "dictionary_set_fallback_plain", "dictionary_set_fallback"),
+    ("lz4", "dictionary_set_fallback", "dictionary_set_fallback"),
+    ("zstd", "dictionary_set_fallback_plain", "dictionary_set_fallback"),
+    ("zstd", "dictionary_set_fallback", "dictionary_set_fallback"),
 }
 
 
@@ -210,6 +216,14 @@ def main() -> int:
             raise AssertionError(
                 f"expected {codec} direct dictionary-set row to improve dictionary_set_direct size: "
                 f"plain={direct_plain['encoded_bytes']} dictionary_set={direct_set['encoded_bytes']}"
+            )
+
+        fallback_plain = row_by_identity[(codec, "dictionary_set_fallback_plain", "dictionary_set_fallback")]
+        fallback_set = row_by_identity[(codec, "dictionary_set_fallback", "dictionary_set_fallback")]
+        if int(fallback_set["encoded_bytes"]) >= int(fallback_plain["encoded_bytes"]):
+            raise AssertionError(
+                f"expected {codec} fallback dictionary-set row to improve dictionary_set_fallback size: "
+                f"plain={fallback_plain['encoded_bytes']} dictionary_set={fallback_set['encoded_bytes']}"
             )
 
     print(f"native_library_bench_gate=ok rows={len(rows)} iterations={expected_iterations}")
