@@ -3599,6 +3599,11 @@ fn optionsWithNativeDictionary(options: NativeFrameOptions, dictionary: ?NativeD
 }
 
 pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return try encodeBlockWithChainDepthAlloc(allocator, input, max_chain_depth);
+}
+
+pub fn encodeBlockWithChainDepthAlloc(allocator: std.mem.Allocator, input: []const u8, chain_depth: u8) Error![]u8 {
+    if (chain_depth > max_chain_depth) return error.InvalidBlockPlan;
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var occupancy_bits: []u64 = &.{};
@@ -3624,11 +3629,16 @@ pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![
         if (occupancy_bits.len != 0) allocator.free(occupancy_bits);
         if (hash_table.len != 0) allocator.free(hash_table);
     }
-    _ = try encodeBlockInto(allocator, &out, input, hash_table, occupancy_bits, chain_table, max_chain_depth);
+    _ = try encodeBlockInto(allocator, &out, input, hash_table, occupancy_bits, chain_table, chain_depth);
     return out.toOwnedSlice(allocator);
 }
 
 pub fn encodeBlockWithPrefixAlloc(allocator: std.mem.Allocator, input: []const u8, prefix: []const u8) Error![]u8 {
+    return try encodeBlockWithPrefixAndChainDepthAlloc(allocator, input, prefix, max_chain_depth);
+}
+
+pub fn encodeBlockWithPrefixAndChainDepthAlloc(allocator: std.mem.Allocator, input: []const u8, prefix: []const u8, chain_depth: u8) Error![]u8 {
+    if (chain_depth > max_chain_depth) return error.InvalidBlockPlan;
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var occupancy_bits: []u64 = &.{};
@@ -3655,20 +3665,28 @@ pub fn encodeBlockWithPrefixAlloc(allocator: std.mem.Allocator, input: []const u
         if (hash_table.len != 0) allocator.free(hash_table);
     }
     const history = prefix[if (prefix.len > max_match_offset) prefix.len - max_match_offset else 0..];
-    _ = try encodeLinkedBlockInto(allocator, &out, history, input, hash_table, occupancy_bits, chain_table, max_chain_depth);
+    _ = try encodeLinkedBlockInto(allocator, &out, history, input, hash_table, occupancy_bits, chain_table, chain_depth);
     return out.toOwnedSlice(allocator);
 }
 
 pub fn encodeBlockIntoSlice(allocator: std.mem.Allocator, input: []const u8, output: []u8) Error!usize {
+    return try encodeBlockIntoSliceWithChainDepth(allocator, input, output, max_chain_depth);
+}
+
+pub fn encodeBlockIntoSliceWithChainDepth(allocator: std.mem.Allocator, input: []const u8, output: []u8, chain_depth: u8) Error!usize {
     var encoder = try BlockEncoder.init(allocator);
     defer encoder.deinit();
-    return try encoder.encodeIntoSlice(input, output);
+    return try encoder.encodeIntoSliceWithChainDepth(input, output, chain_depth);
 }
 
 pub fn encodeBlockWithPrefixIntoSlice(allocator: std.mem.Allocator, input: []const u8, prefix: []const u8, output: []u8) Error!usize {
+    return try encodeBlockWithPrefixIntoSliceAndChainDepth(allocator, input, prefix, output, max_chain_depth);
+}
+
+pub fn encodeBlockWithPrefixIntoSliceAndChainDepth(allocator: std.mem.Allocator, input: []const u8, prefix: []const u8, output: []u8, chain_depth: u8) Error!usize {
     var encoder = try BlockEncoder.init(allocator);
     defer encoder.deinit();
-    return try encoder.encodeWithPrefixIntoSlice(input, prefix, output);
+    return try encoder.encodeWithPrefixIntoSliceAndChainDepth(input, prefix, output, chain_depth);
 }
 
 pub fn decodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8, expected_size: ?usize) Error![]u8 {

@@ -221,9 +221,13 @@ pub const lz4EncodeNativeFrameAppendWithDictionarySet = lz4.encodeNativeFrameApp
 pub const lz4EncodeNativeFrameIntoSliceWithDictionary = lz4.encodeNativeFrameIntoSliceWithDictionary;
 pub const lz4EncodeNativeFrameIntoSliceWithDictionarySet = lz4.encodeNativeFrameIntoSliceWithDictionarySet;
 pub const lz4EncodeBlockAlloc = lz4.encodeBlockAlloc;
+pub const lz4EncodeBlockWithChainDepthAlloc = lz4.encodeBlockWithChainDepthAlloc;
 pub const lz4EncodeBlockWithPrefixAlloc = lz4.encodeBlockWithPrefixAlloc;
+pub const lz4EncodeBlockWithPrefixAndChainDepthAlloc = lz4.encodeBlockWithPrefixAndChainDepthAlloc;
 pub const lz4EncodeBlockIntoSlice = lz4.encodeBlockIntoSlice;
+pub const lz4EncodeBlockIntoSliceWithChainDepth = lz4.encodeBlockIntoSliceWithChainDepth;
 pub const lz4EncodeBlockWithPrefixIntoSlice = lz4.encodeBlockWithPrefixIntoSlice;
+pub const lz4EncodeBlockWithPrefixIntoSliceAndChainDepth = lz4.encodeBlockWithPrefixIntoSliceAndChainDepth;
 pub const lz4DecodeBlockAlloc = lz4.decodeBlockAlloc;
 pub const lz4DecodeBlockWithPrefixAlloc = lz4.decodeBlockWithPrefixAlloc;
 pub const lz4DecodeBlockAppend = lz4.decodeBlockAppend;
@@ -1129,9 +1133,13 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4EncodeNativeFrameAppendWithDictionarySet;
     _ = lz4EncodeNativeFrameIntoSliceWithDictionarySet;
     _ = lz4EncodeBlockAlloc;
+    _ = lz4EncodeBlockWithChainDepthAlloc;
     _ = lz4EncodeBlockWithPrefixAlloc;
+    _ = lz4EncodeBlockWithPrefixAndChainDepthAlloc;
     _ = lz4EncodeBlockIntoSlice;
+    _ = lz4EncodeBlockIntoSliceWithChainDepth;
     _ = lz4EncodeBlockWithPrefixIntoSlice;
+    _ = lz4EncodeBlockWithPrefixIntoSliceAndChainDepth;
     _ = lz4DecodeBlockAlloc;
     _ = lz4DecodeBlockWithPrefixAlloc;
     _ = lz4DecodeBlockAppend;
@@ -1381,6 +1389,19 @@ test "root lz4 lib frame options round trip" {
     var raw_encoded_into: [16]u8 = undefined;
     const raw_written = try lz4EncodeBlockIntoSlice(std.testing.allocator, "abcabcabca", &raw_encoded_into);
     try std.testing.expect(raw_written <= try lz4EncodedBlockBound(10));
+    const depth_encoded = try lz4EncodeBlockWithChainDepthAlloc(std.testing.allocator, "abcabcabca", 4);
+    defer std.testing.allocator.free(depth_encoded);
+    const depth_decoded = try lz4DecodeBlockAlloc(std.testing.allocator, depth_encoded, "abcabcabca".len);
+    defer std.testing.allocator.free(depth_decoded);
+    try std.testing.expectEqualSlices(u8, "abcabcabca", depth_decoded);
+    var depth_into: [16]u8 = undefined;
+    const depth_written = try lz4EncodeBlockIntoSliceWithChainDepth(std.testing.allocator, "abcabcabca", &depth_into, 4);
+    try std.testing.expectEqualSlices(u8, depth_encoded, depth_into[0..depth_written]);
+    const prefix_depth_encoded = try lz4EncodeBlockWithPrefixAndChainDepthAlloc(std.testing.allocator, "payload", "previous payload history", 4);
+    defer std.testing.allocator.free(prefix_depth_encoded);
+    const prefix_depth_decoded = try lz4DecodeBlockWithPrefixAlloc(std.testing.allocator, prefix_depth_encoded, "payload".len, "previous payload history");
+    defer std.testing.allocator.free(prefix_depth_decoded);
+    try std.testing.expectEqualSlices(u8, "payload", prefix_depth_decoded);
 }
 
 test "root zstd lib frame options round trip" {
