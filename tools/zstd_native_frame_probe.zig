@@ -475,6 +475,16 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_rle_block));
     checked += 1;
 
+    const oversized_raw_block = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x20, // single-segment, no checksum, one-byte content size.
+        0x00,
+        0x00, 0x08, 0x00, // raw block size exceeds the advertised block/window limit.
+    };
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameFirstBlock(&oversized_raw_block));
+    try expectNativeStreamOnlyError(allocator, &oversized_raw_block, error.CorruptFrame);
+    checked += 1;
+
     const repeat_without_previous_hex = "28b52ffd20042d0000096101fc01";
     var repeat_without_previous: [repeat_without_previous_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&repeat_without_previous, repeat_without_previous_hex);
