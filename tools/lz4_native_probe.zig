@@ -543,6 +543,53 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
         return error.Lz4ProbeMismatch;
     }
 
+    const invalid_match = try frameWithSingleBlockAndDictionary(
+        allocator,
+        0x61, // Dictionary_ID.
+        0x40,
+        4,
+        "\x10a\x00\x00",
+        "\x00\x00\x00\x00",
+        dict.id,
+    );
+    defer allocator.free(invalid_match);
+    const invalid_match_header = try vort.lz4InspectNativeFrameHeader(invalid_match);
+    if (invalid_match_header.dictionary_id != dict.id) return error.Lz4ProbeMismatch;
+    try expectNeedDictionary(vort.lz4DecodedNativeFrameSize(invalid_match));
+    try expectNeedDictionary(vort.lz4DecodedNativeFrameSizeWithDictionary(invalid_match, wrong));
+    var invalid_match_output: [payload.len]u8 = undefined;
+    try expectNeedDictionary(vort.lz4DecodeNativeFrameInto(invalid_match, &invalid_match_output));
+    try expectNeedDictionary(vort.lz4DecodeNativeFrameIntoWithDictionary(invalid_match, &invalid_match_output, wrong));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeFrameAlloc(allocator, invalid_match));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, invalid_match, wrong));
+    try expectError(error.InvalidMatch, vort.lz4DecodedNativeFrameSizeWithDictionary(invalid_match, dict));
+    try expectError(error.InvalidMatch, vort.lz4DecodeNativeFrameIntoWithDictionary(invalid_match, &invalid_match_output, dict));
+    try expectAllocError(allocator, error.InvalidMatch, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, invalid_match, dict));
+    var missing_invalid_match_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = invalid_match_output.len,
+        .max_decoded_buffer_len = invalid_match_output.len,
+    });
+    defer missing_invalid_match_decoder.deinit();
+    try expectNeedDictionary(missing_invalid_match_decoder.step(invalid_match, invalid_match_output[0..0]));
+    if (!std.mem.eql(u8, "NeedDictionary", missing_invalid_match_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", missing_invalid_match_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    var invalid_match_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+        .expected_output_len = invalid_match_output.len,
+        .max_decoded_buffer_len = invalid_match_output.len,
+    });
+    defer invalid_match_decoder.deinit();
+    try expectError(error.InvalidMatch, invalid_match_decoder.step(invalid_match, invalid_match_output[0..0]));
+    if (!std.mem.eql(u8, "InvalidMatch", invalid_match_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", invalid_match_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+
     const size_mismatch = try frameWithSingleBlockAndContentSizeAndDictionary(
         allocator,
         0x69, // Content Size + Dictionary_ID.
@@ -1463,6 +1510,26 @@ fn frameWithSingleBlockAndContentSize(
     return try frame.toOwnedSlice(allocator);
 }
 
+fn frameWithSingleBlockAndDictionary(
+    allocator: std.mem.Allocator,
+    flg: u8,
+    bd: u8,
+    block_header_value: u32,
+    payload: []const u8,
+    trailing: []const u8,
+    dictionary_id: u32,
+) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(allocator);
+    try appendLz4FrameHeaderWithDictionary(allocator, &frame, flg, bd, dictionary_id);
+    var block_header: [4]u8 = undefined;
+    std.mem.writeInt(u32, &block_header, block_header_value, .little);
+    try frame.appendSlice(allocator, &block_header);
+    try frame.appendSlice(allocator, payload);
+    try frame.appendSlice(allocator, trailing);
+    return try frame.toOwnedSlice(allocator);
+}
+
 fn frameWithSingleBlockAndContentSizeAndDictionary(
     allocator: std.mem.Allocator,
     flg: u8,
@@ -1497,6 +1564,16 @@ fn appendLz4FrameHeaderWithContentSize(allocator: std.mem.Allocator, frame: *std
     descriptor[0] = flg;
     descriptor[1] = bd;
     std.mem.writeInt(u64, descriptor[2..10], @intCast(content_size), .little);
+    try frame.appendSlice(allocator, &descriptor);
+    try frame.append(allocator, lz4DescriptorChecksum(&descriptor));
+}
+
+fn appendLz4FrameHeaderWithDictionary(allocator: std.mem.Allocator, frame: *std.ArrayList(u8), flg: u8, bd: u8, dictionary_id: u32) !void {
+    try frame.appendSlice(allocator, &.{ 0x04, 0x22, 0x4d, 0x18 });
+    var descriptor: [6]u8 = undefined;
+    descriptor[0] = flg;
+    descriptor[1] = bd;
+    std.mem.writeInt(u32, descriptor[2..6], dictionary_id, .little);
     try frame.appendSlice(allocator, &descriptor);
     try frame.append(allocator, lz4DescriptorChecksum(&descriptor));
 }

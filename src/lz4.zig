@@ -1093,7 +1093,11 @@ pub const NativeIncrementalFrameDecoder = struct {
                         };
                     };
 
-                    if (try self.beginDirectOutputIfSupported(frame_end)) {
+                    const direct_supported = self.beginDirectOutputIfSupported(frame_end) catch |err| {
+                        self.recordError(.frame, err);
+                        return err;
+                    };
+                    if (direct_supported) {
                         self.phase = .direct_output;
                     } else {
                         self.decodeCompleteFrame(self.frame_scratch.items[0..frame_end]) catch |err| {
