@@ -1658,6 +1658,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(native_allocation_dashboard_step);
     validation_json_smoke.step.dependOn(native_allocation_smoke_step);
     validation_json_smoke.step.dependOn(native_allocation_negative_smoke_step);
+    validation_json_smoke.step.dependOn(native_codec_probes_dashboard_step);
     validation_json_smoke.step.dependOn(png_scratch_report_dashboard_step);
     const validation_json_smoke_step = b.step("run-validation-json-smoke", "Validate CLI and report JSON schema outputs");
     validation_json_smoke_step.dependOn(&validation_json_smoke.step);
@@ -1674,6 +1675,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.step.dependOn(native_allocation_dashboard_step);
     validation_json_dashboard.step.dependOn(native_allocation_smoke_step);
     validation_json_dashboard.step.dependOn(native_allocation_negative_smoke_step);
+    validation_json_dashboard.step.dependOn(native_codec_probes_dashboard_step);
     validation_json_dashboard.step.dependOn(png_scratch_report_dashboard_step);
     const validation_json_dashboard_step = b.step("run-validation-json-dashboard", "Write validation JSON schema smoke summary to zig-out");
     validation_json_dashboard_step.dependOn(&validation_json_dashboard.step);

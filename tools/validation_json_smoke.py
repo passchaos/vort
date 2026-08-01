@@ -97,6 +97,7 @@ def main() -> int:
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
         decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
+        native_codec_probes_path = ROOT / "zig-out" / "vort-native-codec-probes.json"
         zlib_relaxed_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.json"
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
         native_allocation_smoke_path = ROOT / "zig-out" / "vort-native-allocation-smoke.json"
@@ -193,6 +194,14 @@ def main() -> int:
         assert python_zlib_diff["cli_successes"] >= 1
         assert python_zlib_diff["expected_failures"] >= 1
         validate_value_against_manifest(python_zlib_diff, schemas_def)
+        native_codec_probes = json.loads(native_codec_probes_path.read_text())
+        assert native_codec_probes["schema"] == "vort.native_codec_probes"
+        assert native_codec_probes["schema_version"] == 1
+        assert native_codec_probes["ok"] is True
+        assert native_codec_probes["probe_count"] == 4
+        assert native_codec_probes["total_cases"] >= 4
+        assert all(probe["ok"] is True for probe in native_codec_probes["probes"])
+        validate_value_against_manifest(native_codec_probes, schemas_def)
         zlib_relaxed = json.loads(zlib_relaxed_path.read_text())
         assert zlib_relaxed["schema"] == "vort.zlib_relaxed_report"
         assert zlib_relaxed["schema_version"] >= 2
@@ -715,6 +724,7 @@ def main() -> int:
                 dashboard_producers_required_smoke["schema"],
                 decode_stage["schema"],
                 python_zlib_diff["schema"],
+                native_codec_probes["schema"],
                 zlib_relaxed["schema"],
                 png_scratch["schema"],
                 fuzz_report["schema"],

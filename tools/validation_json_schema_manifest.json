@@ -2136,6 +2136,39 @@
         "present": "bool"
       }
     },
+    "vort.native_codec_probes": {
+      "count_rules": {
+        "probe_count": {
+          "collection": "probes"
+        }
+      },
+      "fields": {
+        "ok": "bool",
+        "probe_count": "int",
+        "probes": "list",
+        "schema": "str",
+        "schema_version": "int",
+        "total_cases": "int"
+      },
+      "item_collection": "probes",
+      "item_enums": {
+        "label": [
+          "lz4-native-probe",
+          "lz4-native-dictionary-probe",
+          "zstd-native-frame-probe",
+          "zstd-native-dictionary-probe"
+        ]
+      },
+      "item_fields": {
+        "cases": "int",
+        "executable": "str",
+        "label": "str",
+        "marker": "str",
+        "ok": "bool",
+        "output": "str",
+        "returncode": "int"
+      }
+    },
     "vort.png_scratch_report": {
       "count_rules": {
         "case_count": {
@@ -2437,6 +2470,7 @@
           "vort.gzip_header_info",
           "vort.header_inspect_required_workflows",
           "vort.header_inspect_smoke",
+          "vort.native_codec_probes",
           "vort.native_tier_range_corpus_discovery",
           "vort.png_scratch_report",
           "vort.python_zlib_diff_smoke",

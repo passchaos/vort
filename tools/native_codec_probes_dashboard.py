@@ -86,6 +86,7 @@ def main() -> int:
     ]
     summary: dict[str, object] = {
         "schema": "vort.native_codec_probes",
+        "schema_version": 1,
         "ok": all(bool(probe["ok"]) for probe in probes),
         "probe_count": len(probes),
         "total_cases": sum(int(probe["cases"] or 0) for probe in probes),

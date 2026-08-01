@@ -1329,6 +1329,68 @@ Example:
 }
 ```
 
+## `vort.native_codec_probes`
+
+Produced by:
+
+```sh
+zig build run-native-codec-probes-dashboard
+python3 tools/native_codec_probes_dashboard.py --json zig-out/vort-native-codec-probes.json --markdown zig-out/vort-native-codec-probes.md zig-out/bin/lz4-native-probe zig-out/bin/lz4-native-dictionary-probe zig-out/bin/zstd-native-frame-probe zig-out/bin/zstd-native-dictionary-probe
+```
+
+This schema summarizes the library-level native LZ4/Zstd probes and retains the
+case counts from the frame and dictionary probe executables.
+
+Example:
+
+```json
+{
+  "schema": "vort.native_codec_probes",
+  "schema_version": 1,
+  "ok": true,
+  "probe_count": 4,
+  "total_cases": 110,
+  "probes": [
+    {
+      "label": "lz4-native-probe",
+      "executable": "zig-out/bin/lz4-native-probe",
+      "ok": true,
+      "returncode": 0,
+      "cases": 40,
+      "marker": "lz4_native_probe",
+      "output": "lz4_native_probe_ok cases=40\n"
+    },
+    {
+      "label": "lz4-native-dictionary-probe",
+      "executable": "zig-out/bin/lz4-native-dictionary-probe",
+      "ok": true,
+      "returncode": 0,
+      "cases": 8,
+      "marker": "lz4_native_dictionary_probe",
+      "output": "lz4_native_dictionary_probe_ok cases=8\n"
+    },
+    {
+      "label": "zstd-native-frame-probe",
+      "executable": "zig-out/bin/zstd-native-frame-probe",
+      "ok": true,
+      "returncode": 0,
+      "cases": 40,
+      "marker": "zstd_native_frame_probe",
+      "output": "zstd_native_frame_probe_ok cases=40\n"
+    },
+    {
+      "label": "zstd-native-dictionary-probe",
+      "executable": "zig-out/bin/zstd-native-dictionary-probe",
+      "ok": true,
+      "returncode": 0,
+      "cases": 22,
+      "marker": "zstd_native_dictionary_probe",
+      "output": "zstd_native_dictionary_probe_ok cases=22\n"
+    }
+  ]
+}
+```
+
 ## `vort.dashboard_index`
 
 Produced by:
