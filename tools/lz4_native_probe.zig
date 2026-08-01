@@ -1256,8 +1256,8 @@ fn checkLibLz4GeneratedLibraryFrame(
 
     // Pure library differential: liblz4 writes the compatibility frame through
     // Vort's library wrapper, then the dependency-free native decoder must
-    // agree across one-shot, caller-buffer, reusable, append, and bounded-size
-    // public APIs. This avoids routing the oracle through the CLI.
+    // agree across one-shot, caller-buffer, reusable, append, incremental, and
+    // bounded-size public APIs. This avoids routing the oracle through the CLI.
     const lib_decoded = try vort.lz4DecodeFrameAlloc(allocator, frame);
     defer allocator.free(lib_decoded);
     try expectPayload(case, lib_decoded);
@@ -1318,6 +1318,49 @@ fn checkLibLz4GeneratedLibraryFrame(
     if (!std.mem.eql(u8, appended.items["prefix:".len..], case.payload)) return error.Lz4ProbeMismatch;
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&appended, frame, case.payload.len - 1));
+
+    try checkLibLz4GeneratedIncrementalFrame(allocator, case, frame);
+}
+
+fn checkLibLz4GeneratedIncrementalFrame(allocator: std.mem.Allocator, case: Case, frame: []const u8) !void {
+    var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = case.payload.len,
+        .max_decoded_buffer_len = case.payload.len,
+    });
+    defer decoder.deinit();
+
+    const output = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    var status: vort.StepResult.Status = .need_input;
+
+    while (status != .done) {
+        const input_chunk_len: usize = if (input_offset < frame.len) @min(frame.len - input_offset, 13) else 0;
+        const remaining_output = output.len - output_offset;
+        const output_chunk_len: usize = if (remaining_output == 0) 0 else @min(remaining_output, 127);
+        const result = try decoder.step(
+            frame[input_offset..][0..input_chunk_len],
+            output[output_offset..][0..output_chunk_len],
+        );
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        status = result.status;
+
+        switch (status) {
+            .need_input => {
+                if (input_offset >= frame.len) return error.Lz4ProbeMismatch;
+            },
+            .need_output => {
+                if (output_offset >= output.len) return error.Lz4ProbeMismatch;
+            },
+            .done => {},
+        }
+    }
+
+    if (input_offset != frame.len or output_offset != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    try expectPayload(case, output);
+    try decoder.finish();
 }
 
 fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {
