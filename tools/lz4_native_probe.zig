@@ -682,6 +682,19 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     }
 
     const missing_set = vort.Lz4NativeDictionarySet.init(&.{first_dict});
+    try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionarySet(stream.items, missing_set));
+    try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameSizeLimitedWithDictionarySet(stream.items, expected.len, missing_set));
+    var missing_output: [expected.len]u8 = undefined;
+    try expectNeedDictionary(vort.lz4DecodeNativeConcatenatedFrameIntoWithDictionarySet(stream.items, &missing_output, missing_set));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(allocator, stream.items, missing_set));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySetExactSize(allocator, stream.items, missing_set, expected.len));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameAllocLimitedWithDictionarySet(allocator, stream.items, expected.len, missing_set));
+    try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(&chunks, join, missing_set));
+    try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet(&chunks, join, expected.len, missing_set));
+    try expectNeedDictionary(vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&chunks, join, &missing_output, missing_set));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySet(allocator, &chunks, join, missing_set));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySetExactSize(allocator, &chunks, join, missing_set, expected.len));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameChunksAllocWithDictionarySetLimited(allocator, &chunks, join, missing_set, expected.len));
     if (reusable.decodeConcatenatedChunksAllocWithDictionarySet(&chunks, join, missing_set)) |missing| {
         allocator.free(missing);
         return error.Lz4ProbeExpectedFrameError;
