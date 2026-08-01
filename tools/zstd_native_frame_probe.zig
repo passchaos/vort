@@ -791,6 +791,15 @@ fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !u
     } else |err| if (err != error.CorruptFrame) return err;
     checked += 1;
 
+    const reserved_then_skippable = try std.mem.concat(allocator, u8, &.{ &reserved_descriptor_bit, leading_skippable });
+    defer allocator.free(reserved_then_skippable);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(reserved_then_skippable));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(reserved_then_skippable, &stream_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, reserved_then_skippable));
+    try expectError(error.CorruptFrame, vort.zstdSummarizeNativeStream(reserved_then_skippable));
+    try expectStreamIteratorError(reserved_then_skippable, error.CorruptFrame);
+    checked += 1;
+
     return checked;
 }
 
