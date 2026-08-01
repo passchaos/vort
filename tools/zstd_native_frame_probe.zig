@@ -23,6 +23,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkRepeatOffsetZeroLiteralSecondSelector(init.gpa);
     checked += 1;
+    try checkRepeatOffsetLiteralZerothSelector(init.gpa);
+    checked += 1;
     try checkRepeatOffsetLiteralFirstSelector(init.gpa);
     checked += 1;
     try checkRepeatOffsetLiteralSecondSelector(init.gpa);
@@ -542,6 +544,43 @@ fn checkRepeatOffsetZeroLiteralSecondSelector(allocator: std.mem.Allocator) !voi
     defer allocator.free(decoded);
     try expectEqualSlices("abcdefghabcdefgh", decoded);
     var output: [16]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameInto(&frame, &output);
+    try expect(written == decoded.len);
+    try expectEqualSlices(decoded, output[0..written]);
+}
+
+fn checkRepeatOffsetLiteralZerothSelector(allocator: std.mem.Allocator) !void {
+    // With literal_len>0, OF code 0 selects rep0 directly. The current frame
+    // starts with the default rep0=1, emits two raw literals, then uses an
+    // overlapping one-byte match to fill the tail. This complements the
+    // positive-literal rep1/rep2 fixtures and keeps all three non-shifted
+    // repeat selectors visible in the public frame probe.
+    const frame_hex = "28b52ffd201240000061626364656667684d000010696a015402000501";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .raw);
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+    try expect(second_block.block_type == .compressed);
+    try expect(second_block.last);
+    try expect(modes.literals_kind == .raw);
+    try expect(modes.regenerated_literals_size == 2);
+    try expect(modes.sequence_count == 1);
+    try expect(modes.literal_length_mode == .rle);
+    try expect(modes.offset_mode == .rle);
+    try expect(modes.match_length_mode == .rle);
+
+    const expected = "abcdefghi" ++ ("j" ** 9);
+    const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+    defer allocator.free(lib_decoded);
+    try expectEqualSlices(expected, lib_decoded);
+
+    const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(decoded);
+    try expectEqualSlices(expected, decoded);
+    var output: [expected.len]u8 = undefined;
     const written = try vort.zstdDecodeNativeFrameInto(&frame, &output);
     try expect(written == decoded.len);
     try expectEqualSlices(decoded, output[0..written]);
