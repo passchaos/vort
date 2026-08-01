@@ -136,6 +136,41 @@ fn checkNoSizeCompressedBlockLimits(allocator: std.mem.Allocator) !void {
     try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAllocLimited(allocator, truncated_checksum, payload.len));
     try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(truncated_checksum, payload.len - 1));
     try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeFrameAllocLimited(allocator, truncated_checksum, payload.len - 1));
+
+    const small_block_len = 1024;
+    const multi_payload = try allocator.alloc(u8, small_block_len * 2);
+    defer allocator.free(multi_payload);
+    @memset(multi_payload[0..small_block_len], 'a');
+    @memset(multi_payload[small_block_len..], 'b');
+
+    const multi = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, multi_payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .include_content_size = false,
+        .block_size_max = small_block_len,
+    });
+    defer allocator.free(multi.frame);
+    try expect(multi.mode == .literal_only);
+    const multi_header = try vort.zstdInspectNativeFrameHeader(multi.frame);
+    try expect(multi_header.content_size == null);
+    const multi_summary = try vort.zstdSummarizeNativeFrameBlocks(multi.frame);
+    try expect(multi_summary.block_count == 2);
+    try expect(multi_summary.compressed_block_count == 2);
+    try expect(multi_summary.raw_block_count == 0);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(multi.frame, multi_payload.len)) == multi_payload.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(multi.frame, multi_payload.len - 1));
+
+    const multi_decoded = try vort.zstdDecodeNativeFrameAllocLimited(allocator, multi.frame, multi_payload.len);
+    defer allocator.free(multi_decoded);
+    try expectEqualSlices(multi_payload, multi_decoded);
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeFrameAllocLimited(allocator, multi.frame, multi_payload.len - 1));
+
+    const multi_into = try allocator.alloc(u8, multi_payload.len);
+    defer allocator.free(multi_into);
+    const multi_written = try vort.zstdDecodeNativeFrameInto(multi.frame, multi_into);
+    try expect(multi_written == multi_payload.len);
+    try expectEqualSlices(multi_payload, multi_into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(multi.frame, multi_into[0 .. multi_into.len - 1]));
 }
 
 fn checkHighByteFseHuffman(allocator: std.mem.Allocator) !void {
