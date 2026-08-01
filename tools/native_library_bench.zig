@@ -2139,6 +2139,43 @@ fn smokeZstdAllCompressedSequenceTables(allocator: std.mem.Allocator) !void {
     try expectRoundTrip(decoder.decodeChunksIntoSlice(&chunks, &join, &decoded), &expected, &decoded);
     const scratch = try decoder.decodeChunksScratch(&chunks, &join);
     if (!std.mem.eql(u8, &expected, scratch)) return error.SizeMismatch;
+
+    const repeat_frame_hex =
+        "28b52ffd600400a4020044036162636465666768696a6b6c6d6e6f7062636464656665666667686967686968696a6a6b6c6b6c6c6d6e6f6d6e6f6e6f7070717210a810386bdbdf106a1f1068ed01fb609ffe1f9f8fcdfb78fedfd865875345020044034142434445464748494a4b4c4d4e4f5042434444454645464647484947484948494a4a4b4c4b4c4c4d4e4f4d4e4f4e4f5050515210fcfb609ffe1f9f8fcdfb78fedfd8658753";
+    const repeat_expected_hex =
+        "6162636465666768696a6b6c6d6e6f706d6e6f70626e6f706d6e63646d6e6f70646566706465667064656670646566706667686964656670676869706768697067686970676869696a686970676a6b6c676a6b6c676b6c6c676a6b6c6d6e6f6c676b6c6c676d6e6f676d6e6f676e6e6f676d6f70676d6e6f676e7071726e7071726e4142434445464748494a4b4c4d4e4f504d4e4f50424e4f504d4e43444d4e4f50444546504445465044454650444546504647484944454650474849504748495047484950474849494a484950474a4b4c474a4b4c474b4c4c474a4b4c4d4e4f4c474b4c4c474d4e4f474d4e4f474e4e4f474d4f50474d4e4f474e5051524e5051524e";
+    var repeat_frame: [repeat_frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&repeat_frame, repeat_frame_hex);
+    var repeat_expected: [repeat_expected_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&repeat_expected, repeat_expected_hex);
+
+    const repeat_first = try vort.zstdInspectNativeFrameFirstBlock(&repeat_frame);
+    const repeat_first_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&repeat_frame, repeat_first);
+    if (repeat_first_modes.literal_length_mode != .compressed or
+        repeat_first_modes.offset_mode != .compressed or
+        repeat_first_modes.match_length_mode != .compressed) return error.SizeMismatch;
+    const repeat_second = try vort.zstdInspectNativeFrameBlockAt(&repeat_frame, repeat_first.next_header_offset);
+    const repeat_second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&repeat_frame, repeat_second);
+    if (repeat_second_modes.literal_length_mode != .repeat or
+        repeat_second_modes.offset_mode != .repeat or
+        repeat_second_modes.match_length_mode != .repeat) return error.SizeMismatch;
+
+    var repeat_decoded: [repeat_expected.len]u8 = undefined;
+    try expectRoundTrip(vort.zstdDecodeNativeFrameInto(&repeat_frame, &repeat_decoded), &repeat_expected, &repeat_decoded);
+    try decodeZstdIncremental(allocator, &repeat_frame, &repeat_decoded);
+    if (!std.mem.eql(u8, &repeat_expected, &repeat_decoded)) return error.SizeMismatch;
+
+    const repeat_chunks = [_][]const u8{
+        repeat_frame[0..13],
+        repeat_frame[13..101],
+        repeat_frame[101..],
+    };
+    var repeat_join: [repeat_frame.len]u8 = undefined;
+    try expectSize(vort.zstdDecodedNativeFrameChunksSize(&repeat_chunks, &repeat_join), repeat_expected.len);
+    @memset(&repeat_decoded, 0);
+    try expectRoundTrip(decoder.decodeChunksIntoSlice(&repeat_chunks, &repeat_join, &repeat_decoded), &repeat_expected, &repeat_decoded);
+    const repeat_scratch = try decoder.decodeChunksScratch(&repeat_chunks, &repeat_join);
+    if (!std.mem.eql(u8, &repeat_expected, repeat_scratch)) return error.SizeMismatch;
 }
 
 fn smokeZstdSequenceInspectFixtures(allocator: std.mem.Allocator) !void {
