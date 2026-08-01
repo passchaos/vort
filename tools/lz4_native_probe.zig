@@ -544,6 +544,30 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
     try expectError(error.SizeMismatch, vort.lz4DecodedNativeFrameSizeWithDictionary(size_mismatch, dict));
     try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameIntoWithDictionary(size_mismatch, &size_priority_output, dict));
     try expectAllocError(allocator, error.SizeMismatch, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, size_mismatch, dict));
+    var missing_size_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = size_priority_output.len,
+        .max_decoded_buffer_len = size_priority_output.len,
+    });
+    defer missing_size_decoder.deinit();
+    try expectNeedDictionary(missing_size_decoder.step(size_mismatch, size_priority_output[0..0]));
+    if (!std.mem.eql(u8, "NeedDictionary", missing_size_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", missing_size_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    var size_mismatch_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+        .expected_output_len = size_priority_output.len,
+        .max_decoded_buffer_len = size_priority_output.len,
+    });
+    defer size_mismatch_decoder.deinit();
+    try expectError(error.SizeMismatch, size_mismatch_decoder.step(size_mismatch, size_priority_output[0..0]));
+    if (!std.mem.eql(u8, "SizeMismatch", size_mismatch_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", size_mismatch_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
 
     var reusable_wrong = vort.Lz4NativeFrameDecoder.init(allocator);
     defer reusable_wrong.deinit();
