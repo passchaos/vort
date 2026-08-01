@@ -79,10 +79,10 @@ pub fn main(init: std.process.Init) !void {
         "sequence-tables",
         "skippable",
     }, &.{
-        .{ .capability = "chunked", .cases = lib_generated_cases + 1 },
-        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 1 },
+        .{ .capability = "chunked", .cases = lib_generated_cases + 2 },
+        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 2 },
         .{ .capability = "fse-repeat", .cases = 4 },
-        .{ .capability = "incremental", .cases = lib_generated_cases + 1 },
+        .{ .capability = "incremental", .cases = lib_generated_cases + 2 },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });
     try stdout.flush();
@@ -1337,6 +1337,8 @@ fn checkAllCompressedThenRepeatedSequenceTables(allocator: std.mem.Allocator) !v
     const native_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
     defer allocator.free(native_decoded);
     try expectEqualSlices(&expected, native_decoded);
+    try checkIncrementalFrameLibraryApis(allocator, &expected, &frame);
+    try checkChunkedFrameLibraryApis(allocator, &expected, &frame);
 
     var into: [expected.len]u8 = undefined;
     const written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
