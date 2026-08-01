@@ -441,6 +441,40 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
     try expectNeedDictionary(vort.lz4DecodeNativeFrameIntoWithDictionary(encoded, &wrong_output, wrong));
     try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, encoded, wrong));
 
+    const checksummed = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, payload, .{
+        .content_checksum = true,
+        .block_checksum = true,
+    }, dict);
+    defer allocator.free(checksummed);
+    var wrong_checksum = try allocator.dupe(u8, checksummed);
+    defer allocator.free(wrong_checksum);
+    wrong_checksum[wrong_checksum.len - 1] ^= 0x01;
+    const checksummed_header = try vort.lz4InspectNativeFrameHeader(wrong_checksum);
+    if (checksummed_header.dictionary_id != dict.id or !checksummed_header.content_checksum) {
+        return error.Lz4ProbeMismatch;
+    }
+    try expectNeedDictionary(vort.lz4DecodedNativeFrameSize(wrong_checksum));
+    try expectNeedDictionary(vort.lz4DecodedNativeFrameSizeWithDictionary(wrong_checksum, wrong));
+    var checksum_priority_output: [payload.len]u8 = undefined;
+    try expectNeedDictionary(vort.lz4DecodeNativeFrameInto(wrong_checksum, &checksum_priority_output));
+    try expectNeedDictionary(vort.lz4DecodeNativeFrameIntoWithDictionary(wrong_checksum, &checksum_priority_output, wrong));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeFrameAlloc(allocator, wrong_checksum));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, wrong_checksum, wrong));
+    if (try vort.lz4DecodedNativeFrameSizeWithDictionary(wrong_checksum, dict) != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (vort.lz4DecodeNativeFrameIntoWithDictionary(wrong_checksum, &checksum_priority_output, dict)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.ChecksumMismatch => {},
+        else => return err,
+    }
+    if (vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, wrong_checksum, dict)) |bad_checksum_decoded| {
+        allocator.free(bad_checksum_decoded);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.ChecksumMismatch => {},
+        else => return err,
+    }
+
     var reusable_wrong = vort.Lz4NativeFrameDecoder.init(allocator);
     defer reusable_wrong.deinit();
     try expectNeedDictionary(reusable_wrong.decodedSizeWithDictionary(encoded, wrong));
