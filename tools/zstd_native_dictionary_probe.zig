@@ -11,6 +11,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkDerivedDictionaryIdApis(init.gpa);
     checked += 1;
+    try checkTrainedDictionaryApis(init.gpa);
+    checked += 1;
     try checkDictionaryMatchEncoding(init.gpa);
     checked += 1;
     try checkDictionarySequenceHuffmanLiterals(init.gpa);
@@ -60,6 +62,7 @@ pub fn main(init: std.process.Init) !void {
         "checksum",
         "chunked",
         "dictionary",
+        "dictionary-training",
         "dictionary-set",
         "fse-repeat",
         "incremental",
@@ -67,8 +70,9 @@ pub fn main(init: std.process.Init) !void {
         "sequence-tables",
     }, &.{
         .{ .capability = "bounded-limits", .cases = 3 },
-        .{ .capability = "checksum", .cases = 3 },
+        .{ .capability = "checksum", .cases = 4 },
         .{ .capability = "chunked", .cases = 2 },
+        .{ .capability = "dictionary-training", .cases = 1 },
         .{ .capability = "dictionary-set", .cases = 3 },
         .{ .capability = "fse-repeat", .cases = 3 },
         .{ .capability = "incremental", .cases = 4 },
@@ -360,6 +364,44 @@ fn checkDerivedDictionaryIdApis(allocator: std.mem.Allocator) !void {
     try expect(header.dictionary_id == dict.id);
 
     const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, same);
+    defer allocator.free(decoded);
+    try expectEqualSlices(payload, decoded);
+}
+
+fn checkTrainedDictionaryApis(allocator: std.mem.Allocator) !void {
+    const samples = [_][]const u8{
+        "trained-zstd-prefix alpha trained-zstd-tail",
+        "trained-zstd-prefix beta trained-zstd-tail",
+        "trained-zstd-prefix gamma trained-zstd-tail",
+    };
+    const trained = try vort.zstdTrainNativeDictionaryAlloc(allocator, &samples, .{
+        .target_size = 64,
+        .min_phrase_len = 4,
+        .max_phrase_len = 18,
+        .max_phrases = 96,
+    });
+    defer trained.deinit(allocator);
+    const dict = trained.asDictionary();
+    const payload = "pfx-trained-zstd-prefix alpha trained-zstd-tail payload";
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    try expect(dict.id == vort.ZstdNativeDictionary.derivedId(dict.content));
+    try expect(dict.id != 0);
+    try expect(dict.content.len > 0);
+    try expect(dict.content.len <= 64);
+    const match_summary = try vort.summarizeDictionaryMatchesAlloc(allocator, dict.content, payload, 4);
+    try expect(match_summary.matches > 0);
+    try expect(match_summary.longest >= 4);
+
+    const encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict);
+    defer allocator.free(encoded.frame);
+    const header = try vort.zstdInspectNativeFrameHeader(encoded.frame);
+    try expect(header.dictionary_id == dict.id);
+
+    const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
     defer allocator.free(decoded);
     try expectEqualSlices(payload, decoded);
 }

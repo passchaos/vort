@@ -233,6 +233,7 @@ def main() -> int:
             "reusable-chunked",
             "fse-repeat",
             "dictionary",
+            "dictionary-training",
             "dictionary-set",
             "skippable",
             "malformed",

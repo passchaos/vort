@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("core.zig");
 const checksum_mod = @import("checksum.zig");
+const dictionary_mod = @import("dictionary.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -102,6 +103,35 @@ pub const NativeDictionary = struct {
         return init(derivedId(content), content);
     }
 };
+
+pub const NativeDictionaryTrainOptions = dictionary_mod.TrainOptions;
+
+pub const OwnedNativeDictionary = struct {
+    id: u32,
+    content: []u8,
+
+    pub fn asDictionary(self: OwnedNativeDictionary) NativeDictionary {
+        return NativeDictionary.init(self.id, self.content);
+    }
+
+    pub fn deinit(self: OwnedNativeDictionary, allocator: std.mem.Allocator) void {
+        allocator.free(self.content);
+    }
+};
+
+/// Train an owned native LZ4 preset dictionary from representative samples.
+///
+/// The trainer is intentionally shared with the wider Vort dictionary module so
+/// library callers get deterministic bytes, explicit allocator ownership, and
+/// the same content-derived Dictionary_ID policy used by `initFromContent`.
+pub fn trainNativeDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: NativeDictionaryTrainOptions,
+) Error!OwnedNativeDictionary {
+    const content = try dictionary_mod.trainAlloc(allocator, samples, options);
+    return .{ .id = NativeDictionary.derivedId(content), .content = content };
+}
 
 /// Caller-supplied preset dictionary catalog used when decoding concatenated
 /// native streams whose frames can reference different Dictionary_ID values.
@@ -6499,6 +6529,35 @@ test "lz4 native dictionary can derive stable non-zero ids from content" {
     try std.testing.expectEqual(dict.id, NativeDictionary.initFromContent(dict.content).id);
     try std.testing.expectEqual(@as(u32, 1), NativeDictionary.derivedId(""));
     try std.testing.expectEqual(@as(u32, 1), NativeDictionary.initFromContent("").id);
+}
+
+test "lz4 native dictionary training returns owned bytes and stable id" {
+    const samples = [_][]const u8{
+        "trained-lz4-prefix alpha trained-lz4-tail",
+        "trained-lz4-prefix beta trained-lz4-tail",
+        "trained-lz4-prefix gamma trained-lz4-tail",
+    };
+    const trained = try trainNativeDictionaryAlloc(std.testing.allocator, &samples, .{
+        .target_size = 64,
+        .min_phrase_len = 4,
+        .max_phrase_len = 18,
+        .max_phrases = 96,
+    });
+    defer trained.deinit(std.testing.allocator);
+    const dict = trained.asDictionary();
+    try std.testing.expectEqual(NativeDictionary.derivedId(dict.content), dict.id);
+    try std.testing.expect(dict.content.len > 0);
+    try std.testing.expect(dict.content.len <= 64);
+
+    const payload = "trained-lz4-prefix alpha trained-lz4-tail payload";
+    const encoded = try encodeNativeFrameWithDictionaryAlloc(std.testing.allocator, payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+    }, dict);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeNativeFrameAllocWithDictionary(std.testing.allocator, encoded, dict);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "lz4 independent blocks reuse preset dictionary" {

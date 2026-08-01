@@ -207,9 +207,10 @@ Current interpretation:
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage
   while remaining decodable through explicit dictionary APIs. Public helpers can
-  now derive stable non-zero Dictionary_ID values from dictionary content, encode
-  through a dictionary set by Dictionary_ID, and compute dictionary- or
-  dictionary-set-aware frame bounds for caller-owned output buffers. Callers can inspect
+  now derive stable non-zero Dictionary_ID values from dictionary content, train
+  allocator-owned deterministic native dictionaries, encode through a dictionary
+  set by Dictionary_ID, and compute dictionary- or dictionary-set-aware frame
+  bounds for caller-owned output buffers. Callers can inspect
   Dictionary_ID metadata before decode. The native writer also exposes a
   block-size option plus a bounded mixed-match search budget for library callers
   that need to trade branch-scored ratio work against encode latency, and the public native stream/block iterators expose

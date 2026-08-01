@@ -1343,8 +1343,8 @@ case counts from the frame and dictionary probe executables, adds a
 `coverage` list keyed by codec (`lz4`/`zstd`) and surface (`frame`/`dictionary`),
 and adds a `capabilities` list for cross-cutting library behaviors such as
 lib-generated frames, incremental drains, chunked split input, reusable chunked
-decoder drains, dictionaries, malformed input, checksums, Huffman literals,
-sequence tables, and block APIs.
+decoder drains, dictionaries, dictionary training, malformed input, checksums,
+Huffman literals, sequence tables, and block APIs.
 
 Example:
 
@@ -1353,10 +1353,10 @@ Example:
   "schema": "vort.native_codec_probes",
   "schema_version": 1,
   "ok": true,
-  "capability_count": 15,
+  "capability_count": 16,
   "coverage_count": 4,
   "probe_count": 4,
-  "total_cases": 252,
+  "total_cases": 254,
   "capabilities": [
     {
       "capability": "lib-generated",
@@ -1408,11 +1408,19 @@ Example:
     },
     {
       "capability": "dictionary",
-      "cases": 135,
+      "cases": 137,
       "ok": true,
       "ok_probe_count": 3,
       "present": true,
       "probe_count": 3
+    },
+    {
+      "capability": "dictionary-training",
+      "cases": 2,
+      "ok": true,
+      "ok_probe_count": 2,
+      "present": true,
+      "probe_count": 2
     },
     {
       "capability": "dictionary-set",
@@ -1440,7 +1448,7 @@ Example:
     },
     {
       "capability": "checksum",
-      "cases": 225,
+      "cases": 227,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -1490,7 +1498,7 @@ Example:
       "surface": "frame"
     },
     {
-      "cases": 9,
+      "cases": 10,
       "codec": "lz4",
       "ok": true,
       "ok_probe_count": 1,
@@ -1508,7 +1516,7 @@ Example:
       "surface": "frame"
     },
     {
-      "cases": 23,
+      "cases": 24,
       "codec": "zstd",
       "ok": true,
       "ok_probe_count": 1,
@@ -1561,26 +1569,28 @@ Example:
       "executable": "zig-out/bin/lz4-native-dictionary-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 9,
+      "cases": 10,
       "marker": "lz4_native_dictionary_probe",
-      "output": "lz4_native_dictionary_probe_ok cases=9\nlz4_native_dictionary_probe_coverage capability=bounded-limits cases=1\nlz4_native_dictionary_probe_coverage capability=checksum cases=2\nlz4_native_dictionary_probe_coverage capability=chunked cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary cases=9\nlz4_native_dictionary_probe_coverage capability=dictionary-set cases=3\nlz4_native_dictionary_probe_coverage capability=incremental cases=3\n",
+      "output": "lz4_native_dictionary_probe_ok cases=10\nlz4_native_dictionary_probe_coverage capability=bounded-limits cases=1\nlz4_native_dictionary_probe_coverage capability=checksum cases=3\nlz4_native_dictionary_probe_coverage capability=chunked cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary cases=10\nlz4_native_dictionary_probe_coverage capability=dictionary-training cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary-set cases=3\nlz4_native_dictionary_probe_coverage capability=incremental cases=3\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
         "chunked",
         "dictionary",
+        "dictionary-training",
         "dictionary-set",
         "incremental"
       ],
       "reported_capability_cases": {
         "bounded-limits": 1,
-        "checksum": 2,
+        "checksum": 3,
         "chunked": 1,
-        "dictionary": 9,
+        "dictionary": 10,
+        "dictionary-training": 1,
         "dictionary-set": 3,
         "incremental": 3
       },
-      "reported_capability_count": 6
+      "reported_capability_count": 7
     },
     {
       "label": "zstd-native-frame-probe",
@@ -1625,14 +1635,15 @@ Example:
       "executable": "zig-out/bin/zstd-native-dictionary-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 23,
+      "cases": 24,
       "marker": "zstd_native_dictionary_probe",
-      "output": "zstd_native_dictionary_probe_ok cases=23\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=3\nzstd_native_dictionary_probe_coverage capability=checksum cases=3\nzstd_native_dictionary_probe_coverage capability=chunked cases=2\nzstd_native_dictionary_probe_coverage capability=dictionary cases=23\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=3\nzstd_native_dictionary_probe_coverage capability=fse-repeat cases=3\nzstd_native_dictionary_probe_coverage capability=incremental cases=4\nzstd_native_dictionary_probe_coverage capability=malformed cases=2\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=7\n",
+      "output": "zstd_native_dictionary_probe_ok cases=24\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=3\nzstd_native_dictionary_probe_coverage capability=checksum cases=4\nzstd_native_dictionary_probe_coverage capability=chunked cases=2\nzstd_native_dictionary_probe_coverage capability=dictionary cases=24\nzstd_native_dictionary_probe_coverage capability=dictionary-training cases=1\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=3\nzstd_native_dictionary_probe_coverage capability=fse-repeat cases=3\nzstd_native_dictionary_probe_coverage capability=incremental cases=4\nzstd_native_dictionary_probe_coverage capability=malformed cases=2\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=7\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
         "chunked",
         "dictionary",
+        "dictionary-training",
         "dictionary-set",
         "fse-repeat",
         "incremental",
@@ -1641,16 +1652,17 @@ Example:
       ],
       "reported_capability_cases": {
         "bounded-limits": 3,
-        "checksum": 3,
+        "checksum": 4,
         "chunked": 2,
-        "dictionary": 23,
+        "dictionary": 24,
+        "dictionary-training": 1,
         "dictionary-set": 3,
         "fse-repeat": 3,
         "incremental": 4,
         "malformed": 2,
         "sequence-tables": 7
       },
-      "reported_capability_count": 9
+      "reported_capability_count": 10
     }
   ]
 }

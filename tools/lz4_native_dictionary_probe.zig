@@ -11,6 +11,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkDerivedDictionaryIdApis(init.gpa);
     checked += 1;
+    try checkTrainedDictionaryApis(init.gpa);
+    checked += 1;
     try checkSingleFrameDictionaryApis(init.gpa);
     checked += 1;
     try checkIndependentBlocksReuseDictionary(init.gpa);
@@ -32,12 +34,14 @@ pub fn main(init: std.process.Init) !void {
         "checksum",
         "chunked",
         "dictionary",
+        "dictionary-training",
         "dictionary-set",
         "incremental",
     }, &.{
         .{ .capability = "bounded-limits", .cases = 1 },
-        .{ .capability = "checksum", .cases = 2 },
+        .{ .capability = "checksum", .cases = 3 },
         .{ .capability = "chunked", .cases = 1 },
+        .{ .capability = "dictionary-training", .cases = 1 },
         .{ .capability = "dictionary-set", .cases = 3 },
         .{ .capability = "incremental", .cases = 3 },
     });
@@ -105,6 +109,43 @@ fn checkDerivedDictionaryIdApis(allocator: std.mem.Allocator) !void {
     try expect(header.dictionary_id == dict.id);
 
     const decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, encoded, same);
+    defer allocator.free(decoded);
+    try expectEqualSlices(payload, decoded);
+}
+
+fn checkTrainedDictionaryApis(allocator: std.mem.Allocator) !void {
+    const samples = [_][]const u8{
+        "trained-lz4-prefix alpha trained-lz4-tail",
+        "trained-lz4-prefix beta trained-lz4-tail",
+        "trained-lz4-prefix gamma trained-lz4-tail",
+    };
+    const trained = try vort.lz4TrainNativeDictionaryAlloc(allocator, &samples, .{
+        .target_size = 64,
+        .min_phrase_len = 4,
+        .max_phrase_len = 18,
+        .max_phrases = 96,
+    });
+    defer trained.deinit(allocator);
+    const dict = trained.asDictionary();
+    const payload = "trained-lz4-prefix alpha trained-lz4-tail payload";
+
+    try expect(dict.id == vort.Lz4NativeDictionary.derivedId(dict.content));
+    try expect(dict.id != 0);
+    try expect(dict.content.len > 0);
+    try expect(dict.content.len <= 64);
+    const match_summary = try vort.summarizeDictionaryMatchesAlloc(allocator, dict.content, payload, 4);
+    try expect(match_summary.matches > 0);
+    try expect(match_summary.longest >= 4);
+
+    const encoded = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+    }, dict);
+    defer allocator.free(encoded);
+    const header = try vort.lz4InspectNativeFrameHeader(encoded);
+    try expect(header.dictionary_id == dict.id);
+
+    const decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, encoded, dict);
     defer allocator.free(decoded);
     try expectEqualSlices(payload, decoded);
 }
