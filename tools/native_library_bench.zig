@@ -17,6 +17,7 @@ const Mode = enum {
     lib_generated_checksum,
     lib_generated_no_size_checksum,
     lib_generated_independent,
+    lib_generated_independent_no_size_checksum,
     sequence_huffman_literals_plain,
     sequence_huffman_literals,
     dictionary_plain,
@@ -129,6 +130,7 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, .lib_generated_checksum, "lib_generated_checksum", true, true, .linked, options.iterations));
     try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, .lib_generated_no_size_checksum, "lib_generated_no_size_checksum", false, true, .linked, options.iterations));
     try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, .lib_generated_independent, "lib_generated_independent", true, false, .independent, options.iterations));
+    try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, .lib_generated_independent_no_size_checksum, "lib_generated_independent_no_size_checksum", false, true, .independent, options.iterations));
     try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, .lib_generated, "lib_generated", true, false, options.iterations));
     try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, .lib_generated_no_size, "lib_generated_no_size", false, false, options.iterations));
     try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, .lib_generated_checksum, "lib_generated_checksum", true, true, options.iterations));
@@ -3161,6 +3163,7 @@ fn modeName(mode: Mode) []const u8 {
         .lib_generated_checksum => "lib_generated_checksum",
         .lib_generated_no_size_checksum => "lib_generated_no_size_checksum",
         .lib_generated_independent => "lib_generated_independent",
+        .lib_generated_independent_no_size_checksum => "lib_generated_independent_no_size_checksum",
         .sequence_huffman_literals_plain => "sequence_huffman_literals_plain",
         .sequence_huffman_literals => "sequence_huffman_literals",
         .dictionary_plain => "dictionary_plain",
