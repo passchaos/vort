@@ -549,6 +549,18 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
 fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !usize {
     var checked: usize = 0;
 
+    // Bit 3 of the frame descriptor is reserved by the Zstandard format and
+    // must be rejected before any block parsing. The neighboring bit 4 is only
+    // unused and accepted by reference decoders, so keep this public probe
+    // focused on the true reserved-bit diagnostic.
+    const reserved_descriptor_bit = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x08, // Reserved descriptor bit set.
+        0x00, // Valid window descriptor if parsing were to continue.
+    };
+    try expectNativeHeaderAndStreamError(allocator, &reserved_descriptor_bit, error.CorruptFrame);
+    checked += 1;
+
     // Descriptor advertises a 2-byte Dictionary_ID field but only one byte is
     // present. Keep the window descriptor valid so this specifically covers
     // field-length accounting, not earlier frame-header parsing.
