@@ -664,7 +664,7 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     const dictionaries = [_]vort.Lz4NativeDictionary{ first_dict, second_dict };
     const dictionary_set = vort.Lz4NativeDictionarySet.init(&dictionaries);
     const options: vort.Lz4NativeFrameOptions = .{
-        .content_checksum = false,
+        .content_checksum = true,
         .block_checksum = true,
     };
     const first_payload = "prefix-abcdefghijklmnop-one";
@@ -875,6 +875,46 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
         return error.Lz4ProbeMismatch;
     }
     if (!std.mem.eql(u8, "frame", set_checksum_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+
+    var content_checksum_stream = try allocator.dupe(u8, stream.items);
+    defer allocator.free(content_checksum_stream);
+    content_checksum_stream[content_checksum_stream.len - 1] ^= 0x01;
+    try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionarySet(content_checksum_stream, missing_set));
+    try expectNeedDictionary(vort.lz4DecodeNativeConcatenatedFrameIntoWithDictionarySet(content_checksum_stream, &missing_output, missing_set));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(allocator, content_checksum_stream, missing_set));
+    if (try vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionarySet(content_checksum_stream, dictionary_set) != expected.len) {
+        return error.Lz4ProbeSizeMismatch;
+    }
+    try expectError(error.ChecksumMismatch, vort.lz4DecodeNativeConcatenatedFrameIntoWithDictionarySet(content_checksum_stream, &missing_output, dictionary_set));
+    try expectAllocError(allocator, error.ChecksumMismatch, vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(allocator, content_checksum_stream, dictionary_set));
+    var missing_set_content_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, missing_set, .{
+        .expected_output_len = expected.len,
+        .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
+    });
+    defer missing_set_content_decoder.deinit();
+    const missing_content_initial = try missing_set_content_decoder.step(content_checksum_stream, missing_output[0..0]);
+    if (missing_content_initial.status != .need_output) return error.Lz4ProbeMismatch;
+    try expectError(error.NeedDictionary, missing_set_content_decoder.step("", &missing_output));
+    if (!std.mem.eql(u8, "NeedDictionary", missing_set_content_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", missing_set_content_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    var set_content_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
+        .expected_output_len = expected.len,
+        .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
+    });
+    defer set_content_decoder.deinit();
+    const set_content_initial = try set_content_decoder.step(content_checksum_stream, missing_output[0..0]);
+    if (set_content_initial.status != .need_output) return error.Lz4ProbeMismatch;
+    try expectError(error.ChecksumMismatch, set_content_decoder.step("", &missing_output));
+    if (!std.mem.eql(u8, "ChecksumMismatch", set_content_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "direct_output", set_content_decoder.diagnostics().last_error_phase_name)) {
         return error.Lz4ProbeMismatch;
     }
 
