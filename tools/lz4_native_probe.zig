@@ -1254,6 +1254,12 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         };
     }
 
+    var sparse_zero: [2048]u8 = undefined;
+    @memset(&sparse_zero, 0);
+    for (&sparse_zero, 0..) |*byte, i| {
+        if (i % 97 == 0) byte.* = @intCast((i * 17 + 3) & 0xff);
+    }
+
     const json_unit = "{\"service\":\"vort\",\"codec\":\"lz4\",\"native\":true,\"value\":12345}\n";
     const cases = [_]Case{
         .{ .name = "liblz4-small", .payload = @constCast("lz4-small-reference-payload") },
@@ -1261,6 +1267,7 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         .{ .name = "liblz4-sequential", .payload = &sequential },
         .{ .name = "liblz4-json", .payload = @constCast(json_unit ** 64) },
         .{ .name = "liblz4-binary-mix", .payload = &binary_mix },
+        .{ .name = "liblz4-sparse-zero", .payload = &sparse_zero },
         .{ .name = "liblz4-randomish", .payload = &randomish },
     };
     const levels = [_]c_int{ 0, 3, 10 };

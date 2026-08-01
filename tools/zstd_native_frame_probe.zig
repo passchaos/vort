@@ -911,6 +911,12 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         };
     }
 
+    var sparse_zero: [2048]u8 = undefined;
+    @memset(&sparse_zero, 0);
+    for (&sparse_zero, 0..) |*byte, i| {
+        if (i % 97 == 0) byte.* = @intCast((i * 17 + 3) & 0xff);
+    }
+
     const json_unit = "{\"service\":\"vort\",\"codec\":\"zstd\",\"native\":true,\"value\":12345}\n";
     const cases = [_][]const u8{
         "zstd-small-reference-payload",
@@ -918,6 +924,7 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         &sequential,
         json_unit ** 64,
         &binary_mix,
+        &sparse_zero,
         &randomish,
     };
     const levels = [_]c_int{ 1, 9, 19 };

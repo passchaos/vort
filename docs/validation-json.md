@@ -1355,7 +1355,7 @@ Example:
   "capability_count": 13,
   "coverage_count": 4,
   "probe_count": 4,
-  "total_cases": 222,
+  "total_cases": 240,
   "capabilities": [
     {
       "capability": "lib-generated",
@@ -1363,7 +1363,7 @@ Example:
       "ok": true,
       "probe_count": 2,
       "ok_probe_count": 2,
-      "cases": 108
+      "cases": 126
     },
     {
       "capability": "native-generated",
@@ -1371,7 +1371,7 @@ Example:
       "ok": true,
       "probe_count": 2,
       "ok_probe_count": 2,
-      "cases": 192
+      "cases": 210
     },
     {
       "capability": "incremental",
@@ -1379,7 +1379,7 @@ Example:
       "ok": true,
       "probe_count": 4,
       "ok_probe_count": 4,
-      "cases": 115
+      "cases": 133
     },
     {
       "capability": "chunked",
@@ -1387,7 +1387,7 @@ Example:
       "ok": true,
       "probe_count": 4,
       "ok_probe_count": 4,
-      "cases": 111
+      "cases": 129
     },
     {
       "capability": "dictionary",
@@ -1395,7 +1395,7 @@ Example:
       "ok": true,
       "probe_count": 3,
       "ok_probe_count": 3,
-      "cases": 124
+      "cases": 133
     },
     {
       "capability": "dictionary-set",
@@ -1403,7 +1403,7 @@ Example:
       "ok": true,
       "probe_count": 3,
       "ok_probe_count": 3,
-      "cases": 100
+      "cases": 109
     },
     {
       "capability": "skippable",
@@ -1411,7 +1411,7 @@ Example:
       "ok": true,
       "probe_count": 2,
       "ok_probe_count": 2,
-      "cases": 192
+      "cases": 210
     },
     {
       "capability": "malformed",
@@ -1419,7 +1419,7 @@ Example:
       "ok": true,
       "probe_count": 3,
       "ok_probe_count": 3,
-      "cases": 194
+      "cases": 212
     },
     {
       "capability": "checksum",
@@ -1427,7 +1427,7 @@ Example:
       "ok": true,
       "probe_count": 4,
       "ok_probe_count": 4,
-      "cases": 195
+      "cases": 213
     },
     {
       "capability": "bounded-limits",
@@ -1435,7 +1435,7 @@ Example:
       "ok": true,
       "probe_count": 4,
       "ok_probe_count": 4,
-      "cases": 196
+      "cases": 214
     },
     {
       "capability": "huffman",
@@ -1443,7 +1443,7 @@ Example:
       "ok": true,
       "probe_count": 1,
       "ok_probe_count": 1,
-      "cases": 98
+      "cases": 107
     },
     {
       "capability": "sequence-tables",
@@ -1451,7 +1451,7 @@ Example:
       "ok": true,
       "probe_count": 2,
       "ok_probe_count": 2,
-      "cases": 105
+      "cases": 114
     },
     {
       "capability": "block",
@@ -1459,7 +1459,7 @@ Example:
       "ok": true,
       "probe_count": 1,
       "ok_probe_count": 1,
-      "cases": 94
+      "cases": 103
     }
   ],
   "coverage": [
@@ -1470,7 +1470,7 @@ Example:
       "ok": true,
       "probe_count": 1,
       "ok_probe_count": 1,
-      "cases": 94
+      "cases": 103
     },
     {
       "codec": "lz4",
@@ -1488,7 +1488,7 @@ Example:
       "ok": true,
       "probe_count": 1,
       "ok_probe_count": 1,
-      "cases": 98
+      "cases": 107
     },
     {
       "codec": "zstd",
@@ -1506,11 +1506,11 @@ Example:
       "executable": "zig-out/bin/lz4-native-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 94,
+      "cases": 103,
       "marker": "lz4_native_probe",
-      "output": "lz4_native_probe_ok cases=94\nlz4_native_probe_coverage capability=block cases=94\nlz4_native_probe_coverage capability=bounded-limits cases=94\nlz4_native_probe_coverage capability=checksum cases=94\nlz4_native_probe_coverage capability=chunked cases=54\nlz4_native_probe_coverage capability=dictionary cases=94\nlz4_native_probe_coverage capability=dictionary-set cases=94\nlz4_native_probe_coverage capability=incremental cases=54\nlz4_native_probe_coverage capability=lib-generated cases=54\nlz4_native_probe_coverage capability=malformed cases=94\nlz4_native_probe_coverage capability=native-generated cases=94\nlz4_native_probe_coverage capability=skippable cases=94\n",
+      "output": "lz4_native_probe_ok cases=103\nlz4_native_probe_coverage capability=block cases=103\nlz4_native_probe_coverage capability=bounded-limits cases=103\nlz4_native_probe_coverage capability=checksum cases=103\nlz4_native_probe_coverage capability=chunked cases=63\nlz4_native_probe_coverage capability=dictionary cases=103\nlz4_native_probe_coverage capability=dictionary-set cases=103\nlz4_native_probe_coverage capability=incremental cases=63\nlz4_native_probe_coverage capability=lib-generated cases=63\nlz4_native_probe_coverage capability=malformed cases=103\nlz4_native_probe_coverage capability=native-generated cases=103\nlz4_native_probe_coverage capability=skippable cases=103\n",
       "reported_capabilities": ["block", "bounded-limits", "checksum", "chunked", "dictionary", "dictionary-set", "incremental", "lib-generated", "malformed", "native-generated", "skippable"],
-      "reported_capability_cases": {"block": 94, "bounded-limits": 94, "checksum": 94, "chunked": 54, "dictionary": 94, "dictionary-set": 94, "incremental": 54, "lib-generated": 54, "malformed": 94, "native-generated": 94, "skippable": 94},
+      "reported_capability_cases": {"block": 103, "bounded-limits": 103, "checksum": 103, "chunked": 63, "dictionary": 103, "dictionary-set": 103, "incremental": 63, "lib-generated": 63, "malformed": 103, "native-generated": 103, "skippable": 103},
       "reported_capability_count": 11
     },
     {
@@ -1530,11 +1530,11 @@ Example:
       "executable": "zig-out/bin/zstd-native-frame-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 98,
+      "cases": 107,
       "marker": "zstd_native_frame_probe",
-      "output": "zstd_native_frame_probe_ok cases=98\nzstd_native_frame_probe_coverage capability=bounded-limits cases=98\nzstd_native_frame_probe_coverage capability=checksum cases=98\nzstd_native_frame_probe_coverage capability=chunked cases=54\nzstd_native_frame_probe_coverage capability=huffman cases=98\nzstd_native_frame_probe_coverage capability=incremental cases=54\nzstd_native_frame_probe_coverage capability=lib-generated cases=54\nzstd_native_frame_probe_coverage capability=malformed cases=98\nzstd_native_frame_probe_coverage capability=native-generated cases=98\nzstd_native_frame_probe_coverage capability=sequence-tables cases=98\nzstd_native_frame_probe_coverage capability=skippable cases=98\n",
+      "output": "zstd_native_frame_probe_ok cases=107\nzstd_native_frame_probe_coverage capability=bounded-limits cases=107\nzstd_native_frame_probe_coverage capability=checksum cases=107\nzstd_native_frame_probe_coverage capability=chunked cases=63\nzstd_native_frame_probe_coverage capability=huffman cases=107\nzstd_native_frame_probe_coverage capability=incremental cases=63\nzstd_native_frame_probe_coverage capability=lib-generated cases=63\nzstd_native_frame_probe_coverage capability=malformed cases=107\nzstd_native_frame_probe_coverage capability=native-generated cases=107\nzstd_native_frame_probe_coverage capability=sequence-tables cases=107\nzstd_native_frame_probe_coverage capability=skippable cases=107\n",
       "reported_capabilities": ["bounded-limits", "checksum", "chunked", "huffman", "incremental", "lib-generated", "malformed", "native-generated", "sequence-tables", "skippable"],
-      "reported_capability_cases": {"bounded-limits": 98, "checksum": 98, "chunked": 54, "huffman": 98, "incremental": 54, "lib-generated": 54, "malformed": 98, "native-generated": 98, "sequence-tables": 98, "skippable": 98},
+      "reported_capability_cases": {"bounded-limits": 107, "checksum": 107, "chunked": 63, "huffman": 107, "incremental": 63, "lib-generated": 63, "malformed": 107, "native-generated": 107, "sequence-tables": 107, "skippable": 107},
       "reported_capability_count": 10
     },
     {
