@@ -1017,6 +1017,56 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
         return error.Lz4ProbeMismatch;
     }
 
+    const second_invalid_match = try frameWithSingleBlockAndDictionary(
+        allocator,
+        0x61, // Dictionary_ID.
+        0x40,
+        4,
+        "\x10a\x00\x00",
+        "\x00\x00\x00\x00",
+        second_dict.id,
+    );
+    defer allocator.free(second_invalid_match);
+    var invalid_stream: std.ArrayList(u8) = .empty;
+    defer invalid_stream.deinit(allocator);
+    try invalid_stream.appendSlice(allocator, first);
+    try invalid_stream.appendSlice(allocator, skip);
+    try invalid_stream.appendSlice(allocator, second_invalid_match);
+    try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionarySet(invalid_stream.items, missing_set));
+    try expectNeedDictionary(vort.lz4DecodeNativeConcatenatedFrameIntoWithDictionarySet(invalid_stream.items, &missing_output, missing_set));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(allocator, invalid_stream.items, missing_set));
+    try expectError(error.InvalidMatch, vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionarySet(invalid_stream.items, dictionary_set));
+    try expectError(error.InvalidMatch, vort.lz4DecodeNativeConcatenatedFrameIntoWithDictionarySet(invalid_stream.items, &missing_output, dictionary_set));
+    try expectAllocError(allocator, error.InvalidMatch, vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(allocator, invalid_stream.items, dictionary_set));
+    var missing_set_invalid_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, missing_set, .{
+        .expected_output_len = expected.len,
+        .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
+    });
+    defer missing_set_invalid_decoder.deinit();
+    const missing_invalid_initial = try missing_set_invalid_decoder.step(invalid_stream.items, missing_output[0..0]);
+    if (missing_invalid_initial.status != .need_output) return error.Lz4ProbeMismatch;
+    try expectError(error.NeedDictionary, missing_set_invalid_decoder.step("", &missing_output));
+    if (!std.mem.eql(u8, "NeedDictionary", missing_set_invalid_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", missing_set_invalid_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    var set_invalid_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
+        .expected_output_len = expected.len,
+        .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
+    });
+    defer set_invalid_decoder.deinit();
+    const set_invalid_initial = try set_invalid_decoder.step(invalid_stream.items, missing_output[0..0]);
+    if (set_invalid_initial.status != .need_output) return error.Lz4ProbeMismatch;
+    try expectError(error.InvalidMatch, set_invalid_decoder.step("", &missing_output));
+    if (!std.mem.eql(u8, "InvalidMatch", set_invalid_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", set_invalid_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+
     try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionarySet(stream.items, missing_set));
     try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameSizeLimitedWithDictionarySet(stream.items, expected.len, missing_set));
     try expectNeedDictionary(vort.lz4DecodeNativeConcatenatedFrameIntoWithDictionarySet(stream.items, &missing_output, missing_set));
