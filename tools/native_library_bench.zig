@@ -1708,6 +1708,36 @@ fn smokeLz4SkippableMalformedStreams(allocator: std.mem.Allocator) !void {
         error.TruncatedFrame => {},
         else => return err,
     }
+
+    const checksum_payload = "bench-checksum";
+    const checksum_frame = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, checksum_payload, .{
+        .content_checksum = true,
+        .block_checksum = false,
+    });
+    defer allocator.free(checksum_frame);
+    var bad_checksum_frame = try allocator.dupe(u8, checksum_frame);
+    defer allocator.free(bad_checksum_frame);
+    bad_checksum_frame[bad_checksum_frame.len - 1] ^= 0x01;
+    const checksum_stream = try std.mem.concat(allocator, u8, &.{ skip, bad_checksum_frame });
+    defer allocator.free(checksum_stream);
+
+    if (try vort.lz4DecodedNativeConcatenatedFrameSize(checksum_stream) != checksum_payload.len) return error.SizeMismatch;
+    var checksum_output: [checksum_payload.len]u8 = undefined;
+    if (vort.lz4DecodeNativeConcatenatedFrameInto(checksum_stream, &checksum_output)) |_| {
+        return error.SizeMismatch;
+    } else |err| switch (err) {
+        error.ChecksumMismatch => {},
+        else => return err,
+    }
+
+    var checksum_iterator = vort.lz4IterateNativeStream(checksum_stream);
+    _ = (try checksum_iterator.next()) orelse return error.SizeMismatch;
+    const checksum_frame_element = (try checksum_iterator.next()) orelse return error.SizeMismatch;
+    switch (checksum_frame_element) {
+        .skippable => return error.SizeMismatch,
+        .frame => |frame| if (!frame.header.content_checksum) return error.SizeMismatch,
+    }
+    if ((try checksum_iterator.next()) != null) return error.SizeMismatch;
 }
 
 fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
