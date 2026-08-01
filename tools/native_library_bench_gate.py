@@ -29,6 +29,8 @@ EXPECTED_MODES = {
     "incremental",
     "incremental_direct",
     "incremental_fallback",
+    "lib_decode",
+    "native_lib_decode",
     "chain_depth_0",
     "chain_depth_default",
     "match_budget_0",
@@ -169,6 +171,10 @@ def main() -> int:
         for codec in EXPECTED_CODECS
         for mode in {"one_shot", "incremental", "incremental_direct", "incremental_fallback"}
         for case in EXPECTED_CASES
+    } | {
+        ("zstd", mode, case)
+        for mode in {"lib_decode", "native_lib_decode"}
+        for case in EXPECTED_CASES
     } | EXPECTED_EXTRA_ROWS
     seen: set[tuple[str, str, str]] = set()
     expected_iterations: int | None = None
@@ -236,6 +242,14 @@ def main() -> int:
         lz4_independent = row_by_identity[("lz4", case_name, case_name)]
         if int(lz4_independent["encoded_bytes"]) >= int(lz4_independent["input_bytes"]):
             raise AssertionError(f"expected lz4 {case_name} row to compress input: {lz4_independent}")
+
+    for case in EXPECTED_CASES:
+        lib_decode = row_by_identity[("zstd", "lib_decode", case)]
+        native_lib_decode = row_by_identity[("zstd", "native_lib_decode", case)]
+        if int(lib_decode["encoded_bytes"]) >= int(lib_decode["input_bytes"]):
+            raise AssertionError(f"expected zstd lib_decode row to compress input: {lib_decode}")
+        if int(native_lib_decode["encoded_bytes"]) >= int(native_lib_decode["input_bytes"]):
+            raise AssertionError(f"expected zstd native_lib_decode row to compress input: {native_lib_decode}")
 
     sequence_plain = row_by_identity[("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals")]
     sequence_huffman = row_by_identity[("zstd", "sequence_huffman_literals", "sequence_huffman_literals")]

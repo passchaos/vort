@@ -7,6 +7,8 @@ const Mode = enum {
     incremental,
     incremental_direct,
     incremental_fallback,
+    lib_decode,
+    native_lib_decode,
     chain_depth_0,
     chain_depth_default,
     match_budget_0,
@@ -104,6 +106,8 @@ pub fn main(init: std.process.Init) !void {
         try rows.append(init.gpa, try lz4IncrementalDirectRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try lz4IncrementalFallbackRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdOneShotRow(init.io, init.gpa, case, options.iterations));
+        try rows.append(init.gpa, try zstdLibDecodeRow(init.io, init.gpa, case, options.iterations));
+        try rows.append(init.gpa, try zstdNativeLibDecodeRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdIncrementalRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdIncrementalDirectRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdIncrementalFallbackRow(init.io, init.gpa, case, options.iterations));
@@ -272,6 +276,34 @@ fn zstdOneShotRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iteratio
     const encode_result = try timeEncodeZstd(io, allocator, case.payload, options, iterations);
     const decode_result = try timeDecodeZstdOneShot(io, encoded.frame, decoded, case.payload, iterations);
     return makeRow(.zstd, .one_shot, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdLibDecodeRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
+    const options: vort.ZstdLibFrameOptions = .{ .include_content_size = true, .content_checksum = false };
+    const encoded = try vort.zstdEncodeFrameWithOptionsAlloc(allocator, case.payload, options);
+    defer allocator.free(encoded);
+    const decoded = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(decoded);
+    try expectRoundTrip(vort.zstdDecodeFrameInto(encoded, decoded), case.payload, decoded);
+    try expectRoundTrip(vort.zstdDecodeNativeFrameInto(encoded, decoded), case.payload, decoded);
+
+    const encode_result = try timeEncodeZstdLib(io, allocator, case.payload, options, iterations);
+    const decode_result = try timeDecodeZstdLib(io, encoded, decoded, case.payload, iterations);
+    return makeRow(.zstd, .lib_decode, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdNativeLibDecodeRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
+    const options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only, .content_checksum = false };
+    const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, case.payload, options);
+    defer allocator.free(encoded.frame);
+    const decoded = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(decoded);
+    try expectRoundTrip(vort.zstdDecodeNativeFrameInto(encoded.frame, decoded), case.payload, decoded);
+    try expectRoundTrip(vort.zstdDecodeFrameInto(encoded.frame, decoded), case.payload, decoded);
+
+    const encode_result = try timeEncodeZstd(io, allocator, case.payload, options, iterations);
+    const decode_result = try timeDecodeZstdLib(io, encoded.frame, decoded, case.payload, iterations);
+    return makeRow(.zstd, .native_lib_decode, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
 fn zstdIncrementalRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
@@ -1333,6 +1365,16 @@ fn timeDecodeZstdOneShot(io: std.Io, encoded: []const u8, decoded: []u8, expecte
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
         try expectRoundTrip(vort.zstdDecodeNativeFrameInto(encoded, decoded), expected, decoded);
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeZstdLib(io: std.Io, encoded: []const u8, decoded: []u8, expected: []const u8, iterations: usize) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        try expectRoundTrip(vort.zstdDecodeFrameInto(encoded, decoded), expected, decoded);
         checksum +%= decoded[0];
     }
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
@@ -3153,6 +3195,8 @@ fn modeName(mode: Mode) []const u8 {
         .incremental => "incremental",
         .incremental_direct => "incremental_direct",
         .incremental_fallback => "incremental_fallback",
+        .lib_decode => "lib_decode",
+        .native_lib_decode => "native_lib_decode",
         .chain_depth_0 => "chain_depth_0",
         .chain_depth_default => "chain_depth_default",
         .match_budget_0 => "match_budget_0",
