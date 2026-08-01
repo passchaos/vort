@@ -1245,6 +1245,7 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
 
     const json_unit = "{\"service\":\"vort\",\"codec\":\"lz4\",\"native\":true,\"value\":12345}\n";
     const cases = [_]Case{
+        .{ .name = "liblz4-small", .payload = @constCast("lz4-small-reference-payload") },
         .{ .name = "liblz4-repeated", .payload = @constCast("abcd" ** 512) },
         .{ .name = "liblz4-sequential", .payload = &sequential },
         .{ .name = "liblz4-json", .payload = @constCast(json_unit ** 64) },

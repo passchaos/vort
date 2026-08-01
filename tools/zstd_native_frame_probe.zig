@@ -902,6 +902,7 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
 
     const json_unit = "{\"service\":\"vort\",\"codec\":\"zstd\",\"native\":true,\"value\":12345}\n";
     const cases = [_][]const u8{
+        "zstd-small-reference-payload",
         "abcd" ** 512,
         &sequential,
         json_unit ** 64,
