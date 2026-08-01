@@ -1671,6 +1671,43 @@ fn smokeLz4SkippableMalformedStreams(allocator: std.mem.Allocator) !void {
         error.CorruptFrame => {},
         else => return err,
     }
+
+    var truncated_frame: std.ArrayList(u8) = .empty;
+    defer truncated_frame.deinit(allocator);
+    try truncated_frame.appendSlice(allocator, &.{ 0x04, 0x22, 0x4d, 0x18 });
+    const valid_descriptor = [_]u8{ 0x60, 0x40 };
+    try truncated_frame.appendSlice(allocator, &valid_descriptor);
+    try truncated_frame.append(allocator, @truncate(std.hash.XxHash32.hash(0, &valid_descriptor) >> 8));
+    var block_header: [4]u8 = undefined;
+    std.mem.writeInt(u32, &block_header, 0x8000_0000 | @as(u32, 64 * 1024), .little);
+    try truncated_frame.appendSlice(allocator, &block_header);
+    try truncated_frame.appendSlice(allocator, "ab");
+
+    const truncated_stream = try std.mem.concat(allocator, u8, &.{ skip, truncated_frame.items });
+    defer allocator.free(truncated_stream);
+    if (vort.lz4DecodedNativeConcatenatedFrameSize(truncated_stream)) |_| return error.SizeMismatch else |err| switch (err) {
+        error.TruncatedFrame => {},
+        else => return err,
+    }
+    if (vort.lz4SummarizeNativeStream(truncated_stream)) |_| return error.SizeMismatch else |err| switch (err) {
+        error.TruncatedFrame => {},
+        else => return err,
+    }
+
+    var truncated_iterator = vort.lz4IterateNativeStream(truncated_stream);
+    const truncated_first = (try truncated_iterator.next()) orelse return error.SizeMismatch;
+    switch (truncated_first) {
+        .frame => return error.SizeMismatch,
+        .skippable => |skippable| {
+            if (skippable.header.skippable_id != 4 or !std.mem.eql(u8, skippable.payload, "bench-meta")) {
+                return error.SizeMismatch;
+            }
+        },
+    }
+    if (truncated_iterator.next()) |_| return error.SizeMismatch else |err| switch (err) {
+        error.TruncatedFrame => {},
+        else => return err,
+    }
 }
 
 fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
