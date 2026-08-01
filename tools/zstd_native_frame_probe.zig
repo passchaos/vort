@@ -903,8 +903,8 @@ fn checkLibZstdGeneratedLibraryFrame(
     // This is intentionally a pure Zig library differential: libzstd writes the
     // compatibility frame through Vort's library wrapper, then the dependency-
     // free native decoder must agree across one-shot, caller-buffer, reusable,
-    // append, and bounded-size public APIs. No CLI command participates in the
-    // oracle path.
+    // append, incremental, and bounded-size public APIs. No CLI command
+    // participates in the oracle path.
     const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, encoded);
     defer allocator.free(lib_decoded);
     try expectEqualSlices(payload, lib_decoded);
@@ -949,6 +949,50 @@ fn checkLibZstdGeneratedLibraryFrame(
     try expectPrefixedPayload(appended.items, payload);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&appended, encoded, payload.len - 1));
+
+    try checkLibZstdGeneratedIncrementalFrame(allocator, payload, encoded);
+}
+
+fn checkLibZstdGeneratedIncrementalFrame(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
+    var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+
+    const output = try allocator.alloc(u8, payload.len);
+    defer allocator.free(output);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    var status: vort.StepResult.Status = .need_input;
+
+    while (status != .done) {
+        const input_chunk_len: usize = if (input_offset < frame.len) @min(frame.len - input_offset, 17) else 0;
+        const remaining_output = output.len - output_offset;
+        const output_chunk_len: usize = if (remaining_output == 0) 0 else @min(remaining_output, 191);
+        const result = try decoder.step(
+            frame[input_offset..][0..input_chunk_len],
+            output[output_offset..][0..output_chunk_len],
+        );
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        status = result.status;
+
+        switch (status) {
+            .need_input => {
+                if (input_offset >= frame.len) return error.ZstdNativeFrameProbeMismatch;
+            },
+            .need_output => {
+                if (output_offset >= output.len) return error.ZstdNativeFrameProbeMismatch;
+            },
+            .done => {},
+        }
+    }
+
+    try expect(input_offset == frame.len);
+    try expect(output_offset == payload.len);
+    try expectEqualSlices(payload, output);
+    try decoder.finish();
 }
 
 fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {
