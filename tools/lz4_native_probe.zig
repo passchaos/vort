@@ -475,6 +475,32 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
         else => return err,
     }
 
+    const size_mismatch = try frameWithSingleBlockAndContentSizeAndDictionary(
+        allocator,
+        0x69, // Content Size + Dictionary_ID.
+        0x40,
+        payload.len + 1,
+        0x8000_0000 | payload.len,
+        payload,
+        "\x00\x00\x00\x00",
+        dict.id,
+    );
+    defer allocator.free(size_mismatch);
+    const size_mismatch_header = try vort.lz4InspectNativeFrameHeader(size_mismatch);
+    if (size_mismatch_header.dictionary_id != dict.id or size_mismatch_header.expected_content_size == null or size_mismatch_header.expected_content_size.? != payload.len + 1) {
+        return error.Lz4ProbeMismatch;
+    }
+    var size_priority_output: [payload.len + 1]u8 = undefined;
+    try expectNeedDictionary(vort.lz4DecodedNativeFrameSize(size_mismatch));
+    try expectNeedDictionary(vort.lz4DecodedNativeFrameSizeWithDictionary(size_mismatch, wrong));
+    try expectNeedDictionary(vort.lz4DecodeNativeFrameInto(size_mismatch, &size_priority_output));
+    try expectNeedDictionary(vort.lz4DecodeNativeFrameIntoWithDictionary(size_mismatch, &size_priority_output, wrong));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeFrameAlloc(allocator, size_mismatch));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, size_mismatch, wrong));
+    try expectError(error.SizeMismatch, vort.lz4DecodedNativeFrameSizeWithDictionary(size_mismatch, dict));
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameIntoWithDictionary(size_mismatch, &size_priority_output, dict));
+    try expectAllocError(allocator, error.SizeMismatch, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, size_mismatch, dict));
+
     var reusable_wrong = vort.Lz4NativeFrameDecoder.init(allocator);
     defer reusable_wrong.deinit();
     try expectNeedDictionary(reusable_wrong.decodedSizeWithDictionary(encoded, wrong));
@@ -1210,6 +1236,27 @@ fn frameWithSingleBlockAndContentSize(
     return try frame.toOwnedSlice(allocator);
 }
 
+fn frameWithSingleBlockAndContentSizeAndDictionary(
+    allocator: std.mem.Allocator,
+    flg: u8,
+    bd: u8,
+    content_size: usize,
+    block_header_value: u32,
+    payload: []const u8,
+    trailing: []const u8,
+    dictionary_id: u32,
+) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(allocator);
+    try appendLz4FrameHeaderWithContentSizeAndDictionary(allocator, &frame, flg, bd, content_size, dictionary_id);
+    var block_header: [4]u8 = undefined;
+    std.mem.writeInt(u32, &block_header, block_header_value, .little);
+    try frame.appendSlice(allocator, &block_header);
+    try frame.appendSlice(allocator, payload);
+    try frame.appendSlice(allocator, trailing);
+    return try frame.toOwnedSlice(allocator);
+}
+
 fn appendLz4FrameHeader(allocator: std.mem.Allocator, frame: *std.ArrayList(u8), flg: u8, bd: u8) !void {
     try frame.appendSlice(allocator, &.{ 0x04, 0x22, 0x4d, 0x18 });
     const descriptor = [_]u8{ flg, bd };
@@ -1227,8 +1274,39 @@ fn appendLz4FrameHeaderWithContentSize(allocator: std.mem.Allocator, frame: *std
     try frame.append(allocator, lz4DescriptorChecksum(&descriptor));
 }
 
+fn appendLz4FrameHeaderWithContentSizeAndDictionary(
+    allocator: std.mem.Allocator,
+    frame: *std.ArrayList(u8),
+    flg: u8,
+    bd: u8,
+    content_size: usize,
+    dictionary_id: u32,
+) !void {
+    try frame.appendSlice(allocator, &.{ 0x04, 0x22, 0x4d, 0x18 });
+    var descriptor: [14]u8 = undefined;
+    descriptor[0] = flg;
+    descriptor[1] = bd;
+    std.mem.writeInt(u64, descriptor[2..10], @intCast(content_size), .little);
+    std.mem.writeInt(u32, descriptor[10..14], dictionary_id, .little);
+    try frame.appendSlice(allocator, &descriptor);
+    try frame.append(allocator, lz4DescriptorChecksum(&descriptor));
+}
+
 fn lz4DescriptorChecksum(descriptor: []const u8) u8 {
     return @truncate(std.hash.XxHash32.hash(0, descriptor) >> 8);
+}
+
+fn expectError(expected: anyerror, result: anytype) !void {
+    if (result) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+}
+
+fn expectAllocError(allocator: std.mem.Allocator, expected: anyerror, result: anytype) !void {
+    if (result) |decoded| {
+        allocator.free(decoded);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
 }
 
 fn expectNeedDictionary(result: anytype) !void {
