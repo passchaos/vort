@@ -518,6 +518,30 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
     try expectError(error.ChecksumMismatch, vort.lz4DecodedNativeFrameSizeWithDictionary(wrong_block_checksum, dict));
     try expectError(error.ChecksumMismatch, vort.lz4DecodeNativeFrameIntoWithDictionary(wrong_block_checksum, &block_checksum_priority_output, dict));
     try expectAllocError(allocator, error.ChecksumMismatch, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, wrong_block_checksum, dict));
+    var missing_block_checksum_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer missing_block_checksum_decoder.deinit();
+    try expectNeedDictionary(missing_block_checksum_decoder.step(wrong_block_checksum, block_checksum_priority_output[0..0]));
+    if (!std.mem.eql(u8, "NeedDictionary", missing_block_checksum_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", missing_block_checksum_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    var bad_block_checksum_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer bad_block_checksum_decoder.deinit();
+    try expectError(error.ChecksumMismatch, bad_block_checksum_decoder.step(wrong_block_checksum, block_checksum_priority_output[0..0]));
+    if (!std.mem.eql(u8, "ChecksumMismatch", bad_block_checksum_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", bad_block_checksum_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
 
     const size_mismatch = try frameWithSingleBlockAndContentSizeAndDictionary(
         allocator,
