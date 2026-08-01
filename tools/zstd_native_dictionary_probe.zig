@@ -420,6 +420,16 @@ fn checkMalformedCompressedSequenceTableInspect(allocator: std.mem.Allocator) !v
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
 
     _ = try std.fmt.hexToBytes(&frame, frame_hex);
+    // Raise the ML FSE accuracy-log bias past the supported sequence-table
+    // maximum. This should be rejected while parsing table metadata.
+    frame[25] = 0x15;
+    const bad_accuracy_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&frame, bad_accuracy_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&frame));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&frame, &into));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
+
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
     // This mutation still leaves enough normalized-count structure for public
     // inspection to identify ML=FSE, but the resulting table/state stream is
     // invalid during sequence preflight/decode.
