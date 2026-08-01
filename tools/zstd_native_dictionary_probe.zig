@@ -70,13 +70,55 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     const header = try vort.zstdInspectNativeFrameHeader(encoded);
     try expect(header.dictionary_id == dict.id);
     try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameAlloc(allocator, encoded));
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSizeWithDictionary(encoded, wrong));
+    var wrong_output: [payload.len]u8 = undefined;
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameIntoWithDictionary(encoded, &wrong_output, wrong));
     try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded, wrong));
+
+    var reusable_wrong = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer reusable_wrong.deinit();
+    try expectError(error.NeedDictionary, reusable_wrong.decodedSizeWithDictionary(encoded, wrong));
+    try expectAllocError(allocator, error.NeedDictionary, reusable_wrong.decodeAllocWithDictionary(encoded, wrong));
+
+    var incremental_wrong = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, wrong, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer incremental_wrong.deinit();
+    try expectError(error.NeedDictionary, incremental_wrong.step(encoded, &wrong_output));
+    try expectEqualSlices("NeedDictionary", incremental_wrong.diagnostics().last_error_name);
+    try expectEqualSlices("frame", incremental_wrong.diagnostics().last_error_phase_name);
 
     const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded, dict);
     defer allocator.free(decoded);
     try expectEqualSlices(payload, decoded);
     try expect((try vort.zstdDecodedNativeFrameSizeWithDictionary(encoded, dict)) == payload.len);
     try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimitedWithDictionary(encoded, payload.len - 1, dict));
+
+    const second_payload = "plain second payload";
+    const second = try vort.zstdEncodeRawOrRleFrameWithOptionsAlloc(allocator, second_payload, .{
+        .content_checksum = false,
+        .dictionary_id = dict.id,
+    });
+    defer allocator.free(second);
+    const skip = try vort.zstdEncodeSkippableFrameAlloc(allocator, 1, "wrong-dict-zstd");
+    defer allocator.free(skip);
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(allocator);
+    try stream.appendSlice(allocator, encoded);
+    try stream.appendSlice(allocator, skip);
+    try stream.appendSlice(allocator, second);
+
+    const expected_stream_payload = payload ++ second_payload;
+    const stream_decoded = try vort.zstdDecodeNativeConcatenatedFrameAllocWithDictionary(allocator, stream.items, dict);
+    defer allocator.free(stream_decoded);
+    try expectEqualSlices(expected_stream_payload, stream_decoded);
+    try expect((try vort.zstdDecodedNativeConcatenatedFrameSizeWithDictionary(stream.items, dict)) == expected_stream_payload.len);
+
+    var wrong_stream_output: [expected_stream_payload.len]u8 = undefined;
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeConcatenatedFrameSizeWithDictionary(stream.items, wrong));
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeConcatenatedFrameIntoWithDictionary(stream.items, &wrong_stream_output, wrong));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeConcatenatedFrameAllocWithDictionary(allocator, stream.items, wrong));
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
@@ -96,6 +138,12 @@ fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
     try expect(first_block.block_type == .compressed);
 
     try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameAlloc(allocator, encoded.frame));
+    const wrong = vort.ZstdNativeDictionary.init(dict.id + 1, dict.content);
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSizeWithDictionary(encoded.frame, wrong));
+    var wrong_output: [payload.len]u8 = undefined;
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameIntoWithDictionary(encoded.frame, &wrong_output, wrong));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, wrong));
+
     const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
     defer allocator.free(decoded);
     try expectEqualSlices(payload, decoded);
