@@ -9559,16 +9559,24 @@ test "zstd native sequence reader applies compressed offset selectors" {
     var sequence_bits: std.ArrayList(u8) = .empty;
     defer sequence_bits.deinit(std.testing.allocator);
     const read_fields = [_]BitField{
-        .{ .value = 0, .bits = 1 }, // second sequence: OF code 1 extra bit selects positive-literal rep1.
-        .{ .value = 1, .bits = 1 }, // third sequence: OF code 1 extra bit selects positive-literal rep2.
+        .{ .value = 0, .bits = 1 }, // initial compressed-FSE offset state: entry 0.
+        .{ .value = 0, .bits = 1 }, // first sequence: OF code 1 extra bit selects positive-literal rep1.
+        .{ .value = 1, .bits = 1 }, // transition to the second compressed-FSE offset table entry.
+        .{ .value = 1, .bits = 1 }, // second sequence: OF code 1 extra bit selects positive-literal rep2.
     };
     try emitReverseBitstreamFromReadOrder(std.testing.allocator, &sequence_bits, &read_fields);
 
     var offset_fse: SequenceFseTable = .{
-        .len = 1,
-        .accuracy_log = 0,
+        .len = 2,
+        .accuracy_log = 1,
     };
     offset_fse.entries[0] = .{
+        .base = 1,
+        .additional_bits = 1,
+        .next_state = 0,
+        .state_bits = 1,
+    };
+    offset_fse.entries[1] = .{
         .base = 1,
         .additional_bits = 1,
         .next_state = 0,
@@ -9585,11 +9593,13 @@ test "zstd native sequence reader applies compressed offset selectors" {
         .match_rle = .{ .base = 3, .additional_bits = 0, .next_state = 0, .state_bits = 0 },
         .bitstream_offset = 0,
     }, 2, try ReverseBitReader.init(sequence_bits.items), initial_repeated_offsets);
+    try std.testing.expectEqual(@as(usize, 0), state.of_state);
 
     const first = try readModeSequence(&state);
     try std.testing.expectEqual(@as(usize, 1), first.literal_len);
     try std.testing.expectEqual(@as(usize, 4), first.match_offset);
     try std.testing.expectEqual([3]usize{ 4, 1, 8 }, state.repeated_offsets);
+    try std.testing.expectEqual(@as(usize, 1), state.of_state);
 
     const second = try readModeSequence(&state);
     try std.testing.expectEqual(@as(usize, 1), second.literal_len);
