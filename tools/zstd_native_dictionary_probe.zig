@@ -256,6 +256,22 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSizeWithDictionary(&compressed_malformed, dict));
     try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameIntoWithDictionary(&compressed_malformed, &compressed_priority_output, dict));
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &compressed_malformed, dict));
+    var missing_compressed_decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = compressed_priority_output.len,
+        .max_decoded_buffer_len = compressed_priority_output.len,
+    });
+    defer missing_compressed_decoder.deinit();
+    try expectError(error.NeedDictionary, missing_compressed_decoder.step(&compressed_malformed, compressed_priority_output[0..0]));
+    try expectEqualSlices("NeedDictionary", missing_compressed_decoder.diagnostics().last_error_name);
+    try expectEqualSlices("frame", missing_compressed_decoder.diagnostics().last_error_phase_name);
+    var compressed_malformed_decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+        .expected_output_len = compressed_priority_output.len,
+        .max_decoded_buffer_len = compressed_priority_output.len,
+    });
+    defer compressed_malformed_decoder.deinit();
+    try expectError(error.CorruptFrame, compressed_malformed_decoder.step(&compressed_malformed, compressed_priority_output[0..0]));
+    try expectEqualSlices("CorruptFrame", compressed_malformed_decoder.diagnostics().last_error_name);
+    try expectEqualSlices("frame", compressed_malformed_decoder.diagnostics().last_error_phase_name);
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
