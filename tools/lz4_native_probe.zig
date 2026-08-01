@@ -818,6 +818,16 @@ fn checkInvalidFrameBlocks(allocator: std.mem.Allocator) !usize {
     try expectNativeFrameBodyError(allocator, truncated_compressed_literals, error.TruncatedFrame);
     checked += 1;
 
+    const truncated_literal_len_extension = try frameWithSingleBlock(allocator, 0x60, 0x40, 1, "\xf0", "\x00\x00\x00\x00");
+    defer allocator.free(truncated_literal_len_extension);
+    try expectNativeFrameDecodeAndSizeError(allocator, truncated_literal_len_extension, error.TruncatedFrame);
+    checked += 1;
+
+    const truncated_match_len_extension = try frameWithSingleBlock(allocator, 0x60, 0x40, 4, "\x1fa\x01\x00", "\x00\x00\x00\x00");
+    defer allocator.free(truncated_match_len_extension);
+    try expectNativeFrameDecodeAndSizeError(allocator, truncated_match_len_extension, error.TruncatedFrame);
+    checked += 1;
+
     const invalid_match_offset = try frameWithSingleBlock(allocator, 0x60, 0x40, 3, "\x00\x01\x00", "\x00\x00\x00\x00");
     defer allocator.free(invalid_match_offset);
     try expectNativeFrameDecodeAndSizeError(allocator, invalid_match_offset, error.InvalidMatch);
