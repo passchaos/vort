@@ -51,6 +51,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkCompressedOffsetRepeatSelectorFrame(init.gpa);
     checked += 1;
+    try checkAllCompressedSequenceTableFrame(init.gpa);
+    checked += 1;
     const lib_generated_cases = try checkLibZstdGeneratedLibraryFrames(init.gpa);
     checked += lib_generated_cases;
     try checkSplitHeaderIncremental(init.gpa);
@@ -1136,6 +1138,69 @@ fn checkCompressedOffsetRepeatSelectorFrame(allocator: std.mem.Allocator) !void 
     try expect(modes.literal_length_mode == .predefined);
     try expect(modes.offset_mode == .compressed);
     try expect(modes.match_length_mode == .rle);
+
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
+    try expect(summary.block_count == 1);
+    try expect(summary.compressed_block_count == 1);
+    try expect(summary.raw_block_count == 0);
+    try expect(summary.rle_block_count == 0);
+
+    try expect((try vort.zstdDecodedFrameSize(&frame)) == expected.len);
+    const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+    defer allocator.free(lib_decoded);
+    try expectEqualSlices(&expected, lib_decoded);
+
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == expected.len);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len)) == expected.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len - 1));
+
+    const native_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(native_decoded);
+    try expectEqualSlices(&expected, native_decoded);
+
+    var into: [expected.len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
+    try expect(written == expected.len);
+    try expectEqualSlices(&expected, into[0..written]);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(&frame, into[0 .. into.len - 1]));
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const scratch = try decoder.decodeScratch(&frame);
+    try expectEqualSlices(&expected, scratch);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, &frame, expected.len);
+    try expect(appended_written == expected.len);
+    try expectPrefixedPayload(appended.items, &expected);
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, &frame, expected.len - 1));
+}
+
+fn checkAllCompressedSequenceTableFrame(allocator: std.mem.Allocator) !void {
+    // Fixed fixture emitted through the generic table-plan writer path after it
+    // learned to keep all-compressed LL/OF/ML candidates. The older planner
+    // treated that shape as "not mixed" and skipped the only emitter capable of
+    // serializing an LL=FSE, OF=FSE, ML=FSE sequence block.
+    const frame_hex =
+        "28b52ffd20f0d503004405616263646566676862636464656665666667686967686968696a6a6b6c6b6c6c6d6e6f6d6e6f6e6f70707172717272737475737475747576767778777878797a61797a617a61626263646364646566676566676620a810386b9d03c03e1068ed01a89eb45b9c8181d61f93e495416210faa3bd6039199102";
+    const expected_hex =
+        "616263646566676865666768626667686266636464646464646566646464646464656664646464646667686966676869676869696768696967686969676869696a6a6a6a6a6a6b6c6c6c6c6c6c6b6c6c6c6c6c6c6d6e6f6c6d6e6f6c6d6d6e6f6d6d6e6f6d6e6e6f6d6d6f70707070707070707172727272727271727272727272737475727374757273747572737475747374757273747576767676767676777878787878777877787878787878797a6178797a6178797a6178797a617a797a617879616262626262626364646464646464636464646464646465666764656667656667676566676765666767656667";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+    var expected: [expected_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expected, expected_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .compressed);
+    try expect(first_block.last);
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    try expect(modes.sequence_count == 32);
+    try expect(modes.literal_length_mode == .compressed);
+    try expect(modes.offset_mode == .compressed);
+    try expect(modes.match_length_mode == .compressed);
 
     const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
     try expect(summary.block_count == 1);
