@@ -21,6 +21,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkRepeatOffsetZeroLiteralSelector(init.gpa);
     checked += 1;
+    try checkRepeatOffsetZeroLiteralInvalidSelector(init.gpa);
+    checked += 1;
     try checkRepeatedRleSequenceTables(init.gpa);
     checked += 1;
     try checkSplitHeaderIncremental(init.gpa);
@@ -463,6 +465,31 @@ fn checkRepeatOffsetZeroLiteralSelector(allocator: std.mem.Allocator) !void {
     const into_written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
     try expect(into_written == decoded.len);
     try expectEqualSlices(decoded, into[0..into_written]);
+}
+
+fn checkRepeatOffsetZeroLiteralInvalidSelector(allocator: std.mem.Allocator) !void {
+    // literal_len=0 adjusts OF code 1 by one selector slot. With extra bit 1,
+    // raw selector 3 means "rep0 - 1"; the initial rep0 is 1, so the
+    // resolved offset would be zero and must fail as an invalid match.
+    const frame_hex = "28b52ffd20043d000000015400010103";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, block);
+    try expect(block.block_type == .compressed);
+    try expect(block.last);
+    try expect(modes.literals_kind == .raw);
+    try expect(modes.regenerated_literals_size == 0);
+    try expect(modes.sequence_count == 1);
+    try expect(modes.literal_length_mode == .rle);
+    try expect(modes.offset_mode == .rle);
+    try expect(modes.match_length_mode == .rle);
+
+    try expectError(error.InvalidMatch, vort.zstdDecodedNativeFrameSize(&frame));
+    var output: [8]u8 = undefined;
+    try expectError(error.InvalidMatch, vort.zstdDecodeNativeFrameInto(&frame, &output));
+    try expectAllocError(allocator, error.InvalidMatch, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
 }
 
 fn checkRepeatedRleSequenceTables(allocator: std.mem.Allocator) !void {
