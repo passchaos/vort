@@ -1550,6 +1550,23 @@ fn smokeLz4LinkedDirectFallback(allocator: std.mem.Allocator) !void {
     const done = try decoder.step("", decoded[64 * 1024 + 127 ..]);
     if (done.status != .done) return error.SizeMismatch;
     if (!std.mem.eql(u8, &payload, &decoded)) return error.SizeMismatch;
+
+    const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 5, "linked-direct");
+    defer allocator.free(skip);
+    const stream = try std.mem.concat(allocator, u8, &.{ skip, encoded });
+    defer allocator.free(stream);
+    var stream_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer stream_decoder.deinit();
+    @memset(&decoded, 0);
+    const stream_initial = try stream_decoder.step(stream, decoded[0..0]);
+    if (stream_initial.status != .need_output) return error.SizeMismatch;
+    if (!std.mem.eql(u8, stream_decoder.diagnostics().phase_name, "direct_output")) return error.SizeMismatch;
+    const stream_done = try stream_decoder.step("", &decoded);
+    if (stream_done.status != .done) return error.SizeMismatch;
+    if (!std.mem.eql(u8, &payload, &decoded)) return error.SizeMismatch;
 }
 
 fn smokeLz4DeepHashChain(allocator: std.mem.Allocator) !void {
