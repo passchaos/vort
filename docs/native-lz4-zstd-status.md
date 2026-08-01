@@ -37,7 +37,7 @@ APIs:
 | Dictionaries and dictionary sets | Root tests and dictionary probes cover LZ4/Zstd Dictionary_ID metadata, explicit dictionaries, dictionary sets, no-content-size direct output, chunked APIs, missing dictionary diagnostics, and exact-size mismatches. | Implemented for current native APIs; training/stable dictionary workflows remain future work. |
 | Skippable/concatenated streams | LZ4/Zstd probes and root tests cover skippable-only streams, mixed streams, consecutive split skippable headers, truncated skippable metadata, chunked split inputs, concatenated direct-output frame boundaries, and skippable streams adjacent to malformed, truncated, checksum-mismatched, and trailing-data frames. | Implemented for current stream iterators/decoders. |
 | Bounded memory and hostile inputs | Incremental options expose `max_compressed_buffer_len`, `max_decoded_buffer_len`, and `expected_output_len`; root/probe tests cover OutputLimitExceeded, TruncatedFrame, SizeMismatch, ChecksumMismatch, NeedDictionary, malformed Repeat_Mode state, and malformed compressed-FSE table diagnostics. | Good coverage for current whole-frame validation plus direct-output paths; fuzz/corpus expansion remains. |
-| Bench/gate evidence | `zig build run-native-library-bench-gate` validates public native LZ4/Zstd rows and now runs lightweight smoke checks without adding CSV rows: Zstd sequence inspect, no-content-size multi-compressed frames with checksum/truncation precedence, LZ4 skippable malformed/truncated/checksum/trailing streams, linked direct-output after skippable metadata, and LZ4/Zstd dictionary-set skippable fallback. README documents heavier coverage in probes. | Smoke-level public API gate exists; not a complete performance benchmark. |
+| Bench/gate evidence | `zig build run-native-library-bench-gate` validates public native LZ4/Zstd rows and now runs lightweight smoke checks without adding CSV rows: Zstd sequence inspect, no-content-size multi-compressed frames with checksum/truncation precedence, LZ4 skippable malformed/truncated/checksum/trailing streams, linked direct-output after skippable metadata, and LZ4/Zstd dictionary-set skippable direct-output plus fallback. README documents heavier coverage in probes. | Smoke-level public API gate exists; not a complete performance benchmark. |
 | Documentation | `README.md`, `docs/zstd-gap.md`, and this status document describe implemented surfaces and gaps. | Current but should evolve with behavior changes. |
 
 ## Current validation commands
@@ -57,7 +57,7 @@ Recent work in this thread has repeatedly run the narrower probes plus `test` an
 `check`. `run-native-library-bench-gate` is the lightweight public API benchmark
 CSV gate; it now also runs bounded pre-row smoke checks for no-content-size
 multi-compressed Zstd, skippable/malformed LZ4 streams, and dictionary-set
-skippable fallback without increasing the 67-row CSV. Heavier sequence-table
+skippable direct-output plus fallback without increasing the 67-row CSV. Heavier sequence-table
 fixtures intentionally live in the frame and dictionary probes so the Debug
 bench gate stays fast.
 

@@ -185,8 +185,8 @@ Current interpretation:
   probes now cover dictionary, dictionary-set, no-content-size, and multi-block
   fallback shapes, while the native library bench gate now keeps cheap smoke
   coverage for no-content-size multi-compressed frames, checksum mismatch,
-  truncated-checksum limit precedence, and dictionary-set skippable fallback
-  without adding CSV rows. The
+  truncated-checksum limit precedence, and dictionary-set skippable direct-output
+  plus fallback without adding CSV rows. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage

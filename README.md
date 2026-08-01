@@ -964,7 +964,7 @@ CSV rows, the bench executable now runs cheap pre-row smoke checks for
 no-content-size multi-compressed Zstd frames (including checksum mismatch and
 truncated-checksum limit precedence), LZ4 skippable streams followed by
 malformed/truncated/checksum/trailing frames, and LZ4/Zstd dictionary-set
-skippable streams that force small-output fallback. These checks intentionally
+skippable streams in both direct-output and small-output fallback modes. These checks intentionally
 do not add CSV rows, keeping the Debug gate bounded. The heavier limited
 compressed-FSE sequence-table path is covered by
 `run-zstd-native-dictionary-probe` for public inspect/decode of LL/OF/ML=FSE
