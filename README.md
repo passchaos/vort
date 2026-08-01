@@ -382,17 +382,17 @@ const lz4_native_size = try vort.lz4DecodedNativeFrameSize(lz4_frame);
 _ = try vort.lz4DecodedNativeFrameSizeLimited(lz4_frame, lz4_native_size);
 const lz4_frame_chunks = [_][]const u8{ lz4_frame[0..4], lz4_frame[4..] };
 var lz4_join_scratch: [1024]u8 = undefined;
-_ = try vort.lz4DecodedNativeConcatenatedFrameChunksSize(&lz4_frame_chunks, &lz4_join_scratch);
+_ = try vort.lz4DecodedNativeFrameChunksSize(&lz4_frame_chunks, &lz4_join_scratch);
 var lz4_chunk_appended: std.ArrayList(u8) = .empty;
 defer lz4_chunk_appended.deinit(allocator);
 try lz4_chunk_appended.appendSlice(allocator, "prefix:");
-_ = try vort.lz4DecodeNativeConcatenatedFrameChunksAppend(
+_ = try vort.lz4DecodeNativeFrameChunksAppend(
     allocator,
     &lz4_chunk_appended,
     &lz4_frame_chunks,
     &lz4_join_scratch,
 );
-_ = try vort.lz4DecodeNativeConcatenatedFrameChunksAppendExactSize(
+_ = try vort.lz4DecodeNativeFrameChunksAppendExactSize(
     allocator,
     &lz4_chunk_appended,
     &lz4_frame_chunks,
@@ -415,13 +415,13 @@ var lz4_decoder = vort.Lz4NativeFrameDecoder.init(allocator);
 defer lz4_decoder.deinit();
 const lz4_plain = try lz4_decoder.decodeScratch(lz4_frame);
 _ = lz4_plain;
-_ = try lz4_decoder.decodedConcatenatedChunksSize(&lz4_frame_chunks, &lz4_join_scratch);
-const lz4_chunk_plain = try lz4_decoder.decodeConcatenatedChunksScratch(&lz4_frame_chunks, &lz4_join_scratch);
+_ = try lz4_decoder.decodedChunksSize(&lz4_frame_chunks, &lz4_join_scratch);
+const lz4_chunk_plain = try lz4_decoder.decodeChunksScratch(&lz4_frame_chunks, &lz4_join_scratch);
 _ = lz4_chunk_plain;
 var lz4_reusable_chunk_appended: std.ArrayList(u8) = .empty;
 defer lz4_reusable_chunk_appended.deinit(allocator);
 try lz4_reusable_chunk_appended.appendSlice(allocator, "prefix:");
-_ = try lz4_decoder.decodeConcatenatedChunksAppendExactSize(
+_ = try lz4_decoder.decodeChunksAppendExactSize(
     &lz4_reusable_chunk_appended,
     &lz4_frame_chunks,
     &lz4_join_scratch,
@@ -534,7 +534,7 @@ const lz4_chunks = [_][]const u8{ lz4_dict_frame[0..8], lz4_dict_frame[8..] };
 const lz4_join = try allocator.alloc(u8, lz4_dict_frame.len);
 defer allocator.free(lz4_join);
 var lz4_chunk_out: ["previous lz4 history payload".len]u8 = undefined;
-_ = try vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
+_ = try vort.lz4DecodeNativeFrameChunksIntoWithDictionarySet(
     &lz4_chunks,
     lz4_join,
     &lz4_chunk_out,
@@ -707,7 +707,7 @@ defer allocator.free(zstd_stream_exact);
 const zstd_chunks = [_][]const u8{ zstd_dict_frame.frame[0..8], zstd_dict_frame.frame[8..] };
 const zstd_join = try allocator.alloc(u8, zstd_dict_frame.frame.len);
 defer allocator.free(zstd_join);
-_ = try vort.zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(
+_ = try vort.zstdDecodedNativeFrameChunksSizeWithDictionarySet(
     &zstd_chunks,
     zstd_join,
     zstd_dict_set,
@@ -717,20 +717,20 @@ _ = try vort.zstdDecodedRawOrRleFrameChunksSizeWithDictionarySet(
     zstd_join,
     zstd_dict_set,
 );
-_ = try zstd_decoder.decodedConcatenatedChunksSizeWithDictionarySet(&zstd_chunks, zstd_join, zstd_dict_set);
-const zstd_chunk_plain = try zstd_decoder.decodeConcatenatedChunksScratchWithDictionarySet(&zstd_chunks, zstd_join, zstd_dict_set);
+_ = try zstd_decoder.decodedChunksSizeWithDictionarySet(&zstd_chunks, zstd_join, zstd_dict_set);
+const zstd_chunk_plain = try zstd_decoder.decodeChunksScratchWithDictionarySet(&zstd_chunks, zstd_join, zstd_dict_set);
 _ = zstd_chunk_plain;
 var zstd_chunk_appended: std.ArrayList(u8) = .empty;
 defer zstd_chunk_appended.deinit(allocator);
 try zstd_chunk_appended.appendSlice(allocator, "prefix:");
-_ = try vort.zstdDecodeNativeConcatenatedFrameChunksAppendWithDictionarySet(
+_ = try vort.zstdDecodeNativeFrameChunksAppendWithDictionarySet(
     allocator,
     &zstd_chunk_appended,
     &zstd_chunks,
     zstd_join,
     zstd_dict_set,
 );
-_ = try vort.zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(
+_ = try vort.zstdDecodeNativeFrameChunksAppendExactSizeWithDictionarySet(
     allocator,
     &zstd_chunk_appended,
     &zstd_chunks,
@@ -739,7 +739,7 @@ _ = try vort.zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionar
     zstd_stream_plain.len,
 );
 var zstd_chunk_out: ["prefix: previous zstd history payload, shared phrase tail".len]u8 = undefined;
-_ = try vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
+_ = try vort.zstdDecodeNativeFrameChunksIntoWithDictionarySet(
     &zstd_chunks,
     zstd_join,
     &zstd_chunk_out,
@@ -748,7 +748,7 @@ _ = try vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(
 var zstd_reusable_chunk_appended: std.ArrayList(u8) = .empty;
 defer zstd_reusable_chunk_appended.deinit(allocator);
 try zstd_reusable_chunk_appended.appendSlice(allocator, "prefix:");
-_ = try zstd_decoder.decodeConcatenatedChunksAppendExactSizeWithDictionarySet(
+_ = try zstd_decoder.decodeChunksAppendExactSizeWithDictionarySet(
     &zstd_reusable_chunk_appended,
     &zstd_chunks,
     zstd_join,
@@ -943,9 +943,10 @@ own prefixes/sidecars without constructing a reusable decoder just to avoid an
 alloc-returning API. `*AppendExactSize` variants additionally verify the decoded
 byte count before extending the destination, returning `SizeMismatch` for
 container-advertised lengths that do not match the stream. Reusable
-`NativeFrameDecoder` values expose the same append exact-size helpers, so callers
-can keep decoder-owned scratch capacity while still appending into their own
-output buffers. Incremental native decoders expose the shared `StepResult`
+`NativeFrameDecoder` values expose matching single-frame `decodeChunks*` and
+concatenated `decodeConcatenatedChunks*` helpers, so callers can keep
+decoder-owned scratch capacity while still appending into their own output
+buffers. Incremental native decoders expose the shared `StepResult`
 contract: feed compressed bytes, provide caller-owned output slices, then call
 `finish()` when an exact EOF/size check matters. Direct-output paths are fastest
 when the caller supplies a large enough output slice; if a slice is too small
