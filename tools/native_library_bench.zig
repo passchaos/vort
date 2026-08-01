@@ -105,6 +105,8 @@ pub fn main(init: std.process.Init) !void {
         try rows.append(init.gpa, try lz4IncrementalRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try lz4IncrementalDirectRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try lz4IncrementalFallbackRow(init.io, init.gpa, case, options.iterations));
+        try rows.append(init.gpa, try lz4LibDecodeRow(init.io, init.gpa, case, options.iterations));
+        try rows.append(init.gpa, try lz4NativeLibDecodeRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdOneShotRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdLibDecodeRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try zstdNativeLibDecodeRow(init.io, init.gpa, case, options.iterations));
@@ -263,6 +265,39 @@ fn lz4IncrementalFallbackRow(io: std.Io, allocator: std.mem.Allocator, case: Cas
     const decode_result = try timeDecodeLz4IncrementalFallback(io, allocator, encoded, decoded, case.payload, iterations);
     const encode_result = try timeEncodeLz4(io, allocator, case.payload, options, iterations);
     return makeRow(.lz4, .incremental_fallback, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn lz4LibDecodeRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
+    const options: vort.Lz4LibFrameOptions = .{
+        .include_content_size = true,
+        .content_checksum = true,
+        .block_checksum = false,
+        .block_mode = .linked,
+    };
+    const encoded = try vort.lz4EncodeFrameWithOptionsAlloc(allocator, case.payload, options);
+    defer allocator.free(encoded);
+    const decoded = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(decoded);
+    try expectRoundTrip(vort.lz4DecodeFrameInto(encoded, decoded), case.payload, decoded);
+    try expectRoundTrip(vort.lz4DecodeNativeFrameInto(encoded, decoded), case.payload, decoded);
+
+    const encode_result = try timeEncodeLz4Lib(io, allocator, case.payload, options, iterations);
+    const decode_result = try timeDecodeLz4Lib(io, encoded, decoded, case.payload, iterations);
+    return makeRow(.lz4, .lib_decode, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn lz4NativeLibDecodeRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
+    const options: vort.Lz4NativeFrameOptions = .{ .content_checksum = false, .block_checksum = true };
+    const encoded = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, case.payload, options);
+    defer allocator.free(encoded);
+    const decoded = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(decoded);
+    try expectRoundTrip(vort.lz4DecodeNativeFrameInto(encoded, decoded), case.payload, decoded);
+    try expectRoundTrip(vort.lz4DecodeFrameInto(encoded, decoded), case.payload, decoded);
+
+    const encode_result = try timeEncodeLz4(io, allocator, case.payload, options, iterations);
+    const decode_result = try timeDecodeLz4Lib(io, encoded, decoded, case.payload, iterations);
+    return makeRow(.lz4, .native_lib_decode, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
 fn zstdOneShotRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
@@ -1333,6 +1368,16 @@ fn timeDecodeLz4OneShot(io: std.Io, encoded: []const u8, decoded: []u8, expected
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
         try expectRoundTrip(vort.lz4DecodeNativeFrameInto(encoded, decoded), expected, decoded);
+        checksum +%= decoded[0];
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeDecodeLz4Lib(io: std.Io, encoded: []const u8, decoded: []u8, expected: []const u8, iterations: usize) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        try expectRoundTrip(vort.lz4DecodeFrameInto(encoded, decoded), expected, decoded);
         checksum +%= decoded[0];
     }
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };

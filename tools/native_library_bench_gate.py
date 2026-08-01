@@ -172,7 +172,8 @@ def main() -> int:
         for mode in {"one_shot", "incremental", "incremental_direct", "incremental_fallback"}
         for case in EXPECTED_CASES
     } | {
-        ("zstd", mode, case)
+        (codec, mode, case)
+        for codec in EXPECTED_CODECS
         for mode in {"lib_decode", "native_lib_decode"}
         for case in EXPECTED_CASES
     } | EXPECTED_EXTRA_ROWS
@@ -243,13 +244,14 @@ def main() -> int:
         if int(lz4_independent["encoded_bytes"]) >= int(lz4_independent["input_bytes"]):
             raise AssertionError(f"expected lz4 {case_name} row to compress input: {lz4_independent}")
 
-    for case in EXPECTED_CASES:
-        lib_decode = row_by_identity[("zstd", "lib_decode", case)]
-        native_lib_decode = row_by_identity[("zstd", "native_lib_decode", case)]
-        if int(lib_decode["encoded_bytes"]) >= int(lib_decode["input_bytes"]):
-            raise AssertionError(f"expected zstd lib_decode row to compress input: {lib_decode}")
-        if int(native_lib_decode["encoded_bytes"]) >= int(native_lib_decode["input_bytes"]):
-            raise AssertionError(f"expected zstd native_lib_decode row to compress input: {native_lib_decode}")
+    for codec in EXPECTED_CODECS:
+        for case in EXPECTED_CASES:
+            lib_decode = row_by_identity[(codec, "lib_decode", case)]
+            native_lib_decode = row_by_identity[(codec, "native_lib_decode", case)]
+            if int(lib_decode["encoded_bytes"]) >= int(lib_decode["input_bytes"]):
+                raise AssertionError(f"expected {codec} lib_decode row to compress input: {lib_decode}")
+            if int(native_lib_decode["encoded_bytes"]) >= int(native_lib_decode["input_bytes"]):
+                raise AssertionError(f"expected {codec} native_lib_decode row to compress input: {native_lib_decode}")
 
     sequence_plain = row_by_identity[("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals")]
     sequence_huffman = row_by_identity[("zstd", "sequence_huffman_literals", "sequence_huffman_literals")]
