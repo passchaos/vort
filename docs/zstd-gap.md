@@ -189,7 +189,7 @@ Current interpretation:
   intentionally falls back to the whole-frame scratch facade only if it cannot
   first return existing progress as `need_output`; root tests and dictionary
   probes now cover dictionary, dictionary-set, no-content-size, and multi-block
-  fallback shapes, while the native library bench gate now keeps CSV rows for
+  fallback shapes, while the native library bench gates now keep Debug and ReleaseFast CSV rows for
   LZ4/Zstd lib-generated compatibility-frame and trained-dictionary library encode/decode plus cheap smoke
   coverage for no-content-size multi-compressed frames, checksum mismatch,
   truncated-checksum limit precedence, and dictionary-set skippable direct-output

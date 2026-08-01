@@ -1216,6 +1216,32 @@ pub fn build(b: *std.Build) void {
     const native_library_bench_gate_step = b.step("run-native-library-bench-gate", "Validate native LZ4/Zstd public library benchmark CSV");
     native_library_bench_gate_step.dependOn(&native_library_bench_gate.step);
 
+    const native_library_bench_releasefast_exe = b.addExecutable(.{
+        .name = "vort-native-library-bench-releasefast",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/native_library_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+            },
+        }),
+    });
+    const run_native_library_bench_releasefast_csv = b.addRunArtifact(native_library_bench_releasefast_exe);
+    run_native_library_bench_releasefast_csv.addArgs(&.{ "--iterations", "25", "--csv", "zig-out/vort-native-library-bench-releasefast.csv" });
+    const native_library_bench_releasefast_csv_step = b.step("run-native-library-bench-releasefast-csv", "Write ReleaseFast native LZ4/Zstd public library benchmark CSV");
+    native_library_bench_releasefast_csv_step.dependOn(&run_native_library_bench_releasefast_csv.step);
+
+    const native_library_bench_releasefast_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/native_library_bench_gate.py",
+        "--csv",
+        "zig-out/vort-native-library-bench-releasefast.csv",
+    });
+    native_library_bench_releasefast_gate.step.dependOn(native_library_bench_releasefast_csv_step);
+    const native_library_bench_releasefast_gate_step = b.step("run-native-library-bench-releasefast-gate", "Validate ReleaseFast native LZ4/Zstd public library benchmark CSV");
+    native_library_bench_releasefast_gate_step.dependOn(&native_library_bench_releasefast_gate.step);
+
     const dictionary_decode_bench_exe = b.addExecutable(.{
         .name = "vort-dictionary-decode-bench",
         .root_module = b.createModule(.{

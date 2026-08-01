@@ -53,6 +53,7 @@ zig build run-lz4-native-dictionary-probe --summary all
 zig build run-zstd-native-frame-probe --summary all
 zig build run-zstd-native-dictionary-probe --summary all
 zig build run-native-library-bench-gate --summary all
+zig build run-native-library-bench-releasefast-gate --summary all
 zig build check --summary all
 ```
 
@@ -60,10 +61,11 @@ Recent work in this thread has repeatedly run the narrower probes plus `test` an
 `check`; `ci-smoke` now depends on `run-native-codec-probes-dashboard` so all
 four library-level LZ4/Zstd probes run through the regular smoke target and
 retain `zig-out/vort-native-codec-probes.json` / `.md` artifacts.
-`run-native-library-bench-gate` is the lightweight public API benchmark
-CSV gate. `run-native-codec-probes-dashboard` now records reusable single-frame
+`run-native-library-bench-gate` is the lightweight Debug public API benchmark
+CSV gate; `run-native-library-bench-releasefast-gate` runs the same 73-row matrix
+through a ReleaseFast build for library-path smoke evidence. `run-native-codec-probes-dashboard` now records reusable single-frame
 chunked decoder coverage as a distinct `reusable-chunked` capability. The bench
-gate also runs bounded pre-row smoke checks for no-content-size
+gates also run bounded pre-row smoke checks for no-content-size
 multi-compressed Zstd, skippable/malformed LZ4 streams, and dictionary-set
 skippable direct-output plus fallback, and reusable single-frame chunked decoder helpers with and without dictionary sets. The CSV now has 73 rows, including LZ4/Zstd lib-generated compatibility-frame and trained-dictionary encode/decode rows backed by the same public training APIs exposed to library callers. Heavier sequence-table
 fixtures intentionally live in the frame and dictionary probes so the Debug
