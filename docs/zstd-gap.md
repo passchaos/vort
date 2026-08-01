@@ -117,7 +117,7 @@ Current interpretation:
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug
   classes visible without requiring a full external corpus checkout, including
-  zero-literal rep1/rep2 selector paths, positive-literal rep0/rep1/rep2 plus Repeat_Mode positive-literal rep0 replay, invalid
+  zero-literal rep1/rep2 selector paths, positive-literal rep0/rep1/rep2 plus Repeat_Mode positive-literal rep0/rep1/rep2 replay, invalid
   `rep0 - 1` rejection, and valid cross-block `rep0 - 1` after a
   direct-offset update, multi-sequence predefined-table state transitions, mixed RLE/predefined sequence modes, repeated mixed-table modes across blocks, and non-dictionary LL/ML/OF=FSE Repeat_Mode replay, plus pure library-level libzstd-generated frame differentials. It also
   validates Vort's dependency-free native encoder on the same generated/file

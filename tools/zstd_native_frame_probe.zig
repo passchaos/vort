@@ -27,6 +27,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkRepeatOffsetRepeatModePositiveSelector(init.gpa);
     checked += 1;
+    try checkRepeatOffsetRepeatModePositiveSecondSelectors(init.gpa);
+    checked += 1;
     try checkRepeatOffsetLiteralFirstSelector(init.gpa);
     checked += 1;
     try checkRepeatOffsetLiteralSecondSelector(init.gpa);
@@ -656,6 +658,87 @@ fn checkRepeatOffsetRepeatModePositiveSelector(allocator: std.mem.Allocator) !vo
     const written = try vort.zstdDecodeNativeFrameInto(&frame, &output);
     try expect(written == decoded.len);
     try expectEqualSlices(decoded, output[0..written]);
+}
+
+fn checkRepeatOffsetRepeatModePositiveSecondSelectors(allocator: std.mem.Allocator) !void {
+    // Complement the Repeat_Mode rep0 fixture above with repeated-table replay
+    // for the positive-literal rep1 and rep2 selectors. The defining block uses
+    // explicit RLE tables for LL/OF/ML, while the final block repeats those
+    // tables and relies on the decoder to preserve both sequence-table state
+    // and the repeated-offset ring across compressed-block boundaries.
+    const cases = [_]struct {
+        name: []const u8,
+        frame_hex: []const u8,
+        expected: []const u8,
+    }{
+        .{
+            .name = "repeat-mode-positive-rep1",
+            .frame_hex = "28b52ffd201c40000061626364656667684c000010696a015402010502350000106b6c01fc02",
+            .expected = "abcdefghijghijghijklllllllll",
+        },
+        .{
+            .name = "repeat-mode-positive-rep2",
+            .frame_hex = "28b52ffd201c40000061626364656667684c000010696a015402010503350000106b6c01fc03",
+            .expected = "abcdefghijcdefghijklijklijkl",
+        },
+    };
+
+    inline for (cases) |case| {
+        var frame: [case.frame_hex.len / 2]u8 = undefined;
+        _ = try std.fmt.hexToBytes(&frame, case.frame_hex);
+
+        const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+        defer allocator.free(lib_decoded);
+        try expectEqualSlices(case.expected, lib_decoded);
+
+        const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+        try expect(first_block.block_type == .raw);
+        try expect(!first_block.last);
+        const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+        try expect(second_block.block_type == .compressed);
+        try expect(!second_block.last);
+        const third_block = try vort.zstdInspectNativeFrameBlockAt(&frame, second_block.next_header_offset);
+        try expect(third_block.block_type == .compressed);
+        try expect(third_block.last);
+
+        const second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+        try expect(second_modes.literals_kind == .raw);
+        try expect(second_modes.sequence_count == 1);
+        try expect(second_modes.literal_length_mode == .rle);
+        try expect(second_modes.offset_mode == .rle);
+        try expect(second_modes.match_length_mode == .rle);
+        const third_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, third_block);
+        try expect(third_modes.literals_kind == .raw);
+        try expect(third_modes.sequence_count == 1);
+        try expect(third_modes.literal_length_mode == .repeat);
+        try expect(third_modes.offset_mode == .repeat);
+        try expect(third_modes.match_length_mode == .repeat);
+
+        const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
+        try expect(summary.block_count == 3);
+        try expect(summary.raw_block_count == 1);
+        try expect(summary.compressed_block_count == 2);
+
+        try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == case.expected.len);
+        const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+        defer allocator.free(decoded);
+        try expectEqualSlices(case.expected, decoded);
+        var output: [case.expected.len]u8 = undefined;
+        const written = try vort.zstdDecodeNativeFrameInto(&frame, &output);
+        try expect(written == decoded.len);
+        try expectEqualSlices(decoded, output[0..written]);
+
+        var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+        defer decoder.deinit();
+        const scratch = try decoder.decodeScratch(&frame);
+        try expectEqualSlices(case.expected, scratch);
+        var appended: std.ArrayList(u8) = .empty;
+        defer appended.deinit(allocator);
+        try appended.appendSlice(allocator, "prefix:");
+        const appended_written = try decoder.decodeAppendExactSize(&appended, &frame, case.expected.len);
+        try expect(appended_written == case.expected.len);
+        try expectPrefixedPayload(appended.items, case.expected);
+    }
 }
 
 fn checkRepeatOffsetLiteralFirstSelector(allocator: std.mem.Allocator) !void {
