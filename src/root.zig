@@ -2138,6 +2138,14 @@ test "root native incremental finish reports direct-output not drained" {
     try std.testing.expectError(error.OutputTooSmall, lz4_decoder.finish());
     try std.testing.expectEqualSlices(u8, "OutputTooSmall", lz4_decoder.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "direct_output", lz4_decoder.diagnostics().last_error_phase_name);
+    lz4_decoder.reset();
+    try std.testing.expectEqualSlices(u8, "", lz4_decoder.diagnostics().last_error_name);
+    var lz4_recovered_output: [lz4_payload.len]u8 = undefined;
+    const lz4_recovered_initial = try lz4_decoder.step(lz4_frame, lz4_recovered_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_recovered_initial.status);
+    const lz4_recovered_done = try lz4_decoder.step("", &lz4_recovered_output);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_recovered_done.status);
+    try std.testing.expectEqualSlices(u8, lz4_payload, &lz4_recovered_output);
 
     var lz4_partial_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
@@ -2171,6 +2179,14 @@ test "root native incremental finish reports direct-output not drained" {
     try std.testing.expectError(error.OutputTooSmall, zstd_decoder.finish());
     try std.testing.expectEqualSlices(u8, "OutputTooSmall", zstd_decoder.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "direct_output", zstd_decoder.diagnostics().last_error_phase_name);
+    zstd_decoder.reset();
+    try std.testing.expectEqualSlices(u8, "", zstd_decoder.diagnostics().last_error_name);
+    var zstd_recovered_output: [zstd_payload.len]u8 = undefined;
+    const zstd_recovered_initial = try zstd_decoder.step(zstd_frame.frame, zstd_recovered_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_recovered_initial.status);
+    const zstd_recovered_done = try zstd_decoder.step("", &zstd_recovered_output);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_recovered_done.status);
+    try std.testing.expectEqualSlices(u8, zstd_payload, &zstd_recovered_output);
 
     var zstd_partial_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = zstd_payload.len,
