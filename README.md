@@ -969,7 +969,8 @@ do not add CSV rows, keeping the Debug gate bounded. The heavier limited
 compressed-FSE sequence-table path is covered by
 `run-zstd-native-dictionary-probe` for public inspect/decode of LL/OF/ML=FSE
 blocks plus repeated sequence-table reuse, and `run-zstd-native-frame-probe` for
-treeless repeat-Huffman literal reuse, invalid repeat-offset selectors, and
+treeless repeat-Huffman literal reuse, repeat-offset selector variants
+(zero-literal rep1/rep2, positive-literal rep2, and invalid `rep0 - 1`), and
 malformed sequence bitstreams, while focused unit tests keep the writer-side
 ML=FSE construction covered without adding the heavier path to the regular
 native library bench gate.
