@@ -61,6 +61,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkSplitSkippableHeaderIncremental(init.gpa);
     checked += 1;
+    try checkSkippableOnlyStream(init.gpa);
+    checked += 1;
     checked += try checkHandcraftedFrameValidation(init.gpa);
     checked += try checkHandcraftedHeaderAndSkippableValidation(init.gpa);
 
@@ -1829,6 +1831,52 @@ fn checkSplitSkippableHeaderIncremental(allocator: std.mem.Allocator) !void {
     try expect(done.progress.output_written == payload.len);
     try expectEqualSlices(payload, &output);
     try decoder.finish();
+}
+
+fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
+    const expected_len = try vort.zstdEncodedSkippableFrameBound("metadata-only-zstd".len);
+    const skip = try vort.zstdEncodeSkippableFrameAlloc(allocator, 9, "metadata-only-zstd");
+    defer allocator.free(skip);
+    try expect(skip.len == expected_len);
+
+    var into: [64]u8 = undefined;
+    const into_written = try vort.zstdEncodeSkippableFrameIntoSlice(9, "metadata-only-zstd", &into);
+    try expect(into_written == skip.len);
+    try expectEqualSlices(skip, into[0..into_written]);
+    try expectError(error.OutputTooSmall, vort.zstdEncodeSkippableFrameIntoSlice(9, "metadata-only-zstd", into[0 .. into_written - 1]));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    try vort.zstdEncodeSkippableFrameAppend(allocator, &appended, 9, "metadata-only-zstd");
+    try expectEqualSlices("prefix:", appended.items[0.."prefix:".len]);
+    try expectEqualSlices(skip, appended.items["prefix:".len..]);
+
+    const decoded = try vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, skip);
+    defer allocator.free(decoded);
+    try expect(decoded.len == 0);
+    const exact = try vort.zstdDecodeNativeConcatenatedFrameAllocExactSize(allocator, skip, 0);
+    defer allocator.free(exact);
+    try expect(exact.len == 0);
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeConcatenatedFrameAllocExactSize(allocator, skip, 1));
+    try expect((try vort.zstdDecodedNativeConcatenatedFrameSize(skip)) == 0);
+    try expect((try vort.zstdDecodedNativeConcatenatedFrameSizeLimited(skip, 0)) == 0);
+
+    const summary = try vort.zstdSummarizeNativeStream(skip);
+    try expect(summary.frame_count == 0);
+    try expect(summary.skippable_frame_count == 1);
+    try expect(summary.skippable_payload_bytes == "metadata-only-zstd".len);
+
+    var iterator = vort.zstdIterateNativeStream(skip);
+    const element = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (element) {
+        .frame => return error.ZstdNativeFrameProbeMismatch,
+        .skippable => |skippable| {
+            try expect(skippable.header.skippable_id == 9);
+            try expectEqualSlices("metadata-only-zstd", skippable.payload);
+        },
+    }
+    if ((try iterator.next()) != null) return error.ZstdNativeFrameProbeMismatch;
 }
 
 fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
