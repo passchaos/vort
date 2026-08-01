@@ -473,6 +473,21 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.SizeMismatch, vort.zstdDecodeNativeFrameAlloc(allocator, &content_size_mismatch));
     checked += 1;
 
+    const content_size_mismatch_with_checksum = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x24, // single-segment, checksum present, one-byte content size.
+        0x05, // Advertise five decoded bytes.
+        0x21, 0x00, 0x00, // Last raw block with only four payload bytes.
+        'a',  'b',  'c',
+        'd',
+        0x00, 0x00, 0x00, 0x00, // Also wrong, but SizeMismatch is diagnosed first.
+    };
+    try expectError(error.SizeMismatch, vort.zstdDecodedNativeFrameSize(&content_size_mismatch_with_checksum));
+    var mismatch_checksum_output: [5]u8 = undefined;
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameInto(&content_size_mismatch_with_checksum, &mismatch_checksum_output));
+    try expectAllocError(allocator, error.SizeMismatch, vort.zstdDecodeNativeFrameAlloc(allocator, &content_size_mismatch_with_checksum));
+    checked += 1;
+
     const reserved_block_type = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
         0x20, // single-segment, no checksum, one-byte content size.
