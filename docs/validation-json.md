@@ -1339,9 +1339,11 @@ python3 tools/native_codec_probes_dashboard.py --json zig-out/vort-native-codec-
 ```
 
 This schema summarizes the library-level native LZ4/Zstd probes, retains the
-case counts from the frame and dictionary probe executables, and adds a
-`coverage` list keyed by codec (`lz4`/`zstd`) and surface (`frame`/`dictionary`)
-so dashboard consumers can audit which public library areas are represented.
+case counts from the frame and dictionary probe executables, adds a
+`coverage` list keyed by codec (`lz4`/`zstd`) and surface (`frame`/`dictionary`),
+and adds a `capabilities` list for cross-cutting library behaviors such as
+lib-generated frames, incremental drains, chunked split input, dictionaries,
+malformed input, checksums, Huffman literals, sequence tables, and block APIs.
 
 Example:
 
@@ -1350,9 +1352,116 @@ Example:
   "schema": "vort.native_codec_probes",
   "schema_version": 1,
   "ok": true,
+  "capability_count": 13,
   "coverage_count": 4,
   "probe_count": 4,
   "total_cases": 162,
+  "capabilities": [
+    {
+      "capability": "lib-generated",
+      "present": true,
+      "ok": true,
+      "probe_count": 2,
+      "ok_probe_count": 2,
+      "cases": 132
+    },
+    {
+      "capability": "native-generated",
+      "present": true,
+      "ok": true,
+      "probe_count": 2,
+      "ok_probe_count": 2,
+      "cases": 132
+    },
+    {
+      "capability": "incremental",
+      "present": true,
+      "ok": true,
+      "probe_count": 4,
+      "ok_probe_count": 4,
+      "cases": 162
+    },
+    {
+      "capability": "chunked",
+      "present": true,
+      "ok": true,
+      "probe_count": 4,
+      "ok_probe_count": 4,
+      "cases": 162
+    },
+    {
+      "capability": "dictionary",
+      "present": true,
+      "ok": true,
+      "probe_count": 3,
+      "ok_probe_count": 3,
+      "cases": 94
+    },
+    {
+      "capability": "dictionary-set",
+      "present": true,
+      "ok": true,
+      "probe_count": 3,
+      "ok_probe_count": 3,
+      "cases": 94
+    },
+    {
+      "capability": "skippable",
+      "present": true,
+      "ok": true,
+      "probe_count": 2,
+      "ok_probe_count": 2,
+      "cases": 132
+    },
+    {
+      "capability": "malformed",
+      "present": true,
+      "ok": true,
+      "probe_count": 4,
+      "ok_probe_count": 4,
+      "cases": 162
+    },
+    {
+      "capability": "checksum",
+      "present": true,
+      "ok": true,
+      "probe_count": 4,
+      "ok_probe_count": 4,
+      "cases": 162
+    },
+    {
+      "capability": "bounded-limits",
+      "present": true,
+      "ok": true,
+      "probe_count": 4,
+      "ok_probe_count": 4,
+      "cases": 162
+    },
+    {
+      "capability": "huffman",
+      "present": true,
+      "ok": true,
+      "probe_count": 1,
+      "ok_probe_count": 1,
+      "cases": 68
+    },
+    {
+      "capability": "sequence-tables",
+      "present": true,
+      "ok": true,
+      "probe_count": 2,
+      "ok_probe_count": 2,
+      "cases": 90
+    },
+    {
+      "capability": "block",
+      "present": true,
+      "ok": true,
+      "probe_count": 1,
+      "ok_probe_count": 1,
+      "cases": 64
+    }
+  ],
   "coverage": [
     {
       "codec": "lz4",

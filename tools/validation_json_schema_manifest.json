@@ -2155,6 +2155,9 @@
     },
     "vort.native_codec_probes": {
       "count_rules": {
+        "capability_count": {
+          "collection": "capabilities"
+        },
         "coverage_count": {
           "collection": "coverage"
         },
@@ -2163,6 +2166,33 @@
         }
       },
       "collections": {
+        "capabilities": {
+          "enums": {
+            "capability": [
+              "lib-generated",
+              "native-generated",
+              "incremental",
+              "chunked",
+              "dictionary",
+              "dictionary-set",
+              "skippable",
+              "malformed",
+              "checksum",
+              "bounded-limits",
+              "huffman",
+              "sequence-tables",
+              "block"
+            ]
+          },
+          "fields": {
+            "capability": "str",
+            "cases": "int",
+            "ok": "bool",
+            "ok_probe_count": "int",
+            "present": "bool",
+            "probe_count": "int"
+          }
+        },
         "coverage": {
           "enums": {
             "codec": [
@@ -2192,6 +2222,8 @@
         }
       },
       "fields": {
+        "capabilities": "list",
+        "capability_count": "int",
         "coverage": "list",
         "coverage_count": "int",
         "ok": "bool",

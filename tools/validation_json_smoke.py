@@ -200,6 +200,7 @@ def main() -> int:
         assert native_codec_probes["ok"] is True
         assert native_codec_probes["probe_count"] == 4
         assert native_codec_probes["coverage_count"] == 4
+        assert native_codec_probes["capability_count"] >= 10
         assert native_codec_probes["total_cases"] >= 4
         assert all(probe["ok"] is True for probe in native_codec_probes["probes"])
         coverage_by_key = {
@@ -217,6 +218,30 @@ def main() -> int:
         assert all(row["probe_count"] == 1 for row in coverage_by_key.values())
         assert all(row["ok_probe_count"] == 1 for row in coverage_by_key.values())
         assert sum(row["cases"] for row in coverage_by_key.values()) == native_codec_probes["total_cases"]
+        capabilities_by_name = {
+            row["capability"]: row
+            for row in native_codec_probes["capabilities"]
+        }
+        for capability in (
+            "lib-generated",
+            "native-generated",
+            "incremental",
+            "chunked",
+            "dictionary",
+            "dictionary-set",
+            "skippable",
+            "malformed",
+            "checksum",
+            "bounded-limits",
+            "huffman",
+            "sequence-tables",
+            "block",
+        ):
+            assert capabilities_by_name[capability]["present"] is True
+            assert capabilities_by_name[capability]["ok"] is True
+            assert capabilities_by_name[capability]["probe_count"] >= 1
+            assert capabilities_by_name[capability]["ok_probe_count"] == capabilities_by_name[capability]["probe_count"]
+            assert capabilities_by_name[capability]["cases"] >= 1
         validate_value_against_manifest(native_codec_probes, schemas_def)
         zlib_relaxed = json.loads(zlib_relaxed_path.read_text())
         assert zlib_relaxed["schema"] == "vort.zlib_relaxed_report"

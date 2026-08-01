@@ -14,6 +14,69 @@ sys.dont_write_bytecode = True
 
 OK_RE = re.compile(r"^(?P<name>[a-z0-9_]+)_ok cases=(?P<cases>[0-9]+)$")
 
+PROBE_CAPABILITIES = {
+    "lz4-native-probe": {
+        "block",
+        "bounded-limits",
+        "checksum",
+        "chunked",
+        "dictionary",
+        "dictionary-set",
+        "incremental",
+        "lib-generated",
+        "malformed",
+        "native-generated",
+        "skippable",
+    },
+    "lz4-native-dictionary-probe": {
+        "bounded-limits",
+        "checksum",
+        "chunked",
+        "dictionary",
+        "dictionary-set",
+        "incremental",
+        "malformed",
+    },
+    "zstd-native-frame-probe": {
+        "bounded-limits",
+        "checksum",
+        "chunked",
+        "huffman",
+        "incremental",
+        "lib-generated",
+        "malformed",
+        "native-generated",
+        "sequence-tables",
+        "skippable",
+    },
+    "zstd-native-dictionary-probe": {
+        "bounded-limits",
+        "checksum",
+        "chunked",
+        "dictionary",
+        "dictionary-set",
+        "incremental",
+        "malformed",
+        "sequence-tables",
+    },
+}
+
+CAPABILITY_ORDER = (
+    "lib-generated",
+    "native-generated",
+    "incremental",
+    "chunked",
+    "dictionary",
+    "dictionary-set",
+    "skippable",
+    "malformed",
+    "checksum",
+    "bounded-limits",
+    "huffman",
+    "sequence-tables",
+    "block",
+)
+
 
 def probe_category(label: str) -> tuple[str, str]:
     if label.startswith("lz4-"):
@@ -76,6 +139,30 @@ def coverage_summary(probes: list[dict[str, object]]) -> list[dict[str, object]]
     return rows
 
 
+
+
+def capability_summary(probes: list[dict[str, object]]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for capability in CAPABILITY_ORDER:
+        matching = [
+            probe
+            for probe in probes
+            if capability in PROBE_CAPABILITIES.get(str(probe["label"]), set())
+        ]
+        cases = sum(int(probe["cases"] or 0) for probe in matching)
+        ok_count = sum(1 for probe in matching if bool(probe["ok"]))
+        rows.append(
+            {
+                "capability": capability,
+                "present": len(matching) != 0,
+                "ok": len(matching) != 0 and ok_count == len(matching),
+                "probe_count": len(matching),
+                "ok_probe_count": ok_count,
+                "cases": cases,
+            }
+        )
+    return rows
+
 def write_markdown(path: Path, summary: dict[str, object]) -> None:
     lines = [
         "# Native codec probes",
@@ -93,6 +180,26 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
             "| {codec} | {surface} | `{present}` | `{ok}` | {ok_probe_count}/{probe_count} | {cases} |".format(
                 codec=row["codec"],
                 surface=row["surface"],
+                present=str(row["present"]).lower(),
+                ok=str(row["ok"]).lower(),
+                ok_probe_count=row["ok_probe_count"],
+                probe_count=row["probe_count"],
+                cases=row["cases"],
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "## Capabilities",
+            "",
+            "| capability | present | ok | probes | cases |",
+            "| --- | --- | --- | ---: | ---: |",
+        ]
+    )
+    for row in summary["capabilities"]:  # type: ignore[index]
+        lines.append(
+            "| {capability} | `{present}` | `{ok}` | {ok_probe_count}/{probe_count} | {cases} |".format(
+                capability=row["capability"],
                 present=str(row["present"]).lower(),
                 ok=str(row["ok"]).lower(),
                 ok_probe_count=row["ok_probe_count"],
@@ -140,10 +247,13 @@ def main() -> int:
         run_probe("zstd-native-dictionary-probe", args.zstd_dictionary_probe),
     ]
     coverage = coverage_summary(probes)
+    capabilities = capability_summary(probes)
     summary: dict[str, object] = {
         "schema": "vort.native_codec_probes",
         "schema_version": 1,
         "ok": all(bool(probe["ok"]) for probe in probes),
+        "capabilities": capabilities,
+        "capability_count": len(capabilities),
         "coverage": coverage,
         "coverage_count": len(coverage),
         "probe_count": len(probes),
