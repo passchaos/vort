@@ -1776,6 +1776,7 @@ Top-level fields:
   `native_codec_probes_incremental_cases`,
   `native_codec_probes_chunked_cases`,
   `native_codec_probes_reusable_chunked_cases`,
+  `native_codec_probes_fse_repeat_cases`,
   `native_codec_probes_dictionary_cases`,
   `native_codec_probes_malformed_cases`,
   `native_codec_probes_total_cases`
@@ -1917,6 +1918,7 @@ Example:
   "native_codec_probes_incremental_cases": 0,
   "native_codec_probes_chunked_cases": 0,
   "native_codec_probes_reusable_chunked_cases": 0,
+  "native_codec_probes_fse_repeat_cases": 0,
   "native_codec_probes_dictionary_cases": 0,
   "native_codec_probes_malformed_cases": 0,
   "native_codec_probes_total_cases": 0,
