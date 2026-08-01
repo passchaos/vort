@@ -1240,6 +1240,60 @@ fn checkAllCompressedSequenceTableFrame(allocator: std.mem.Allocator) !void {
     try expectPrefixedPayload(appended.items, &expected);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, &frame, expected.len - 1));
+
+    var truncated_table = frame;
+    setZstdProbeBlockPayloadLen(&truncated_table, 88);
+    const truncated_table_slice = truncated_table[0 .. 9 + 88];
+    const truncated_table_block = try vort.zstdInspectNativeFrameFirstBlock(truncated_table_slice);
+    try expectError(error.TruncatedFrame, vort.zstdInspectNativeFrameBlockSequenceModes(truncated_table_slice, truncated_table_block));
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(truncated_table_slice));
+    var truncated_table_output: [expected.len]u8 = undefined;
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(truncated_table_slice, &truncated_table_output));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, truncated_table_slice));
+
+    var short_state = frame;
+    setZstdProbeBlockPayloadLen(&short_state, 121);
+    const short_state_slice = short_state[0 .. frame.len - 1];
+    const short_state_block = try vort.zstdInspectNativeFrameFirstBlock(short_state_slice);
+    const short_state_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(short_state_slice, short_state_block);
+    try expect(short_state_modes.literal_length_mode == .compressed);
+    try expect(short_state_modes.offset_mode == .compressed);
+    try expect(short_state_modes.match_length_mode == .compressed);
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(short_state_slice));
+    var short_state_output: [expected.len]u8 = undefined;
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(short_state_slice, &short_state_output));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, short_state_slice));
+
+    var bad_mode = frame;
+    bad_mode[96] = 0xa9; // Low mode bits are reserved by zstd and must stay zero.
+    const bad_mode_block = try vort.zstdInspectNativeFrameFirstBlock(&bad_mode);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&bad_mode, bad_mode_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&bad_mode));
+    var bad_mode_output: [expected.len]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&bad_mode, &bad_mode_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &bad_mode));
+
+    var zero_end_mark = frame;
+    zero_end_mark[zero_end_mark.len - 1] = 0;
+    const zero_end_block = try vort.zstdInspectNativeFrameFirstBlock(&zero_end_mark);
+    const zero_end_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&zero_end_mark, zero_end_block);
+    try expect(zero_end_modes.literal_length_mode == .compressed);
+    try expect(zero_end_modes.offset_mode == .compressed);
+    try expect(zero_end_modes.match_length_mode == .compressed);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&zero_end_mark));
+    var zero_end_output: [expected.len]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&zero_end_mark, &zero_end_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_end_mark));
+}
+
+fn setZstdProbeBlockPayloadLen(frame: []u8, payload_len: usize) void {
+    // The handcrafted fixtures in this probe all use a simple one-frame,
+    // one-block zstd layout: 4-byte magic, 2-byte frame header, then a 3-byte
+    // block header. Keep length mutations local to that fixture shape so the
+    // negative tests exercise payload parsing without changing unrelated frame
+    // metadata.
+    const header: u24 = @intCast((payload_len << 3) | (2 << 1) | 1);
+    std.mem.writeInt(u24, frame[6..][0..3], header, .little);
 }
 
 fn checkLiteralLengthCompressedThenRepeatedSequenceTables(allocator: std.mem.Allocator) !void {
