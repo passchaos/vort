@@ -231,6 +231,7 @@ def main() -> int:
             "incremental",
             "chunked",
             "reusable-chunked",
+            "fse-repeat",
             "dictionary",
             "dictionary-set",
             "skippable",

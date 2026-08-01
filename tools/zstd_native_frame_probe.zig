@@ -64,6 +64,7 @@ pub fn main(init: std.process.Init) !void {
         "checksum",
         "chunked",
         "reusable-chunked",
+        "fse-repeat",
         "huffman",
         "incremental",
         "lib-generated",
@@ -74,6 +75,7 @@ pub fn main(init: std.process.Init) !void {
     }, &.{
         .{ .capability = "chunked", .cases = lib_generated_cases },
         .{ .capability = "reusable-chunked", .cases = lib_generated_cases },
+        .{ .capability = "fse-repeat", .cases = 3 },
         .{ .capability = "incremental", .cases = lib_generated_cases },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });

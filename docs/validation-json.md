@@ -1353,7 +1353,7 @@ Example:
   "schema": "vort.native_codec_probes",
   "schema_version": 1,
   "ok": true,
-  "capability_count": 14,
+  "capability_count": 15,
   "coverage_count": 4,
   "probe_count": 4,
   "total_cases": 246,
@@ -1393,6 +1393,14 @@ Example:
     {
       "capability": "reusable-chunked",
       "cases": 126,
+      "ok": true,
+      "ok_probe_count": 2,
+      "present": true,
+      "probe_count": 2
+    },
+    {
+      "capability": "fse-repeat",
+      "cases": 6,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1581,11 +1589,12 @@ Example:
       "returncode": 0,
       "cases": 113,
       "marker": "zstd_native_frame_probe",
-      "output": "zstd_native_frame_probe_ok cases=113\nzstd_native_frame_probe_coverage capability=bounded-limits cases=113\nzstd_native_frame_probe_coverage capability=checksum cases=113\nzstd_native_frame_probe_coverage capability=chunked cases=63\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=63\nzstd_native_frame_probe_coverage capability=huffman cases=113\nzstd_native_frame_probe_coverage capability=incremental cases=63\nzstd_native_frame_probe_coverage capability=lib-generated cases=63\nzstd_native_frame_probe_coverage capability=malformed cases=113\nzstd_native_frame_probe_coverage capability=native-generated cases=113\nzstd_native_frame_probe_coverage capability=sequence-tables cases=113\nzstd_native_frame_probe_coverage capability=skippable cases=113\n",
+      "output": "zstd_native_frame_probe_ok cases=113\nzstd_native_frame_probe_coverage capability=bounded-limits cases=113\nzstd_native_frame_probe_coverage capability=checksum cases=113\nzstd_native_frame_probe_coverage capability=chunked cases=63\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=63\nzstd_native_frame_probe_coverage capability=fse-repeat cases=3\nzstd_native_frame_probe_coverage capability=huffman cases=113\nzstd_native_frame_probe_coverage capability=incremental cases=63\nzstd_native_frame_probe_coverage capability=lib-generated cases=63\nzstd_native_frame_probe_coverage capability=malformed cases=113\nzstd_native_frame_probe_coverage capability=native-generated cases=113\nzstd_native_frame_probe_coverage capability=sequence-tables cases=113\nzstd_native_frame_probe_coverage capability=skippable cases=113\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
         "chunked",
+        "fse-repeat",
         "huffman",
         "incremental",
         "lib-generated",
@@ -1599,6 +1608,7 @@ Example:
         "bounded-limits": 113,
         "checksum": 113,
         "chunked": 63,
+        "fse-repeat": 3,
         "huffman": 113,
         "incremental": 63,
         "lib-generated": 63,
@@ -1608,7 +1618,7 @@ Example:
         "sequence-tables": 113,
         "skippable": 113
       },
-      "reported_capability_count": 11
+      "reported_capability_count": 12
     },
     {
       "label": "zstd-native-dictionary-probe",
@@ -1617,13 +1627,14 @@ Example:
       "returncode": 0,
       "cases": 22,
       "marker": "zstd_native_dictionary_probe",
-      "output": "zstd_native_dictionary_probe_ok cases=22\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=3\nzstd_native_dictionary_probe_coverage capability=checksum cases=2\nzstd_native_dictionary_probe_coverage capability=chunked cases=2\nzstd_native_dictionary_probe_coverage capability=dictionary cases=22\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=3\nzstd_native_dictionary_probe_coverage capability=incremental cases=4\nzstd_native_dictionary_probe_coverage capability=malformed cases=2\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=7\n",
+      "output": "zstd_native_dictionary_probe_ok cases=22\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=3\nzstd_native_dictionary_probe_coverage capability=checksum cases=2\nzstd_native_dictionary_probe_coverage capability=chunked cases=2\nzstd_native_dictionary_probe_coverage capability=dictionary cases=22\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=3\nzstd_native_dictionary_probe_coverage capability=fse-repeat cases=3\nzstd_native_dictionary_probe_coverage capability=incremental cases=4\nzstd_native_dictionary_probe_coverage capability=malformed cases=2\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=7\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
         "chunked",
         "dictionary",
         "dictionary-set",
+        "fse-repeat",
         "incremental",
         "malformed",
         "sequence-tables"
@@ -1634,11 +1645,12 @@ Example:
         "chunked": 2,
         "dictionary": 22,
         "dictionary-set": 3,
+        "fse-repeat": 3,
         "incremental": 4,
         "malformed": 2,
         "sequence-tables": 7
       },
-      "reported_capability_count": 8
+      "reported_capability_count": 9
     }
   ]
 }

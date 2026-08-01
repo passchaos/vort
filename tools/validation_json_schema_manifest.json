@@ -2188,6 +2188,7 @@
               "incremental",
               "chunked",
               "reusable-chunked",
+              "fse-repeat",
               "dictionary",
               "dictionary-set",
               "skippable",
