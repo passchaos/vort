@@ -44,6 +44,7 @@ pub fn main(init: std.process.Init) !void {
     try checkSkippableOnlyStream(init.gpa);
     checked += 1;
     checked += try checkSkippableMalformedStreams(init.gpa);
+    checked += try checkSkippableChecksumAndTrailingStreams(init.gpa);
     checked += try checkInvalidFrameHeaders(init.gpa);
     checked += try checkInvalidFrameBlocks(init.gpa);
     checked += try checkInvalidFrameChecksumsAndTrailing(init.gpa);
@@ -835,6 +836,89 @@ fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {
     return checked;
 }
 
+fn checkSkippableChecksumAndTrailingStreams(allocator: std.mem.Allocator) !usize {
+    var checked: usize = 0;
+    const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 2, "before-frame");
+    defer allocator.free(skip);
+
+    const checksum_payload = "skipped-checksum";
+    var wrong_checksum_tail: [8]u8 = undefined;
+    @memset(wrong_checksum_tail[0..4], 0);
+    std.mem.writeInt(u32, wrong_checksum_tail[4..8], std.hash.XxHash32.hash(0, checksum_payload) ^ 0x01, .little);
+    const checksum_frame = try frameWithSingleBlock(allocator, 0x64, 0x40, 0x8000_0000 | checksum_payload.len, checksum_payload, &wrong_checksum_tail);
+    defer allocator.free(checksum_frame);
+    const checksum_stream = try std.mem.concat(allocator, u8, &.{ skip, checksum_frame });
+    defer allocator.free(checksum_stream);
+
+    const checksum_summary = try vort.lz4SummarizeNativeStream(checksum_stream);
+    if (checksum_summary.skippable_frame_count != 1 or checksum_summary.frame_count != 1) return error.Lz4ProbeMismatch;
+    if (try vort.lz4DecodedNativeConcatenatedFrameSize(checksum_stream) != checksum_payload.len) return error.Lz4ProbeSizeMismatch;
+    var checksum_output: [checksum_payload.len]u8 = undefined;
+    if (vort.lz4DecodeNativeConcatenatedFrameInto(checksum_stream, &checksum_output)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.ChecksumMismatch) return err;
+    if (vort.lz4DecodeNativeConcatenatedFrameAlloc(allocator, checksum_stream)) |decoded| {
+        allocator.free(decoded);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.ChecksumMismatch) return err;
+
+    var checksum_iterator = vort.lz4IterateNativeStream(checksum_stream);
+    const checksum_skip = (try checksum_iterator.next()) orelse return error.Lz4ProbeMismatch;
+    switch (checksum_skip) {
+        .frame => return error.Lz4ProbeMismatch,
+        .skippable => |skippable| {
+            if (skippable.header.skippable_id != 2) return error.Lz4ProbeMismatch;
+            if (!std.mem.eql(u8, skippable.payload, "before-frame")) return error.Lz4ProbeMismatch;
+        },
+    }
+    const checksum_frame_element = (try checksum_iterator.next()) orelse return error.Lz4ProbeMismatch;
+    switch (checksum_frame_element) {
+        .skippable => return error.Lz4ProbeMismatch,
+        .frame => |frame| {
+            if (!frame.header.content_checksum) return error.Lz4ProbeMismatch;
+            if (vort.lz4DecodeNativeFrameAlloc(allocator, frame.bytes)) |decoded| {
+                allocator.free(decoded);
+                return error.Lz4ProbeExpectedFrameError;
+            } else |err| if (@as(anyerror, err) != error.ChecksumMismatch) return err;
+        },
+    }
+    if ((try checksum_iterator.next()) != null) return error.Lz4ProbeMismatch;
+    checked += 1;
+
+    const trailing_payload = "skipped-trailing";
+    const trailing_tail = [_]u8{ 0, 0, 0, 0, 'x', 'x' };
+    const trailing_frame = try frameWithSingleBlock(allocator, 0x60, 0x40, 0x8000_0000 | trailing_payload.len, trailing_payload, &trailing_tail);
+    defer allocator.free(trailing_frame);
+    const trailing_stream = try std.mem.concat(allocator, u8, &.{ skip, trailing_frame });
+    defer allocator.free(trailing_stream);
+    try expectNativeConcatenatedStreamError(allocator, trailing_stream, error.TruncatedFrame);
+
+    var trailing_iterator = vort.lz4IterateNativeStream(trailing_stream);
+    const trailing_skip = (try trailing_iterator.next()) orelse return error.Lz4ProbeMismatch;
+    switch (trailing_skip) {
+        .frame => return error.Lz4ProbeMismatch,
+        .skippable => |skippable| {
+            if (skippable.header.skippable_id != 2) return error.Lz4ProbeMismatch;
+            if (!std.mem.eql(u8, skippable.payload, "before-frame")) return error.Lz4ProbeMismatch;
+        },
+    }
+    const trailing_frame_element = (try trailing_iterator.next()) orelse return error.Lz4ProbeMismatch;
+    switch (trailing_frame_element) {
+        .skippable => return error.Lz4ProbeMismatch,
+        .frame => |frame| {
+            const decoded = try vort.lz4DecodeNativeFrameAlloc(allocator, frame.bytes);
+            defer allocator.free(decoded);
+            if (!std.mem.eql(u8, trailing_payload, decoded)) return error.Lz4ProbeMismatch;
+        },
+    }
+    if (trailing_iterator.next()) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
+    checked += 1;
+
+    return checked;
+}
+
 fn checkInvalidFrameHeaders(allocator: std.mem.Allocator) !usize {
     const cases = [_]struct {
         name: []const u8,
@@ -1105,8 +1189,9 @@ fn expectNativeConcatenatedStreamError(allocator: std.mem.Allocator, stream: []c
         return error.Lz4ProbeExpectedFrameError;
     } else |err| if (@as(anyerror, err) != expected) return err;
 
-    var output: [1]u8 = undefined;
-    if (vort.lz4DecodeNativeConcatenatedFrameInto(stream, &output)) |_| {
+    const output = try allocator.alloc(u8, 64 * 1024 + 16);
+    defer allocator.free(output);
+    if (vort.lz4DecodeNativeConcatenatedFrameInto(stream, output)) |_| {
         return error.Lz4ProbeExpectedFrameError;
     } else |err| if (@as(anyerror, err) != expected) return err;
 
