@@ -77,10 +77,10 @@ pub fn main(init: std.process.Init) !void {
         "sequence-tables",
         "skippable",
     }, &.{
-        .{ .capability = "chunked", .cases = lib_generated_cases },
-        .{ .capability = "reusable-chunked", .cases = lib_generated_cases },
+        .{ .capability = "chunked", .cases = lib_generated_cases + 1 },
+        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 1 },
         .{ .capability = "fse-repeat", .cases = 4 },
-        .{ .capability = "incremental", .cases = lib_generated_cases },
+        .{ .capability = "incremental", .cases = lib_generated_cases + 1 },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });
     try stdout.flush();
@@ -1220,6 +1220,8 @@ fn checkAllCompressedSequenceTableFrame(allocator: std.mem.Allocator) !void {
     const native_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
     defer allocator.free(native_decoded);
     try expectEqualSlices(&expected, native_decoded);
+    try checkIncrementalFrameLibraryApis(allocator, &expected, &frame);
+    try checkChunkedFrameLibraryApis(allocator, &expected, &frame);
 
     var into: [expected.len]u8 = undefined;
     const written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
@@ -1551,11 +1553,11 @@ fn checkLibZstdGeneratedLibraryFrame(
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&appended, encoded, payload.len - 1));
 
-    try checkLibZstdGeneratedIncrementalFrame(allocator, payload, encoded);
-    try checkLibZstdGeneratedChunkedFrame(allocator, payload, encoded);
+    try checkIncrementalFrameLibraryApis(allocator, payload, encoded);
+    try checkChunkedFrameLibraryApis(allocator, payload, encoded);
 }
 
-fn checkLibZstdGeneratedIncrementalFrame(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
+fn checkIncrementalFrameLibraryApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = payload.len,
         .max_decoded_buffer_len = payload.len,
@@ -1597,7 +1599,7 @@ fn checkLibZstdGeneratedIncrementalFrame(allocator: std.mem.Allocator, payload: 
     try decoder.finish();
 }
 
-fn checkLibZstdGeneratedChunkedFrame(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
+fn checkChunkedFrameLibraryApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
     const split_a: usize = @min(frame.len, 5);
     const split_b: usize = @min(frame.len, split_a + 19);
     const chunks = [_][]const u8{

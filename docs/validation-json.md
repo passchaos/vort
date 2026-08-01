@@ -1376,7 +1376,7 @@ Example:
     },
     {
       "capability": "incremental",
-      "cases": 133,
+      "cases": 134,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -1384,7 +1384,7 @@ Example:
     },
     {
       "capability": "chunked",
-      "cases": 129,
+      "cases": 130,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -1392,7 +1392,7 @@ Example:
     },
     {
       "capability": "reusable-chunked",
-      "cases": 126,
+      "cases": 127,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1589,7 +1589,7 @@ Example:
       "returncode": 0,
       "cases": 115,
       "marker": "zstd_native_frame_probe",
-      "output": "zstd_native_frame_probe_ok cases=115\nzstd_native_frame_probe_coverage capability=bounded-limits cases=115\nzstd_native_frame_probe_coverage capability=checksum cases=115\nzstd_native_frame_probe_coverage capability=chunked cases=63\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=63\nzstd_native_frame_probe_coverage capability=fse-repeat cases=4\nzstd_native_frame_probe_coverage capability=huffman cases=115\nzstd_native_frame_probe_coverage capability=incremental cases=63\nzstd_native_frame_probe_coverage capability=lib-generated cases=63\nzstd_native_frame_probe_coverage capability=malformed cases=115\nzstd_native_frame_probe_coverage capability=native-generated cases=115\nzstd_native_frame_probe_coverage capability=sequence-tables cases=115\nzstd_native_frame_probe_coverage capability=skippable cases=115\n",
+      "output": "zstd_native_frame_probe_ok cases=115\nzstd_native_frame_probe_coverage capability=bounded-limits cases=115\nzstd_native_frame_probe_coverage capability=checksum cases=115\nzstd_native_frame_probe_coverage capability=chunked cases=64\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=64\nzstd_native_frame_probe_coverage capability=fse-repeat cases=4\nzstd_native_frame_probe_coverage capability=huffman cases=115\nzstd_native_frame_probe_coverage capability=incremental cases=64\nzstd_native_frame_probe_coverage capability=lib-generated cases=63\nzstd_native_frame_probe_coverage capability=malformed cases=115\nzstd_native_frame_probe_coverage capability=native-generated cases=115\nzstd_native_frame_probe_coverage capability=sequence-tables cases=115\nzstd_native_frame_probe_coverage capability=skippable cases=115\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
@@ -1607,14 +1607,14 @@ Example:
       "reported_capability_cases": {
         "bounded-limits": 115,
         "checksum": 115,
-        "chunked": 63,
+        "chunked": 64,
         "fse-repeat": 4,
         "huffman": 115,
-        "incremental": 63,
+        "incremental": 64,
         "lib-generated": 63,
         "malformed": 115,
         "native-generated": 115,
-        "reusable-chunked": 63,
+        "reusable-chunked": 64,
         "sequence-tables": 115,
         "skippable": 115
       },
