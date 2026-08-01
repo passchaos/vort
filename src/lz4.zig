@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("core.zig");
+const checksum_mod = @import("checksum.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -78,6 +79,27 @@ pub const NativeDictionary = struct {
 
     pub fn init(id: u32, content: []const u8) NativeDictionary {
         return .{ .id = id, .content = content };
+    }
+
+    /// Derive a stable 32-bit native LZ4 Dictionary_ID from dictionary bytes.
+    ///
+    /// The native LZ4 frame header uses a zero/absent dictionary ID to mean
+    /// "no preset dictionary".  Fold the rare CRC-32 zero result to a fixed
+    /// non-zero value so `initFromContent` always creates a usable frame
+    /// dictionary.  Callers that need a stronger collision policy or externally
+    /// assigned IDs can keep using `init`.
+    pub fn derivedId(content: []const u8) u32 {
+        const id = checksum_mod.crc32(content);
+        return if (id == 0) 1 else id;
+    }
+
+    /// Create a dictionary whose frame Dictionary_ID is derived from `content`.
+    ///
+    /// This keeps encoder and decoder call sites from hand-rolling IDs while
+    /// preserving the explicit ownership model: the returned dictionary borrows
+    /// `content`, and callers must keep those bytes alive for the codec call.
+    pub fn initFromContent(content: []const u8) NativeDictionary {
+        return init(derivedId(content), content);
     }
 };
 
@@ -6468,6 +6490,15 @@ test "lz4 native frame uses preset dictionary history" {
     const written = try encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, out);
     try std.testing.expectEqualSlices(u8, encoded, out[0..written]);
     try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSliceWithDictionary(std.testing.allocator, payload, options, dict, out[0 .. written - 1]));
+}
+
+test "lz4 native dictionary can derive stable non-zero ids from content" {
+    const dict = NativeDictionary.initFromContent("abcdefghijklmnop");
+    try std.testing.expectEqual(checksum_mod.crc32(dict.content), dict.id);
+    try std.testing.expectEqual(dict.id, NativeDictionary.derivedId(dict.content));
+    try std.testing.expectEqual(dict.id, NativeDictionary.initFromContent(dict.content).id);
+    try std.testing.expectEqual(@as(u32, 1), NativeDictionary.derivedId(""));
+    try std.testing.expectEqual(@as(u32, 1), NativeDictionary.initFromContent("").id);
 }
 
 test "lz4 independent blocks reuse preset dictionary" {

@@ -1356,7 +1356,7 @@ Example:
   "capability_count": 15,
   "coverage_count": 4,
   "probe_count": 4,
-  "total_cases": 250,
+  "total_cases": 252,
   "capabilities": [
     {
       "capability": "lib-generated",
@@ -1408,7 +1408,7 @@ Example:
     },
     {
       "capability": "dictionary",
-      "cases": 133,
+      "cases": 135,
       "ok": true,
       "ok_probe_count": 3,
       "present": true,
@@ -1440,7 +1440,7 @@ Example:
     },
     {
       "capability": "checksum",
-      "cases": 223,
+      "cases": 225,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -1490,7 +1490,7 @@ Example:
       "surface": "frame"
     },
     {
-      "cases": 8,
+      "cases": 9,
       "codec": "lz4",
       "ok": true,
       "ok_probe_count": 1,
@@ -1508,7 +1508,7 @@ Example:
       "surface": "frame"
     },
     {
-      "cases": 22,
+      "cases": 23,
       "codec": "zstd",
       "ok": true,
       "ok_probe_count": 1,
@@ -1561,9 +1561,9 @@ Example:
       "executable": "zig-out/bin/lz4-native-dictionary-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 8,
+      "cases": 9,
       "marker": "lz4_native_dictionary_probe",
-      "output": "lz4_native_dictionary_probe_ok cases=8\nlz4_native_dictionary_probe_coverage capability=bounded-limits cases=1\nlz4_native_dictionary_probe_coverage capability=checksum cases=1\nlz4_native_dictionary_probe_coverage capability=chunked cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary cases=8\nlz4_native_dictionary_probe_coverage capability=dictionary-set cases=3\nlz4_native_dictionary_probe_coverage capability=incremental cases=3\n",
+      "output": "lz4_native_dictionary_probe_ok cases=9\nlz4_native_dictionary_probe_coverage capability=bounded-limits cases=1\nlz4_native_dictionary_probe_coverage capability=checksum cases=2\nlz4_native_dictionary_probe_coverage capability=chunked cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary cases=9\nlz4_native_dictionary_probe_coverage capability=dictionary-set cases=3\nlz4_native_dictionary_probe_coverage capability=incremental cases=3\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
@@ -1574,9 +1574,9 @@ Example:
       ],
       "reported_capability_cases": {
         "bounded-limits": 1,
-        "checksum": 1,
+        "checksum": 2,
         "chunked": 1,
-        "dictionary": 8,
+        "dictionary": 9,
         "dictionary-set": 3,
         "incremental": 3
       },
@@ -1625,9 +1625,9 @@ Example:
       "executable": "zig-out/bin/zstd-native-dictionary-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 22,
+      "cases": 23,
       "marker": "zstd_native_dictionary_probe",
-      "output": "zstd_native_dictionary_probe_ok cases=22\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=3\nzstd_native_dictionary_probe_coverage capability=checksum cases=2\nzstd_native_dictionary_probe_coverage capability=chunked cases=2\nzstd_native_dictionary_probe_coverage capability=dictionary cases=22\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=3\nzstd_native_dictionary_probe_coverage capability=fse-repeat cases=3\nzstd_native_dictionary_probe_coverage capability=incremental cases=4\nzstd_native_dictionary_probe_coverage capability=malformed cases=2\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=7\n",
+      "output": "zstd_native_dictionary_probe_ok cases=23\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=3\nzstd_native_dictionary_probe_coverage capability=checksum cases=3\nzstd_native_dictionary_probe_coverage capability=chunked cases=2\nzstd_native_dictionary_probe_coverage capability=dictionary cases=23\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=3\nzstd_native_dictionary_probe_coverage capability=fse-repeat cases=3\nzstd_native_dictionary_probe_coverage capability=incremental cases=4\nzstd_native_dictionary_probe_coverage capability=malformed cases=2\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=7\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
@@ -1641,9 +1641,9 @@ Example:
       ],
       "reported_capability_cases": {
         "bounded-limits": 3,
-        "checksum": 2,
+        "checksum": 3,
         "chunked": 2,
-        "dictionary": 22,
+        "dictionary": 23,
         "dictionary-set": 3,
         "fse-repeat": 3,
         "incremental": 4,

@@ -9,6 +9,8 @@ pub fn main(init: std.process.Init) !void {
     var checked: usize = 0;
     try checkDictionaryIdValidation(init.gpa);
     checked += 1;
+    try checkDerivedDictionaryIdApis(init.gpa);
+    checked += 1;
     try checkDictionaryMatchEncoding(init.gpa);
     checked += 1;
     try checkDictionarySequenceHuffmanLiterals(init.gpa);
@@ -65,7 +67,7 @@ pub fn main(init: std.process.Init) !void {
         "sequence-tables",
     }, &.{
         .{ .capability = "bounded-limits", .cases = 3 },
-        .{ .capability = "checksum", .cases = 2 },
+        .{ .capability = "checksum", .cases = 3 },
         .{ .capability = "chunked", .cases = 2 },
         .{ .capability = "dictionary-set", .cases = 3 },
         .{ .capability = "fse-repeat", .cases = 3 },
@@ -334,6 +336,32 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     try expectError(error.CorruptFrame, set_compressed_decoder.step(&compressed_malformed, compressed_priority_output[0..0]));
     try expectEqualSlices("CorruptFrame", set_compressed_decoder.diagnostics().last_error_name);
     try expectEqualSlices("frame", set_compressed_decoder.diagnostics().last_error_phase_name);
+}
+
+fn checkDerivedDictionaryIdApis(allocator: std.mem.Allocator) !void {
+    const dict = vort.ZstdNativeDictionary.initFromContent("derived zstd dictionary history");
+    const same = vort.ZstdNativeDictionary.initFromContent(dict.content);
+    const payload = "pfx-derived zstd dictionary history payload";
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+
+    try expect(dict.id == vort.crc32(dict.content));
+    try expect(dict.id != 0);
+    try expect(same.id == dict.id);
+    try expectEqualSlices(dict.content, same.content);
+    try expect(vort.ZstdNativeDictionary.derivedId("") == 1);
+    try expect(vort.ZstdNativeDictionary.initFromContent("").id == 1);
+
+    const encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict);
+    defer allocator.free(encoded.frame);
+    const header = try vort.zstdInspectNativeFrameHeader(encoded.frame);
+    try expect(header.dictionary_id == dict.id);
+
+    const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, same);
+    defer allocator.free(decoded);
+    try expectEqualSlices(payload, decoded);
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {

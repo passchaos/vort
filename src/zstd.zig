@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("core.zig");
+const checksum_mod = @import("checksum.zig");
 const huffman = @import("huffman.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
@@ -129,6 +130,25 @@ pub const NativeDictionary = struct {
 
     pub fn init(id: u32, content: []const u8) NativeDictionary {
         return .{ .id = id, .content = content };
+    }
+
+    /// Derive a stable 32-bit native Zstd Dictionary_ID from dictionary bytes.
+    ///
+    /// The Zstandard frame header treats a zero Dictionary_ID as absent, so fold
+    /// the rare CRC-32 zero result to a fixed non-zero value.  This makes the
+    /// convenience constructor safe for dictionary-aware encode/decode helpers
+    /// while leaving externally assigned or stronger-catalog IDs to `init`.
+    pub fn derivedId(content: []const u8) u32 {
+        const id = checksum_mod.crc32(content);
+        return if (id == 0) 1 else id;
+    }
+
+    /// Create a dictionary whose frame Dictionary_ID is derived from `content`.
+    ///
+    /// The returned dictionary borrows `content`; callers must keep the bytes
+    /// alive for any encode/decode operation that references this dictionary.
+    pub fn initFromContent(content: []const u8) NativeDictionary {
+        return init(derivedId(content), content);
     }
 };
 
@@ -13133,6 +13153,15 @@ test "zstd native writer emits dictionary ids" {
     try std.testing.expectEqual(@as(usize, 7), no_size_header.payload_offset);
     try std.testing.expectError(error.NeedDictionary, decodedRawOrRleFrameSize(no_size));
     try std.testing.expectError(error.InvalidMagic, inspectNativeFrameHeader("not-zstd"));
+}
+
+test "zstd native dictionary can derive stable non-zero ids from content" {
+    const dict = NativeDictionary.initFromContent("abcdefghijklmnopQRSTUVWXYZabcd");
+    try std.testing.expectEqual(checksum_mod.crc32(dict.content), dict.id);
+    try std.testing.expectEqual(dict.id, NativeDictionary.derivedId(dict.content));
+    try std.testing.expectEqual(dict.id, NativeDictionary.initFromContent(dict.content).id);
+    try std.testing.expectEqual(@as(u32, 1), NativeDictionary.derivedId(""));
+    try std.testing.expectEqual(@as(u32, 1), NativeDictionary.initFromContent("").id);
 }
 
 test "zstd native decoder rejects dictionary id frames without a dictionary" {
