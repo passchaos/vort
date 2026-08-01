@@ -78,6 +78,7 @@ pub fn main(init: std.process.Init) !void {
     try smokeReusableChunkedDecoders(init.gpa);
     try smokeZstdManyRepeatedSequences(init.gpa);
     try smokeZstdSequenceInspectFixtures(init.gpa);
+    try smokeZstdNoSizeMultiCompressed(init.gpa);
     try smokeZstdMatchSearchBudget(init.gpa);
     try smokeNativeDictionaryBenchRows(init.gpa);
     try smokeNativeDictionarySetBenchRows(init.gpa);
@@ -1761,6 +1762,40 @@ fn smokeZstdSequenceInspectFixtures(allocator: std.mem.Allocator) !void {
         error.CorruptFrame => {},
         else => return err,
     }
+}
+
+fn smokeZstdNoSizeMultiCompressed(allocator: std.mem.Allocator) !void {
+    const block_len = 1024;
+    const payload = try allocator.alloc(u8, block_len * 2);
+    defer allocator.free(payload);
+    @memset(payload[0..block_len], 'a');
+    @memset(payload[block_len..], 'b');
+
+    const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .include_content_size = false,
+        .block_size_max = block_len,
+    });
+    defer allocator.free(encoded.frame);
+
+    const header = try vort.zstdInspectNativeFrameHeader(encoded.frame);
+    if (header.content_size != null) return error.SizeMismatch;
+    const summary = try vort.zstdSummarizeNativeStream(encoded.frame);
+    if (summary.frame_count != 1 or summary.block_count != 2 or summary.compressed_block_count != 2) {
+        return error.SizeMismatch;
+    }
+    if (try vort.zstdDecodedNativeFrameSizeLimited(encoded.frame, payload.len) != payload.len) return error.SizeMismatch;
+    if (vort.zstdDecodedNativeFrameSizeLimited(encoded.frame, payload.len - 1)) |_| {
+        return error.SizeMismatch;
+    } else |err| switch (err) {
+        error.OutputLimitExceeded => {},
+        else => return err,
+    }
+
+    const decoded = try vort.zstdDecodeNativeFrameAllocLimited(allocator, encoded.frame, payload.len);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, payload, decoded)) return error.SizeMismatch;
 }
 
 fn smokeZstdMatchSearchBudget(allocator: std.mem.Allocator) !void {
