@@ -38,6 +38,7 @@ EXPECTED_MODES = {
     "lib_generated_no_size",
     "lib_generated_checksum",
     "lib_generated_no_size_checksum",
+    "lib_generated_independent",
     "sequence_huffman_literals_plain",
     "sequence_huffman_literals",
     "dictionary_plain",
@@ -76,6 +77,7 @@ EXPECTED_EXTRA_ROWS = {
     ("zstd", "lib_generated_checksum", "lib_generated_checksum"),
     ("lz4", "lib_generated_no_size_checksum", "lib_generated_no_size_checksum"),
     ("zstd", "lib_generated_no_size_checksum", "lib_generated_no_size_checksum"),
+    ("lz4", "lib_generated_independent", "lib_generated_independent"),
     ("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals"),
     ("zstd", "sequence_huffman_literals", "sequence_huffman_literals"),
     ("lz4", "dictionary_plain", "dictionary"),
@@ -228,6 +230,9 @@ def main() -> int:
             lib_generated = row_by_identity[(codec, case_name, case_name)]
             if int(lib_generated["encoded_bytes"]) >= int(lib_generated["input_bytes"]):
                 raise AssertionError(f"expected {codec} {case_name} row to compress input: {lib_generated}")
+    lz4_independent = row_by_identity[("lz4", "lib_generated_independent", "lib_generated_independent")]
+    if int(lz4_independent["encoded_bytes"]) >= int(lz4_independent["input_bytes"]):
+        raise AssertionError(f"expected lz4 independent lib-generated row to compress input: {lz4_independent}")
 
     sequence_plain = row_by_identity[("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals")]
     sequence_huffman = row_by_identity[("zstd", "sequence_huffman_literals", "sequence_huffman_literals")]
