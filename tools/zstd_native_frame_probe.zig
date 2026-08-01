@@ -461,6 +461,27 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(&no_size_multi_block, no_size_multi_into[0..4]));
     checked += 1;
 
+    const no_size_multi_checksum_mismatch = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x04, // No content size, checksum present; window descriptor follows.
+        0x00, // 1 KiB window.
+        0x10, 0x00, 0x00, // Non-final raw block with two payload bytes.
+        'a',  'b',
+        0x19, 0x00, 0x00, // Final raw block with three more bytes.
+        'c',  'd',  'e',
+        0x00, 0x00, 0x00, 0x00, // Wrong checksum for "abcde".
+    };
+    const no_size_multi_checksum_summary = try vort.zstdSummarizeNativeStream(&no_size_multi_checksum_mismatch);
+    try expect(no_size_multi_checksum_summary.frame_count == 1);
+    try expect(no_size_multi_checksum_summary.block_count == 2);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&no_size_multi_checksum_mismatch, 5)) == 5);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(&no_size_multi_checksum_mismatch, 4));
+    var no_size_multi_checksum_into: [5]u8 = undefined;
+    try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameInto(&no_size_multi_checksum_mismatch, &no_size_multi_checksum_into));
+    try expectAllocError(allocator, error.ChecksumMismatch, vort.zstdDecodeNativeFrameAllocLimited(allocator, &no_size_multi_checksum_mismatch, 5));
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeFrameAllocLimited(allocator, &no_size_multi_checksum_mismatch, 4));
+    checked += 1;
+
     const checksum_payload = "zstd-checksum";
     var wrong_checksum: [4]u8 = undefined;
     std.mem.writeInt(u32, &wrong_checksum, @as(u32, @truncate(std.hash.XxHash64.hash(0, checksum_payload))) ^ 0x01, .little);
