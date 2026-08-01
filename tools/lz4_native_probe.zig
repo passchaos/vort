@@ -475,6 +475,24 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
         else => return err,
     }
 
+    var wrong_block_checksum = try allocator.dupe(u8, encoded);
+    defer allocator.free(wrong_block_checksum);
+    const checksum_priority_block = (try vort.lz4InspectNativeFrameFirstBlock(wrong_block_checksum)) orelse {
+        return error.Lz4ProbeMismatch;
+    };
+    if (checksum_priority_block.block_checksum_offset == null) return error.Lz4ProbeMismatch;
+    wrong_block_checksum[checksum_priority_block.block_checksum_offset.?] ^= 0x01;
+    try expectNeedDictionary(vort.lz4DecodedNativeFrameSize(wrong_block_checksum));
+    try expectNeedDictionary(vort.lz4DecodedNativeFrameSizeWithDictionary(wrong_block_checksum, wrong));
+    var block_checksum_priority_output: [payload.len]u8 = undefined;
+    try expectNeedDictionary(vort.lz4DecodeNativeFrameInto(wrong_block_checksum, &block_checksum_priority_output));
+    try expectNeedDictionary(vort.lz4DecodeNativeFrameIntoWithDictionary(wrong_block_checksum, &block_checksum_priority_output, wrong));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeFrameAlloc(allocator, wrong_block_checksum));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, wrong_block_checksum, wrong));
+    try expectError(error.ChecksumMismatch, vort.lz4DecodedNativeFrameSizeWithDictionary(wrong_block_checksum, dict));
+    try expectError(error.ChecksumMismatch, vort.lz4DecodeNativeFrameIntoWithDictionary(wrong_block_checksum, &block_checksum_priority_output, dict));
+    try expectAllocError(allocator, error.ChecksumMismatch, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, wrong_block_checksum, dict));
+
     const size_mismatch = try frameWithSingleBlockAndContentSizeAndDictionary(
         allocator,
         0x69, // Content Size + Dictionary_ID.
