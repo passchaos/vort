@@ -128,6 +128,14 @@ fn checkNoSizeCompressedBlockLimits(allocator: std.mem.Allocator) !void {
     try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameInto(corrupt_checksum, &checksum_into));
     try expectAllocError(allocator, error.ChecksumMismatch, vort.zstdDecodeNativeFrameAllocLimited(allocator, corrupt_checksum, payload.len));
     try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeFrameAllocLimited(allocator, corrupt_checksum, payload.len - 1));
+
+    const truncated_checksum = checksummed.frame[0 .. checksummed.frame.len - 2];
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSizeLimited(truncated_checksum, payload.len));
+    var truncated_into: [payload.len]u8 = undefined;
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(truncated_checksum, &truncated_into));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAllocLimited(allocator, truncated_checksum, payload.len));
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(truncated_checksum, payload.len - 1));
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeFrameAllocLimited(allocator, truncated_checksum, payload.len - 1));
 }
 
 fn checkHighByteFseHuffman(allocator: std.mem.Allocator) !void {
