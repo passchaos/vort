@@ -47,6 +47,7 @@ pub fn main(init: std.process.Init) !void {
     checked += try checkSkippableChecksumAndTrailingStreams(init.gpa);
     checked += try checkInvalidFrameHeaders(init.gpa);
     checked += try checkInvalidFrameBlocks(init.gpa);
+    checked += try checkInvalidFrameContentSizes(init.gpa);
     checked += try checkInvalidFrameChecksumsAndTrailing(init.gpa);
 
     try stdout.print("lz4_native_probe_ok cases={d}\n", .{checked});
@@ -1000,6 +1001,48 @@ fn checkInvalidFrameBlocks(allocator: std.mem.Allocator) !usize {
     return checked;
 }
 
+fn checkInvalidFrameContentSizes(allocator: std.mem.Allocator) !usize {
+    var checked: usize = 0;
+    const payload = "abcd";
+    const end_mark = [_]u8{ 0, 0, 0, 0 };
+
+    const declared_too_small = try frameWithSingleBlockAndContentSize(
+        allocator,
+        0x68,
+        0x40,
+        payload.len - 1,
+        0x8000_0000 | payload.len,
+        payload,
+        &end_mark,
+    );
+    defer allocator.free(declared_too_small);
+    const small_header = try vort.lz4InspectNativeFrameHeader(declared_too_small);
+    if (small_header.expected_content_size == null or small_header.expected_content_size.? != payload.len - 1) {
+        return error.Lz4ProbeSizeMismatch;
+    }
+    try expectNativeFrameAndConcatenatedDecodeSizeError(allocator, declared_too_small, error.SizeMismatch);
+    checked += 1;
+
+    const declared_too_large = try frameWithSingleBlockAndContentSize(
+        allocator,
+        0x68,
+        0x40,
+        payload.len + 1,
+        0x8000_0000 | payload.len,
+        payload,
+        &end_mark,
+    );
+    defer allocator.free(declared_too_large);
+    const large_header = try vort.lz4InspectNativeFrameHeader(declared_too_large);
+    if (large_header.expected_content_size == null or large_header.expected_content_size.? != payload.len + 1) {
+        return error.Lz4ProbeSizeMismatch;
+    }
+    try expectNativeFrameAndConcatenatedDecodeSizeError(allocator, declared_too_large, error.SizeMismatch);
+    checked += 1;
+
+    return checked;
+}
+
 fn checkInvalidFrameChecksumsAndTrailing(allocator: std.mem.Allocator) !usize {
     var checked: usize = 0;
 
@@ -1072,9 +1115,39 @@ fn frameWithSingleBlock(
     return try frame.toOwnedSlice(allocator);
 }
 
+fn frameWithSingleBlockAndContentSize(
+    allocator: std.mem.Allocator,
+    flg: u8,
+    bd: u8,
+    content_size: usize,
+    block_header_value: u32,
+    payload: []const u8,
+    trailing: []const u8,
+) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(allocator);
+    try appendLz4FrameHeaderWithContentSize(allocator, &frame, flg, bd, content_size);
+    var block_header: [4]u8 = undefined;
+    std.mem.writeInt(u32, &block_header, block_header_value, .little);
+    try frame.appendSlice(allocator, &block_header);
+    try frame.appendSlice(allocator, payload);
+    try frame.appendSlice(allocator, trailing);
+    return try frame.toOwnedSlice(allocator);
+}
+
 fn appendLz4FrameHeader(allocator: std.mem.Allocator, frame: *std.ArrayList(u8), flg: u8, bd: u8) !void {
     try frame.appendSlice(allocator, &.{ 0x04, 0x22, 0x4d, 0x18 });
     const descriptor = [_]u8{ flg, bd };
+    try frame.appendSlice(allocator, &descriptor);
+    try frame.append(allocator, lz4DescriptorChecksum(&descriptor));
+}
+
+fn appendLz4FrameHeaderWithContentSize(allocator: std.mem.Allocator, frame: *std.ArrayList(u8), flg: u8, bd: u8, content_size: usize) !void {
+    try frame.appendSlice(allocator, &.{ 0x04, 0x22, 0x4d, 0x18 });
+    var descriptor: [10]u8 = undefined;
+    descriptor[0] = flg;
+    descriptor[1] = bd;
+    std.mem.writeInt(u64, descriptor[2..10], @intCast(content_size), .little);
     try frame.appendSlice(allocator, &descriptor);
     try frame.append(allocator, lz4DescriptorChecksum(&descriptor));
 }
@@ -1158,6 +1231,30 @@ fn expectNativeFrameDecodeAndSizeError(allocator: std.mem.Allocator, frame: []co
     } else |err| if (@as(anyerror, err) != expected) return err;
 
     if (vort.lz4DecodeNativeFrameAlloc(allocator, frame)) |decoded| {
+        allocator.free(decoded);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+}
+
+fn expectNativeFrameAndConcatenatedDecodeSizeError(allocator: std.mem.Allocator, frame: []const u8, expected: anyerror) !void {
+    try expectNativeFrameDecodeAndSizeError(allocator, frame, expected);
+
+    const block_summary = try vort.lz4SummarizeNativeFrameBlocks(frame);
+    if (block_summary.block_count != 1) return error.Lz4ProbeSizeMismatch;
+    const stream_summary = try vort.lz4SummarizeNativeStream(frame);
+    if (stream_summary.frame_count != 1 or stream_summary.block_count != 1) return error.Lz4ProbeSizeMismatch;
+
+    if (vort.lz4DecodedNativeConcatenatedFrameSize(frame)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    const output = try allocator.alloc(u8, 64 * 1024 + 16);
+    defer allocator.free(output);
+    if (vort.lz4DecodeNativeConcatenatedFrameInto(frame, output)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    if (vort.lz4DecodeNativeConcatenatedFrameAlloc(allocator, frame)) |decoded| {
         allocator.free(decoded);
         return error.Lz4ProbeExpectedFrameError;
     } else |err| if (@as(anyerror, err) != expected) return err;
