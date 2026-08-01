@@ -43,7 +43,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkSkippableOnlyStream(init.gpa);
     checked += 1;
-    checked += try checkLibLz4GeneratedLibraryFrames(init.gpa);
+    const lib_generated_cases = try checkLibLz4GeneratedLibraryFrames(init.gpa);
+    checked += lib_generated_cases;
     checked += try checkSkippableMalformedStreams(init.gpa);
     checked += try checkSkippableChecksumAndTrailingStreams(init.gpa);
     checked += try checkInvalidFrameHeaders(init.gpa);
@@ -64,12 +65,28 @@ pub fn main(init: std.process.Init) !void {
         "malformed",
         "native-generated",
         "skippable",
+    }, &.{
+        .{ .capability = "chunked", .cases = lib_generated_cases },
+        .{ .capability = "incremental", .cases = lib_generated_cases },
+        .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });
     try stdout.flush();
 }
 
-fn printCoverage(stdout: anytype, marker: []const u8, cases: usize, capabilities: []const []const u8) !void {
+const CoverageCase = struct {
+    capability: []const u8,
+    cases: usize,
+};
+
+fn printCoverage(stdout: anytype, marker: []const u8, default_cases: usize, capabilities: []const []const u8, overrides: []const CoverageCase) !void {
     for (capabilities) |capability| {
+        var cases = default_cases;
+        for (overrides) |override| {
+            if (std.mem.eql(u8, override.capability, capability)) {
+                cases = override.cases;
+                break;
+            }
+        }
         try stdout.print("{s}_coverage capability={s} cases={d}\n", .{ marker, capability, cases });
     }
 }

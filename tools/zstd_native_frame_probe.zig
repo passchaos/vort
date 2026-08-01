@@ -37,7 +37,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkRepeatMixedRlePredefinedSequenceModes(init.gpa);
     checked += 1;
-    checked += try checkLibZstdGeneratedLibraryFrames(init.gpa);
+    const lib_generated_cases = try checkLibZstdGeneratedLibraryFrames(init.gpa);
+    checked += lib_generated_cases;
     try checkSplitHeaderIncremental(init.gpa);
     checked += 1;
     try checkSplitSkippableHeaderIncremental(init.gpa);
@@ -57,12 +58,28 @@ pub fn main(init: std.process.Init) !void {
         "native-generated",
         "sequence-tables",
         "skippable",
+    }, &.{
+        .{ .capability = "chunked", .cases = lib_generated_cases },
+        .{ .capability = "incremental", .cases = lib_generated_cases },
+        .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });
     try stdout.flush();
 }
 
-fn printCoverage(stdout: anytype, marker: []const u8, cases: usize, capabilities: []const []const u8) !void {
+const CoverageCase = struct {
+    capability: []const u8,
+    cases: usize,
+};
+
+fn printCoverage(stdout: anytype, marker: []const u8, default_cases: usize, capabilities: []const []const u8, overrides: []const CoverageCase) !void {
     for (capabilities) |capability| {
+        var cases = default_cases;
+        for (overrides) |override| {
+            if (std.mem.eql(u8, override.capability, capability)) {
+                cases = override.cases;
+                break;
+            }
+        }
         try stdout.print("{s}_coverage capability={s} cases={d}\n", .{ marker, capability, cases });
     }
 }
