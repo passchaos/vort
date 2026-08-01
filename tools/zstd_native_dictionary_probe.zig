@@ -141,6 +141,29 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     try expect((try vort.zstdDecodedNativeFrameSizeWithDictionary(wrong_checksum, dict)) == payload.len);
     try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameIntoWithDictionary(wrong_checksum, &checksum_priority_output, dict));
     try expectAllocError(allocator, error.ChecksumMismatch, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, wrong_checksum, dict));
+
+    const content_size_mismatch = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x22, // 2-byte Dictionary_ID, single-segment, one-byte content size.
+        0x34, 0x12, // Dictionary_ID == 0x1234.
+        0x05, // Advertise five decoded bytes.
+        0x21, 0x00, 0x00, // Last raw block with only four payload bytes.
+        'a',  'b',  'c',
+        'd',
+    };
+    const mismatch_header = try vort.zstdInspectNativeFrameHeader(&content_size_mismatch);
+    try expect(mismatch_header.dictionary_id == dict.id);
+    try expect(mismatch_header.content_size.? == 5);
+    var size_priority_output: [5]u8 = undefined;
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSize(&content_size_mismatch));
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSizeWithDictionary(&content_size_mismatch, wrong));
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameInto(&content_size_mismatch, &size_priority_output));
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameIntoWithDictionary(&content_size_mismatch, &size_priority_output, wrong));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAlloc(allocator, &content_size_mismatch));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &content_size_mismatch, wrong));
+    try expectError(error.SizeMismatch, vort.zstdDecodedNativeFrameSizeWithDictionary(&content_size_mismatch, dict));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoWithDictionary(&content_size_mismatch, &size_priority_output, dict));
+    try expectAllocError(allocator, error.SizeMismatch, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &content_size_mismatch, dict));
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
