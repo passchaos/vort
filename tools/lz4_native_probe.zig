@@ -1210,8 +1210,23 @@ fn checkSplitSkippableHeaderIncremental(allocator: std.mem.Allocator) !void {
 }
 
 fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
+    const expected_len = try vort.lz4EncodedSkippableFrameBound("metadata-only".len);
     const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 5, "metadata-only");
     defer allocator.free(skip);
+    if (skip.len != expected_len) return error.Lz4ProbeSizeMismatch;
+
+    var into: [64]u8 = undefined;
+    const into_written = try vort.lz4EncodeSkippableFrameIntoSlice(5, "metadata-only", &into);
+    if (into_written != skip.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, skip, into[0..into_written])) return error.Lz4ProbeMismatch;
+    try expectError(error.OutputTooSmall, vort.lz4EncodeSkippableFrameIntoSlice(5, "metadata-only", into[0 .. into_written - 1]));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    try vort.lz4EncodeSkippableFrameAppend(allocator, &appended, 5, "metadata-only");
+    if (!std.mem.eql(u8, "prefix:", appended.items[0.."prefix:".len])) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, skip, appended.items["prefix:".len..])) return error.Lz4ProbeMismatch;
 
     const decoded = try vort.lz4DecodeNativeConcatenatedFrameAlloc(allocator, skip);
     defer allocator.free(decoded);
@@ -1219,6 +1234,9 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
     const exact = try vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, skip, 0);
     defer allocator.free(exact);
     if (exact.len != 0) return error.Lz4ProbeSizeMismatch;
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, skip, 1));
+    if ((try vort.lz4DecodedNativeConcatenatedFrameSize(skip)) != 0) return error.Lz4ProbeSizeMismatch;
+    if ((try vort.lz4DecodedNativeConcatenatedFrameSizeLimited(skip, 0)) != 0) return error.Lz4ProbeSizeMismatch;
 
     const summary = try vort.lz4SummarizeNativeStream(skip);
     if (summary.frame_count != 0) return error.Lz4ProbeMismatch;
