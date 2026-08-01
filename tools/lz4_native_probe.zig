@@ -1431,31 +1431,31 @@ fn checkLibLz4GeneratedChunkedFrame(allocator: std.mem.Allocator, case: Case, fr
     const join = try allocator.alloc(u8, frame.len);
     defer allocator.free(join);
 
-    if (try vort.lz4DecodedNativeConcatenatedFrameChunksSize(&chunks, join) != case.payload.len) return error.Lz4ProbeSizeMismatch;
-    if (try vort.lz4DecodedNativeConcatenatedFrameChunksSizeLimited(&chunks, join, case.payload.len) != case.payload.len) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.OutputLimitExceeded, vort.lz4DecodedNativeConcatenatedFrameChunksSizeLimited(&chunks, join, case.payload.len - 1));
+    if (try vort.lz4DecodedNativeFrameChunksSize(&chunks, join) != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (try vort.lz4DecodedNativeFrameChunksSizeLimited(&chunks, join, case.payload.len) != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    try expectError(error.OutputLimitExceeded, vort.lz4DecodedNativeFrameChunksSizeLimited(&chunks, join, case.payload.len - 1));
 
-    const decoded = try vort.lz4DecodeNativeConcatenatedFrameChunksAllocLimited(allocator, &chunks, join, case.payload.len);
+    const decoded = try vort.lz4DecodeNativeFrameChunksAllocLimited(allocator, &chunks, join, case.payload.len);
     defer allocator.free(decoded);
     try expectPayload(case, decoded);
-    try expectAllocError(allocator, error.OutputLimitExceeded, vort.lz4DecodeNativeConcatenatedFrameChunksAllocLimited(allocator, &chunks, join, case.payload.len - 1));
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.lz4DecodeNativeFrameChunksAllocLimited(allocator, &chunks, join, case.payload.len - 1));
 
     const into = try allocator.alloc(u8, case.payload.len);
     defer allocator.free(into);
-    const written = try vort.lz4DecodeNativeConcatenatedFrameChunksInto(&chunks, join, into);
+    const written = try vort.lz4DecodeNativeFrameChunksInto(&chunks, join, into);
     if (written != case.payload.len) return error.Lz4ProbeSizeMismatch;
     try expectPayload(case, into[0..written]);
-    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeConcatenatedFrameChunksInto(&chunks, join, into[0 .. into.len - 1]));
+    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameChunksInto(&chunks, join, into[0 .. into.len - 1]));
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(allocator);
     try appended.appendSlice(allocator, "prefix:");
-    const appended_written = try vort.lz4DecodeNativeConcatenatedFrameChunksAppendExactSize(allocator, &appended, &chunks, join, case.payload.len);
+    const appended_written = try vort.lz4DecodeNativeFrameChunksAppendExactSize(allocator, &appended, &chunks, join, case.payload.len);
     if (appended_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
     if (!std.mem.eql(u8, appended.items[0.."prefix:".len], "prefix:")) return error.Lz4ProbeMismatch;
     if (!std.mem.eql(u8, appended.items["prefix:".len..], case.payload)) return error.Lz4ProbeMismatch;
     appended.clearRetainingCapacity();
-    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameChunksAppendExactSize(allocator, &appended, &chunks, join, case.payload.len - 1));
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameChunksAppendExactSize(allocator, &appended, &chunks, join, case.payload.len - 1));
 }
 
 fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {
