@@ -834,9 +834,52 @@ fn checkDictionarySetStreamInspection(allocator: std.mem.Allocator) !void {
     }
 
     const missing_set = vort.Lz4NativeDictionarySet.init(&.{first_dict});
+    var missing_output: [expected.len]u8 = undefined;
+    var checksum_stream = try allocator.dupe(u8, stream.items);
+    defer allocator.free(checksum_stream);
+    const second_frame_slice = checksum_stream[second_start..];
+    const second_checksum_block = (try vort.lz4InspectNativeFrameFirstBlock(second_frame_slice)) orelse {
+        return error.Lz4ProbeMismatch;
+    };
+    if (second_checksum_block.block_checksum_offset == null) return error.Lz4ProbeMismatch;
+    checksum_stream[second_start + second_checksum_block.block_checksum_offset.?] ^= 0x01;
+    try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionarySet(checksum_stream, missing_set));
+    try expectNeedDictionary(vort.lz4DecodeNativeConcatenatedFrameIntoWithDictionarySet(checksum_stream, &missing_output, missing_set));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(allocator, checksum_stream, missing_set));
+    try expectError(error.ChecksumMismatch, vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionarySet(checksum_stream, dictionary_set));
+    try expectError(error.ChecksumMismatch, vort.lz4DecodeNativeConcatenatedFrameIntoWithDictionarySet(checksum_stream, &missing_output, dictionary_set));
+    try expectAllocError(allocator, error.ChecksumMismatch, vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(allocator, checksum_stream, dictionary_set));
+    var missing_set_checksum_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, missing_set, .{
+        .expected_output_len = expected.len,
+        .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
+    });
+    defer missing_set_checksum_decoder.deinit();
+    const missing_set_initial = try missing_set_checksum_decoder.step(checksum_stream, missing_output[0..0]);
+    if (missing_set_initial.status != .need_output) return error.Lz4ProbeMismatch;
+    try expectError(error.NeedDictionary, missing_set_checksum_decoder.step("", &missing_output));
+    if (!std.mem.eql(u8, "NeedDictionary", missing_set_checksum_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", missing_set_checksum_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    var set_checksum_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
+        .expected_output_len = expected.len,
+        .max_decoded_buffer_len = @max(first_payload.len, second_payload.len),
+    });
+    defer set_checksum_decoder.deinit();
+    const set_checksum_initial = try set_checksum_decoder.step(checksum_stream, missing_output[0..0]);
+    if (set_checksum_initial.status != .need_output) return error.Lz4ProbeMismatch;
+    try expectError(error.ChecksumMismatch, set_checksum_decoder.step("", &missing_output));
+    if (!std.mem.eql(u8, "ChecksumMismatch", set_checksum_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", set_checksum_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+
     try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionarySet(stream.items, missing_set));
     try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameSizeLimitedWithDictionarySet(stream.items, expected.len, missing_set));
-    var missing_output: [expected.len]u8 = undefined;
     try expectNeedDictionary(vort.lz4DecodeNativeConcatenatedFrameIntoWithDictionarySet(stream.items, &missing_output, missing_set));
     try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet(allocator, stream.items, missing_set));
     try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionarySetExactSize(allocator, stream.items, missing_set, expected.len));
