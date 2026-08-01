@@ -1250,7 +1250,7 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         .{ .name = "liblz4-json", .payload = @constCast(json_unit ** 64) },
         .{ .name = "liblz4-randomish", .payload = &randomish },
     };
-    const levels = [_]c_int{ 0, 10 };
+    const levels = [_]c_int{ 0, 3, 10 };
     const option_sets = [_]vort.Lz4LibFrameOptions{
         .{},
         .{

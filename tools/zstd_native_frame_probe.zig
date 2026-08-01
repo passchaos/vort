@@ -907,7 +907,7 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         json_unit ** 64,
         &randomish,
     };
-    const levels = [_]c_int{ 1, 9 };
+    const levels = [_]c_int{ 1, 9, 19 };
     const option_sets = [_]vort.ZstdLibFrameOptions{
         .{},
         .{ .include_content_size = false },
