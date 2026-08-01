@@ -194,8 +194,11 @@ Current interpretation:
   content-size, malformed raw/RLE block, or malformed compressed
   sequence-table errors; once the matching dictionary is supplied, the same
   fixtures expose the underlying `ChecksumMismatch`, `SizeMismatch`, or
-  `CorruptFrame`, including incremental diagnostics for checksum, size, and
-  raw/RLE malformed-block paths. The
+  `CorruptFrame`, including incremental diagnostics for checksum, size,
+  raw/RLE malformed-block, and compressed sequence-table paths. Dictionary-set
+  variants now exercise the same precedence through top-level, chunked/reusable,
+  and incremental APIs when skippable concatenated streams contain a later frame
+  whose Dictionary_ID is absent from the set. The
   native writer can emit Dictionary_ID fields for downstream
   container metadata and has a dictionary-aware multi-match path that can also run after the first block, so frames
   whose blocks contain preset history can be smaller than raw storage

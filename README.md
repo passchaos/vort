@@ -952,9 +952,12 @@ pin error precedence for hostile frames that carry a missing or mismatched
 checksum, and content-size conflicts across one-shot and incremental paths;
 Zstd covers content checksum, content-size, malformed raw/RLE blocks, and
 malformed compressed sequence-table blocks, including incremental diagnostics
-where that path applies. In those cases callers see `NeedDictionary` before
-deeper payload or checksum errors, while providing the matching dictionary
-exposes the underlying `ChecksumMismatch`, `SizeMismatch`, or `CorruptFrame`.
+where that path applies. Dictionary-set probes extend the same precedence to
+skippable concatenated streams whose later frame needs a missing ID, including
+chunked/reusable helpers and incremental dictionary-set drains. In those cases
+callers see `NeedDictionary` before deeper payload or checksum errors, while
+providing the matching dictionary exposes the underlying `ChecksumMismatch`,
+`SizeMismatch`, or `CorruptFrame`.
 
 The focused library benchmark/gate tracks these public surfaces directly:
 
