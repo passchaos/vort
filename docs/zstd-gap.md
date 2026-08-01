@@ -131,6 +131,7 @@ Current interpretation:
   RLE/predefined sequence cost scoring for single and mixed match candidates,
   mixed RLE/predefined plus limited compressed-FSE sequence-table mode emission
   (LL/OF/ML, public frame-probe coverage for compressed offset-table repeat selector emission,
+  writer-side all-LL/OF/ML compressed-FSE table-plan selection,
   repeated-table reuse, and short/corrupt LL/OF/ML FSE state streams covered by public dictionary probe
   inspection/decode, with writer-side ML construction still covered by focused
   unit round-trips, and frame-probe malformed paths for repeated-table truncation),

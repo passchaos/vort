@@ -6253,11 +6253,11 @@ fn emitBestSequenceCompressedBlock(
         tail_start,
     );
 
-    var mixed_block: std.ArrayList(u8) = .empty;
-    defer mixed_block.deinit(allocator);
-    const mixed_ok = try emitMixedSequenceCompressedBlock(
+    var table_plan_block: std.ArrayList(u8) = .empty;
+    defer table_plan_block.deinit(allocator);
+    const table_plan_ok = try emitTablePlanSequenceCompressedBlock(
         allocator,
-        &mixed_block,
+        &table_plan_block,
         block,
         last,
         literal_lens,
@@ -6271,7 +6271,7 @@ fn emitBestSequenceCompressedBlock(
     var best_len: usize = std.math.maxInt(usize);
     chooseShortestPlannedBlock(rle_ok, rle_block.items, &best, &best_len);
     chooseShortestPlannedBlock(predefined_ok, predefined_block.items, &best, &best_len);
-    chooseShortestPlannedBlock(mixed_ok, mixed_block.items, &best, &best_len);
+    chooseShortestPlannedBlock(table_plan_ok, table_plan_block.items, &best, &best_len);
     const best_block = best orelse return false;
     try out.appendSlice(allocator, best_block);
     return true;
@@ -6334,7 +6334,7 @@ fn emitRleSequenceCompressedBlock(
     return true;
 }
 
-fn emitMixedSequenceCompressedBlock(
+fn emitTablePlanSequenceCompressedBlock(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     block: []const u8,
@@ -6345,7 +6345,7 @@ fn emitMixedSequenceCompressedBlock(
     literal_ends: []const usize,
     tail_start: usize,
 ) Error!bool {
-    const best = (try bestMixedSequencePlan(
+    const best = (try bestTablePlanSequence(
         block,
         literal_lens,
         offsets,
@@ -6781,7 +6781,7 @@ fn bestSequencePayloadLenWithLiteralEnds(
         else => return err,
     }
 
-    if (try bestMixedSequencePlan(block, literal_lens, offsets, match_lens, literal_ends, tail_start)) |candidate| {
+    if (try bestTablePlanSequence(block, literal_lens, offsets, match_lens, literal_ends, tail_start)) |candidate| {
         chooseShortestPayloadLen(candidate.payload_len, &best);
     }
 
@@ -6839,7 +6839,7 @@ const SequenceTablePlanAlternatives = struct {
     }
 };
 
-fn bestMixedSequencePlan(
+fn bestTablePlanSequence(
     block: []const u8,
     literal_lens: []const usize,
     offsets: []const usize,
@@ -6870,7 +6870,7 @@ fn bestMixedSequencePlan(
                     .offset = offset_plan,
                     .match = match_plan,
                 };
-                if (!sequenceCombinedPlanIsMixed(combined)) continue;
+                if (!sequenceCombinedPlanNeedsGenericEmitter(combined)) continue;
                 const payload_len = sequencePayloadLenWithTablePlans(
                     block,
                     literal_lens,
@@ -6892,11 +6892,17 @@ fn bestMixedSequencePlan(
     return best;
 }
 
-fn sequenceCombinedPlanIsMixed(plan: SequenceCombinedEmitPlan) bool {
+fn sequenceCombinedPlanNeedsGenericEmitter(plan: SequenceCombinedEmitPlan) bool {
     const literal_mode = sequenceTableMode(plan.literal);
     const offset_mode = sequenceTableMode(plan.offset);
     const match_mode = sequenceTableMode(plan.match);
-    return literal_mode != offset_mode or literal_mode != match_mode;
+    // All-RLE and all-predefined plans are already handled by dedicated emitters
+    // that are cheaper to score directly.  All-compressed plans have no such
+    // separate path, so keep them in the generic table-plan search instead of
+    // accidentally discarding the only route to LL/OF/ML=FSE blocks.
+    if (literal_mode == .rle and offset_mode == .rle and match_mode == .rle) return false;
+    if (literal_mode == .predefined and offset_mode == .predefined and match_mode == .predefined) return false;
+    return true;
 }
 
 fn sequenceTablePlanAlternatives(values: []const usize, kind: SequenceTableKind) Error!SequenceTablePlanAlternatives {
@@ -11235,12 +11241,12 @@ test "zstd sequence emitter supports mixed RLE and predefined tables" {
     const offsets = [_]usize{ 72, 52 };
     const match_lens = [_]usize{ 57, 202 };
     const literal_ends = [_]usize{ 131, payload.len };
-    const mixed = (try bestMixedSequencePlan(&payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len)) orelse return error.CorruptFrame;
-    try std.testing.expectEqual(SymbolMode.rle, sequenceTableMode(mixed.plan.literal));
-    try std.testing.expectEqual(SymbolMode.predefined, sequenceTableMode(mixed.plan.offset));
-    try std.testing.expectEqual(SymbolMode.predefined, sequenceTableMode(mixed.plan.match));
-    try std.testing.expect(mixed.payload_len < try multiSequencePayloadLenWithLiteralEnds(&payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len));
-    try std.testing.expectEqual(mixed.payload_len, try bestSequencePayloadLenWithLiteralEnds(&payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len));
+    const table_plan = (try bestTablePlanSequence(&payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(SymbolMode.rle, sequenceTableMode(table_plan.plan.literal));
+    try std.testing.expectEqual(SymbolMode.predefined, sequenceTableMode(table_plan.plan.offset));
+    try std.testing.expectEqual(SymbolMode.predefined, sequenceTableMode(table_plan.plan.match));
+    try std.testing.expect(table_plan.payload_len < try multiSequencePayloadLenWithLiteralEnds(&payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len));
+    try std.testing.expectEqual(table_plan.payload_len, try bestSequencePayloadLenWithLiteralEnds(&payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len));
 
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
@@ -11259,7 +11265,7 @@ test "zstd sequence emitter supports mixed RLE and predefined tables" {
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
     try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
-    try std.testing.expectEqual(mixed.payload_len, first_block.payload_len);
+    try std.testing.expectEqual(table_plan.payload_len, first_block.payload_len);
     const block = frame.items[first_block.payload_offset..][0..first_block.payload_len];
     var frame_state: SequenceFrameState = .{};
     const section = try parseLiteralsSection(block, &frame_state);
@@ -11452,6 +11458,84 @@ test "zstd sequence emitter supports compressed FSE repeat-offset selectors" {
 
     const decoded_len = try decodedRawOrRleFrameSize(frame.items);
     try std.testing.expectEqual(payload.items.len, decoded_len);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, std_decoded);
+}
+
+test "zstd sequence planner can choose compressed FSE for all sequence tables" {
+    const literal_lens = [_]usize{
+        8, 1, 2, 3, 2, 4, 3, 1,
+        2, 3, 2, 4, 3, 1, 2, 3,
+        2, 4, 3, 1, 2, 3, 2, 4,
+        3, 1, 2, 3, 2, 4, 3, 1,
+    };
+    const offsets = [_]usize{
+        4, 4, 1, 8, 8, 4, 4, 8,
+        1, 1, 8, 4, 4, 8, 1, 1,
+        8, 4, 4, 8, 1, 1, 8, 4,
+        4, 8, 1, 1, 8, 4, 4, 8,
+    };
+    const match_lens = [_]usize{
+        4, 5, 4, 6, 5, 4, 6, 5,
+        4, 5, 4, 6, 5, 4, 6, 5,
+        4, 5, 4, 6, 5, 4, 6, 5,
+        4, 5, 4, 6, 5, 4, 6, 5,
+    };
+    var literal_ends: [literal_lens.len]usize = undefined;
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    for (offsets, 0..) |offset, i| {
+        for (0..literal_lens[i]) |j| {
+            try payload.append(std.testing.allocator, 'a' + @as(u8, @intCast((i + j) % 26)));
+        }
+        for (0..match_lens[i]) |_| {
+            try payload.append(std.testing.allocator, payload.items[payload.items.len - offset]);
+        }
+        literal_ends[i] = payload.items.len;
+    }
+
+    const table_plan = (try bestTablePlanSequence(
+        payload.items,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        payload.items.len,
+    )) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(SymbolMode.compressed, sequenceTableMode(table_plan.plan.literal));
+    try std.testing.expectEqual(SymbolMode.compressed, sequenceTableMode(table_plan.plan.offset));
+    try std.testing.expectEqual(SymbolMode.compressed, sequenceTableMode(table_plan.plan.match));
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.items.len, .{ .content_checksum = false });
+    try std.testing.expect(try emitBestSequenceCompressedBlock(
+        std.testing.allocator,
+        &frame,
+        payload.items,
+        true,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        payload.items.len,
+    ));
+
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    try std.testing.expectEqual(table_plan.payload_len, first_block.payload_len);
+    const block = frame.items[first_block.payload_offset..][0..first_block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(literal_lens.len, section.sequence_count);
+    try std.testing.expectEqual(@as(u8, 0xa8), block[section.sequence_payload_offset]); // LL/OF/ML all use FSE.
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(decoded);
