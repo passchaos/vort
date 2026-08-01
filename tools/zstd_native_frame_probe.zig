@@ -951,6 +951,7 @@ fn checkLibZstdGeneratedLibraryFrame(
     try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&appended, encoded, payload.len - 1));
 
     try checkLibZstdGeneratedIncrementalFrame(allocator, payload, encoded);
+    try checkLibZstdGeneratedChunkedFrame(allocator, payload, encoded);
 }
 
 fn checkLibZstdGeneratedIncrementalFrame(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
@@ -993,6 +994,43 @@ fn checkLibZstdGeneratedIncrementalFrame(allocator: std.mem.Allocator, payload: 
     try expect(output_offset == payload.len);
     try expectEqualSlices(payload, output);
     try decoder.finish();
+}
+
+fn checkLibZstdGeneratedChunkedFrame(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
+    const split_a: usize = @min(frame.len, 5);
+    const split_b: usize = @min(frame.len, split_a + 19);
+    const chunks = [_][]const u8{
+        frame[0..split_a],
+        frame[split_a..split_b],
+        frame[split_b..],
+    };
+    const join = try allocator.alloc(u8, frame.len);
+    defer allocator.free(join);
+
+    try expect((try vort.zstdDecodedNativeConcatenatedFrameChunksSize(&chunks, join)) == payload.len);
+    try expect((try vort.zstdDecodedNativeConcatenatedFrameChunksSizeLimited(&chunks, join, payload.len)) == payload.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeConcatenatedFrameChunksSizeLimited(&chunks, join, payload.len - 1));
+
+    const decoded = try vort.zstdDecodeNativeConcatenatedFrameChunksAllocLimited(allocator, &chunks, join, payload.len);
+    defer allocator.free(decoded);
+    try expectEqualSlices(payload, decoded);
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeConcatenatedFrameChunksAllocLimited(allocator, &chunks, join, payload.len - 1));
+
+    const into = try allocator.alloc(u8, payload.len);
+    defer allocator.free(into);
+    const written = try vort.zstdDecodeNativeConcatenatedFrameChunksInto(&chunks, join, into);
+    try expect(written == payload.len);
+    try expectEqualSlices(payload, into[0..written]);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeConcatenatedFrameChunksInto(&chunks, join, into[0 .. into.len - 1]));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try vort.zstdDecodeNativeConcatenatedFrameChunksAppendExactSize(allocator, &appended, &chunks, join, payload.len);
+    try expect(appended_written == payload.len);
+    try expectPrefixedPayload(appended.items, payload);
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeConcatenatedFrameChunksAppendExactSize(allocator, &appended, &chunks, join, payload.len - 1));
 }
 
 fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {

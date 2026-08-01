@@ -968,7 +968,7 @@ malformed compressed sequence-table conflicts. In those cases callers see
 matching dictionary exposes the underlying `ChecksumMismatch`, `SizeMismatch`,
 `InvalidMatch`, or `CorruptFrame`.
 
-`run-lz4-native-probe` also runs pure library-level liblz4-generated frame differentials across multiple frame option/level combinations and decodes them through Vort native public APIs, including incremental split-input/caller-output drains, so LZ4 interoperability coverage is not limited to CLI routing.
+`run-lz4-native-probe` also runs pure library-level liblz4-generated frame differentials across multiple frame option/level combinations and decodes them through Vort native public APIs, including incremental split-input/caller-output drains and chunked split-input helpers, so LZ4 interoperability coverage is not limited to CLI routing.
 
 The focused library benchmark/gate tracks these public surfaces directly:
 
@@ -992,7 +992,7 @@ compressed-FSE sequence-table path is covered by
 `run-zstd-native-dictionary-probe` for public inspect/decode of LL/OF/ML=FSE
 blocks plus repeated sequence-table reuse, and `run-zstd-native-frame-probe` for
 treeless repeat-Huffman literal reuse, repeat-offset selector variants
-(zero-literal rep1/rep2, positive-literal rep2, invalid `rep0 - 1`, valid cross-block `rep0 - 1` after a direct-offset update, multi-sequence predefined-table state transitions, mixed RLE/predefined sequence modes, and repeated mixed-table modes across blocks, and pure library-level libzstd-generated frame differentials with incremental drains), and
+(zero-literal rep1/rep2, positive-literal rep2, invalid `rep0 - 1`, valid cross-block `rep0 - 1` after a direct-offset update, multi-sequence predefined-table state transitions, mixed RLE/predefined sequence modes, and repeated mixed-table modes across blocks, and pure library-level libzstd-generated frame differentials with incremental drains and chunked split-input helpers), and
 malformed sequence bitstreams, and short/corrupt LL/OF/ML compressed-FSE state streams,
 while focused unit tests keep the writer-side ML=FSE construction covered
 without adding the heavier path to the regular native library bench gate.
