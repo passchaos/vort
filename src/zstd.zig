@@ -6852,7 +6852,7 @@ fn bestMixedSequencePlan(
     if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
 
     const literal_alternatives = try sequenceTablePlanAlternatives(literal_lens, .literal);
-    const offset_alternatives = try sequenceTablePlanAlternatives(offsets, .offset);
+    const offset_alternatives = try offsetSequenceTablePlanAlternatives(literal_lens, offsets);
     const match_alternatives = try sequenceTablePlanAlternatives(match_lens, .match);
     if (literal_alternatives.len == 0 or offset_alternatives.len == 0 or match_alternatives.len == 0) return null;
 
@@ -6915,6 +6915,21 @@ fn sequenceTablePlanAlternatives(values: []const usize, kind: SequenceTableKind)
     return alternatives;
 }
 
+fn offsetSequenceTablePlanAlternatives(literal_lens: []const usize, offsets: []const usize) Error!SequenceTablePlanAlternatives {
+    if (literal_lens.len != offsets.len) return error.CorruptFrame;
+    var alternatives: SequenceTablePlanAlternatives = .{};
+    if (try rleSequenceCodeForValues(offsets, &of_base, &of_bits)) |code| {
+        try alternatives.add(.{ .rle = code });
+    }
+    if (try planPredefinedSequenceValues(offsets, &default_of_symbols, 2)) |plan| {
+        try alternatives.add(.{ .predefined = plan });
+    }
+    if (try planCompressedOffsetSequenceValues(literal_lens, offsets)) |plan| {
+        try alternatives.add(.{ .compressed = plan });
+    }
+    return alternatives;
+}
+
 fn rleSequenceCodeForValues(values: []const usize, bases: []const usize, bits: []const u8) Error!?u8 {
     if (values.len == 0) return null;
     const code = sequenceCodeForValue(values[0], bases, bits) catch |err| switch (err) {
@@ -6932,17 +6947,11 @@ fn rleSequenceCodeForValues(values: []const usize, bases: []const usize, bits: [
 }
 
 fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) Error!?CompressedSequencePlan {
-    // Keep the first compressed-table writer slice deliberately narrow. Literal
-    // lengths have no repeat-offset side effects. Offset tables are enabled
-    // only for absolute offsets (code extra bits > 1) so the compressed state
-    // stream cannot accidentally exercise the repeat-offset special cases.
     if (values.len < min_compressed_sequence_table_count or values.len > max_bootstrap_sequence_count) return null;
     const bases = sequenceTableBases(kind);
     const bits = sequenceTableBits(kind);
 
-    var plan: CompressedSequencePlan = .{ .len = values.len, .accuracy_log = 5 };
-    var counts: [max_fse_compression_symbol + 1]u32 = .{0} ** (max_fse_compression_symbol + 1);
-    var max_code: u8 = 0;
+    var codes: [max_bootstrap_sequence_count]u8 = undefined;
     for (values, 0..) |value, i| {
         const code = sequenceCodeForValue(value, bases, bits) catch |err| switch (err) {
             error.CorruptFrame => return null,
@@ -6950,6 +6959,66 @@ fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) 
         };
         if (code > max_fse_compression_symbol) return null;
         if (kind == .offset and of_bits[code] <= 1) return null;
+        codes[i] = code;
+    }
+    return try planCompressedSequenceCodes(codes[0..values.len]);
+}
+
+fn planCompressedOffsetSequenceValues(literal_lens: []const usize, offsets: []const usize) Error!?CompressedSequencePlan {
+    if (literal_lens.len != offsets.len) return error.CorruptFrame;
+    if (offsets.len < min_compressed_sequence_table_count or offsets.len > max_bootstrap_sequence_count) return null;
+
+    var codes: [max_bootstrap_sequence_count]u8 = undefined;
+    var repeated_offsets = initial_repeated_offsets;
+    for (offsets, 0..) |offset, i| {
+        codes[i] = try chooseOffsetSequenceCode(literal_lens[i], offset, &repeated_offsets);
+    }
+    return try planCompressedSequenceCodes(codes[0..offsets.len]);
+}
+
+fn chooseOffsetSequenceCode(literal_len: usize, offset: usize, repeated_offsets: *[3]usize) Error!u8 {
+    // Prefer the dedicated repeat-offset selectors when they describe the
+    // requested match distance. Besides using fewer extra bits, this preserves
+    // the same repeated-offset history that a normal zstd encoder would expose
+    // to later sequences.
+    for ([_]u8{ 0, 1 }) |code| {
+        const symbol = try sequenceRleSymbol(.offset, code);
+        var trial_offsets = repeated_offsets.*;
+        _ = sequenceOffsetExtraForEncodedOffset(symbol, literal_len, offset, &trial_offsets) catch |err| switch (err) {
+            error.CorruptFrame => continue,
+            else => return err,
+        };
+        repeated_offsets.* = trial_offsets;
+        return code;
+    }
+
+    const code = try absoluteOffsetSequenceCode(offset);
+    var trial_offsets = repeated_offsets.*;
+    _ = try sequenceOffsetExtraForEncodedOffset(try sequenceRleSymbol(.offset, code), literal_len, offset, &trial_offsets);
+    repeated_offsets.* = trial_offsets;
+    return code;
+}
+
+fn absoluteOffsetSequenceCode(offset: usize) Error!u8 {
+    var best: ?usize = null;
+    for (of_base, 0..) |base, code| {
+        if (of_bits[code] <= 1) continue;
+        if (offset < base) continue;
+        const span = @as(usize, 1) << @intCast(of_bits[code]);
+        if (offset - base >= span) continue;
+        if (best == null or base >= of_base[best.?]) best = code;
+    }
+    return @intCast(best orelse return error.CorruptFrame);
+}
+
+fn planCompressedSequenceCodes(codes: []const u8) Error!?CompressedSequencePlan {
+    if (codes.len < min_compressed_sequence_table_count or codes.len > max_bootstrap_sequence_count) return null;
+
+    var plan: CompressedSequencePlan = .{ .len = codes.len, .accuracy_log = 5 };
+    var counts: [max_fse_compression_symbol + 1]u32 = .{0} ** (max_fse_compression_symbol + 1);
+    var max_code: u8 = 0;
+    for (codes, 0..) |code, i| {
+        if (code > max_fse_compression_symbol) return null;
         plan.codes[i] = code;
         counts[code] += 1;
         max_code = @max(max_code, code);
@@ -6965,12 +7034,12 @@ fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) 
     // RLE and predefined modes are already cheaper for these degenerate shapes;
     // keep the compressed table candidate for cases with enough repeated code
     // distribution to amortize the normalized-count header.
-    if (max_count == values.len or max_count == 1) return null;
+    if (max_count == codes.len or max_count == 1) return null;
 
     var normalized: [max_fse_compression_symbol + 1]i16 = .{0} ** (max_fse_compression_symbol + 1);
     normalizeFseCounts(
         counts[0 .. @as(usize, max_code) + 1],
-        values.len,
+        codes.len,
         plan.accuracy_log,
         normalized[0 .. @as(usize, max_code) + 1],
     ) orelse return null;
@@ -6990,7 +7059,7 @@ fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) 
     // candidates whose table header alone is no smaller than one byte per
     // sequence; RLE/predefined modes remain available and avoid the FSE setup
     // cost in those cases.
-    if (plan.table_payload_len >= values.len) return null;
+    if (plan.table_payload_len >= codes.len) return null;
 
     var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
     const table_len = try buildFseDecodeTableFromNormalized(
@@ -7110,12 +7179,14 @@ fn sequenceReadFieldsWithTablePlans(
     try appendInitialSequenceStateField(out, &count, plan.offset, .offset);
     try appendInitialSequenceStateField(out, &count, plan.match, .match);
 
+    var repeated_offsets = initial_repeated_offsets;
     for (0..literal_lens.len) |i| {
         const literal_symbol = try sequenceTableSymbol(plan.literal, .literal, i);
         const offset_symbol = try sequenceTableSymbol(plan.offset, .offset, i);
         const match_symbol = try sequenceTableSymbol(plan.match, .match, i);
 
-        try appendBitField(out, &count, offsets[i] - offset_symbol.base, offset_symbol.additional_bits);
+        const offset_extra = try sequenceOffsetExtraForEncodedOffset(offset_symbol, literal_lens[i], offsets[i], &repeated_offsets);
+        try appendBitField(out, &count, offset_extra, offset_symbol.additional_bits);
         try appendBitField(out, &count, match_lens[i] - match_symbol.base, match_symbol.additional_bits);
         try appendBitField(out, &count, literal_lens[i] - literal_symbol.base, literal_symbol.additional_bits);
 
@@ -7126,6 +7197,42 @@ fn sequenceReadFieldsWithTablePlans(
         }
     }
     return count;
+}
+
+fn sequenceOffsetExtraForEncodedOffset(
+    symbol: SequenceSymbol,
+    literal_len: usize,
+    offset: usize,
+    repeated_offsets: *[3]usize,
+) Error!usize {
+    if (symbol.additional_bits > 1) {
+        if (offset < symbol.base) return error.CorruptFrame;
+        const extra = offset - symbol.base;
+        if (extra >= (@as(usize, 1) << @intCast(symbol.additional_bits))) return error.CorruptFrame;
+        updateRepeatedOffsets(repeated_offsets, offset);
+        return extra;
+    }
+
+    const alternatives: usize = @as(usize, 1) << @intCast(symbol.additional_bits);
+    var extra: usize = 0;
+    while (extra < alternatives) : (extra += 1) {
+        var trial_offsets = repeated_offsets.*;
+        const resolved = resolveSequenceOffset(
+            symbol.base,
+            symbol.additional_bits,
+            extra,
+            literal_len,
+            &trial_offsets,
+        ) catch |err| switch (err) {
+            error.InvalidMatch, error.UnsupportedZstdFeature => continue,
+            else => return err,
+        };
+        if (resolved == offset) {
+            repeated_offsets.* = trial_offsets;
+            return extra;
+        }
+    }
+    return error.CorruptFrame;
 }
 
 fn appendInitialSequenceStateField(out: []BitField, count: *usize, plan: SequenceTableEmitPlan, kind: SequenceTableKind) Error!void {
@@ -11279,6 +11386,72 @@ test "zstd sequence emitter supports compressed FSE absolute-offset table" {
     const section = try parseLiteralsSection(block, &frame_state);
     try std.testing.expectEqual(literal_lens.len, section.sequence_count);
     try std.testing.expectEqual(@as(u8, 0x24), block[section.sequence_payload_offset]); // LL=Predefined, OF=FSE, ML=RLE.
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+
+    const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(std_decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, std_decoded);
+}
+
+test "zstd sequence emitter supports compressed FSE repeat-offset selectors" {
+    const literal_lens = [_]usize{ 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+    const offsets = [_]usize{ 4, 4, 1, 8, 8, 4, 4, 8, 1, 1, 8, 4, 4, 8, 1, 1 };
+    const expected_offset_codes = [_]u8{ 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0 };
+    const match_lens = [_]usize{ 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
+    var literal_ends: [literal_lens.len]usize = undefined;
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    for (offsets, 0..) |offset, i| {
+        for (0..literal_lens[i]) |j| {
+            try payload.append(std.testing.allocator, 'a' + @as(u8, @intCast((i + j) % 26)));
+        }
+        for (0..match_lens[i]) |_| {
+            try payload.append(std.testing.allocator, payload.items[payload.items.len - offset]);
+        }
+        literal_ends[i] = payload.items.len;
+    }
+
+    const literal_plan = (try planPredefinedSequenceValues(&literal_lens, &default_ll_symbols, 0)) orelse return error.CorruptFrame;
+    const offset_plan = (try planCompressedOffsetSequenceValues(&literal_lens, &offsets)) orelse return error.CorruptFrame;
+    const plan: SequenceCombinedEmitPlan = .{
+        .literal = .{ .predefined = literal_plan },
+        .offset = .{ .compressed = offset_plan },
+        .match = .{ .rle = try sequenceCodeForValue(4, &ml_base, &ml_bits) },
+    };
+    try std.testing.expectEqual(SymbolMode.compressed, sequenceTableMode(plan.offset));
+    try std.testing.expectEqualSlices(u8, &expected_offset_codes, offset_plan.codes[0..offsets.len]);
+    try std.testing.expect(offset_plan.table_payload_len > 0);
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.items.len, .{ .content_checksum = false });
+    try std.testing.expect(try emitSequenceCompressedBlockWithTablePlans(
+        std.testing.allocator,
+        &frame,
+        payload.items,
+        true,
+        &literal_lens,
+        &offsets,
+        &match_lens,
+        &literal_ends,
+        payload.items.len,
+        plan,
+    ));
+
+    const first_block = try inspectNativeFrameFirstBlock(frame.items);
+    try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
+    const block = frame.items[first_block.payload_offset..][0..first_block.payload_len];
+    var frame_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(block, &frame_state);
+    try std.testing.expectEqual(literal_lens.len, section.sequence_count);
+    try std.testing.expectEqual(@as(u8, 0x24), block[section.sequence_payload_offset]); // LL=Predefined, OF=FSE, ML=RLE.
+
+    const decoded_len = try decodedRawOrRleFrameSize(frame.items);
+    try std.testing.expectEqual(payload.items.len, decoded_len);
 
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(decoded);
