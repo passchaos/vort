@@ -222,6 +222,17 @@ fn checkTreelessRepeatHuffmanLiterals(allocator: std.mem.Allocator) !void {
     const into_written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
     try expect(into_written == payload.len);
     try expectEqualSlices(payload, &into);
+
+    var corrupt_tree = frame;
+    corrupt_tree[first_block.payload_offset + 5] ^= 0xff;
+    const corrupt_first_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&corrupt_tree, first_block);
+    try expect(corrupt_first_modes.literals_kind == .compressed);
+    const corrupt_second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&corrupt_tree, second_block);
+    try expect(corrupt_second_modes.literals_kind == .treeless);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&corrupt_tree));
+    var corrupt_into: [payload.len]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&corrupt_tree, &corrupt_into));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &corrupt_tree));
 }
 
 fn checkRepeatOffsetAdditionalBits(allocator: std.mem.Allocator) !void {
