@@ -400,6 +400,18 @@ fn checkOffsetCompressedThenRepeatedSequenceTableInspect(allocator: std.mem.Allo
     const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
     defer allocator.free(decoded);
     try expect(decoded.len == 148);
+
+    const short_state_hex =
+        "28b52ffd20941c0100606162636465666768696a6b6c1024106a1f05830bc3c2c36061b070701838382c78262d00000001fc4f20";
+    var short_state: [short_state_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&short_state, short_state_hex);
+    const short_block = try vort.zstdInspectNativeFrameFirstBlock(&short_state);
+    const short_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&short_state, short_block);
+    try expect(short_modes.offset_mode == .compressed);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&short_state));
+    var short_output: [148]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&short_state, &short_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &short_state));
 }
 
 fn checkMalformedCompressedSequenceTableInspect(allocator: std.mem.Allocator) !void {
