@@ -767,6 +767,30 @@ fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !u
     try expectNativeStreamOnlyError(allocator, truncated_skippable, error.TruncatedFrame);
     checked += 1;
 
+    const leading_skippable = try handcraftedSkippableFrame(allocator, 8, "metadata");
+    defer allocator.free(leading_skippable);
+    const skippable_then_reserved = try std.mem.concat(allocator, u8, &.{ leading_skippable, &reserved_descriptor_bit });
+    defer allocator.free(skippable_then_reserved);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(skippable_then_reserved));
+    var stream_output: [1]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(skippable_then_reserved, &stream_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, skippable_then_reserved));
+    try expectError(error.CorruptFrame, vort.zstdSummarizeNativeStream(skippable_then_reserved));
+
+    var stream_iterator = vort.zstdIterateNativeStream(skippable_then_reserved);
+    const first = (try stream_iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (first) {
+        .frame => return error.ZstdNativeFrameProbeMismatch,
+        .skippable => |skippable| {
+            try expect(skippable.header.skippable_id == 0);
+            try expectEqualSlices("metadata", skippable.payload);
+        },
+    }
+    if (stream_iterator.next()) |_| {
+        return error.ZstdNativeFrameProbeExpectedError;
+    } else |err| if (err != error.CorruptFrame) return err;
+    checked += 1;
+
     return checked;
 }
 
