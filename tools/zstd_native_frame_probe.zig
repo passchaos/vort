@@ -452,6 +452,16 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectStreamIteratorError(truncated_payload, error.TruncatedFrame);
     checked += 1;
 
+    const reserved_block_type = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x20, // single-segment, no checksum, one-byte content size.
+        0x00,
+        0x07, 0x00, 0x00, // last block, reserved block type 3.
+    };
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameFirstBlock(&reserved_block_type));
+    try expectNativeStreamOnlyError(allocator, &reserved_block_type, error.CorruptFrame);
+    checked += 1;
+
     const repeat_without_previous_hex = "28b52ffd20042d0000096101fc01";
     var repeat_without_previous: [repeat_without_previous_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&repeat_without_previous, repeat_without_previous_hex);
