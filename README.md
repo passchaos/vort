@@ -60,7 +60,10 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 
 Hosted CI runs on `main` pushes and pull requests through
 `.github/workflows/ci.yml`, which installs Zig 0.16, checks formatting, runs
-`ci-smoke`, and repeats the focused fuzz smoke entrypoints.
+`ci-smoke`, and repeats the focused fuzz smoke entrypoints. The `ci-smoke`
+target now includes `run-native-codec-probes`, so the library-level LZ4/Zstd
+frame and dictionary probes run together in CI rather than only as manual
+commands.
 
 ## Commands
 
