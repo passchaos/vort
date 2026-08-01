@@ -141,6 +141,22 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     try expect((try vort.zstdDecodedNativeFrameSizeWithDictionary(wrong_checksum, dict)) == payload.len);
     try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameIntoWithDictionary(wrong_checksum, &checksum_priority_output, dict));
     try expectAllocError(allocator, error.ChecksumMismatch, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, wrong_checksum, dict));
+    var missing_checksum_decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer missing_checksum_decoder.deinit();
+    try expectError(error.NeedDictionary, missing_checksum_decoder.step(wrong_checksum, checksum_priority_output[0..0]));
+    try expectEqualSlices("NeedDictionary", missing_checksum_decoder.diagnostics().last_error_name);
+    try expectEqualSlices("frame", missing_checksum_decoder.diagnostics().last_error_phase_name);
+    var bad_checksum_decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer bad_checksum_decoder.deinit();
+    try expectError(error.ChecksumMismatch, bad_checksum_decoder.step(wrong_checksum, checksum_priority_output[0..0]));
+    try expectEqualSlices("ChecksumMismatch", bad_checksum_decoder.diagnostics().last_error_name);
+    try expectEqualSlices("frame", bad_checksum_decoder.diagnostics().last_error_phase_name);
 
     const content_size_mismatch = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
