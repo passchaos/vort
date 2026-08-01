@@ -33,11 +33,11 @@ APIs:
 | Library-first native Zstd APIs | `src/root.zig` exports Zstd native encode/decode, inspect, dictionary, dictionary-set, chunked/reusable APIs, incremental decoder, and sequence-mode inspect; `tools/zstd_native_frame_probe.zig` and `tools/zstd_native_dictionary_probe.zig` cover public frame/dictionary surfaces. | Implemented for supported native subset; not full zstd format parity. |
 | Incremental decode with caller-owned output | Root tests cover split skippable headers, truncated skippable finish, compressed-buffer limits, no-content-size expected sizes, dictionary-set missing dictionaries, exact frame output boundaries, split block boundaries, checksum diagnostics, and direct-output fallback. Codec tests cover additional direct-output and scratch fallback paths. | Strong coverage for current facade/direct paths; true byte-by-byte streaming decompression remains future work. |
 | Zstd Huffman literals | Zstd native frame probe covers direct Huffman limits, high-byte FSE-Huffman weights, system-zstd high-byte fixture, and treeless repeat-Huffman literal reuse through public inspect/decode. | Supported for covered forms; broader real-corpus tuning remains. |
-| Zstd sequence tables | Dictionary probe covers public inspection/decode for LL/OF/ML compressed-FSE modes, repeated table reuse, and LL/OF/ML compressed-FSE-to-Repeat_Mode transitions; frame probe covers RLE repeated-table reuse, repeat-offset additional bits, zero-literal selector transitions, and treeless literal state reuse; focused unit tests still cover writer-side compressed-table construction. | Supported for current sequence execution subset; more fixtures for broader mixed-table transitions are useful. |
+| Zstd sequence tables | Dictionary probe covers public inspection/decode for LL/OF/ML compressed-FSE modes, repeated table reuse, and LL/OF/ML compressed-FSE-to-Repeat_Mode transitions; frame probe covers RLE repeated-table reuse, repeat-offset additional bits, zero-literal selector transitions including invalid `rep0 - 1 == 0`, treeless literal state reuse, and malformed sequence bitstreams with missing, zero, or trailing end-marker bytes; focused unit tests still cover writer-side compressed-table construction. | Supported for current sequence execution subset; more fixtures for broader mixed-table transitions are useful. |
 | Dictionaries and dictionary sets | Root tests and dictionary probes cover LZ4/Zstd Dictionary_ID metadata, explicit dictionaries, dictionary sets, no-content-size direct output, chunked APIs, missing dictionary diagnostics, and exact-size mismatches. | Implemented for current native APIs; training/stable dictionary workflows remain future work. |
-| Skippable/concatenated streams | LZ4/Zstd probes and root tests cover skippable-only streams, mixed streams, consecutive split skippable headers, truncated skippable metadata, chunked split inputs, and concatenated direct-output frame boundaries. | Implemented for current stream iterators/decoders. |
+| Skippable/concatenated streams | LZ4/Zstd probes and root tests cover skippable-only streams, mixed streams, consecutive split skippable headers, truncated skippable metadata, chunked split inputs, concatenated direct-output frame boundaries, and skippable streams adjacent to malformed, truncated, checksum-mismatched, and trailing-data frames. | Implemented for current stream iterators/decoders. |
 | Bounded memory and hostile inputs | Incremental options expose `max_compressed_buffer_len`, `max_decoded_buffer_len`, and `expected_output_len`; root/probe tests cover OutputLimitExceeded, TruncatedFrame, SizeMismatch, ChecksumMismatch, NeedDictionary, malformed Repeat_Mode state, and malformed compressed-FSE table diagnostics. | Good coverage for current whole-frame validation plus direct-output paths; fuzz/corpus expansion remains. |
-| Bench/gate evidence | `zig build run-native-library-bench-gate` validates public native LZ4/Zstd rows and now runs a lightweight Zstd sequence-inspect smoke without adding CSV rows; README documents heavier coverage in probes. | Smoke-level public API gate exists; not a complete performance benchmark. |
+| Bench/gate evidence | `zig build run-native-library-bench-gate` validates public native LZ4/Zstd rows and now runs lightweight smoke checks without adding CSV rows: Zstd sequence inspect, no-content-size multi-compressed frames with checksum/truncation precedence, LZ4 skippable malformed/truncated/checksum/trailing streams, linked direct-output after skippable metadata, and LZ4/Zstd dictionary-set skippable fallback. README documents heavier coverage in probes. | Smoke-level public API gate exists; not a complete performance benchmark. |
 | Documentation | `README.md`, `docs/zstd-gap.md`, and this status document describe implemented surfaces and gaps. | Current but should evolve with behavior changes. |
 
 ## Current validation commands
@@ -55,8 +55,11 @@ zig build check --summary all
 
 Recent work in this thread has repeatedly run the narrower probes plus `test` and
 `check`. `run-native-library-bench-gate` is the lightweight public API benchmark
-CSV gate; heavier sequence-table fixtures intentionally live in the frame and
-dictionary probes so the Debug bench gate stays fast.
+CSV gate; it now also runs bounded pre-row smoke checks for no-content-size
+multi-compressed Zstd, skippable/malformed LZ4 streams, and dictionary-set
+skippable fallback without increasing the 67-row CSV. Heavier sequence-table
+fixtures intentionally live in the frame and dictionary probes so the Debug
+bench gate stays fast.
 
 ## Remaining gaps before the objective can be considered complete
 

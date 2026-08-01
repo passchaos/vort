@@ -959,13 +959,20 @@ The gate currently requires the LZ4 chain-depth, Zstd match-budget, high-byte
 FSE Huffman, Zstd sequence-Huffman literal, dictionary, dictionary-set, chunked
 dictionary-set, chunked append, chunked append exact-size, reusable decoder,
 reusable append exact-size, direct-output, and small-output fallback rows to
-round-trip and to preserve the expected size relationships. The heavier
-limited compressed-FSE sequence-table path is covered by
+round-trip and to preserve the expected size relationships. In addition to the
+CSV rows, the bench executable now runs cheap pre-row smoke checks for
+no-content-size multi-compressed Zstd frames (including checksum mismatch and
+truncated-checksum limit precedence), LZ4 skippable streams followed by
+malformed/truncated/checksum/trailing frames, and LZ4/Zstd dictionary-set
+skippable streams that force small-output fallback. These checks intentionally
+do not add CSV rows, keeping the Debug gate bounded. The heavier limited
+compressed-FSE sequence-table path is covered by
 `run-zstd-native-dictionary-probe` for public inspect/decode of LL/OF/ML=FSE
 blocks plus repeated sequence-table reuse, and `run-zstd-native-frame-probe` for
-treeless repeat-Huffman literal reuse, while focused unit tests keep the
-writer-side ML=FSE construction covered without adding the heavier path to the
-regular native library bench gate.
+treeless repeat-Huffman literal reuse, invalid repeat-offset selectors, and
+malformed sequence bitstreams, while focused unit tests keep the writer-side
+ML=FSE construction covered without adding the heavier path to the regular
+native library bench gate.
 
 ## Direction
 
