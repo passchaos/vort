@@ -474,6 +474,32 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
         error.ChecksumMismatch => {},
         else => return err,
     }
+    var missing_checksum_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer missing_checksum_decoder.deinit();
+    try expectNeedDictionary(missing_checksum_decoder.step(wrong_checksum, checksum_priority_output[0..0]));
+    if (!std.mem.eql(u8, "NeedDictionary", missing_checksum_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", missing_checksum_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    var bad_checksum_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer bad_checksum_decoder.deinit();
+    const bad_checksum_initial = try bad_checksum_decoder.step(wrong_checksum, checksum_priority_output[0..0]);
+    if (bad_checksum_initial.status != .need_output) return error.Lz4ProbeMismatch;
+    try expectError(error.ChecksumMismatch, bad_checksum_decoder.step("", &checksum_priority_output));
+    if (!std.mem.eql(u8, "ChecksumMismatch", bad_checksum_decoder.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "direct_output", bad_checksum_decoder.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
 
     var wrong_block_checksum = try allocator.dupe(u8, encoded);
     defer allocator.free(wrong_block_checksum);
