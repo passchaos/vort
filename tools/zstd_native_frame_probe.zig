@@ -157,6 +157,29 @@ fn checkNoSizeCompressedBlockLimits(allocator: std.mem.Allocator) !void {
     try expect(multi_summary.block_count == 2);
     try expect(multi_summary.compressed_block_count == 2);
     try expect(multi_summary.raw_block_count == 0);
+    const multi_stream_summary = try vort.zstdSummarizeNativeStream(multi.frame);
+    try expect(multi_stream_summary.frame_count == 1);
+    try expect(multi_stream_summary.skippable_frame_count == 0);
+    try expect(multi_stream_summary.block_count == 2);
+    try expect(multi_stream_summary.compressed_block_count == 2);
+
+    var multi_stream = vort.zstdIterateNativeStream(multi.frame);
+    const multi_element = (try multi_stream.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    const multi_frame = switch (multi_element) {
+        .skippable => return error.ZstdNativeFrameProbeMismatch,
+        .frame => |frame| frame,
+    };
+    try expect(multi_frame.header.content_size == null);
+    var multi_blocks = try multi_frame.blockIterator();
+    const stream_first_block = (try multi_blocks.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    const stream_second_block = (try multi_blocks.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    try expect(stream_first_block.block_type == .compressed);
+    try expect(stream_second_block.block_type == .compressed);
+    try expect(!stream_first_block.last);
+    try expect(stream_second_block.last);
+    if ((try multi_blocks.next()) != null) return error.ZstdNativeFrameProbeMismatch;
+    if ((try multi_stream.next()) != null) return error.ZstdNativeFrameProbeMismatch;
+
     try expect((try vort.zstdDecodedNativeFrameSizeLimited(multi.frame, multi_payload.len)) == multi_payload.len);
     try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(multi.frame, multi_payload.len - 1));
 
