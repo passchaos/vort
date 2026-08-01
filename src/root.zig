@@ -2150,6 +2150,59 @@ test "root native incremental no-size streams diagnose expected size mismatches"
     try std.testing.expectEqualSlices(u8, "output", zstd_too_large.diagnostics().last_error_phase_name);
 }
 
+test "root native incremental reset recovers after extra input size mismatch" {
+    const lz4_payload = "root-lz4-extra-input-reset" ** 3;
+    const lz4_frame = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, lz4_payload, .{
+        .content_checksum = false,
+        .include_content_size = true,
+        .block_checksum = true,
+    });
+    defer std.testing.allocator.free(lz4_frame);
+    var lz4_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = lz4_payload.len,
+        .max_decoded_buffer_len = lz4_payload.len,
+    });
+    defer lz4_decoder.deinit();
+    var lz4_output: [lz4_payload.len]u8 = undefined;
+    _ = try lz4_decoder.step(lz4_frame, lz4_output[0..0]);
+    const lz4_done = try lz4_decoder.step("", &lz4_output);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_done.status);
+    try std.testing.expectError(error.SizeMismatch, lz4_decoder.step(lz4_frame[0..1], lz4_output[0..0]));
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", lz4_decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_decoder.diagnostics().last_error_phase_name);
+    lz4_decoder.reset();
+    const lz4_reused_initial = try lz4_decoder.step(lz4_frame, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_reused_initial.status);
+    const lz4_reused_done = try lz4_decoder.step("", &lz4_output);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_reused_done.status);
+    try std.testing.expectEqualSlices(u8, lz4_payload, &lz4_output);
+
+    const zstd_payload = "root-zstd-extra-input-reset" ** 3;
+    const zstd_frame = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, zstd_payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    });
+    defer std.testing.allocator.free(zstd_frame.frame);
+    var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = zstd_payload.len,
+        .max_decoded_buffer_len = zstd_payload.len,
+    });
+    defer zstd_decoder.deinit();
+    var zstd_output: [zstd_payload.len]u8 = undefined;
+    _ = try zstd_decoder.step(zstd_frame.frame, zstd_output[0..0]);
+    const zstd_done = try zstd_decoder.step("", &zstd_output);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
+    try std.testing.expectError(error.SizeMismatch, zstd_decoder.step(zstd_frame.frame[0..1], zstd_output[0..0]));
+    try std.testing.expectEqualSlices(u8, "SizeMismatch", zstd_decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().last_error_phase_name);
+    zstd_decoder.reset();
+    const zstd_reused_initial = try zstd_decoder.step(zstd_frame.frame, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_reused_initial.status);
+    const zstd_reused_done = try zstd_decoder.step("", &zstd_output);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_reused_done.status);
+    try std.testing.expectEqualSlices(u8, zstd_payload, &zstd_output);
+}
+
 test "root native incremental finish reports direct-output not drained" {
     const lz4_payload = "root-lz4-finish-output-too-small" ** 4;
     const lz4_frame = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, lz4_payload, .{
