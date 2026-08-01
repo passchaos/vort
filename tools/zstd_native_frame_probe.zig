@@ -1349,6 +1349,40 @@ fn checkAllCompressedThenRepeatedSequenceTables(allocator: std.mem.Allocator) !v
     defer decoder.deinit();
     const scratch = try decoder.decodeScratch(&frame);
     try expectEqualSlices(&expected, scratch);
+
+    var short_repeat_state = frame;
+    setZstdProbeBlockPayloadLenAt(&short_repeat_state, first_block.next_header_offset, true, 71);
+    const short_repeat_slice = short_repeat_state[0 .. frame.len - 1];
+    const short_repeat_block = try vort.zstdInspectNativeFrameBlockAt(short_repeat_slice, first_block.next_header_offset);
+    const short_repeat_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(short_repeat_slice, short_repeat_block);
+    try expect(short_repeat_modes.literal_length_mode == .repeat);
+    try expect(short_repeat_modes.offset_mode == .repeat);
+    try expect(short_repeat_modes.match_length_mode == .repeat);
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(short_repeat_slice));
+    var short_repeat_output: [expected.len]u8 = undefined;
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(short_repeat_slice, &short_repeat_output));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, short_repeat_slice));
+
+    var bad_repeat_mode = frame;
+    bad_repeat_mode[152] = 0xfd; // Repeat-mode byte keeps the low reserved bits clear.
+    const bad_repeat_block = try vort.zstdInspectNativeFrameBlockAt(&bad_repeat_mode, first_block.next_header_offset);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&bad_repeat_mode, bad_repeat_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&bad_repeat_mode));
+    var bad_repeat_output: [expected.len]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&bad_repeat_mode, &bad_repeat_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &bad_repeat_mode));
+
+    var zero_repeat_end_mark = frame;
+    zero_repeat_end_mark[zero_repeat_end_mark.len - 1] = 0;
+    const zero_repeat_block = try vort.zstdInspectNativeFrameBlockAt(&zero_repeat_end_mark, first_block.next_header_offset);
+    const zero_repeat_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&zero_repeat_end_mark, zero_repeat_block);
+    try expect(zero_repeat_modes.literal_length_mode == .repeat);
+    try expect(zero_repeat_modes.offset_mode == .repeat);
+    try expect(zero_repeat_modes.match_length_mode == .repeat);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&zero_repeat_end_mark));
+    var zero_repeat_output: [expected.len]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&zero_repeat_end_mark, &zero_repeat_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_repeat_end_mark));
 }
 
 fn setZstdProbeBlockPayloadLen(frame: []u8, payload_len: usize) void {
@@ -1359,6 +1393,11 @@ fn setZstdProbeBlockPayloadLen(frame: []u8, payload_len: usize) void {
     // metadata.
     const header: u24 = @intCast((payload_len << 3) | (2 << 1) | 1);
     std.mem.writeInt(u24, frame[6..][0..3], header, .little);
+}
+
+fn setZstdProbeBlockPayloadLenAt(frame: []u8, header_offset: usize, last: bool, payload_len: usize) void {
+    const header: u24 = @intCast((payload_len << 3) | (2 << 1) | @intFromBool(last));
+    std.mem.writeInt(u24, frame[header_offset..][0..3], header, .little);
 }
 
 fn checkLiteralLengthCompressedThenRepeatedSequenceTables(allocator: std.mem.Allocator) !void {
