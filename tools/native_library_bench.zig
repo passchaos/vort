@@ -80,6 +80,7 @@ pub fn main(init: std.process.Init) !void {
     try smokeZstdMultiblockDirectFallback(init.gpa);
     try smokeReusableChunkedDecoders(init.gpa);
     try smokeZstdManyRepeatedSequences(init.gpa);
+    try smokeZstdAllCompressedSequenceTables(init.gpa);
     try smokeZstdSequenceInspectFixtures(init.gpa);
     try smokeZstdNoSizeMultiCompressed(init.gpa);
     try smokeZstdMatchSearchBudget(init.gpa);
@@ -2094,6 +2095,50 @@ fn smokeZstdManyRepeatedSequences(allocator: std.mem.Allocator) !void {
     if (!std.mem.eql(u8, payload.items, decoded)) return error.SizeMismatch;
     const decoded_len = try decoder.decodedSize(encoded.frame);
     if (decoded_len != payload.items.len) return error.SizeMismatch;
+}
+
+fn smokeZstdAllCompressedSequenceTables(allocator: std.mem.Allocator) !void {
+    // Keep one all-LL/OF/ML=FSE frame in the library benchmark smoke gate. The
+    // frame probe has deeper diagnostics; this gate exists to ensure the same
+    // sequence-table shape remains exercised by the common library entrypoints
+    // that callers benchmark and integrate against.
+    const frame_hex =
+        "28b52ffd20f0d503004405616263646566676862636464656665666667686967686968696a6a6b6c6b6c6c6d6e6f6d6e6f6e6f70707172717272737475737475747576767778777878797a61797a617a61626263646364646566676566676620a810386b9d03c03e1068ed01a89eb45b9c8181d61f93e495416210faa3bd6039199102";
+    const expected_hex =
+        "616263646566676865666768626667686266636464646464646566646464646464656664646464646667686966676869676869696768696967686969676869696a6a6a6a6a6a6b6c6c6c6c6c6c6b6c6c6c6c6c6c6d6e6f6c6d6e6f6c6d6d6e6f6d6d6e6f6d6e6e6f6d6d6f70707070707070707172727272727271727272727272737475727374757273747572737475747374757273747576767676767676777878787878777877787878787878797a6178797a6178797a6178797a617a797a617879616262626262626364646464646464636464646464646465666764656667656667676566676765666767656667";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+    var expected: [expected_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expected, expected_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    if (modes.literal_length_mode != .compressed or
+        modes.offset_mode != .compressed or
+        modes.match_length_mode != .compressed) return error.SizeMismatch;
+    if (try vort.zstdDecodedNativeFrameSize(&frame) != expected.len) return error.SizeMismatch;
+
+    var decoded: [expected.len]u8 = undefined;
+    try expectRoundTrip(vort.zstdDecodeNativeFrameInto(&frame, &decoded), &expected, &decoded);
+    try decodeZstdIncremental(allocator, &frame, &decoded);
+    if (!std.mem.eql(u8, &expected, &decoded)) return error.SizeMismatch;
+
+    const chunks = [_][]const u8{
+        frame[0..11],
+        frame[11..89],
+        frame[89..],
+    };
+    var join: [frame.len]u8 = undefined;
+    try expectSize(vort.zstdDecodedNativeFrameChunksSize(&chunks, &join), expected.len);
+    @memset(&decoded, 0);
+    try expectRoundTrip(vort.zstdDecodeNativeFrameChunksInto(&chunks, &join, &decoded), &expected, &decoded);
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    @memset(&decoded, 0);
+    try expectRoundTrip(decoder.decodeChunksIntoSlice(&chunks, &join, &decoded), &expected, &decoded);
+    const scratch = try decoder.decodeChunksScratch(&chunks, &join);
+    if (!std.mem.eql(u8, &expected, scratch)) return error.SizeMismatch;
 }
 
 fn smokeZstdSequenceInspectFixtures(allocator: std.mem.Allocator) !void {
