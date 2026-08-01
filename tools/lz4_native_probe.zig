@@ -58,6 +58,7 @@ pub fn main(init: std.process.Init) !void {
         "bounded-limits",
         "checksum",
         "chunked",
+        "reusable-chunked",
         "dictionary",
         "dictionary-set",
         "incremental",
@@ -67,6 +68,7 @@ pub fn main(init: std.process.Init) !void {
         "skippable",
     }, &.{
         .{ .capability = "chunked", .cases = lib_generated_cases },
+        .{ .capability = "reusable-chunked", .cases = lib_generated_cases },
         .{ .capability = "incremental", .cases = lib_generated_cases },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });
@@ -1456,6 +1458,38 @@ fn checkLibLz4GeneratedChunkedFrame(allocator: std.mem.Allocator, case: Case, fr
     if (!std.mem.eql(u8, appended.items["prefix:".len..], case.payload)) return error.Lz4ProbeMismatch;
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameChunksAppendExactSize(allocator, &appended, &chunks, join, case.payload.len - 1));
+
+    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    if (try decoder.decodedChunksSize(&chunks, join) != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (try decoder.decodedChunksSizeLimited(&chunks, join, case.payload.len) != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    try expectError(error.OutputLimitExceeded, decoder.decodedChunksSizeLimited(&chunks, join, case.payload.len - 1));
+
+    const reusable_decoded = try decoder.decodeChunksAllocLimited(&chunks, join, case.payload.len);
+    defer allocator.free(reusable_decoded);
+    try expectPayload(case, reusable_decoded);
+    try expectAllocError(allocator, error.OutputLimitExceeded, decoder.decodeChunksAllocLimited(&chunks, join, case.payload.len - 1));
+
+    const scratch = try decoder.decodeChunksScratchLimited(&chunks, join, case.payload.len);
+    try expectPayload(case, scratch);
+    try expectError(error.OutputLimitExceeded, decoder.decodeChunksScratchLimited(&chunks, join, case.payload.len - 1));
+
+    const reusable_into = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(reusable_into);
+    const reusable_written = try decoder.decodeChunksIntoSlice(&chunks, join, reusable_into);
+    if (reusable_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    try expectPayload(case, reusable_into[0..reusable_written]);
+    try expectError(error.OutputTooSmall, decoder.decodeChunksIntoSlice(&chunks, join, reusable_into[0 .. reusable_into.len - 1]));
+
+    var reusable_appended: std.ArrayList(u8) = .empty;
+    defer reusable_appended.deinit(allocator);
+    try reusable_appended.appendSlice(allocator, "prefix:");
+    const reusable_appended_written = try decoder.decodeChunksAppendExactSize(&reusable_appended, &chunks, join, case.payload.len);
+    if (reusable_appended_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, reusable_appended.items[0.."prefix:".len], "prefix:")) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, reusable_appended.items["prefix:".len..], case.payload)) return error.Lz4ProbeMismatch;
+    reusable_appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, decoder.decodeChunksAppendExactSize(&reusable_appended, &chunks, join, case.payload.len - 1));
 }
 
 fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {

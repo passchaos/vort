@@ -51,6 +51,7 @@ pub fn main(init: std.process.Init) !void {
         "bounded-limits",
         "checksum",
         "chunked",
+        "reusable-chunked",
         "huffman",
         "incremental",
         "lib-generated",
@@ -60,6 +61,7 @@ pub fn main(init: std.process.Init) !void {
         "skippable",
     }, &.{
         .{ .capability = "chunked", .cases = lib_generated_cases },
+        .{ .capability = "reusable-chunked", .cases = lib_generated_cases },
         .{ .capability = "incremental", .cases = lib_generated_cases },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });
@@ -1086,6 +1088,37 @@ fn checkLibZstdGeneratedChunkedFrame(allocator: std.mem.Allocator, payload: []co
     try expectPrefixedPayload(appended.items, payload);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameChunksAppendExactSize(allocator, &appended, &chunks, join, payload.len - 1));
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    try expect((try decoder.decodedChunksSize(&chunks, join)) == payload.len);
+    try expect((try decoder.decodedChunksSizeLimited(&chunks, join, payload.len)) == payload.len);
+    try expectError(error.OutputLimitExceeded, decoder.decodedChunksSizeLimited(&chunks, join, payload.len - 1));
+
+    const reusable_decoded = try decoder.decodeChunksAllocLimited(&chunks, join, payload.len);
+    defer allocator.free(reusable_decoded);
+    try expectEqualSlices(payload, reusable_decoded);
+    try expectAllocError(allocator, error.OutputLimitExceeded, decoder.decodeChunksAllocLimited(&chunks, join, payload.len - 1));
+
+    const scratch = try decoder.decodeChunksScratchLimited(&chunks, join, payload.len);
+    try expectEqualSlices(payload, scratch);
+    try expectError(error.OutputLimitExceeded, decoder.decodeChunksScratchLimited(&chunks, join, payload.len - 1));
+
+    const reusable_into = try allocator.alloc(u8, payload.len);
+    defer allocator.free(reusable_into);
+    const reusable_written = try decoder.decodeChunksIntoSlice(&chunks, join, reusable_into);
+    try expect(reusable_written == payload.len);
+    try expectEqualSlices(payload, reusable_into[0..reusable_written]);
+    try expectError(error.OutputTooSmall, decoder.decodeChunksIntoSlice(&chunks, join, reusable_into[0 .. reusable_into.len - 1]));
+
+    var reusable_appended: std.ArrayList(u8) = .empty;
+    defer reusable_appended.deinit(allocator);
+    try reusable_appended.appendSlice(allocator, "prefix:");
+    const reusable_appended_written = try decoder.decodeChunksAppendExactSize(&reusable_appended, &chunks, join, payload.len);
+    try expect(reusable_appended_written == payload.len);
+    try expectPrefixedPayload(reusable_appended.items, payload);
+    reusable_appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, decoder.decodeChunksAppendExactSize(&reusable_appended, &chunks, join, payload.len - 1));
 }
 
 fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {
