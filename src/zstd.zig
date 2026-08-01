@@ -4908,6 +4908,14 @@ test "zstd native repeat-offset resolver follows selector updates" {
     offsets = initial_repeated_offsets;
     try std.testing.expectEqual(@as(usize, 5), try resolveSequenceOffset(5, 2, 0, 0, &offsets));
     try std.testing.expectEqual([3]usize{ 5, 1, 4 }, offsets);
+
+    offsets = initial_repeated_offsets;
+    try std.testing.expectEqual(@as(usize, 1), try resolveSequenceOffset(0, 0, 0, 1, &offsets)); // positive-literal rep0.
+    try std.testing.expectEqual([3]usize{ 1, 4, 8 }, offsets);
+    try std.testing.expectEqual(@as(usize, 4), try resolveSequenceOffset(1, 1, 0, 1, &offsets)); // positive-literal rep1.
+    try std.testing.expectEqual([3]usize{ 4, 1, 8 }, offsets);
+    try std.testing.expectEqual(@as(usize, 8), try resolveSequenceOffset(1, 1, 1, 1, &offsets)); // positive-literal rep2.
+    try std.testing.expectEqual([3]usize{ 8, 4, 1 }, offsets);
 }
 
 fn copyMatchFromOutputBuffer(
