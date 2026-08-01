@@ -252,6 +252,17 @@
             "native_tier_corpus_discovery_selected_case_count"
           ]
         },
+        "native_codec_probes_healthy": {
+          "all": [
+            "native_codec_probes_present",
+            "native_codec_probes_ok"
+          ],
+          "positive": [
+            "native_codec_probes_probe_count",
+            "native_codec_probes_ok_probe_count",
+            "native_codec_probes_total_cases"
+          ]
+        },
         "producer_healthy": {
           "zero": [
             "producer_step_missing"
@@ -423,6 +434,12 @@
         "huffman_length_present": "bool",
         "huffman_length_row_count": "int",
         "huffman_length_worst_gap_bits": "int",
+        "native_codec_probes_healthy": "bool",
+        "native_codec_probes_ok": "bool",
+        "native_codec_probes_ok_probe_count": "int",
+        "native_codec_probes_present": "bool",
+        "native_codec_probes_probe_count": "int",
+        "native_codec_probes_total_cases": "int",
         "producer_healthy": "bool",
         "producer_step_allowed_missing": "list",
         "producer_step_covered": "int",

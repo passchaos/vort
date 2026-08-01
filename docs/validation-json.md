@@ -1502,6 +1502,9 @@ Top-level fields:
   `python_zlib_diff_malformed_wrapper_cases`,
   `python_zlib_diff_malformed_deflate_cases`, `python_zlib_diff_cli_successes`,
   `python_zlib_diff_expected_failures`
+- `native_codec_probes_present`, `native_codec_probes_ok`,
+  `native_codec_probes_healthy`, `native_codec_probes_probe_count`,
+  `native_codec_probes_ok_probe_count`, `native_codec_probes_total_cases`
 - `artifacts`
 
 Each artifact includes:
@@ -1629,6 +1632,12 @@ Example:
   "python_zlib_diff_malformed_deflate_cases": 0,
   "python_zlib_diff_cli_successes": 0,
   "python_zlib_diff_expected_failures": 0,
+  "native_codec_probes_present": false,
+  "native_codec_probes_ok": false,
+  "native_codec_probes_healthy": false,
+  "native_codec_probes_probe_count": 0,
+  "native_codec_probes_ok_probe_count": 0,
+  "native_codec_probes_total_cases": 0,
   "native_tier_range_present": true,
   "native_tier_range_healthy": true,
   "native_tier_range_summary_count": 3,

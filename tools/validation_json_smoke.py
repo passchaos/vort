@@ -562,6 +562,7 @@ def main() -> int:
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
         shutil.copyfile(python_zlib_diff_path, root / "vort-python-zlib-diff-smoke.json")
+        shutil.copyfile(native_codec_probes_path, root / "vort-native-codec-probes.json")
 
         run(
             [
@@ -668,6 +669,12 @@ def main() -> int:
         assert dashboard["python_zlib_diff_malformed_deflate_cases"] == python_zlib_diff["malformed_deflate_cases"]
         assert dashboard["python_zlib_diff_cli_successes"] == python_zlib_diff["cli_successes"]
         assert dashboard["python_zlib_diff_expected_failures"] == python_zlib_diff["expected_failures"]
+        assert dashboard["native_codec_probes_present"] is True
+        assert dashboard["native_codec_probes_ok"] is True
+        assert dashboard["native_codec_probes_healthy"] is True
+        assert dashboard["native_codec_probes_probe_count"] == native_codec_probes["probe_count"]
+        assert dashboard["native_codec_probes_ok_probe_count"] == native_codec_probes["probe_count"]
+        assert dashboard["native_codec_probes_total_cases"] == native_codec_probes["total_cases"]
         assert dashboard["native_tier_corpus_discovery_present"] is True
         assert dashboard["native_tier_corpus_discovery_ok"] is True
         assert dashboard["native_tier_corpus_discovery_healthy"] is True
