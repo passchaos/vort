@@ -233,6 +233,29 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     try expectError(error.CorruptFrame, corrupt_decoder.step(&corrupt_block, corrupt_priority_output[0..0]));
     try expectEqualSlices("CorruptFrame", corrupt_decoder.diagnostics().last_error_name);
     try expectEqualSlices("frame", corrupt_decoder.diagnostics().last_error_phase_name);
+
+    const compressed_malformed_hex =
+        "28b52ffd2234129a250100606162636465666768696a6b6c10180210aeb5070b83c3c2c360e030701878383c1cec92";
+    var compressed_malformed: [compressed_malformed_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&compressed_malformed, compressed_malformed_hex);
+    const compressed_header = try vort.zstdInspectNativeFrameHeader(&compressed_malformed);
+    try expect(compressed_header.dictionary_id == dict.id);
+    const compressed_block = try vort.zstdInspectNativeFrameFirstBlock(&compressed_malformed);
+    try expect(compressed_block.block_type == .compressed);
+    // Corrupt the first byte of the ML FSE normalized-count header in a frame
+    // that also requires a preset dictionary. Dictionary policy must be
+    // resolved before exposing the deeper sequence-table corruption.
+    compressed_malformed[compressed_block.payload_offset + 16] ^= 0xff;
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSize(&compressed_malformed));
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSizeWithDictionary(&compressed_malformed, wrong));
+    var compressed_priority_output: [154]u8 = undefined;
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameInto(&compressed_malformed, &compressed_priority_output));
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameIntoWithDictionary(&compressed_malformed, &compressed_priority_output, wrong));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAlloc(allocator, &compressed_malformed));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &compressed_malformed, wrong));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSizeWithDictionary(&compressed_malformed, dict));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameIntoWithDictionary(&compressed_malformed, &compressed_priority_output, dict));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &compressed_malformed, dict));
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
