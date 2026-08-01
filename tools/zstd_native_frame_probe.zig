@@ -43,6 +43,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkRepeatMixedRlePredefinedSequenceModes(init.gpa);
     checked += 1;
+    try checkMatchLengthCompressedThenRepeatedSequenceTables(init.gpa);
+    checked += 1;
     try checkOffsetCompressedThenRepeatedSequenceTables(init.gpa);
     checked += 1;
     const lib_generated_cases = try checkLibZstdGeneratedLibraryFrames(init.gpa);
@@ -1066,6 +1068,57 @@ fn checkOffsetCompressedThenRepeatedSequenceTables(allocator: std.mem.Allocator)
     defer allocator.free(decoded);
     try expect(decoded.len == 148);
     var into: [148]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
+    try expect(written == decoded.len);
+    try expectEqualSlices(decoded, into[0..written]);
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const scratch = try decoder.decodeScratch(&frame);
+    try expectEqualSlices(decoded, scratch);
+}
+
+fn checkMatchLengthCompressedThenRepeatedSequenceTables(allocator: std.mem.Allocator) !void {
+    // Public frame-level fixture for an ML=FSE table followed by Repeat_Mode.
+    // This mirrors the dictionary probe's heavier sequence-table fixture but
+    // keeps the non-dictionary frame decode/inspect surface independently
+    // covered.
+    const frame_hex =
+        "28b52ffd20a2240100606162636465666768696a6b6c10180210aeb5070b83c3c2c360e030701878383c1cec922d00000001fc3b20";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .compressed);
+    try expect(!first_block.last);
+    const first_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    try expect(first_modes.sequence_count == 16);
+    try expect(first_modes.literal_length_mode == .predefined);
+    try expect(first_modes.offset_mode == .rle);
+    try expect(first_modes.match_length_mode == .compressed);
+
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    try expect(second_block.block_type == .compressed);
+    try expect(second_block.last);
+    const second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+    try expect(second_modes.sequence_count == 1);
+    try expect(second_modes.literal_length_mode == .repeat);
+    try expect(second_modes.offset_mode == .repeat);
+    try expect(second_modes.match_length_mode == .repeat);
+
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
+    try expect(summary.block_count == 2);
+    try expect(summary.compressed_block_count == 2);
+    try expect(summary.raw_block_count == 0);
+    try expect(summary.rle_block_count == 0);
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == 162);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&frame, 162)) == 162);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(&frame, 161));
+
+    const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(decoded);
+    try expect(decoded.len == 162);
+    var into: [162]u8 = undefined;
     const written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
     try expect(written == decoded.len);
     try expectEqualSlices(decoded, into[0..written]);
