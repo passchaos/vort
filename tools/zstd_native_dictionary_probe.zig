@@ -196,6 +196,27 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     try expectError(error.SizeMismatch, size_mismatch_decoder.step(&content_size_mismatch, size_priority_output[0..0]));
     try expectEqualSlices("SizeMismatch", size_mismatch_decoder.diagnostics().last_error_name);
     try expectEqualSlices("frame", size_mismatch_decoder.diagnostics().last_error_phase_name);
+
+    const corrupt_block = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x22, // 2-byte Dictionary_ID, single-segment, one-byte content size.
+        0x34, 0x12, // Dictionary_ID == 0x1234.
+        0x04, // Advertise four decoded bytes.
+        0x03, 0x00, 0x00, // Last RLE block with zero regenerated size.
+        'x',
+    };
+    const corrupt_header = try vort.zstdInspectNativeFrameHeader(&corrupt_block);
+    try expect(corrupt_header.dictionary_id == dict.id);
+    var corrupt_priority_output: [4]u8 = undefined;
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSize(&corrupt_block));
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSizeWithDictionary(&corrupt_block, wrong));
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameInto(&corrupt_block, &corrupt_priority_output));
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameIntoWithDictionary(&corrupt_block, &corrupt_priority_output, wrong));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAlloc(allocator, &corrupt_block));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &corrupt_block, wrong));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSizeWithDictionary(&corrupt_block, dict));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameIntoWithDictionary(&corrupt_block, &corrupt_priority_output, dict));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &corrupt_block, dict));
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
