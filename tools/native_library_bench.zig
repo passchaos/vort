@@ -75,6 +75,7 @@ pub fn main(init: std.process.Init) !void {
     try smokeLz4LinkedDeepHashChain(init.gpa);
     try smokeLz4ChainDepthBudget(init.gpa);
     try smokeLz4SkippableMalformedStreams(init.gpa);
+    try smokeLz4DictionarySetSkippableFallback(init.gpa);
     try smokeZstdMultiblockDirectFallback(init.gpa);
     try smokeReusableChunkedDecoders(init.gpa);
     try smokeZstdManyRepeatedSequences(init.gpa);
@@ -1803,6 +1804,50 @@ fn smokeLz4SkippableMalformedStreams(allocator: std.mem.Allocator) !void {
         error.TruncatedFrame => {},
         else => return err,
     }
+}
+
+fn smokeLz4DictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
+    const first_dict = vort.Lz4NativeDictionary.init(0x4c5a_4501, lz4_dictionary_set_first_content);
+    const second_dict = vort.Lz4NativeDictionary.init(0x4c5a_4502, lz4_dictionary_set_second_content);
+    const dictionary_set = vort.Lz4NativeDictionarySet.init(&.{ first_dict, second_dict });
+    const options: vort.Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+    };
+
+    const first = try vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, lz4_dictionary_set_first_payload, options, dictionary_set, first_dict.id);
+    defer allocator.free(first);
+    const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 6, "dict-fallback");
+    defer allocator.free(skip);
+    const second = try vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, lz4_dictionary_set_second_payload, options, dictionary_set, second_dict.id);
+    defer allocator.free(second);
+    const stream = try std.mem.concat(allocator, u8, &.{ first, skip, second });
+    defer allocator.free(stream);
+
+    const summary = try vort.lz4SummarizeNativeStream(stream);
+    if (summary.frame_count != 2 or summary.skippable_frame_count != 1) return error.SizeMismatch;
+
+    var decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
+        .expected_output_len = lz4_dictionary_set_payload.len,
+        .max_decoded_buffer_len = @max(lz4_dictionary_set_first_payload.len, lz4_dictionary_set_second_payload.len),
+    });
+    defer decoder.deinit();
+    var output: [lz4_dictionary_set_payload.len]u8 = undefined;
+    const initial = try decoder.step(stream, output[0..0]);
+    if (initial.status != .need_output) return error.SizeMismatch;
+    const first_len = @max(@as(usize, 1), output.len / 32);
+    const first_step = try decoder.step("", output[0..first_len]);
+    if (first_step.status != .need_output or first_step.progress.output_written != first_len) return error.SizeMismatch;
+    if (decoder.decoded_scratch.items.len == 0) return error.SizeMismatch;
+
+    var written = first_step.progress.output_written;
+    while (true) {
+        const result = try decoder.step("", output[written..]);
+        written += result.progress.output_written;
+        if (result.status == .done) break;
+        if (result.status != .need_output or result.progress.output_written == 0) return error.SizeMismatch;
+    }
+    if (written != output.len or !std.mem.eql(u8, lz4_dictionary_set_payload, &output)) return error.SizeMismatch;
 }
 
 fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
