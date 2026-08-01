@@ -851,6 +851,12 @@ pub fn build(b: *std.Build) void {
     const lz4_native_dictionary_probe_step = b.step("run-lz4-native-dictionary-probe", "Run library probe for native LZ4 dictionary APIs");
     lz4_native_dictionary_probe_step.dependOn(&run_lz4_native_dictionary_probe.step);
 
+    const native_codec_probes_step = b.step("run-native-codec-probes", "Run library probes for native LZ4 and Zstd APIs");
+    native_codec_probes_step.dependOn(&run_lz4_native_probe.step);
+    native_codec_probes_step.dependOn(&run_lz4_native_dictionary_probe.step);
+    native_codec_probes_step.dependOn(&run_zstd_native_frame_probe.step);
+    native_codec_probes_step.dependOn(&run_zstd_native_dictionary_probe.step);
+
     const header_inspect_smoke = b.addSystemCommand(&.{ "python3", "tools/header_inspect_smoke.py" });
     header_inspect_smoke.addArtifactArg(cli_exe);
     const header_inspect_smoke_step = b.step("run-header-inspect-smoke", "Run raw/zlib/gzip header inspection CLI smoke");

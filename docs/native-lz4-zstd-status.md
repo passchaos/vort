@@ -46,7 +46,9 @@ Relevant smoke commands for this status slice are:
 
 ```sh
 zig build test --summary all
+zig build run-native-codec-probes --summary all
 zig build run-lz4-native-probe --summary all
+zig build run-lz4-native-dictionary-probe --summary all
 zig build run-zstd-native-frame-probe --summary all
 zig build run-zstd-native-dictionary-probe --summary all
 zig build run-native-library-bench-gate --summary all

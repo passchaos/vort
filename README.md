@@ -208,6 +208,7 @@ zig build run-gzip-diff
 zig build run-python-zlib-diff
 zig build run-python-zlib-diff-dashboard
 zig build run-gzip-cli-diff
+zig build run-native-codec-probes
 zig build run-lz4-native-probe
 zig build run-lz4-native-dictionary-probe
 zig build run-lz4-native-probe -- --path README.md --limit 4096
@@ -225,6 +226,7 @@ zig build run -- decode-zstd-native-file-to /tmp/vort-readme.zst /tmp/vort-readm
 zig build run -- size-zstd-native-hex 28b52ffd240529000068656c6c6fa36d9f88 5
 zig build run-zstd-native-cli-diff
 zig build run-zstd-native-probe
+zig build run-zstd-native-frame-probe
 zig build run-zstd-native-dictionary-probe
 zig build run-zstd-native-probe -- --path README.md --limit 4096
 zig build run-zstd-native-probe -- --dir docs --max-files 2 --limit 2048
