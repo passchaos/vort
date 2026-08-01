@@ -1872,12 +1872,26 @@ fn smokeZstdDictionarySetSkippableFallback(allocator: std.mem.Allocator) !void {
     const summary = try vort.zstdSummarizeNativeStream(stream);
     if (summary.frame_count != 2 or summary.skippable_frame_count != 1) return error.SizeMismatch;
 
+    var output: [zstd_dictionary_set_payload.len]u8 = undefined;
+    var direct_decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
+        .expected_output_len = zstd_dictionary_set_payload.len,
+        .max_decoded_buffer_len = @max(zstd_dictionary_set_first_payload.len, zstd_dictionary_set_second_payload.len),
+    });
+    defer direct_decoder.deinit();
+    const direct_initial = try direct_decoder.step(stream, output[0..0]);
+    if (direct_initial.status != .need_output) return error.SizeMismatch;
+    if (!std.mem.eql(u8, direct_decoder.diagnostics().phase_name, "direct_output")) return error.SizeMismatch;
+    const direct_done = try direct_decoder.step("", &output);
+    if (direct_done.status != .done) return error.SizeMismatch;
+    if (!std.mem.eql(u8, zstd_dictionary_set_payload, &output)) return error.SizeMismatch;
+    if (direct_decoder.decoded_scratch.items.len != 0) return error.SizeMismatch;
+
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(allocator, dictionary_set, .{
         .expected_output_len = zstd_dictionary_set_payload.len,
         .max_decoded_buffer_len = @max(zstd_dictionary_set_first_payload.len, zstd_dictionary_set_second_payload.len),
     });
     defer decoder.deinit();
-    var output: [zstd_dictionary_set_payload.len]u8 = undefined;
+    @memset(&output, 0);
     const initial = try decoder.step(stream, output[0..0]);
     if (initial.status != .need_output) return error.SizeMismatch;
     const first_len = @max(@as(usize, 1), output.len / 32);
