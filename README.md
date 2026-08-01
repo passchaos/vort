@@ -971,7 +971,7 @@ compressed-FSE sequence-table path is covered by
 blocks plus repeated sequence-table reuse, and `run-zstd-native-frame-probe` for
 treeless repeat-Huffman literal reuse, repeat-offset selector variants
 (zero-literal rep1/rep2, positive-literal rep2, and invalid `rep0 - 1`), and
-malformed sequence bitstreams, and short/corrupt compressed-FSE state streams,
+malformed sequence bitstreams, and short/corrupt LL/OF/ML compressed-FSE state streams,
 while focused unit tests keep the writer-side ML=FSE construction covered
 without adding the heavier path to the regular native library bench gate.
 
