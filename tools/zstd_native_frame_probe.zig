@@ -27,6 +27,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkRepeatOffsetZeroLiteralInvalidSelector(init.gpa);
     checked += 1;
+    try checkRepeatOffsetZeroLiteralRep0MinusOneAfterUpdate(init.gpa);
+    checked += 1;
     try checkRepeatedRleSequenceTables(init.gpa);
     checked += 1;
     try checkSplitHeaderIncremental(init.gpa);
@@ -553,6 +555,71 @@ fn checkRepeatOffsetZeroLiteralInvalidSelector(allocator: std.mem.Allocator) !vo
     var output: [8]u8 = undefined;
     try expectError(error.InvalidMatch, vort.zstdDecodeNativeFrameInto(&frame, &output));
     try expectAllocError(allocator, error.InvalidMatch, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
+}
+
+fn checkRepeatOffsetZeroLiteralRep0MinusOneAfterUpdate(allocator: std.mem.Allocator) !void {
+    // The previous invalid-selector fixture pins the initial `rep0 - 1 == 0`
+    // error path. This stream first updates rep0 with a direct offset=4 match,
+    // then uses a zero-literal OF-code-1 sequence whose extra bit selects
+    // `rep0 - 1 == 3`. That makes the selector valid and verifies that native
+    // decode mutates repeat offsets across compressed blocks before applying
+    // the Zstandard zero-literal selector adjustment.
+    const expected = "abcdabcabca";
+    const frame_hex = "28b52ffd200b200000616263643c0000000154000200073d000000015400010103";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    try expect((try vort.zstdDecodedFrameSize(&frame)) == expected.len);
+    const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+    defer allocator.free(lib_decoded);
+    try expectEqualSlices(expected, lib_decoded);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .raw);
+    try expect(!first_block.last);
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    try expect(second_block.block_type == .compressed);
+    try expect(!second_block.last);
+    const third_block = try vort.zstdInspectNativeFrameBlockAt(&frame, second_block.next_header_offset);
+    try expect(third_block.block_type == .compressed);
+    try expect(third_block.last);
+
+    const second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+    try expect(second_modes.regenerated_literals_size == 0);
+    try expect(second_modes.sequence_count == 1);
+    try expect(second_modes.literal_length_mode == .rle);
+    try expect(second_modes.offset_mode == .rle);
+    try expect(second_modes.match_length_mode == .rle);
+    const third_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, third_block);
+    try expect(third_modes.regenerated_literals_size == 0);
+    try expect(third_modes.sequence_count == 1);
+    try expect(third_modes.literal_length_mode == .rle);
+    try expect(third_modes.offset_mode == .rle);
+    try expect(third_modes.match_length_mode == .rle);
+
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
+    try expect(summary.block_count == 3);
+    try expect(summary.raw_block_count == 1);
+    try expect(summary.compressed_block_count == 2);
+
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == expected.len);
+    const native_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(native_decoded);
+    try expectEqualSlices(expected, native_decoded);
+
+    var into: [expected.len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
+    try expect(written == expected.len);
+    try expectEqualSlices(expected, into[0..written]);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, &frame, expected.len);
+    try expect(appended_written == expected.len);
+    try expectPrefixedPayload(appended.items, expected);
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, &frame, expected.len - 1));
 }
 
 fn checkRepeatedRleSequenceTables(allocator: std.mem.Allocator) !void {

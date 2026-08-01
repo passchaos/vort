@@ -117,8 +117,9 @@ Current interpretation:
   a bounded generated-corpus differential probe over multiple zstd levels and
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug
   classes visible without requiring a full external corpus checkout, including
-  zero-literal rep1/rep2 selector paths, positive-literal rep2, and invalid
-  `rep0 - 1` rejection. It also
+  zero-literal rep1/rep2 selector paths, positive-literal rep2, invalid
+  `rep0 - 1` rejection, and valid cross-block `rep0 - 1` after a
+  direct-offset update. It also
   validates Vort's dependency-free native encoder on the same generated/file
   byte payloads through `encode-zstd-native-bytes-hex` in `auto`, `raw_or_rle`,
   and `literal_only` modes, including both 4-divisible and non-4-divisible

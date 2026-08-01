@@ -1349,7 +1349,7 @@ Example:
   "schema_version": 1,
   "ok": true,
   "probe_count": 4,
-  "total_cases": 110,
+  "total_cases": 111,
   "probes": [
     {
       "label": "lz4-native-probe",
@@ -1374,9 +1374,9 @@ Example:
       "executable": "zig-out/bin/zstd-native-frame-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 40,
+      "cases": 41,
       "marker": "zstd_native_frame_probe",
-      "output": "zstd_native_frame_probe_ok cases=40\n"
+      "output": "zstd_native_frame_probe_ok cases=41\n"
     },
     {
       "label": "zstd-native-dictionary-probe",
