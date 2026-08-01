@@ -108,6 +108,26 @@ fn checkNoSizeCompressedBlockLimits(allocator: std.mem.Allocator) !void {
     try expect(written == payload.len);
     try expectEqualSlices(&payload, &into);
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(encoded.frame, into[0 .. into.len - 1]));
+
+    const checksummed = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, &payload, .{
+        .selection = .literal_only,
+        .content_checksum = true,
+        .include_content_size = false,
+    });
+    defer allocator.free(checksummed.frame);
+    const checksummed_block = try vort.zstdInspectNativeFrameFirstBlock(checksummed.frame);
+    try expect(checksummed_block.block_type == .compressed);
+
+    var corrupt_checksum = try allocator.dupe(u8, checksummed.frame);
+    defer allocator.free(corrupt_checksum);
+    corrupt_checksum[corrupt_checksum.len - 1] ^= 0x01;
+
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(corrupt_checksum, payload.len)) == payload.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(corrupt_checksum, payload.len - 1));
+    var checksum_into: [payload.len]u8 = undefined;
+    try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameInto(corrupt_checksum, &checksum_into));
+    try expectAllocError(allocator, error.ChecksumMismatch, vort.zstdDecodeNativeFrameAllocLimited(allocator, corrupt_checksum, payload.len));
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeFrameAllocLimited(allocator, corrupt_checksum, payload.len - 1));
 }
 
 fn checkHighByteFseHuffman(allocator: std.mem.Allocator) !void {
