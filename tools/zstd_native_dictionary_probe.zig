@@ -341,10 +341,11 @@ fn checkCompressedThenRepeatedSequenceTableInspect(allocator: std.mem.Allocator)
     _ = try std.fmt.hexToBytes(&short_repeat_state, short_repeat_state_hex);
     const repeat_first = try vort.zstdInspectNativeFrameFirstBlock(&short_repeat_state);
     const repeat_second = try vort.zstdInspectNativeFrameBlockAt(&short_repeat_state, repeat_first.next_header_offset);
-    const repeat_second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&short_repeat_state, repeat_second);
-    try expect(repeat_second_modes.literal_length_mode == .repeat);
-    try expect(repeat_second_modes.offset_mode == .repeat);
-    try expect(repeat_second_modes.match_length_mode == .repeat);
+    const repeat_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&short_repeat_state, repeat_second);
+    try expect(repeat_modes.sequence_count == 1);
+    try expect(repeat_modes.literal_length_mode == .repeat);
+    try expect(repeat_modes.offset_mode == .repeat);
+    try expect(repeat_modes.match_length_mode == .repeat);
     try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(&short_repeat_state));
     var short_repeat_output: [162]u8 = undefined;
     try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(&short_repeat_state, &short_repeat_output));
@@ -383,6 +384,18 @@ fn checkLiteralLengthCompressedThenRepeatedSequenceTableInspect(allocator: std.m
     defer allocator.free(decoded);
     try expect(decoded.len == 184);
     try expectEqualSlices("ababababab", decoded[decoded.len - 10 ..]);
+
+    const short_repeat_state_hex =
+        "28b52ffd20b8040200e402616278616261627879616278616261627879616278616261627861626162787961627861626162787961627861621094106aed0102059966271a8d6e37172d000010616201fc";
+    var short_repeat_state: [short_repeat_state_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&short_repeat_state, short_repeat_state_hex);
+    const repeat_first = try vort.zstdInspectNativeFrameFirstBlock(&short_repeat_state);
+    const repeat_second = try vort.zstdInspectNativeFrameBlockAt(&short_repeat_state, repeat_first.next_header_offset);
+    try expectError(error.TruncatedFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&short_repeat_state, repeat_second));
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(&short_repeat_state));
+    var short_repeat_output: [184]u8 = undefined;
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(&short_repeat_state, &short_repeat_output));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &short_repeat_state));
 
     const short_state_hex =
         "28b52ffd20b8fc0100e402616278616261627879616278616261627879616278616261627861626162787961627861626162787961627861621094106aed0102059966271a8d6e3735000010616201fcb9";
