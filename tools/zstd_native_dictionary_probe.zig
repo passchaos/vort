@@ -1053,6 +1053,16 @@ fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
     try expectError(error.OutputLimitExceeded, reusable_decoder.decodeConcatenatedChunksAppendLimitedWithDictionarySet(&reusable_appended, &chunks, join, expected.len - 1, dictionary_set));
 
     const missing_set = vort.ZstdNativeDictionarySet.init(&.{first_dict});
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeConcatenatedFrameSizeWithDictionarySet(stream.items, missing_set));
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeConcatenatedFrameSizeLimitedWithDictionarySet(stream.items, expected.len, missing_set));
+    var missing_output: [expected.len]u8 = undefined;
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeConcatenatedFrameIntoWithDictionarySet(stream.items, &missing_output, missing_set));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeConcatenatedFrameAllocWithDictionarySet(allocator, stream.items, missing_set));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeConcatenatedFrameAllocWithDictionarySetExactSize(allocator, stream.items, missing_set, expected.len));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeConcatenatedFrameAllocLimitedWithDictionarySet(allocator, stream.items, expected.len, missing_set));
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet(&chunks, join, missing_set));
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySet(&chunks, join, &missing_output, missing_set));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeConcatenatedFrameChunksAllocWithDictionarySet(allocator, &chunks, join, missing_set));
     try expectError(error.NeedDictionary, reusable_decoder.decodeConcatenatedChunksAllocWithDictionarySet(&chunks, join, missing_set));
     try expectError(error.NeedDictionary, reusable_decoder.decodeConcatenatedChunksScratchWithDictionarySet(&chunks, join, missing_set));
     reusable_appended.clearRetainingCapacity();
