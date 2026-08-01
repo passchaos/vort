@@ -441,6 +441,17 @@ fn checkMalformedCompressedSequenceTableInspect(allocator: std.mem.Allocator) !v
     try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&frame, &into));
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
 
+    const short_state_stream_hex =
+        "28b52ffd209a1d0100606162636465666768696a6b6c10180210aeb5070b83c3c2c360e030701878383c1cec";
+    var short_state_stream: [short_state_stream_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&short_state_stream, short_state_stream_hex);
+    const short_state_block = try vort.zstdInspectNativeFrameFirstBlock(&short_state_stream);
+    const short_state_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&short_state_stream, short_state_block);
+    try expect(short_state_modes.match_length_mode == .compressed);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&short_state_stream));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&short_state_stream, &into));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &short_state_stream));
+
     const truncated_table_hex =
         "28b52ffd209aa50000606162636465666768696a6b6c10180210aeb507";
     var truncated_table: [truncated_table_hex.len / 2]u8 = undefined;
