@@ -1567,6 +1567,25 @@ fn smokeLz4LinkedDirectFallback(allocator: std.mem.Allocator) !void {
     const stream_done = try stream_decoder.step("", &decoded);
     if (stream_done.status != .done) return error.SizeMismatch;
     if (!std.mem.eql(u8, &payload, &decoded)) return error.SizeMismatch;
+
+    var fallback_decoder = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer fallback_decoder.deinit();
+    @memset(&decoded, 0);
+    const fallback_initial = try fallback_decoder.step(stream, decoded[0..0]);
+    if (fallback_initial.status != .need_output) return error.SizeMismatch;
+    if (!std.mem.eql(u8, fallback_decoder.diagnostics().phase_name, "direct_output")) return error.SizeMismatch;
+    const fallback_first = try fallback_decoder.step("", decoded[0 .. 64 * 1024]);
+    if (fallback_first.status != .need_output or fallback_first.progress.output_written != 64 * 1024) return error.SizeMismatch;
+    if (fallback_decoder.decoded_scratch.items.len != 0) return error.SizeMismatch;
+    const fallback_progress = try fallback_decoder.step("", decoded[64 * 1024 ..][0..127]);
+    if (fallback_progress.status != .need_output or fallback_progress.progress.output_written != 127) return error.SizeMismatch;
+    if (fallback_decoder.decoded_scratch.items.len != payload.len) return error.SizeMismatch;
+    const fallback_done = try fallback_decoder.step("", decoded[64 * 1024 + 127 ..]);
+    if (fallback_done.status != .done) return error.SizeMismatch;
+    if (!std.mem.eql(u8, &payload, &decoded)) return error.SizeMismatch;
 }
 
 fn smokeLz4DeepHashChain(allocator: std.mem.Allocator) !void {
