@@ -1967,6 +1967,15 @@ test "root native incremental decoders enforce compressed limits on skippable fr
     try std.testing.expectEqual(@as(usize, 0), lz4_decoder.diagnostics().output_written);
     try std.testing.expectEqualSlices(u8, "OutputLimitExceeded", lz4_decoder.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "frame", lz4_decoder.diagnostics().last_error_phase_name);
+    const lz4_small_skip = try lz4EncodeSkippableFrameAlloc(std.testing.allocator, 10, "");
+    defer std.testing.allocator.free(lz4_small_skip);
+    lz4_decoder.reset();
+    try std.testing.expectEqualSlices(u8, "", lz4_decoder.diagnostics().last_error_name);
+    const lz4_recovered = try lz4_decoder.step(lz4_small_skip, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_recovered.status);
+    try std.testing.expectEqual(lz4_small_skip.len, lz4_recovered.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_recovered.progress.output_written);
+    try lz4_decoder.finish();
 
     const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 11, "root-zstd-limit-skippable");
     defer std.testing.allocator.free(zstd_skip);
@@ -1984,6 +1993,15 @@ test "root native incremental decoders enforce compressed limits on skippable fr
     try std.testing.expectEqual(@as(usize, 0), zstd_decoder.diagnostics().output_written);
     try std.testing.expectEqualSlices(u8, "OutputLimitExceeded", zstd_decoder.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().last_error_phase_name);
+    const zstd_small_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 11, "");
+    defer std.testing.allocator.free(zstd_small_skip);
+    zstd_decoder.reset();
+    try std.testing.expectEqualSlices(u8, "", zstd_decoder.diagnostics().last_error_name);
+    const zstd_recovered = try zstd_decoder.step(zstd_small_skip, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_recovered.status);
+    try std.testing.expectEqual(zstd_small_skip.len, zstd_recovered.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_recovered.progress.output_written);
+    try zstd_decoder.finish();
 }
 
 test "root native incremental decoders use expected size after skippable no-size frames" {
