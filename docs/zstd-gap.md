@@ -190,7 +190,7 @@ Current interpretation:
   first return existing progress as `need_output`; root tests and dictionary
   probes now cover dictionary, dictionary-set, no-content-size, and multi-block
   fallback shapes, while the native library bench gate now keeps CSV rows for
-  LZ4/Zstd trained-dictionary library encode/decode plus cheap smoke
+  LZ4/Zstd lib-generated compatibility-frame and trained-dictionary library encode/decode plus cheap smoke
   coverage for no-content-size multi-compressed frames, checksum mismatch,
   truncated-checksum limit precedence, and dictionary-set skippable direct-output
   plus fallback without adding CSV rows. Dictionary probes also pin

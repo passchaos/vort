@@ -12,6 +12,7 @@ const Mode = enum {
     match_budget_0,
     match_budget_full,
     high_byte_binary,
+    lib_generated,
     sequence_huffman_literals_plain,
     sequence_huffman_literals,
     dictionary_plain,
@@ -119,6 +120,8 @@ pub fn main(init: std.process.Init) !void {
         options.iterations,
     ));
     try rows.append(init.gpa, try zstdHighByteBinaryRow(init.io, init.gpa, options.iterations));
+    try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, options.iterations));
+    try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, options.iterations));
     try rows.append(init.gpa, try zstdSequenceHuffmanLiteralsRow(init.io, init.gpa, .sequence_huffman_literals_plain, false, options.iterations));
     try rows.append(init.gpa, try zstdSequenceHuffmanLiteralsRow(init.io, init.gpa, .sequence_huffman_literals, true, options.iterations));
     try rows.append(init.gpa, try lz4DictionaryRow(init.io, init.gpa, .dictionary_plain, false, options.iterations));
@@ -369,6 +372,45 @@ fn zstdHighByteBinaryRow(io: std.Io, allocator: std.mem.Allocator, iterations: u
     const encode_result = try timeEncodeZstd(io, allocator, payload, options, iterations);
     const decode_result = try timeDecodeZstdOneShot(io, encoded.frame, decoded, payload, iterations);
     return makeRow(.zstd, .high_byte_binary, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn lz4LibGeneratedRow(io: std.Io, allocator: std.mem.Allocator, iterations: usize) !Row {
+    const payload = lib_generated_payload;
+    const case: Case = .{ .name = "lib_generated", .payload = payload };
+    const options: vort.Lz4LibFrameOptions = .{
+        .include_content_size = true,
+        .content_checksum = true,
+        .block_checksum = false,
+        .block_mode = .linked,
+    };
+    const encoded = try vort.lz4EncodeFrameWithOptionsAlloc(allocator, payload, options);
+    defer allocator.free(encoded);
+    const decoded = try allocator.alloc(u8, payload.len);
+    defer allocator.free(decoded);
+    try expectRoundTrip(vort.lz4DecodeNativeFrameInto(encoded, decoded), payload, decoded);
+
+    const encode_result = try timeEncodeLz4Lib(io, allocator, payload, options, iterations);
+    const decode_result = try timeDecodeLz4OneShot(io, encoded, decoded, payload, iterations);
+    return makeRow(.lz4, .lib_generated, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdLibGeneratedRow(io: std.Io, allocator: std.mem.Allocator, iterations: usize) !Row {
+    const payload = lib_generated_payload;
+    const case: Case = .{ .name = "lib_generated", .payload = payload };
+    const options: vort.ZstdLibFrameOptions = .{
+        .include_content_size = true,
+        .content_checksum = false,
+    };
+    const encoded = try vort.zstdEncodeFrameWithOptionsAlloc(allocator, payload, options);
+    defer allocator.free(encoded);
+    const decoded = try allocator.alloc(u8, payload.len);
+    defer allocator.free(decoded);
+    try expectRoundTrip(vort.zstdDecodeFrameInto(encoded, decoded), payload, decoded);
+    try expectRoundTrip(vort.zstdDecodeNativeFrameInto(encoded, decoded), payload, decoded);
+
+    const encode_result = try timeEncodeZstdLib(io, allocator, payload, options, iterations);
+    const decode_result = try timeDecodeZstdOneShot(io, encoded, decoded, payload, iterations);
+    return makeRow(.zstd, .lib_generated, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
 fn zstdSequenceHuffmanLiteralsRow(
@@ -1014,6 +1056,7 @@ const zstd_match_budget_payload =
 const zstd_high_byte_binary_payload = makeZstdHighByteBinaryPayload();
 const zstd_sequence_huffman_dictionary_content = makeZstdSequenceHuffmanDictionaryContent();
 const zstd_sequence_huffman_literals_payload = makeZstdSequenceHuffmanLiteralsPayload();
+const lib_generated_payload = ("lib-generated native library benchmark payload. " ** 16) ** 8;
 
 const lz4_dictionary_content = "abcdefghijklmnop";
 const lz4_dictionary_payload = "prefix-abcdefghijklmnop-tail-abcdefghijklmnop";
@@ -1092,6 +1135,23 @@ fn timeEncodeLz4(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, 
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
 }
 
+fn timeEncodeLz4Lib(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    options: vort.Lz4LibFrameOptions,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        const encoded = try vort.lz4EncodeFrameWithOptionsAlloc(allocator, payload, options);
+        checksum +%= encoded.len;
+        allocator.free(encoded);
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
 fn timeEncodeLz4Dictionary(
     io: std.Io,
     allocator: std.mem.Allocator,
@@ -1121,6 +1181,23 @@ fn timeEncodeZstd(io: std.Io, allocator: std.mem.Allocator, payload: []const u8,
         const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
         checksum +%= encoded.frame.len;
         allocator.free(encoded.frame);
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn timeEncodeZstdLib(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    options: vort.ZstdLibFrameOptions,
+    iterations: usize,
+) !TimeResult {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        const encoded = try vort.zstdEncodeFrameWithOptionsAlloc(allocator, payload, options);
+        checksum +%= encoded.len;
+        allocator.free(encoded);
     }
     return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
 }
@@ -3051,6 +3128,7 @@ fn modeName(mode: Mode) []const u8 {
         .match_budget_0 => "match_budget_0",
         .match_budget_full => "match_budget_full",
         .high_byte_binary => "high_byte_binary",
+        .lib_generated => "lib_generated",
         .sequence_huffman_literals_plain => "sequence_huffman_literals_plain",
         .sequence_huffman_literals => "sequence_huffman_literals",
         .dictionary_plain => "dictionary_plain",

@@ -34,6 +34,7 @@ EXPECTED_MODES = {
     "match_budget_0",
     "match_budget_full",
     "high_byte_binary",
+    "lib_generated",
     "sequence_huffman_literals_plain",
     "sequence_huffman_literals",
     "dictionary_plain",
@@ -64,6 +65,8 @@ EXPECTED_EXTRA_ROWS = {
     ("zstd", "match_budget_0", "mixed_budget"),
     ("zstd", "match_budget_full", "mixed_budget"),
     ("zstd", "high_byte_binary", "high_byte_binary"),
+    ("lz4", "lib_generated", "lib_generated"),
+    ("zstd", "lib_generated", "lib_generated"),
     ("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals"),
     ("zstd", "sequence_huffman_literals", "sequence_huffman_literals"),
     ("lz4", "dictionary_plain", "dictionary"),
@@ -210,6 +213,11 @@ def main() -> int:
     high_byte = row_by_identity[("zstd", "high_byte_binary", "high_byte_binary")]
     if int(high_byte["encoded_bytes"]) >= int(high_byte["input_bytes"]):
         raise AssertionError(f"expected high-byte binary zstd row to use FSE Huffman compression: {high_byte}")
+
+    for codec in ("lz4", "zstd"):
+        lib_generated = row_by_identity[(codec, "lib_generated", "lib_generated")]
+        if int(lib_generated["encoded_bytes"]) >= int(lib_generated["input_bytes"]):
+            raise AssertionError(f"expected {codec} lib-generated row to compress input: {lib_generated}")
 
     sequence_plain = row_by_identity[("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals")]
     sequence_huffman = row_by_identity[("zstd", "sequence_huffman_literals", "sequence_huffman_literals")]
