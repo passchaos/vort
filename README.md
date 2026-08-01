@@ -980,7 +980,7 @@ zig build run-native-library-bench-releasefast-gate
 ```
 
 The Debug and ReleaseFast gates currently require the LZ4 chain-depth, Zstd match-budget, high-byte
-FSE Huffman, Zstd sequence-Huffman literal, lib-generated compatibility-frame, dictionary, trained-dictionary,
+FSE Huffman, Zstd sequence-Huffman literal, lib-generated compatibility-frame/no-size, dictionary, trained-dictionary,
 dictionary-set, chunked dictionary-set, chunked append, chunked append exact-size, reusable decoder,
 reusable append exact-size, direct-output, and small-output fallback rows to
 round-trip and to preserve the expected size relationships. In addition to the

@@ -13,6 +13,7 @@ const Mode = enum {
     match_budget_full,
     high_byte_binary,
     lib_generated,
+    lib_generated_no_size,
     sequence_huffman_literals_plain,
     sequence_huffman_literals,
     dictionary_plain,
@@ -120,8 +121,10 @@ pub fn main(init: std.process.Init) !void {
         options.iterations,
     ));
     try rows.append(init.gpa, try zstdHighByteBinaryRow(init.io, init.gpa, options.iterations));
-    try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, options.iterations));
-    try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, options.iterations));
+    try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, .lib_generated, "lib_generated", true, options.iterations));
+    try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, .lib_generated_no_size, "lib_generated_no_size", false, options.iterations));
+    try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, .lib_generated, "lib_generated", true, options.iterations));
+    try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, .lib_generated_no_size, "lib_generated_no_size", false, options.iterations));
     try rows.append(init.gpa, try zstdSequenceHuffmanLiteralsRow(init.io, init.gpa, .sequence_huffman_literals_plain, false, options.iterations));
     try rows.append(init.gpa, try zstdSequenceHuffmanLiteralsRow(init.io, init.gpa, .sequence_huffman_literals, true, options.iterations));
     try rows.append(init.gpa, try lz4DictionaryRow(init.io, init.gpa, .dictionary_plain, false, options.iterations));
@@ -374,11 +377,18 @@ fn zstdHighByteBinaryRow(io: std.Io, allocator: std.mem.Allocator, iterations: u
     return makeRow(.zstd, .high_byte_binary, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
-fn lz4LibGeneratedRow(io: std.Io, allocator: std.mem.Allocator, iterations: usize) !Row {
+fn lz4LibGeneratedRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    case_name: []const u8,
+    include_content_size: bool,
+    iterations: usize,
+) !Row {
     const payload = lib_generated_payload;
-    const case: Case = .{ .name = "lib_generated", .payload = payload };
+    const case: Case = .{ .name = case_name, .payload = payload };
     const options: vort.Lz4LibFrameOptions = .{
-        .include_content_size = true,
+        .include_content_size = include_content_size,
         .content_checksum = true,
         .block_checksum = false,
         .block_mode = .linked,
@@ -391,14 +401,21 @@ fn lz4LibGeneratedRow(io: std.Io, allocator: std.mem.Allocator, iterations: usiz
 
     const encode_result = try timeEncodeLz4Lib(io, allocator, payload, options, iterations);
     const decode_result = try timeDecodeLz4OneShot(io, encoded, decoded, payload, iterations);
-    return makeRow(.lz4, .lib_generated, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+    return makeRow(.lz4, mode, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
-fn zstdLibGeneratedRow(io: std.Io, allocator: std.mem.Allocator, iterations: usize) !Row {
+fn zstdLibGeneratedRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    case_name: []const u8,
+    include_content_size: bool,
+    iterations: usize,
+) !Row {
     const payload = lib_generated_payload;
-    const case: Case = .{ .name = "lib_generated", .payload = payload };
+    const case: Case = .{ .name = case_name, .payload = payload };
     const options: vort.ZstdLibFrameOptions = .{
-        .include_content_size = true,
+        .include_content_size = include_content_size,
         .content_checksum = false,
     };
     const encoded = try vort.zstdEncodeFrameWithOptionsAlloc(allocator, payload, options);
@@ -410,7 +427,7 @@ fn zstdLibGeneratedRow(io: std.Io, allocator: std.mem.Allocator, iterations: usi
 
     const encode_result = try timeEncodeZstdLib(io, allocator, payload, options, iterations);
     const decode_result = try timeDecodeZstdOneShot(io, encoded, decoded, payload, iterations);
-    return makeRow(.zstd, .lib_generated, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+    return makeRow(.zstd, mode, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
 }
 
 fn zstdSequenceHuffmanLiteralsRow(
@@ -3129,6 +3146,7 @@ fn modeName(mode: Mode) []const u8 {
         .match_budget_full => "match_budget_full",
         .high_byte_binary => "high_byte_binary",
         .lib_generated => "lib_generated",
+        .lib_generated_no_size => "lib_generated_no_size",
         .sequence_huffman_literals_plain => "sequence_huffman_literals_plain",
         .sequence_huffman_literals => "sequence_huffman_literals",
         .dictionary_plain => "dictionary_plain",
