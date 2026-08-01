@@ -2139,6 +2139,20 @@ test "root native incremental finish reports direct-output not drained" {
     try std.testing.expectEqualSlices(u8, "OutputTooSmall", lz4_decoder.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "direct_output", lz4_decoder.diagnostics().last_error_phase_name);
 
+    var lz4_partial_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = lz4_payload.len,
+        .max_decoded_buffer_len = lz4_payload.len,
+    });
+    defer lz4_partial_decoder.deinit();
+    var lz4_partial_output: [lz4_payload.len]u8 = undefined;
+    _ = try lz4_partial_decoder.step(lz4_frame, lz4_partial_output[0..0]);
+    const lz4_partial = try lz4_partial_decoder.step("", lz4_partial_output[0..5]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_partial.status);
+    try std.testing.expectEqual(@as(usize, 5), lz4_partial.progress.output_written);
+    try std.testing.expectError(error.OutputTooSmall, lz4_partial_decoder.finish());
+    try std.testing.expectEqualSlices(u8, "OutputTooSmall", lz4_partial_decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "output", lz4_partial_decoder.diagnostics().last_error_phase_name);
+
     const zstd_payload = "root-zstd-finish-output-too-small" ** 4;
     const zstd_frame = try zstdEncodeNativeFrameWithOptionsAlloc(std.testing.allocator, zstd_payload, .{
         .selection = .literal_only,
@@ -2157,6 +2171,20 @@ test "root native incremental finish reports direct-output not drained" {
     try std.testing.expectError(error.OutputTooSmall, zstd_decoder.finish());
     try std.testing.expectEqualSlices(u8, "OutputTooSmall", zstd_decoder.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "direct_output", zstd_decoder.diagnostics().last_error_phase_name);
+
+    var zstd_partial_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = zstd_payload.len,
+        .max_decoded_buffer_len = zstd_payload.len,
+    });
+    defer zstd_partial_decoder.deinit();
+    var zstd_partial_output: [zstd_payload.len]u8 = undefined;
+    _ = try zstd_partial_decoder.step(zstd_frame.frame, zstd_partial_output[0..0]);
+    const zstd_partial = try zstd_partial_decoder.step("", zstd_partial_output[0..5]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_partial.status);
+    try std.testing.expectEqual(@as(usize, 5), zstd_partial.progress.output_written);
+    try std.testing.expectError(error.OutputTooSmall, zstd_partial_decoder.finish());
+    try std.testing.expectEqualSlices(u8, "OutputTooSmall", zstd_partial_decoder.diagnostics().last_error_name);
+    try std.testing.expectEqualSlices(u8, "output", zstd_partial_decoder.diagnostics().last_error_phase_name);
 }
 
 test "root native incremental direct-output waits across split block boundaries" {
