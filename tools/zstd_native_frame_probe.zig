@@ -452,6 +452,27 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectStreamIteratorError(truncated_payload, error.TruncatedFrame);
     checked += 1;
 
+    const content_size_mismatch = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x20, // single-segment, one-byte content size.
+        0x05, // Advertise five decoded bytes.
+        0x21, 0x00, 0x00, // Last raw block with only four payload bytes.
+        'a',  'b',  'c',
+        'd',
+    };
+    const mismatch_header = try vort.zstdInspectNativeFrameHeader(&content_size_mismatch);
+    try expect(mismatch_header.content_size.? == 5);
+    const mismatch_block = try vort.zstdInspectNativeFrameFirstBlock(&content_size_mismatch);
+    try expect(mismatch_block.block_type == .raw);
+    try expect(mismatch_block.payload_len == 4);
+    const mismatch_summary = try vort.zstdSummarizeNativeFrameBlocks(&content_size_mismatch);
+    try expect(mismatch_summary.raw_block_count == 1);
+    try expectError(error.SizeMismatch, vort.zstdDecodedNativeFrameSize(&content_size_mismatch));
+    var mismatch_output: [5]u8 = undefined;
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameInto(&content_size_mismatch, &mismatch_output));
+    try expectAllocError(allocator, error.SizeMismatch, vort.zstdDecodeNativeFrameAlloc(allocator, &content_size_mismatch));
+    checked += 1;
+
     const reserved_block_type = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
         0x20, // single-segment, no checksum, one-byte content size.
