@@ -132,7 +132,7 @@ Current interpretation:
   mixed RLE/predefined plus limited compressed-FSE sequence-table mode emission
   (LL/OF/ML, repeated-table reuse, and short/corrupt LL/OF/ML FSE state streams covered by public dictionary probe
   inspection/decode, with writer-side ML construction still covered by focused
-  unit round-trips),
+  unit round-trips, and frame-probe malformed paths for repeated-table truncation),
   branch-scored mixed duplicate/repeated and dictionary/duplicate/repeated
   match lookahead and emission,
   RLE-literals sections for same-byte sequence literals,
