@@ -1729,6 +1729,13 @@ test "root native incremental decoders reject truncated skippable metadata on fi
     try std.testing.expectError(error.TruncatedFrame, lz4_decoder.finish());
     try std.testing.expectEqualSlices(u8, "TruncatedFrame", lz4_decoder.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "frame", lz4_decoder.diagnostics().last_error_phase_name);
+    lz4_decoder.reset();
+    try std.testing.expectEqualSlices(u8, "", lz4_decoder.diagnostics().last_error_name);
+    const lz4_recovered = try lz4_decoder.step(lz4_skip, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_recovered.status);
+    try std.testing.expectEqual(lz4_skip.len, lz4_recovered.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_recovered.progress.output_written);
+    try lz4_decoder.finish();
 
     const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 7, "root-zstd-truncated-skippable");
     defer std.testing.allocator.free(zstd_skip);
@@ -1749,6 +1756,13 @@ test "root native incremental decoders reject truncated skippable metadata on fi
     try std.testing.expectError(error.TruncatedFrame, zstd_decoder.finish());
     try std.testing.expectEqualSlices(u8, "TruncatedFrame", zstd_decoder.diagnostics().last_error_name);
     try std.testing.expectEqualSlices(u8, "frame", zstd_decoder.diagnostics().last_error_phase_name);
+    zstd_decoder.reset();
+    try std.testing.expectEqualSlices(u8, "", zstd_decoder.diagnostics().last_error_name);
+    const zstd_recovered = try zstd_decoder.step(zstd_skip, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_recovered.status);
+    try std.testing.expectEqual(zstd_skip.len, zstd_recovered.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_recovered.progress.output_written);
+    try zstd_decoder.finish();
 }
 
 test "root native incremental decoders finish skippable-only streams with zero expected output" {
