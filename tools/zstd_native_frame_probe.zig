@@ -21,6 +21,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkRepeatOffsetZeroLiteralSelector(init.gpa);
     checked += 1;
+    try checkRepeatOffsetZeroLiteralSecondSelector(init.gpa);
+    checked += 1;
     try checkRepeatOffsetZeroLiteralInvalidSelector(init.gpa);
     checked += 1;
     try checkRepeatedRleSequenceTables(init.gpa);
@@ -465,6 +467,34 @@ fn checkRepeatOffsetZeroLiteralSelector(allocator: std.mem.Allocator) !void {
     const into_written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
     try expect(into_written == decoded.len);
     try expectEqualSlices(decoded, into[0..into_written]);
+}
+
+fn checkRepeatOffsetZeroLiteralSecondSelector(allocator: std.mem.Allocator) !void {
+    // literal_len=0 shifts OF code 1 into the repeat-offset selector range.
+    // With extra bit 0, selector 2 chooses the initial rep2=8 and copies the
+    // eight-byte raw prefix.
+    const frame_hex = "28b52ffd201040000061626364656667683d000000015400010502";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .raw);
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+    try expect(second_block.block_type == .compressed);
+    try expect(second_block.last);
+    try expect(modes.literals_kind == .raw);
+    try expect(modes.regenerated_literals_size == 0);
+    try expect(modes.sequence_count == 1);
+    try expect(modes.offset_mode == .rle);
+
+    const decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(decoded);
+    try expectEqualSlices("abcdefghabcdefgh", decoded);
+    var output: [16]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameInto(&frame, &output);
+    try expect(written == decoded.len);
+    try expectEqualSlices(decoded, output[0..written]);
 }
 
 fn checkRepeatOffsetZeroLiteralInvalidSelector(allocator: std.mem.Allocator) !void {
