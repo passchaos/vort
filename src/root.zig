@@ -2673,6 +2673,20 @@ test "root native no-size dictionary direct-output paths round trip" {
     const lz4_done = try lz4_decoder.step("", &lz4_output);
     try std.testing.expectEqual(StepResult.Status.done, lz4_done.status);
     try std.testing.expectEqualSlices(u8, lz4_payload, &lz4_output);
+    var lz4_corrupt = try std.testing.allocator.dupe(u8, lz4_frame);
+    defer std.testing.allocator.free(lz4_corrupt);
+    lz4_corrupt[lz4_corrupt.len - 1] ^= 0x01;
+    lz4_decoder.reset();
+    const lz4_corrupt_initial = try lz4_decoder.step(lz4_corrupt, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_corrupt_initial.status);
+    try std.testing.expectError(error.ChecksumMismatch, lz4_decoder.step("", &lz4_output));
+    try std.testing.expectEqualSlices(u8, "ChecksumMismatch", lz4_decoder.diagnostics().last_error_name);
+    lz4_decoder.reset();
+    const lz4_reused_initial = try lz4_decoder.step(lz4_frame, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_reused_initial.status);
+    const lz4_reused_done = try lz4_decoder.step("", &lz4_output);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_reused_done.status);
+    try std.testing.expectEqualSlices(u8, lz4_payload, &lz4_output);
 
     var lz4_missing = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
         .expected_output_len = lz4_payload.len,
@@ -2706,6 +2720,20 @@ test "root native no-size dictionary direct-output paths round trip" {
     try std.testing.expectEqual(@as(?usize, zstd_payload.len), zstd_decoder.snapshot().decoded_len);
     const zstd_done = try zstd_decoder.step("", &zstd_output);
     try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
+    try std.testing.expectEqualSlices(u8, zstd_payload, &zstd_output);
+    var zstd_corrupt = try std.testing.allocator.dupe(u8, zstd_frame.frame);
+    defer std.testing.allocator.free(zstd_corrupt);
+    zstd_corrupt[zstd_corrupt.len - 1] ^= 0x01;
+    zstd_decoder.reset();
+    const zstd_corrupt_initial = try zstd_decoder.step(zstd_corrupt, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_corrupt_initial.status);
+    try std.testing.expectError(error.ChecksumMismatch, zstd_decoder.step("", &zstd_output));
+    try std.testing.expectEqualSlices(u8, "ChecksumMismatch", zstd_decoder.diagnostics().last_error_name);
+    zstd_decoder.reset();
+    const zstd_reused_initial = try zstd_decoder.step(zstd_frame.frame, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_reused_initial.status);
+    const zstd_reused_done = try zstd_decoder.step("", &zstd_output);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_reused_done.status);
     try std.testing.expectEqualSlices(u8, zstd_payload, &zstd_output);
 
     var zstd_missing = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
