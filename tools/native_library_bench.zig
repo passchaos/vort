@@ -74,6 +74,7 @@ pub fn main(init: std.process.Init) !void {
     try smokeLz4DeepHashChain(init.gpa);
     try smokeLz4LinkedDeepHashChain(init.gpa);
     try smokeLz4ChainDepthBudget(init.gpa);
+    try smokeLz4SkippableMalformedStreams(init.gpa);
     try smokeZstdMultiblockDirectFallback(init.gpa);
     try smokeReusableChunkedDecoders(init.gpa);
     try smokeZstdManyRepeatedSequences(init.gpa);
@@ -1630,6 +1631,46 @@ fn smokeLz4ChainDepthBudget(allocator: std.mem.Allocator) !void {
     var decoded: [lz4_chain_depth_payload.len]u8 = undefined;
     try expectRoundTrip(vort.lz4DecodeNativeFrameInto(depth0, &decoded), lz4_chain_depth_payload, &decoded);
     try expectRoundTrip(vort.lz4DecodeNativeFrameInto(default_depth, &decoded), lz4_chain_depth_payload, &decoded);
+}
+
+fn smokeLz4SkippableMalformedStreams(allocator: std.mem.Allocator) !void {
+    const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 4, "bench-meta");
+    defer allocator.free(skip);
+
+    var bad_header: std.ArrayList(u8) = .empty;
+    defer bad_header.deinit(allocator);
+    try bad_header.appendSlice(allocator, &.{ 0x04, 0x22, 0x4d, 0x18 });
+    const descriptor = [_]u8{ 0x62, 0x70 };
+    try bad_header.appendSlice(allocator, &descriptor);
+    try bad_header.append(allocator, @truncate(std.hash.XxHash32.hash(0, &descriptor) >> 8));
+    try bad_header.appendSlice(allocator, &.{ 0, 0, 0, 0 });
+
+    const stream = try std.mem.concat(allocator, u8, &.{ skip, bad_header.items });
+    defer allocator.free(stream);
+
+    if (vort.lz4DecodedNativeConcatenatedFrameSize(stream)) |_| return error.SizeMismatch else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+    if (vort.lz4SummarizeNativeStream(stream)) |_| return error.SizeMismatch else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+
+    var iterator = vort.lz4IterateNativeStream(stream);
+    const first = (try iterator.next()) orelse return error.SizeMismatch;
+    switch (first) {
+        .frame => return error.SizeMismatch,
+        .skippable => |skippable| {
+            if (skippable.header.skippable_id != 4 or !std.mem.eql(u8, skippable.payload, "bench-meta")) {
+                return error.SizeMismatch;
+            }
+        },
+    }
+    if (iterator.next()) |_| return error.SizeMismatch else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
 }
 
 fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
