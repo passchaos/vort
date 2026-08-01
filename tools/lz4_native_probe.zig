@@ -43,6 +43,7 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkSkippableOnlyStream(init.gpa);
     checked += 1;
+    checked += try checkSkippableMalformedStreams(init.gpa);
     checked += try checkInvalidFrameHeaders(init.gpa);
     checked += try checkInvalidFrameBlocks(init.gpa);
     checked += try checkInvalidFrameChecksumsAndTrailing(init.gpa);
@@ -770,6 +771,42 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
     if ((try iterator.next()) != null) return error.Lz4ProbeMismatch;
 }
 
+fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {
+    var checked: usize = 0;
+    const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 7, "lz4-metadata");
+    defer allocator.free(skip);
+    const reserved_header = try minimalHeaderOnlyFrame(allocator, 0x62, 0x70);
+    defer allocator.free(reserved_header);
+
+    const skippable_then_reserved = try std.mem.concat(allocator, u8, &.{ skip, reserved_header });
+    defer allocator.free(skippable_then_reserved);
+    try expectNativeConcatenatedStreamError(allocator, skippable_then_reserved, error.CorruptFrame);
+    var iterator = vort.lz4IterateNativeStream(skippable_then_reserved);
+    const first = (try iterator.next()) orelse return error.Lz4ProbeMismatch;
+    switch (first) {
+        .frame => return error.Lz4ProbeMismatch,
+        .skippable => |skippable| {
+            if (skippable.header.skippable_id != 7) return error.Lz4ProbeMismatch;
+            if (!std.mem.eql(u8, skippable.payload, "lz4-metadata")) return error.Lz4ProbeMismatch;
+        },
+    }
+    if (iterator.next()) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.CorruptFrame) return err;
+    checked += 1;
+
+    const reserved_then_skippable = try std.mem.concat(allocator, u8, &.{ reserved_header, skip });
+    defer allocator.free(reserved_then_skippable);
+    try expectNativeConcatenatedStreamError(allocator, reserved_then_skippable, error.CorruptFrame);
+    var malformed_first = vort.lz4IterateNativeStream(reserved_then_skippable);
+    if (malformed_first.next()) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.CorruptFrame) return err;
+    checked += 1;
+
+    return checked;
+}
+
 fn checkInvalidFrameHeaders(allocator: std.mem.Allocator) !usize {
     const cases = [_]struct {
         name: []const u8,
@@ -1033,6 +1070,26 @@ fn expectNativeFrameDecodeErrorWithSize(
         allocator.free(decoded);
         return error.Lz4ProbeExpectedFrameError;
     } else |err| if (@as(anyerror, err) != expected_decode_error) return err;
+}
+
+fn expectNativeConcatenatedStreamError(allocator: std.mem.Allocator, stream: []const u8, expected: anyerror) !void {
+    if (vort.lz4DecodedNativeConcatenatedFrameSize(stream)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    var output: [1]u8 = undefined;
+    if (vort.lz4DecodeNativeConcatenatedFrameInto(stream, &output)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    if (vort.lz4DecodeNativeConcatenatedFrameAlloc(allocator, stream)) |decoded| {
+        allocator.free(decoded);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
+
+    if (vort.lz4SummarizeNativeStream(stream)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != expected) return err;
 }
 
 fn expectNativeStreamErrorAfterFirstFrame(
