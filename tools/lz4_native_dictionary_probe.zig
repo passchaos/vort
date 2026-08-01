@@ -32,13 +32,30 @@ pub fn main(init: std.process.Init) !void {
         "dictionary",
         "dictionary-set",
         "incremental",
-        "malformed",
+    }, &.{
+        .{ .capability = "bounded-limits", .cases = 1 },
+        .{ .capability = "checksum", .cases = 1 },
+        .{ .capability = "chunked", .cases = 1 },
+        .{ .capability = "dictionary-set", .cases = 3 },
+        .{ .capability = "incremental", .cases = 3 },
     });
     try stdout.flush();
 }
 
-fn printCoverage(stdout: anytype, marker: []const u8, cases: usize, capabilities: []const []const u8) !void {
+const CoverageCase = struct {
+    capability: []const u8,
+    cases: usize,
+};
+
+fn printCoverage(stdout: anytype, marker: []const u8, default_cases: usize, capabilities: []const []const u8, overrides: []const CoverageCase) !void {
     for (capabilities) |capability| {
+        var cases = default_cases;
+        for (overrides) |override| {
+            if (std.mem.eql(u8, override.capability, capability)) {
+                cases = override.cases;
+                break;
+            }
+        }
         try stdout.print("{s}_coverage capability={s} cases={d}\n", .{ marker, capability, cases });
     }
 }

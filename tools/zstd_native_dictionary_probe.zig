@@ -62,12 +62,32 @@ pub fn main(init: std.process.Init) !void {
         "incremental",
         "malformed",
         "sequence-tables",
+    }, &.{
+        .{ .capability = "bounded-limits", .cases = 3 },
+        .{ .capability = "checksum", .cases = 2 },
+        .{ .capability = "chunked", .cases = 2 },
+        .{ .capability = "dictionary-set", .cases = 3 },
+        .{ .capability = "incremental", .cases = 4 },
+        .{ .capability = "malformed", .cases = 2 },
+        .{ .capability = "sequence-tables", .cases = 7 },
     });
     try stdout.flush();
 }
 
-fn printCoverage(stdout: anytype, marker: []const u8, cases: usize, capabilities: []const []const u8) !void {
+const CoverageCase = struct {
+    capability: []const u8,
+    cases: usize,
+};
+
+fn printCoverage(stdout: anytype, marker: []const u8, default_cases: usize, capabilities: []const []const u8, overrides: []const CoverageCase) !void {
     for (capabilities) |capability| {
+        var cases = default_cases;
+        for (overrides) |override| {
+            if (std.mem.eql(u8, override.capability, capability)) {
+                cases = override.cases;
+                break;
+            }
+        }
         try stdout.print("{s}_coverage capability={s} cases={d}\n", .{ marker, capability, cases });
     }
 }
