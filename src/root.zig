@@ -1785,6 +1785,24 @@ test "root native incremental decoders finish skippable-only streams with zero e
     try std.testing.expectEqual(@as(usize, 0), lz4_multi_decoder.diagnostics().output_written);
     try lz4_multi_decoder.finish();
 
+    var lz4_split_decoder = Lz4NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer lz4_split_decoder.deinit();
+    const lz4_split_first = try lz4_split_decoder.step(lz4_stream[0 .. lz4_skip.len + 5], lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, lz4_split_first.status);
+    try std.testing.expectEqual(lz4_skip.len + 5, lz4_split_first.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_split_first.progress.output_written);
+    try std.testing.expectEqualSlices(u8, "frame", lz4_split_decoder.diagnostics().phase_name);
+    const lz4_split_done = try lz4_split_decoder.step(lz4_stream[lz4_skip.len + 5 ..], lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_split_done.status);
+    try std.testing.expectEqual(lz4_stream.len - lz4_skip.len - 5, lz4_split_done.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_split_done.progress.output_written);
+    try std.testing.expectEqual(lz4_stream.len, lz4_split_decoder.diagnostics().frame_input_read);
+    try std.testing.expectEqual(@as(usize, 0), lz4_split_decoder.diagnostics().output_written);
+    try lz4_split_decoder.finish();
+
     const zstd_skip = try zstdEncodeSkippableFrameAlloc(std.testing.allocator, 7, "root-zstd-skippable-only");
     defer std.testing.allocator.free(zstd_skip);
     var zstd_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
@@ -1817,6 +1835,24 @@ test "root native incremental decoders finish skippable-only streams with zero e
     try std.testing.expectEqual(zstd_stream.len, zstd_multi_decoder.diagnostics().frame_input_read);
     try std.testing.expectEqual(@as(usize, 0), zstd_multi_decoder.diagnostics().output_written);
     try zstd_multi_decoder.finish();
+
+    var zstd_split_decoder = ZstdNativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer zstd_split_decoder.deinit();
+    const zstd_split_first = try zstd_split_decoder.step(zstd_stream[0 .. zstd_skip.len + 5], zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_input, zstd_split_first.status);
+    try std.testing.expectEqual(zstd_skip.len + 5, zstd_split_first.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_split_first.progress.output_written);
+    try std.testing.expectEqualSlices(u8, "frame", zstd_split_decoder.diagnostics().phase_name);
+    const zstd_split_done = try zstd_split_decoder.step(zstd_stream[zstd_skip.len + 5 ..], zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_split_done.status);
+    try std.testing.expectEqual(zstd_stream.len - zstd_skip.len - 5, zstd_split_done.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_split_done.progress.output_written);
+    try std.testing.expectEqual(zstd_stream.len, zstd_split_decoder.diagnostics().frame_input_read);
+    try std.testing.expectEqual(@as(usize, 0), zstd_split_decoder.diagnostics().output_written);
+    try zstd_split_decoder.finish();
 }
 
 test "root native incremental decoders handle consecutive split skippable frames" {
