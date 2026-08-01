@@ -47,6 +47,7 @@ Relevant smoke commands for this status slice are:
 ```sh
 zig build test --summary all
 zig build run-native-codec-probes --summary all
+zig build run-native-codec-probes-dashboard --summary all
 zig build run-lz4-native-probe --summary all
 zig build run-lz4-native-dictionary-probe --summary all
 zig build run-zstd-native-frame-probe --summary all
@@ -56,8 +57,9 @@ zig build check --summary all
 ```
 
 Recent work in this thread has repeatedly run the narrower probes plus `test` and
-`check`; `ci-smoke` now depends on `run-native-codec-probes` so all four
-library-level LZ4/Zstd probes run through the regular smoke target.
+`check`; `ci-smoke` now depends on `run-native-codec-probes-dashboard` so all
+four library-level LZ4/Zstd probes run through the regular smoke target and
+retain `zig-out/vort-native-codec-probes.json` / `.md` artifacts.
 `run-native-library-bench-gate` is the lightweight public API benchmark
 CSV gate; it now also runs bounded pre-row smoke checks for no-content-size
 multi-compressed Zstd, skippable/malformed LZ4 streams, and dictionary-set

@@ -61,9 +61,9 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 Hosted CI runs on `main` pushes and pull requests through
 `.github/workflows/ci.yml`, which installs Zig 0.16, checks formatting, runs
 `ci-smoke`, and repeats the focused fuzz smoke entrypoints. The `ci-smoke`
-target now includes `run-native-codec-probes`, so the library-level LZ4/Zstd
-frame and dictionary probes run together in CI rather than only as manual
-commands.
+target now includes `run-native-codec-probes-dashboard`, so the library-level
+LZ4/Zstd frame and dictionary probes run together in CI and retain JSON/Markdown
+artifacts rather than only existing as manual commands.
 
 ## Commands
 
@@ -212,6 +212,7 @@ zig build run-python-zlib-diff
 zig build run-python-zlib-diff-dashboard
 zig build run-gzip-cli-diff
 zig build run-native-codec-probes
+zig build run-native-codec-probes-dashboard
 zig build run-lz4-native-probe
 zig build run-lz4-native-dictionary-probe
 zig build run-lz4-native-probe -- --path README.md --limit 4096

@@ -857,6 +857,20 @@ pub fn build(b: *std.Build) void {
     native_codec_probes_step.dependOn(&run_zstd_native_frame_probe.step);
     native_codec_probes_step.dependOn(&run_zstd_native_dictionary_probe.step);
 
+    const native_codec_probes_dashboard = b.addSystemCommand(&.{ "python3", "tools/native_codec_probes_dashboard.py" });
+    native_codec_probes_dashboard.addArgs(&.{
+        "--json",
+        "zig-out/vort-native-codec-probes.json",
+        "--markdown",
+        "zig-out/vort-native-codec-probes.md",
+    });
+    native_codec_probes_dashboard.addArtifactArg(lz4_native_probe_exe);
+    native_codec_probes_dashboard.addArtifactArg(lz4_native_dictionary_probe_exe);
+    native_codec_probes_dashboard.addArtifactArg(zstd_native_frame_probe_exe);
+    native_codec_probes_dashboard.addArtifactArg(zstd_native_dictionary_probe_exe);
+    const native_codec_probes_dashboard_step = b.step("run-native-codec-probes-dashboard", "Run native codec probes and retain JSON/Markdown artifacts");
+    native_codec_probes_dashboard_step.dependOn(&native_codec_probes_dashboard.step);
+
     const header_inspect_smoke = b.addSystemCommand(&.{ "python3", "tools/header_inspect_smoke.py" });
     header_inspect_smoke.addArtifactArg(cli_exe);
     const header_inspect_smoke_step = b.step("run-header-inspect-smoke", "Run raw/zlib/gzip header inspection CLI smoke");
@@ -1914,7 +1928,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
-    ci_smoke_step.dependOn(native_codec_probes_step);
+    ci_smoke_step.dependOn(native_codec_probes_dashboard_step);
     ci_smoke_step.dependOn(header_inspect_smoke_step);
     ci_smoke_step.dependOn(header_inspect_dashboard_step);
     ci_smoke_step.dependOn(zlib_family_diff_step);
