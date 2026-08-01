@@ -180,6 +180,22 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     try expectError(error.SizeMismatch, vort.zstdDecodedNativeFrameSizeWithDictionary(&content_size_mismatch, dict));
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoWithDictionary(&content_size_mismatch, &size_priority_output, dict));
     try expectAllocError(allocator, error.SizeMismatch, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, &content_size_mismatch, dict));
+    var missing_size_decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = size_priority_output.len,
+        .max_decoded_buffer_len = size_priority_output.len,
+    });
+    defer missing_size_decoder.deinit();
+    try expectError(error.NeedDictionary, missing_size_decoder.step(&content_size_mismatch, size_priority_output[0..0]));
+    try expectEqualSlices("NeedDictionary", missing_size_decoder.diagnostics().last_error_name);
+    try expectEqualSlices("frame", missing_size_decoder.diagnostics().last_error_phase_name);
+    var size_mismatch_decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, dict, .{
+        .expected_output_len = size_priority_output.len,
+        .max_decoded_buffer_len = size_priority_output.len,
+    });
+    defer size_mismatch_decoder.deinit();
+    try expectError(error.SizeMismatch, size_mismatch_decoder.step(&content_size_mismatch, size_priority_output[0..0]));
+    try expectEqualSlices("SizeMismatch", size_mismatch_decoder.diagnostics().last_error_name);
+    try expectEqualSlices("frame", size_mismatch_decoder.diagnostics().last_error_phase_name);
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
