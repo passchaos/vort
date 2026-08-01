@@ -33,6 +33,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkMultiplePredefinedSequenceStateTransitions(init.gpa);
     checked += 1;
+    try checkMixedRlePredefinedSequenceModes(init.gpa);
+    checked += 1;
     try checkSplitHeaderIncremental(init.gpa);
     checked += 1;
     try checkSplitSkippableHeaderIncremental(init.gpa);
@@ -723,6 +725,61 @@ fn checkMultiplePredefinedSequenceStateTransitions(allocator: std.mem.Allocator)
     try expectPrefixedPayload(appended.items, expected);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&appended, &frame, expected.len - 1));
+}
+
+fn checkMixedRlePredefinedSequenceModes(allocator: std.mem.Allocator) !void {
+    // Mixed mode bytes are serialized LL/OF/ML in one compact descriptor. Keep
+    // a public fixture where LL/OF are RLE tables while ML remains predefined so
+    // future table-parser work cannot accidentally assume one shared mode for
+    // all sequence alphabets.
+    const expected = "a" ** 132;
+    const frame_hex = "28b52ffd2084450000096101500100002a";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+    defer allocator.free(lib_decoded);
+    try expectEqualSlices(expected, lib_decoded);
+    try expect((try vort.zstdDecodedFrameSize(&frame)) == expected.len);
+
+    const block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(block.block_type == .compressed);
+    try expect(block.last);
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, block);
+    try expect(modes.literals_kind == .rle);
+    try expect(modes.regenerated_literals_size == 1);
+    try expect(modes.sequence_count == 1);
+    try expect(modes.literal_length_mode == .rle);
+    try expect(modes.offset_mode == .rle);
+    try expect(modes.match_length_mode == .predefined);
+
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == expected.len);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len)) == expected.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len - 1));
+
+    const native_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(native_decoded);
+    try expectEqualSlices(expected, native_decoded);
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const scratch = try decoder.decodeScratch(&frame);
+    try expectEqualSlices(expected, scratch);
+
+    var into: [expected.len]u8 = undefined;
+    const written = try decoder.decodeIntoSlice(&frame, &into);
+    try expect(written == expected.len);
+    try expectEqualSlices(expected, into[0..written]);
+    try expectError(error.OutputTooSmall, decoder.decodeIntoSlice(&frame, into[0 .. into.len - 1]));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, &frame, expected.len);
+    try expect(appended_written == expected.len);
+    try expectPrefixedPayload(appended.items, expected);
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, &frame, expected.len - 1));
 }
 
 fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {

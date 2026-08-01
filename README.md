@@ -990,7 +990,7 @@ compressed-FSE sequence-table path is covered by
 `run-zstd-native-dictionary-probe` for public inspect/decode of LL/OF/ML=FSE
 blocks plus repeated sequence-table reuse, and `run-zstd-native-frame-probe` for
 treeless repeat-Huffman literal reuse, repeat-offset selector variants
-(zero-literal rep1/rep2, positive-literal rep2, invalid `rep0 - 1`, valid cross-block `rep0 - 1` after a direct-offset update, and multi-sequence predefined-table state transitions), and
+(zero-literal rep1/rep2, positive-literal rep2, invalid `rep0 - 1`, valid cross-block `rep0 - 1` after a direct-offset update, multi-sequence predefined-table state transitions, and mixed RLE/predefined sequence modes), and
 malformed sequence bitstreams, and short/corrupt LL/OF/ML compressed-FSE state streams,
 while focused unit tests keep the writer-side ML=FSE construction covered
 without adding the heavier path to the regular native library bench gate.
