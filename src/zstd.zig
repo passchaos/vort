@@ -4647,6 +4647,14 @@ test "zstd native repeat-offset resolver follows selector updates" {
     try std.testing.expectEqual(@as(usize, 8), try resolveSequenceOffset(1, 1, 1, 1, &offsets));
     try std.testing.expectEqual([3]usize{ 8, 1, 4 }, offsets);
 
+    offsets = initial_repeated_offsets;
+    try std.testing.expectEqual(@as(usize, 8), try resolveSequenceOffset(1, 1, 0, 0, &offsets));
+    try std.testing.expectEqual([3]usize{ 8, 1, 4 }, offsets);
+
+    offsets = initial_repeated_offsets;
+    try std.testing.expectError(error.InvalidMatch, resolveSequenceOffset(1, 1, 1, 0, &offsets));
+    try std.testing.expectEqual(initial_repeated_offsets, offsets);
+
     offsets = .{ 2, 4, 8 };
     try std.testing.expectEqual(@as(usize, 1), try resolveSequenceOffset(1, 1, 1, 0, &offsets));
     try std.testing.expectEqual([3]usize{ 1, 2, 4 }, offsets);
