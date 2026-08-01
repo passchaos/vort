@@ -184,6 +184,14 @@
       "expected_format": "json",
       "smoke_gate": "zig build run-native-allocation-smoke"
     },
+    "vort-native-codec-probes.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-native-codec-probes-dashboard"
+    },
+    "vort-native-codec-probes.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-native-codec-probes-dashboard"
+    },
     "vort-native-tier-range-bench.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build run-native-tier-range-bench-gate"
@@ -441,6 +449,8 @@
     "vort-native-allocation-report.json": "zig build run-native-allocation-report-dashboard",
     "vort-native-allocation-report.md": "zig build run-native-allocation-report-dashboard",
     "vort-native-allocation-smoke.json": "zig build run-native-allocation-smoke",
+    "vort-native-codec-probes.json": "zig build run-native-codec-probes-dashboard",
+    "vort-native-codec-probes.md": "zig build run-native-codec-probes-dashboard",
     "vort-native-tier-range-bench.csv": "zig build run-native-tier-range-bench-gate",
     "vort-native-tier-range-files-bench.csv": "zig build run-native-tier-range-files-bench-gate",
     "vort-native-fuzz-corpus-coverage-smoke.json": "zig build run-native-fuzz-corpus-coverage-smoke",
@@ -520,6 +530,8 @@
     "vort-native-allocation-report.json",
     "vort-native-allocation-report.md",
     "vort-native-allocation-smoke.json",
+    "vort-native-codec-probes.json",
+    "vort-native-codec-probes.md",
     "vort-native-fuzz-corpus-coverage-smoke.json",
     "vort-native-fuzz-corpus.json",
     "vort-native-fuzz-corpus.md",

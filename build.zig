@@ -1747,6 +1747,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(deflate_wrapper_fuzz_corpus_dashboard_step);
     dashboard_index.step.dependOn(fuzz_corpus_coverage_smoke_step);
     dashboard_index.step.dependOn(native_fuzz_corpus_coverage_smoke_step);
+    dashboard_index.step.dependOn(native_codec_probes_dashboard_step);
     dashboard_index.step.dependOn(zstd_compare_gate_step);
     dashboard_index.step.dependOn(zstd_compare_block_sweep_gate_step);
     dashboard_index.step.dependOn(zstd_compare_standard_gate_step);
