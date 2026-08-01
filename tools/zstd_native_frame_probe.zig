@@ -418,6 +418,23 @@ fn checkSplitSkippableHeaderIncremental(allocator: std.mem.Allocator) !void {
 fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     var checked: usize = 0;
 
+    const no_size_payload = "nosize-limit";
+    const no_size_frame = try handcraftedRawFrame(allocator, no_size_payload.len, no_size_payload, "", false);
+    defer allocator.free(no_size_frame);
+    const no_size_header = try vort.zstdInspectNativeFrameHeader(no_size_frame);
+    try expect(no_size_header.content_size == null);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(no_size_frame, no_size_payload.len)) == no_size_payload.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(no_size_frame, no_size_payload.len - 1));
+    const no_size_limited = try vort.zstdDecodeNativeFrameAllocLimited(allocator, no_size_frame, no_size_payload.len);
+    defer allocator.free(no_size_limited);
+    try expectEqualSlices(no_size_payload, no_size_limited);
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeFrameAllocLimited(allocator, no_size_frame, no_size_payload.len - 1));
+    var no_size_into: [no_size_payload.len]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(no_size_frame, &no_size_into)) == no_size_payload.len);
+    try expectEqualSlices(no_size_payload, &no_size_into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(no_size_frame, no_size_into[0 .. no_size_into.len - 1]));
+    checked += 1;
+
     const checksum_payload = "zstd-checksum";
     var wrong_checksum: [4]u8 = undefined;
     std.mem.writeInt(u32, &wrong_checksum, @as(u32, @truncate(std.hash.XxHash64.hash(0, checksum_payload))) ^ 0x01, .little);
