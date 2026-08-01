@@ -16,6 +16,8 @@ const Mode = enum {
     sequence_huffman_literals,
     dictionary_plain,
     dictionary,
+    trained_dictionary_plain,
+    trained_dictionary,
     dictionary_set_plain,
     dictionary_set,
     dictionary_set_chunked_plain,
@@ -123,6 +125,10 @@ pub fn main(init: std.process.Init) !void {
     try rows.append(init.gpa, try lz4DictionaryRow(init.io, init.gpa, .dictionary, true, options.iterations));
     try rows.append(init.gpa, try zstdDictionaryRow(init.io, init.gpa, .dictionary_plain, false, options.iterations));
     try rows.append(init.gpa, try zstdDictionaryRow(init.io, init.gpa, .dictionary, true, options.iterations));
+    try rows.append(init.gpa, try lz4TrainedDictionaryRow(init.io, init.gpa, .trained_dictionary_plain, false, options.iterations));
+    try rows.append(init.gpa, try lz4TrainedDictionaryRow(init.io, init.gpa, .trained_dictionary, true, options.iterations));
+    try rows.append(init.gpa, try zstdTrainedDictionaryRow(init.io, init.gpa, .trained_dictionary_plain, false, options.iterations));
+    try rows.append(init.gpa, try zstdTrainedDictionaryRow(init.io, init.gpa, .trained_dictionary, true, options.iterations));
     try rows.append(init.gpa, try lz4DictionarySetRow(init.io, init.gpa, .dictionary_set_plain, false, options.iterations));
     try rows.append(init.gpa, try lz4DictionarySetRow(init.io, init.gpa, .dictionary_set, true, options.iterations));
     try rows.append(init.gpa, try zstdDictionarySetRow(init.io, init.gpa, .dictionary_set_plain, false, options.iterations));
@@ -450,6 +456,74 @@ fn zstdDictionaryRow(
     const dict = vort.ZstdNativeDictionary.init(0x5a53_4401, zstd_dictionary_content);
     const payload = zstd_dictionary_payload;
     const case: Case = .{ .name = "dictionary", .payload = payload };
+    const options: vort.ZstdNativeFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    };
+    const encoded = if (use_dictionary)
+        try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict)
+    else
+        try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
+    defer allocator.free(encoded.frame);
+    const decoded = try allocator.alloc(u8, payload.len);
+    defer allocator.free(decoded);
+    if (use_dictionary) {
+        try expectRoundTrip(vort.zstdDecodeNativeFrameIntoWithDictionary(encoded.frame, decoded, dict), payload, decoded);
+    } else {
+        try expectRoundTrip(vort.zstdDecodeNativeFrameInto(encoded.frame, decoded), payload, decoded);
+    }
+
+    const encode_result = try timeEncodeZstdDictionary(io, allocator, payload, options, dict, use_dictionary, iterations);
+    const decode_result = try timeDecodeZstdDictionaryOneShot(io, encoded.frame, decoded, payload, dict, use_dictionary, iterations);
+    return makeRow(.zstd, mode, case, encoded.frame.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn lz4TrainedDictionaryRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary: bool,
+    iterations: usize,
+) !Row {
+    const trained = try vort.lz4TrainNativeDictionaryAlloc(allocator, &lz4_trained_dictionary_samples, trained_dictionary_options);
+    defer trained.deinit(allocator);
+    const dict = trained.asDictionary();
+    const payload = lz4_trained_dictionary_payload;
+    const case: Case = .{ .name = "trained_dictionary", .payload = payload };
+    const options: vort.Lz4NativeFrameOptions = .{
+        .content_checksum = false,
+        .block_checksum = true,
+    };
+    const encoded = if (use_dictionary)
+        try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, dict)
+    else
+        try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
+    defer allocator.free(encoded);
+    const decoded = try allocator.alloc(u8, payload.len);
+    defer allocator.free(decoded);
+    if (use_dictionary) {
+        try expectRoundTrip(vort.lz4DecodeNativeFrameIntoWithDictionary(encoded, decoded, dict), payload, decoded);
+    } else {
+        try expectRoundTrip(vort.lz4DecodeNativeFrameInto(encoded, decoded), payload, decoded);
+    }
+
+    const encode_result = try timeEncodeLz4Dictionary(io, allocator, payload, options, dict, use_dictionary, iterations);
+    const decode_result = try timeDecodeLz4DictionaryOneShot(io, encoded, decoded, payload, dict, use_dictionary, iterations);
+    return makeRow(.lz4, mode, case, encoded.len, iterations, encode_result.elapsed_ns, decode_result.elapsed_ns, encode_result.checksum ^ decode_result.checksum);
+}
+
+fn zstdTrainedDictionaryRow(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    use_dictionary: bool,
+    iterations: usize,
+) !Row {
+    const trained = try vort.zstdTrainNativeDictionaryAlloc(allocator, &zstd_trained_dictionary_samples, trained_dictionary_options);
+    defer trained.deinit(allocator);
+    const dict = trained.asDictionary();
+    const payload = zstd_trained_dictionary_payload;
+    const case: Case = .{ .name = "trained_dictionary", .payload = payload };
     const options: vort.ZstdNativeFrameOptions = .{
         .selection = .literal_only,
         .content_checksum = false,
@@ -945,6 +1019,24 @@ const lz4_dictionary_content = "abcdefghijklmnop";
 const lz4_dictionary_payload = "prefix-abcdefghijklmnop-tail-abcdefghijklmnop";
 const zstd_dictionary_content = "abcdefghijklmnop";
 const zstd_dictionary_payload = "prefix-abcdefghijklmnop-tail-abcdefghijklmnop";
+const lz4_trained_dictionary_samples = [_][]const u8{
+    "trained-lz4-prefix alpha trained-lz4-tail",
+    "trained-lz4-prefix beta trained-lz4-tail",
+    "trained-lz4-prefix gamma trained-lz4-tail",
+};
+const lz4_trained_dictionary_payload = "trained-lz4-prefix alpha trained-lz4-tail payload";
+const zstd_trained_dictionary_samples = [_][]const u8{
+    "trained-zstd-prefix alpha trained-zstd-tail",
+    "trained-zstd-prefix beta trained-zstd-tail",
+    "trained-zstd-prefix gamma trained-zstd-tail",
+};
+const zstd_trained_dictionary_payload = "pfx-trained-zstd-prefix alpha trained-zstd-tail payload";
+const trained_dictionary_options: vort.Lz4NativeDictionaryTrainOptions = .{
+    .target_size = 64,
+    .min_phrase_len = 4,
+    .max_phrase_len = 18,
+    .max_phrases = 96,
+};
 const lz4_dictionary_set_first_content = "abcdefghijklmnop";
 const lz4_dictionary_set_second_content = "QRSTUVWXYZabcdef";
 const lz4_dictionary_set_first_payload = "prefix-abcdefghijklmnop-set-one";
@@ -2340,6 +2432,30 @@ fn smokeNativeDictionaryBenchRows(allocator: std.mem.Allocator) !void {
     var zstd_out: [zstd_dictionary_payload.len]u8 = undefined;
     try expectRoundTrip(vort.zstdDecodeNativeFrameInto(zstd_plain.frame, &zstd_out), zstd_dictionary_payload, &zstd_out);
     try expectRoundTrip(vort.zstdDecodeNativeFrameIntoWithDictionary(zstd_dict_frame.frame, &zstd_out, zstd_dict), zstd_dictionary_payload, &zstd_out);
+
+    const lz4_trained = try vort.lz4TrainNativeDictionaryAlloc(allocator, &lz4_trained_dictionary_samples, trained_dictionary_options);
+    defer lz4_trained.deinit(allocator);
+    const lz4_trained_dict = lz4_trained.asDictionary();
+    const lz4_trained_plain = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, lz4_trained_dictionary_payload, lz4_options);
+    defer allocator.free(lz4_trained_plain);
+    const lz4_trained_frame = try vort.lz4EncodeNativeFrameWithDictionaryAlloc(allocator, lz4_trained_dictionary_payload, lz4_options, lz4_trained_dict);
+    defer allocator.free(lz4_trained_frame);
+    if (lz4_trained_frame.len >= lz4_trained_plain.len) return error.SizeMismatch;
+    var lz4_trained_out: [lz4_trained_dictionary_payload.len]u8 = undefined;
+    try expectRoundTrip(vort.lz4DecodeNativeFrameInto(lz4_trained_plain, &lz4_trained_out), lz4_trained_dictionary_payload, &lz4_trained_out);
+    try expectRoundTrip(vort.lz4DecodeNativeFrameIntoWithDictionary(lz4_trained_frame, &lz4_trained_out, lz4_trained_dict), lz4_trained_dictionary_payload, &lz4_trained_out);
+
+    const zstd_trained = try vort.zstdTrainNativeDictionaryAlloc(allocator, &zstd_trained_dictionary_samples, trained_dictionary_options);
+    defer zstd_trained.deinit(allocator);
+    const zstd_trained_dict = zstd_trained.asDictionary();
+    const zstd_trained_plain = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, zstd_trained_dictionary_payload, zstd_options);
+    defer allocator.free(zstd_trained_plain.frame);
+    const zstd_trained_frame = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, zstd_trained_dictionary_payload, zstd_options, zstd_trained_dict);
+    defer allocator.free(zstd_trained_frame.frame);
+    if (zstd_trained_frame.frame.len >= zstd_trained_plain.frame.len) return error.SizeMismatch;
+    var zstd_trained_out: [zstd_trained_dictionary_payload.len]u8 = undefined;
+    try expectRoundTrip(vort.zstdDecodeNativeFrameInto(zstd_trained_plain.frame, &zstd_trained_out), zstd_trained_dictionary_payload, &zstd_trained_out);
+    try expectRoundTrip(vort.zstdDecodeNativeFrameIntoWithDictionary(zstd_trained_frame.frame, &zstd_trained_out, zstd_trained_dict), zstd_trained_dictionary_payload, &zstd_trained_out);
 }
 
 fn smokeNativeDictionarySetBenchRows(allocator: std.mem.Allocator) !void {
@@ -2939,6 +3055,8 @@ fn modeName(mode: Mode) []const u8 {
         .sequence_huffman_literals => "sequence_huffman_literals",
         .dictionary_plain => "dictionary_plain",
         .dictionary => "dictionary",
+        .trained_dictionary_plain => "trained_dictionary_plain",
+        .trained_dictionary => "trained_dictionary",
         .dictionary_set_plain => "dictionary_set_plain",
         .dictionary_set => "dictionary_set",
         .dictionary_set_chunked_plain => "dictionary_set_chunked_plain",

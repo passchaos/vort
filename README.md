@@ -979,8 +979,8 @@ zig build run-native-library-bench-gate
 ```
 
 The gate currently requires the LZ4 chain-depth, Zstd match-budget, high-byte
-FSE Huffman, Zstd sequence-Huffman literal, dictionary, dictionary-set, chunked
-dictionary-set, chunked append, chunked append exact-size, reusable decoder,
+FSE Huffman, Zstd sequence-Huffman literal, dictionary, trained-dictionary,
+dictionary-set, chunked dictionary-set, chunked append, chunked append exact-size, reusable decoder,
 reusable append exact-size, direct-output, and small-output fallback rows to
 round-trip and to preserve the expected size relationships. In addition to the
 CSV rows, the bench executable now runs cheap pre-row smoke checks for

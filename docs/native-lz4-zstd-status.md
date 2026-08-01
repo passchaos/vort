@@ -65,7 +65,7 @@ CSV gate. `run-native-codec-probes-dashboard` now records reusable single-frame
 chunked decoder coverage as a distinct `reusable-chunked` capability. The bench
 gate also runs bounded pre-row smoke checks for no-content-size
 multi-compressed Zstd, skippable/malformed LZ4 streams, and dictionary-set
-skippable direct-output plus fallback, and reusable single-frame chunked decoder helpers with and without dictionary sets, without increasing the 67-row CSV. Heavier sequence-table
+skippable direct-output plus fallback, and reusable single-frame chunked decoder helpers with and without dictionary sets. The CSV now has 71 rows, including LZ4/Zstd trained-dictionary encode/decode rows backed by the same public training APIs exposed to library callers. Heavier sequence-table
 fixtures intentionally live in the frame and dictionary probes so the Debug
 bench gate stays fast.
 

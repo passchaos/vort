@@ -38,6 +38,8 @@ EXPECTED_MODES = {
     "sequence_huffman_literals",
     "dictionary_plain",
     "dictionary",
+    "trained_dictionary_plain",
+    "trained_dictionary",
     "dictionary_set_plain",
     "dictionary_set",
     "dictionary_set_chunked_plain",
@@ -68,6 +70,10 @@ EXPECTED_EXTRA_ROWS = {
     ("lz4", "dictionary", "dictionary"),
     ("zstd", "dictionary_plain", "dictionary"),
     ("zstd", "dictionary", "dictionary"),
+    ("lz4", "trained_dictionary_plain", "trained_dictionary"),
+    ("lz4", "trained_dictionary", "trained_dictionary"),
+    ("zstd", "trained_dictionary_plain", "trained_dictionary"),
+    ("zstd", "trained_dictionary", "trained_dictionary"),
     ("lz4", "dictionary_set_plain", "dictionary_set"),
     ("lz4", "dictionary_set", "dictionary_set"),
     ("zstd", "dictionary_set_plain", "dictionary_set"),
@@ -220,6 +226,14 @@ def main() -> int:
             raise AssertionError(
                 f"expected {codec} dictionary row to improve dictionary size: "
                 f"plain={plain['encoded_bytes']} dictionary={dictionary['encoded_bytes']}"
+            )
+
+        trained_plain = row_by_identity[(codec, "trained_dictionary_plain", "trained_dictionary")]
+        trained_dictionary = row_by_identity[(codec, "trained_dictionary", "trained_dictionary")]
+        if int(trained_dictionary["encoded_bytes"]) >= int(trained_plain["encoded_bytes"]):
+            raise AssertionError(
+                f"expected {codec} trained dictionary row to improve trained_dictionary size: "
+                f"plain={trained_plain['encoded_bytes']} dictionary={trained_dictionary['encoded_bytes']}"
             )
 
         set_plain = row_by_identity[(codec, "dictionary_set_plain", "dictionary_set")]
