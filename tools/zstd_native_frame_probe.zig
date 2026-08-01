@@ -462,6 +462,19 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectNativeStreamOnlyError(allocator, &reserved_block_type, error.CorruptFrame);
     checked += 1;
 
+    const zero_rle_block = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x20, // single-segment, no checksum, one-byte content size.
+        0x08,
+        0x03, 0x00, 0x00, // last RLE block with decoded size 0 is invalid.
+    };
+    try expectError(error.TruncatedFrame, vort.zstdInspectNativeFrameFirstBlock(&zero_rle_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&zero_rle_block));
+    var zero_rle_output: [8]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&zero_rle_block, &zero_rle_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_rle_block));
+    checked += 1;
+
     const repeat_without_previous_hex = "28b52ffd20042d0000096101fc01";
     var repeat_without_previous: [repeat_without_previous_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&repeat_without_previous, repeat_without_previous_hex);
