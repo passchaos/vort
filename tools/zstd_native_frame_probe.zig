@@ -53,6 +53,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkAllCompressedSequenceTableFrame(init.gpa);
     checked += 1;
+    try checkAllCompressedThenRepeatedSequenceTables(init.gpa);
+    checked += 1;
     const lib_generated_cases = try checkLibZstdGeneratedLibraryFrames(init.gpa);
     checked += lib_generated_cases;
     try checkSplitHeaderIncremental(init.gpa);
@@ -1286,6 +1288,65 @@ fn checkAllCompressedSequenceTableFrame(allocator: std.mem.Allocator) !void {
     var zero_end_output: [expected.len]u8 = undefined;
     try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&zero_end_mark, &zero_end_output));
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_end_mark));
+}
+
+fn checkAllCompressedThenRepeatedSequenceTables(allocator: std.mem.Allocator) !void {
+    // First block defines LL/OF/ML as compressed FSE tables; the second block
+    // uses Repeat_Mode for all three. This exercises table replay with the
+    // densest sequence-table shape that the bootstrap writer can emit.
+    const frame_hex =
+        "28b52ffd600400a4020044036162636465666768696a6b6c6d6e6f7062636464656665666667686967686968696a6a6b6c6b6c6c6d6e6f6d6e6f6e6f7070717210a810386bdbdf106a1f1068ed01fb609ffe1f9f8fcdfb78fedfd865875345020044034142434445464748494a4b4c4d4e4f5042434444454645464647484947484948494a4a4b4c4b4c4c4d4e4f4d4e4f4e4f5050515210fcfb609ffe1f9f8fcdfb78fedfd8658753";
+    const expected_hex =
+        "6162636465666768696a6b6c6d6e6f706d6e6f70626e6f706d6e63646d6e6f70646566706465667064656670646566706667686964656670676869706768697067686970676869696a686970676a6b6c676a6b6c676b6c6c676a6b6c6d6e6f6c676b6c6c676d6e6f676d6e6f676e6e6f676d6f70676d6e6f676e7071726e7071726e4142434445464748494a4b4c4d4e4f504d4e4f50424e4f504d4e43444d4e4f50444546504445465044454650444546504647484944454650474849504748495047484950474849494a484950474a4b4c474a4b4c474b4c4c474a4b4c4d4e4f4c474b4c4c474d4e4f474d4e4f474e4e4f474d4f50474d4e4f474e5051524e5051524e";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+    var expected: [expected_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expected, expected_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .compressed);
+    try expect(!first_block.last);
+    const first_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    try expect(first_modes.sequence_count == 16);
+    try expect(first_modes.literal_length_mode == .compressed);
+    try expect(first_modes.offset_mode == .compressed);
+    try expect(first_modes.match_length_mode == .compressed);
+
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    try expect(second_block.block_type == .compressed);
+    try expect(second_block.last);
+    const second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+    try expect(second_modes.sequence_count == 16);
+    try expect(second_modes.literal_length_mode == .repeat);
+    try expect(second_modes.offset_mode == .repeat);
+    try expect(second_modes.match_length_mode == .repeat);
+
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
+    try expect(summary.block_count == 2);
+    try expect(summary.compressed_block_count == 2);
+    try expect(summary.raw_block_count == 0);
+    try expect(summary.rle_block_count == 0);
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == expected.len);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len)) == expected.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len - 1));
+
+    const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+    defer allocator.free(lib_decoded);
+    try expectEqualSlices(&expected, lib_decoded);
+
+    const native_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(native_decoded);
+    try expectEqualSlices(&expected, native_decoded);
+
+    var into: [expected.len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
+    try expect(written == expected.len);
+    try expectEqualSlices(&expected, into[0..written]);
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const scratch = try decoder.decodeScratch(&frame);
+    try expectEqualSlices(&expected, scratch);
 }
 
 fn setZstdProbeBlockPayloadLen(frame: []u8, payload_len: usize) void {
