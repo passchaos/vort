@@ -43,6 +43,7 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkSkippableOnlyStream(init.gpa);
     checked += 1;
+    checked += try checkLibLz4GeneratedLibraryFrames(init.gpa);
     checked += try checkSkippableMalformedStreams(init.gpa);
     checked += try checkSkippableChecksumAndTrailingStreams(init.gpa);
     checked += try checkInvalidFrameHeaders(init.gpa);
@@ -1196,6 +1197,127 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
         },
     }
     if ((try iterator.next()) != null) return error.Lz4ProbeMismatch;
+}
+
+fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
+    var sequential: [2048]u8 = undefined;
+    for (&sequential, 0..) |*byte, i| byte.* = @intCast(i % 251);
+
+    var randomish: [2048]u8 = undefined;
+    var rng = std.Random.DefaultPrng.init(0x1a34_2026);
+    for (&randomish) |*byte| byte.* = rng.random().int(u8);
+
+    const json_unit = "{\"service\":\"vort\",\"codec\":\"lz4\",\"native\":true,\"value\":12345}\n";
+    const cases = [_]Case{
+        .{ .name = "liblz4-repeated", .payload = @constCast("abcd" ** 512) },
+        .{ .name = "liblz4-sequential", .payload = &sequential },
+        .{ .name = "liblz4-json", .payload = @constCast(json_unit ** 64) },
+        .{ .name = "liblz4-randomish", .payload = &randomish },
+    };
+    const levels = [_]c_int{ 0, 10 };
+    const option_sets = [_]vort.Lz4LibFrameOptions{
+        .{},
+        .{
+            .include_content_size = false,
+            .content_checksum = false,
+            .block_checksum = false,
+            .block_size_id = .max64kb,
+            .block_mode = .independent,
+        },
+        .{
+            .include_content_size = false,
+            .content_checksum = true,
+            .block_checksum = true,
+            .block_size_id = .max64kb,
+            .block_mode = .linked,
+        },
+    };
+
+    var checked: usize = 0;
+    for (cases) |case| {
+        for (levels) |level| {
+            for (option_sets) |options| {
+                try checkLibLz4GeneratedLibraryFrame(allocator, case, level, options);
+                checked += 1;
+            }
+        }
+    }
+    return checked;
+}
+
+fn checkLibLz4GeneratedLibraryFrame(
+    allocator: std.mem.Allocator,
+    case: Case,
+    level: c_int,
+    options: vort.Lz4LibFrameOptions,
+) !void {
+    const frame = try vort.lz4EncodeFrameWithLevelAndOptionsAlloc(allocator, case.payload, level, options);
+    defer allocator.free(frame);
+
+    // Pure library differential: liblz4 writes the compatibility frame through
+    // Vort's library wrapper, then the dependency-free native decoder must
+    // agree across one-shot, caller-buffer, reusable, append, and bounded-size
+    // public APIs. This avoids routing the oracle through the CLI.
+    const lib_decoded = try vort.lz4DecodeFrameAlloc(allocator, frame);
+    defer allocator.free(lib_decoded);
+    try expectPayload(case, lib_decoded);
+
+    const lib_into = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(lib_into);
+    const lib_written = try vort.lz4DecodeFrameInto(frame, lib_into);
+    if (lib_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    try expectPayload(case, lib_into[0..lib_written]);
+
+    const header = try vort.lz4InspectNativeFrameHeader(frame);
+    if (header.block_checksum != options.block_checksum) return error.Lz4ProbeMismatch;
+    if (header.content_checksum != options.content_checksum) return error.Lz4ProbeMismatch;
+    if (options.include_content_size) {
+        if (header.expected_content_size == null or header.expected_content_size.? != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    } else if (header.expected_content_size != null) {
+        return error.Lz4ProbeMismatch;
+    }
+
+    const summary = try vort.lz4SummarizeNativeFrameBlocks(frame);
+    if (case.payload.len == 0) {
+        if (summary.block_count != 0) return error.Lz4ProbeSizeMismatch;
+    } else if (summary.block_count == 0) {
+        return error.Lz4ProbeSizeMismatch;
+    }
+    const stream_summary = try vort.lz4SummarizeNativeStream(frame);
+    if (stream_summary.frame_count != 1 or stream_summary.skippable_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (stream_summary.block_count != summary.block_count) return error.Lz4ProbeSizeMismatch;
+
+    if (try vort.lz4DecodedNativeFrameSizeLimited(frame, case.payload.len) != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    try expectError(error.OutputLimitExceeded, vort.lz4DecodedNativeFrameSizeLimited(frame, case.payload.len - 1));
+
+    const native_decoded = try vort.lz4DecodeNativeFrameAllocLimited(allocator, frame, case.payload.len);
+    defer allocator.free(native_decoded);
+    try expectPayload(case, native_decoded);
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.lz4DecodeNativeFrameAllocLimited(allocator, frame, case.payload.len - 1));
+
+    const native_into = try allocator.alloc(u8, case.payload.len);
+    defer allocator.free(native_into);
+    const native_written = try vort.lz4DecodeNativeFrameInto(frame, native_into);
+    if (native_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    try expectPayload(case, native_into[0..native_written]);
+    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameInto(frame, native_into[0 .. native_into.len - 1]));
+
+    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const scratch = try decoder.decodeScratchLimited(frame, case.payload.len);
+    try expectPayload(case, scratch);
+    try expectError(error.OutputLimitExceeded, decoder.decodeScratchLimited(frame, case.payload.len - 1));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try decoder.decodeAppendExactSize(&appended, frame, case.payload.len);
+    if (appended_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (appended.items.len != "prefix:".len + case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, appended.items[0.."prefix:".len], "prefix:")) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, appended.items["prefix:".len..], case.payload)) return error.Lz4ProbeMismatch;
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&appended, frame, case.payload.len - 1));
 }
 
 fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {

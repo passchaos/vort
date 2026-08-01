@@ -269,7 +269,7 @@ def main() -> int:
                 "native_codec_probes_healthy": True,
                 "native_codec_probes_probe_count": 4,
                 "native_codec_probes_ok_probe_count": 4,
-                "native_codec_probes_total_cases": 138,
+                "native_codec_probes_total_cases": 162,
                 "native_tier_range_present": True,
                 "native_tier_range_healthy": True,
                 "native_tier_range_summary_count": 1,

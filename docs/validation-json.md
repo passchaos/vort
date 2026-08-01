@@ -1349,16 +1349,16 @@ Example:
   "schema_version": 1,
   "ok": true,
   "probe_count": 4,
-  "total_cases": 138,
+  "total_cases": 162,
   "probes": [
     {
       "label": "lz4-native-probe",
       "executable": "zig-out/bin/lz4-native-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 40,
+      "cases": 64,
       "marker": "lz4_native_probe",
-      "output": "lz4_native_probe_ok cases=40\n"
+      "output": "lz4_native_probe_ok cases=64\n"
     },
     {
       "label": "lz4-native-dictionary-probe",
