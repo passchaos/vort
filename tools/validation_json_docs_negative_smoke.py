@@ -275,7 +275,7 @@ def main() -> int:
                 "native_codec_probes_incremental_cases": 135,
                 "native_codec_probes_chunked_cases": 131,
                 "native_codec_probes_reusable_chunked_cases": 128,
-                "native_codec_probes_fse_repeat_cases": 7,
+                "native_codec_probes_fse_repeat_cases": 8,
                 "native_codec_probes_dictionary_cases": 133,
                 "native_codec_probes_malformed_cases": 221,
                 "native_codec_probes_total_cases": 249,

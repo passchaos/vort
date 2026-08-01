@@ -81,7 +81,7 @@ pub fn main(init: std.process.Init) !void {
     }, &.{
         .{ .capability = "chunked", .cases = lib_generated_cases + 2 },
         .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 2 },
-        .{ .capability = "fse-repeat", .cases = 4 },
+        .{ .capability = "fse-repeat", .cases = 5 },
         .{ .capability = "incremental", .cases = lib_generated_cases + 2 },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });

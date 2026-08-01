@@ -1400,7 +1400,7 @@ Example:
     },
     {
       "capability": "fse-repeat",
-      "cases": 7,
+      "cases": 8,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1589,7 +1589,7 @@ Example:
       "returncode": 0,
       "cases": 116,
       "marker": "zstd_native_frame_probe",
-      "output": "zstd_native_frame_probe_ok cases=116\nzstd_native_frame_probe_coverage capability=bounded-limits cases=116\nzstd_native_frame_probe_coverage capability=checksum cases=116\nzstd_native_frame_probe_coverage capability=chunked cases=65\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=65\nzstd_native_frame_probe_coverage capability=fse-repeat cases=4\nzstd_native_frame_probe_coverage capability=huffman cases=116\nzstd_native_frame_probe_coverage capability=incremental cases=65\nzstd_native_frame_probe_coverage capability=lib-generated cases=63\nzstd_native_frame_probe_coverage capability=malformed cases=116\nzstd_native_frame_probe_coverage capability=native-generated cases=116\nzstd_native_frame_probe_coverage capability=sequence-tables cases=116\nzstd_native_frame_probe_coverage capability=skippable cases=116\n",
+      "output": "zstd_native_frame_probe_ok cases=116\nzstd_native_frame_probe_coverage capability=bounded-limits cases=116\nzstd_native_frame_probe_coverage capability=checksum cases=116\nzstd_native_frame_probe_coverage capability=chunked cases=65\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=65\nzstd_native_frame_probe_coverage capability=fse-repeat cases=5\nzstd_native_frame_probe_coverage capability=huffman cases=116\nzstd_native_frame_probe_coverage capability=incremental cases=65\nzstd_native_frame_probe_coverage capability=lib-generated cases=63\nzstd_native_frame_probe_coverage capability=malformed cases=116\nzstd_native_frame_probe_coverage capability=native-generated cases=116\nzstd_native_frame_probe_coverage capability=sequence-tables cases=116\nzstd_native_frame_probe_coverage capability=skippable cases=116\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
@@ -1608,7 +1608,7 @@ Example:
         "bounded-limits": 116,
         "checksum": 116,
         "chunked": 65,
-        "fse-repeat": 4,
+        "fse-repeat": 5,
         "huffman": 116,
         "incremental": 65,
         "lib-generated": 63,
