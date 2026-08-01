@@ -568,13 +568,38 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
         if not isinstance(probes, list):
             probes = []
         ok_probes = sum(1 for probe in probes if isinstance(probe, dict) and probe.get("ok") is True)
+        capabilities = data.get("capabilities")
+        if not isinstance(capabilities, list):
+            capabilities = []
+        ok_capabilities = sum(1 for row in capabilities if isinstance(row, dict) and row.get("ok") is True)
+        capability_cases = {
+            str(row.get("capability")): int(row.get("cases") or 0)
+            for row in capabilities
+            if isinstance(row, dict)
+        }
         total_cases = int(data.get("total_cases") or 0)
+        capability_count = int(data.get("capability_count") or len(capabilities))
         return {
             "present": True,
             "ok": bool(data.get("ok")),
-            "healthy": bool(data.get("ok")) and ok_probes == int(data.get("probe_count") or 0) and ok_probes == 4 and total_cases > 0,
+            "healthy": bool(data.get("ok"))
+            and ok_probes == int(data.get("probe_count") or 0)
+            and ok_probes == 4
+            and capability_count > 0
+            and ok_capabilities == capability_count
+            and total_cases > 0
+            and capability_cases.get("lib-generated", 0) > 0
+            and capability_cases.get("incremental", 0) > 0
+            and capability_cases.get("chunked", 0) > 0,
             "probe_count": int(data.get("probe_count") or 0),
             "ok_probe_count": ok_probes,
+            "capability_count": capability_count,
+            "ok_capability_count": ok_capabilities,
+            "lib_generated_cases": capability_cases.get("lib-generated", 0),
+            "incremental_cases": capability_cases.get("incremental", 0),
+            "chunked_cases": capability_cases.get("chunked", 0),
+            "dictionary_cases": capability_cases.get("dictionary", 0),
+            "malformed_cases": capability_cases.get("malformed", 0),
             "total_cases": total_cases,
         }
     return {
@@ -583,6 +608,13 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
         "healthy": False,
         "probe_count": 0,
         "ok_probe_count": 0,
+        "capability_count": 0,
+        "ok_capability_count": 0,
+        "lib_generated_cases": 0,
+        "incremental_cases": 0,
+        "chunked_cases": 0,
+        "dictionary_cases": 0,
+        "malformed_cases": 0,
         "total_cases": 0,
     }
 
@@ -872,7 +904,7 @@ def main() -> int:
         f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
         f"- Python zlib differential: payloads {python_zlib_health['payloads']}, dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
-        f"- native codec probes: {native_codec_health['ok_probe_count']}/{native_codec_health['probe_count']} probes ok, cases {native_codec_health['total_cases']}, healthy `{native_codec_health['healthy']}`",
+        f"- native codec probes: {native_codec_health['ok_probe_count']}/{native_codec_health['probe_count']} probes ok, capabilities {native_codec_health['ok_capability_count']}/{native_codec_health['capability_count']} ok, cases total/lib/incremental/chunked {native_codec_health['total_cases']}/{native_codec_health['lib_generated_cases']}/{native_codec_health['incremental_cases']}/{native_codec_health['chunked_cases']}, healthy `{native_codec_health['healthy']}`",
         f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
@@ -1039,6 +1071,13 @@ def main() -> int:
                 "native_codec_probes_healthy": native_codec_health["healthy"],
                 "native_codec_probes_probe_count": native_codec_health["probe_count"],
                 "native_codec_probes_ok_probe_count": native_codec_health["ok_probe_count"],
+                "native_codec_probes_capability_count": native_codec_health["capability_count"],
+                "native_codec_probes_ok_capability_count": native_codec_health["ok_capability_count"],
+                "native_codec_probes_lib_generated_cases": native_codec_health["lib_generated_cases"],
+                "native_codec_probes_incremental_cases": native_codec_health["incremental_cases"],
+                "native_codec_probes_chunked_cases": native_codec_health["chunked_cases"],
+                "native_codec_probes_dictionary_cases": native_codec_health["dictionary_cases"],
+                "native_codec_probes_malformed_cases": native_codec_health["malformed_cases"],
                 "native_codec_probes_total_cases": native_codec_health["total_cases"],
                 "native_tier_range_present": native_tier_health["present"],
                 "native_tier_range_healthy": native_tier_health["healthy"],

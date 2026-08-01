@@ -718,6 +718,13 @@ def main() -> int:
         assert dashboard["native_codec_probes_healthy"] is True
         assert dashboard["native_codec_probes_probe_count"] == native_codec_probes["probe_count"]
         assert dashboard["native_codec_probes_ok_probe_count"] == native_codec_probes["probe_count"]
+        assert dashboard["native_codec_probes_capability_count"] == native_codec_probes["capability_count"]
+        assert dashboard["native_codec_probes_ok_capability_count"] == native_codec_probes["capability_count"]
+        assert dashboard["native_codec_probes_lib_generated_cases"] == capabilities_by_name["lib-generated"]["cases"]
+        assert dashboard["native_codec_probes_incremental_cases"] == capabilities_by_name["incremental"]["cases"]
+        assert dashboard["native_codec_probes_chunked_cases"] == capabilities_by_name["chunked"]["cases"]
+        assert dashboard["native_codec_probes_dictionary_cases"] == capabilities_by_name["dictionary"]["cases"]
+        assert dashboard["native_codec_probes_malformed_cases"] == capabilities_by_name["malformed"]["cases"]
         assert dashboard["native_codec_probes_total_cases"] == native_codec_probes["total_cases"]
         assert dashboard["native_tier_corpus_discovery_present"] is True
         assert dashboard["native_tier_corpus_discovery_ok"] is True

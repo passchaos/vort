@@ -1666,7 +1666,15 @@ Top-level fields:
   `python_zlib_diff_expected_failures`
 - `native_codec_probes_present`, `native_codec_probes_ok`,
   `native_codec_probes_healthy`, `native_codec_probes_probe_count`,
-  `native_codec_probes_ok_probe_count`, `native_codec_probes_total_cases`
+  `native_codec_probes_ok_probe_count`,
+  `native_codec_probes_capability_count`,
+  `native_codec_probes_ok_capability_count`,
+  `native_codec_probes_lib_generated_cases`,
+  `native_codec_probes_incremental_cases`,
+  `native_codec_probes_chunked_cases`,
+  `native_codec_probes_dictionary_cases`,
+  `native_codec_probes_malformed_cases`,
+  `native_codec_probes_total_cases`
 - `artifacts`
 
 Each artifact includes:
@@ -1799,6 +1807,13 @@ Example:
   "native_codec_probes_healthy": false,
   "native_codec_probes_probe_count": 0,
   "native_codec_probes_ok_probe_count": 0,
+  "native_codec_probes_capability_count": 0,
+  "native_codec_probes_ok_capability_count": 0,
+  "native_codec_probes_lib_generated_cases": 0,
+  "native_codec_probes_incremental_cases": 0,
+  "native_codec_probes_chunked_cases": 0,
+  "native_codec_probes_dictionary_cases": 0,
+  "native_codec_probes_malformed_cases": 0,
   "native_codec_probes_total_cases": 0,
   "native_tier_range_present": true,
   "native_tier_range_healthy": true,

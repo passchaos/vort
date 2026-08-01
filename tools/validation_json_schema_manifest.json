@@ -258,6 +258,11 @@
             "native_codec_probes_ok"
           ],
           "positive": [
+            "native_codec_probes_capability_count",
+            "native_codec_probes_ok_capability_count",
+            "native_codec_probes_lib_generated_cases",
+            "native_codec_probes_incremental_cases",
+            "native_codec_probes_chunked_cases",
             "native_codec_probes_probe_count",
             "native_codec_probes_ok_probe_count",
             "native_codec_probes_total_cases"
@@ -435,7 +440,14 @@
         "huffman_length_row_count": "int",
         "huffman_length_worst_gap_bits": "int",
         "native_codec_probes_healthy": "bool",
+        "native_codec_probes_capability_count": "int",
+        "native_codec_probes_chunked_cases": "int",
+        "native_codec_probes_dictionary_cases": "int",
+        "native_codec_probes_incremental_cases": "int",
+        "native_codec_probes_lib_generated_cases": "int",
+        "native_codec_probes_malformed_cases": "int",
         "native_codec_probes_ok": "bool",
+        "native_codec_probes_ok_capability_count": "int",
         "native_codec_probes_ok_probe_count": "int",
         "native_codec_probes_present": "bool",
         "native_codec_probes_probe_count": "int",
