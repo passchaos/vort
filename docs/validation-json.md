@@ -1356,7 +1356,7 @@ Example:
   "capability_count": 16,
   "coverage_count": 4,
   "probe_count": 4,
-  "total_cases": 254,
+  "total_cases": 256,
   "capabilities": [
     {
       "capability": "lib-generated",
@@ -1408,7 +1408,7 @@ Example:
     },
     {
       "capability": "dictionary",
-      "cases": 137,
+      "cases": 139,
       "ok": true,
       "ok_probe_count": 3,
       "present": true,
@@ -1424,7 +1424,7 @@ Example:
     },
     {
       "capability": "dictionary-set",
-      "cases": 109,
+      "cases": 111,
       "ok": true,
       "ok_probe_count": 3,
       "present": true,
@@ -1498,7 +1498,7 @@ Example:
       "surface": "frame"
     },
     {
-      "cases": 10,
+      "cases": 11,
       "codec": "lz4",
       "ok": true,
       "ok_probe_count": 1,
@@ -1516,7 +1516,7 @@ Example:
       "surface": "frame"
     },
     {
-      "cases": 24,
+      "cases": 25,
       "codec": "zstd",
       "ok": true,
       "ok_probe_count": 1,
@@ -1569,9 +1569,9 @@ Example:
       "executable": "zig-out/bin/lz4-native-dictionary-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 10,
+      "cases": 11,
       "marker": "lz4_native_dictionary_probe",
-      "output": "lz4_native_dictionary_probe_ok cases=10\nlz4_native_dictionary_probe_coverage capability=bounded-limits cases=1\nlz4_native_dictionary_probe_coverage capability=checksum cases=3\nlz4_native_dictionary_probe_coverage capability=chunked cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary cases=10\nlz4_native_dictionary_probe_coverage capability=dictionary-training cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary-set cases=3\nlz4_native_dictionary_probe_coverage capability=incremental cases=3\n",
+      "output": "lz4_native_dictionary_probe_ok cases=11\nlz4_native_dictionary_probe_coverage capability=bounded-limits cases=1\nlz4_native_dictionary_probe_coverage capability=checksum cases=3\nlz4_native_dictionary_probe_coverage capability=chunked cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary cases=11\nlz4_native_dictionary_probe_coverage capability=dictionary-training cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary-set cases=4\nlz4_native_dictionary_probe_coverage capability=incremental cases=3\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
@@ -1585,9 +1585,9 @@ Example:
         "bounded-limits": 1,
         "checksum": 3,
         "chunked": 1,
-        "dictionary": 10,
+        "dictionary": 11,
         "dictionary-training": 1,
-        "dictionary-set": 3,
+        "dictionary-set": 4,
         "incremental": 3
       },
       "reported_capability_count": 7
@@ -1635,9 +1635,9 @@ Example:
       "executable": "zig-out/bin/zstd-native-dictionary-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 24,
+      "cases": 25,
       "marker": "zstd_native_dictionary_probe",
-      "output": "zstd_native_dictionary_probe_ok cases=24\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=3\nzstd_native_dictionary_probe_coverage capability=checksum cases=4\nzstd_native_dictionary_probe_coverage capability=chunked cases=2\nzstd_native_dictionary_probe_coverage capability=dictionary cases=24\nzstd_native_dictionary_probe_coverage capability=dictionary-training cases=1\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=3\nzstd_native_dictionary_probe_coverage capability=fse-repeat cases=3\nzstd_native_dictionary_probe_coverage capability=incremental cases=4\nzstd_native_dictionary_probe_coverage capability=malformed cases=2\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=7\n",
+      "output": "zstd_native_dictionary_probe_ok cases=25\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=3\nzstd_native_dictionary_probe_coverage capability=checksum cases=4\nzstd_native_dictionary_probe_coverage capability=chunked cases=2\nzstd_native_dictionary_probe_coverage capability=dictionary cases=25\nzstd_native_dictionary_probe_coverage capability=dictionary-training cases=1\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=4\nzstd_native_dictionary_probe_coverage capability=fse-repeat cases=3\nzstd_native_dictionary_probe_coverage capability=incremental cases=4\nzstd_native_dictionary_probe_coverage capability=malformed cases=2\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=7\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
@@ -1654,9 +1654,9 @@ Example:
         "bounded-limits": 3,
         "checksum": 4,
         "chunked": 2,
-        "dictionary": 24,
+        "dictionary": 25,
         "dictionary-training": 1,
-        "dictionary-set": 3,
+        "dictionary-set": 4,
         "fse-repeat": 3,
         "incremental": 4,
         "malformed": 2,

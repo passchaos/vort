@@ -26,6 +26,7 @@ pub const Error = error{
     RangeOutOfBounds,
     OutputLimitExceeded,
     TrailingData,
+    DuplicateDictionaryId,
 };
 
 /// Input/output accounting for resumable streaming APIs.

@@ -13,6 +13,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkTrainedDictionaryApis(init.gpa);
     checked += 1;
+    try checkDictionarySetValidationApis();
+    checked += 1;
     try checkDictionaryMatchEncoding(init.gpa);
     checked += 1;
     try checkDictionarySequenceHuffmanLiterals(init.gpa);
@@ -73,7 +75,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .capability = "checksum", .cases = 4 },
         .{ .capability = "chunked", .cases = 2 },
         .{ .capability = "dictionary-training", .cases = 1 },
-        .{ .capability = "dictionary-set", .cases = 3 },
+        .{ .capability = "dictionary-set", .cases = 4 },
         .{ .capability = "fse-repeat", .cases = 3 },
         .{ .capability = "incremental", .cases = 4 },
         .{ .capability = "malformed", .cases = 2 },
@@ -404,6 +406,22 @@ fn checkTrainedDictionaryApis(allocator: std.mem.Allocator) !void {
     const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
     defer allocator.free(decoded);
     try expectEqualSlices(payload, decoded);
+}
+
+fn checkDictionarySetValidationApis() !void {
+    const first = vort.ZstdNativeDictionary.init(0x8181, "zstd-set-first");
+    const second = vort.ZstdNativeDictionary.init(0x8282, "zstd-set-second");
+    const dictionaries = [_]vort.ZstdNativeDictionary{ first, second };
+    const checked = try vort.ZstdNativeDictionarySet.initChecked(&dictionaries);
+    try checked.validate();
+    try expectEqualSlices(first.content, (checked.find(first.id) orelse return error.ZstdNativeDictionaryProbeMismatch).content);
+    try expect(checked.find(0x8383) == null);
+
+    const duplicate = [_]vort.ZstdNativeDictionary{ first, vort.ZstdNativeDictionary.init(first.id, "zstd-duplicate") };
+    try expectError(error.DuplicateDictionaryId, vort.ZstdNativeDictionarySet.initChecked(&duplicate));
+    try expectError(error.DuplicateDictionaryId, vort.ZstdNativeDictionarySet.init(&duplicate).validate());
+    const zero = [_]vort.ZstdNativeDictionary{vort.ZstdNativeDictionary.init(0, "zstd-zero")};
+    try expectError(error.NeedDictionary, vort.ZstdNativeDictionarySet.initChecked(&zero));
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {

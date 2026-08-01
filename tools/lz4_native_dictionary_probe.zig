@@ -13,6 +13,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkTrainedDictionaryApis(init.gpa);
     checked += 1;
+    try checkDictionarySetValidationApis();
+    checked += 1;
     try checkSingleFrameDictionaryApis(init.gpa);
     checked += 1;
     try checkIndependentBlocksReuseDictionary(init.gpa);
@@ -42,7 +44,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .capability = "checksum", .cases = 3 },
         .{ .capability = "chunked", .cases = 1 },
         .{ .capability = "dictionary-training", .cases = 1 },
-        .{ .capability = "dictionary-set", .cases = 3 },
+        .{ .capability = "dictionary-set", .cases = 4 },
         .{ .capability = "incremental", .cases = 3 },
     });
     try stdout.flush();
@@ -148,6 +150,22 @@ fn checkTrainedDictionaryApis(allocator: std.mem.Allocator) !void {
     const decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, encoded, dict);
     defer allocator.free(decoded);
     try expectEqualSlices(payload, decoded);
+}
+
+fn checkDictionarySetValidationApis() !void {
+    const first = vort.Lz4NativeDictionary.init(0x7171, "lz4-set-first");
+    const second = vort.Lz4NativeDictionary.init(0x7272, "lz4-set-second");
+    const dictionaries = [_]vort.Lz4NativeDictionary{ first, second };
+    const checked = try vort.Lz4NativeDictionarySet.initChecked(&dictionaries);
+    try checked.validate();
+    try expectEqualSlices(first.content, (checked.find(first.id) orelse return error.Lz4NativeDictionaryProbeMismatch).content);
+    try expect(checked.find(0x7373) == null);
+
+    const duplicate = [_]vort.Lz4NativeDictionary{ first, vort.Lz4NativeDictionary.init(first.id, "lz4-duplicate") };
+    try expectError(error.DuplicateDictionaryId, vort.Lz4NativeDictionarySet.initChecked(&duplicate));
+    try expectError(error.DuplicateDictionaryId, vort.Lz4NativeDictionarySet.init(&duplicate).validate());
+    const zero = [_]vort.Lz4NativeDictionary{vort.Lz4NativeDictionary.init(0, "lz4-zero")};
+    try expectError(error.NeedDictionary, vort.Lz4NativeDictionarySet.initChecked(&zero));
 }
 
 fn checkSingleFrameDictionaryApis(allocator: std.mem.Allocator) !void {

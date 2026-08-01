@@ -142,6 +142,26 @@ pub const NativeDictionarySet = struct {
         return .{ .dictionaries = dictionaries };
     }
 
+    /// Build a dictionary catalog and reject IDs that cannot be resolved
+    /// unambiguously from frame metadata.  The plain `init` constructor remains
+    /// available for callers that already validated a static table, while this
+    /// checked form is the safer choice for dynamically trained or discovered
+    /// dictionaries.
+    pub fn initChecked(dictionaries: []const NativeDictionary) Error!NativeDictionarySet {
+        const set = init(dictionaries);
+        try set.validate();
+        return set;
+    }
+
+    pub fn validate(self: NativeDictionarySet) Error!void {
+        for (self.dictionaries, 0..) |dictionary, i| {
+            if (dictionary.id == 0) return error.NeedDictionary;
+            for (self.dictionaries[0..i]) |previous| {
+                if (previous.id == dictionary.id) return error.DuplicateDictionaryId;
+            }
+        }
+    }
+
     pub fn find(self: NativeDictionarySet, id: u32) ?NativeDictionary {
         for (self.dictionaries) |dictionary| {
             if (dictionary.id == id) return dictionary;
@@ -6643,7 +6663,15 @@ test "lz4 native concatenated streams select dictionaries by id" {
     const first_dict = NativeDictionary.init(0x1010, "abcdefghijklmnop");
     const second_dict = NativeDictionary.init(0x2020, "qrstuvwxyz123456");
     const dictionaries = [_]NativeDictionary{ first_dict, second_dict };
-    const dictionary_set = NativeDictionarySet.init(&dictionaries);
+    const dictionary_set = try NativeDictionarySet.initChecked(&dictionaries);
+    try dictionary_set.validate();
+    try std.testing.expectEqualSlices(u8, first_dict.content, (dictionary_set.find(first_dict.id) orelse return error.NeedDictionary).content);
+    try std.testing.expect(dictionary_set.find(0xffff) == null);
+    const duplicate_dictionaries = [_]NativeDictionary{ first_dict, NativeDictionary.init(first_dict.id, "duplicate-lz4") };
+    try std.testing.expectError(error.DuplicateDictionaryId, NativeDictionarySet.initChecked(&duplicate_dictionaries));
+    try std.testing.expectError(error.DuplicateDictionaryId, NativeDictionarySet.init(&duplicate_dictionaries).validate());
+    const zero_id_dictionaries = [_]NativeDictionary{NativeDictionary.init(0, "zero-lz4")};
+    try std.testing.expectError(error.NeedDictionary, NativeDictionarySet.initChecked(&zero_id_dictionaries));
     const options: NativeFrameOptions = .{
         .content_checksum = false,
         .block_checksum = true,

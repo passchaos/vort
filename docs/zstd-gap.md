@@ -209,8 +209,9 @@ Current interpretation:
   while remaining decodable through explicit dictionary APIs. Public helpers can
   now derive stable non-zero Dictionary_ID values from dictionary content, train
   allocator-owned deterministic native dictionaries, encode through a dictionary
-  set by Dictionary_ID, and compute dictionary- or dictionary-set-aware frame
-  bounds for caller-owned output buffers. Callers can inspect
+  set by Dictionary_ID, validate dictionary-set catalogs for zero or duplicate
+  IDs, and compute dictionary- or dictionary-set-aware frame bounds for
+  caller-owned output buffers. Callers can inspect
   Dictionary_ID metadata before decode. The native writer also exposes a
   block-size option plus a bounded mixed-match search budget for library callers
   that need to trade branch-scored ratio work against encode latency, and the public native stream/block iterators expose
