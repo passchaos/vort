@@ -1964,11 +1964,25 @@ fn smokeReusableChunkedDecoders(allocator: std.mem.Allocator) !void {
     defer allocator.free(lz4_join);
     var lz4_decoder = vort.Lz4NativeFrameDecoder.init(allocator);
     defer lz4_decoder.deinit();
-    const lz4_exact = try lz4_decoder.decodeConcatenatedChunksAllocExactSize(&lz4_chunks, lz4_join, lz4_payload.len);
+    try expectSize(lz4_decoder.decodedChunksSize(&lz4_chunks, lz4_join), lz4_payload.len);
+    try expectSize(lz4_decoder.decodedChunksSizeLimited(&lz4_chunks, lz4_join, lz4_payload.len), lz4_payload.len);
+    try expectOutputLimit(lz4_decoder.decodedChunksSizeLimited(&lz4_chunks, lz4_join, lz4_payload.len - 1));
+    const lz4_exact = try lz4_decoder.decodeChunksAllocExactSize(&lz4_chunks, lz4_join, lz4_payload.len);
     defer allocator.free(lz4_exact);
     if (!std.mem.eql(u8, lz4_payload, lz4_exact)) return error.SizeMismatch;
-    const lz4_size = try lz4_decoder.decodedConcatenatedChunksSize(&lz4_chunks, lz4_join);
-    if (lz4_size != lz4_payload.len) return error.SizeMismatch;
+    try expectOutputLimitAlloc(allocator, lz4_decoder.decodeChunksAllocLimited(&lz4_chunks, lz4_join, lz4_payload.len - 1));
+    var lz4_out: [lz4_payload.len]u8 = undefined;
+    try expectRoundTrip(lz4_decoder.decodeChunksIntoSlice(&lz4_chunks, lz4_join, &lz4_out), lz4_payload, &lz4_out);
+    const lz4_scratch = try lz4_decoder.decodeChunksScratch(&lz4_chunks, lz4_join);
+    if (!std.mem.eql(u8, lz4_payload, lz4_scratch)) return error.SizeMismatch;
+    var lz4_appended: std.ArrayList(u8) = .empty;
+    defer lz4_appended.deinit(allocator);
+    try lz4_appended.appendSlice(allocator, "prefix:");
+    try expectSize(lz4_decoder.decodeChunksAppendExactSize(&lz4_appended, &lz4_chunks, lz4_join, lz4_payload.len), lz4_payload.len);
+    if (!std.mem.eql(u8, lz4_appended.items, "prefix:" ++ lz4_payload)) return error.SizeMismatch;
+    const lz4_concatenated_exact = try lz4_decoder.decodeConcatenatedChunksAllocExactSize(&lz4_chunks, lz4_join, lz4_payload.len);
+    defer allocator.free(lz4_concatenated_exact);
+    if (!std.mem.eql(u8, lz4_payload, lz4_concatenated_exact)) return error.SizeMismatch;
 
     const zstd_payload = "bench-zstd-chunked-reusable";
     const zstd_encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, zstd_payload, .{
@@ -1984,11 +1998,73 @@ fn smokeReusableChunkedDecoders(allocator: std.mem.Allocator) !void {
     defer allocator.free(zstd_join);
     var zstd_decoder = vort.ZstdNativeFrameDecoder.init(allocator);
     defer zstd_decoder.deinit();
-    const zstd_exact = try zstd_decoder.decodeConcatenatedChunksAllocExactSize(&zstd_chunks, zstd_join, zstd_payload.len);
+    try expectSize(zstd_decoder.decodedChunksSize(&zstd_chunks, zstd_join), zstd_payload.len);
+    try expectSize(zstd_decoder.decodedChunksSizeLimited(&zstd_chunks, zstd_join, zstd_payload.len), zstd_payload.len);
+    try expectOutputLimit(zstd_decoder.decodedChunksSizeLimited(&zstd_chunks, zstd_join, zstd_payload.len - 1));
+    const zstd_exact = try zstd_decoder.decodeChunksAllocExactSize(&zstd_chunks, zstd_join, zstd_payload.len);
     defer allocator.free(zstd_exact);
     if (!std.mem.eql(u8, zstd_payload, zstd_exact)) return error.SizeMismatch;
-    const zstd_size = try zstd_decoder.decodedConcatenatedChunksSize(&zstd_chunks, zstd_join);
-    if (zstd_size != zstd_payload.len) return error.SizeMismatch;
+    try expectOutputLimitAlloc(allocator, zstd_decoder.decodeChunksAllocLimited(&zstd_chunks, zstd_join, zstd_payload.len - 1));
+    var zstd_out: [zstd_payload.len]u8 = undefined;
+    try expectRoundTrip(zstd_decoder.decodeChunksIntoSlice(&zstd_chunks, zstd_join, &zstd_out), zstd_payload, &zstd_out);
+    const zstd_scratch = try zstd_decoder.decodeChunksScratch(&zstd_chunks, zstd_join);
+    if (!std.mem.eql(u8, zstd_payload, zstd_scratch)) return error.SizeMismatch;
+    var zstd_appended: std.ArrayList(u8) = .empty;
+    defer zstd_appended.deinit(allocator);
+    try zstd_appended.appendSlice(allocator, "prefix:");
+    try expectSize(zstd_decoder.decodeChunksAppendExactSize(&zstd_appended, &zstd_chunks, zstd_join, zstd_payload.len), zstd_payload.len);
+    if (!std.mem.eql(u8, zstd_appended.items, "prefix:" ++ zstd_payload)) return error.SizeMismatch;
+    const zstd_concatenated_exact = try zstd_decoder.decodeConcatenatedChunksAllocExactSize(&zstd_chunks, zstd_join, zstd_payload.len);
+    defer allocator.free(zstd_concatenated_exact);
+    if (!std.mem.eql(u8, zstd_payload, zstd_concatenated_exact)) return error.SizeMismatch;
+
+    const lz4_dict = vort.Lz4NativeDictionary.init(0x4c5a_4301, "bench-lz4-history");
+    const lz4_dictionary_set = vort.Lz4NativeDictionarySet.init(&.{lz4_dict});
+    const lz4_dict_payload = "bench-lz4-history-payload";
+    const lz4_dict_encoded = try vort.lz4EncodeNativeFrameWithDictionarySetAlloc(allocator, lz4_dict_payload, .{
+        .content_checksum = false,
+        .block_checksum = true,
+    }, lz4_dictionary_set, lz4_dict.id);
+    defer allocator.free(lz4_dict_encoded);
+    const lz4_dict_chunks = [_][]const u8{
+        lz4_dict_encoded[0..6],
+        lz4_dict_encoded[6..],
+    };
+    const lz4_dict_join = try allocator.alloc(u8, lz4_dict_encoded.len);
+    defer allocator.free(lz4_dict_join);
+    try expectSize(lz4_decoder.decodedChunksSizeWithDictionarySet(&lz4_dict_chunks, lz4_dict_join, lz4_dictionary_set), lz4_dict_payload.len);
+    try expectSize(lz4_decoder.decodedChunksSizeLimitedWithDictionarySet(&lz4_dict_chunks, lz4_dict_join, lz4_dict_payload.len, lz4_dictionary_set), lz4_dict_payload.len);
+    try expectOutputLimit(lz4_decoder.decodedChunksSizeLimitedWithDictionarySet(&lz4_dict_chunks, lz4_dict_join, lz4_dict_payload.len - 1, lz4_dictionary_set));
+    const lz4_dict_plain = try lz4_decoder.decodeChunksScratchWithDictionarySet(&lz4_dict_chunks, lz4_dict_join, lz4_dictionary_set);
+    if (!std.mem.eql(u8, lz4_dict_payload, lz4_dict_plain)) return error.SizeMismatch;
+    lz4_appended.clearRetainingCapacity();
+    try lz4_appended.appendSlice(allocator, "prefix:");
+    try expectSize(lz4_decoder.decodeChunksAppendExactSizeWithDictionarySet(&lz4_appended, &lz4_dict_chunks, lz4_dict_join, lz4_dictionary_set, lz4_dict_payload.len), lz4_dict_payload.len);
+    if (!std.mem.eql(u8, lz4_appended.items, "prefix:" ++ lz4_dict_payload)) return error.SizeMismatch;
+
+    const zstd_dict = vort.ZstdNativeDictionary.init(0x5a53_4301, "bench-zstd-history");
+    const zstd_dictionary_set = vort.ZstdNativeDictionarySet.init(&.{zstd_dict});
+    const zstd_dict_payload = "bench-zstd-history-payload";
+    const zstd_dict_encoded = try vort.zstdEncodeNativeFrameWithDictionarySetAlloc(allocator, zstd_dict_payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+    }, zstd_dictionary_set, zstd_dict.id);
+    defer allocator.free(zstd_dict_encoded.frame);
+    const zstd_dict_chunks = [_][]const u8{
+        zstd_dict_encoded.frame[0..8],
+        zstd_dict_encoded.frame[8..],
+    };
+    const zstd_dict_join = try allocator.alloc(u8, zstd_dict_encoded.frame.len);
+    defer allocator.free(zstd_dict_join);
+    try expectSize(zstd_decoder.decodedChunksSizeWithDictionarySet(&zstd_dict_chunks, zstd_dict_join, zstd_dictionary_set), zstd_dict_payload.len);
+    try expectSize(zstd_decoder.decodedChunksSizeLimitedWithDictionarySet(&zstd_dict_chunks, zstd_dict_join, zstd_dict_payload.len, zstd_dictionary_set), zstd_dict_payload.len);
+    try expectOutputLimit(zstd_decoder.decodedChunksSizeLimitedWithDictionarySet(&zstd_dict_chunks, zstd_dict_join, zstd_dict_payload.len - 1, zstd_dictionary_set));
+    const zstd_dict_plain = try zstd_decoder.decodeChunksScratchWithDictionarySet(&zstd_dict_chunks, zstd_dict_join, zstd_dictionary_set);
+    if (!std.mem.eql(u8, zstd_dict_payload, zstd_dict_plain)) return error.SizeMismatch;
+    zstd_appended.clearRetainingCapacity();
+    try zstd_appended.appendSlice(allocator, "prefix:");
+    try expectSize(zstd_decoder.decodeChunksAppendExactSizeWithDictionarySet(&zstd_appended, &zstd_dict_chunks, zstd_dict_join, zstd_dictionary_set, zstd_dict_payload.len), zstd_dict_payload.len);
+    if (!std.mem.eql(u8, zstd_appended.items, "prefix:" ++ zstd_dict_payload)) return error.SizeMismatch;
 }
 
 fn smokeZstdManyRepeatedSequences(allocator: std.mem.Allocator) !void {
@@ -2705,6 +2781,30 @@ fn expectRoundTrip(written_result: anytype, expected: []const u8, decoded: []u8)
     const written = try written_result;
     if (written != expected.len) return error.SizeMismatch;
     if (!std.mem.eql(u8, expected, decoded[0..written])) return error.SizeMismatch;
+}
+
+fn expectSize(size_result: anytype, expected: usize) !void {
+    const size = try size_result;
+    if (size != expected) return error.SizeMismatch;
+}
+
+fn expectOutputLimit(size_result: anytype) !void {
+    if (size_result) |_| {
+        return error.SizeMismatch;
+    } else |err| switch (err) {
+        error.OutputLimitExceeded => {},
+        else => return err,
+    }
+}
+
+fn expectOutputLimitAlloc(allocator: std.mem.Allocator, alloc_result: anytype) !void {
+    if (alloc_result) |decoded| {
+        allocator.free(decoded);
+        return error.SizeMismatch;
+    } else |err| switch (err) {
+        error.OutputLimitExceeded => {},
+        else => return err,
+    }
 }
 
 fn makeRow(codec: Codec, mode: Mode, case: Case, encoded_len: usize, iterations: usize, encode_ns: u64, decode_ns: u64, checksum: u64) Row {

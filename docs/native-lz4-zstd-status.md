@@ -63,11 +63,11 @@ retain `zig-out/vort-native-codec-probes.json` / `.md` artifacts.
 `run-native-library-bench-gate` is the lightweight public API benchmark
 CSV gate; it now also runs bounded pre-row smoke checks for no-content-size
 multi-compressed Zstd, skippable/malformed LZ4 streams, and dictionary-set
-skippable direct-output plus fallback without increasing the 67-row CSV. Heavier sequence-table
+skippable direct-output plus fallback, and reusable single-frame chunked decoder helpers with and without dictionary sets, without increasing the 67-row CSV. Heavier sequence-table
 fixtures intentionally live in the frame and dictionary probes so the Debug
 bench gate stays fast.
 
-Recent progress: single-frame dictionary-set `decodeChunks*` helpers on `NativeFrameDecoder` plus root-level `decodeNativeFrameChunks*` aliases now avoid requiring callers to route split single frames through concatenated-stream helpers.
+Recent progress: single-frame dictionary-set `decodeChunks*` helpers on `NativeFrameDecoder` plus root-level `decodeNativeFrameChunks*` aliases now avoid requiring callers to route split single frames through concatenated-stream helpers. The native library bench gate smoke path now exercises those single-frame reusable chunk helpers alongside the older concatenated chunk helpers.
 
 ## Remaining gaps before the objective can be considered complete
 
