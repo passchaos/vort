@@ -954,10 +954,13 @@ Zstd covers content checksum, content-size, malformed raw/RLE blocks, and
 malformed compressed sequence-table blocks, including incremental diagnostics
 where that path applies. Dictionary-set probes extend the same precedence to
 skippable concatenated streams whose later frame needs a missing ID, including
-chunked/reusable helpers and incremental dictionary-set drains. In those cases
-callers see `NeedDictionary` before deeper payload or checksum errors, while
-providing the matching dictionary exposes the underlying `ChecksumMismatch`,
-`SizeMismatch`, or `CorruptFrame`.
+chunked/reusable helpers and incremental dictionary-set drains. LZ4
+dictionary-set fixtures now cover later-frame block checksum, content checksum,
+content-size, and invalid-match conflicts; Zstd dictionary-set fixtures cover
+malformed compressed sequence-table conflicts. In those cases callers see
+`NeedDictionary` before deeper payload or checksum errors, while providing the
+matching dictionary exposes the underlying `ChecksumMismatch`, `SizeMismatch`,
+`InvalidMatch`, or `CorruptFrame`.
 
 The focused library benchmark/gate tracks these public surfaces directly:
 
