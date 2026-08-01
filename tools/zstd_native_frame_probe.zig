@@ -9,6 +9,8 @@ pub fn main(init: std.process.Init) !void {
     var checked: usize = 0;
     try checkDirectHuffmanBoundaries(init.gpa);
     checked += 1;
+    try checkNoSizeCompressedBlockLimits(init.gpa);
+    checked += 1;
     try checkHighByteFseHuffman(init.gpa);
     checked += 1;
     try checkSystemZstdHighByteFrame(init.gpa);
@@ -71,6 +73,41 @@ fn checkDirectHuffmanBoundaries(allocator: std.mem.Allocator) !void {
     try expectPrefixedPayload(appended.items, &payload);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, encoded.frame, payload.len - 1));
+}
+
+fn checkNoSizeCompressedBlockLimits(allocator: std.mem.Allocator) !void {
+    var payload: [129 * 64]u8 = undefined;
+    for (payload[0..129], 0..) |*byte, i| byte.* = @intCast(i);
+    var state: u32 = 0x1290_0f5e;
+    for (payload[129..]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast((state >> 16) % 129);
+    }
+
+    const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, &payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .include_content_size = false,
+    });
+    defer allocator.free(encoded.frame);
+    try expect(encoded.mode == .literal_only);
+    const header = try vort.zstdInspectNativeFrameHeader(encoded.frame);
+    try expect(header.content_size == null);
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(encoded.frame);
+    try expect(first_block.block_type == .compressed);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(encoded.frame, payload.len)) == payload.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(encoded.frame, payload.len - 1));
+
+    const decoded = try vort.zstdDecodeNativeFrameAllocLimited(allocator, encoded.frame, payload.len);
+    defer allocator.free(decoded);
+    try expectEqualSlices(&payload, decoded);
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeFrameAllocLimited(allocator, encoded.frame, payload.len - 1));
+
+    var into: [payload.len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameInto(encoded.frame, &into);
+    try expect(written == payload.len);
+    try expectEqualSlices(&payload, &into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(encoded.frame, into[0 .. into.len - 1]));
 }
 
 fn checkHighByteFseHuffman(allocator: std.mem.Allocator) !void {
