@@ -777,6 +777,8 @@ fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {
     defer allocator.free(skip);
     const reserved_header = try minimalHeaderOnlyFrame(allocator, 0x62, 0x70);
     defer allocator.free(reserved_header);
+    const truncated_frame = try frameWithSingleBlock(allocator, 0x60, 0x40, 0x8000_0000 | (64 * 1024), "ab", "");
+    defer allocator.free(truncated_frame);
 
     const skippable_then_reserved = try std.mem.concat(allocator, u8, &.{ skip, reserved_header });
     defer allocator.free(skippable_then_reserved);
@@ -802,6 +804,32 @@ fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {
     if (malformed_first.next()) |_| {
         return error.Lz4ProbeExpectedFrameError;
     } else |err| if (@as(anyerror, err) != error.CorruptFrame) return err;
+    checked += 1;
+
+    const skippable_then_truncated = try std.mem.concat(allocator, u8, &.{ skip, truncated_frame });
+    defer allocator.free(skippable_then_truncated);
+    try expectNativeConcatenatedStreamError(allocator, skippable_then_truncated, error.TruncatedFrame);
+    var truncated_after_skip = vort.lz4IterateNativeStream(skippable_then_truncated);
+    const truncated_first = (try truncated_after_skip.next()) orelse return error.Lz4ProbeMismatch;
+    switch (truncated_first) {
+        .frame => return error.Lz4ProbeMismatch,
+        .skippable => |skippable| {
+            if (skippable.header.skippable_id != 7) return error.Lz4ProbeMismatch;
+            if (!std.mem.eql(u8, skippable.payload, "lz4-metadata")) return error.Lz4ProbeMismatch;
+        },
+    }
+    if (truncated_after_skip.next()) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
+    checked += 1;
+
+    const truncated_then_skippable = try std.mem.concat(allocator, u8, &.{ truncated_frame, skip });
+    defer allocator.free(truncated_then_skippable);
+    try expectNativeConcatenatedStreamError(allocator, truncated_then_skippable, error.TruncatedFrame);
+    var truncated_first_stream = vort.lz4IterateNativeStream(truncated_then_skippable);
+    if (truncated_first_stream.next()) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
     checked += 1;
 
     return checked;
