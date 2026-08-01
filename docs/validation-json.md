@@ -1338,8 +1338,10 @@ zig build run-native-codec-probes-dashboard
 python3 tools/native_codec_probes_dashboard.py --json zig-out/vort-native-codec-probes.json --markdown zig-out/vort-native-codec-probes.md zig-out/bin/lz4-native-probe zig-out/bin/lz4-native-dictionary-probe zig-out/bin/zstd-native-frame-probe zig-out/bin/zstd-native-dictionary-probe
 ```
 
-This schema summarizes the library-level native LZ4/Zstd probes and retains the
-case counts from the frame and dictionary probe executables.
+This schema summarizes the library-level native LZ4/Zstd probes, retains the
+case counts from the frame and dictionary probe executables, and adds a
+`coverage` list keyed by codec (`lz4`/`zstd`) and surface (`frame`/`dictionary`)
+so dashboard consumers can audit which public library areas are represented.
 
 Example:
 
@@ -1348,8 +1350,47 @@ Example:
   "schema": "vort.native_codec_probes",
   "schema_version": 1,
   "ok": true,
+  "coverage_count": 4,
   "probe_count": 4,
   "total_cases": 162,
+  "coverage": [
+    {
+      "codec": "lz4",
+      "surface": "frame",
+      "present": true,
+      "ok": true,
+      "probe_count": 1,
+      "ok_probe_count": 1,
+      "cases": 64
+    },
+    {
+      "codec": "lz4",
+      "surface": "dictionary",
+      "present": true,
+      "ok": true,
+      "probe_count": 1,
+      "ok_probe_count": 1,
+      "cases": 8
+    },
+    {
+      "codec": "zstd",
+      "surface": "frame",
+      "present": true,
+      "ok": true,
+      "probe_count": 1,
+      "ok_probe_count": 1,
+      "cases": 68
+    },
+    {
+      "codec": "zstd",
+      "surface": "dictionary",
+      "present": true,
+      "ok": true,
+      "probe_count": 1,
+      "ok_probe_count": 1,
+      "cases": 22
+    }
+  ],
   "probes": [
     {
       "label": "lz4-native-probe",

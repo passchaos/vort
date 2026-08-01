@@ -15,6 +15,17 @@ sys.dont_write_bytecode = True
 OK_RE = re.compile(r"^(?P<name>[a-z0-9_]+)_ok cases=(?P<cases>[0-9]+)$")
 
 
+def probe_category(label: str) -> tuple[str, str]:
+    if label.startswith("lz4-"):
+        codec = "lz4"
+    elif label.startswith("zstd-"):
+        codec = "zstd"
+    else:
+        raise ValueError(f"unknown native codec probe label: {label}")
+    surface = "dictionary" if "dictionary" in label else "frame"
+    return codec, surface
+
+
 def run_probe(label: str, exe: str) -> dict[str, object]:
     completed = subprocess.run(
         [exe],
@@ -44,6 +55,27 @@ def run_probe(label: str, exe: str) -> dict[str, object]:
     }
 
 
+def coverage_summary(probes: list[dict[str, object]]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for codec in ("lz4", "zstd"):
+        for surface in ("frame", "dictionary"):
+            matching = [probe for probe in probes if probe_category(str(probe["label"])) == (codec, surface)]
+            cases = sum(int(probe["cases"] or 0) for probe in matching)
+            ok_count = sum(1 for probe in matching if bool(probe["ok"]))
+            rows.append(
+                {
+                    "codec": codec,
+                    "surface": surface,
+                    "present": len(matching) != 0,
+                    "ok": len(matching) != 0 and ok_count == len(matching),
+                    "probe_count": len(matching),
+                    "ok_probe_count": ok_count,
+                    "cases": cases,
+                }
+            )
+    return rows
+
+
 def write_markdown(path: Path, summary: dict[str, object]) -> None:
     lines = [
         "# Native codec probes",
@@ -51,9 +83,32 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
         f"- ok: `{str(summary['ok']).lower()}`",
         f"- total cases: `{summary['total_cases']}`",
         "",
-        "| probe | ok | cases | returncode |",
-        "| --- | --- | ---: | ---: |",
+        "## Coverage",
+        "",
+        "| codec | surface | present | ok | probes | cases |",
+        "| --- | --- | --- | --- | ---: | ---: |",
     ]
+    for row in summary["coverage"]:  # type: ignore[index]
+        lines.append(
+            "| {codec} | {surface} | `{present}` | `{ok}` | {ok_probe_count}/{probe_count} | {cases} |".format(
+                codec=row["codec"],
+                surface=row["surface"],
+                present=str(row["present"]).lower(),
+                ok=str(row["ok"]).lower(),
+                ok_probe_count=row["ok_probe_count"],
+                probe_count=row["probe_count"],
+                cases=row["cases"],
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "## Probes",
+            "",
+            "| probe | ok | cases | returncode |",
+            "| --- | --- | ---: | ---: |",
+        ]
+    )
     for probe in summary["probes"]:  # type: ignore[index]
         lines.append(
             "| {label} | `{ok}` | {cases} | {returncode} |".format(
@@ -84,10 +139,13 @@ def main() -> int:
         run_probe("zstd-native-frame-probe", args.zstd_frame_probe),
         run_probe("zstd-native-dictionary-probe", args.zstd_dictionary_probe),
     ]
+    coverage = coverage_summary(probes)
     summary: dict[str, object] = {
         "schema": "vort.native_codec_probes",
         "schema_version": 1,
         "ok": all(bool(probe["ok"]) for probe in probes),
+        "coverage": coverage,
+        "coverage_count": len(coverage),
         "probe_count": len(probes),
         "total_cases": sum(int(probe["cases"] or 0) for probe in probes),
         "probes": probes,

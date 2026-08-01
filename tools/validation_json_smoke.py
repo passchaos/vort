@@ -199,8 +199,24 @@ def main() -> int:
         assert native_codec_probes["schema_version"] == 1
         assert native_codec_probes["ok"] is True
         assert native_codec_probes["probe_count"] == 4
+        assert native_codec_probes["coverage_count"] == 4
         assert native_codec_probes["total_cases"] >= 4
         assert all(probe["ok"] is True for probe in native_codec_probes["probes"])
+        coverage_by_key = {
+            (row["codec"], row["surface"]): row
+            for row in native_codec_probes["coverage"]
+        }
+        assert set(coverage_by_key) == {
+            ("lz4", "frame"),
+            ("lz4", "dictionary"),
+            ("zstd", "frame"),
+            ("zstd", "dictionary"),
+        }
+        assert all(row["present"] is True for row in coverage_by_key.values())
+        assert all(row["ok"] is True for row in coverage_by_key.values())
+        assert all(row["probe_count"] == 1 for row in coverage_by_key.values())
+        assert all(row["ok_probe_count"] == 1 for row in coverage_by_key.values())
+        assert sum(row["cases"] for row in coverage_by_key.values()) == native_codec_probes["total_cases"]
         validate_value_against_manifest(native_codec_probes, schemas_def)
         zlib_relaxed = json.loads(zlib_relaxed_path.read_text())
         assert zlib_relaxed["schema"] == "vort.zlib_relaxed_report"

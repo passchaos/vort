@@ -2155,11 +2155,45 @@
     },
     "vort.native_codec_probes": {
       "count_rules": {
+        "coverage_count": {
+          "collection": "coverage"
+        },
         "probe_count": {
           "collection": "probes"
         }
       },
+      "collections": {
+        "coverage": {
+          "enums": {
+            "codec": [
+              "lz4",
+              "zstd"
+            ],
+            "surface": [
+              "frame",
+              "dictionary"
+            ]
+          },
+          "fields": {
+            "cases": "int",
+            "codec": "str",
+            "ok": "bool",
+            "ok_probe_count": "int",
+            "present": "bool",
+            "probe_count": "int",
+            "surface": "str"
+          }
+        }
+      },
+      "collection_sum_rules": {
+        "total_cases": {
+          "collection": "probes",
+          "field": "cases"
+        }
+      },
       "fields": {
+        "coverage": "list",
+        "coverage_count": "int",
         "ok": "bool",
         "probe_count": "int",
         "probes": "list",
