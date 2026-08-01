@@ -1243,12 +1243,24 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
     var rng = std.Random.DefaultPrng.init(0x1a34_2026);
     for (&randomish) |*byte| byte.* = rng.random().int(u8);
 
+    var binary_mix: [2048]u8 = undefined;
+    for (&binary_mix, 0..) |*byte, i| {
+        byte.* = switch (i % 11) {
+            0 => 0,
+            1 => 0xff,
+            2 => @intCast(i & 0xff),
+            3 => @intCast((i * 31) & 0xff),
+            else => @intCast((i / 3) & 0xff),
+        };
+    }
+
     const json_unit = "{\"service\":\"vort\",\"codec\":\"lz4\",\"native\":true,\"value\":12345}\n";
     const cases = [_]Case{
         .{ .name = "liblz4-small", .payload = @constCast("lz4-small-reference-payload") },
         .{ .name = "liblz4-repeated", .payload = @constCast("abcd" ** 512) },
         .{ .name = "liblz4-sequential", .payload = &sequential },
         .{ .name = "liblz4-json", .payload = @constCast(json_unit ** 64) },
+        .{ .name = "liblz4-binary-mix", .payload = &binary_mix },
         .{ .name = "liblz4-randomish", .payload = &randomish },
     };
     const levels = [_]c_int{ 0, 3, 10 };

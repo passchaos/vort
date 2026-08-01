@@ -900,12 +900,24 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
     var rng = std.Random.DefaultPrng.init(0x7a57_1b5d);
     for (&randomish) |*byte| byte.* = rng.random().int(u8);
 
+    var binary_mix: [2048]u8 = undefined;
+    for (&binary_mix, 0..) |*byte, i| {
+        byte.* = switch (i % 11) {
+            0 => 0,
+            1 => 0xff,
+            2 => @intCast(i & 0xff),
+            3 => @intCast((i * 31) & 0xff),
+            else => @intCast((i / 3) & 0xff),
+        };
+    }
+
     const json_unit = "{\"service\":\"vort\",\"codec\":\"zstd\",\"native\":true,\"value\":12345}\n";
     const cases = [_][]const u8{
         "zstd-small-reference-payload",
         "abcd" ** 512,
         &sequential,
         json_unit ** 64,
+        &binary_mix,
         &randomish,
     };
     const levels = [_]c_int{ 1, 9, 19 };
