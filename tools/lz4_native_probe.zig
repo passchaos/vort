@@ -813,6 +813,11 @@ fn checkInvalidFrameBlocks(allocator: std.mem.Allocator) !usize {
     try expectNativeFrameBodyError(allocator, truncated_payload, error.TruncatedFrame);
     checked += 1;
 
+    const truncated_compressed_literals = try frameWithSingleBlock(allocator, 0x60, 0x40, 4, "\x60ab", "");
+    defer allocator.free(truncated_compressed_literals);
+    try expectNativeFrameBodyError(allocator, truncated_compressed_literals, error.TruncatedFrame);
+    checked += 1;
+
     const truncated_block_checksum = try frameWithSingleBlock(allocator, 0x70, 0x40, 0x8000_0000 | 3, "abc", "\x00\x00");
     defer allocator.free(truncated_block_checksum);
     try expectNativeFrameBodyError(allocator, truncated_block_checksum, error.TruncatedFrame);
