@@ -2782,6 +2782,20 @@ test "root native no-size dictionary-set direct-output paths round trip" {
     try std.testing.expectEqual(StepResult.Status.done, lz4_done.status);
     try std.testing.expectEqualSlices(u8, lz4_expected, &lz4_output);
     try lz4_decoder.finish();
+    var lz4_corrupt_stream = try std.testing.allocator.dupe(u8, lz4_stream.items);
+    defer std.testing.allocator.free(lz4_corrupt_stream);
+    lz4_corrupt_stream[lz4_corrupt_stream.len - 1] ^= 0x01;
+    lz4_decoder.reset();
+    const lz4_corrupt_initial = try lz4_decoder.step(lz4_corrupt_stream, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_corrupt_initial.status);
+    try std.testing.expectError(error.ChecksumMismatch, lz4_decoder.step("", &lz4_output));
+    try std.testing.expectEqualSlices(u8, "ChecksumMismatch", lz4_decoder.diagnostics().last_error_name);
+    lz4_decoder.reset();
+    const lz4_reused_initial = try lz4_decoder.step(lz4_stream.items, lz4_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, lz4_reused_initial.status);
+    const lz4_reused_done = try lz4_decoder.step("", &lz4_output);
+    try std.testing.expectEqual(StepResult.Status.done, lz4_reused_done.status);
+    try std.testing.expectEqualSlices(u8, lz4_expected, &lz4_output);
 
     const zstd_first_dict = ZstdNativeDictionary.init(0x6261, "abcdefghijklmnop");
     const zstd_second_dict = ZstdNativeDictionary.init(0x6262, "QRSTUVWXYZabcdef");
@@ -2820,6 +2834,20 @@ test "root native no-size dictionary-set direct-output paths round trip" {
     try std.testing.expectEqual(StepResult.Status.done, zstd_done.status);
     try std.testing.expectEqualSlices(u8, zstd_expected, &zstd_output);
     try zstd_decoder.finish();
+    var zstd_corrupt_stream = try std.testing.allocator.dupe(u8, zstd_stream.items);
+    defer std.testing.allocator.free(zstd_corrupt_stream);
+    zstd_corrupt_stream[zstd_corrupt_stream.len - 1] ^= 0x01;
+    zstd_decoder.reset();
+    const zstd_corrupt_initial = try zstd_decoder.step(zstd_corrupt_stream, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_corrupt_initial.status);
+    try std.testing.expectError(error.ChecksumMismatch, zstd_decoder.step("", &zstd_output));
+    try std.testing.expectEqualSlices(u8, "ChecksumMismatch", zstd_decoder.diagnostics().last_error_name);
+    zstd_decoder.reset();
+    const zstd_reused_initial = try zstd_decoder.step(zstd_stream.items, zstd_output[0..0]);
+    try std.testing.expectEqual(StepResult.Status.need_output, zstd_reused_initial.status);
+    const zstd_reused_done = try zstd_decoder.step("", &zstd_output);
+    try std.testing.expectEqual(StepResult.Status.done, zstd_reused_done.status);
+    try std.testing.expectEqualSlices(u8, zstd_expected, &zstd_output);
 }
 
 test "root native no-size dictionary-set streams diagnose expected size mismatches" {
