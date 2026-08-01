@@ -36,6 +36,7 @@ EXPECTED_MODES = {
     "high_byte_binary",
     "lib_generated",
     "lib_generated_no_size",
+    "lib_generated_checksum",
     "sequence_huffman_literals_plain",
     "sequence_huffman_literals",
     "dictionary_plain",
@@ -70,6 +71,8 @@ EXPECTED_EXTRA_ROWS = {
     ("zstd", "lib_generated", "lib_generated"),
     ("lz4", "lib_generated_no_size", "lib_generated_no_size"),
     ("zstd", "lib_generated_no_size", "lib_generated_no_size"),
+    ("lz4", "lib_generated_checksum", "lib_generated_checksum"),
+    ("zstd", "lib_generated_checksum", "lib_generated_checksum"),
     ("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals"),
     ("zstd", "sequence_huffman_literals", "sequence_huffman_literals"),
     ("lz4", "dictionary_plain", "dictionary"),
@@ -218,7 +221,7 @@ def main() -> int:
         raise AssertionError(f"expected high-byte binary zstd row to use FSE Huffman compression: {high_byte}")
 
     for codec in ("lz4", "zstd"):
-        for case_name in ("lib_generated", "lib_generated_no_size"):
+        for case_name in ("lib_generated", "lib_generated_no_size", "lib_generated_checksum"):
             lib_generated = row_by_identity[(codec, case_name, case_name)]
             if int(lib_generated["encoded_bytes"]) >= int(lib_generated["input_bytes"]):
                 raise AssertionError(f"expected {codec} {case_name} row to compress input: {lib_generated}")

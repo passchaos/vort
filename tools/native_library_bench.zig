@@ -14,6 +14,7 @@ const Mode = enum {
     high_byte_binary,
     lib_generated,
     lib_generated_no_size,
+    lib_generated_checksum,
     sequence_huffman_literals_plain,
     sequence_huffman_literals,
     dictionary_plain,
@@ -121,10 +122,12 @@ pub fn main(init: std.process.Init) !void {
         options.iterations,
     ));
     try rows.append(init.gpa, try zstdHighByteBinaryRow(init.io, init.gpa, options.iterations));
-    try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, .lib_generated, "lib_generated", true, options.iterations));
-    try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, .lib_generated_no_size, "lib_generated_no_size", false, options.iterations));
-    try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, .lib_generated, "lib_generated", true, options.iterations));
-    try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, .lib_generated_no_size, "lib_generated_no_size", false, options.iterations));
+    try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, .lib_generated, "lib_generated", true, false, options.iterations));
+    try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, .lib_generated_no_size, "lib_generated_no_size", false, false, options.iterations));
+    try rows.append(init.gpa, try lz4LibGeneratedRow(init.io, init.gpa, .lib_generated_checksum, "lib_generated_checksum", true, true, options.iterations));
+    try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, .lib_generated, "lib_generated", true, false, options.iterations));
+    try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, .lib_generated_no_size, "lib_generated_no_size", false, false, options.iterations));
+    try rows.append(init.gpa, try zstdLibGeneratedRow(init.io, init.gpa, .lib_generated_checksum, "lib_generated_checksum", true, true, options.iterations));
     try rows.append(init.gpa, try zstdSequenceHuffmanLiteralsRow(init.io, init.gpa, .sequence_huffman_literals_plain, false, options.iterations));
     try rows.append(init.gpa, try zstdSequenceHuffmanLiteralsRow(init.io, init.gpa, .sequence_huffman_literals, true, options.iterations));
     try rows.append(init.gpa, try lz4DictionaryRow(init.io, init.gpa, .dictionary_plain, false, options.iterations));
@@ -383,6 +386,7 @@ fn lz4LibGeneratedRow(
     mode: Mode,
     case_name: []const u8,
     include_content_size: bool,
+    block_checksum: bool,
     iterations: usize,
 ) !Row {
     const payload = lib_generated_payload;
@@ -390,7 +394,7 @@ fn lz4LibGeneratedRow(
     const options: vort.Lz4LibFrameOptions = .{
         .include_content_size = include_content_size,
         .content_checksum = true,
-        .block_checksum = false,
+        .block_checksum = block_checksum,
         .block_mode = .linked,
     };
     const encoded = try vort.lz4EncodeFrameWithOptionsAlloc(allocator, payload, options);
@@ -410,13 +414,14 @@ fn zstdLibGeneratedRow(
     mode: Mode,
     case_name: []const u8,
     include_content_size: bool,
+    content_checksum: bool,
     iterations: usize,
 ) !Row {
     const payload = lib_generated_payload;
     const case: Case = .{ .name = case_name, .payload = payload };
     const options: vort.ZstdLibFrameOptions = .{
         .include_content_size = include_content_size,
-        .content_checksum = false,
+        .content_checksum = content_checksum,
     };
     const encoded = try vort.zstdEncodeFrameWithOptionsAlloc(allocator, payload, options);
     defer allocator.free(encoded);
@@ -3147,6 +3152,7 @@ fn modeName(mode: Mode) []const u8 {
         .high_byte_binary => "high_byte_binary",
         .lib_generated => "lib_generated",
         .lib_generated_no_size => "lib_generated_no_size",
+        .lib_generated_checksum => "lib_generated_checksum",
         .sequence_huffman_literals_plain => "sequence_huffman_literals_plain",
         .sequence_huffman_literals => "sequence_huffman_literals",
         .dictionary_plain => "dictionary_plain",

@@ -67,7 +67,7 @@ through a ReleaseFast build for library-path smoke evidence. `run-native-codec-p
 chunked decoder coverage as a distinct `reusable-chunked` capability. The bench
 gates also run bounded pre-row smoke checks for no-content-size
 multi-compressed Zstd, skippable/malformed LZ4 streams, and dictionary-set
-skippable direct-output plus fallback, and reusable single-frame chunked decoder helpers with and without dictionary sets. The CSV now has 75 rows, including LZ4/Zstd lib-generated compatibility-frame/no-size and trained-dictionary encode/decode rows backed by the same public training APIs exposed to library callers. Heavier sequence-table
+skippable direct-output plus fallback, and reusable single-frame chunked decoder helpers with and without dictionary sets. The CSV now has 77 rows, including LZ4/Zstd lib-generated compatibility-frame/no-size/checksum and trained-dictionary encode/decode rows backed by the same public training APIs exposed to library callers. Heavier sequence-table
 fixtures intentionally live in the frame and dictionary probes so the Debug
 bench gate stays fast.
 
