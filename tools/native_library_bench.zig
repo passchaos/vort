@@ -1796,6 +1796,51 @@ fn smokeZstdNoSizeMultiCompressed(allocator: std.mem.Allocator) !void {
     const decoded = try vort.zstdDecodeNativeFrameAllocLimited(allocator, encoded.frame, payload.len);
     defer allocator.free(decoded);
     if (!std.mem.eql(u8, payload, decoded)) return error.SizeMismatch;
+
+    const checksummed = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, .{
+        .selection = .literal_only,
+        .content_checksum = true,
+        .include_content_size = false,
+        .block_size_max = block_len,
+    });
+    defer allocator.free(checksummed.frame);
+    const checksummed_summary = try vort.zstdSummarizeNativeStream(checksummed.frame);
+    if (checksummed_summary.frame_count != 1 or checksummed_summary.block_count != 2 or checksummed_summary.compressed_block_count != 2) {
+        return error.SizeMismatch;
+    }
+
+    var bad_checksum = try allocator.dupe(u8, checksummed.frame);
+    defer allocator.free(bad_checksum);
+    bad_checksum[bad_checksum.len - 1] ^= 0x01;
+    if (try vort.zstdDecodedNativeFrameSizeLimited(bad_checksum, payload.len) != payload.len) return error.SizeMismatch;
+    if (vort.zstdDecodeNativeFrameAllocLimited(allocator, bad_checksum, payload.len)) |bad_decoded| {
+        allocator.free(bad_decoded);
+        return error.SizeMismatch;
+    } else |err| switch (err) {
+        error.ChecksumMismatch => {},
+        else => return err,
+    }
+    if (vort.zstdDecodeNativeFrameAllocLimited(allocator, bad_checksum, payload.len - 1)) |bad_decoded| {
+        allocator.free(bad_decoded);
+        return error.SizeMismatch;
+    } else |err| switch (err) {
+        error.OutputLimitExceeded => {},
+        else => return err,
+    }
+
+    const truncated_checksum = checksummed.frame[0 .. checksummed.frame.len - 2];
+    if (vort.zstdDecodedNativeFrameSizeLimited(truncated_checksum, payload.len)) |_| {
+        return error.SizeMismatch;
+    } else |err| switch (err) {
+        error.TruncatedFrame => {},
+        else => return err,
+    }
+    if (vort.zstdDecodedNativeFrameSizeLimited(truncated_checksum, payload.len - 1)) |_| {
+        return error.SizeMismatch;
+    } else |err| switch (err) {
+        error.OutputLimitExceeded => {},
+        else => return err,
+    }
 }
 
 fn smokeZstdMatchSearchBudget(allocator: std.mem.Allocator) !void {
