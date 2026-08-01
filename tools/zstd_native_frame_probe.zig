@@ -37,6 +37,7 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkRepeatMixedRlePredefinedSequenceModes(init.gpa);
     checked += 1;
+    checked += try checkLibZstdGeneratedLibraryFrames(init.gpa);
     try checkSplitHeaderIncremental(init.gpa);
     checked += 1;
     try checkSplitSkippableHeaderIncremental(init.gpa);
@@ -854,6 +855,100 @@ fn checkRepeatMixedRlePredefinedSequenceModes(allocator: std.mem.Allocator) !voi
     try expectPrefixedPayload(appended.items, expected);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&appended, &frame, expected.len - 1));
+}
+
+fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
+    var sequential: [2048]u8 = undefined;
+    for (&sequential, 0..) |*byte, i| byte.* = @intCast(i % 251);
+
+    var randomish: [2048]u8 = undefined;
+    var rng = std.Random.DefaultPrng.init(0x7a57_1b5d);
+    for (&randomish) |*byte| byte.* = rng.random().int(u8);
+
+    const json_unit = "{\"service\":\"vort\",\"codec\":\"zstd\",\"native\":true,\"value\":12345}\n";
+    const cases = [_][]const u8{
+        "abcd" ** 512,
+        &sequential,
+        json_unit ** 64,
+        &randomish,
+    };
+    const levels = [_]c_int{ 1, 9 };
+    const option_sets = [_]vort.ZstdLibFrameOptions{
+        .{},
+        .{ .include_content_size = false },
+        .{ .include_content_size = false, .content_checksum = true },
+    };
+
+    var checked: usize = 0;
+    for (cases) |payload| {
+        for (levels) |level| {
+            for (option_sets) |options| {
+                try checkLibZstdGeneratedLibraryFrame(allocator, payload, level, options);
+                checked += 1;
+            }
+        }
+    }
+    return checked;
+}
+
+fn checkLibZstdGeneratedLibraryFrame(
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    level: c_int,
+    options: vort.ZstdLibFrameOptions,
+) !void {
+    const encoded = try vort.zstdEncodeFrameWithLevelAndOptionsAlloc(allocator, payload, level, options);
+    defer allocator.free(encoded);
+
+    // This is intentionally a pure Zig library differential: libzstd writes the
+    // compatibility frame through Vort's library wrapper, then the dependency-
+    // free native decoder must agree across one-shot, caller-buffer, reusable,
+    // append, and bounded-size public APIs. No CLI command participates in the
+    // oracle path.
+    const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, encoded);
+    defer allocator.free(lib_decoded);
+    try expectEqualSlices(payload, lib_decoded);
+
+    const lib_into = try allocator.alloc(u8, payload.len);
+    defer allocator.free(lib_into);
+    const lib_written = try vort.zstdDecodeFrameInto(encoded, lib_into);
+    try expect(lib_written == payload.len);
+    try expectEqualSlices(payload, lib_into[0..lib_written]);
+
+    const stream_summary = try vort.zstdSummarizeNativeStream(encoded);
+    try expect(stream_summary.frame_count == 1);
+    try expect(stream_summary.block_count >= 1);
+    try expect(stream_summary.skippable_frame_count == 0);
+
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(encoded, payload.len)) == payload.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(encoded, payload.len - 1));
+
+    const native_decoded = try vort.zstdDecodeNativeFrameAllocLimited(allocator, encoded, payload.len);
+    defer allocator.free(native_decoded);
+    try expectEqualSlices(payload, native_decoded);
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeFrameAllocLimited(allocator, encoded, payload.len - 1));
+
+    const native_into = try allocator.alloc(u8, payload.len);
+    defer allocator.free(native_into);
+    const native_written = try vort.zstdDecodeNativeFrameInto(encoded, native_into);
+    try expect(native_written == payload.len);
+    try expectEqualSlices(payload, native_into[0..native_written]);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(encoded, native_into[0 .. native_into.len - 1]));
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const scratch = try decoder.decodeScratchLimited(encoded, payload.len);
+    try expectEqualSlices(payload, scratch);
+    try expectError(error.OutputLimitExceeded, decoder.decodeScratchLimited(encoded, payload.len - 1));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try decoder.decodeAppendExactSize(&appended, encoded, payload.len);
+    try expect(appended_written == payload.len);
+    try expectPrefixedPayload(appended.items, payload);
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&appended, encoded, payload.len - 1));
 }
 
 fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {
