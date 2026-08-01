@@ -9555,6 +9555,48 @@ test "zstd native sequence reader updates repeated offsets across positive selec
     try std.testing.expectEqual([3]usize{ 8, 4, 1 }, state.repeated_offsets);
 }
 
+test "zstd native sequence reader applies compressed offset selectors" {
+    var sequence_bits: std.ArrayList(u8) = .empty;
+    defer sequence_bits.deinit(std.testing.allocator);
+    const read_fields = [_]BitField{
+        .{ .value = 0, .bits = 1 }, // second sequence: OF code 1 extra bit selects positive-literal rep1.
+        .{ .value = 1, .bits = 1 }, // third sequence: OF code 1 extra bit selects positive-literal rep2.
+    };
+    try emitReverseBitstreamFromReadOrder(std.testing.allocator, &sequence_bits, &read_fields);
+
+    var offset_fse: SequenceFseTable = .{
+        .len = 1,
+        .accuracy_log = 0,
+    };
+    offset_fse.entries[0] = .{
+        .base = 1,
+        .additional_bits = 1,
+        .next_state = 0,
+        .state_bits = 0,
+    };
+
+    var state = try initSequenceDecodeState(.{
+        .ll_mode = .rle,
+        .of_mode = .compressed,
+        .ml_mode = .rle,
+        .literal_rle = .{ .base = 1, .additional_bits = 0, .next_state = 0, .state_bits = 0 },
+        .offset_rle = null,
+        .offset_fse = offset_fse,
+        .match_rle = .{ .base = 3, .additional_bits = 0, .next_state = 0, .state_bits = 0 },
+        .bitstream_offset = 0,
+    }, 2, try ReverseBitReader.init(sequence_bits.items), initial_repeated_offsets);
+
+    const first = try readModeSequence(&state);
+    try std.testing.expectEqual(@as(usize, 1), first.literal_len);
+    try std.testing.expectEqual(@as(usize, 4), first.match_offset);
+    try std.testing.expectEqual([3]usize{ 4, 1, 8 }, state.repeated_offsets);
+
+    const second = try readModeSequence(&state);
+    try std.testing.expectEqual(@as(usize, 1), second.literal_len);
+    try std.testing.expectEqual(@as(usize, 8), second.match_offset);
+    try std.testing.expectEqual([3]usize{ 8, 4, 1 }, state.repeated_offsets);
+}
+
 test "zstd native decoder streams several predefined sequences" {
     const payload = "a" ** 30;
     var frame: std.ArrayList(u8) = .empty;
