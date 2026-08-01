@@ -119,6 +119,28 @@ fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {
     try expectError(error.NeedDictionary, vort.zstdDecodedNativeConcatenatedFrameSizeWithDictionary(stream.items, wrong));
     try expectError(error.NeedDictionary, vort.zstdDecodeNativeConcatenatedFrameIntoWithDictionary(stream.items, &wrong_stream_output, wrong));
     try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeConcatenatedFrameAllocWithDictionary(allocator, stream.items, wrong));
+
+    const checksummed = try vort.zstdEncodeRawOrRleFrameWithOptionsAlloc(allocator, payload, .{
+        .content_checksum = true,
+        .dictionary_id = dict.id,
+    });
+    defer allocator.free(checksummed);
+    var wrong_checksum = try allocator.dupe(u8, checksummed);
+    defer allocator.free(wrong_checksum);
+    wrong_checksum[wrong_checksum.len - 1] ^= 0x01;
+    const checksummed_header = try vort.zstdInspectNativeFrameHeader(wrong_checksum);
+    try expect(checksummed_header.dictionary_id == dict.id);
+    try expect(checksummed_header.has_checksum);
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSize(wrong_checksum));
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSizeWithDictionary(wrong_checksum, wrong));
+    var checksum_priority_output: [payload.len]u8 = undefined;
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameInto(wrong_checksum, &checksum_priority_output));
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameIntoWithDictionary(wrong_checksum, &checksum_priority_output, wrong));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAlloc(allocator, wrong_checksum));
+    try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, wrong_checksum, wrong));
+    try expect((try vort.zstdDecodedNativeFrameSizeWithDictionary(wrong_checksum, dict)) == payload.len);
+    try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameIntoWithDictionary(wrong_checksum, &checksum_priority_output, dict));
+    try expectAllocError(allocator, error.ChecksumMismatch, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, wrong_checksum, dict));
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
