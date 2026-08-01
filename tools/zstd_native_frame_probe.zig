@@ -171,6 +171,33 @@ fn checkNoSizeCompressedBlockLimits(allocator: std.mem.Allocator) !void {
     try expect(multi_written == multi_payload.len);
     try expectEqualSlices(multi_payload, multi_into);
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(multi.frame, multi_into[0 .. multi_into.len - 1]));
+
+    const multi_checksummed = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, multi_payload, .{
+        .selection = .literal_only,
+        .content_checksum = true,
+        .include_content_size = false,
+        .block_size_max = small_block_len,
+    });
+    defer allocator.free(multi_checksummed.frame);
+    const multi_checksummed_summary = try vort.zstdSummarizeNativeFrameBlocks(multi_checksummed.frame);
+    try expect(multi_checksummed_summary.block_count == 2);
+    try expect(multi_checksummed_summary.compressed_block_count == 2);
+
+    var multi_bad_checksum = try allocator.dupe(u8, multi_checksummed.frame);
+    defer allocator.free(multi_bad_checksum);
+    multi_bad_checksum[multi_bad_checksum.len - 1] ^= 0x01;
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(multi_bad_checksum, multi_payload.len)) == multi_payload.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(multi_bad_checksum, multi_payload.len - 1));
+    try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameInto(multi_bad_checksum, multi_into));
+    try expectAllocError(allocator, error.ChecksumMismatch, vort.zstdDecodeNativeFrameAllocLimited(allocator, multi_bad_checksum, multi_payload.len));
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeFrameAllocLimited(allocator, multi_bad_checksum, multi_payload.len - 1));
+
+    const multi_truncated_checksum = multi_checksummed.frame[0 .. multi_checksummed.frame.len - 2];
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSizeLimited(multi_truncated_checksum, multi_payload.len));
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(multi_truncated_checksum, multi_into));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAllocLimited(allocator, multi_truncated_checksum, multi_payload.len));
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(multi_truncated_checksum, multi_payload.len - 1));
+    try expectAllocError(allocator, error.OutputLimitExceeded, vort.zstdDecodeNativeFrameAllocLimited(allocator, multi_truncated_checksum, multi_payload.len - 1));
 }
 
 fn checkHighByteFseHuffman(allocator: std.mem.Allocator) !void {
