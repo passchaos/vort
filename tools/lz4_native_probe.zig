@@ -435,6 +435,30 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
         else => return err,
     }
 
+    const wrong = vort.Lz4NativeDictionary.init(dict.id + 1, dict.content);
+    try expectNeedDictionary(vort.lz4DecodedNativeFrameSizeWithDictionary(encoded, wrong));
+    var wrong_output: [payload.len]u8 = undefined;
+    try expectNeedDictionary(vort.lz4DecodeNativeFrameIntoWithDictionary(encoded, &wrong_output, wrong));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, encoded, wrong));
+
+    var reusable_wrong = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer reusable_wrong.deinit();
+    try expectNeedDictionary(reusable_wrong.decodedSizeWithDictionary(encoded, wrong));
+    try expectAllocNeedDictionary(allocator, reusable_wrong.decodeAllocWithDictionary(encoded, wrong));
+
+    var incremental_wrong = vort.Lz4NativeIncrementalFrameDecoder.initWithDictionaryAndOptions(allocator, wrong, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer incremental_wrong.deinit();
+    try expectNeedDictionary(incremental_wrong.step(encoded, &wrong_output));
+    if (!std.mem.eql(u8, "NeedDictionary", incremental_wrong.diagnostics().last_error_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+    if (!std.mem.eql(u8, "frame", incremental_wrong.diagnostics().last_error_phase_name)) {
+        return error.Lz4ProbeMismatch;
+    }
+
     const decoded = try vort.lz4DecodeNativeFrameAllocWithDictionary(allocator, encoded, dict);
     defer allocator.free(decoded);
     if (!std.mem.eql(u8, payload, decoded)) return error.Lz4ProbeMismatch;
@@ -457,6 +481,10 @@ fn checkDictionaryFrame(allocator: std.mem.Allocator) !void {
     if (try vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionary(stream.items, dict) != concatenated.len) {
         return error.Lz4ProbeSizeMismatch;
     }
+    try expectNeedDictionary(vort.lz4DecodedNativeConcatenatedFrameSizeWithDictionary(stream.items, wrong));
+    var wrong_stream_output: [payload.len + second_payload.len]u8 = undefined;
+    try expectNeedDictionary(vort.lz4DecodeNativeConcatenatedFrameIntoWithDictionary(stream.items, &wrong_stream_output, wrong));
+    try expectAllocNeedDictionary(allocator, vort.lz4DecodeNativeConcatenatedFrameAllocWithDictionary(allocator, stream.items, wrong));
 
     const first_block = try allocator.alloc(u8, 64 * 1024);
     defer allocator.free(first_block);
@@ -1154,6 +1182,25 @@ fn appendLz4FrameHeaderWithContentSize(allocator: std.mem.Allocator, frame: *std
 
 fn lz4DescriptorChecksum(descriptor: []const u8) u8 {
     return @truncate(std.hash.XxHash32.hash(0, descriptor) >> 8);
+}
+
+fn expectNeedDictionary(result: anytype) !void {
+    if (result) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.NeedDictionary => {},
+        else => return err,
+    }
+}
+
+fn expectAllocNeedDictionary(allocator: std.mem.Allocator, result: anytype) !void {
+    if (result) |decoded| {
+        allocator.free(decoded);
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| switch (err) {
+        error.NeedDictionary => {},
+        else => return err,
+    }
 }
 
 fn expectNativeFrameError(allocator: std.mem.Allocator, frame: []const u8, expected: anyerror) !void {
