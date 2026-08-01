@@ -2249,6 +2249,9 @@
         "marker": "str",
         "ok": "bool",
         "output": "str",
+        "reported_capabilities": "list",
+        "reported_capability_cases": "dict",
+        "reported_capability_count": "int",
         "returncode": "int"
       }
     },

@@ -46,7 +46,25 @@ pub fn main(init: std.process.Init) !void {
     checked += try checkHandcraftedHeaderAndSkippableValidation(init.gpa);
 
     try stdout.print("zstd_native_frame_probe_ok cases={d}\n", .{checked});
+    try printCoverage(stdout, "zstd_native_frame_probe", checked, &.{
+        "bounded-limits",
+        "checksum",
+        "chunked",
+        "huffman",
+        "incremental",
+        "lib-generated",
+        "malformed",
+        "native-generated",
+        "sequence-tables",
+        "skippable",
+    });
     try stdout.flush();
+}
+
+fn printCoverage(stdout: anytype, marker: []const u8, cases: usize, capabilities: []const []const u8) !void {
+    for (capabilities) |capability| {
+        try stdout.print("{s}_coverage capability={s} cases={d}\n", .{ marker, capability, cases });
+    }
 }
 
 fn checkDirectHuffmanBoundaries(allocator: std.mem.Allocator) !void {

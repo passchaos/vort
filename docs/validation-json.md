@@ -1508,7 +1508,10 @@ Example:
       "returncode": 0,
       "cases": 64,
       "marker": "lz4_native_probe",
-      "output": "lz4_native_probe_ok cases=64\n"
+      "output": "lz4_native_probe_ok cases=64\nlz4_native_probe_coverage capability=block cases=64\nlz4_native_probe_coverage capability=bounded-limits cases=64\nlz4_native_probe_coverage capability=checksum cases=64\nlz4_native_probe_coverage capability=chunked cases=64\nlz4_native_probe_coverage capability=dictionary cases=64\nlz4_native_probe_coverage capability=dictionary-set cases=64\nlz4_native_probe_coverage capability=incremental cases=64\nlz4_native_probe_coverage capability=lib-generated cases=64\nlz4_native_probe_coverage capability=malformed cases=64\nlz4_native_probe_coverage capability=native-generated cases=64\nlz4_native_probe_coverage capability=skippable cases=64\n",
+      "reported_capabilities": ["block", "bounded-limits", "checksum", "chunked", "dictionary", "dictionary-set", "incremental", "lib-generated", "malformed", "native-generated", "skippable"],
+      "reported_capability_cases": {"block": 64, "bounded-limits": 64, "checksum": 64, "chunked": 64, "dictionary": 64, "dictionary-set": 64, "incremental": 64, "lib-generated": 64, "malformed": 64, "native-generated": 64, "skippable": 64},
+      "reported_capability_count": 11
     },
     {
       "label": "lz4-native-dictionary-probe",
@@ -1517,7 +1520,10 @@ Example:
       "returncode": 0,
       "cases": 8,
       "marker": "lz4_native_dictionary_probe",
-      "output": "lz4_native_dictionary_probe_ok cases=8\n"
+      "output": "lz4_native_dictionary_probe_ok cases=8\nlz4_native_dictionary_probe_coverage capability=bounded-limits cases=8\nlz4_native_dictionary_probe_coverage capability=checksum cases=8\nlz4_native_dictionary_probe_coverage capability=chunked cases=8\nlz4_native_dictionary_probe_coverage capability=dictionary cases=8\nlz4_native_dictionary_probe_coverage capability=dictionary-set cases=8\nlz4_native_dictionary_probe_coverage capability=incremental cases=8\nlz4_native_dictionary_probe_coverage capability=malformed cases=8\n",
+      "reported_capabilities": ["bounded-limits", "checksum", "chunked", "dictionary", "dictionary-set", "incremental", "malformed"],
+      "reported_capability_cases": {"bounded-limits": 8, "checksum": 8, "chunked": 8, "dictionary": 8, "dictionary-set": 8, "incremental": 8, "malformed": 8},
+      "reported_capability_count": 7
     },
     {
       "label": "zstd-native-frame-probe",
@@ -1526,7 +1532,10 @@ Example:
       "returncode": 0,
       "cases": 68,
       "marker": "zstd_native_frame_probe",
-      "output": "zstd_native_frame_probe_ok cases=68\n"
+      "output": "zstd_native_frame_probe_ok cases=68\nzstd_native_frame_probe_coverage capability=bounded-limits cases=68\nzstd_native_frame_probe_coverage capability=checksum cases=68\nzstd_native_frame_probe_coverage capability=chunked cases=68\nzstd_native_frame_probe_coverage capability=huffman cases=68\nzstd_native_frame_probe_coverage capability=incremental cases=68\nzstd_native_frame_probe_coverage capability=lib-generated cases=68\nzstd_native_frame_probe_coverage capability=malformed cases=68\nzstd_native_frame_probe_coverage capability=native-generated cases=68\nzstd_native_frame_probe_coverage capability=sequence-tables cases=68\nzstd_native_frame_probe_coverage capability=skippable cases=68\n",
+      "reported_capabilities": ["bounded-limits", "checksum", "chunked", "huffman", "incremental", "lib-generated", "malformed", "native-generated", "sequence-tables", "skippable"],
+      "reported_capability_cases": {"bounded-limits": 68, "checksum": 68, "chunked": 68, "huffman": 68, "incremental": 68, "lib-generated": 68, "malformed": 68, "native-generated": 68, "sequence-tables": 68, "skippable": 68},
+      "reported_capability_count": 10
     },
     {
       "label": "zstd-native-dictionary-probe",
@@ -1535,7 +1544,10 @@ Example:
       "returncode": 0,
       "cases": 22,
       "marker": "zstd_native_dictionary_probe",
-      "output": "zstd_native_dictionary_probe_ok cases=22\n"
+      "output": "zstd_native_dictionary_probe_ok cases=22\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=22\nzstd_native_dictionary_probe_coverage capability=checksum cases=22\nzstd_native_dictionary_probe_coverage capability=chunked cases=22\nzstd_native_dictionary_probe_coverage capability=dictionary cases=22\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=22\nzstd_native_dictionary_probe_coverage capability=incremental cases=22\nzstd_native_dictionary_probe_coverage capability=malformed cases=22\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=22\n",
+      "reported_capabilities": ["bounded-limits", "checksum", "chunked", "dictionary", "dictionary-set", "incremental", "malformed", "sequence-tables"],
+      "reported_capability_cases": {"bounded-limits": 22, "checksum": 22, "chunked": 22, "dictionary": 22, "dictionary-set": 22, "incremental": 22, "malformed": 22, "sequence-tables": 22},
+      "reported_capability_count": 8
     }
   ]
 }

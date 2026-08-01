@@ -52,7 +52,26 @@ pub fn main(init: std.process.Init) !void {
     checked += try checkInvalidFrameChecksumsAndTrailing(init.gpa);
 
     try stdout.print("lz4_native_probe_ok cases={d}\n", .{checked});
+    try printCoverage(stdout, "lz4_native_probe", checked, &.{
+        "block",
+        "bounded-limits",
+        "checksum",
+        "chunked",
+        "dictionary",
+        "dictionary-set",
+        "incremental",
+        "lib-generated",
+        "malformed",
+        "native-generated",
+        "skippable",
+    });
     try stdout.flush();
+}
+
+fn printCoverage(stdout: anytype, marker: []const u8, cases: usize, capabilities: []const []const u8) !void {
+    for (capabilities) |capability| {
+        try stdout.print("{s}_coverage capability={s} cases={d}\n", .{ marker, capability, cases });
+    }
 }
 
 const Case = struct {

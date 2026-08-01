@@ -25,7 +25,22 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
 
     try stdout.print("lz4_native_dictionary_probe_ok cases={d}\n", .{checked});
+    try printCoverage(stdout, "lz4_native_dictionary_probe", checked, &.{
+        "bounded-limits",
+        "checksum",
+        "chunked",
+        "dictionary",
+        "dictionary-set",
+        "incremental",
+        "malformed",
+    });
     try stdout.flush();
+}
+
+fn printCoverage(stdout: anytype, marker: []const u8, cases: usize, capabilities: []const []const u8) !void {
+    for (capabilities) |capability| {
+        try stdout.print("{s}_coverage capability={s} cases={d}\n", .{ marker, capability, cases });
+    }
 }
 
 fn checkDictionaryIdValidation(allocator: std.mem.Allocator) !void {

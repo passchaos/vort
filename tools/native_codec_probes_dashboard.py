@@ -13,6 +13,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 
 OK_RE = re.compile(r"^(?P<name>[a-z0-9_]+)_ok cases=(?P<cases>[0-9]+)$")
+COVERAGE_RE = re.compile(r"^(?P<name>[a-z0-9_]+)_coverage capability=(?P<capability>[a-z0-9_-]+) cases=(?P<cases>[0-9]+)$")
 
 PROBE_CAPABILITIES = {
     "lz4-native-probe": {
@@ -100,12 +101,24 @@ def run_probe(label: str, exe: str) -> dict[str, object]:
     output = completed.stdout
     cases: int | None = None
     marker: str | None = None
+    reported_capabilities: list[str] = []
+    reported_capability_cases: dict[str, int] = {}
     for line in output.splitlines():
-        match = OK_RE.match(line.strip())
-        if match:
+        stripped = line.strip()
+        match = OK_RE.match(stripped)
+        if match and marker is None:
             marker = match.group("name")
             cases = int(match.group("cases"))
-            break
+            continue
+        coverage_match = COVERAGE_RE.match(stripped)
+        if coverage_match:
+            reported_marker = coverage_match.group("name")
+            if marker is not None and reported_marker != marker:
+                continue
+            capability = coverage_match.group("capability")
+            reported_capabilities.append(capability)
+            reported_capability_cases[capability] = int(coverage_match.group("cases"))
+    reported_capabilities = sorted(set(reported_capabilities))
     ok = completed.returncode == 0 and cases is not None
     return {
         "label": label,
@@ -115,6 +128,9 @@ def run_probe(label: str, exe: str) -> dict[str, object]:
         "cases": cases,
         "marker": marker or "",
         "output": output,
+        "reported_capabilities": reported_capabilities,
+        "reported_capability_count": len(reported_capabilities),
+        "reported_capability_cases": reported_capability_cases,
     }
 
 
@@ -141,15 +157,27 @@ def coverage_summary(probes: list[dict[str, object]]) -> list[dict[str, object]]
 
 
 
+def capabilities_for_probe(probe: dict[str, object]) -> set[str]:
+    reported = probe.get("reported_capabilities")
+    if isinstance(reported, list) and all(isinstance(item, str) for item in reported) and reported:
+        return set(reported)
+    return set(PROBE_CAPABILITIES.get(str(probe["label"]), set()))
+
+
+def capability_cases_for_probe(probe: dict[str, object], capability: str) -> int:
+    reported_cases = probe.get("reported_capability_cases")
+    if isinstance(reported_cases, dict) and capability in reported_cases:
+        value = reported_cases[capability]
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return int(probe["cases"] or 0)
+
+
 def capability_summary(probes: list[dict[str, object]]) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for capability in CAPABILITY_ORDER:
-        matching = [
-            probe
-            for probe in probes
-            if capability in PROBE_CAPABILITIES.get(str(probe["label"]), set())
-        ]
-        cases = sum(int(probe["cases"] or 0) for probe in matching)
+        matching = [probe for probe in probes if capability in capabilities_for_probe(probe)]
+        cases = sum(capability_cases_for_probe(probe, capability) for probe in matching)
         ok_count = sum(1 for probe in matching if bool(probe["ok"]))
         rows.append(
             {
