@@ -527,6 +527,24 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.ChecksumMismatch, vort.zstdDecodeNativeFrameAlloc(allocator, &multi_block_checksum_mismatch));
     checked += 1;
 
+    const multi_block_truncated_checksum = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x24, // single-segment, checksum present, one-byte content size.
+        0x05,
+        0x10, 0x00, 0x00, // Non-final raw block with two payload bytes.
+        'a',  'b',
+        0x19, 0x00, 0x00, // Final raw block with three more bytes.
+        'c',  'd',  'e',
+        0x00, 0x00, // Checksum field is present but truncated.
+    };
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(&multi_block_truncated_checksum));
+    var multi_truncated_checksum_output: [5]u8 = undefined;
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(&multi_block_truncated_checksum, &multi_truncated_checksum_output));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &multi_block_truncated_checksum));
+    try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeStream(&multi_block_truncated_checksum));
+    try expectStreamIteratorError(&multi_block_truncated_checksum, error.TruncatedFrame);
+    checked += 1;
+
     const reserved_block_type = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
         0x20, // single-segment, no checksum, one-byte content size.
