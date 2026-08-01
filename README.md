@@ -946,7 +946,15 @@ when the caller supplies a large enough output slice; if a slice is too small
 for an atomic compressed block, the decoders intentionally fall back to bounded
 scratch and continue draining without losing correctness. Dictionary-set
 chunked APIs additionally accept caller-owned compressed join scratch so split
-input can be decoded without hidden global state.
+input can be decoded without hidden global state. Public dictionary probes also
+pin error precedence for hostile frames that carry a missing or mismatched
+`Dictionary_ID` plus another defect: LZ4 covers content checksum, block
+checksum, and content-size conflicts across one-shot and incremental paths;
+Zstd covers content checksum, content-size, malformed raw/RLE blocks, and
+malformed compressed sequence-table blocks, including incremental diagnostics
+where that path applies. In those cases callers see `NeedDictionary` before
+deeper payload or checksum errors, while providing the matching dictionary
+exposes the underlying `ChecksumMismatch`, `SizeMismatch`, or `CorruptFrame`.
 
 The focused library benchmark/gate tracks these public surfaces directly:
 
