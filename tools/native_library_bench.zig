@@ -1738,6 +1738,35 @@ fn smokeLz4SkippableMalformedStreams(allocator: std.mem.Allocator) !void {
         .frame => |frame| if (!frame.header.content_checksum) return error.SizeMismatch,
     }
     if ((try checksum_iterator.next()) != null) return error.SizeMismatch;
+
+    const trailing_payload = "bench-trailing";
+    const trailing_frame = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, trailing_payload, .{
+        .content_checksum = false,
+        .block_checksum = false,
+    });
+    defer allocator.free(trailing_frame);
+    const trailing_stream = try std.mem.concat(allocator, u8, &.{ skip, trailing_frame, "xx" });
+    defer allocator.free(trailing_stream);
+    if (vort.lz4SummarizeNativeStream(trailing_stream)) |_| return error.SizeMismatch else |err| switch (err) {
+        error.TruncatedFrame => {},
+        else => return err,
+    }
+
+    var trailing_iterator = vort.lz4IterateNativeStream(trailing_stream);
+    _ = (try trailing_iterator.next()) orelse return error.SizeMismatch;
+    const trailing_frame_element = (try trailing_iterator.next()) orelse return error.SizeMismatch;
+    switch (trailing_frame_element) {
+        .skippable => return error.SizeMismatch,
+        .frame => |frame| {
+            const decoded = try vort.lz4DecodeNativeFrameAlloc(allocator, frame.bytes);
+            defer allocator.free(decoded);
+            if (!std.mem.eql(u8, trailing_payload, decoded)) return error.SizeMismatch;
+        },
+    }
+    if (trailing_iterator.next()) |_| return error.SizeMismatch else |err| switch (err) {
+        error.TruncatedFrame => {},
+        else => return err,
+    }
 }
 
 fn smokeZstdMultiblockDirectFallback(allocator: std.mem.Allocator) !void {
