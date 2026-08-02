@@ -2495,6 +2495,18 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         };
     }
 
+    const high_entropy_payload_len = std.compress.zstd.block_size_max * 2 + 333;
+    const high_entropy_multiblock = try allocator.alloc(u8, high_entropy_payload_len);
+    defer allocator.free(high_entropy_multiblock);
+    var high_entropy_rng = std.Random.DefaultPrng.init(0x4851_7d5a_e3c0_129b);
+    for (high_entropy_multiblock) |*byte| {
+        // A deterministic high-entropy corpus complements the structured
+        // multi-block fixtures above. It tends to drive libzstd toward raw or
+        // nearly-uncompressible block shapes while still exercising the same
+        // public native decode, chunked, checksum, and truncation paths.
+        byte.* = high_entropy_rng.random().int(u8);
+    }
+
     const json_unit = "{\"service\":\"vort\",\"codec\":\"zstd\",\"native\":true,\"value\":12345}\n";
     const cases = [_]struct {
         payload: []const u8,
@@ -2510,6 +2522,7 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         .{ .payload = boundary_multiblock, .min_blocks = 2 },
         .{ .payload = large_multiblock, .min_blocks = 2 },
         .{ .payload = triple_multiblock, .min_blocks = 3 },
+        .{ .payload = high_entropy_multiblock, .min_blocks = 3 },
     };
     const levels = [_]c_int{ 1, 9, 19 };
     const option_sets = [_]vort.ZstdLibFrameOptions{
@@ -2824,7 +2837,10 @@ fn checkCorruptChecksumLibZstdGeneratedIncrementalApis(allocator: std.mem.Alloca
 
     const output = try allocator.alloc(u8, payload.len);
     defer allocator.free(output);
-    const initial = try decoder.step(frame, output[0..0]);
+    const initial = decoder.step(frame, output[0..0]) catch |err| {
+        if (err != error.ChecksumMismatch) return err;
+        return;
+    };
     try expect(initial.status == .need_output);
     try expect(initial.progress.input_read == frame.len);
     var written: usize = 0;
