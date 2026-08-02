@@ -437,6 +437,28 @@ fn checkDictionarySetValidationApis() !void {
     try expectError(error.DuplicateDictionaryId, vort.ZstdNativeDictionarySet.init(&duplicate).validate());
     const zero = [_]vort.ZstdNativeDictionary{vort.ZstdNativeDictionary.init(0, "zstd-zero")};
     try expectError(error.NeedDictionary, vort.ZstdNativeDictionarySet.initChecked(&zero));
+
+    const metadata_first = vort.ZstdNativeDictionary.initFromContent("zstd-set-metadata-first");
+    const metadata_second = vort.ZstdNativeDictionary.initFromContent("zstd-set-metadata-second");
+    const metadata = [_]vort.DictionaryMetadata{
+        vort.DictionaryMetadata.fromBytes(metadata_first.content, vort.zstdNativeDictionaryWindowLen),
+        vort.DictionaryMetadata.fromBytes(metadata_second.content, vort.zstdNativeDictionaryWindowLen),
+    };
+    const contents = [_][]const u8{ metadata_first.content, metadata_second.content };
+    var catalog: [2]vort.ZstdNativeDictionary = undefined;
+    const metadata_set = try vort.ZstdNativeDictionarySet.initFromMetadata(&catalog, &metadata, &contents);
+    try metadata_set.validate();
+    try expectEqualSlices(metadata_first.content, (metadata_set.find(metadata_first.id) orelse return error.ZstdNativeDictionaryProbeMismatch).content);
+    try expectEqualSlices(metadata_second.content, (metadata_set.find(metadata_second.id) orelse return error.ZstdNativeDictionaryProbeMismatch).content);
+
+    var short_catalog: [1]vort.ZstdNativeDictionary = undefined;
+    try expectError(error.InvalidDictionaryMetadata, vort.ZstdNativeDictionarySet.initFromMetadata(&short_catalog, &metadata, &contents));
+    try expectError(error.InvalidDictionaryMetadata, vort.ZstdNativeDictionarySet.initFromMetadata(&catalog, metadata[0..1], &contents));
+    const wrong_contents = [_][]const u8{ metadata_first.content, "wrong-zstd-set-second" };
+    try expectError(error.InvalidDictionaryMetadata, vort.ZstdNativeDictionarySet.initFromMetadata(&catalog, &metadata, &wrong_contents));
+    const duplicate_metadata = [_]vort.DictionaryMetadata{ metadata[0], metadata[0] };
+    const duplicate_contents = [_][]const u8{ metadata_first.content, metadata_first.content };
+    try expectError(error.DuplicateDictionaryId, vort.ZstdNativeDictionarySet.initFromMetadata(&catalog, &duplicate_metadata, &duplicate_contents));
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {

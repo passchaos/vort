@@ -172,6 +172,25 @@ pub const NativeDictionarySet = struct {
         return set;
     }
 
+    /// Validate persisted metadata records and construct a dictionary catalog.
+    ///
+    /// `out` receives borrowed dictionary views of `contents`; callers retain
+    /// ownership of both slices and must keep dictionary bytes alive for any
+    /// subsequent encode/decode operation. Keeping this constructor allocation-
+    /// free lets applications load catalog metadata from their own container
+    /// format and still get the same duplicate-ID checks as `initChecked`.
+    pub fn initFromMetadata(
+        out: []NativeDictionary,
+        metadata: []const dictionary_mod.Metadata,
+        contents: []const []const u8,
+    ) Error!NativeDictionarySet {
+        if (out.len < metadata.len or contents.len != metadata.len) return error.InvalidDictionaryMetadata;
+        for (metadata, contents, 0..) |entry, content, i| {
+            out[i] = try NativeDictionary.initFromMetadata(entry, content);
+        }
+        return try initChecked(out[0..metadata.len]);
+    }
+
     pub fn validate(self: NativeDictionarySet) Error!void {
         for (self.dictionaries, 0..) |dictionary, i| {
             if (dictionary.id == 0) return error.NeedDictionary;
@@ -6699,6 +6718,21 @@ test "lz4 native concatenated streams select dictionaries by id" {
     try std.testing.expectError(error.DuplicateDictionaryId, NativeDictionarySet.init(&duplicate_dictionaries).validate());
     const zero_id_dictionaries = [_]NativeDictionary{NativeDictionary.init(0, "zero-lz4")};
     try std.testing.expectError(error.NeedDictionary, NativeDictionarySet.initChecked(&zero_id_dictionaries));
+    const metadata_first_dict = NativeDictionary.initFromContent("lz4 metadata first");
+    const metadata_second_dict = NativeDictionary.initFromContent("lz4 metadata second");
+    const metadata = [_]dictionary_mod.Metadata{
+        .fromBytes(metadata_first_dict.content, native_dictionary_window_len),
+        .fromBytes(metadata_second_dict.content, native_dictionary_window_len),
+    };
+    const contents = [_][]const u8{ metadata_first_dict.content, metadata_second_dict.content };
+    var metadata_dictionaries: [2]NativeDictionary = undefined;
+    const metadata_set = try NativeDictionarySet.initFromMetadata(&metadata_dictionaries, &metadata, &contents);
+    try std.testing.expectEqualSlices(u8, metadata_first_dict.content, (metadata_set.find(metadata_first_dict.id) orelse return error.NeedDictionary).content);
+    try std.testing.expectEqualSlices(u8, metadata_second_dict.content, (metadata_set.find(metadata_second_dict.id) orelse return error.NeedDictionary).content);
+    var short_metadata_dictionaries: [1]NativeDictionary = undefined;
+    try std.testing.expectError(error.InvalidDictionaryMetadata, NativeDictionarySet.initFromMetadata(&short_metadata_dictionaries, &metadata, &contents));
+    const bad_contents = [_][]const u8{ metadata_first_dict.content, "wrong lz4 metadata second" };
+    try std.testing.expectError(error.InvalidDictionaryMetadata, NativeDictionarySet.initFromMetadata(&metadata_dictionaries, &metadata, &bad_contents));
     const options: NativeFrameOptions = .{
         .content_checksum = false,
         .block_checksum = true,
