@@ -6,89 +6,141 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
+    const filter = try parseProbeFilter(init);
     var checked: usize = 0;
-    try checkDirectHuffmanBoundaries(init.gpa);
-    checked += 1;
-    try checkNoSizeCompressedBlockLimits(init.gpa);
-    checked += 1;
-    try checkHighByteFseHuffman(init.gpa);
-    checked += 1;
-    try checkSystemZstdHighByteFrame(init.gpa);
-    checked += 1;
-    try checkTreelessRepeatHuffmanLiterals(init.gpa);
-    checked += 1;
-    try checkTreelessRepeatHuffmanAcrossRawBlock(init.gpa);
-    checked += 1;
-    try checkTreelessRepeatHuffmanAcrossRleBlock(init.gpa);
-    checked += 1;
-    try checkRepeatOffsetAdditionalBits(init.gpa);
-    checked += 1;
-    try checkRepeatOffsetZeroLiteralSelector(init.gpa);
-    checked += 1;
-    try checkRepeatOffsetZeroLiteralSecondSelector(init.gpa);
-    checked += 1;
-    try checkRepeatOffsetLiteralZerothSelector(init.gpa);
-    checked += 1;
-    try checkRepeatOffsetRepeatModePositiveSelector(init.gpa);
-    checked += 1;
-    try checkRepeatOffsetRepeatModePositiveSecondSelectors(init.gpa);
-    checked += 1;
-    try checkRepeatOffsetLiteralFirstSelector(init.gpa);
-    checked += 1;
-    try checkRepeatOffsetLiteralSecondSelector(init.gpa);
-    checked += 1;
-    try checkRepeatOffsetZeroLiteralInvalidSelector(init.gpa);
-    checked += 1;
-    try checkRepeatOffsetZeroLiteralRep0MinusOneAfterUpdate(init.gpa);
-    checked += 1;
-    try checkRepeatOffsetRepeatModeZeroLiteralRep0MinusOneAfterUpdate(init.gpa);
-    checked += 1;
-    try checkRepeatedRleSequenceTables(init.gpa);
-    checked += 1;
-    try checkMultiplePredefinedSequenceStateTransitions(init.gpa);
-    checked += 1;
-    try checkManyPredefinedSequenceStateTransitions(init.gpa);
-    checked += 1;
-    try checkFirstBlockRepeatSequenceModeIsRejected(init.gpa);
-    checked += 1;
-    try checkFirstBlockMixedRepeatSequenceModeIsRejected(init.gpa);
-    checked += 1;
-    try checkFirstBlockOffsetAndMatchRepeatSequenceModesAreRejected(init.gpa);
-    checked += 1;
-    try checkMixedRlePredefinedSequenceModes(init.gpa);
-    checked += 1;
-    try checkRepeatMixedRlePredefinedSequenceModes(init.gpa);
-    checked += 1;
-    try checkRepeatSequenceTablesAcrossRawBlock(init.gpa);
-    checked += 1;
-    try checkRepeatSequenceTablesAcrossRleBlock(init.gpa);
-    checked += 1;
-    try checkLiteralLengthCompressedThenRepeatedSequenceTables(init.gpa);
-    checked += 1;
-    try checkMatchLengthCompressedThenRepeatedSequenceTables(init.gpa);
-    checked += 1;
-    try checkOffsetCompressedThenRepeatedSequenceTables(init.gpa);
-    checked += 1;
-    try checkOffsetAndMatchLengthCompressedSequenceTables(init.gpa);
-    checked += 1;
-    try checkCompressedOffsetRepeatSelectorFrame(init.gpa);
-    checked += 1;
-    try checkAllCompressedSequenceTableFrame(init.gpa);
-    checked += 1;
-    try checkAllCompressedThenRepeatedSequenceTables(init.gpa);
-    checked += 1;
-    try checkFixedLibZstdFseSequenceFrames(init.gpa);
-    checked += 1;
+    var non_lib_generated_cases: usize = 0;
+    if (filter.runGeneral()) {
+        try checkDirectHuffmanBoundaries(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkNoSizeCompressedBlockLimits(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkHighByteFseHuffman(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkSystemZstdHighByteFrame(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkTreelessRepeatHuffmanLiterals(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkTreelessRepeatHuffmanAcrossRawBlock(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkTreelessRepeatHuffmanAcrossRleBlock(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetAdditionalBits(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetZeroLiteralSelector(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetZeroLiteralSecondSelector(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetLiteralZerothSelector(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetRepeatModePositiveSelector(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetRepeatModePositiveSecondSelectors(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetLiteralFirstSelector(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetLiteralSecondSelector(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetZeroLiteralInvalidSelector(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetZeroLiteralRep0MinusOneAfterUpdate(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetRepeatModeZeroLiteralRep0MinusOneAfterUpdate(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatedRleSequenceTables(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkMultiplePredefinedSequenceStateTransitions(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkManyPredefinedSequenceStateTransitions(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkFirstBlockRepeatSequenceModeIsRejected(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkFirstBlockMixedRepeatSequenceModeIsRejected(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkFirstBlockOffsetAndMatchRepeatSequenceModesAreRejected(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkMixedRlePredefinedSequenceModes(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatMixedRlePredefinedSequenceModes(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatSequenceTablesAcrossRawBlock(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatSequenceTablesAcrossRleBlock(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkLiteralLengthCompressedThenRepeatedSequenceTables(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkMatchLengthCompressedThenRepeatedSequenceTables(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkOffsetCompressedThenRepeatedSequenceTables(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkOffsetAndMatchLengthCompressedSequenceTables(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkCompressedOffsetRepeatSelectorFrame(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkAllCompressedSequenceTableFrame(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkAllCompressedThenRepeatedSequenceTables(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkFixedLibZstdFseSequenceFrames(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+    }
     const lib_generated_cases = try checkLibZstdGeneratedLibraryFrames(init.gpa);
     checked += lib_generated_cases;
-    try checkSplitHeaderIncremental(init.gpa);
-    checked += 1;
-    try checkSplitSkippableHeaderIncremental(init.gpa);
-    checked += 1;
-    try checkSkippableOnlyStream(init.gpa);
-    checked += 1;
-    checked += try checkHandcraftedFrameValidation(init.gpa);
-    checked += try checkHandcraftedHeaderAndSkippableValidation(init.gpa);
+    if (filter.runGeneral()) {
+        try checkSplitHeaderIncremental(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkSplitSkippableHeaderIncremental(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkSkippableOnlyStream(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        const handcrafted_frame_cases = try checkHandcraftedFrameValidation(init.gpa);
+        checked += handcrafted_frame_cases;
+        non_lib_generated_cases += handcrafted_frame_cases;
+        const handcrafted_header_cases = try checkHandcraftedHeaderAndSkippableValidation(init.gpa);
+        checked += handcrafted_header_cases;
+        non_lib_generated_cases += handcrafted_header_cases;
+    }
+
+    const general_chunked_cases: usize = if (filter.runGeneral()) 10 else 0;
+    const general_fse_repeat_cases: usize = if (filter.runGeneral()) 5 else 0;
 
     try stdout.print("zstd_native_frame_probe_ok cases={d}\n", .{checked});
     try printCoverage(stdout, "zstd_native_frame_probe", checked, &.{
@@ -105,13 +157,55 @@ pub fn main(init: std.process.Init) !void {
         "sequence-tables",
         "skippable",
     }, &.{
-        .{ .capability = "chunked", .cases = lib_generated_cases + 10 },
-        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 10 },
-        .{ .capability = "fse-repeat", .cases = 5 },
-        .{ .capability = "incremental", .cases = lib_generated_cases + 10 },
+        .{ .capability = "chunked", .cases = lib_generated_cases + general_chunked_cases },
+        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + general_chunked_cases },
+        .{ .capability = "fse-repeat", .cases = general_fse_repeat_cases },
+        .{ .capability = "incremental", .cases = lib_generated_cases + general_chunked_cases },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
+        .{ .capability = "malformed", .cases = lib_generated_cases + non_lib_generated_cases },
     });
     try stdout.flush();
+}
+
+const ProbeFilter = enum {
+    all,
+    lib_generated,
+
+    fn runGeneral(self: ProbeFilter) bool {
+        return self == .all;
+    }
+};
+
+fn parseProbeFilter(init: std.process.Init) !ProbeFilter {
+    var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
+    defer args.deinit();
+    _ = args.skip();
+
+    var filter: ProbeFilter = .all;
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--only")) {
+            const value = args.next() orelse return error.ZstdNativeFrameProbeMismatch;
+            if (std.mem.eql(u8, value, "all")) {
+                filter = .all;
+            } else if (std.mem.eql(u8, value, "lib-generated")) {
+                filter = .lib_generated;
+            } else {
+                return error.ZstdNativeFrameProbeMismatch;
+            }
+        } else if (std.mem.startsWith(u8, arg, "--only=")) {
+            const value = arg["--only=".len..];
+            if (std.mem.eql(u8, value, "all")) {
+                filter = .all;
+            } else if (std.mem.eql(u8, value, "lib-generated")) {
+                filter = .lib_generated;
+            } else {
+                return error.ZstdNativeFrameProbeMismatch;
+            }
+        } else {
+            return error.ZstdNativeFrameProbeMismatch;
+        }
+    }
+    return filter;
 }
 
 const CoverageCase = struct {
