@@ -47,6 +47,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkFirstBlockRepeatSequenceModeIsRejected(init.gpa);
     checked += 1;
+    try checkFirstBlockMixedRepeatSequenceModeIsRejected(init.gpa);
+    checked += 1;
     try checkMixedRlePredefinedSequenceModes(init.gpa);
     checked += 1;
     try checkRepeatMixedRlePredefinedSequenceModes(init.gpa);
@@ -1160,6 +1162,40 @@ fn checkFirstBlockRepeatSequenceModeIsRejected(allocator: std.mem.Allocator) !vo
     try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&frame, block));
     try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&frame));
     try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSizeLimited(&frame, 4));
+
+    var into: [4]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&frame, &into));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameIntoExactSize(&frame, &into, into.len));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    try expectError(error.CorruptFrame, decoder.decodeIntoSlice(&frame, &into));
+    try expectAllocError(allocator, error.CorruptFrame, decoder.decodeAlloc(&frame));
+}
+
+fn checkFirstBlockMixedRepeatSequenceModeIsRejected(allocator: std.mem.Allocator) !void {
+    // A repeat in any one of the three sequence-table slots still requires
+    // previous table state. This fixture differs from the all-repeat case above
+    // by mixing LL=Repeat_Mode with OF/ML=RLE_Mode, pinning the partial-repeat
+    // error path through the same public facades.
+    const frame = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x20, 0x04, // Single-segment frame with content size 4.
+        0x3d, 0x00, 0x00, // Last compressed block with seven payload bytes.
+        0x09, 'a', // RLE literals, regenerated size 1.
+        0x01, // One sequence.
+        0xd4, // LL=Repeat_Mode, OF=RLE_Mode, ML=RLE_Mode.
+        0x00, // OF RLE symbol: repeated offset code 0.
+        0x00, // ML RLE symbol: match length 3.
+        0x01, // Minimal reverse bitstream end mark.
+    };
+
+    const block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(block.block_type == .compressed);
+    try expect(block.last);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&frame, block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&frame));
 
     var into: [4]u8 = undefined;
     try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&frame, &into));
