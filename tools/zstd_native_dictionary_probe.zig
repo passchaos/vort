@@ -522,6 +522,24 @@ fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
     try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameIntoWithDictionary(encoded.frame, &wrong_output, wrong));
     try expectAllocError(allocator, error.NeedDictionary, vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, wrong));
 
+    var into: [payload.len]u8 = undefined;
+    const into_written = try vort.zstdDecodeNativeFrameIntoWithDictionary(encoded.frame, &into, dict);
+    try expect(into_written == payload.len);
+    try expectEqualSlices(payload, &into);
+    const exact_into_written = try vort.zstdDecodeNativeFrameIntoWithDictionaryExactSize(encoded.frame, &into, dict, payload.len);
+    try expect(exact_into_written == payload.len);
+    try expectEqualSlices(payload, &into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameIntoWithDictionaryExactSize(encoded.frame, into[0 .. into.len - 1], dict, payload.len));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoWithDictionaryExactSize(encoded.frame, &into, dict, payload.len - 1));
+    var oversized_into: [payload.len + 1]u8 = undefined;
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoWithDictionaryExactSize(encoded.frame, &oversized_into, dict, payload.len + 1));
+
+    const dictionary_set = vort.ZstdNativeDictionarySet.init(&.{dict});
+    const set_exact_written = try vort.zstdDecodeNativeFrameIntoWithDictionarySetExactSize(encoded.frame, &into, dictionary_set, payload.len);
+    try expect(set_exact_written == payload.len);
+    try expectEqualSlices(payload, &into);
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoWithDictionarySetExactSize(encoded.frame, &into, dictionary_set, payload.len - 1));
+
     const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
     defer allocator.free(decoded);
     try expectEqualSlices(payload, decoded);
@@ -534,12 +552,12 @@ fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
     try expect(encoded.frame.len < raw.len);
 
     const bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(payload.len, options, dict);
-    const into = try allocator.alloc(u8, bound);
-    defer allocator.free(into);
-    const into_result = try vort.zstdEncodeNativeFrameIntoSliceWithDictionary(allocator, payload, options, dict, into);
+    const encoded_into = try allocator.alloc(u8, bound);
+    defer allocator.free(encoded_into);
+    const into_result = try vort.zstdEncodeNativeFrameIntoSliceWithDictionary(allocator, payload, options, dict, encoded_into);
     try expect(into_result.mode == .literal_only);
-    try expectEqualSlices(encoded.frame, into[0..into_result.written]);
-    try expectError(error.OutputTooSmall, vort.zstdEncodeNativeFrameIntoSliceWithDictionary(allocator, payload, options, dict, into[0 .. into_result.written - 1]));
+    try expectEqualSlices(encoded.frame, encoded_into[0..into_result.written]);
+    try expectError(error.OutputTooSmall, vort.zstdEncodeNativeFrameIntoSliceWithDictionary(allocator, payload, options, dict, encoded_into[0 .. into_result.written - 1]));
     try expectError(error.NeedDictionary, vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, options, vort.ZstdNativeDictionary.init(0, dict.content)));
 }
 

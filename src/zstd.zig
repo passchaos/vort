@@ -571,6 +571,21 @@ pub fn decodeRawOrRleFrameAllocWithDictionaryExactSize(
     return out;
 }
 
+pub fn decodeRawOrRleFrameIntoWithDictionaryExactSize(
+    frame: []const u8,
+    output: []u8,
+    dictionary: NativeDictionary,
+    expected_output_len: usize,
+) Error!usize {
+    if (output.len < expected_output_len) return error.OutputTooSmall;
+    const written = decodeRawOrRleFrameIntoWithDictionary(frame, output[0..expected_output_len], dictionary) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return written;
+}
+
 pub fn decodeRawOrRleFrameAllocWithDictionarySet(
     allocator: std.mem.Allocator,
     frame: []const u8,
@@ -598,6 +613,21 @@ pub fn decodeRawOrRleFrameAllocWithDictionarySetExactSize(
     };
     if (written != expected_output_len) return error.SizeMismatch;
     return out;
+}
+
+pub fn decodeRawOrRleFrameIntoWithDictionarySetExactSize(
+    frame: []const u8,
+    output: []u8,
+    dictionary_set: NativeDictionarySet,
+    expected_output_len: usize,
+) Error!usize {
+    if (output.len < expected_output_len) return error.OutputTooSmall;
+    const written = decodeRawOrRleFrameIntoWithDictionarySet(frame, output[0..expected_output_len], dictionary_set) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return written;
 }
 
 fn decodeRawOrRleFrameAllocWithDictionaryInternal(
@@ -1166,6 +1196,7 @@ pub const decodeNativeFrameInto = decodeRawOrRleFrameInto;
 pub const decodeNativeFrameIntoExactSize = decodeRawOrRleFrameIntoExactSize;
 pub const decodeNativeFrameAllocWithDictionary = decodeRawOrRleFrameAllocWithDictionary;
 pub const decodeNativeFrameAllocWithDictionaryExactSize = decodeRawOrRleFrameAllocWithDictionaryExactSize;
+pub const decodeNativeFrameIntoWithDictionaryExactSize = decodeRawOrRleFrameIntoWithDictionaryExactSize;
 pub const decodeNativeFrameAppendWithDictionary = decodeRawOrRleFrameAppendWithDictionary;
 pub const decodeNativeFrameAppendExactSizeWithDictionary = decodeRawOrRleFrameAppendExactSizeWithDictionary;
 pub const decodeNativeFrameAppendLimitedWithDictionary = decodeRawOrRleFrameAppendLimitedWithDictionary;
@@ -1173,6 +1204,7 @@ pub const decodeNativeFrameAllocLimitedWithDictionary = decodeRawOrRleFrameAlloc
 pub const decodeNativeFrameIntoWithDictionary = decodeRawOrRleFrameIntoWithDictionary;
 pub const decodeNativeFrameAllocWithDictionarySet = decodeRawOrRleFrameAllocWithDictionarySet;
 pub const decodeNativeFrameAllocWithDictionarySetExactSize = decodeRawOrRleFrameAllocWithDictionarySetExactSize;
+pub const decodeNativeFrameIntoWithDictionarySetExactSize = decodeRawOrRleFrameIntoWithDictionarySetExactSize;
 pub const decodeNativeFrameAppendWithDictionarySet = decodeRawOrRleFrameAppendWithDictionarySet;
 pub const decodeNativeFrameAppendExactSizeWithDictionarySet = decodeRawOrRleFrameAppendExactSizeWithDictionarySet;
 pub const decodeNativeFrameAppendLimitedWithDictionarySet = decodeRawOrRleFrameAppendLimitedWithDictionarySet;
@@ -2136,9 +2168,19 @@ pub const NativeFrameDecoder = struct {
         return try decodeRawOrRleFrameIntoWithDictionary(frame, output, dictionary);
     }
 
+    pub fn decodeIntoSliceWithDictionaryExactSize(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameIntoWithDictionaryExactSize(frame, output, dictionary, expected_output_len);
+    }
+
     pub fn decodeIntoSliceWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameIntoWithDictionarySet(frame, output, dictionary_set);
+    }
+
+    pub fn decodeIntoSliceWithDictionarySetExactSize(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameIntoWithDictionarySetExactSize(frame, output, dictionary_set, expected_output_len);
     }
 
     pub fn decodedSize(self: *NativeFrameDecoder, frame: []const u8) Error!usize {

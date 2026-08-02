@@ -949,8 +949,8 @@ container-advertised lengths that do not match the stream. Reusable
 concatenated `decodeConcatenatedChunks*` helpers, so callers can keep
 decoder-owned scratch capacity while still appending into their own output
 buffers. Native one-shot and reusable decoders also provide `decode*Into*ExactSize`
-forms for caller-owned slices when a container-advertised byte count must match
-exactly. Incremental native decoders expose the shared `StepResult`
+forms, including dictionary/dictionary-set variants, for caller-owned slices
+when a container-advertised byte count must match exactly. Incremental native decoders expose the shared `StepResult`
 contract: feed compressed bytes, provide caller-owned output slices, then call
 `finish()` when an exact EOF/size check matters. Direct-output paths are fastest
 when the caller supplies a large enough output slice; if a slice is too small
