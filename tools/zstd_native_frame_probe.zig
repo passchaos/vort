@@ -2356,15 +2356,36 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         if (i % 97 == 0) byte.* = @intCast((i * 17 + 3) & 0xff);
     }
 
+    const large_payload_len = std.compress.zstd.block_size_max + 8192;
+    const large_multiblock = try allocator.alloc(u8, large_payload_len);
+    defer allocator.free(large_multiblock);
+    for (large_multiblock, 0..) |*byte, i| {
+        // Force libzstd to emit more than one data block while keeping the
+        // content deterministic and mixed enough to exercise literal/sequence
+        // handling rather than collapsing into a single trivial RLE shape.
+        const stripe = i % 4096;
+        byte.* = switch (stripe % 13) {
+            0 => @intCast((i / 17) & 0xff),
+            1, 2, 3 => @intCast('A' + (stripe % 23)),
+            4 => 0,
+            5 => 0xff,
+            else => @intCast((stripe * 31 + i / 4096) & 0xff),
+        };
+    }
+
     const json_unit = "{\"service\":\"vort\",\"codec\":\"zstd\",\"native\":true,\"value\":12345}\n";
-    const cases = [_][]const u8{
-        "zstd-small-reference-payload",
-        "abcd" ** 512,
-        &sequential,
-        json_unit ** 64,
-        &binary_mix,
-        &sparse_zero,
-        &randomish,
+    const cases = [_]struct {
+        payload: []const u8,
+        min_blocks: usize,
+    }{
+        .{ .payload = "zstd-small-reference-payload", .min_blocks = 1 },
+        .{ .payload = "abcd" ** 512, .min_blocks = 1 },
+        .{ .payload = &sequential, .min_blocks = 1 },
+        .{ .payload = json_unit ** 64, .min_blocks = 1 },
+        .{ .payload = &binary_mix, .min_blocks = 1 },
+        .{ .payload = &sparse_zero, .min_blocks = 1 },
+        .{ .payload = &randomish, .min_blocks = 1 },
+        .{ .payload = large_multiblock, .min_blocks = 2 },
     };
     const levels = [_]c_int{ 1, 9, 19 };
     const option_sets = [_]vort.ZstdLibFrameOptions{
@@ -2374,10 +2395,10 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
     };
 
     var checked: usize = 0;
-    for (cases) |payload| {
+    for (cases) |case| {
         for (levels) |level| {
             for (option_sets) |options| {
-                try checkLibZstdGeneratedLibraryFrame(allocator, payload, level, options);
+                try checkLibZstdGeneratedLibraryFrame(allocator, case.payload, level, options, case.min_blocks);
                 checked += 1;
             }
         }
@@ -2390,6 +2411,7 @@ fn checkLibZstdGeneratedLibraryFrame(
     payload: []const u8,
     level: c_int,
     options: vort.ZstdLibFrameOptions,
+    min_blocks: usize,
 ) !void {
     const encoded = try vort.zstdEncodeFrameWithLevelAndOptionsAlloc(allocator, payload, level, options);
     defer allocator.free(encoded);
@@ -2411,8 +2433,11 @@ fn checkLibZstdGeneratedLibraryFrame(
 
     const stream_summary = try vort.zstdSummarizeNativeStream(encoded);
     try expect(stream_summary.frame_count == 1);
-    try expect(stream_summary.block_count >= 1);
+    try expect(stream_summary.block_count >= min_blocks);
     try expect(stream_summary.skippable_frame_count == 0);
+    const block_summary = try vort.zstdSummarizeNativeFrameBlocks(encoded);
+    try expect(block_summary.block_count == stream_summary.block_count);
+    try expect(block_summary.block_count >= min_blocks);
 
     try expect((try vort.zstdDecodedNativeFrameSizeLimited(encoded, payload.len)) == payload.len);
     try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(encoded, payload.len - 1));
