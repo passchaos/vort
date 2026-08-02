@@ -2030,7 +2030,15 @@ fn checkChunkedFrameLibraryApis(allocator: std.mem.Allocator, payload: []const u
     const written = try vort.zstdDecodeNativeFrameChunksInto(&chunks, join, into);
     try expect(written == payload.len);
     try expectEqualSlices(payload, into[0..written]);
+    const exact_written = try vort.zstdDecodeNativeFrameChunksIntoExactSize(&chunks, join, into, payload.len);
+    try expect(exact_written == payload.len);
+    try expectEqualSlices(payload, into[0..exact_written]);
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameChunksInto(&chunks, join, into[0 .. into.len - 1]));
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameChunksIntoExactSize(&chunks, join, into[0 .. into.len - 1], payload.len));
+    if (payload.len != 0) try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameChunksIntoExactSize(&chunks, join, into, payload.len - 1));
+    const oversized_into = try allocator.alloc(u8, payload.len + 1);
+    defer allocator.free(oversized_into);
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameChunksIntoExactSize(&chunks, join, oversized_into, payload.len + 1));
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(allocator);
@@ -2055,6 +2063,9 @@ fn checkChunkedFrameLibraryApis(allocator: std.mem.Allocator, payload: []const u
     const scratch = try decoder.decodeChunksScratchLimited(&chunks, join, payload.len);
     try expectEqualSlices(payload, scratch);
     try expectError(error.OutputLimitExceeded, decoder.decodeChunksScratchLimited(&chunks, join, payload.len - 1));
+    const reusable_exact_written = try decoder.decodeChunksIntoSliceExactSize(&chunks, join, into, payload.len);
+    try expect(reusable_exact_written == payload.len);
+    try expectEqualSlices(payload, into[0..reusable_exact_written]);
 
     const reusable_into = try allocator.alloc(u8, payload.len);
     defer allocator.free(reusable_into);

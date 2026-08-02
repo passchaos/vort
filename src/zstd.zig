@@ -1048,6 +1048,11 @@ pub fn decodeRawOrRleFrameChunksInto(chunks: []const []const u8, compressed_scra
     return try decodeRawOrRleFrameInto(joined, output);
 }
 
+pub fn decodeRawOrRleFrameChunksIntoExactSize(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeRawOrRleFrameIntoExactSize(joined, output, expected_output_len);
+}
+
 pub fn decodedRawOrRleFrameChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodedRawOrRleFrameSize(joined);
@@ -1217,6 +1222,7 @@ pub const decodeNativeFrameChunksAppend = decodeRawOrRleFrameChunksAppend;
 pub const decodeNativeFrameChunksAppendExactSize = decodeRawOrRleFrameChunksAppendExactSize;
 pub const decodeNativeFrameChunksAppendLimited = decodeRawOrRleFrameChunksAppendLimited;
 pub const decodeNativeFrameChunksInto = decodeRawOrRleFrameChunksInto;
+pub const decodeNativeFrameChunksIntoExactSize = decodeRawOrRleFrameChunksIntoExactSize;
 pub const decodedNativeFrameChunksSize = decodedRawOrRleFrameChunksSize;
 pub const decodedNativeFrameChunksSizeLimited = decodedRawOrRleFrameChunksSizeLimited;
 pub const decodeNativeFrameChunksAllocWithDictionary = decodeRawOrRleFrameChunksAllocWithDictionary;
@@ -2252,6 +2258,11 @@ pub const NativeFrameDecoder = struct {
     pub fn decodeChunksIntoSlice(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameChunksInto(chunks, compressed_scratch, output);
+    }
+
+    pub fn decodeChunksIntoSliceExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameChunksIntoExactSize(chunks, compressed_scratch, output, expected_output_len);
     }
 
     pub fn decodedChunksSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error!usize {

@@ -1476,7 +1476,15 @@ fn checkLibLz4GeneratedChunkedFrame(allocator: std.mem.Allocator, case: Case, fr
     const written = try vort.lz4DecodeNativeFrameChunksInto(&chunks, join, into);
     if (written != case.payload.len) return error.Lz4ProbeSizeMismatch;
     try expectPayload(case, into[0..written]);
+    const exact_written = try vort.lz4DecodeNativeFrameChunksIntoExactSize(&chunks, join, into, case.payload.len);
+    if (exact_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    try expectPayload(case, into[0..exact_written]);
     try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameChunksInto(&chunks, join, into[0 .. into.len - 1]));
+    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameChunksIntoExactSize(&chunks, join, into[0 .. into.len - 1], case.payload.len));
+    if (case.payload.len != 0) try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameChunksIntoExactSize(&chunks, join, into, case.payload.len - 1));
+    const oversized_into = try allocator.alloc(u8, case.payload.len + 1);
+    defer allocator.free(oversized_into);
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameChunksIntoExactSize(&chunks, join, oversized_into, case.payload.len + 1));
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(allocator);
@@ -1502,6 +1510,9 @@ fn checkLibLz4GeneratedChunkedFrame(allocator: std.mem.Allocator, case: Case, fr
     const scratch = try decoder.decodeChunksScratchLimited(&chunks, join, case.payload.len);
     try expectPayload(case, scratch);
     try expectError(error.OutputLimitExceeded, decoder.decodeChunksScratchLimited(&chunks, join, case.payload.len - 1));
+    const reusable_exact_written = try decoder.decodeChunksIntoSliceExactSize(&chunks, join, into, case.payload.len);
+    if (reusable_exact_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    try expectPayload(case, into[0..reusable_exact_written]);
 
     const reusable_into = try allocator.alloc(u8, case.payload.len);
     defer allocator.free(reusable_into);

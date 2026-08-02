@@ -2031,6 +2031,11 @@ pub const NativeFrameDecoder = struct {
         return try decodeFrameChunksInto(chunks, compressed_scratch, output);
     }
 
+    pub fn decodeChunksIntoSliceExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeFrameChunksIntoExactSize(chunks, compressed_scratch, output, expected_output_len);
+    }
+
     pub fn decodedChunksSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
         _ = self;
         return try decodedFrameChunksSize(chunks, compressed_scratch);
@@ -2998,6 +3003,11 @@ pub fn decodeFrameChunksInto(chunks: []const []const u8, compressed_scratch: []u
     return try decodeFrameInto(joined, output);
 }
 
+pub fn decodeFrameChunksIntoExactSize(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeFrameIntoExactSize(joined, output, expected_output_len);
+}
+
 pub fn decodedFrameChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodedFrameSize(joined);
@@ -3240,6 +3250,7 @@ pub const decodeNativeFrameChunksAppend = decodeFrameChunksAppend;
 pub const decodeNativeFrameChunksAppendExactSize = decodeFrameChunksAppendExactSize;
 pub const decodeNativeFrameChunksAppendLimited = decodeFrameChunksAppendLimited;
 pub const decodeNativeFrameChunksInto = decodeFrameChunksInto;
+pub const decodeNativeFrameChunksIntoExactSize = decodeFrameChunksIntoExactSize;
 pub const decodedNativeFrameChunksSize = decodedFrameChunksSize;
 pub const decodedNativeFrameChunksSizeLimited = decodedFrameChunksSizeLimited;
 pub const decodeNativeFrameChunksAllocWithDictionary = decodeFrameChunksAllocWithDictionary;
