@@ -2879,6 +2879,20 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &raw_then_treeless_without_tree));
     checked += 1;
 
+    const rle_then_treeless_without_tree_hex = "28b52ffd20031a00005225000033400001";
+    var rle_then_treeless_without_tree: [rle_then_treeless_without_tree_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&rle_then_treeless_without_tree, rle_then_treeless_without_tree_hex);
+    const rle_before_treeless = try vort.zstdInspectNativeFrameFirstBlock(&rle_then_treeless_without_tree);
+    try expect(rle_before_treeless.block_type == .rle);
+    const treeless_after_rle = try vort.zstdInspectNativeFrameBlockAt(&rle_then_treeless_without_tree, rle_before_treeless.next_header_offset);
+    try expect(treeless_after_rle.block_type == .compressed);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&rle_then_treeless_without_tree, treeless_after_rle));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&rle_then_treeless_without_tree));
+    var rle_then_treeless_output: [6]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&rle_then_treeless_without_tree, &rle_then_treeless_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &rle_then_treeless_without_tree));
+    checked += 1;
+
     return checked;
 }
 
