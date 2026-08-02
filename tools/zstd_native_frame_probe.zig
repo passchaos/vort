@@ -2508,6 +2508,10 @@ fn checkLibZstdGeneratedLibraryFrame(
     if (min_blocks > 1) {
         checked += try checkTruncatedLibZstdGeneratedFrameApis(allocator, payload, encoded, min_blocks);
     }
+    if (min_blocks > 1 and options.content_checksum) {
+        try checkCorruptChecksumLibZstdGeneratedFrameApis(allocator, payload, encoded);
+        checked += 1;
+    }
     return checked;
 }
 
@@ -2666,6 +2670,93 @@ fn checkTruncatedLibZstdGeneratedIncrementalApis(allocator: std.mem.Allocator, p
     try expect(result.progress.input_read == truncated.len);
     try expect(result.progress.output_written == 0);
     try expectError(error.TruncatedFrame, decoder.finish());
+}
+
+fn checkCorruptChecksumLibZstdGeneratedFrameApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
+    // Unlike the truncation fixtures, this keeps the libzstd frame structurally
+    // complete and corrupts only the checksum trailer. Size preflight should
+    // still succeed, while all decode facades must reject the final content
+    // verification step with ChecksumMismatch.
+    if (frame.len < 4) return error.ZstdNativeFrameProbeMismatch;
+    var corrupt = try allocator.dupe(u8, frame);
+    defer allocator.free(corrupt);
+    corrupt[corrupt.len - 1] ^= 0x01;
+
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(corrupt, payload.len)) == payload.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(corrupt, payload.len - 1));
+    const summary = try vort.zstdSummarizeNativeStream(corrupt);
+    try expect(summary.frame_count == 1);
+    try expect(summary.block_count >= 2);
+
+    const into = try allocator.alloc(u8, payload.len);
+    defer allocator.free(into);
+    try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameInto(corrupt, into));
+    try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameIntoExactSize(corrupt, into, payload.len));
+    try expectAllocError(allocator, error.ChecksumMismatch, vort.zstdDecodeNativeFrameAllocLimited(allocator, corrupt, payload.len));
+
+    var reusable = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer reusable.deinit();
+    try expect((try reusable.decodedSizeLimited(corrupt, payload.len)) == payload.len);
+    try expectError(error.ChecksumMismatch, reusable.decodeIntoSlice(corrupt, into));
+    try expectAllocError(allocator, error.ChecksumMismatch, reusable.decodeAlloc(corrupt));
+
+    try checkCorruptChecksumLibZstdGeneratedIncrementalApis(allocator, payload, corrupt);
+    try checkCorruptChecksumLibZstdGeneratedChunkedApis(allocator, payload, corrupt);
+}
+
+fn checkCorruptChecksumLibZstdGeneratedIncrementalApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
+    var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+
+    const output = try allocator.alloc(u8, payload.len);
+    defer allocator.free(output);
+    const initial = try decoder.step(frame, output[0..0]);
+    try expect(initial.status == .need_output);
+    try expect(initial.progress.input_read == frame.len);
+    var written: usize = 0;
+    var result: vort.StepResult = initial;
+    while (result.status == .need_output) {
+        const end = @min(output.len, written + 4096);
+        result = decoder.step("", output[written..end]) catch |err| {
+            if (err != error.ChecksumMismatch) return err;
+            return;
+        };
+        written += result.progress.output_written;
+    }
+    try expect(result.status == .done);
+    try expect(written == payload.len);
+    try expectEqualSlices(payload, output);
+    try expectError(error.ChecksumMismatch, decoder.finish());
+}
+
+fn checkCorruptChecksumLibZstdGeneratedChunkedApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
+    const split_a: usize = @min(frame.len, 5);
+    const split_b: usize = @min(frame.len, split_a + 19);
+    const chunks = [_][]const u8{
+        frame[0..split_a],
+        frame[split_a..split_b],
+        frame[split_b..],
+    };
+    const join = try allocator.alloc(u8, frame.len);
+    defer allocator.free(join);
+
+    try expect((try vort.zstdDecodedNativeFrameChunksSizeLimited(&chunks, join, payload.len)) == payload.len);
+    try expectAllocError(allocator, error.ChecksumMismatch, vort.zstdDecodeNativeFrameChunksAllocLimited(allocator, &chunks, join, payload.len));
+
+    const into = try allocator.alloc(u8, payload.len);
+    defer allocator.free(into);
+    try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameChunksInto(&chunks, join, into));
+    try expectError(error.ChecksumMismatch, vort.zstdDecodeNativeFrameChunksIntoExactSize(&chunks, join, into, payload.len));
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    try expect((try decoder.decodedChunksSizeLimited(&chunks, join, payload.len)) == payload.len);
+    try expectAllocError(allocator, error.ChecksumMismatch, decoder.decodeChunksAllocLimited(&chunks, join, payload.len));
+    try expectError(error.ChecksumMismatch, decoder.decodeChunksIntoSlice(&chunks, join, into));
+    try expectError(error.ChecksumMismatch, decoder.decodeChunksIntoSliceExactSize(&chunks, join, into, payload.len));
 }
 
 fn checkTruncatedLibZstdGeneratedChunkedApis(allocator: std.mem.Allocator, payload: []const u8, truncated: []const u8) !void {
