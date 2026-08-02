@@ -1376,13 +1376,24 @@ fn checkLibLz4GeneratedLibraryFrame(
     const native_written = try vort.lz4DecodeNativeFrameInto(frame, native_into);
     if (native_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
     try expectPayload(case, native_into[0..native_written]);
+    const exact_written = try vort.lz4DecodeNativeFrameIntoExactSize(frame, native_into, case.payload.len);
+    if (exact_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    try expectPayload(case, native_into[0..exact_written]);
     try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameInto(frame, native_into[0 .. native_into.len - 1]));
+    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameIntoExactSize(frame, native_into[0 .. native_into.len - 1], case.payload.len));
+    if (case.payload.len != 0) try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameIntoExactSize(frame, native_into, case.payload.len - 1));
+    const oversized_into = try allocator.alloc(u8, case.payload.len + 1);
+    defer allocator.free(oversized_into);
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameIntoExactSize(frame, oversized_into, case.payload.len + 1));
 
     var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
     defer decoder.deinit();
     const scratch = try decoder.decodeScratchLimited(frame, case.payload.len);
     try expectPayload(case, scratch);
     try expectError(error.OutputLimitExceeded, decoder.decodeScratchLimited(frame, case.payload.len - 1));
+    const reusable_into_written = try decoder.decodeIntoSliceExactSize(frame, native_into, case.payload.len);
+    if (reusable_into_written != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    try expectPayload(case, native_into[0..reusable_into_written]);
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(allocator);

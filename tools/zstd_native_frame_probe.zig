@@ -144,6 +144,13 @@ fn checkDirectHuffmanBoundaries(allocator: std.mem.Allocator) !void {
     const written = try vort.zstdDecodeNativeFrameInto(encoded.frame, &into);
     try expect(written == payload.len);
     try expectEqualSlices(&payload, &into);
+    const exact_written = try vort.zstdDecodeNativeFrameIntoExactSize(encoded.frame, &into, payload.len);
+    try expect(exact_written == payload.len);
+    try expectEqualSlices(&payload, &into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameIntoExactSize(encoded.frame, into[0 .. into.len - 1], payload.len));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoExactSize(encoded.frame, &into, payload.len - 1));
+    var oversized_into: [payload.len + 1]u8 = undefined;
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoExactSize(encoded.frame, &oversized_into, payload.len + 1));
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(allocator);
@@ -1939,6 +1946,9 @@ fn checkLibZstdGeneratedLibraryFrame(
     const scratch = try decoder.decodeScratchLimited(encoded, payload.len);
     try expectEqualSlices(payload, scratch);
     try expectError(error.OutputLimitExceeded, decoder.decodeScratchLimited(encoded, payload.len - 1));
+    const reusable_exact_written = try decoder.decodeIntoSliceExactSize(encoded, native_into, payload.len);
+    try expect(reusable_exact_written == payload.len);
+    try expectEqualSlices(payload, native_into[0..reusable_exact_written]);
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(allocator);

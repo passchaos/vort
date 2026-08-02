@@ -745,6 +745,16 @@ pub fn decodeFrameAllocExactSize(allocator: std.mem.Allocator, frame: []const u8
     return out;
 }
 
+pub fn decodeFrameIntoExactSize(frame: []const u8, output: []u8, expected_output_len: usize) Error!usize {
+    if (output.len < expected_output_len) return error.OutputTooSmall;
+    const written = decodeFrameInto(frame, output[0..expected_output_len]) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return written;
+}
+
 pub fn decodedFrameSize(frame: []const u8) Error!usize {
     return try frameDecodedSizeLimited(frame, std.math.maxInt(usize));
 }
@@ -987,6 +997,7 @@ pub const decodeNativeFrameAppendExactSize = decodeFrameAppendExactSize;
 pub const decodeNativeFrameAppendLimited = decodeFrameAppendLimited;
 pub const decodeNativeFrameAllocLimited = decodeFrameAllocLimited;
 pub const decodeNativeFrameAllocExactSize = decodeFrameAllocExactSize;
+pub const decodeNativeFrameIntoExactSize = decodeFrameIntoExactSize;
 pub const decodedNativeFrameSize = decodedFrameSize;
 pub const decodedNativeFrameSizeLimited = decodedFrameSizeLimited;
 pub const decodeNativeFrameAllocWithDictionary = decodeFrameAllocWithDictionary;
@@ -1855,6 +1866,11 @@ pub const NativeFrameDecoder = struct {
 
     pub fn decodeAppendExactSize(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, expected_output_len: usize) Error!usize {
         return try decodeFrameAppendExactSize(self.allocator, out, frame, expected_output_len);
+    }
+
+    pub fn decodeIntoSliceExactSize(self: *NativeFrameDecoder, frame: []const u8, output: []u8, expected_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeFrameIntoExactSize(frame, output, expected_output_len);
     }
 
     pub fn decodeAppendWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary) Error!usize {

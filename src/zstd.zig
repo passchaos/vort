@@ -535,6 +535,16 @@ pub fn decodeRawOrRleFrameAllocExactSize(allocator: std.mem.Allocator, frame: []
     return out;
 }
 
+pub fn decodeRawOrRleFrameIntoExactSize(frame: []const u8, output: []u8, expected_output_len: usize) Error!usize {
+    if (output.len < expected_output_len) return error.OutputTooSmall;
+    const written = decodeRawOrRleFrameInto(frame, output[0..expected_output_len]) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return written;
+}
+
 pub fn decodeRawOrRleFrameAllocWithDictionary(
     allocator: std.mem.Allocator,
     frame: []const u8,
@@ -1153,6 +1163,7 @@ pub const decodeNativeFrameAppendExactSize = decodeRawOrRleFrameAppendExactSize;
 pub const decodeNativeFrameAppendLimited = decodeRawOrRleFrameAppendLimited;
 pub const decodeNativeFrameAllocLimited = decodeRawOrRleFrameAllocLimited;
 pub const decodeNativeFrameInto = decodeRawOrRleFrameInto;
+pub const decodeNativeFrameIntoExactSize = decodeRawOrRleFrameIntoExactSize;
 pub const decodeNativeFrameAllocWithDictionary = decodeRawOrRleFrameAllocWithDictionary;
 pub const decodeNativeFrameAllocWithDictionaryExactSize = decodeRawOrRleFrameAllocWithDictionaryExactSize;
 pub const decodeNativeFrameAppendWithDictionary = decodeRawOrRleFrameAppendWithDictionary;
@@ -2113,6 +2124,11 @@ pub const NativeFrameDecoder = struct {
     pub fn decodeIntoSlice(self: *NativeFrameDecoder, frame: []const u8, output: []u8) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameInto(frame, output);
+    }
+
+    pub fn decodeIntoSliceExactSize(self: *NativeFrameDecoder, frame: []const u8, output: []u8, expected_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameIntoExactSize(frame, output, expected_output_len);
     }
 
     pub fn decodeIntoSliceWithDictionary(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary: NativeDictionary) Error!usize {
