@@ -2899,6 +2899,23 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &raw_before_repeat));
     checked += 1;
 
+    // Like raw blocks, RLE blocks carry bytes but establish no sequence table
+    // state. A Repeat_Mode compressed block after only an RLE block must
+    // therefore be rejected rather than accidentally reusing stale state from a
+    // previous probe or treating the RLE block as a table initializer.
+    const rle_before_repeat_hex = "28b52ffd2008220000612500000001fc01";
+    var rle_before_repeat: [rle_before_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&rle_before_repeat, rle_before_repeat_hex);
+    const rle_block = try vort.zstdInspectNativeFrameFirstBlock(&rle_before_repeat);
+    try expect(rle_block.block_type == .rle);
+    const repeat_after_rle_block = try vort.zstdInspectNativeFrameBlockAt(&rle_before_repeat, rle_block.next_header_offset);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&rle_before_repeat, repeat_after_rle_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&rle_before_repeat));
+    var rle_before_repeat_output: [8]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&rle_before_repeat, &rle_before_repeat_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &rle_before_repeat));
+    checked += 1;
+
     const missing_sequence_bitstream_hex = "28b52ffd240e3d00000961015401000a";
     var missing_sequence_bitstream: [missing_sequence_bitstream_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&missing_sequence_bitstream, missing_sequence_bitstream_hex);
