@@ -118,8 +118,9 @@ Current interpretation:
   data shapes, keeping previously discovered Huffman/FSE/repeat-offset bug
   classes visible without requiring a full external corpus checkout, including
   zero-literal rep1/rep2 selector paths, positive-literal rep0/rep1/rep2 plus Repeat_Mode positive-literal rep0/rep1/rep2 replay, invalid
-  `rep0 - 1` rejection, and valid cross-block `rep0 - 1` after a
-  direct-offset update, multi-sequence predefined-table state transitions, mixed RLE/predefined sequence modes, repeated mixed-table modes across blocks, and non-dictionary LL/ML/OF=FSE Repeat_Mode replay, plus pure library-level libzstd-generated frame differentials. It also
+  `rep0 - 1` rejection, valid cross-block `rep0 - 1` after a
+  direct-offset update, and Repeat_Mode replay of that `rep0 - 1` selector
+  after the repeated-offset ring mutates, multi-sequence predefined-table state transitions, mixed RLE/predefined sequence modes, repeated mixed-table modes across blocks, and non-dictionary LL/ML/OF=FSE Repeat_Mode replay, plus pure library-level libzstd-generated frame differentials. It also
   validates Vort's dependency-free native encoder on the same generated/file
   byte payloads through `encode-zstd-native-bytes-hex` in `auto`, `raw_or_rle`,
   and `literal_only` modes, including both 4-divisible and non-4-divisible
