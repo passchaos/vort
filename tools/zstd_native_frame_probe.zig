@@ -3138,24 +3138,24 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
         "28b52ffd20042d0000096101fc01";
     var tables_then_new_frame_repeat: [tables_then_new_frame_repeat_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&tables_then_new_frame_repeat, tables_then_new_frame_repeat_hex);
-    var repeat_boundary_iterator = vort.zstdIterateNativeStream(&tables_then_new_frame_repeat);
-    const table_frame = (try repeat_boundary_iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
-    const repeat_frame = (try repeat_boundary_iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
-    try expect((try repeat_boundary_iterator.next()) == null);
-    switch (table_frame) {
-        .frame => {},
-        .skippable => return error.ZstdNativeFrameProbeMismatch,
-    }
-    const repeat_frame_bytes = switch (repeat_frame) {
-        .frame => |frame| frame.bytes,
-        .skippable => return error.ZstdNativeFrameProbeMismatch,
-    };
-    const repeat_boundary_block = try vort.zstdInspectNativeFrameFirstBlock(repeat_frame_bytes);
-    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(repeat_frame_bytes, repeat_boundary_block));
-    try expectError(error.CorruptFrame, vort.zstdDecodedNativeConcatenatedFrameSize(&tables_then_new_frame_repeat));
     var repeat_boundary_output: [32]u8 = undefined;
-    try expectError(error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameInto(&tables_then_new_frame_repeat, &repeat_boundary_output));
-    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, &tables_then_new_frame_repeat));
+    try expectTwoFrameRepeatBoundaryError(allocator, &tables_then_new_frame_repeat, &repeat_boundary_output);
+    checked += 1;
+
+    const tables_then_new_frame_offset_repeat_hex =
+        "28b52ffd200e4500000961015401000a01" ++
+        "28b52ffd20043d000009610174000001";
+    var tables_then_new_frame_offset_repeat: [tables_then_new_frame_offset_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&tables_then_new_frame_offset_repeat, tables_then_new_frame_offset_repeat_hex);
+    try expectTwoFrameRepeatBoundaryError(allocator, &tables_then_new_frame_offset_repeat, &repeat_boundary_output);
+    checked += 1;
+
+    const tables_then_new_frame_match_repeat_hex =
+        "28b52ffd200e4500000961015401000a01" ++
+        "28b52ffd20043d00000961015c000001";
+    var tables_then_new_frame_match_repeat: [tables_then_new_frame_match_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&tables_then_new_frame_match_repeat, tables_then_new_frame_match_repeat_hex);
+    try expectTwoFrameRepeatBoundaryError(allocator, &tables_then_new_frame_match_repeat, &repeat_boundary_output);
     checked += 1;
 
     const skip_between_tables_and_repeat = try vort.zstdEncodeSkippableFrameAlloc(allocator, 2, "state-boundary");
@@ -3297,6 +3297,30 @@ fn handcraftedSkippableFrame(allocator: std.mem.Allocator, claimed_len: u32, pay
     try frame.appendSlice(allocator, &header);
     try frame.appendSlice(allocator, payload);
     return try frame.toOwnedSlice(allocator);
+}
+
+fn expectTwoFrameRepeatBoundaryError(allocator: std.mem.Allocator, stream: []const u8, output: []u8) !void {
+    // Repeat_Mode sequence tables are frame-local. This helper verifies the
+    // common boundary shape used by the all-repeat and partial-repeat fixtures:
+    // the first frame may decode on its own, but the second frame must not see
+    // the first frame's tables through inspect, preflight, or decode APIs.
+    var iterator = vort.zstdIterateNativeStream(stream);
+    const table_frame = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    const repeat_frame = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    try expect((try iterator.next()) == null);
+    switch (table_frame) {
+        .frame => {},
+        .skippable => return error.ZstdNativeFrameProbeMismatch,
+    }
+    const repeat_frame_bytes = switch (repeat_frame) {
+        .frame => |frame| frame.bytes,
+        .skippable => return error.ZstdNativeFrameProbeMismatch,
+    };
+    const repeat_boundary_block = try vort.zstdInspectNativeFrameFirstBlock(repeat_frame_bytes);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(repeat_frame_bytes, repeat_boundary_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeConcatenatedFrameSize(stream));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameInto(stream, output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, stream));
 }
 
 fn expect(ok: bool) !void {
