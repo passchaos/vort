@@ -2356,6 +2356,17 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         if (i % 97 == 0) byte.* = @intCast((i * 17 + 3) & 0xff);
     }
 
+    const boundary_payload_len = std.compress.zstd.block_size_max + 1;
+    const boundary_multiblock = try allocator.alloc(u8, boundary_payload_len);
+    defer allocator.free(boundary_multiblock);
+    for (boundary_multiblock, 0..) |*byte, i| {
+        // The +1 boundary catches off-by-one mistakes in frame/block walking:
+        // libzstd must emit a second block whose decoded contribution is tiny,
+        // while Vort's native APIs still need to account for it across sized,
+        // unsized, checksummed, incremental, and chunked decode paths.
+        byte.* = @intCast((i * 73 + i / 257) & 0xff);
+    }
+
     const large_payload_len = std.compress.zstd.block_size_max + 8192;
     const large_multiblock = try allocator.alloc(u8, large_payload_len);
     defer allocator.free(large_multiblock);
@@ -2385,6 +2396,7 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         .{ .payload = &binary_mix, .min_blocks = 1 },
         .{ .payload = &sparse_zero, .min_blocks = 1 },
         .{ .payload = &randomish, .min_blocks = 1 },
+        .{ .payload = boundary_multiblock, .min_blocks = 2 },
         .{ .payload = large_multiblock, .min_blocks = 2 },
     };
     const levels = [_]c_int{ 1, 9, 19 };
