@@ -2489,7 +2489,7 @@ fn checkLibZstdGeneratedLibraryFrame(
 
     if (min_blocks > 1) {
         try checkTruncatedLibZstdGeneratedFrameApis(allocator, payload, encoded);
-        checked += 1;
+        checked += 2;
     }
     return checked;
 }
@@ -2567,6 +2567,17 @@ fn checkTruncatedLibZstdGeneratedFrameApis(allocator: std.mem.Allocator, payload
 
     try checkTruncatedLibZstdGeneratedIncrementalApis(allocator, payload, truncated);
     try checkTruncatedLibZstdGeneratedChunkedApis(allocator, payload, truncated);
+
+    const first_block_payload_truncated = try firstBlockPayloadTruncatedFrame(frame);
+    try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeStream(first_block_payload_truncated));
+    try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeFrameBlocks(first_block_payload_truncated));
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSizeLimited(first_block_payload_truncated, payload.len));
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(first_block_payload_truncated, into));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAllocLimited(allocator, first_block_payload_truncated, payload.len));
+    try expectError(error.TruncatedFrame, reusable.decodedSizeLimited(first_block_payload_truncated, payload.len));
+    try expectError(error.TruncatedFrame, reusable.decodeIntoSlice(first_block_payload_truncated, into));
+    try checkTruncatedLibZstdGeneratedIncrementalApis(allocator, payload, first_block_payload_truncated);
+    try checkTruncatedLibZstdGeneratedChunkedApis(allocator, payload, first_block_payload_truncated);
 }
 
 fn checkTruncatedLibZstdGeneratedIncrementalApis(allocator: std.mem.Allocator, payload: []const u8, truncated: []const u8) !void {
@@ -2612,6 +2623,12 @@ fn checkTruncatedLibZstdGeneratedChunkedApis(allocator: std.mem.Allocator, paylo
     try expectAllocError(allocator, error.TruncatedFrame, decoder.decodeChunksAllocLimited(&chunks, join, payload.len));
     try expectError(error.TruncatedFrame, decoder.decodeChunksIntoSlice(&chunks, join, into));
     try expectError(error.TruncatedFrame, decoder.decodeChunksIntoSliceExactSize(&chunks, join, into, payload.len));
+}
+
+fn firstBlockPayloadTruncatedFrame(frame: []const u8) ![]const u8 {
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(frame);
+    if (first_block.last or first_block.payload_len == 0) return error.ZstdNativeFrameProbeMismatch;
+    return frame[0 .. first_block.payload_offset + first_block.payload_len - 1];
 }
 
 fn checkChunkedFrameLibraryApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
