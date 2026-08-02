@@ -2893,6 +2893,32 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &rle_then_treeless_without_tree));
     checked += 1;
 
+    const tree_then_new_frame_treeless_hex =
+        "28b52ffd00680d0200e2c30d1290cf016c3325f0fdb0cddd2ce10b3339ce4e20b" ++
+        "fb1a5123a279f76cdb7192d3a14f27ba43cef2102b95c08d2f8fea2efd493d" ++
+        "fe58e0301007e7f411fa028b52ffd200325000033400001";
+    var tree_then_new_frame_treeless: [tree_then_new_frame_treeless_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&tree_then_new_frame_treeless, tree_then_new_frame_treeless_hex);
+    var boundary_iterator = vort.zstdIterateNativeStream(&tree_then_new_frame_treeless);
+    const tree_frame = (try boundary_iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    const treeless_frame = (try boundary_iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    try expect((try boundary_iterator.next()) == null);
+    const treeless_frame_bytes = switch (treeless_frame) {
+        .frame => |frame| frame.bytes,
+        .skippable => return error.ZstdNativeFrameProbeMismatch,
+    };
+    switch (tree_frame) {
+        .frame => {},
+        .skippable => return error.ZstdNativeFrameProbeMismatch,
+    }
+    const treeless_boundary_block = try vort.zstdInspectNativeFrameFirstBlock(treeless_frame_bytes);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(treeless_frame_bytes, treeless_boundary_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeConcatenatedFrameSize(&tree_then_new_frame_treeless));
+    var boundary_output: [8192]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameInto(&tree_then_new_frame_treeless, &boundary_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, &tree_then_new_frame_treeless));
+    checked += 1;
+
     return checked;
 }
 
