@@ -3174,13 +3174,41 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
         },
     });
     defer allocator.free(tables_skip_repeat);
-    const skip_summary = try vort.zstdSummarizeNativeStream(tables_skip_repeat);
-    try expect(skip_summary.frame_count == 2);
-    try expect(skip_summary.skippable_frame_count == 1);
-    try expect(skip_summary.skippable_payload_bytes == "state-boundary".len);
-    try expectError(error.CorruptFrame, vort.zstdDecodedNativeConcatenatedFrameSize(tables_skip_repeat));
-    try expectError(error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameInto(tables_skip_repeat, &repeat_boundary_output));
-    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, tables_skip_repeat));
+    try expectSkippableRepeatBoundaryError(allocator, tables_skip_repeat, "state-boundary".len, &repeat_boundary_output);
+    checked += 1;
+
+    const tables_skip_offset_repeat = try std.mem.concat(allocator, u8, &.{
+        &[_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x0e,
+            0x45, 0x00, 0x00, 0x09, 'a',  0x01,
+            0x54, 0x01, 0x00, 0x0a, 0x01,
+        },
+        skip_between_tables_and_repeat,
+        &[_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x04,
+            0x3d, 0x00, 0x00, 0x09, 'a',  0x01,
+            0x74, 0x00, 0x00, 0x01,
+        },
+    });
+    defer allocator.free(tables_skip_offset_repeat);
+    try expectSkippableRepeatBoundaryError(allocator, tables_skip_offset_repeat, "state-boundary".len, &repeat_boundary_output);
+    checked += 1;
+
+    const tables_skip_match_repeat = try std.mem.concat(allocator, u8, &.{
+        &[_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x0e,
+            0x45, 0x00, 0x00, 0x09, 'a',  0x01,
+            0x54, 0x01, 0x00, 0x0a, 0x01,
+        },
+        skip_between_tables_and_repeat,
+        &[_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x04,
+            0x3d, 0x00, 0x00, 0x09, 'a',  0x01,
+            0x5c, 0x00, 0x00, 0x01,
+        },
+    });
+    defer allocator.free(tables_skip_match_repeat);
+    try expectSkippableRepeatBoundaryError(allocator, tables_skip_match_repeat, "state-boundary".len, &repeat_boundary_output);
     checked += 1;
 
     return checked;
@@ -3318,6 +3346,16 @@ fn expectTwoFrameRepeatBoundaryError(allocator: std.mem.Allocator, stream: []con
     };
     const repeat_boundary_block = try vort.zstdInspectNativeFrameFirstBlock(repeat_frame_bytes);
     try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(repeat_frame_bytes, repeat_boundary_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeConcatenatedFrameSize(stream));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameInto(stream, output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, stream));
+}
+
+fn expectSkippableRepeatBoundaryError(allocator: std.mem.Allocator, stream: []const u8, skippable_payload_len: usize, output: []u8) !void {
+    const summary = try vort.zstdSummarizeNativeStream(stream);
+    try expect(summary.frame_count == 2);
+    try expect(summary.skippable_frame_count == 1);
+    try expect(summary.skippable_payload_bytes == skippable_payload_len);
     try expectError(error.CorruptFrame, vort.zstdDecodedNativeConcatenatedFrameSize(stream));
     try expectError(error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameInto(stream, output));
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, stream));
