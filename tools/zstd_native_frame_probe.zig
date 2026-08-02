@@ -2944,6 +2944,31 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, &tables_then_new_frame_repeat));
     checked += 1;
 
+    const skip_between_tables_and_repeat = try vort.zstdEncodeSkippableFrameAlloc(allocator, 2, "state-boundary");
+    defer allocator.free(skip_between_tables_and_repeat);
+    const tables_skip_repeat = try std.mem.concat(allocator, u8, &.{
+        &[_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x0e,
+            0x45, 0x00, 0x00, 0x09, 'a',  0x01,
+            0x54, 0x01, 0x00, 0x0a, 0x01,
+        },
+        skip_between_tables_and_repeat,
+        &[_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x04,
+            0x2d, 0x00, 0x00, 0x09, 'a',  0x01,
+            0xfc, 0x01,
+        },
+    });
+    defer allocator.free(tables_skip_repeat);
+    const skip_summary = try vort.zstdSummarizeNativeStream(tables_skip_repeat);
+    try expect(skip_summary.frame_count == 2);
+    try expect(skip_summary.skippable_frame_count == 1);
+    try expect(skip_summary.skippable_payload_bytes == "state-boundary".len);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeConcatenatedFrameSize(tables_skip_repeat));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameInto(tables_skip_repeat, &repeat_boundary_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, tables_skip_repeat));
+    checked += 1;
+
     return checked;
 }
 
