@@ -94,6 +94,9 @@ pub fn main(init: std.process.Init) !void {
         try checkRepeatSequenceTablesAcrossRleBlock(init.gpa);
         checked += 1;
         non_lib_generated_cases += 1;
+        try checkRepeatSequenceTablesAcrossRawAndRleBlocks(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
         try checkLiteralLengthCompressedThenRepeatedSequenceTables(init.gpa);
         checked += 1;
         non_lib_generated_cases += 1;
@@ -2290,6 +2293,69 @@ fn setZstdProbeBlockPayloadLen(frame: []u8, payload_len: usize) void {
 fn setZstdProbeBlockPayloadLenAt(frame: []u8, header_offset: usize, last: bool, payload_len: usize) void {
     const header: u24 = @intCast((payload_len << 3) | (2 << 1) | @intFromBool(last));
     std.mem.writeInt(u24, frame[header_offset..][0..3], header, .little);
+}
+
+fn checkRepeatSequenceTablesAcrossRawAndRleBlocks(allocator: std.mem.Allocator) !void {
+    // Raw and RLE blocks may appear back-to-back between a compressed table
+    // definition and a later Repeat_Mode block. This fixture keeps that replay
+    // state visible through public APIs after crossing both non-compressed block
+    // kinds in one frame, rather than only one at a time.
+    const expected = ("a" ** 132) ++ "RAW" ++ ("R" ** 3) ++ ("a" ** 132);
+    const frame_hex = "28b52ffd600e00440000096101500100002a1800005241571a000052350000096101fc002a";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+    defer allocator.free(lib_decoded);
+    try expectEqualSlices(expected, lib_decoded);
+    try expect((try vort.zstdDecodedFrameSize(&frame)) == expected.len);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .compressed);
+    try expect(!first_block.last);
+    const first_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    try expect(first_modes.literal_length_mode == .rle);
+    try expect(first_modes.offset_mode == .rle);
+    try expect(first_modes.match_length_mode == .predefined);
+
+    const raw_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    try expect(raw_block.block_type == .raw);
+    try expect(!raw_block.last);
+
+    const rle_block = try vort.zstdInspectNativeFrameBlockAt(&frame, raw_block.next_header_offset);
+    try expect(rle_block.block_type == .rle);
+    try expect(!rle_block.last);
+
+    const repeat_block = try vort.zstdInspectNativeFrameBlockAt(&frame, rle_block.next_header_offset);
+    try expect(repeat_block.block_type == .compressed);
+    try expect(repeat_block.last);
+    const repeat_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, repeat_block);
+    try expect(repeat_modes.literal_length_mode == .repeat);
+    try expect(repeat_modes.offset_mode == .repeat);
+    try expect(repeat_modes.match_length_mode == .repeat);
+
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
+    try expect(summary.block_count == 4);
+    try expect(summary.compressed_block_count == 2);
+    try expect(summary.raw_block_count == 1);
+    try expect(summary.rle_block_count == 1);
+
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == expected.len);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len)) == expected.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len - 1));
+
+    const native_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(native_decoded);
+    try expectEqualSlices(expected, native_decoded);
+    try checkIncrementalFrameLibraryApis(allocator, expected, &frame);
+    try checkChunkedFrameLibraryApis(allocator, expected, &frame);
+
+    var into: [expected.len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameIntoExactSize(&frame, &into, expected.len);
+    try expect(written == expected.len);
+    try expectEqualSlices(expected, into[0..written]);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameIntoExactSize(&frame, into[0 .. into.len - 1], expected.len));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoExactSize(&frame, &into, expected.len - 1));
 }
 
 fn checkLiteralLengthCompressedThenRepeatedSequenceTables(allocator: std.mem.Allocator) !void {
