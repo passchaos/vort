@@ -819,6 +819,14 @@ pub fn build(b: *std.Build) void {
     const zstd_native_frame_probe_step = b.step("run-zstd-native-frame-probe", "Run library probe for native Zstd frame APIs");
     zstd_native_frame_probe_step.dependOn(&run_zstd_native_frame_probe.step);
 
+    const run_zstd_native_frame_lib_generated_probe = b.addRunArtifact(zstd_native_frame_probe_exe);
+    run_zstd_native_frame_lib_generated_probe.addArgs(&.{ "--only", "lib-generated" });
+    const zstd_native_frame_lib_generated_probe_step = b.step(
+        "run-zstd-native-frame-lib-generated-probe",
+        "Run libzstd-generated differential probe for native Zstd frame APIs",
+    );
+    zstd_native_frame_lib_generated_probe_step.dependOn(&run_zstd_native_frame_lib_generated_probe.step);
+
     const lz4_native_probe_exe = b.addExecutable(.{
         .name = "lz4-native-probe",
         .root_module = b.createModule(.{
