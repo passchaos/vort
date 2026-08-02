@@ -19,6 +19,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkTreelessRepeatHuffmanAcrossRawBlock(init.gpa);
     checked += 1;
+    try checkTreelessRepeatHuffmanAcrossRleBlock(init.gpa);
+    checked += 1;
     try checkRepeatOffsetAdditionalBits(init.gpa);
     checked += 1;
     try checkRepeatOffsetZeroLiteralSelector(init.gpa);
@@ -99,10 +101,10 @@ pub fn main(init: std.process.Init) !void {
         "sequence-tables",
         "skippable",
     }, &.{
-        .{ .capability = "chunked", .cases = lib_generated_cases + 8 },
-        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 8 },
+        .{ .capability = "chunked", .cases = lib_generated_cases + 9 },
+        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 9 },
         .{ .capability = "fse-repeat", .cases = 5 },
-        .{ .capability = "incremental", .cases = lib_generated_cases + 8 },
+        .{ .capability = "incremental", .cases = lib_generated_cases + 9 },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });
     try stdout.flush();
@@ -537,6 +539,62 @@ fn checkTreelessRepeatHuffmanAcrossRawBlock(allocator: std.mem.Allocator) !void 
     try expect(summary.compressed_block_count == 2);
     try expect(summary.raw_block_count == 1);
     try expect(summary.rle_block_count == 0);
+
+    const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+    defer allocator.free(lib_decoded);
+    try expectEqualSlices(payload, lib_decoded);
+    try expect((try vort.zstdDecodedFrameSize(&frame)) >= payload.len);
+
+    const native_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(native_decoded);
+    try expectEqualSlices(payload, native_decoded);
+    try checkIncrementalFrameLibraryApis(allocator, payload, &frame);
+    try checkChunkedFrameLibraryApis(allocator, payload, &frame);
+
+    var into: [payload.len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameIntoExactSize(&frame, &into, payload.len);
+    try expect(written == payload.len);
+    try expectEqualSlices(payload, into[0..written]);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameIntoExactSize(&frame, into[0 .. into.len - 1], payload.len));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoExactSize(&frame, &into, payload.len - 1));
+}
+
+fn checkTreelessRepeatHuffmanAcrossRleBlock(allocator: std.mem.Allocator) !void {
+    // RLE blocks also must not clear the previous Huffman tree used by later
+    // treeless literals. This is the RLE sibling of the raw-block fixture above,
+    // pinning both non-compressed block flavors through public APIs.
+    const unit = "{\"key\":\"value\",\"number\":123,\"array\":[1,2,3],\"text\":\"abcdefg\"}\n";
+    const payload = (unit ** 100) ++ ("R" ** 3) ++ (unit ** 100);
+    const frame_hex =
+        "28b52ffd00680c0200e2c30d1290cf016c3325f0fdb0cddd2ce10b3339ce4e20b" ++
+        "fb1a5123a279f76cdb7192d3a14f27ba43cef2102b95c08d2f8fea2efd493d" ++
+        "fe58e0301007e7f411fa01a000052750100e3030920bfb1a5123a279f76c" ++
+        "db7192d3a14f27ba43cef2102b95c08d2f8fea2efd493dfe58e0301007e7f411fa0";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .compressed);
+    try expect(!first_block.last);
+    const first_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    try expect(first_modes.literals_kind == .compressed);
+
+    const rle_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    try expect(rle_block.block_type == .rle);
+    try expect(!rle_block.last);
+
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, rle_block.next_header_offset);
+    try expect(second_block.block_type == .compressed);
+    try expect(second_block.last);
+    const second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+    try expect(second_modes.literals_kind == .treeless);
+    try expect(second_modes.regenerated_literals_size == first_modes.regenerated_literals_size);
+
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
+    try expect(summary.block_count == 3);
+    try expect(summary.compressed_block_count == 2);
+    try expect(summary.raw_block_count == 0);
+    try expect(summary.rle_block_count == 1);
 
     const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
     defer allocator.free(lib_decoded);
