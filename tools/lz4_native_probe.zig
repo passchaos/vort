@@ -1327,6 +1327,44 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
     if (!std.mem.eql(u8, "output", incremental_too_large.diagnostics().last_error_phase_name)) return error.Lz4ProbeMismatch;
 }
 
+fn expectLz4ConcatenatedPayloadApis(allocator: std.mem.Allocator, stream: []const u8, payload: []const u8) !void {
+    if ((try vort.lz4DecodedNativeConcatenatedFrameSize(stream)) != payload.len) return error.Lz4ProbeSizeMismatch;
+    if ((try vort.lz4DecodedNativeConcatenatedFrameSizeLimited(stream, payload.len)) != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (payload.len != 0) try expectError(error.OutputLimitExceeded, vort.lz4DecodedNativeConcatenatedFrameSizeLimited(stream, payload.len - 1));
+
+    const decoded = try vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, payload.len);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, payload, decoded)) return error.Lz4ProbeMismatch;
+    try expectAllocError(allocator, error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, payload.len + 1));
+
+    const into = try allocator.alloc(u8, payload.len + 1);
+    defer allocator.free(into);
+    const written = try vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, into[0..payload.len], payload.len);
+    if (written != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, payload, into[0..payload.len])) return error.Lz4ProbeMismatch;
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, into, payload.len + 1));
+    if (payload.len != 0) try expectError(error.OutputTooSmall, vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, into[0 .. payload.len - 1], payload.len));
+
+    const split_a: usize = @min(stream.len, stream.len / 3 + 1);
+    const split_b: usize = @min(stream.len, split_a + stream.len / 3 + 1);
+    const chunks = [_][]const u8{ stream[0..split_a], stream[split_a..split_b], stream[split_b..] };
+    const join = try allocator.alloc(u8, stream.len);
+    defer allocator.free(join);
+    if ((try vort.lz4DecodedNativeConcatenatedFrameChunksSize(&chunks, join)) != payload.len) return error.Lz4ProbeSizeMismatch;
+    const chunked_written = try vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, into[0..payload.len], payload.len);
+    if (chunked_written != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, payload, into[0..payload.len])) return error.Lz4ProbeMismatch;
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, into, payload.len + 1));
+
+    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    if ((try decoder.decodedConcatenatedSize(stream)) != payload.len) return error.Lz4ProbeSizeMismatch;
+    const reusable_written = try decoder.decodeConcatenatedIntoSliceExactSize(stream, into[0..payload.len], payload.len);
+    if (reusable_written != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, payload, into[0..payload.len])) return error.Lz4ProbeMismatch;
+    try expectError(error.SizeMismatch, decoder.decodeConcatenatedIntoSliceExactSize(stream, into, payload.len + 1));
+}
+
 fn checkSkippableThenEmptyFrame(allocator: std.mem.Allocator) !void {
     const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 4, "metadata-before-empty");
     defer allocator.free(skip);
@@ -1343,35 +1381,8 @@ fn checkSkippableThenEmptyFrame(allocator: std.mem.Allocator) !void {
     if (summary.frame_count != 1) return error.Lz4ProbeMismatch;
     if (summary.skippable_frame_count != 1) return error.Lz4ProbeMismatch;
     if (summary.skippable_payload_bytes != "metadata-before-empty".len) return error.Lz4ProbeSizeMismatch;
-    if ((try vort.lz4DecodedNativeConcatenatedFrameSize(stream)) != 0) return error.Lz4ProbeSizeMismatch;
-    if ((try vort.lz4DecodedNativeConcatenatedFrameSizeLimited(stream, 0)) != 0) return error.Lz4ProbeSizeMismatch;
-
-    const decoded = try vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, 0);
-    defer allocator.free(decoded);
-    if (decoded.len != 0) return error.Lz4ProbeSizeMismatch;
-    try expectAllocError(allocator, error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, 1));
-
+    try expectLz4ConcatenatedPayloadApis(allocator, stream, "");
     var into: [1]u8 = undefined;
-    const written = try vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, &into, 0);
-    if (written != 0) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, &into, 1));
-
-    const split_a: usize = @min(stream.len, skip.len + 2);
-    const split_b: usize = @min(stream.len, split_a + 5);
-    const chunks = [_][]const u8{ stream[0..split_a], stream[split_a..split_b], stream[split_b..] };
-    const join = try allocator.alloc(u8, stream.len);
-    defer allocator.free(join);
-    if ((try vort.lz4DecodedNativeConcatenatedFrameChunksSize(&chunks, join)) != 0) return error.Lz4ProbeSizeMismatch;
-    const chunked_written = try vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, &into, 0);
-    if (chunked_written != 0) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, &into, 1));
-
-    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
-    defer decoder.deinit();
-    if ((try decoder.decodedConcatenatedSize(stream)) != 0) return error.Lz4ProbeSizeMismatch;
-    const reusable_written = try decoder.decodeConcatenatedIntoSliceExactSize(stream, &into, 0);
-    if (reusable_written != 0) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.SizeMismatch, decoder.decodeConcatenatedIntoSliceExactSize(stream, &into, 1));
 
     var incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = 0,
@@ -1410,35 +1421,8 @@ fn checkEmptyFrameThenSkippable(allocator: std.mem.Allocator) !void {
     if (summary.frame_count != 1) return error.Lz4ProbeMismatch;
     if (summary.skippable_frame_count != 1) return error.Lz4ProbeMismatch;
     if (summary.skippable_payload_bytes != "metadata-after-empty".len) return error.Lz4ProbeSizeMismatch;
-    if ((try vort.lz4DecodedNativeConcatenatedFrameSize(stream)) != 0) return error.Lz4ProbeSizeMismatch;
-    if ((try vort.lz4DecodedNativeConcatenatedFrameSizeLimited(stream, 0)) != 0) return error.Lz4ProbeSizeMismatch;
-
-    const decoded = try vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, 0);
-    defer allocator.free(decoded);
-    if (decoded.len != 0) return error.Lz4ProbeSizeMismatch;
-    try expectAllocError(allocator, error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, 1));
-
+    try expectLz4ConcatenatedPayloadApis(allocator, stream, "");
     var into: [1]u8 = undefined;
-    const written = try vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, &into, 0);
-    if (written != 0) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, &into, 1));
-
-    const split_a: usize = @min(stream.len, empty.len / 2 + 1);
-    const split_b: usize = @min(stream.len, empty.len + 4);
-    const chunks = [_][]const u8{ stream[0..split_a], stream[split_a..split_b], stream[split_b..] };
-    const join = try allocator.alloc(u8, stream.len);
-    defer allocator.free(join);
-    if ((try vort.lz4DecodedNativeConcatenatedFrameChunksSize(&chunks, join)) != 0) return error.Lz4ProbeSizeMismatch;
-    const chunked_written = try vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, &into, 0);
-    if (chunked_written != 0) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, &into, 1));
-
-    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
-    defer decoder.deinit();
-    if ((try decoder.decodedConcatenatedSize(stream)) != 0) return error.Lz4ProbeSizeMismatch;
-    const reusable_written = try decoder.decodeConcatenatedIntoSliceExactSize(stream, &into, 0);
-    if (reusable_written != 0) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.SizeMismatch, decoder.decodeConcatenatedIntoSliceExactSize(stream, &into, 1));
 
     var incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = 0,
@@ -1490,38 +1474,7 @@ fn checkEmptySkippableThenPayloadFrame(allocator: std.mem.Allocator) !void {
     if (summary.frame_count != 2) return error.Lz4ProbeMismatch;
     if (summary.skippable_frame_count != 1) return error.Lz4ProbeMismatch;
     if (summary.skippable_payload_bytes != "metadata-between-frames".len) return error.Lz4ProbeSizeMismatch;
-    if ((try vort.lz4DecodedNativeConcatenatedFrameSize(stream)) != payload.len) return error.Lz4ProbeSizeMismatch;
-    if ((try vort.lz4DecodedNativeConcatenatedFrameSizeLimited(stream, payload.len)) != payload.len) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.OutputLimitExceeded, vort.lz4DecodedNativeConcatenatedFrameSizeLimited(stream, payload.len - 1));
-
-    const decoded = try vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, payload.len);
-    defer allocator.free(decoded);
-    if (!std.mem.eql(u8, payload, decoded)) return error.Lz4ProbeMismatch;
-    try expectAllocError(allocator, error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, payload.len - 1));
-
-    var into: [payload.len]u8 = undefined;
-    const written = try vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, &into, payload.len);
-    if (written != payload.len) return error.Lz4ProbeSizeMismatch;
-    if (!std.mem.eql(u8, payload, &into)) return error.Lz4ProbeMismatch;
-    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, into[0 .. into.len - 1], payload.len));
-    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, &into, payload.len - 1));
-
-    const split_a: usize = @min(stream.len, empty.len + 2);
-    const split_b: usize = @min(stream.len, empty.len + skip.len / 2 + 1);
-    const chunks = [_][]const u8{ stream[0..split_a], stream[split_a..split_b], stream[split_b..] };
-    const join = try allocator.alloc(u8, stream.len);
-    defer allocator.free(join);
-    if ((try vort.lz4DecodedNativeConcatenatedFrameChunksSize(&chunks, join)) != payload.len) return error.Lz4ProbeSizeMismatch;
-    const chunked_written = try vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, &into, payload.len);
-    if (chunked_written != payload.len) return error.Lz4ProbeSizeMismatch;
-    if (!std.mem.eql(u8, payload, &into)) return error.Lz4ProbeMismatch;
-
-    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
-    defer decoder.deinit();
-    if ((try decoder.decodedConcatenatedSize(stream)) != payload.len) return error.Lz4ProbeSizeMismatch;
-    const reusable_written = try decoder.decodeConcatenatedIntoSliceExactSize(stream, &into, payload.len);
-    if (reusable_written != payload.len) return error.Lz4ProbeSizeMismatch;
-    if (!std.mem.eql(u8, payload, &into)) return error.Lz4ProbeMismatch;
+    try expectLz4ConcatenatedPayloadApis(allocator, stream, payload);
 
     var incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = payload.len,
@@ -1564,38 +1517,7 @@ fn checkPayloadSkippableThenEmptyFrame(allocator: std.mem.Allocator) !void {
     if (summary.frame_count != 2) return error.Lz4ProbeMismatch;
     if (summary.skippable_frame_count != 1) return error.Lz4ProbeMismatch;
     if (summary.skippable_payload_bytes != "metadata-after-payload".len) return error.Lz4ProbeSizeMismatch;
-    if ((try vort.lz4DecodedNativeConcatenatedFrameSize(stream)) != payload.len) return error.Lz4ProbeSizeMismatch;
-    if ((try vort.lz4DecodedNativeConcatenatedFrameSizeLimited(stream, payload.len)) != payload.len) return error.Lz4ProbeSizeMismatch;
-    try expectError(error.OutputLimitExceeded, vort.lz4DecodedNativeConcatenatedFrameSizeLimited(stream, payload.len - 1));
-
-    const decoded = try vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, payload.len);
-    defer allocator.free(decoded);
-    if (!std.mem.eql(u8, payload, decoded)) return error.Lz4ProbeMismatch;
-    try expectAllocError(allocator, error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, payload.len + 1));
-
-    var into: [payload.len + 1]u8 = undefined;
-    const written = try vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, into[0..payload.len], payload.len);
-    if (written != payload.len) return error.Lz4ProbeSizeMismatch;
-    if (!std.mem.eql(u8, payload, into[0..payload.len])) return error.Lz4ProbeMismatch;
-    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, into[0 .. payload.len - 1], payload.len));
-    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, &into, payload.len + 1));
-
-    const split_a: usize = @min(stream.len, frame.len + 3);
-    const split_b: usize = @min(stream.len, frame.len + skip.len / 2 + 1);
-    const chunks = [_][]const u8{ stream[0..split_a], stream[split_a..split_b], stream[split_b..] };
-    const join = try allocator.alloc(u8, stream.len);
-    defer allocator.free(join);
-    if ((try vort.lz4DecodedNativeConcatenatedFrameChunksSize(&chunks, join)) != payload.len) return error.Lz4ProbeSizeMismatch;
-    const chunked_written = try vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, into[0..payload.len], payload.len);
-    if (chunked_written != payload.len) return error.Lz4ProbeSizeMismatch;
-    if (!std.mem.eql(u8, payload, into[0..payload.len])) return error.Lz4ProbeMismatch;
-
-    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
-    defer decoder.deinit();
-    if ((try decoder.decodedConcatenatedSize(stream)) != payload.len) return error.Lz4ProbeSizeMismatch;
-    const reusable_written = try decoder.decodeConcatenatedIntoSliceExactSize(stream, into[0..payload.len], payload.len);
-    if (reusable_written != payload.len) return error.Lz4ProbeSizeMismatch;
-    if (!std.mem.eql(u8, payload, into[0..payload.len])) return error.Lz4ProbeMismatch;
+    try expectLz4ConcatenatedPayloadApis(allocator, stream, payload);
 
     var incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = payload.len,
