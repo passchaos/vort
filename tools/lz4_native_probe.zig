@@ -2003,6 +2003,19 @@ fn checkSkippableMalformedStreams(allocator: std.mem.Allocator) !usize {
     } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
     checked += 1;
 
+    var huge_skip = try allocator.alloc(u8, 12);
+    defer allocator.free(huge_skip);
+    std.mem.writeInt(u32, huge_skip[0..4], 0x184d2a50, .little);
+    std.mem.writeInt(u32, huge_skip[4..8], std.math.maxInt(u32), .little);
+    @memset(huge_skip[8..], 'x');
+    try expectError(error.TruncatedFrame, vort.lz4InspectNativeSkippableFrame(huge_skip));
+    try expectNativeConcatenatedStreamError(allocator, huge_skip, error.TruncatedFrame);
+    var huge_skip_iter = vort.lz4IterateNativeStream(huge_skip);
+    if (huge_skip_iter.next()) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
+    checked += 1;
+
     return checked;
 }
 
