@@ -827,6 +827,14 @@ pub fn build(b: *std.Build) void {
     );
     zstd_native_frame_lib_generated_probe_step.dependOn(&run_zstd_native_frame_lib_generated_probe.step);
 
+    const run_zstd_native_frame_handcrafted_probe = b.addRunArtifact(zstd_native_frame_probe_exe);
+    run_zstd_native_frame_handcrafted_probe.addArgs(&.{ "--only", "handcrafted" });
+    const zstd_native_frame_handcrafted_probe_step = b.step(
+        "run-zstd-native-frame-handcrafted-probe",
+        "Run handwritten fixture probe for native Zstd frame APIs",
+    );
+    zstd_native_frame_handcrafted_probe_step.dependOn(&run_zstd_native_frame_handcrafted_probe.step);
+
     const lz4_native_probe_exe = b.addExecutable(.{
         .name = "lz4-native-probe",
         .root_module = b.createModule(.{

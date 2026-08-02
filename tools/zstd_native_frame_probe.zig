@@ -9,7 +9,7 @@ pub fn main(init: std.process.Init) !void {
     const filter = try parseProbeFilter(init);
     var checked: usize = 0;
     var non_lib_generated_cases: usize = 0;
-    if (filter.runGeneral()) {
+    if (filter.runHandcrafted()) {
         try checkDirectHuffmanBoundaries(init.gpa);
         checked += 1;
         non_lib_generated_cases += 1;
@@ -119,9 +119,9 @@ pub fn main(init: std.process.Init) !void {
         checked += 1;
         non_lib_generated_cases += 1;
     }
-    const lib_generated_cases = try checkLibZstdGeneratedLibraryFrames(init.gpa);
+    const lib_generated_cases = if (filter.runLibGenerated()) try checkLibZstdGeneratedLibraryFrames(init.gpa) else 0;
     checked += lib_generated_cases;
-    if (filter.runGeneral()) {
+    if (filter.runHandcrafted()) {
         try checkSplitHeaderIncremental(init.gpa);
         checked += 1;
         non_lib_generated_cases += 1;
@@ -139,8 +139,8 @@ pub fn main(init: std.process.Init) !void {
         non_lib_generated_cases += handcrafted_header_cases;
     }
 
-    const general_chunked_cases: usize = if (filter.runGeneral()) 10 else 0;
-    const general_fse_repeat_cases: usize = if (filter.runGeneral()) 5 else 0;
+    const general_chunked_cases: usize = if (filter.runHandcrafted()) 10 else 0;
+    const general_fse_repeat_cases: usize = if (filter.runHandcrafted()) 5 else 0;
 
     try stdout.print("zstd_native_frame_probe_ok cases={d}\n", .{checked});
     try printCoverage(stdout, "zstd_native_frame_probe", checked, &.{
@@ -169,10 +169,15 @@ pub fn main(init: std.process.Init) !void {
 
 const ProbeFilter = enum {
     all,
+    handcrafted,
     lib_generated,
 
-    fn runGeneral(self: ProbeFilter) bool {
-        return self == .all;
+    fn runHandcrafted(self: ProbeFilter) bool {
+        return self == .all or self == .handcrafted;
+    }
+
+    fn runLibGenerated(self: ProbeFilter) bool {
+        return self == .all or self == .lib_generated;
     }
 };
 
@@ -187,6 +192,8 @@ fn parseProbeFilter(init: std.process.Init) !ProbeFilter {
             const value = args.next() orelse return error.ZstdNativeFrameProbeMismatch;
             if (std.mem.eql(u8, value, "all")) {
                 filter = .all;
+            } else if (std.mem.eql(u8, value, "handcrafted")) {
+                filter = .handcrafted;
             } else if (std.mem.eql(u8, value, "lib-generated")) {
                 filter = .lib_generated;
             } else {
@@ -196,6 +203,8 @@ fn parseProbeFilter(init: std.process.Init) !ProbeFilter {
             const value = arg["--only=".len..];
             if (std.mem.eql(u8, value, "all")) {
                 filter = .all;
+            } else if (std.mem.eql(u8, value, "handcrafted")) {
+                filter = .handcrafted;
             } else if (std.mem.eql(u8, value, "lib-generated")) {
                 filter = .lib_generated;
             } else {
