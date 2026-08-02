@@ -25,6 +25,7 @@ const invalid_pos = std.math.maxInt(u32);
 // search cheap but avoids truncating those obvious wins.
 const max_chain_depth = 16;
 pub const native_max_chain_depth: u8 = max_chain_depth;
+pub const native_dictionary_window_len: usize = max_block_history_len;
 const good_match_len = 64;
 const lazy_extra_gain = 1;
 
@@ -112,6 +113,17 @@ pub const OwnedNativeDictionary = struct {
 
     pub fn asDictionary(self: OwnedNativeDictionary) NativeDictionary {
         return NativeDictionary.init(self.id, self.content);
+    }
+
+    /// Summarize trained bytes for application-level dictionary catalogs.
+    ///
+    /// The returned metadata intentionally uses the shared 64-bit dictionary
+    /// fingerprint (`DictionaryId`) rather than the frame's 32-bit
+    /// `Dictionary_ID`, so callers can persist richer catalog metadata while
+    /// still converting the owned bytes to a codec dictionary with
+    /// `asDictionary`.
+    pub fn metadata(self: OwnedNativeDictionary) dictionary_mod.Metadata {
+        return .fromBytes(self.content, native_dictionary_window_len);
     }
 
     pub fn deinit(self: OwnedNativeDictionary, allocator: std.mem.Allocator) void {
@@ -6565,7 +6577,11 @@ test "lz4 native dictionary training returns owned bytes and stable id" {
     });
     defer trained.deinit(std.testing.allocator);
     const dict = trained.asDictionary();
+    const metadata = trained.metadata();
     try std.testing.expectEqual(NativeDictionary.derivedId(dict.content), dict.id);
+    try std.testing.expectEqual(dictionary_mod.DictionaryId.fromBytes(dict.content).asInt(), metadata.id.asInt());
+    try std.testing.expectEqual(dict.content.len, metadata.content_len);
+    try std.testing.expectEqual(@as(usize, max_block_history_len), metadata.window_len);
     try std.testing.expect(dict.content.len > 0);
     try std.testing.expect(dict.content.len <= 64);
 

@@ -129,10 +129,14 @@ fn checkTrainedDictionaryApis(allocator: std.mem.Allocator) !void {
     });
     defer trained.deinit(allocator);
     const dict = trained.asDictionary();
+    const metadata = trained.metadata();
     const payload = "trained-lz4-prefix alpha trained-lz4-tail payload";
 
     try expect(dict.id == vort.Lz4NativeDictionary.derivedId(dict.content));
     try expect(dict.id != 0);
+    try expect(metadata.id.asInt() == vort.DictionaryId.fromBytes(dict.content).asInt());
+    try expect(metadata.content_len == dict.content.len);
+    try expect(metadata.window_len == vort.lz4NativeDictionaryWindowLen);
     try expect(dict.content.len > 0);
     try expect(dict.content.len <= 64);
     const match_summary = try vort.summarizeDictionaryMatchesAlloc(allocator, dict.content, payload, 4);

@@ -384,6 +384,7 @@ fn checkTrainedDictionaryApis(allocator: std.mem.Allocator) !void {
     });
     defer trained.deinit(allocator);
     const dict = trained.asDictionary();
+    const metadata = trained.metadata();
     const payload = "pfx-trained-zstd-prefix alpha trained-zstd-tail payload";
     const options: vort.ZstdNativeFrameOptions = .{
         .selection = .literal_only,
@@ -392,6 +393,9 @@ fn checkTrainedDictionaryApis(allocator: std.mem.Allocator) !void {
 
     try expect(dict.id == vort.ZstdNativeDictionary.derivedId(dict.content));
     try expect(dict.id != 0);
+    try expect(metadata.id.asInt() == vort.DictionaryId.fromBytes(dict.content).asInt());
+    try expect(metadata.content_len == dict.content.len);
+    try expect(metadata.window_len == vort.zstdNativeDictionaryWindowLen);
     try expect(dict.content.len > 0);
     try expect(dict.content.len <= 64);
     const match_summary = try vort.summarizeDictionaryMatchesAlloc(allocator, dict.content, payload, 4);

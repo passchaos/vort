@@ -28,6 +28,7 @@ const max_direct_huffman_symbol = 128;
 
 pub const native_max_match_search_budget: usize = mixed_match_path_search_budget;
 pub const native_max_direct_huffman_symbol: u8 = max_direct_huffman_symbol;
+pub const native_dictionary_window_len: usize = std.compress.zstd.default_window_len;
 
 const ll_base = [_]usize{
     0,      1,      2,      3,       4,     5,     6,     7,
@@ -161,6 +162,17 @@ pub const OwnedNativeDictionary = struct {
 
     pub fn asDictionary(self: OwnedNativeDictionary) NativeDictionary {
         return NativeDictionary.init(self.id, self.content);
+    }
+
+    /// Summarize trained bytes for application-level dictionary catalogs.
+    ///
+    /// Zstd frames expose a 32-bit `Dictionary_ID`; this metadata carries the
+    /// shared wider dictionary fingerprint and the decoder window used by the
+    /// native Zstd facade so callers can persist enough information to validate
+    /// catalogs before selecting the borrowed dictionary returned by
+    /// `asDictionary`.
+    pub fn metadata(self: OwnedNativeDictionary) dictionary_mod.Metadata {
+        return .fromBytes(self.content, native_dictionary_window_len);
     }
 
     pub fn deinit(self: OwnedNativeDictionary, allocator: std.mem.Allocator) void {
@@ -13228,7 +13240,11 @@ test "zstd native dictionary training returns owned bytes and stable id" {
     });
     defer trained.deinit(std.testing.allocator);
     const dict = trained.asDictionary();
+    const metadata = trained.metadata();
     try std.testing.expectEqual(NativeDictionary.derivedId(dict.content), dict.id);
+    try std.testing.expectEqual(dictionary_mod.DictionaryId.fromBytes(dict.content).asInt(), metadata.id.asInt());
+    try std.testing.expectEqual(dict.content.len, metadata.content_len);
+    try std.testing.expectEqual(@as(usize, native_dictionary_window_len), metadata.window_len);
     try std.testing.expect(dict.content.len > 0);
     try std.testing.expect(dict.content.len <= 64);
 

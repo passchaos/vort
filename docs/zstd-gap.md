@@ -213,7 +213,8 @@ Current interpretation:
   set by Dictionary_ID, validate dictionary-set catalogs for zero or duplicate
   IDs, and compute dictionary- or dictionary-set-aware frame bounds for
   caller-owned output buffers. Callers can inspect
-  Dictionary_ID metadata before decode. The native writer also exposes a
+  Dictionary_ID metadata before decode, and trained owned dictionaries expose a
+  shared `DictionaryMetadata` summary for caller-managed catalogs. The native writer also exposes a
   block-size option plus a bounded mixed-match search budget for library callers
   that need to trade branch-scored ratio work against encode latency, and the public native stream/block iterators expose
   zero-allocation frame, block, and skippable-frame inspection so future
