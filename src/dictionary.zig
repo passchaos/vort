@@ -9,8 +9,12 @@ const op_match: u8 = 1;
 const metadata_magic = [_]u8{ 'V', 'D', 'M', 'T' };
 const metadata_version: u8 = 0;
 const metadata_header_len: usize = 32;
+const metadata_catalog_magic = [_]u8{ 'V', 'D', 'M', 'C' };
+const metadata_catalog_version: u8 = 0;
+const metadata_catalog_header_len: usize = 16;
 
 pub const metadata_encoded_len: usize = metadata_header_len;
+pub const metadata_catalog_header_encoded_len: usize = metadata_catalog_header_len;
 
 pub const DictionaryId = packed struct(u64) {
     crc32: u32,
@@ -118,6 +122,65 @@ pub fn decodeMetadata(bytes: []const u8) !Metadata {
 
 pub fn decodeMetadataPrefix(bytes: []const u8) !MetadataDecodeResult {
     return Metadata.decodePrefix(bytes);
+}
+
+pub fn encodedMetadataCatalogLen(count: usize) !usize {
+    const body = std.math.mul(usize, count, metadata_encoded_len) catch return error.IntegerOverflow;
+    return std.math.add(usize, metadata_catalog_header_encoded_len, body) catch return error.IntegerOverflow;
+}
+
+pub fn encodeMetadataCatalogInto(metadata: []const Metadata, output: []u8) !usize {
+    const required = try encodedMetadataCatalogLen(metadata.len);
+    if (output.len < required) return error.OutputTooSmall;
+    @memcpy(output[0..4], &metadata_catalog_magic);
+    output[4] = metadata_catalog_version;
+    output[5] = 0;
+    output[6] = 0;
+    output[7] = 0;
+    std.mem.writeInt(u64, output[8..16], std.math.cast(u64, metadata.len) orelse return error.IntegerOverflow, .little);
+    var offset: usize = metadata_catalog_header_encoded_len;
+    for (metadata) |entry| {
+        offset += try entry.encodeInto(output[offset..][0..metadata_encoded_len]);
+    }
+    return required;
+}
+
+pub fn encodeMetadataCatalogAlloc(allocator: std.mem.Allocator, metadata: []const Metadata) ![]u8 {
+    const encoded = try allocator.alloc(u8, try encodedMetadataCatalogLen(metadata.len));
+    errdefer allocator.free(encoded);
+    _ = try encodeMetadataCatalogInto(metadata, encoded);
+    return encoded;
+}
+
+pub fn decodedMetadataCatalogCount(bytes: []const u8) !usize {
+    if (bytes.len < metadata_catalog_header_encoded_len) return error.TruncatedFrame;
+    if (!std.mem.eql(u8, bytes[0..4], &metadata_catalog_magic)) return error.InvalidMagic;
+    if (bytes[4] != metadata_catalog_version) return error.UnsupportedVersion;
+    if (bytes[5] != 0 or bytes[6] != 0 or bytes[7] != 0) return error.CorruptFrame;
+    return std.math.cast(usize, std.mem.readInt(u64, bytes[8..16], .little)) orelse return error.IntegerOverflow;
+}
+
+pub fn decodeMetadataCatalogInto(bytes: []const u8, output: []Metadata) !usize {
+    const count = try decodedMetadataCatalogCount(bytes);
+    if (output.len < count) return error.OutputTooSmall;
+    const required = try encodedMetadataCatalogLen(count);
+    if (bytes.len < required) return error.TruncatedFrame;
+    if (bytes.len != required) return error.TrailingData;
+    var offset: usize = metadata_catalog_header_encoded_len;
+    for (output[0..count]) |*entry| {
+        const result = try Metadata.decodePrefix(bytes[offset..]);
+        entry.* = result.metadata;
+        offset += result.bytes_read;
+    }
+    return count;
+}
+
+pub fn decodeMetadataCatalogAlloc(allocator: std.mem.Allocator, bytes: []const u8) ![]Metadata {
+    const count = try decodedMetadataCatalogCount(bytes);
+    const decoded = try allocator.alloc(Metadata, count);
+    errdefer allocator.free(decoded);
+    _ = try decodeMetadataCatalogInto(bytes, decoded);
+    return decoded;
 }
 
 pub const TrainOptions = struct {
@@ -460,6 +523,91 @@ test "dictionary metadata codec rejects malformed records" {
     var bad_reserved = encoded;
     bad_reserved[5] = 1;
     try std.testing.expectError(error.CorruptFrame, decodeMetadata(&bad_reserved));
+}
+
+test "dictionary metadata catalog codec round trips entries" {
+    const entries = [_]Metadata{
+        Metadata.fromBytes("first dictionary", 64 * 1024),
+        Metadata.fromBytes("second dictionary", 8 * 1024 * 1024),
+    };
+    const expected_len = metadata_catalog_header_encoded_len + entries.len * metadata_encoded_len;
+    try std.testing.expectEqual(expected_len, try encodedMetadataCatalogLen(entries.len));
+
+    const encoded = try encodeMetadataCatalogAlloc(std.testing.allocator, &entries);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(expected_len, encoded.len);
+    try std.testing.expectEqualSlices(u8, &metadata_catalog_magic, encoded[0..4]);
+    try std.testing.expectEqual(metadata_catalog_version, encoded[4]);
+    try std.testing.expectEqual(entries.len, try decodedMetadataCatalogCount(encoded));
+
+    var decoded_into: [entries.len]Metadata = undefined;
+    try std.testing.expectEqual(entries.len, try decodeMetadataCatalogInto(encoded, &decoded_into));
+    for (entries, decoded_into) |expected, actual| {
+        try std.testing.expectEqual(expected.id.asInt(), actual.id.asInt());
+        try std.testing.expectEqual(expected.content_len, actual.content_len);
+        try std.testing.expectEqual(expected.window_len, actual.window_len);
+    }
+
+    const decoded = try decodeMetadataCatalogAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqual(entries.len, decoded.len);
+    for (entries, decoded) |expected, actual| {
+        try std.testing.expectEqual(expected.id.asInt(), actual.id.asInt());
+        try std.testing.expectEqual(expected.content_len, actual.content_len);
+        try std.testing.expectEqual(expected.window_len, actual.window_len);
+    }
+
+    const empty_encoded = try encodeMetadataCatalogAlloc(std.testing.allocator, &.{});
+    defer std.testing.allocator.free(empty_encoded);
+    try std.testing.expectEqual(metadata_catalog_header_encoded_len, empty_encoded.len);
+    try std.testing.expectEqual(@as(usize, 0), try decodedMetadataCatalogCount(empty_encoded));
+    var empty_decoded: [0]Metadata = .{};
+    try std.testing.expectEqual(@as(usize, 0), try decodeMetadataCatalogInto(empty_encoded, &empty_decoded));
+}
+
+test "dictionary metadata catalog codec rejects malformed records" {
+    const entries = [_]Metadata{
+        Metadata.fromBytes("first dictionary", 64 * 1024),
+        Metadata.fromBytes("second dictionary", 8 * 1024 * 1024),
+    };
+    const encoded = try encodeMetadataCatalogAlloc(std.testing.allocator, &entries);
+    defer std.testing.allocator.free(encoded);
+
+    var short_out: [metadata_catalog_header_encoded_len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, encodeMetadataCatalogInto(&entries, &short_out));
+    try std.testing.expectError(error.TruncatedFrame, decodedMetadataCatalogCount(encoded[0 .. metadata_catalog_header_encoded_len - 1]));
+
+    var bad_magic = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_magic);
+    bad_magic[0] = 'x';
+    try std.testing.expectError(error.InvalidMagic, decodedMetadataCatalogCount(bad_magic));
+
+    var bad_version = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_version);
+    bad_version[4] = metadata_catalog_version + 1;
+    try std.testing.expectError(error.UnsupportedVersion, decodedMetadataCatalogCount(bad_version));
+
+    var bad_reserved = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_reserved);
+    bad_reserved[5] = 1;
+    try std.testing.expectError(error.CorruptFrame, decodedMetadataCatalogCount(bad_reserved));
+
+    var short_entries: [entries.len - 1]Metadata = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodeMetadataCatalogInto(encoded, &short_entries));
+    try std.testing.expectError(error.TruncatedFrame, decodeMetadataCatalogAlloc(std.testing.allocator, encoded[0 .. encoded.len - 1]));
+
+    var trailing = std.ArrayList(u8).empty;
+    defer trailing.deinit(std.testing.allocator);
+    try trailing.appendSlice(std.testing.allocator, encoded);
+    try trailing.append(std.testing.allocator, 0xff);
+    try std.testing.expectEqual(entries.len, try decodedMetadataCatalogCount(trailing.items));
+    var decoded: [entries.len]Metadata = undefined;
+    try std.testing.expectError(error.TrailingData, decodeMetadataCatalogInto(trailing.items, &decoded));
+
+    var corrupt_entry = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(corrupt_entry);
+    corrupt_entry[metadata_catalog_header_encoded_len] = 'x';
+    try std.testing.expectError(error.InvalidMagic, decodeMetadataCatalogInto(corrupt_entry, &decoded));
 }
 
 test "dictionary metadata validates content and window" {

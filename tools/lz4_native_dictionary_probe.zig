@@ -188,9 +188,18 @@ fn checkDictionarySetValidationApis(allocator: std.mem.Allocator) !void {
         vort.DictionaryMetadata.fromBytes(metadata_first.content, vort.lz4NativeDictionaryWindowLen),
         vort.DictionaryMetadata.fromBytes(metadata_second.content, vort.lz4NativeDictionaryWindowLen),
     };
+    const encoded_catalog = try vort.encodeDictionaryMetadataCatalogAlloc(allocator, &metadata);
+    defer allocator.free(encoded_catalog);
+    try expect(encoded_catalog.len == try vort.encodedDictionaryMetadataCatalogLen(metadata.len));
+    try expect(try vort.decodedDictionaryMetadataCatalogCount(encoded_catalog) == metadata.len);
+    const decoded_catalog = try vort.decodeDictionaryMetadataCatalogAlloc(allocator, encoded_catalog);
+    defer allocator.free(decoded_catalog);
+    try expect(decoded_catalog.len == metadata.len);
+    try expect(decoded_catalog[0].id.asInt() == metadata[0].id.asInt());
+    try expect(decoded_catalog[1].id.asInt() == metadata[1].id.asInt());
     const contents = [_][]const u8{ metadata_first.content, metadata_second.content };
     var catalog: [2]vort.Lz4NativeDictionary = undefined;
-    const metadata_set = try vort.Lz4NativeDictionarySet.initFromMetadata(&catalog, &metadata, &contents);
+    const metadata_set = try vort.Lz4NativeDictionarySet.initFromMetadata(&catalog, decoded_catalog, &contents);
     try metadata_set.validate();
     try expectEqualSlices(metadata_first.content, (metadata_set.find(metadata_first.id) orelse return error.Lz4NativeDictionaryProbeMismatch).content);
     try expectEqualSlices(metadata_second.content, (metadata_set.find(metadata_second.id) orelse return error.Lz4NativeDictionaryProbeMismatch).content);
