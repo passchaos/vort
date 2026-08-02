@@ -1354,6 +1354,13 @@ fn expectLz4ConcatenatedPayloadApis(allocator: std.mem.Allocator, stream: []cons
     if (!std.mem.eql(u8, payload, appended.items["prefix:".len..])) return error.Lz4ProbeMismatch;
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameAppendExactSize(allocator, &appended, stream, payload.len + 1));
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_limited_written = try vort.lz4DecodeNativeConcatenatedFrameAppendLimited(allocator, &appended, stream, payload.len);
+    if (appended_limited_written != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, "prefix:", appended.items[0.."prefix:".len])) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, payload, appended.items["prefix:".len..])) return error.Lz4ProbeMismatch;
+    appended.clearRetainingCapacity();
+    if (payload.len != 0) try expectError(error.OutputLimitExceeded, vort.lz4DecodeNativeConcatenatedFrameAppendLimited(allocator, &appended, stream, payload.len - 1));
 
     const split_a: usize = @min(stream.len, stream.len / 3 + 1);
     const split_b: usize = @min(stream.len, split_a + stream.len / 3 + 1);
@@ -1375,6 +1382,13 @@ fn expectLz4ConcatenatedPayloadApis(allocator: std.mem.Allocator, stream: []cons
     if (!std.mem.eql(u8, payload, chunked_appended.items["prefix:".len..])) return error.Lz4ProbeMismatch;
     chunked_appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameChunksAppendExactSize(allocator, &chunked_appended, &chunks, join, payload.len + 1));
+    try chunked_appended.appendSlice(allocator, "prefix:");
+    const chunked_limited_written = try vort.lz4DecodeNativeConcatenatedFrameChunksAppendLimited(allocator, &chunked_appended, &chunks, join, payload.len);
+    if (chunked_limited_written != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, "prefix:", chunked_appended.items[0.."prefix:".len])) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, payload, chunked_appended.items["prefix:".len..])) return error.Lz4ProbeMismatch;
+    chunked_appended.clearRetainingCapacity();
+    if (payload.len != 0) try expectError(error.OutputLimitExceeded, vort.lz4DecodeNativeConcatenatedFrameChunksAppendLimited(allocator, &chunked_appended, &chunks, join, payload.len - 1));
 
     var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
     defer decoder.deinit();
@@ -1393,6 +1407,13 @@ fn expectLz4ConcatenatedPayloadApis(allocator: std.mem.Allocator, stream: []cons
     if (!std.mem.eql(u8, payload, reusable_appended.items["prefix:".len..])) return error.Lz4ProbeMismatch;
     reusable_appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, decoder.decodeConcatenatedAppendExactSize(&reusable_appended, stream, payload.len + 1));
+    try reusable_appended.appendSlice(allocator, "prefix:");
+    const reusable_limited_written = try decoder.decodeConcatenatedAppendLimited(&reusable_appended, stream, payload.len);
+    if (reusable_limited_written != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, "prefix:", reusable_appended.items[0.."prefix:".len])) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, payload, reusable_appended.items["prefix:".len..])) return error.Lz4ProbeMismatch;
+    reusable_appended.clearRetainingCapacity();
+    if (payload.len != 0) try expectError(error.OutputLimitExceeded, decoder.decodeConcatenatedAppendLimited(&reusable_appended, stream, payload.len - 1));
 
     var reusable_chunked_appended: std.ArrayList(u8) = .empty;
     defer reusable_chunked_appended.deinit(allocator);
@@ -1403,6 +1424,13 @@ fn expectLz4ConcatenatedPayloadApis(allocator: std.mem.Allocator, stream: []cons
     if (!std.mem.eql(u8, payload, reusable_chunked_appended.items["prefix:".len..])) return error.Lz4ProbeMismatch;
     reusable_chunked_appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, decoder.decodeConcatenatedChunksAppendExactSize(&reusable_chunked_appended, &chunks, join, payload.len + 1));
+    try reusable_chunked_appended.appendSlice(allocator, "prefix:");
+    const reusable_chunked_limited_written = try decoder.decodeConcatenatedChunksAppendLimited(&reusable_chunked_appended, &chunks, join, payload.len);
+    if (reusable_chunked_limited_written != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, "prefix:", reusable_chunked_appended.items[0.."prefix:".len])) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, payload, reusable_chunked_appended.items["prefix:".len..])) return error.Lz4ProbeMismatch;
+    reusable_chunked_appended.clearRetainingCapacity();
+    if (payload.len != 0) try expectError(error.OutputLimitExceeded, decoder.decodeConcatenatedChunksAppendLimited(&reusable_chunked_appended, &chunks, join, payload.len - 1));
 }
 
 fn checkSkippableThenEmptyFrame(allocator: std.mem.Allocator) !void {
