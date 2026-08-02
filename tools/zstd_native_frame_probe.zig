@@ -2507,6 +2507,29 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         byte.* = high_entropy_rng.random().int(u8);
     }
 
+    var structured_logs: std.ArrayList(u8) = .empty;
+    defer structured_logs.deinit(allocator);
+    var log_index: usize = 0;
+    while (structured_logs.items.len < std.compress.zstd.block_size_max * 2 + 4096) : (log_index += 1) {
+        const line = try std.fmt.allocPrint(
+            allocator,
+            "{{\"ts\":\"2026-08-02T{d:0>2}:{d:0>2}:{d:0>2}.000Z\",\"level\":\"{s}\",\"service\":\"vort-zstd\",\"trace\":\"{x:0>8}\",\"message\":\"structured libzstd differential row {d}\",\"payload\":\"alpha beta gamma delta epsilon\"}}\n",
+            .{
+                (log_index / 3600) % 24,
+                (log_index / 60) % 60,
+                log_index % 60,
+                if (log_index % 11 == 0) "warn" else if (log_index % 17 == 0) "error" else "info",
+                @as(u32, @truncate(log_index *% 2_654_435_761)),
+                log_index,
+            },
+        );
+        defer allocator.free(line);
+        // Structured logs sit between highly repetitive and high-entropy
+        // corpora. They keep JSON syntax, repeated field names, and varied
+        // values visible in the libzstd-generated multi-block differential.
+        try structured_logs.appendSlice(allocator, line);
+    }
+
     const json_unit = "{\"service\":\"vort\",\"codec\":\"zstd\",\"native\":true,\"value\":12345}\n";
     const cases = [_]struct {
         payload: []const u8,
@@ -2519,6 +2542,7 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         .{ .payload = &binary_mix, .min_blocks = 1 },
         .{ .payload = &sparse_zero, .min_blocks = 1 },
         .{ .payload = &randomish, .min_blocks = 1 },
+        .{ .payload = structured_logs.items, .min_blocks = 3 },
         .{ .payload = boundary_multiblock, .min_blocks = 2 },
         .{ .payload = large_multiblock, .min_blocks = 2 },
         .{ .payload = triple_multiblock, .min_blocks = 3 },
