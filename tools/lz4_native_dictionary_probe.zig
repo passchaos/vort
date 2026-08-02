@@ -144,6 +144,10 @@ fn checkTrainedDictionaryApis(allocator: std.mem.Allocator) !void {
     try expect(decoded_metadata.id.asInt() == metadata.id.asInt());
     try expect(decoded_metadata.content_len == metadata.content_len);
     try expect(decoded_metadata.window_len == metadata.window_len);
+    const metadata_dict = try vort.Lz4NativeDictionary.initFromMetadata(decoded_metadata, dict.content);
+    try expect(metadata_dict.id == dict.id);
+    try expectEqualSlices(metadata_dict.content, dict.content);
+    try expectError(error.InvalidDictionaryMetadata, vort.Lz4NativeDictionary.initFromMetadata(decoded_metadata, "wrong-lz4-dict"));
     try expect(dict.content.len > 0);
     try expect(dict.content.len <= 64);
     const match_summary = try vort.summarizeDictionaryMatchesAlloc(allocator, dict.content, payload, 4);

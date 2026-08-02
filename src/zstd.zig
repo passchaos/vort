@@ -152,6 +152,13 @@ pub const NativeDictionary = struct {
     pub fn initFromContent(content: []const u8) NativeDictionary {
         return init(derivedId(content), content);
     }
+
+    /// Validate a persisted metadata record before constructing a borrowed
+    /// dictionary view from caller-owned bytes.
+    pub fn initFromMetadata(metadata: dictionary_mod.Metadata, content: []const u8) Error!NativeDictionary {
+        try metadata.validateBytes(content, native_dictionary_window_len);
+        return init(derivedId(content), content);
+    }
 };
 
 pub const NativeDictionaryTrainOptions = dictionary_mod.TrainOptions;
@@ -13245,6 +13252,10 @@ test "zstd native dictionary training returns owned bytes and stable id" {
     try std.testing.expectEqual(dictionary_mod.DictionaryId.fromBytes(dict.content).asInt(), metadata.id.asInt());
     try std.testing.expectEqual(dict.content.len, metadata.content_len);
     try std.testing.expectEqual(@as(usize, native_dictionary_window_len), metadata.window_len);
+    const metadata_dict = try NativeDictionary.initFromMetadata(metadata, dict.content);
+    try std.testing.expectEqual(dict.id, metadata_dict.id);
+    try std.testing.expectEqualSlices(u8, dict.content, metadata_dict.content);
+    try std.testing.expectError(error.InvalidDictionaryMetadata, NativeDictionary.initFromMetadata(metadata, "wrong"));
     try std.testing.expect(dict.content.len > 0);
     try std.testing.expect(dict.content.len <= 64);
 

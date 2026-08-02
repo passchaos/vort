@@ -215,7 +215,8 @@ Current interpretation:
   caller-owned output buffers. Callers can inspect
   Dictionary_ID metadata before decode, and trained owned dictionaries expose a
   shared `DictionaryMetadata` summary plus fixed-size versioned metadata
-  records for caller-managed catalogs. The native writer also exposes a
+  records that can validate dictionary bytes before constructing borrowed
+  codec dictionaries for caller-managed catalogs. The native writer also exposes a
   block-size option plus a bounded mixed-match search budget for library callers
   that need to trade branch-scored ratio work against encode latency, and the public native stream/block iterators expose
   zero-allocation frame, block, and skippable-frame inspection so future

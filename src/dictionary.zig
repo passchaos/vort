@@ -34,6 +34,19 @@ pub const Metadata = struct {
         return .{ .id = .fromBytes(bytes), .content_len = bytes.len, .window_len = window_len };
     }
 
+    /// Check whether this catalog entry describes the provided dictionary bytes
+    /// for a codec-specific history window.
+    pub fn matchesBytes(self: Metadata, bytes: []const u8, window_len: usize) bool {
+        const actual = fromBytes(bytes, window_len);
+        return self.id.asInt() == actual.id.asInt() and
+            self.content_len == actual.content_len and
+            self.window_len == actual.window_len;
+    }
+
+    pub fn validateBytes(self: Metadata, bytes: []const u8, window_len: usize) !void {
+        if (!self.matchesBytes(bytes, window_len)) return error.InvalidDictionaryMetadata;
+    }
+
     /// Stable fixed-size record for persisting dictionary catalog metadata.
     ///
     /// The record intentionally contains metadata only: callers still own and
@@ -447,6 +460,18 @@ test "dictionary metadata codec rejects malformed records" {
     var bad_reserved = encoded;
     bad_reserved[5] = 1;
     try std.testing.expectError(error.CorruptFrame, decodeMetadata(&bad_reserved));
+}
+
+test "dictionary metadata validates content and window" {
+    const dict = "dictionary contents";
+    const meta = Metadata.fromBytes(dict, 64 * 1024);
+
+    try meta.validateBytes(dict, 64 * 1024);
+    try std.testing.expect(meta.matchesBytes(dict, 64 * 1024));
+    try std.testing.expect(!meta.matchesBytes("different contents", 64 * 1024));
+    try std.testing.expect(!meta.matchesBytes(dict, 32 * 1024));
+    try std.testing.expectError(error.InvalidDictionaryMetadata, meta.validateBytes("different contents", 64 * 1024));
+    try std.testing.expectError(error.InvalidDictionaryMetadata, meta.validateBytes(dict, 32 * 1024));
 }
 
 test "training plan summarizes sample corpus" {
