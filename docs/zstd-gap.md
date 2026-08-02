@@ -213,7 +213,8 @@ Current interpretation:
   now derive stable non-zero Dictionary_ID values from dictionary content, train
   allocator-owned deterministic native dictionaries, encode through a dictionary
   set by Dictionary_ID, validate dictionary-set catalogs for zero or duplicate
-  IDs, build dictionary sets from validated metadata+bytes catalogs, and compute
+  IDs, build dictionary sets from validated metadata+bytes catalogs with either
+  caller-provided scratch or allocator-owned catalog arrays, and compute
   dictionary- or dictionary-set-aware frame bounds for caller-owned output
   buffers. Callers can inspect
   Dictionary_ID metadata before decode, and trained owned dictionaries expose a

@@ -212,6 +212,36 @@ pub const NativeDictionarySet = struct {
     }
 };
 
+pub const OwnedNativeDictionarySet = struct {
+    dictionaries: []NativeDictionary,
+
+    pub fn asDictionarySet(self: OwnedNativeDictionarySet) NativeDictionarySet {
+        return NativeDictionarySet.init(self.dictionaries);
+    }
+
+    pub fn deinit(self: OwnedNativeDictionarySet, allocator: std.mem.Allocator) void {
+        allocator.free(self.dictionaries);
+    }
+};
+
+/// Allocate and validate a borrowed dictionary catalog from persisted metadata.
+///
+/// This owns only the small catalog array, not the dictionary bytes themselves.
+/// It is useful for applications that decode a container's dictionary metadata
+/// table and want a reusable `NativeDictionarySet` without managing a separate
+/// scratch array at every call site.
+pub fn nativeDictionarySetFromMetadataAlloc(
+    allocator: std.mem.Allocator,
+    metadata: []const dictionary_mod.Metadata,
+    contents: []const []const u8,
+) Error!OwnedNativeDictionarySet {
+    if (contents.len != metadata.len) return error.InvalidDictionaryMetadata;
+    const dictionaries = try allocator.alloc(NativeDictionary, metadata.len);
+    errdefer allocator.free(dictionaries);
+    _ = try NativeDictionarySet.initFromMetadata(dictionaries, metadata, contents);
+    return .{ .dictionaries = dictionaries };
+}
+
 pub const BlockMode = enum {
     independent,
     linked,
@@ -6743,6 +6773,13 @@ test "lz4 native concatenated streams select dictionaries by id" {
     try std.testing.expect(empty_metadata_set.find(metadata_first_dict.id) == null);
     const unexpected_contents = [_][]const u8{metadata_first_dict.content};
     try std.testing.expectError(error.InvalidDictionaryMetadata, NativeDictionarySet.initFromMetadata(&empty_metadata_dictionaries, &.{}, &unexpected_contents));
+    const owned_metadata_set = try nativeDictionarySetFromMetadataAlloc(std.testing.allocator, &metadata, &contents);
+    defer owned_metadata_set.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(u8, metadata_first_dict.content, (owned_metadata_set.asDictionarySet().find(metadata_first_dict.id) orelse return error.NeedDictionary).content);
+    const empty_owned_set = try nativeDictionarySetFromMetadataAlloc(std.testing.allocator, &.{}, &.{});
+    defer empty_owned_set.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 0), empty_owned_set.dictionaries.len);
+    try std.testing.expectError(error.InvalidDictionaryMetadata, nativeDictionarySetFromMetadataAlloc(std.testing.allocator, &metadata, &bad_contents));
     const options: NativeFrameOptions = .{
         .content_checksum = false,
         .block_checksum = true,

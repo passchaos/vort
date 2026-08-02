@@ -13,7 +13,7 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkTrainedDictionaryApis(init.gpa);
     checked += 1;
-    try checkDictionarySetValidationApis();
+    try checkDictionarySetValidationApis(init.gpa);
     checked += 1;
     try checkSingleFrameDictionaryApis(init.gpa);
     checked += 1;
@@ -167,7 +167,7 @@ fn checkTrainedDictionaryApis(allocator: std.mem.Allocator) !void {
     try expectEqualSlices(payload, decoded);
 }
 
-fn checkDictionarySetValidationApis() !void {
+fn checkDictionarySetValidationApis(allocator: std.mem.Allocator) !void {
     const first = vort.Lz4NativeDictionary.init(0x7171, "lz4-set-first");
     const second = vort.Lz4NativeDictionary.init(0x7272, "lz4-set-second");
     const dictionaries = [_]vort.Lz4NativeDictionary{ first, second };
@@ -210,6 +210,19 @@ fn checkDictionarySetValidationApis() !void {
     try expect(empty_metadata_set.find(metadata_first.id) == null);
     const unexpected_contents = [_][]const u8{metadata_first.content};
     try expectError(error.InvalidDictionaryMetadata, vort.Lz4NativeDictionarySet.initFromMetadata(&empty_catalog, &.{}, &unexpected_contents));
+
+    const owned_metadata_set = try vort.lz4NativeDictionarySetFromMetadataAlloc(allocator, &metadata, &contents);
+    defer owned_metadata_set.deinit(allocator);
+    const borrowed_metadata_set = owned_metadata_set.asDictionarySet();
+    try borrowed_metadata_set.validate();
+    try expectEqualSlices(metadata_first.content, (borrowed_metadata_set.find(metadata_first.id) orelse return error.Lz4NativeDictionaryProbeMismatch).content);
+    try expectEqualSlices(metadata_second.content, (borrowed_metadata_set.find(metadata_second.id) orelse return error.Lz4NativeDictionaryProbeMismatch).content);
+
+    const empty_owned_set = try vort.lz4NativeDictionarySetFromMetadataAlloc(allocator, &.{}, &.{});
+    defer empty_owned_set.deinit(allocator);
+    try expect(empty_owned_set.dictionaries.len == 0);
+    try expect(empty_owned_set.asDictionarySet().find(metadata_first.id) == null);
+    try expectError(error.InvalidDictionaryMetadata, vort.lz4NativeDictionarySetFromMetadataAlloc(allocator, &metadata, &wrong_contents));
 }
 
 fn checkSingleFrameDictionaryApis(allocator: std.mem.Allocator) !void {
