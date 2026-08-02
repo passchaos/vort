@@ -416,6 +416,16 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
     var chunked_into: [expected.len]u8 = undefined;
     try expect((try decoder.decodeConcatenatedChunksIntoSliceWithDictionarySet(&chunks, join, &chunked_into, dictionary_set)) == expected.len);
     try expectEqualSlices(expected, &chunked_into);
+    try expect((try vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionaryExactSize(&chunks, join, &chunked_into, dict, expected.len)) == expected.len);
+    try expectEqualSlices(expected, &chunked_into);
+    try expect((try vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySetExactSize(&chunks, join, &chunked_into, dictionary_set, expected.len)) == expected.len);
+    try expectEqualSlices(expected, &chunked_into);
+    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySetExactSize(&chunks, join, chunked_into[0 .. chunked_into.len - 1], dictionary_set, expected.len));
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameChunksIntoWithDictionarySetExactSize(&chunks, join, &chunked_into, dictionary_set, expected.len - 1));
+    try expect((try decoder.decodeConcatenatedChunksIntoSliceWithDictionaryExactSize(&chunks, join, &chunked_into, dict, expected.len)) == expected.len);
+    try expectEqualSlices(expected, &chunked_into);
+    try expect((try decoder.decodeConcatenatedChunksIntoSliceWithDictionarySetExactSize(&chunks, join, &chunked_into, dictionary_set, expected.len)) == expected.len);
+    try expectEqualSlices(expected, &chunked_into);
 }
 
 fn checkReusableDictionaryApis(allocator: std.mem.Allocator) !void {
