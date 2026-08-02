@@ -3142,6 +3142,14 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectTwoFrameRepeatBoundaryError(allocator, &tables_then_new_frame_repeat, &repeat_boundary_output);
     checked += 1;
 
+    const tables_then_new_frame_literal_repeat_hex =
+        "28b52ffd200e4500000961015401000a01" ++
+        "28b52ffd20043d0000096101d4000001";
+    var tables_then_new_frame_literal_repeat: [tables_then_new_frame_literal_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&tables_then_new_frame_literal_repeat, tables_then_new_frame_literal_repeat_hex);
+    try expectTwoFrameRepeatBoundaryError(allocator, &tables_then_new_frame_literal_repeat, &repeat_boundary_output);
+    checked += 1;
+
     const tables_then_new_frame_offset_repeat_hex =
         "28b52ffd200e4500000961015401000a01" ++
         "28b52ffd20043d000009610174000001";
@@ -3175,6 +3183,23 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     });
     defer allocator.free(tables_skip_repeat);
     try expectSkippableRepeatBoundaryError(allocator, tables_skip_repeat, "state-boundary".len, &repeat_boundary_output);
+    checked += 1;
+
+    const tables_skip_literal_repeat = try std.mem.concat(allocator, u8, &.{
+        &[_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x0e,
+            0x45, 0x00, 0x00, 0x09, 'a',  0x01,
+            0x54, 0x01, 0x00, 0x0a, 0x01,
+        },
+        skip_between_tables_and_repeat,
+        &[_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x04,
+            0x3d, 0x00, 0x00, 0x09, 'a',  0x01,
+            0xd4, 0x00, 0x00, 0x01,
+        },
+    });
+    defer allocator.free(tables_skip_literal_repeat);
+    try expectSkippableRepeatBoundaryError(allocator, tables_skip_literal_repeat, "state-boundary".len, &repeat_boundary_output);
     checked += 1;
 
     const tables_skip_offset_repeat = try std.mem.concat(allocator, u8, &.{
