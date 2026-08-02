@@ -43,6 +43,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkSkippableOnlyStream(init.gpa);
     checked += 1;
+    try checkSkippableThenEmptyFrame(init.gpa);
+    checked += 1;
     const lib_generated_cases = try checkLibLz4GeneratedLibraryFrames(init.gpa);
     checked += lib_generated_cases;
     checked += try checkSkippableMalformedStreams(init.gpa);
@@ -1317,6 +1319,73 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
     try expectError(error.SizeMismatch, incremental_too_large.finish());
     if (!std.mem.eql(u8, "SizeMismatch", incremental_too_large.diagnostics().last_error_name)) return error.Lz4ProbeMismatch;
     if (!std.mem.eql(u8, "output", incremental_too_large.diagnostics().last_error_phase_name)) return error.Lz4ProbeMismatch;
+}
+
+fn checkSkippableThenEmptyFrame(allocator: std.mem.Allocator) !void {
+    const skip = try vort.lz4EncodeSkippableFrameAlloc(allocator, 4, "metadata-before-empty");
+    defer allocator.free(skip);
+    const empty = try vort.lz4EncodeNativeFrameWithOptionsAlloc(allocator, "", .{
+        .include_content_size = true,
+        .content_checksum = false,
+        .block_checksum = false,
+    });
+    defer allocator.free(empty);
+    const stream = try std.mem.concat(allocator, u8, &.{ skip, empty });
+    defer allocator.free(stream);
+
+    const summary = try vort.lz4SummarizeNativeStream(stream);
+    if (summary.frame_count != 1) return error.Lz4ProbeMismatch;
+    if (summary.skippable_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (summary.skippable_payload_bytes != "metadata-before-empty".len) return error.Lz4ProbeSizeMismatch;
+    if ((try vort.lz4DecodedNativeConcatenatedFrameSize(stream)) != 0) return error.Lz4ProbeSizeMismatch;
+    if ((try vort.lz4DecodedNativeConcatenatedFrameSizeLimited(stream, 0)) != 0) return error.Lz4ProbeSizeMismatch;
+
+    const decoded = try vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, 0);
+    defer allocator.free(decoded);
+    if (decoded.len != 0) return error.Lz4ProbeSizeMismatch;
+    try expectAllocError(allocator, error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, 1));
+
+    var into: [1]u8 = undefined;
+    const written = try vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, &into, 0);
+    if (written != 0) return error.Lz4ProbeSizeMismatch;
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, &into, 1));
+
+    const split_a: usize = @min(stream.len, skip.len + 2);
+    const split_b: usize = @min(stream.len, split_a + 5);
+    const chunks = [_][]const u8{ stream[0..split_a], stream[split_a..split_b], stream[split_b..] };
+    const join = try allocator.alloc(u8, stream.len);
+    defer allocator.free(join);
+    if ((try vort.lz4DecodedNativeConcatenatedFrameChunksSize(&chunks, join)) != 0) return error.Lz4ProbeSizeMismatch;
+    const chunked_written = try vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, &into, 0);
+    if (chunked_written != 0) return error.Lz4ProbeSizeMismatch;
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, &into, 1));
+
+    var decoder = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    if ((try decoder.decodedConcatenatedSize(stream)) != 0) return error.Lz4ProbeSizeMismatch;
+    const reusable_written = try decoder.decodeConcatenatedIntoSliceExactSize(stream, &into, 0);
+    if (reusable_written != 0) return error.Lz4ProbeSizeMismatch;
+    try expectError(error.SizeMismatch, decoder.decodeConcatenatedIntoSliceExactSize(stream, &into, 1));
+
+    var incremental = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer incremental.deinit();
+    const done = try incremental.step(stream, into[0..0]);
+    if (done.status != .done) return error.Lz4ProbeMismatch;
+    if (done.progress.input_read != stream.len or done.progress.output_written != 0) return error.Lz4ProbeSizeMismatch;
+    try incremental.finish();
+
+    var too_large = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = 1,
+        .max_decoded_buffer_len = 1,
+    });
+    defer too_large.deinit();
+    const pending = try too_large.step(stream, into[0..0]);
+    if (pending.status != .need_input) return error.Lz4ProbeMismatch;
+    if (pending.progress.input_read != stream.len or pending.progress.output_written != 0) return error.Lz4ProbeSizeMismatch;
+    try expectError(error.SizeMismatch, too_large.finish());
 }
 
 fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
