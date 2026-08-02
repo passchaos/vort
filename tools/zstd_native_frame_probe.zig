@@ -2916,6 +2916,36 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &rle_before_repeat));
     checked += 1;
 
+    // Partial Repeat_Mode has the same state precondition as the all-repeat
+    // shape above. Keep raw and RLE siblings where LL=Repeat_Mode but OF/ML are
+    // immediate RLE symbols so the parser must read mixed-mode payloads without
+    // allowing a non-compressed block to satisfy the previous-table invariant.
+    const raw_before_mixed_repeat_hex = "28b52ffd2008200000616263643d0000096101d4000001";
+    var raw_before_mixed_repeat: [raw_before_mixed_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&raw_before_mixed_repeat, raw_before_mixed_repeat_hex);
+    const raw_mixed_block = try vort.zstdInspectNativeFrameFirstBlock(&raw_before_mixed_repeat);
+    try expect(raw_mixed_block.block_type == .raw);
+    const mixed_repeat_after_raw_block = try vort.zstdInspectNativeFrameBlockAt(&raw_before_mixed_repeat, raw_mixed_block.next_header_offset);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&raw_before_mixed_repeat, mixed_repeat_after_raw_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&raw_before_mixed_repeat));
+    var raw_mixed_repeat_output: [8]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&raw_before_mixed_repeat, &raw_mixed_repeat_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &raw_before_mixed_repeat));
+    checked += 1;
+
+    const rle_before_mixed_repeat_hex = "28b52ffd2008220000613d0000096101d4000001";
+    var rle_before_mixed_repeat: [rle_before_mixed_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&rle_before_mixed_repeat, rle_before_mixed_repeat_hex);
+    const rle_mixed_block = try vort.zstdInspectNativeFrameFirstBlock(&rle_before_mixed_repeat);
+    try expect(rle_mixed_block.block_type == .rle);
+    const mixed_repeat_after_rle_block = try vort.zstdInspectNativeFrameBlockAt(&rle_before_mixed_repeat, rle_mixed_block.next_header_offset);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&rle_before_mixed_repeat, mixed_repeat_after_rle_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&rle_before_mixed_repeat));
+    var rle_mixed_repeat_output: [8]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&rle_before_mixed_repeat, &rle_mixed_repeat_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &rle_before_mixed_repeat));
+    checked += 1;
+
     const missing_sequence_bitstream_hex = "28b52ffd240e3d00000961015401000a";
     var missing_sequence_bitstream: [missing_sequence_bitstream_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&missing_sequence_bitstream, missing_sequence_bitstream_hex);
