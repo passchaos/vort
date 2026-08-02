@@ -1287,8 +1287,17 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
     const written = try vort.zstdDecodeNativeConcatenatedFrameIntoWithDictionary(stream.items, &into, dict);
     try expect(written == into.len);
     try expectEqualSlices(first_payload ++ second_payload, &into);
+    const exact_written = try vort.zstdDecodeNativeConcatenatedFrameIntoWithDictionaryExactSize(stream.items, &into, dict, into.len);
+    try expect(exact_written == into.len);
+    try expectEqualSlices(first_payload ++ second_payload, &into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeConcatenatedFrameIntoWithDictionaryExactSize(stream.items, into[0 .. into.len - 1], dict, into.len));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeConcatenatedFrameIntoWithDictionaryExactSize(stream.items, &into, dict, into.len - 1));
 
     const dictionary_set = vort.ZstdNativeDictionarySet.init(&.{dict});
+    var set_decode_into: [first_payload.len + second_payload.len]u8 = undefined;
+    const set_exact_written = try vort.zstdDecodeNativeConcatenatedFrameIntoWithDictionarySetExactSize(stream.items, &set_decode_into, dictionary_set, set_decode_into.len);
+    try expect(set_exact_written == set_decode_into.len);
+    try expectEqualSlices(first_payload ++ second_payload, &set_decode_into);
     const set_bound = try vort.zstdEncodedNativeFrameBoundWithDictionarySet(first_payload.len, options, dictionary_set, dict.id);
     try expect(first.frame.len <= set_bound);
     try expectError(error.NeedDictionary, vort.zstdEncodedNativeFrameBoundWithDictionarySet(first_payload.len, options, dictionary_set, 0xeeee));
@@ -1331,6 +1340,10 @@ fn checkConcatenatedDictionaryApis(allocator: std.mem.Allocator) !void {
     defer allocator.free(join);
     var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
     defer decoder.deinit();
+    try expect((try decoder.decodeConcatenatedIntoSliceWithDictionaryExactSize(stream.items, &into, dict, into.len)) == into.len);
+    try expectEqualSlices(first_payload ++ second_payload, &into);
+    try expect((try decoder.decodeConcatenatedIntoSliceWithDictionarySetExactSize(stream.items, &set_decode_into, dictionary_set, set_decode_into.len)) == set_decode_into.len);
+    try expectEqualSlices(first_payload ++ second_payload, &set_decode_into);
     const chunked_exact = try decoder.decodeConcatenatedChunksAllocExactSizeWithDictionarySet(&chunks, join, dictionary_set, decoded.len);
     defer allocator.free(chunked_exact);
     try expectEqualSlices(decoded, chunked_exact);

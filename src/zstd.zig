@@ -1267,6 +1267,7 @@ pub const decodeNativeConcatenatedFrameInto = decodeRawOrRleFrameInto;
 pub const decodeNativeConcatenatedFrameIntoExactSize = decodeRawOrRleFrameIntoExactSize;
 pub const decodeNativeConcatenatedFrameAllocWithDictionary = decodeRawOrRleFrameAllocWithDictionary;
 pub const decodeNativeConcatenatedFrameAllocWithDictionaryExactSize = decodeRawOrRleFrameAllocWithDictionaryExactSize;
+pub const decodeNativeConcatenatedFrameIntoWithDictionaryExactSize = decodeRawOrRleFrameIntoWithDictionaryExactSize;
 pub const decodeNativeConcatenatedFrameAppendWithDictionary = decodeRawOrRleFrameAppendWithDictionary;
 pub const decodeNativeConcatenatedFrameAppendExactSizeWithDictionary = decodeRawOrRleFrameAppendExactSizeWithDictionary;
 pub const decodeNativeConcatenatedFrameAppendLimitedWithDictionary = decodeRawOrRleFrameAppendLimitedWithDictionary;
@@ -1274,6 +1275,7 @@ pub const decodeNativeConcatenatedFrameAllocLimitedWithDictionary = decodeRawOrR
 pub const decodeNativeConcatenatedFrameIntoWithDictionary = decodeRawOrRleFrameIntoWithDictionary;
 pub const decodeNativeConcatenatedFrameAllocWithDictionarySet = decodeRawOrRleFrameAllocWithDictionarySet;
 pub const decodeNativeConcatenatedFrameAllocWithDictionarySetExactSize = decodeRawOrRleFrameAllocWithDictionarySetExactSize;
+pub const decodeNativeConcatenatedFrameIntoWithDictionarySetExactSize = decodeRawOrRleFrameIntoWithDictionarySetExactSize;
 pub const decodeNativeConcatenatedFrameAppendWithDictionarySet = decodeRawOrRleFrameAppendWithDictionarySet;
 pub const decodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet = decodeRawOrRleFrameAppendExactSizeWithDictionarySet;
 pub const decodeNativeConcatenatedFrameAppendLimitedWithDictionarySet = decodeRawOrRleFrameAppendLimitedWithDictionarySet;
@@ -2483,6 +2485,7 @@ pub const NativeFrameDecoder = struct {
     pub const decodeConcatenatedAppendExactSizeWithDictionary = decodeAppendExactSizeWithDictionary;
     pub const decodeConcatenatedAppendLimitedWithDictionary = decodeAppendLimitedWithDictionary;
     pub const decodeConcatenatedIntoSliceWithDictionary = decodeIntoSliceWithDictionary;
+    pub const decodeConcatenatedIntoSliceWithDictionaryExactSize = decodeIntoSliceWithDictionaryExactSize;
     pub const decodeConcatenatedAllocWithDictionarySet = decodeAllocWithDictionarySet;
     pub const decodeConcatenatedAllocWithDictionarySetExactSize = decodeAllocWithDictionarySetExactSize;
     pub const decodeConcatenatedAllocLimitedWithDictionarySet = decodeAllocLimitedWithDictionarySet;
@@ -2492,6 +2495,7 @@ pub const NativeFrameDecoder = struct {
     pub const decodeConcatenatedAppendExactSizeWithDictionarySet = decodeAppendExactSizeWithDictionarySet;
     pub const decodeConcatenatedAppendLimitedWithDictionarySet = decodeAppendLimitedWithDictionarySet;
     pub const decodeConcatenatedIntoSliceWithDictionarySet = decodeIntoSliceWithDictionarySet;
+    pub const decodeConcatenatedIntoSliceWithDictionarySetExactSize = decodeIntoSliceWithDictionarySetExactSize;
 
     pub fn decodedConcatenatedSize(self: *NativeFrameDecoder, frames: []const u8) Error!usize {
         _ = self;
@@ -13743,6 +13747,13 @@ test "zstd native concatenated streams select dictionaries by id" {
     try std.testing.expectEqual(expected.len, into_written);
     try std.testing.expectEqualSlices(u8, expected, &into);
     try std.testing.expectError(error.OutputTooSmall, decodeNativeConcatenatedFrameIntoWithDictionarySet(stream.items, into[0 .. into.len - 1], dictionary_set));
+    const exact_into_written = try decodeNativeConcatenatedFrameIntoWithDictionarySetExactSize(stream.items, &into, dictionary_set, expected.len);
+    try std.testing.expectEqual(expected.len, exact_into_written);
+    try std.testing.expectEqualSlices(u8, expected, &into);
+    try std.testing.expectError(error.OutputTooSmall, decodeNativeConcatenatedFrameIntoWithDictionarySetExactSize(stream.items, into[0 .. into.len - 1], dictionary_set, expected.len));
+    try std.testing.expectError(error.SizeMismatch, decodeNativeConcatenatedFrameIntoWithDictionarySetExactSize(stream.items, &into, dictionary_set, expected.len - 1));
+    var oversized_into: [expected.len + 1]u8 = undefined;
+    try std.testing.expectError(error.SizeMismatch, decodeNativeConcatenatedFrameIntoWithDictionarySetExactSize(stream.items, &oversized_into, dictionary_set, expected.len + 1));
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(std.testing.allocator);
@@ -13765,6 +13776,9 @@ test "zstd native concatenated streams select dictionaries by id" {
     const reusable_exact_decoded = try decoder.decodeConcatenatedAllocWithDictionarySetExactSize(stream.items, dictionary_set, expected.len);
     defer std.testing.allocator.free(reusable_exact_decoded);
     try std.testing.expectEqualSlices(u8, expected, reusable_exact_decoded);
+    const reusable_exact_into_written = try decoder.decodeConcatenatedIntoSliceWithDictionarySetExactSize(stream.items, &into, dictionary_set, expected.len);
+    try std.testing.expectEqual(expected.len, reusable_exact_into_written);
+    try std.testing.expectEqualSlices(u8, expected, &into);
     const scratch_limited = try decoder.decodeConcatenatedScratchLimitedWithDictionarySet(stream.items, expected.len, dictionary_set);
     try std.testing.expectEqualSlices(u8, expected, scratch_limited);
 
