@@ -45,6 +45,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkManyPredefinedSequenceStateTransitions(init.gpa);
     checked += 1;
+    try checkFirstBlockRepeatSequenceModeIsRejected(init.gpa);
+    checked += 1;
     try checkMixedRlePredefinedSequenceModes(init.gpa);
     checked += 1;
     try checkRepeatMixedRlePredefinedSequenceModes(init.gpa);
@@ -1135,6 +1137,39 @@ fn checkManyPredefinedSequenceStateTransitions(allocator: std.mem.Allocator) !vo
     try expectEqualSlices(expected, into[0..written]);
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameIntoExactSize(&frame, into[0 .. into.len - 1], expected.len));
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoExactSize(&frame, &into, expected.len - 1));
+}
+
+fn checkFirstBlockRepeatSequenceModeIsRejected(allocator: std.mem.Allocator) !void {
+    // Repeat_Mode sequence tables are only valid after a previous compressed
+    // block has established tables in the same frame. Keep this malformed shape
+    // in the public probe so all public inspect/preflight/decode facades agree
+    // on CorruptFrame instead of leaking uninitialized table state.
+    const frame = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x20, 0x04, // Single-segment frame with content size 4.
+        0x2d, 0x00, 0x00, // Last compressed block with five payload bytes.
+        0x09, 'a', // RLE literals, regenerated size 1.
+        0x01, // One sequence.
+        0xfc, // Repeat_Mode for LL, OF, and ML without previous tables.
+        0x01, // Minimal reverse bitstream end mark.
+    };
+
+    const block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(block.block_type == .compressed);
+    try expect(block.last);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&frame, block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&frame));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSizeLimited(&frame, 4));
+
+    var into: [4]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&frame, &into));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameIntoExactSize(&frame, &into, into.len));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    try expectError(error.CorruptFrame, decoder.decodeIntoSlice(&frame, &into));
+    try expectAllocError(allocator, error.CorruptFrame, decoder.decodeAlloc(&frame));
 }
 
 fn checkMixedRlePredefinedSequenceModes(allocator: std.mem.Allocator) !void {
