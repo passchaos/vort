@@ -197,6 +197,15 @@ fn checkDictionarySetValidationApis(allocator: std.mem.Allocator) !void {
     try expect(decoded_catalog.len == metadata.len);
     try expect(decoded_catalog[0].id.asInt() == metadata[0].id.asInt());
     try expect(decoded_catalog[1].id.asInt() == metadata[1].id.asInt());
+    var catalog_with_payload: std.ArrayList(u8) = .empty;
+    defer catalog_with_payload.deinit(allocator);
+    try catalog_with_payload.appendSlice(allocator, encoded_catalog);
+    try catalog_with_payload.appendSlice(allocator, "dictionary-bytes-follow");
+    const prefix_catalog = try vort.decodeDictionaryMetadataCatalogPrefixAlloc(allocator, catalog_with_payload.items);
+    defer prefix_catalog.deinit(allocator);
+    try expect(prefix_catalog.bytes_read == encoded_catalog.len);
+    try expect(prefix_catalog.metadata.len == metadata.len);
+    try expect(prefix_catalog.metadata[0].id.asInt() == metadata[0].id.asInt());
     const contents = [_][]const u8{ metadata_first.content, metadata_second.content };
     var catalog: [2]vort.Lz4NativeDictionary = undefined;
     const metadata_set = try vort.Lz4NativeDictionarySet.initFromMetadata(&catalog, decoded_catalog, &contents);

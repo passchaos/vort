@@ -81,7 +81,9 @@ values from dictionary bytes using the shared IEEE CRC-32 checksum, and
 with the same ID policy, and the owned dictionary values now expose
 `metadata()` plus `encodeDictionaryMetadata*` / `decodeDictionaryMetadata*`
 helpers so callers can persist 32-byte versioned `DictionaryMetadata` records or
-counted metadata catalogs next to dictionary bytes. `initFromMetadata` validates
+counted metadata catalogs next to dictionary bytes. Catalog decoders support both
+strict and prefix modes, so container formats can read the metadata table before
+continuing to dictionary bytes or other sections. `initFromMetadata` validates
 received bytes against those catalog entries before deriving frame-level
 Dictionary_ID values, and dictionary sets can now build a full borrowed catalog
 from parallel metadata and content slices while preserving duplicate-ID

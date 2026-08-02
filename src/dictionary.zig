@@ -108,6 +108,20 @@ pub const MetadataDecodeResult = struct {
     bytes_read: usize,
 };
 
+pub const MetadataCatalogDecodeResult = struct {
+    count: usize,
+    bytes_read: usize,
+};
+
+pub const MetadataCatalogAllocDecodeResult = struct {
+    metadata: []Metadata,
+    bytes_read: usize,
+
+    pub fn deinit(self: MetadataCatalogAllocDecodeResult, allocator: std.mem.Allocator) void {
+        allocator.free(self.metadata);
+    }
+};
+
 pub fn encodeMetadataInto(metadata: Metadata, output: []u8) !usize {
     return metadata.encodeInto(output);
 }
@@ -161,18 +175,23 @@ pub fn decodedMetadataCatalogCount(bytes: []const u8) !usize {
 }
 
 pub fn decodeMetadataCatalogInto(bytes: []const u8, output: []Metadata) !usize {
+    const result = try decodeMetadataCatalogPrefixInto(bytes, output);
+    if (bytes.len != result.bytes_read) return error.TrailingData;
+    return result.count;
+}
+
+pub fn decodeMetadataCatalogPrefixInto(bytes: []const u8, output: []Metadata) !MetadataCatalogDecodeResult {
     const count = try decodedMetadataCatalogCount(bytes);
     if (output.len < count) return error.OutputTooSmall;
     const required = try encodedMetadataCatalogLen(count);
     if (bytes.len < required) return error.TruncatedFrame;
-    if (bytes.len != required) return error.TrailingData;
     var offset: usize = metadata_catalog_header_encoded_len;
     for (output[0..count]) |*entry| {
         const result = try Metadata.decodePrefix(bytes[offset..]);
         entry.* = result.metadata;
         offset += result.bytes_read;
     }
-    return count;
+    return .{ .count = count, .bytes_read = required };
 }
 
 pub fn decodeMetadataCatalogAlloc(allocator: std.mem.Allocator, bytes: []const u8) ![]Metadata {
@@ -181,6 +200,14 @@ pub fn decodeMetadataCatalogAlloc(allocator: std.mem.Allocator, bytes: []const u
     errdefer allocator.free(decoded);
     _ = try decodeMetadataCatalogInto(bytes, decoded);
     return decoded;
+}
+
+pub fn decodeMetadataCatalogPrefixAlloc(allocator: std.mem.Allocator, bytes: []const u8) !MetadataCatalogAllocDecodeResult {
+    const count = try decodedMetadataCatalogCount(bytes);
+    const decoded = try allocator.alloc(Metadata, count);
+    errdefer allocator.free(decoded);
+    const result = try decodeMetadataCatalogPrefixInto(bytes, decoded);
+    return .{ .metadata = decoded, .bytes_read = result.bytes_read };
 }
 
 pub const TrainOptions = struct {
@@ -602,6 +629,14 @@ test "dictionary metadata catalog codec rejects malformed records" {
     try trailing.append(std.testing.allocator, 0xff);
     try std.testing.expectEqual(entries.len, try decodedMetadataCatalogCount(trailing.items));
     var decoded: [entries.len]Metadata = undefined;
+    const prefix = try decodeMetadataCatalogPrefixInto(trailing.items, &decoded);
+    try std.testing.expectEqual(entries.len, prefix.count);
+    try std.testing.expectEqual(encoded.len, prefix.bytes_read);
+    try std.testing.expectEqual(entries[0].id.asInt(), decoded[0].id.asInt());
+    const prefix_alloc = try decodeMetadataCatalogPrefixAlloc(std.testing.allocator, trailing.items);
+    defer prefix_alloc.deinit(std.testing.allocator);
+    try std.testing.expectEqual(encoded.len, prefix_alloc.bytes_read);
+    try std.testing.expectEqual(entries.len, prefix_alloc.metadata.len);
     try std.testing.expectError(error.TrailingData, decodeMetadataCatalogInto(trailing.items, &decoded));
 
     var corrupt_entry = try std.testing.allocator.dupe(u8, encoded);
