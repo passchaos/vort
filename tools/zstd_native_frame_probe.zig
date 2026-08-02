@@ -2919,6 +2919,31 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, &tree_then_new_frame_treeless));
     checked += 1;
 
+    const tables_then_new_frame_repeat_hex =
+        "28b52ffd200e4500000961015401000a01" ++
+        "28b52ffd20042d0000096101fc01";
+    var tables_then_new_frame_repeat: [tables_then_new_frame_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&tables_then_new_frame_repeat, tables_then_new_frame_repeat_hex);
+    var repeat_boundary_iterator = vort.zstdIterateNativeStream(&tables_then_new_frame_repeat);
+    const table_frame = (try repeat_boundary_iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    const repeat_frame = (try repeat_boundary_iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    try expect((try repeat_boundary_iterator.next()) == null);
+    switch (table_frame) {
+        .frame => {},
+        .skippable => return error.ZstdNativeFrameProbeMismatch,
+    }
+    const repeat_frame_bytes = switch (repeat_frame) {
+        .frame => |frame| frame.bytes,
+        .skippable => return error.ZstdNativeFrameProbeMismatch,
+    };
+    const repeat_boundary_block = try vort.zstdInspectNativeFrameFirstBlock(repeat_frame_bytes);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(repeat_frame_bytes, repeat_boundary_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeConcatenatedFrameSize(&tables_then_new_frame_repeat));
+    var repeat_boundary_output: [32]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameInto(&tables_then_new_frame_repeat, &repeat_boundary_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, &tables_then_new_frame_repeat));
+    checked += 1;
+
     return checked;
 }
 
