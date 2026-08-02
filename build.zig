@@ -1222,6 +1222,8 @@ pub fn build(b: *std.Build) void {
         "1",
         "--path",
         "corpus/native-library-bench-small.txt",
+        "--limit",
+        "4096",
         "--csv",
         "zig-out/vort-native-library-bench-path.csv",
     });
@@ -1271,6 +1273,8 @@ pub fn build(b: *std.Build) void {
         "1",
         "--path",
         "corpus/native-library-bench-small.txt",
+        "--limit",
+        "4096",
         "--csv",
         "zig-out/vort-native-library-bench-releasefast-path.csv",
     });

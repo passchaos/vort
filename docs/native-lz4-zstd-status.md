@@ -63,7 +63,7 @@ Recent work in this thread has repeatedly run the narrower probes plus `test` an
 `check`; `ci-smoke` now depends on `run-native-codec-probes-dashboard` so all
 four library-level LZ4/Zstd probes run through the regular smoke target and
 retain `zig-out/vort-native-codec-probes.json` / `.md` artifacts.
-`run-native-library-bench` now accepts repeated `--path` arguments for focused
+`run-native-library-bench` now accepts repeated `--path` arguments plus `--limit` for focused
 project-file payloads, and `run-native-library-bench-path-gate` and `run-native-library-bench-releasefast-path-gate` keep that code path covered with a small fixture in Debug and ReleaseFast builds. `run-native-library-bench-gate` is the lightweight Debug public API benchmark
 CSV gate; `run-native-library-bench-releasefast-gate` runs the same 93-row matrix
 through a ReleaseFast build for library-path smoke evidence. `run-native-codec-probes-dashboard` now records reusable single-frame

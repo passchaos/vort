@@ -74,6 +74,7 @@ const Row = struct {
 const Options = struct {
     iterations: usize = 200,
     csv_path: ?[]const u8 = null,
+    path_limit: usize = 128 * 1024,
     paths: std.ArrayList([]const u8) = .empty,
 
     fn deinit(self: *Options, allocator: std.mem.Allocator) void {
@@ -95,7 +96,7 @@ pub fn main(init: std.process.Init) !void {
         cases.deinit(init.gpa);
     }
     try addBuiltinCases(init.gpa, &cases);
-    try addPathCases(init.io, init.gpa, &cases, options.paths.items);
+    try addPathCases(init.io, init.gpa, &cases, options.paths.items, options.path_limit);
 
     try smokeLz4LinkedDirectFallback(init.gpa);
     try smokeLz4DeepHashChain(init.gpa);
@@ -224,6 +225,10 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
             if (options.iterations == 0) return error.InvalidIterationCount;
         } else if (std.mem.eql(u8, arg, "--csv")) {
             options.csv_path = args.next() orelse return error.MissingCsvPath;
+        } else if (std.mem.eql(u8, arg, "--limit")) {
+            const value = args.next() orelse return error.MissingLimit;
+            options.path_limit = try std.fmt.parseInt(usize, value, 10);
+            if (options.path_limit == 0) return error.InvalidLimit;
         } else if (std.mem.eql(u8, arg, "--path")) {
             const path = args.next() orelse return error.MissingPath;
             try options.paths.append(allocator, try allocator.dupe(u8, path));
@@ -240,18 +245,28 @@ fn addBuiltinCases(allocator: std.mem.Allocator, cases: *std.ArrayList(Case)) !v
     try cases.append(allocator, .{ .name = "repetitive", .payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 256 });
 }
 
-fn addPathCases(io: std.Io, allocator: std.mem.Allocator, cases: *std.ArrayList(Case), paths: []const []const u8) !void {
+fn addPathCases(io: std.Io, allocator: std.mem.Allocator, cases: *std.ArrayList(Case), paths: []const []const u8, limit: usize) !void {
     for (paths) |path| {
-        const payload = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(128 * 1024 * 1024));
-        if (payload.len == 0) {
-            allocator.free(payload);
-            continue;
-        }
+        const file = try std.Io.Dir.cwd().openFile(io, path, .{});
+        defer file.close(io);
+        const stat = try file.stat(io);
+        const read_len = @min(limit, try checkedU64ToUsize(stat.size));
+        if (read_len == 0) continue;
+        const payload = try allocator.alloc(u8, read_len);
         errdefer allocator.free(payload);
+        var reader_buffer: [4096]u8 = undefined;
+        var reader = file.reader(io, &reader_buffer);
+        const n = try reader.interface.readSliceShort(payload);
+        if (n != read_len) return error.InputTooSmall;
         const name = try caseNameForPath(allocator, path, cases.items.len);
         errdefer allocator.free(name);
         try cases.append(allocator, .{ .name = name, .payload = payload, .owned = true });
     }
+}
+
+fn checkedU64ToUsize(value: u64) !usize {
+    if (value > std.math.maxInt(usize)) return error.IntegerOverflow;
+    return @intCast(value);
 }
 
 fn caseNameForPath(allocator: std.mem.Allocator, path: []const u8, index: usize) ![]u8 {
