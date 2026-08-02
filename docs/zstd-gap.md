@@ -136,7 +136,8 @@ Current interpretation:
   Repeat_Mode replay, and malformed table/state/end-marker paths,
   repeated-table reuse, and short/corrupt LL/OF/ML FSE state streams covered by public dictionary probe
   inspection/decode, with writer-side ML construction still covered by focused
-  unit round-trips, and frame-probe malformed paths for repeated-table truncation),
+  unit round-trips, public frame-probe coverage for mixed OF+ML compressed-FSE tables,
+  and frame-probe malformed paths for repeated-table truncation),
   branch-scored mixed duplicate/repeated and dictionary/duplicate/repeated
   match lookahead and emission,
   RLE-literals sections for same-byte sequence literals,

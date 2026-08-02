@@ -53,6 +53,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkOffsetCompressedThenRepeatedSequenceTables(init.gpa);
     checked += 1;
+    try checkOffsetAndMatchLengthCompressedSequenceTables(init.gpa);
+    checked += 1;
     try checkCompressedOffsetRepeatSelectorFrame(init.gpa);
     checked += 1;
     try checkAllCompressedSequenceTableFrame(init.gpa);
@@ -85,10 +87,10 @@ pub fn main(init: std.process.Init) !void {
         "sequence-tables",
         "skippable",
     }, &.{
-        .{ .capability = "chunked", .cases = lib_generated_cases + 3 },
-        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 3 },
+        .{ .capability = "chunked", .cases = lib_generated_cases + 4 },
+        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 4 },
         .{ .capability = "fse-repeat", .cases = 5 },
-        .{ .capability = "incremental", .cases = lib_generated_cases + 3 },
+        .{ .capability = "incremental", .cases = lib_generated_cases + 4 },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });
     try stdout.flush();
@@ -1286,6 +1288,93 @@ fn checkOffsetCompressedThenRepeatedSequenceTables(allocator: std.mem.Allocator)
     var short_output: [148]u8 = undefined;
     try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&short_state, &short_output));
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &short_state));
+}
+
+fn checkOffsetAndMatchLengthCompressedSequenceTables(allocator: std.mem.Allocator) !void {
+    // Fixture generated through the public native writer from a structured
+    // duplicate-heavy payload. It chooses LL=Predefined while both OF and ML use
+    // compressed FSE tables, complementing the single-table and all-table FSE
+    // fixtures. This keeps mixed compressed/predefined sequence-table decode
+    // visible through public frame APIs rather than only internal writer tests.
+    const frame_hex =
+        "28b52ffd60bd01fd0a0092a14ee300000000000000000000000000000000000000000000000000000000000000000333" ++
+        "33343333333231233333123000000666975b96655996cb5d4e511445b9dce59224492e77390441d6badce58ecb154551" ++
+        "14c5e52e471004415cee72c3300c97bb9c20085575b9cb0d2e475114455197bbdc344dd374b9cb4992245dee72511441" ++
+        "d0e52e27b8dcf33ccff35cee7281402010b8dce51cc7712e77b9a66918e672975b2e972449922497bb1c82200872b9cb" ++
+        "adb5d6e52e771c87615cee72c5e586611886e17297130441102e77b9aaaaaacb5d6e301804045cee72d4e524499224e9" ++
+        "72978ba2288a2e77390882a0cb5d4e201000005cee728fe3388ee35cee724dd334cde52ec7300c73b9cb2dcb72b9cb29" ++
+        "cae52e975cee7297bbdc5a6bad75b9cb1dc7711c97bb9c6118c6e52e5714c5e52e4710c3e52e17102810c86b0d102e86" ++
+        "2f07b6386dedb4b4d36a4fa33dadb64d0fba2d330025a26972";
+    const expected_hex =
+        "616263646162636442616263646162636443436162636461626364444444616263646162636445454545616263646162" ++
+        "636446464646466162636461626364474747474747616263646162636461626364616263644961626364616263644a4a" ++
+        "61626364616263644b4b4b61626364616263644c4c4c4c61626364616263644d4d4d4d4d61626364616263644e4e4e4e" ++
+        "4e4e61626364616263646162636461626364506162636461626364515161626364616263645252526162636461626364" ++
+        "535353536162636461626364545454545461626364616263645555555555556162636461626364616263646162636457" ++
+        "61626364616263645858616263646162636459595961626364616263645a5a5a5a616263646162636441414141416162" ++
+        "636461626364424242424242616263646162636461626364616263644461626364616263644545616263646162636446" ++
+        "464661626364616263644747474761626364616263644848484848616263646162636449494949494961626364616263" ++
+        "6461626364616263644b61626364616263644c4c61626364616263644d4d4d61626364616263644e4e4e4e6162636461" ++
+        "6263644f4f4f4f4f61626364616263645050505050506162636461626364616263646162636452616263646162636453" ++
+        "536162636461626364545454616263646162636455555555616263646162636456565656566162636461626364575757" ++
+        "575757616263646162636461626364616263645961626364616263645a5a616263646162636441414161626364616263" ++
+        "644242424261626364616263644343434343616263646162636444444444444461626364616263646162636461626364" ++
+        "4661626364616263644747616263646162636448484861626364616263644949494961626364616263644a4a4a4a4a61" ++
+        "626364616263644b4b4b4b4b4b61626364616263646162636461626364";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+    var expected: [expected_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expected, expected_hex);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .compressed);
+    try expect(first_block.last);
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, first_block);
+    try expect(modes.sequence_count == 16);
+    try expect(modes.literal_length_mode == .predefined);
+    try expect(modes.offset_mode == .compressed);
+    try expect(modes.match_length_mode == .compressed);
+
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
+    try expect(summary.block_count == 1);
+    try expect(summary.compressed_block_count == 1);
+    try expect(summary.raw_block_count == 0);
+    try expect(summary.rle_block_count == 0);
+
+    try expect((try vort.zstdDecodedFrameSize(&frame)) == expected.len);
+    const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+    defer allocator.free(lib_decoded);
+    try expectEqualSlices(&expected, lib_decoded);
+
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == expected.len);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len)) == expected.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len - 1));
+
+    const native_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(native_decoded);
+    try expectEqualSlices(&expected, native_decoded);
+    try checkIncrementalFrameLibraryApis(allocator, &expected, &frame);
+    try checkChunkedFrameLibraryApis(allocator, &expected, &frame);
+
+    var into: [expected.len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
+    try expect(written == expected.len);
+    try expectEqualSlices(&expected, into[0..written]);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(&frame, into[0 .. into.len - 1]));
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const scratch = try decoder.decodeScratch(&frame);
+    try expectEqualSlices(&expected, scratch);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try decoder.decodeAppendExactSize(&appended, &frame, expected.len);
+    try expect(appended_written == expected.len);
+    try expectPrefixedPayload(appended.items, &expected);
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&appended, &frame, expected.len - 1));
 }
 
 fn checkCompressedOffsetRepeatSelectorFrame(allocator: std.mem.Allocator) !void {
