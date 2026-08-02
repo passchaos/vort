@@ -1294,6 +1294,29 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
         },
     }
     if ((try iterator.next()) != null) return error.Lz4ProbeMismatch;
+
+    var incremental_exact = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = 0,
+        .max_decoded_buffer_len = 0,
+    });
+    defer incremental_exact.deinit();
+    const incremental_done = try incremental_exact.step(skip, chunked_into[0..0]);
+    if (incremental_done.status != .done) return error.Lz4ProbeMismatch;
+    if (incremental_done.progress.input_read != skip.len or incremental_done.progress.output_written != 0) return error.Lz4ProbeSizeMismatch;
+    if (incremental_exact.diagnostics().output_written != 0) return error.Lz4ProbeSizeMismatch;
+    try incremental_exact.finish();
+
+    var incremental_too_large = vort.Lz4NativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = 1,
+        .max_decoded_buffer_len = 1,
+    });
+    defer incremental_too_large.deinit();
+    const pending = try incremental_too_large.step(skip, chunked_into[0..0]);
+    if (pending.status != .need_input) return error.Lz4ProbeMismatch;
+    if (pending.progress.input_read != skip.len or pending.progress.output_written != 0) return error.Lz4ProbeSizeMismatch;
+    try expectError(error.SizeMismatch, incremental_too_large.finish());
+    if (!std.mem.eql(u8, "SizeMismatch", incremental_too_large.diagnostics().last_error_name)) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, "output", incremental_too_large.diagnostics().last_error_phase_name)) return error.Lz4ProbeMismatch;
 }
 
 fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
