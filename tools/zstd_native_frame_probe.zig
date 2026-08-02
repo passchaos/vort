@@ -2384,6 +2384,23 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         };
     }
 
+    const triple_payload_len = std.compress.zstd.block_size_max * 2 + 1;
+    const triple_multiblock = try allocator.alloc(u8, triple_payload_len);
+    defer allocator.free(triple_multiblock);
+    for (triple_multiblock, 0..) |*byte, i| {
+        // One byte past two full blocks forces a third block and keeps the
+        // frame iterator moving beyond the second-block truncation fixtures.
+        const lane = i % 8191;
+        byte.* = switch (lane % 17) {
+            0 => @intCast((i / 257) & 0xff),
+            1, 2 => @intCast('0' + (lane % 10)),
+            3 => 0,
+            4 => 0xff,
+            5, 6, 7 => @intCast('a' + (lane % 26)),
+            else => @intCast((lane * 19 + i / 8191) & 0xff),
+        };
+    }
+
     const json_unit = "{\"service\":\"vort\",\"codec\":\"zstd\",\"native\":true,\"value\":12345}\n";
     const cases = [_]struct {
         payload: []const u8,
@@ -2398,6 +2415,7 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         .{ .payload = &randomish, .min_blocks = 1 },
         .{ .payload = boundary_multiblock, .min_blocks = 2 },
         .{ .payload = large_multiblock, .min_blocks = 2 },
+        .{ .payload = triple_multiblock, .min_blocks = 3 },
     };
     const levels = [_]c_int{ 1, 9, 19 };
     const option_sets = [_]vort.ZstdLibFrameOptions{
