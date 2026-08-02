@@ -75,6 +75,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkAllCompressedThenRepeatedSequenceTables(init.gpa);
     checked += 1;
+    try checkFixedLibZstdFseSequenceFrames(init.gpa);
+    checked += 1;
     const lib_generated_cases = try checkLibZstdGeneratedLibraryFrames(init.gpa);
     checked += lib_generated_cases;
     try checkSplitHeaderIncremental(init.gpa);
@@ -101,10 +103,10 @@ pub fn main(init: std.process.Init) !void {
         "sequence-tables",
         "skippable",
     }, &.{
-        .{ .capability = "chunked", .cases = lib_generated_cases + 9 },
-        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 9 },
+        .{ .capability = "chunked", .cases = lib_generated_cases + 10 },
+        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 10 },
         .{ .capability = "fse-repeat", .cases = 5 },
-        .{ .capability = "incremental", .cases = lib_generated_cases + 9 },
+        .{ .capability = "incremental", .cases = lib_generated_cases + 10 },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });
     try stdout.flush();
@@ -2040,6 +2042,84 @@ fn checkAllCompressedThenRepeatedSequenceTables(allocator: std.mem.Allocator) !v
     var zero_repeat_output: [expected.len]u8 = undefined;
     try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&zero_repeat_end_mark, &zero_repeat_output));
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_repeat_end_mark));
+}
+
+fn checkFixedLibZstdFseSequenceFrames(allocator: std.mem.Allocator) !void {
+    // Fixed libzstd-generated frames from the unit suite. They exercise native
+    // decode of a single-frame OF=FSE shape and a single-frame LL/OF/ML=FSE
+    // shape through the public probe, complementing Vort-emitted repeat-mode
+    // fixtures with reference-generated entropy payloads.
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+    for (0..20) |i| {
+        const line = try std.fmt.allocPrint(
+            allocator,
+            "{{\"k\":\"{d:0>4}\",\"n\":{d},\"txt\":\"abcdefghijklmnopqrstuvwxyz0123456789\"}}\n",
+            .{ i, i },
+        );
+        defer allocator.free(line);
+        try payload.appendSlice(allocator, line);
+    }
+
+    const cases = [_]struct {
+        frame_hex: []const u8,
+        expect_ll_fse: bool,
+        expect_of_fse: bool,
+        expect_ml_fse: bool,
+    }{
+        .{
+            .frame_hex = "28b52ffd04480d05008246171b604fda9c7c0c3be3e2e30209a920082d844864" ++
+                "7777ec670a42a39c2921d4cdbcab9a89786767971242ddccbbaa99887780cc13" ++
+                "6a5e4d3cbb582a94896445200f47e3612c1c4502713014080341e0eaabb2de" ++
+                "98faf3e6666657778e092720f0750344c9ae87b9d2732eeb11f77a982b7dce" ++
+                "653de25e0f73a5e7dc65254ec31a8f60d7c330e97318eb11ec7a18263d87" ++
+                "b11ec1ae0ec3a4e70833602852141ad6cc48",
+            .expect_ll_fse = false,
+            .expect_of_fse = true,
+            .expect_ml_fse = false,
+        },
+        .{
+            .frame_hex = "28b52ffd0458bd04006286161d404fd4010c12709f71cdcb65012b8aa20c2b" ++
+                "adb44686e60ccbf0189303ffffffff9fbfe75c6b8cada5544a083d20d3e71" ++
+                "a5b2aa1f362a950269218813c1c8d87b1701409c4c150200c0481c2c64a6" ++
+                "c93b04f9b666616d6292627a831ecebff6790734a0f1118396384ffff1d1f" ++
+                "351a6514ea22a98a124d541551a887841a1aa91692544238998e4eabd5ea" ++
+                "745a261a1840a4061ad6cc48",
+            .expect_ll_fse = true,
+            .expect_of_fse = true,
+            .expect_ml_fse = true,
+        },
+    };
+
+    inline for (cases) |case| {
+        var frame: [case.frame_hex.len / 2]u8 = undefined;
+        _ = try std.fmt.hexToBytes(&frame, case.frame_hex);
+
+        const block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+        try expect(block.block_type == .compressed);
+        try expect(block.last);
+        const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, block);
+        try expect((modes.literal_length_mode == .compressed) == case.expect_ll_fse);
+        try expect((modes.offset_mode == .compressed) == case.expect_of_fse);
+        try expect((modes.match_length_mode == .compressed) == case.expect_ml_fse);
+
+        const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+        defer allocator.free(lib_decoded);
+        try expectEqualSlices(payload.items, lib_decoded);
+
+        const native_decoded = try vort.zstdDecodeNativeFrameAllocLimited(allocator, &frame, payload.items.len);
+        defer allocator.free(native_decoded);
+        try expectEqualSlices(payload.items, native_decoded);
+        try checkIncrementalFrameLibraryApis(allocator, payload.items, &frame);
+        try checkChunkedFrameLibraryApis(allocator, payload.items, &frame);
+
+        const into = try allocator.alloc(u8, payload.items.len);
+        defer allocator.free(into);
+        const written = try vort.zstdDecodeNativeFrameIntoExactSize(&frame, into, payload.items.len);
+        try expect(written == payload.items.len);
+        try expectEqualSlices(payload.items, into[0..written]);
+        try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameIntoExactSize(&frame, into[0 .. into.len - 1], payload.items.len));
+    }
 }
 
 fn setZstdProbeBlockPayloadLen(frame: []u8, payload_len: usize) void {
