@@ -1375,6 +1375,39 @@ fn checkOffsetAndMatchLengthCompressedSequenceTables(allocator: std.mem.Allocato
     try expectPrefixedPayload(appended.items, &expected);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&appended, &frame, expected.len - 1));
+
+    var truncated_table = frame;
+    setZstdProbeBlockPayloadLenAt(&truncated_table, first_block.header_offset, true, 240);
+    const truncated_table_slice = truncated_table[0 .. first_block.payload_offset + 240];
+    const truncated_table_block = try vort.zstdInspectNativeFrameFirstBlock(truncated_table_slice);
+    try expectError(error.TruncatedFrame, vort.zstdInspectNativeFrameBlockSequenceModes(truncated_table_slice, truncated_table_block));
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSize(truncated_table_slice));
+    var truncated_table_output: [expected.len]u8 = undefined;
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(truncated_table_slice, &truncated_table_output));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, truncated_table_slice));
+
+    var bad_mode = frame;
+    try expect(bad_mode[328] == 0x28); // LL=Predefined, OF=FSE, ML=FSE, reserved low bits clear.
+    bad_mode[328] = 0x29; // Set a reserved low bit in the mixed sequence-mode byte.
+    const bad_mode_block = try vort.zstdInspectNativeFrameFirstBlock(&bad_mode);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&bad_mode, bad_mode_block));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&bad_mode));
+    var bad_mode_output: [expected.len]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&bad_mode, &bad_mode_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &bad_mode));
+
+    var short_bitstream = frame;
+    setZstdProbeBlockPayloadLenAt(&short_bitstream, first_block.header_offset, true, first_block.payload_len - 1);
+    const short_bitstream_slice = short_bitstream[0 .. first_block.next_header_offset - 1];
+    const short_bitstream_block = try vort.zstdInspectNativeFrameFirstBlock(short_bitstream_slice);
+    const short_bitstream_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(short_bitstream_slice, short_bitstream_block);
+    try expect(short_bitstream_modes.literal_length_mode == .predefined);
+    try expect(short_bitstream_modes.offset_mode == .compressed);
+    try expect(short_bitstream_modes.match_length_mode == .compressed);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(short_bitstream_slice));
+    var short_bitstream_output: [expected.len]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(short_bitstream_slice, &short_bitstream_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, short_bitstream_slice));
 }
 
 fn checkCompressedOffsetRepeatSelectorFrame(allocator: std.mem.Allocator) !void {

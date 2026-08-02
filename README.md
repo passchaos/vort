@@ -1002,7 +1002,7 @@ blocks plus repeated sequence-table reuse, and `run-zstd-native-frame-probe` for
 treeless repeat-Huffman literal reuse, mixed compressed-FSE sequence-table
 layouts (for example OF+ML=FSE with predefined LL), repeat-offset selector variants
 (zero-literal rep1/rep2, positive-literal rep2, invalid `rep0 - 1`, valid cross-block `rep0 - 1` after a direct-offset update plus Repeat_Mode replay, multi-sequence predefined-table state transitions, mixed RLE/predefined sequence modes, and repeated mixed-table modes across blocks, and pure library-level libzstd-generated frame differentials with incremental drains and chunked split-input helpers), and
-malformed sequence bitstreams, and short/corrupt LL/OF/ML compressed-FSE state streams,
+malformed sequence bitstreams, mixed-table reserved-bit/truncated/short-bitstream paths, and short/corrupt LL/OF/ML compressed-FSE state streams,
 while focused unit tests keep the writer-side ML=FSE construction covered
 without adding the heavier path to the regular native library bench gate.
 
