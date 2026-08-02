@@ -975,11 +975,12 @@ The focused library benchmark/gate tracks these public surfaces directly:
 
 ```sh
 zig build run-native-library-bench
+zig build run-native-library-bench -- --path README.md --iterations 1
 zig build run-native-library-bench-gate
 zig build run-native-library-bench-releasefast-gate
 ```
 
-The Debug and ReleaseFast gates currently require the LZ4 chain-depth, Zstd match-budget, high-byte
+The bench command accepts repeated `--path` arguments for focused project-file payloads. The Debug and ReleaseFast gates currently require the LZ4 chain-depth, Zstd match-budget, high-byte
 FSE Huffman, LZ4/Zstd lib/native lib-decode rows, Zstd sequence-Huffman literal, LZ4/Zstd lib-generated compatibility-frame/no-size/checksum/no-size+checksum/independent/full-independent, dictionary, trained-dictionary,
 dictionary-set, chunked dictionary-set, chunked append, chunked append exact-size, reusable decoder,
 reusable append exact-size, direct-output, and small-output fallback rows to

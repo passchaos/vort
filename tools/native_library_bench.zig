@@ -47,6 +47,14 @@ const Mode = enum {
 const Case = struct {
     name: []const u8,
     payload: []const u8,
+    owned: bool = false,
+
+    fn deinit(self: Case, allocator: std.mem.Allocator) void {
+        if (self.owned) {
+            allocator.free(self.name);
+            allocator.free(self.payload);
+        }
+    }
 };
 
 const Row = struct {
@@ -66,19 +74,28 @@ const Row = struct {
 const Options = struct {
     iterations: usize = 200,
     csv_path: ?[]const u8 = null,
+    paths: std.ArrayList([]const u8) = .empty,
+
+    fn deinit(self: *Options, allocator: std.mem.Allocator) void {
+        for (self.paths.items) |path| allocator.free(path);
+        self.paths.deinit(allocator);
+    }
 };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
     _ = args.next();
-    const options = try parseOptions(&args);
+    var options = try parseOptions(init.gpa, &args);
+    defer options.deinit(init.gpa);
 
-    const cases = [_]Case{
-        .{ .name = "text", .payload = "Native library benchmark text payload. " ** 1024 },
-        .{ .name = "structured", .payload = "{\"service\":\"vort\",\"codec\":\"native\",\"value\":12345}\n" ** 768 },
-        .{ .name = "repetitive", .payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 256 },
-    };
+    var cases: std.ArrayList(Case) = .empty;
+    defer {
+        for (cases.items) |case| case.deinit(init.gpa);
+        cases.deinit(init.gpa);
+    }
+    try addBuiltinCases(init.gpa, &cases);
+    try addPathCases(init.io, init.gpa, &cases, options.paths.items);
 
     try smokeLz4LinkedDirectFallback(init.gpa);
     try smokeLz4DeepHashChain(init.gpa);
@@ -100,7 +117,7 @@ pub fn main(init: std.process.Init) !void {
 
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(init.gpa);
-    for (cases) |case| {
+    for (cases.items) |case| {
         try rows.append(init.gpa, try lz4OneShotRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try lz4IncrementalRow(init.io, init.gpa, case, options.iterations));
         try rows.append(init.gpa, try lz4IncrementalDirectRow(init.io, init.gpa, case, options.iterations));
@@ -197,8 +214,9 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
-fn parseOptions(args: *std.process.Args.Iterator) !Options {
+fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) !Options {
     var options: Options = .{};
+    errdefer options.deinit(allocator);
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--iterations")) {
             const value = args.next() orelse return error.MissingIterationCount;
@@ -206,11 +224,45 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             if (options.iterations == 0) return error.InvalidIterationCount;
         } else if (std.mem.eql(u8, arg, "--csv")) {
             options.csv_path = args.next() orelse return error.MissingCsvPath;
+        } else if (std.mem.eql(u8, arg, "--path")) {
+            const path = args.next() orelse return error.MissingPath;
+            try options.paths.append(allocator, try allocator.dupe(u8, path));
         } else {
             return error.UnknownArgument;
         }
     }
     return options;
+}
+
+fn addBuiltinCases(allocator: std.mem.Allocator, cases: *std.ArrayList(Case)) !void {
+    try cases.append(allocator, .{ .name = "text", .payload = "Native library benchmark text payload. " ** 1024 });
+    try cases.append(allocator, .{ .name = "structured", .payload = "{\"service\":\"vort\",\"codec\":\"native\",\"value\":12345}\n" ** 768 });
+    try cases.append(allocator, .{ .name = "repetitive", .payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 256 });
+}
+
+fn addPathCases(io: std.Io, allocator: std.mem.Allocator, cases: *std.ArrayList(Case), paths: []const []const u8) !void {
+    for (paths) |path| {
+        const payload = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(128 * 1024 * 1024));
+        if (payload.len == 0) {
+            allocator.free(payload);
+            continue;
+        }
+        errdefer allocator.free(payload);
+        const name = try caseNameForPath(allocator, path, cases.items.len);
+        errdefer allocator.free(name);
+        try cases.append(allocator, .{ .name = name, .payload = payload, .owned = true });
+    }
+}
+
+fn caseNameForPath(allocator: std.mem.Allocator, path: []const u8, index: usize) ![]u8 {
+    const base = std.fs.path.basename(path);
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    errdefer out.deinit();
+    try out.writer.print("file{d}_", .{index});
+    for (base) |byte| {
+        try out.writer.writeByte(if (std.ascii.isAlphanumeric(byte)) byte else '_');
+    }
+    return try out.toOwnedSlice();
 }
 
 fn lz4OneShotRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
