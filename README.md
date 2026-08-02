@@ -980,6 +980,7 @@ zig build run-native-library-bench-path-gate
 zig build run-native-library-bench-gate
 zig build run-native-library-bench-releasefast-csv
 zig build run-native-library-bench-releasefast-gate
+zig build run-native-library-bench-releasefast-path-gate
 ```
 
 The bench command accepts repeated `--path` arguments for focused project-file payloads. The Debug and ReleaseFast gates currently require the LZ4 chain-depth, Zstd match-budget, high-byte
