@@ -2410,8 +2410,7 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
     for (cases) |case| {
         for (levels) |level| {
             for (option_sets) |options| {
-                try checkLibZstdGeneratedLibraryFrame(allocator, case.payload, level, options, case.min_blocks);
-                checked += 1;
+                checked += try checkLibZstdGeneratedLibraryFrame(allocator, case.payload, level, options, case.min_blocks);
             }
         }
     }
@@ -2424,9 +2423,10 @@ fn checkLibZstdGeneratedLibraryFrame(
     level: c_int,
     options: vort.ZstdLibFrameOptions,
     min_blocks: usize,
-) !void {
+) !usize {
     const encoded = try vort.zstdEncodeFrameWithLevelAndOptionsAlloc(allocator, payload, level, options);
     defer allocator.free(encoded);
+    var checked: usize = 1;
 
     // This is intentionally a pure Zig library differential: libzstd writes the
     // compatibility frame through Vort's library wrapper, then the dependency-
@@ -2486,6 +2486,12 @@ fn checkLibZstdGeneratedLibraryFrame(
 
     try checkIncrementalFrameLibraryApis(allocator, payload, encoded);
     try checkChunkedFrameLibraryApis(allocator, payload, encoded);
+
+    if (min_blocks > 1) {
+        try checkTruncatedLibZstdGeneratedFrameApis(allocator, payload, encoded);
+        checked += 1;
+    }
+    return checked;
 }
 
 fn checkIncrementalFrameLibraryApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
@@ -2528,6 +2534,84 @@ fn checkIncrementalFrameLibraryApis(allocator: std.mem.Allocator, payload: []con
     try expect(output_offset == payload.len);
     try expectEqualSlices(payload, output);
     try decoder.finish();
+}
+
+fn checkTruncatedLibZstdGeneratedFrameApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
+    // Derive hostile multi-block fixtures from libzstd output instead of
+    // hand-authoring the entropy payload. Dropping the final byte keeps every
+    // advertised block/header length intact except the trailing payload/checksum
+    // accounting, so all public native facades should converge on
+    // TruncatedFrame rather than SizeMismatch, ChecksumMismatch, or silent EOF.
+    if (frame.len < 2) return error.ZstdNativeFrameProbeMismatch;
+    const truncated = frame[0 .. frame.len - 1];
+
+    try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeStream(truncated));
+    if (vort.zstdSummarizeNativeFrameBlocks(truncated)) |_| {
+        // A checksum-only tail truncation leaves every block payload complete,
+        // so the block-level inspector may still succeed. Full-frame APIs below
+        // must still reject the frame because the advertised checksum is short.
+    } else |err| if (err != error.TruncatedFrame) return err;
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSizeLimited(truncated, payload.len));
+
+    const into = try allocator.alloc(u8, payload.len);
+    defer allocator.free(into);
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(truncated, into));
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameIntoExactSize(truncated, into, payload.len));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAllocLimited(allocator, truncated, payload.len));
+
+    var reusable = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer reusable.deinit();
+    try expectError(error.TruncatedFrame, reusable.decodedSizeLimited(truncated, payload.len));
+    try expectError(error.TruncatedFrame, reusable.decodeIntoSlice(truncated, into));
+    try expectAllocError(allocator, error.TruncatedFrame, reusable.decodeAlloc(truncated));
+
+    try checkTruncatedLibZstdGeneratedIncrementalApis(allocator, payload, truncated);
+    try checkTruncatedLibZstdGeneratedChunkedApis(allocator, payload, truncated);
+}
+
+fn checkTruncatedLibZstdGeneratedIncrementalApis(allocator: std.mem.Allocator, payload: []const u8, truncated: []const u8) !void {
+    var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
+        .expected_output_len = payload.len,
+        .max_decoded_buffer_len = payload.len,
+    });
+    defer decoder.deinit();
+
+    const output = try allocator.alloc(u8, payload.len);
+    defer allocator.free(output);
+    const result = try decoder.step(truncated, output[0..0]);
+    try expect(result.status == .need_input);
+    try expect(result.progress.input_read == truncated.len);
+    try expect(result.progress.output_written == 0);
+    try expectError(error.TruncatedFrame, decoder.finish());
+}
+
+fn checkTruncatedLibZstdGeneratedChunkedApis(allocator: std.mem.Allocator, payload: []const u8, truncated: []const u8) !void {
+    const split_a: usize = @min(truncated.len, 5);
+    const split_b: usize = @min(truncated.len, split_a + 19);
+    const chunks = [_][]const u8{
+        truncated[0..split_a],
+        truncated[split_a..split_b],
+        truncated[split_b..],
+    };
+    const join = try allocator.alloc(u8, truncated.len);
+    defer allocator.free(join);
+
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameChunksSize(&chunks, join));
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameChunksSizeLimited(&chunks, join, payload.len));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameChunksAllocLimited(allocator, &chunks, join, payload.len));
+
+    const into = try allocator.alloc(u8, payload.len);
+    defer allocator.free(into);
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameChunksInto(&chunks, join, into));
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameChunksIntoExactSize(&chunks, join, into, payload.len));
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    try expectError(error.TruncatedFrame, decoder.decodedChunksSize(&chunks, join));
+    try expectError(error.TruncatedFrame, decoder.decodedChunksSizeLimited(&chunks, join, payload.len));
+    try expectAllocError(allocator, error.TruncatedFrame, decoder.decodeChunksAllocLimited(&chunks, join, payload.len));
+    try expectError(error.TruncatedFrame, decoder.decodeChunksIntoSlice(&chunks, join, into));
+    try expectError(error.TruncatedFrame, decoder.decodeChunksIntoSliceExactSize(&chunks, join, into, payload.len));
 }
 
 fn checkChunkedFrameLibraryApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
