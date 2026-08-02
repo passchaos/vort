@@ -2489,7 +2489,7 @@ fn checkLibZstdGeneratedLibraryFrame(
 
     if (min_blocks > 1) {
         try checkTruncatedLibZstdGeneratedFrameApis(allocator, payload, encoded);
-        checked += 3;
+        checked += 4;
     }
     return checked;
 }
@@ -2589,6 +2589,17 @@ fn checkTruncatedLibZstdGeneratedFrameApis(allocator: std.mem.Allocator, payload
     try expectError(error.TruncatedFrame, reusable.decodeIntoSlice(second_block_header_truncated, into));
     try checkTruncatedLibZstdGeneratedIncrementalApis(allocator, payload, second_block_header_truncated);
     try checkTruncatedLibZstdGeneratedChunkedApis(allocator, payload, second_block_header_truncated);
+
+    const second_block_payload_truncated = try secondBlockPayloadTruncatedFrame(frame);
+    try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeStream(second_block_payload_truncated));
+    try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeFrameBlocks(second_block_payload_truncated));
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSizeLimited(second_block_payload_truncated, payload.len));
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(second_block_payload_truncated, into));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAllocLimited(allocator, second_block_payload_truncated, payload.len));
+    try expectError(error.TruncatedFrame, reusable.decodedSizeLimited(second_block_payload_truncated, payload.len));
+    try expectError(error.TruncatedFrame, reusable.decodeIntoSlice(second_block_payload_truncated, into));
+    try checkTruncatedLibZstdGeneratedIncrementalApis(allocator, payload, second_block_payload_truncated);
+    try checkTruncatedLibZstdGeneratedChunkedApis(allocator, payload, second_block_payload_truncated);
 }
 
 fn checkTruncatedLibZstdGeneratedIncrementalApis(allocator: std.mem.Allocator, payload: []const u8, truncated: []const u8) !void {
@@ -2649,6 +2660,14 @@ fn secondBlockHeaderTruncatedFrame(frame: []const u8) ![]const u8 {
     // three-byte block header. This stresses the frame/block walker transition
     // between blocks, distinct from payload-tail and first-payload truncation.
     return frame[0 .. first_block.next_header_offset + 2];
+}
+
+fn secondBlockPayloadTruncatedFrame(frame: []const u8) ![]const u8 {
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(frame);
+    if (first_block.last) return error.ZstdNativeFrameProbeMismatch;
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(frame, first_block.next_header_offset);
+    if (second_block.payload_len == 0) return error.ZstdNativeFrameProbeMismatch;
+    return frame[0 .. second_block.payload_offset + second_block.payload_len - 1];
 }
 
 fn checkChunkedFrameLibraryApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
