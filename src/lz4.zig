@@ -2300,6 +2300,11 @@ pub const NativeFrameDecoder = struct {
         return try decodeConcatenatedFrameAppendExactSize(self.allocator, out, frames, expected_output_len);
     }
 
+    pub fn decodeConcatenatedIntoSliceExactSize(self: *NativeFrameDecoder, frames: []const u8, output: []u8, expected_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeConcatenatedFrameIntoExactSize(frames, output, expected_output_len);
+    }
+
     pub fn decodeConcatenatedAppendWithDictionary(self: *NativeFrameDecoder, out: *std.ArrayList(u8), frames: []const u8, dictionary: NativeDictionary) Error!usize {
         return try decodeConcatenatedFrameAppendWithDictionary(self.allocator, out, frames, dictionary);
     }
@@ -2631,6 +2636,16 @@ pub fn decodeConcatenatedFrameAllocExactSize(allocator: std.mem.Allocator, frame
     };
     if (written != expected_output_len) return error.SizeMismatch;
     return out;
+}
+
+pub fn decodeConcatenatedFrameIntoExactSize(frames: []const u8, output: []u8, expected_output_len: usize) Error!usize {
+    if (output.len < expected_output_len) return error.OutputTooSmall;
+    const written = decodeConcatenatedFrameInto(frames, output[0..expected_output_len]) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return written;
 }
 
 pub fn decodeConcatenatedFrameAllocWithDictionary(allocator: std.mem.Allocator, frames: []const u8, dictionary: NativeDictionary) Error![]u8 {
@@ -3302,6 +3317,7 @@ pub const decodeNativeConcatenatedFrameAppendExactSize = decodeConcatenatedFrame
 pub const decodeNativeConcatenatedFrameAppendLimited = decodeConcatenatedFrameAppendLimited;
 pub const decodeNativeConcatenatedFrameAllocLimited = decodeConcatenatedFrameAllocLimited;
 pub const decodeNativeConcatenatedFrameInto = decodeConcatenatedFrameInto;
+pub const decodeNativeConcatenatedFrameIntoExactSize = decodeConcatenatedFrameIntoExactSize;
 pub const decodedNativeConcatenatedFrameSize = decodedConcatenatedFrameSize;
 pub const decodedNativeConcatenatedFrameSizeLimited = decodedConcatenatedFrameSizeLimited;
 pub const decodeNativeConcatenatedFrameAllocWithDictionary = decodeConcatenatedFrameAllocWithDictionary;
@@ -7159,6 +7175,15 @@ test "lz4 skippable frame writer composes with concatenated native streams" {
     const reusable_into_written = try reusable_decoder.decodeConcatenatedIntoSlice(stream.items, &reusable_into);
     try std.testing.expectEqual(@as(usize, "firstsecond".len), reusable_into_written);
     try std.testing.expectEqualSlices(u8, "firstsecond", &reusable_into);
+    const exact_into_written = try decodeNativeConcatenatedFrameIntoExactSize(stream.items, &reusable_into, "firstsecond".len);
+    try std.testing.expectEqual(@as(usize, "firstsecond".len), exact_into_written);
+    try std.testing.expectEqualSlices(u8, "firstsecond", &reusable_into);
+    try std.testing.expectError(error.OutputTooSmall, decodeNativeConcatenatedFrameIntoExactSize(stream.items, reusable_into[0 .. reusable_into.len - 1], "firstsecond".len));
+    try std.testing.expectError(error.SizeMismatch, decodeNativeConcatenatedFrameIntoExactSize(stream.items, &reusable_into, "firstsecond".len - 1));
+    var oversized_into: ["firstsecond".len + 1]u8 = undefined;
+    try std.testing.expectError(error.SizeMismatch, decodeNativeConcatenatedFrameIntoExactSize(stream.items, &oversized_into, "firstsecond".len + 1));
+    const reusable_exact_into_written = try reusable_decoder.decodeConcatenatedIntoSliceExactSize(stream.items, &reusable_into, "firstsecond".len);
+    try std.testing.expectEqual(@as(usize, "firstsecond".len), reusable_exact_into_written);
 
     const limited_decoded = try decodeConcatenatedFrameAllocLimited(std.testing.allocator, stream.items, "firstsecond".len);
     defer std.testing.allocator.free(limited_decoded);

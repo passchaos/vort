@@ -948,7 +948,7 @@ container-advertised lengths that do not match the stream. Reusable
 `NativeFrameDecoder` values expose matching single-frame `decodeChunks*` and
 concatenated `decodeConcatenatedChunks*` helpers, so callers can keep
 decoder-owned scratch capacity while still appending into their own output
-buffers. Native one-shot, chunked, and reusable decoders also provide
+buffers. Native one-shot, chunked, concatenated, and reusable decoders also provide
 `decode*Into*ExactSize` forms, including dictionary/dictionary-set variants, for
 caller-owned slices when a container-advertised byte count must match exactly.
 Incremental native decoders expose the shared `StepResult`

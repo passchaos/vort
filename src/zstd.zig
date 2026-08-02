@@ -1264,6 +1264,7 @@ pub const decodeNativeConcatenatedFrameAppendExactSize = decodeRawOrRleFrameAppe
 pub const decodeNativeConcatenatedFrameAppendLimited = decodeRawOrRleFrameAppendLimited;
 pub const decodeNativeConcatenatedFrameAllocLimited = decodeRawOrRleFrameAllocLimited;
 pub const decodeNativeConcatenatedFrameInto = decodeRawOrRleFrameInto;
+pub const decodeNativeConcatenatedFrameIntoExactSize = decodeRawOrRleFrameIntoExactSize;
 pub const decodeNativeConcatenatedFrameAllocWithDictionary = decodeRawOrRleFrameAllocWithDictionary;
 pub const decodeNativeConcatenatedFrameAllocWithDictionaryExactSize = decodeRawOrRleFrameAllocWithDictionaryExactSize;
 pub const decodeNativeConcatenatedFrameAppendWithDictionary = decodeRawOrRleFrameAppendWithDictionary;
@@ -2472,6 +2473,7 @@ pub const NativeFrameDecoder = struct {
     pub const decodeConcatenatedAppendExactSize = decodeAppendExactSize;
     pub const decodeConcatenatedAppendLimited = decodeAppendLimited;
     pub const decodeConcatenatedIntoSlice = decodeIntoSlice;
+    pub const decodeConcatenatedIntoSliceExactSize = decodeIntoSliceExactSize;
     pub const decodeConcatenatedAllocWithDictionary = decodeAllocWithDictionary;
     pub const decodeConcatenatedAllocWithDictionaryExactSize = decodeAllocWithDictionaryExactSize;
     pub const decodeConcatenatedAllocLimitedWithDictionary = decodeAllocLimitedWithDictionary;
@@ -9407,10 +9409,19 @@ test "zstd raw/RLE native decoder handles skippable and concatenated frames" {
     const native_written = try decodeNativeConcatenatedFrameInto(stream.items, &into_buffer);
     try std.testing.expectEqual(@as(usize, "firstsecond".len), native_written);
     try std.testing.expectEqualSlices(u8, "firstsecond", into_buffer[0..native_written]);
+    const exact_written = try decodeNativeConcatenatedFrameIntoExactSize(stream.items, &into_buffer, "firstsecond".len);
+    try std.testing.expectEqual(@as(usize, "firstsecond".len), exact_written);
+    try std.testing.expectEqualSlices(u8, "firstsecond", into_buffer[0..exact_written]);
+    try std.testing.expectError(error.OutputTooSmall, decodeNativeConcatenatedFrameIntoExactSize(stream.items, into_buffer[0 .. into_buffer.len - 1], "firstsecond".len));
+    try std.testing.expectError(error.SizeMismatch, decodeNativeConcatenatedFrameIntoExactSize(stream.items, &into_buffer, "firstsecond".len - 1));
+    var oversized_into: ["firstsecond".len + 1]u8 = undefined;
+    try std.testing.expectError(error.SizeMismatch, decodeNativeConcatenatedFrameIntoExactSize(stream.items, &oversized_into, "firstsecond".len + 1));
     var reusable = NativeFrameDecoder.init(std.testing.allocator);
     defer reusable.deinit();
     const reusable_decoded = try reusable.decodeConcatenatedScratch(stream.items);
     try std.testing.expectEqualSlices(u8, "firstsecond", reusable_decoded);
+    const reusable_exact_written = try reusable.decodeConcatenatedIntoSliceExactSize(stream.items, &into_buffer, "firstsecond".len);
+    try std.testing.expectEqual(@as(usize, "firstsecond".len), reusable_exact_written);
 }
 
 test "zstd skippable frame writer composes with native streams" {

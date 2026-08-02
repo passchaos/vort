@@ -233,6 +233,7 @@ pub const lz4DecodeNativeConcatenatedFrameAppendLimited = lz4.decodeNativeConcat
 pub const lz4DecodeNativeConcatenatedFrameAllocLimited = lz4.decodeNativeConcatenatedFrameAllocLimited;
 pub const lz4DecodeNativeConcatenatedFrameAllocExactSize = lz4.decodeNativeConcatenatedFrameAllocExactSize;
 pub const lz4DecodeNativeConcatenatedFrameInto = lz4.decodeNativeConcatenatedFrameInto;
+pub const lz4DecodeNativeConcatenatedFrameIntoExactSize = lz4.decodeNativeConcatenatedFrameIntoExactSize;
 pub const lz4DecodedNativeConcatenatedFrameSize = lz4.decodedNativeConcatenatedFrameSize;
 pub const lz4DecodedNativeConcatenatedFrameSizeLimited = lz4.decodedNativeConcatenatedFrameSizeLimited;
 pub const lz4DecodeNativeConcatenatedFrameAllocWithDictionary = lz4.decodeNativeConcatenatedFrameAllocWithDictionary;
@@ -506,6 +507,7 @@ pub const zstdDecodeNativeConcatenatedFrameAppendLimited = zstd.decodeNativeConc
 pub const zstdDecodeNativeConcatenatedFrameAllocLimited = zstd.decodeNativeConcatenatedFrameAllocLimited;
 pub const zstdDecodeNativeConcatenatedFrameAllocExactSize = zstd.decodeNativeConcatenatedFrameAllocExactSize;
 pub const zstdDecodeNativeConcatenatedFrameInto = zstd.decodeNativeConcatenatedFrameInto;
+pub const zstdDecodeNativeConcatenatedFrameIntoExactSize = zstd.decodeNativeConcatenatedFrameIntoExactSize;
 pub const zstdDecodeNativeConcatenatedFrameAllocWithDictionary = zstd.decodeNativeConcatenatedFrameAllocWithDictionary;
 pub const zstdDecodeNativeConcatenatedFrameAppendWithDictionary = zstd.decodeNativeConcatenatedFrameAppendWithDictionary;
 pub const zstdDecodeNativeConcatenatedFrameAppendExactSizeWithDictionary = zstd.decodeNativeConcatenatedFrameAppendExactSizeWithDictionary;
@@ -1334,6 +1336,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodeNativeConcatenatedFrameAllocExactSize;
     _ = lz4DecodedNativeConcatenatedFrameSize;
     _ = lz4DecodedNativeConcatenatedFrameSizeLimited;
+    _ = lz4DecodeNativeConcatenatedFrameIntoExactSize;
     _ = lz4DecodeNativeConcatenatedFrameAllocWithDictionary;
     _ = lz4DecodeNativeConcatenatedFrameAppendWithDictionary;
     _ = lz4DecodeNativeConcatenatedFrameAppendExactSizeWithDictionary;
@@ -1344,6 +1347,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodedNativeConcatenatedFrameSizeWithDictionary;
     _ = lz4DecodedNativeConcatenatedFrameSizeLimitedWithDictionary;
     _ = lz4DecodeNativeConcatenatedFrameInto;
+    _ = lz4DecodeNativeConcatenatedFrameIntoExactSize;
     _ = lz4DecodeNativeConcatenatedFrameAllocWithDictionarySet;
     _ = lz4DecodeNativeConcatenatedFrameAppendWithDictionarySet;
     _ = lz4DecodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet;
@@ -1595,6 +1599,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeNativeConcatenatedFrameAppendLimited;
     _ = zstdDecodeNativeConcatenatedFrameAllocLimited;
     _ = zstdDecodeNativeConcatenatedFrameAllocExactSize;
+    _ = zstdDecodeNativeConcatenatedFrameIntoExactSize;
     _ = zstdDecodeNativeConcatenatedFrameAllocWithDictionary;
     _ = zstdDecodeNativeConcatenatedFrameAppendWithDictionary;
     _ = zstdDecodeNativeConcatenatedFrameAppendLimitedWithDictionary;
@@ -1604,6 +1609,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodedNativeConcatenatedFrameSizeWithDictionary;
     _ = zstdDecodedNativeConcatenatedFrameSizeLimitedWithDictionary;
     _ = zstdDecodeNativeConcatenatedFrameInto;
+    _ = zstdDecodeNativeConcatenatedFrameIntoExactSize;
     _ = zstdDecodeNativeConcatenatedFrameAllocWithDictionarySet;
     _ = zstdDecodeNativeConcatenatedFrameAppendWithDictionarySet;
     _ = zstdDecodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet;
