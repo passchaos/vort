@@ -63,7 +63,7 @@ four library-level LZ4/Zstd probes run through the regular smoke target and
 retain `zig-out/vort-native-codec-probes.json` / `.md` artifacts.
 `run-native-library-bench` now accepts repeated `--path` arguments for focused
 project-file payloads. `run-native-library-bench-gate` is the lightweight Debug public API benchmark
-CSV gate; `run-native-library-bench-releasefast-gate` runs the same 87-row matrix
+CSV gate; `run-native-library-bench-releasefast-gate` runs the same 93-row matrix
 through a ReleaseFast build for library-path smoke evidence. `run-native-codec-probes-dashboard` now records reusable single-frame
 chunked decoder coverage as a distinct `reusable-chunked` capability. The bench
 gates also run bounded pre-row smoke checks for no-content-size

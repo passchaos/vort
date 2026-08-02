@@ -977,6 +977,7 @@ The focused library benchmark/gate tracks these public surfaces directly:
 zig build run-native-library-bench
 zig build run-native-library-bench -- --path README.md --iterations 1
 zig build run-native-library-bench-gate
+zig build run-native-library-bench-releasefast-csv
 zig build run-native-library-bench-releasefast-gate
 ```
 
