@@ -2919,6 +2919,41 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, &tree_then_new_frame_treeless));
     checked += 1;
 
+    const skip_between_tree_and_treeless = try vort.zstdEncodeSkippableFrameAlloc(allocator, 3, "tree-boundary");
+    defer allocator.free(skip_between_tree_and_treeless);
+    const tree_skip_treeless = try std.mem.concat(allocator, u8, &.{
+        &[_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x00, 0x68,
+            0x0d, 0x02, 0x00, 0xe2, 0xc3, 0x0d,
+            0x12, 0x90, 0xcf, 0x01, 0x6c, 0x33,
+            0x25, 0xf0, 0xfd, 0xb0, 0xcd, 0xdd,
+            0x2c, 0xe1, 0x0b, 0x33, 0x39, 0xce,
+            0x4e, 0x20, 0xbf, 0xb1, 0xa5, 0x12,
+            0x3a, 0x27, 0x9f, 0x76, 0xcd, 0xb7,
+            0x19, 0x2d, 0x3a, 0x14, 0xf2, 0x7b,
+            0xa4, 0x3c, 0xef, 0x21, 0x02, 0xb9,
+            0x5c, 0x08, 0xd2, 0xf8, 0xfe, 0xa2,
+            0xef, 0xd4, 0x93, 0xdf, 0xe5, 0x8e,
+            0x03, 0x01, 0x00, 0x7e, 0x7f, 0x41,
+            0x1f, 0xa0,
+        },
+        skip_between_tree_and_treeless,
+        &[_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x03,
+            0x25, 0x00, 0x00, 0x33, 0x40, 0x00,
+            0x01,
+        },
+    });
+    defer allocator.free(tree_skip_treeless);
+    const tree_skip_summary = try vort.zstdSummarizeNativeStream(tree_skip_treeless);
+    try expect(tree_skip_summary.frame_count == 2);
+    try expect(tree_skip_summary.skippable_frame_count == 1);
+    try expect(tree_skip_summary.skippable_payload_bytes == "tree-boundary".len);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeConcatenatedFrameSize(tree_skip_treeless));
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameInto(tree_skip_treeless, &boundary_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, tree_skip_treeless));
+    checked += 1;
+
     const tables_then_new_frame_repeat_hex =
         "28b52ffd200e4500000961015401000a01" ++
         "28b52ffd20042d0000096101fc01";
