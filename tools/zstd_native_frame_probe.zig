@@ -43,6 +43,8 @@ pub fn main(init: std.process.Init) !void {
     checked += 1;
     try checkMultiplePredefinedSequenceStateTransitions(init.gpa);
     checked += 1;
+    try checkManyPredefinedSequenceStateTransitions(init.gpa);
+    checked += 1;
     try checkMixedRlePredefinedSequenceModes(init.gpa);
     checked += 1;
     try checkRepeatMixedRlePredefinedSequenceModes(init.gpa);
@@ -87,10 +89,10 @@ pub fn main(init: std.process.Init) !void {
         "sequence-tables",
         "skippable",
     }, &.{
-        .{ .capability = "chunked", .cases = lib_generated_cases + 4 },
-        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 4 },
+        .{ .capability = "chunked", .cases = lib_generated_cases + 5 },
+        .{ .capability = "reusable-chunked", .cases = lib_generated_cases + 5 },
         .{ .capability = "fse-repeat", .cases = 5 },
-        .{ .capability = "incremental", .cases = lib_generated_cases + 4 },
+        .{ .capability = "incremental", .cases = lib_generated_cases + 5 },
         .{ .capability = "lib-generated", .cases = lib_generated_cases },
     });
     try stdout.flush();
@@ -1089,6 +1091,50 @@ fn checkMultiplePredefinedSequenceStateTransitions(allocator: std.mem.Allocator)
     try expectPrefixedPayload(appended.items, expected);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&appended, &frame, expected.len - 1));
+}
+
+fn checkManyPredefinedSequenceStateTransitions(allocator: std.mem.Allocator) !void {
+    // Keep a public fixture with more than two predefined-table transitions.
+    // The LL state deliberately cycles through several states while OF/ML stay
+    // simple, making regressions in streaming state updates visible through
+    // library APIs and the probe dashboard rather than only private unit tests.
+    const expected = "a" ** 30;
+    const frame_hex = "28b52ffd201e7500002961050000600010001c00d80184";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+    defer allocator.free(lib_decoded);
+    try expectEqualSlices(expected, lib_decoded);
+    try expect((try vort.zstdDecodedFrameSize(&frame)) == expected.len);
+
+    const block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(block.block_type == .compressed);
+    try expect(block.last);
+    const modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, block);
+    try expect(modes.literals_kind == .rle);
+    try expect(modes.regenerated_literals_size == 5);
+    try expect(modes.sequence_count == 5);
+    try expect(modes.literal_length_mode == .predefined);
+    try expect(modes.offset_mode == .predefined);
+    try expect(modes.match_length_mode == .predefined);
+
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == expected.len);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len)) == expected.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len - 1));
+
+    const native_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(native_decoded);
+    try expectEqualSlices(expected, native_decoded);
+    try checkIncrementalFrameLibraryApis(allocator, expected, &frame);
+    try checkChunkedFrameLibraryApis(allocator, expected, &frame);
+
+    var into: [expected.len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameIntoExactSize(&frame, &into, expected.len);
+    try expect(written == expected.len);
+    try expectEqualSlices(expected, into[0..written]);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameIntoExactSize(&frame, into[0 .. into.len - 1], expected.len));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoExactSize(&frame, &into, expected.len - 1));
 }
 
 fn checkMixedRlePredefinedSequenceModes(allocator: std.mem.Allocator) !void {
