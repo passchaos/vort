@@ -3493,6 +3493,58 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &rle_before_mixed_repeat));
     checked += 1;
 
+    const raw_before_offset_repeat_hex = "28b52ffd2008200000616263643d000009610174000001";
+    var raw_before_offset_repeat: [raw_before_offset_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&raw_before_offset_repeat, raw_before_offset_repeat_hex);
+    const raw_offset_block = try vort.zstdInspectNativeFrameFirstBlock(&raw_before_offset_repeat);
+    try expect(raw_offset_block.block_type == .raw);
+    const offset_repeat_after_raw = try vort.zstdInspectNativeFrameBlockAt(&raw_before_offset_repeat, raw_offset_block.next_header_offset);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&raw_before_offset_repeat, offset_repeat_after_raw));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&raw_before_offset_repeat));
+    var raw_offset_output: [8]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&raw_before_offset_repeat, &raw_offset_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &raw_before_offset_repeat));
+    checked += 1;
+
+    const raw_before_match_repeat_hex = "28b52ffd2008200000616263643d00000961015c000001";
+    var raw_before_match_repeat: [raw_before_match_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&raw_before_match_repeat, raw_before_match_repeat_hex);
+    const raw_match_block = try vort.zstdInspectNativeFrameFirstBlock(&raw_before_match_repeat);
+    try expect(raw_match_block.block_type == .raw);
+    const match_repeat_after_raw = try vort.zstdInspectNativeFrameBlockAt(&raw_before_match_repeat, raw_match_block.next_header_offset);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&raw_before_match_repeat, match_repeat_after_raw));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&raw_before_match_repeat));
+    var raw_match_output: [8]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&raw_before_match_repeat, &raw_match_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &raw_before_match_repeat));
+    checked += 1;
+
+    const rle_before_offset_repeat_hex = "28b52ffd2008220000613d000009610174000001";
+    var rle_before_offset_repeat: [rle_before_offset_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&rle_before_offset_repeat, rle_before_offset_repeat_hex);
+    const rle_offset_block = try vort.zstdInspectNativeFrameFirstBlock(&rle_before_offset_repeat);
+    try expect(rle_offset_block.block_type == .rle);
+    const offset_repeat_after_rle = try vort.zstdInspectNativeFrameBlockAt(&rle_before_offset_repeat, rle_offset_block.next_header_offset);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&rle_before_offset_repeat, offset_repeat_after_rle));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&rle_before_offset_repeat));
+    var rle_offset_output: [8]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&rle_before_offset_repeat, &rle_offset_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &rle_before_offset_repeat));
+    checked += 1;
+
+    const rle_before_match_repeat_hex = "28b52ffd2008220000613d00000961015c000001";
+    var rle_before_match_repeat: [rle_before_match_repeat_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&rle_before_match_repeat, rle_before_match_repeat_hex);
+    const rle_match_block = try vort.zstdInspectNativeFrameFirstBlock(&rle_before_match_repeat);
+    try expect(rle_match_block.block_type == .rle);
+    const match_repeat_after_rle = try vort.zstdInspectNativeFrameBlockAt(&rle_before_match_repeat, rle_match_block.next_header_offset);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&rle_before_match_repeat, match_repeat_after_rle));
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&rle_before_match_repeat));
+    var rle_match_output: [8]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&rle_before_match_repeat, &rle_match_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &rle_before_match_repeat));
+    checked += 1;
+
     const missing_sequence_bitstream_hex = "28b52ffd240e3d00000961015401000a";
     var missing_sequence_bitstream: [missing_sequence_bitstream_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&missing_sequence_bitstream, missing_sequence_bitstream_hex);
