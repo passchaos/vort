@@ -1238,6 +1238,47 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
     if ((try vort.lz4DecodedNativeConcatenatedFrameSize(skip)) != 0) return error.Lz4ProbeSizeMismatch;
     if ((try vort.lz4DecodedNativeConcatenatedFrameSizeLimited(skip, 0)) != 0) return error.Lz4ProbeSizeMismatch;
 
+    const split_a: usize = @min(skip.len, 5);
+    const split_b: usize = @min(skip.len, split_a + 3);
+    const chunks = [_][]const u8{ skip[0..split_a], skip[split_a..split_b], skip[split_b..] };
+    const join = try allocator.alloc(u8, skip.len);
+    defer allocator.free(join);
+    if ((try vort.lz4DecodedNativeConcatenatedFrameChunksSize(&chunks, join)) != 0) return error.Lz4ProbeSizeMismatch;
+    if ((try vort.lz4DecodedNativeConcatenatedFrameChunksSizeLimited(&chunks, join, 0)) != 0) return error.Lz4ProbeSizeMismatch;
+    const chunked_exact = try vort.lz4DecodeNativeConcatenatedFrameChunksAllocExactSize(allocator, &chunks, join, 0);
+    defer allocator.free(chunked_exact);
+    if (chunked_exact.len != 0) return error.Lz4ProbeSizeMismatch;
+    try expectAllocError(allocator, error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameChunksAllocExactSize(allocator, &chunks, join, 1));
+    var chunked_into: [1]u8 = undefined;
+    const chunked_written = try vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, &chunked_into, 0);
+    if (chunked_written != 0) return error.Lz4ProbeSizeMismatch;
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameChunksIntoExactSize(&chunks, join, &chunked_into, 1));
+
+    var chunked_appended: std.ArrayList(u8) = .empty;
+    defer chunked_appended.deinit(allocator);
+    try chunked_appended.appendSlice(allocator, "prefix:");
+    const chunked_appended_written = try vort.lz4DecodeNativeConcatenatedFrameChunksAppendExactSize(allocator, &chunked_appended, &chunks, join, 0);
+    if (chunked_appended_written != 0) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, chunked_appended.items, "prefix:")) return error.Lz4ProbeMismatch;
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameChunksAppendExactSize(allocator, &chunked_appended, &chunks, join, 1));
+
+    var reusable = vort.Lz4NativeFrameDecoder.init(allocator);
+    defer reusable.deinit();
+    const reusable_exact = try reusable.decodeConcatenatedChunksAllocExactSize(&chunks, join, 0);
+    defer allocator.free(reusable_exact);
+    if (reusable_exact.len != 0) return error.Lz4ProbeSizeMismatch;
+    try expectAllocError(allocator, error.SizeMismatch, reusable.decodeConcatenatedChunksAllocExactSize(&chunks, join, 1));
+    const reusable_written = try reusable.decodeConcatenatedChunksIntoSliceExactSize(&chunks, join, &chunked_into, 0);
+    if (reusable_written != 0) return error.Lz4ProbeSizeMismatch;
+    try expectError(error.SizeMismatch, reusable.decodeConcatenatedChunksIntoSliceExactSize(&chunks, join, &chunked_into, 1));
+    var reusable_appended: std.ArrayList(u8) = .empty;
+    defer reusable_appended.deinit(allocator);
+    try reusable_appended.appendSlice(allocator, "prefix:");
+    const reusable_appended_written = try reusable.decodeConcatenatedChunksAppendExactSize(&reusable_appended, &chunks, join, 0);
+    if (reusable_appended_written != 0) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, reusable_appended.items, "prefix:")) return error.Lz4ProbeMismatch;
+    try expectError(error.SizeMismatch, reusable.decodeConcatenatedChunksAppendExactSize(&reusable_appended, &chunks, join, 1));
+
     const summary = try vort.lz4SummarizeNativeStream(skip);
     if (summary.frame_count != 0) return error.Lz4ProbeMismatch;
     if (summary.skippable_frame_count != 1) return error.Lz4ProbeMismatch;
