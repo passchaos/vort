@@ -154,6 +154,7 @@ def assert_close(actual: float, expected: float, label: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, default=Path("zig-out/vort-native-library-bench.csv"))
+    parser.add_argument("--allow-extra-cases", action="store_true", help="Allow path-supplied cases in addition to the built-in matrix")
     args = parser.parse_args()
 
     if not args.csv.exists():
@@ -186,7 +187,8 @@ def main() -> int:
             raise AssertionError(f"duplicate benchmark row: {row}")
         seen.add(identity)
         if identity not in expected:
-            raise AssertionError(f"unexpected benchmark row identity: {row}")
+            if not args.allow_extra_cases or row["mode"] not in {"one_shot", "incremental", "incremental_direct", "incremental_fallback", "lib_decode", "native_lib_decode"}:
+                raise AssertionError(f"unexpected benchmark row identity: {row}")
 
         input_bytes = positive_int(row, "input_bytes")
         encoded_bytes = positive_int(row, "encoded_bytes")
@@ -210,7 +212,11 @@ def main() -> int:
         assert_close(encode_mib_s, expected_encode_mib_s, f"{identity} encode_mib_s")
         assert_close(decode_mib_s, expected_decode_mib_s, f"{identity} decode_mib_s")
 
-    if seen != expected or len(rows) != len(expected):
+    if args.allow_extra_cases:
+        missing = expected - seen
+        if missing:
+            raise AssertionError(f"missing required benchmark rows: {sorted(missing)!r}")
+    elif seen != expected or len(rows) != len(expected):
         raise AssertionError(f"bad codec/mode/case matrix: seen={sorted(seen)!r}")
 
     row_by_identity = {(row["codec"], row["mode"], row["case"]): row for row in rows}
