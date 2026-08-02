@@ -184,6 +184,10 @@ pub const NativeDictionarySet = struct {
         metadata: []const dictionary_mod.Metadata,
         contents: []const []const u8,
     ) Error!NativeDictionarySet {
+        if (metadata.len == 0) {
+            if (contents.len != 0) return error.InvalidDictionaryMetadata;
+            return initChecked(&.{});
+        }
         if (out.len < metadata.len or contents.len != metadata.len) return error.InvalidDictionaryMetadata;
         for (metadata, contents, 0..) |entry, content, i| {
             out[i] = try NativeDictionary.initFromMetadata(entry, content);
@@ -6733,6 +6737,12 @@ test "lz4 native concatenated streams select dictionaries by id" {
     try std.testing.expectError(error.InvalidDictionaryMetadata, NativeDictionarySet.initFromMetadata(&short_metadata_dictionaries, &metadata, &contents));
     const bad_contents = [_][]const u8{ metadata_first_dict.content, "wrong lz4 metadata second" };
     try std.testing.expectError(error.InvalidDictionaryMetadata, NativeDictionarySet.initFromMetadata(&metadata_dictionaries, &metadata, &bad_contents));
+    var empty_metadata_dictionaries: [0]NativeDictionary = .{};
+    const empty_metadata_set = try NativeDictionarySet.initFromMetadata(&empty_metadata_dictionaries, &.{}, &.{});
+    try empty_metadata_set.validate();
+    try std.testing.expect(empty_metadata_set.find(metadata_first_dict.id) == null);
+    const unexpected_contents = [_][]const u8{metadata_first_dict.content};
+    try std.testing.expectError(error.InvalidDictionaryMetadata, NativeDictionarySet.initFromMetadata(&empty_metadata_dictionaries, &.{}, &unexpected_contents));
     const options: NativeFrameOptions = .{
         .content_checksum = false,
         .block_checksum = true,

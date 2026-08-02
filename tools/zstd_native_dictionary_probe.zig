@@ -459,6 +459,13 @@ fn checkDictionarySetValidationApis() !void {
     const duplicate_metadata = [_]vort.DictionaryMetadata{ metadata[0], metadata[0] };
     const duplicate_contents = [_][]const u8{ metadata_first.content, metadata_first.content };
     try expectError(error.DuplicateDictionaryId, vort.ZstdNativeDictionarySet.initFromMetadata(&catalog, &duplicate_metadata, &duplicate_contents));
+
+    var empty_catalog: [0]vort.ZstdNativeDictionary = .{};
+    const empty_metadata_set = try vort.ZstdNativeDictionarySet.initFromMetadata(&empty_catalog, &.{}, &.{});
+    try empty_metadata_set.validate();
+    try expect(empty_metadata_set.find(metadata_first.id) == null);
+    const unexpected_contents = [_][]const u8{metadata_first.content};
+    try expectError(error.InvalidDictionaryMetadata, vort.ZstdNativeDictionarySet.initFromMetadata(&empty_catalog, &.{}, &unexpected_contents));
 }
 
 fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {

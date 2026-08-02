@@ -84,9 +84,10 @@ helpers so callers can persist 32-byte versioned `DictionaryMetadata` catalog
 entries next to dictionary bytes. `initFromMetadata` validates received bytes
 against that catalog entry before deriving the frame-level Dictionary_ID, and
 dictionary sets can now build a full borrowed catalog from parallel metadata and
-content slices while preserving duplicate-ID validation. Library callers no
-longer need to hand-roll IDs or route basic deterministic training through a CLI
-for simple dictionary catalogs.
+content slices while preserving duplicate-ID validation, accepting an explicitly
+empty catalog but rejecting metadata/content length mismatches. Library callers
+no longer need to hand-roll IDs or route basic deterministic training through a
+CLI for simple dictionary catalogs.
 Dictionary sets now also expose `initChecked`/`validate` helpers so dynamic
 catalogs can reject zero IDs and duplicate Dictionary_ID collisions before they
 reach encode/decode paths.

@@ -203,6 +203,13 @@ fn checkDictionarySetValidationApis() !void {
     const duplicate_metadata = [_]vort.DictionaryMetadata{ metadata[0], metadata[0] };
     const duplicate_contents = [_][]const u8{ metadata_first.content, metadata_first.content };
     try expectError(error.DuplicateDictionaryId, vort.Lz4NativeDictionarySet.initFromMetadata(&catalog, &duplicate_metadata, &duplicate_contents));
+
+    var empty_catalog: [0]vort.Lz4NativeDictionary = .{};
+    const empty_metadata_set = try vort.Lz4NativeDictionarySet.initFromMetadata(&empty_catalog, &.{}, &.{});
+    try empty_metadata_set.validate();
+    try expect(empty_metadata_set.find(metadata_first.id) == null);
+    const unexpected_contents = [_][]const u8{metadata_first.content};
+    try expectError(error.InvalidDictionaryMetadata, vort.Lz4NativeDictionarySet.initFromMetadata(&empty_catalog, &.{}, &unexpected_contents));
 }
 
 fn checkSingleFrameDictionaryApis(allocator: std.mem.Allocator) !void {
