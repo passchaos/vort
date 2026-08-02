@@ -6,6 +6,11 @@ const patch_version: u8 = 0;
 const patch_header_len: usize = 17;
 const op_literal: u8 = 0;
 const op_match: u8 = 1;
+const metadata_magic = [_]u8{ 'V', 'D', 'M', 'T' };
+const metadata_version: u8 = 0;
+const metadata_header_len: usize = 32;
+
+pub const metadata_encoded_len: usize = metadata_header_len;
 
 pub const DictionaryId = packed struct(u64) {
     crc32: u32,
@@ -28,7 +33,79 @@ pub const Metadata = struct {
     pub fn fromBytes(bytes: []const u8, window_len: usize) Metadata {
         return .{ .id = .fromBytes(bytes), .content_len = bytes.len, .window_len = window_len };
     }
+
+    /// Stable fixed-size record for persisting dictionary catalog metadata.
+    ///
+    /// The record intentionally contains metadata only: callers still own and
+    /// distribute the dictionary bytes separately. Keeping the wire form small,
+    /// versioned, and endian-stable lets containers advertise dictionary
+    /// requirements before constructing codec-specific borrowed dictionaries.
+    pub fn encodeInto(self: Metadata, output: []u8) !usize {
+        if (output.len < metadata_encoded_len) return error.OutputTooSmall;
+        @memcpy(output[0..4], &metadata_magic);
+        output[4] = metadata_version;
+        output[5] = 0;
+        output[6] = 0;
+        output[7] = 0;
+        std.mem.writeInt(u32, output[8..12], self.id.crc32, .little);
+        std.mem.writeInt(u32, output[12..16], self.id.length, .little);
+        std.mem.writeInt(u64, output[16..24], std.math.cast(u64, self.content_len) orelse return error.IntegerOverflow, .little);
+        std.mem.writeInt(u64, output[24..32], std.math.cast(u64, self.window_len) orelse return error.IntegerOverflow, .little);
+        return metadata_encoded_len;
+    }
+
+    pub fn encodeAlloc(self: Metadata, allocator: std.mem.Allocator) ![]u8 {
+        const encoded = try allocator.alloc(u8, metadata_encoded_len);
+        errdefer allocator.free(encoded);
+        _ = try self.encodeInto(encoded);
+        return encoded;
+    }
+
+    pub fn decode(bytes: []const u8) !Metadata {
+        const result = try decodePrefix(bytes);
+        if (bytes.len != result.bytes_read) return error.TrailingData;
+        return result.metadata;
+    }
+
+    pub fn decodePrefix(bytes: []const u8) !MetadataDecodeResult {
+        if (bytes.len < metadata_encoded_len) return error.TruncatedFrame;
+        if (!std.mem.eql(u8, bytes[0..4], &metadata_magic)) return error.InvalidMagic;
+        if (bytes[4] != metadata_version) return error.UnsupportedVersion;
+        if (bytes[5] != 0 or bytes[6] != 0 or bytes[7] != 0) return error.CorruptFrame;
+        return .{
+            .metadata = .{
+                .id = .{
+                    .crc32 = std.mem.readInt(u32, bytes[8..12], .little),
+                    .length = std.mem.readInt(u32, bytes[12..16], .little),
+                },
+                .content_len = std.math.cast(usize, std.mem.readInt(u64, bytes[16..24], .little)) orelse return error.IntegerOverflow,
+                .window_len = std.math.cast(usize, std.mem.readInt(u64, bytes[24..32], .little)) orelse return error.IntegerOverflow,
+            },
+            .bytes_read = metadata_encoded_len,
+        };
+    }
 };
+
+pub const MetadataDecodeResult = struct {
+    metadata: Metadata,
+    bytes_read: usize,
+};
+
+pub fn encodeMetadataInto(metadata: Metadata, output: []u8) !usize {
+    return metadata.encodeInto(output);
+}
+
+pub fn encodeMetadataAlloc(allocator: std.mem.Allocator, metadata: Metadata) ![]u8 {
+    return metadata.encodeAlloc(allocator);
+}
+
+pub fn decodeMetadata(bytes: []const u8) !Metadata {
+    return Metadata.decode(bytes);
+}
+
+pub fn decodeMetadataPrefix(bytes: []const u8) !MetadataDecodeResult {
+    return Metadata.decodePrefix(bytes);
+}
 
 pub const TrainOptions = struct {
     target_size: usize,
@@ -320,6 +397,56 @@ test "dictionary IDs are stable and content sensitive" {
     const c = DictionaryId.fromBytes("different contents");
     try std.testing.expectEqual(a.asInt(), b.asInt());
     try std.testing.expect(a.asInt() != c.asInt());
+}
+
+test "dictionary metadata codec is fixed size and versioned" {
+    const meta = Metadata.fromBytes("dictionary contents", 64 * 1024);
+
+    var encoded: [metadata_encoded_len]u8 = undefined;
+    try std.testing.expectEqual(metadata_encoded_len, try meta.encodeInto(&encoded));
+    try std.testing.expectEqualSlices(u8, &metadata_magic, encoded[0..4]);
+    try std.testing.expectEqual(metadata_version, encoded[4]);
+
+    const decoded = try Metadata.decode(&encoded);
+    try std.testing.expectEqual(meta.id.asInt(), decoded.id.asInt());
+    try std.testing.expectEqual(meta.content_len, decoded.content_len);
+    try std.testing.expectEqual(meta.window_len, decoded.window_len);
+
+    const owned = try encodeMetadataAlloc(std.testing.allocator, meta);
+    defer std.testing.allocator.free(owned);
+    try std.testing.expectEqualSlices(u8, &encoded, owned);
+    try std.testing.expectEqual(meta.id.asInt(), (try decodeMetadata(owned)).id.asInt());
+
+    var prefixed = std.ArrayList(u8).empty;
+    defer prefixed.deinit(std.testing.allocator);
+    try prefixed.appendSlice(std.testing.allocator, &encoded);
+    try prefixed.append(std.testing.allocator, 0xff);
+    const prefix = try decodeMetadataPrefix(prefixed.items);
+    try std.testing.expectEqual(meta.id.asInt(), prefix.metadata.id.asInt());
+    try std.testing.expectEqual(metadata_encoded_len, prefix.bytes_read);
+    try std.testing.expectError(error.TrailingData, decodeMetadata(prefixed.items));
+}
+
+test "dictionary metadata codec rejects malformed records" {
+    const meta = Metadata.fromBytes("dictionary contents", 64 * 1024);
+    var encoded: [metadata_encoded_len]u8 = undefined;
+    _ = try encodeMetadataInto(meta, &encoded);
+
+    var short_out: [metadata_encoded_len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, encodeMetadataInto(meta, &short_out));
+    try std.testing.expectError(error.TruncatedFrame, decodeMetadata(encoded[0 .. metadata_encoded_len - 1]));
+
+    var bad_magic = encoded;
+    bad_magic[0] = 'x';
+    try std.testing.expectError(error.InvalidMagic, decodeMetadata(&bad_magic));
+
+    var bad_version = encoded;
+    bad_version[4] = metadata_version + 1;
+    try std.testing.expectError(error.UnsupportedVersion, decodeMetadata(&bad_version));
+
+    var bad_reserved = encoded;
+    bad_reserved[5] = 1;
+    try std.testing.expectError(error.CorruptFrame, decodeMetadata(&bad_reserved));
 }
 
 test "training plan summarizes sample corpus" {

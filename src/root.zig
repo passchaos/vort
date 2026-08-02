@@ -1048,6 +1048,12 @@ pub const optimalLz77PlanAlloc = lz77.optimalPlanAlloc;
 
 pub const DictionaryId = dictionary.DictionaryId;
 pub const DictionaryMetadata = dictionary.Metadata;
+pub const DictionaryMetadataDecodeResult = dictionary.MetadataDecodeResult;
+pub const dictionaryMetadataEncodedLen = dictionary.metadata_encoded_len;
+pub const encodeDictionaryMetadataAlloc = dictionary.encodeMetadataAlloc;
+pub const encodeDictionaryMetadataInto = dictionary.encodeMetadataInto;
+pub const decodeDictionaryMetadata = dictionary.decodeMetadata;
+pub const decodeDictionaryMetadataPrefix = dictionary.decodeMetadataPrefix;
 pub const trainDictionaryAlloc = dictionary.trainAlloc;
 pub const findDictionaryMatchesAlloc = dictionary.findMatchesAlloc;
 pub const summarizeDictionaryMatchesAlloc = dictionary.summarizeMatchesAlloc;
@@ -1082,6 +1088,24 @@ test {
 test "root exports lz4 and zstd codec helpers" {
     // The codec modules remain available as namespaces, while these aliases keep
     // the one-shot and caller-owned native surfaces discoverable from `vort`.
+    _ = DictionaryId;
+    _ = DictionaryMetadata;
+    _ = DictionaryMetadataDecodeResult;
+    _ = dictionaryMetadataEncodedLen;
+    _ = encodeDictionaryMetadataAlloc;
+    _ = encodeDictionaryMetadataInto;
+    _ = decodeDictionaryMetadata;
+    _ = decodeDictionaryMetadataPrefix;
+    _ = trainDictionaryAlloc;
+    _ = findDictionaryMatchesAlloc;
+    _ = summarizeDictionaryMatchesAlloc;
+    _ = encodeDictionaryPatchAlloc;
+    _ = decodedDictionaryPatchSize;
+    _ = maxDictionaryPatchSizeForDecodedLen;
+    _ = decodeDictionaryPatch;
+    _ = decodeDictionaryPatchInto;
+    _ = decodeDictionaryPatchAlloc;
+
     _ = lz4EncodeFrameAlloc;
     _ = lz4EncodeFrameWithLevelAlloc;
     _ = lz4EncodeFrameWithOptionsAlloc;

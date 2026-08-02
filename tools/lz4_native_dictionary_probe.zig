@@ -137,6 +137,13 @@ fn checkTrainedDictionaryApis(allocator: std.mem.Allocator) !void {
     try expect(metadata.id.asInt() == vort.DictionaryId.fromBytes(dict.content).asInt());
     try expect(metadata.content_len == dict.content.len);
     try expect(metadata.window_len == vort.lz4NativeDictionaryWindowLen);
+    const encoded_metadata = try vort.encodeDictionaryMetadataAlloc(allocator, metadata);
+    defer allocator.free(encoded_metadata);
+    try expect(encoded_metadata.len == vort.dictionaryMetadataEncodedLen);
+    const decoded_metadata = try vort.decodeDictionaryMetadata(encoded_metadata);
+    try expect(decoded_metadata.id.asInt() == metadata.id.asInt());
+    try expect(decoded_metadata.content_len == metadata.content_len);
+    try expect(decoded_metadata.window_len == metadata.window_len);
     try expect(dict.content.len > 0);
     try expect(dict.content.len <= 64);
     const match_summary = try vort.summarizeDictionaryMatchesAlloc(allocator, dict.content, payload, 4);
