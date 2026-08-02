@@ -1345,6 +1345,16 @@ fn expectLz4ConcatenatedPayloadApis(allocator: std.mem.Allocator, stream: []cons
     try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, into, payload.len + 1));
     if (payload.len != 0) try expectError(error.OutputTooSmall, vort.lz4DecodeNativeConcatenatedFrameIntoExactSize(stream, into[0 .. payload.len - 1], payload.len));
 
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(allocator);
+    try appended.appendSlice(allocator, "prefix:");
+    const appended_written = try vort.lz4DecodeNativeConcatenatedFrameAppendExactSize(allocator, &appended, stream, payload.len);
+    if (appended_written != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, "prefix:", appended.items[0.."prefix:".len])) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, payload, appended.items["prefix:".len..])) return error.Lz4ProbeMismatch;
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeConcatenatedFrameAppendExactSize(allocator, &appended, stream, payload.len + 1));
+
     const split_a: usize = @min(stream.len, stream.len / 3 + 1);
     const split_b: usize = @min(stream.len, split_a + stream.len / 3 + 1);
     const chunks = [_][]const u8{ stream[0..split_a], stream[split_a..split_b], stream[split_b..] };
@@ -1363,6 +1373,16 @@ fn expectLz4ConcatenatedPayloadApis(allocator: std.mem.Allocator, stream: []cons
     if (reusable_written != payload.len) return error.Lz4ProbeSizeMismatch;
     if (!std.mem.eql(u8, payload, into[0..payload.len])) return error.Lz4ProbeMismatch;
     try expectError(error.SizeMismatch, decoder.decodeConcatenatedIntoSliceExactSize(stream, into, payload.len + 1));
+
+    var reusable_appended: std.ArrayList(u8) = .empty;
+    defer reusable_appended.deinit(allocator);
+    try reusable_appended.appendSlice(allocator, "prefix:");
+    const reusable_appended_written = try decoder.decodeConcatenatedAppendExactSize(&reusable_appended, stream, payload.len);
+    if (reusable_appended_written != payload.len) return error.Lz4ProbeSizeMismatch;
+    if (!std.mem.eql(u8, "prefix:", reusable_appended.items[0.."prefix:".len])) return error.Lz4ProbeMismatch;
+    if (!std.mem.eql(u8, payload, reusable_appended.items["prefix:".len..])) return error.Lz4ProbeMismatch;
+    reusable_appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, decoder.decodeConcatenatedAppendExactSize(&reusable_appended, stream, payload.len + 1));
 }
 
 fn checkSkippableThenEmptyFrame(allocator: std.mem.Allocator) !void {
