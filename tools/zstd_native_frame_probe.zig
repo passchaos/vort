@@ -2509,8 +2509,7 @@ fn checkLibZstdGeneratedLibraryFrame(
         checked += try checkTruncatedLibZstdGeneratedFrameApis(allocator, payload, encoded, min_blocks);
     }
     if (min_blocks > 1 and options.content_checksum) {
-        try checkCorruptChecksumLibZstdGeneratedFrameApis(allocator, payload, encoded);
-        checked += 1;
+        checked += try checkCorruptChecksumLibZstdGeneratedFrameApis(allocator, payload, encoded);
     }
     return checked;
 }
@@ -2567,28 +2566,12 @@ fn checkTruncatedLibZstdGeneratedFrameApis(allocator: std.mem.Allocator, payload
     var checked: usize = 0;
     const truncated = frame[0 .. frame.len - 1];
 
-    try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeStream(truncated));
-    if (vort.zstdSummarizeNativeFrameBlocks(truncated)) |_| {
-        // A checksum-only tail truncation leaves every block payload complete,
-        // so the block-level inspector may still succeed. Full-frame APIs below
-        // must still reject the frame because the advertised checksum is short.
-    } else |err| if (err != error.TruncatedFrame) return err;
-    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSizeLimited(truncated, payload.len));
-
     const into = try allocator.alloc(u8, payload.len);
     defer allocator.free(into);
-    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(truncated, into));
-    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameIntoExactSize(truncated, into, payload.len));
-    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAllocLimited(allocator, truncated, payload.len));
-
     var reusable = vort.ZstdNativeFrameDecoder.init(allocator);
     defer reusable.deinit();
-    try expectError(error.TruncatedFrame, reusable.decodedSizeLimited(truncated, payload.len));
-    try expectError(error.TruncatedFrame, reusable.decodeIntoSlice(truncated, into));
-    try expectAllocError(allocator, error.TruncatedFrame, reusable.decodeAlloc(truncated));
 
-    try checkTruncatedLibZstdGeneratedIncrementalApis(allocator, payload, truncated);
-    try checkTruncatedLibZstdGeneratedChunkedApis(allocator, payload, truncated);
+    try checkTruncatedLibZstdGeneratedTailApis(allocator, payload, truncated);
     checked += 1;
 
     const first_block_payload_truncated = try firstBlockPayloadTruncatedFrame(frame);
@@ -2656,6 +2639,31 @@ fn checkTruncatedLibZstdGeneratedFrameApis(allocator: std.mem.Allocator, payload
     return checked;
 }
 
+fn checkTruncatedLibZstdGeneratedTailApis(allocator: std.mem.Allocator, payload: []const u8, truncated: []const u8) !void {
+    try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeStream(truncated));
+    if (vort.zstdSummarizeNativeFrameBlocks(truncated)) |_| {
+        // A checksum-only tail truncation leaves every block payload complete,
+        // so the block-level inspector may still succeed. Full-frame APIs below
+        // must still reject the frame because the advertised checksum is short.
+    } else |err| if (err != error.TruncatedFrame) return err;
+    try expectError(error.TruncatedFrame, vort.zstdDecodedNativeFrameSizeLimited(truncated, payload.len));
+
+    const into = try allocator.alloc(u8, payload.len);
+    defer allocator.free(into);
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(truncated, into));
+    try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameIntoExactSize(truncated, into, payload.len));
+    try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAllocLimited(allocator, truncated, payload.len));
+
+    var reusable = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer reusable.deinit();
+    try expectError(error.TruncatedFrame, reusable.decodedSizeLimited(truncated, payload.len));
+    try expectError(error.TruncatedFrame, reusable.decodeIntoSlice(truncated, into));
+    try expectAllocError(allocator, error.TruncatedFrame, reusable.decodeAlloc(truncated));
+
+    try checkTruncatedLibZstdGeneratedIncrementalApis(allocator, payload, truncated);
+    try checkTruncatedLibZstdGeneratedChunkedApis(allocator, payload, truncated);
+}
+
 fn checkTruncatedLibZstdGeneratedIncrementalApis(allocator: std.mem.Allocator, payload: []const u8, truncated: []const u8) !void {
     var decoder = vort.ZstdNativeIncrementalFrameDecoder.initWithOptions(allocator, .{
         .expected_output_len = payload.len,
@@ -2672,7 +2680,7 @@ fn checkTruncatedLibZstdGeneratedIncrementalApis(allocator: std.mem.Allocator, p
     try expectError(error.TruncatedFrame, decoder.finish());
 }
 
-fn checkCorruptChecksumLibZstdGeneratedFrameApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
+fn checkCorruptChecksumLibZstdGeneratedFrameApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !usize {
     // Unlike the truncation fixtures, this keeps the libzstd frame structurally
     // complete and corrupts only the checksum trailer. Size preflight should
     // still succeed, while all decode facades must reject the final content
@@ -2702,6 +2710,15 @@ fn checkCorruptChecksumLibZstdGeneratedFrameApis(allocator: std.mem.Allocator, p
 
     try checkCorruptChecksumLibZstdGeneratedIncrementalApis(allocator, payload, corrupt);
     try checkCorruptChecksumLibZstdGeneratedChunkedApis(allocator, payload, corrupt);
+
+    var corrupt_then_truncated = try allocator.dupe(u8, frame[0 .. frame.len - 1]);
+    defer allocator.free(corrupt_then_truncated);
+    corrupt_then_truncated[corrupt_then_truncated.len - 1] ^= 0x01;
+    // The checksum bytes seen so far are already wrong, but the checksum field
+    // itself is incomplete. Every full-frame facade should report truncation
+    // before attempting checksum comparison.
+    try checkTruncatedLibZstdGeneratedTailApis(allocator, payload, corrupt_then_truncated);
+    return 2;
 }
 
 fn checkCorruptChecksumLibZstdGeneratedIncrementalApis(allocator: std.mem.Allocator, payload: []const u8, frame: []const u8) !void {
