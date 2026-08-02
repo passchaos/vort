@@ -276,6 +276,22 @@ fn checkSingleFrameDictionaryApis(allocator: std.mem.Allocator) !void {
     try expectEqualSlices(payload, &into);
     try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameIntoWithDictionarySetExactSize(encoded, &into, dictionary_set, payload.len - 1));
 
+    const chunks = [_][]const u8{
+        encoded[0..@min(encoded.len, 5)],
+        encoded[@min(encoded.len, 5)..@min(encoded.len, 17)],
+        encoded[@min(encoded.len, 17)..],
+    };
+    const join = try allocator.alloc(u8, encoded.len);
+    defer allocator.free(join);
+    const chunk_exact_written = try vort.lz4DecodeNativeFrameChunksIntoWithDictionaryExactSize(&chunks, join, &into, dict, payload.len);
+    try expect(chunk_exact_written == payload.len);
+    try expectEqualSlices(payload, &into);
+    try expectError(error.OutputTooSmall, vort.lz4DecodeNativeFrameChunksIntoWithDictionaryExactSize(&chunks, join, into[0 .. into.len - 1], dict, payload.len));
+    try expectError(error.SizeMismatch, vort.lz4DecodeNativeFrameChunksIntoWithDictionaryExactSize(&chunks, join, &into, dict, payload.len - 1));
+    const chunk_set_exact_written = try vort.lz4DecodeNativeFrameChunksIntoWithDictionarySetExactSize(&chunks, join, &into, dictionary_set, payload.len);
+    try expect(chunk_set_exact_written == payload.len);
+    try expectEqualSlices(payload, &into);
+
     var out = try allocator.alloc(u8, try vort.lz4EncodedNativeFrameBoundWithDictionary(payload.len, options, dict));
     defer allocator.free(out);
     const written = try vort.lz4EncodeNativeFrameIntoSliceWithDictionary(allocator, payload, options, dict, out);

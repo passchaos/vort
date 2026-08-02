@@ -1098,6 +1098,11 @@ pub fn decodeRawOrRleFrameChunksIntoWithDictionary(chunks: []const []const u8, c
     return try decodeRawOrRleFrameIntoWithDictionary(joined, output, dictionary);
 }
 
+pub fn decodeRawOrRleFrameChunksIntoExactSizeWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeRawOrRleFrameIntoWithDictionaryExactSize(joined, output, dictionary, expected_output_len);
+}
+
 pub fn decodedRawOrRleFrameChunksSizeWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodedRawOrRleFrameSizeWithDictionary(joined, dictionary);
@@ -1141,6 +1146,11 @@ pub fn decodeRawOrRleFrameChunksAppendLimitedWithDictionarySet(allocator: std.me
 pub fn decodeRawOrRleFrameChunksIntoWithDictionarySet(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodeRawOrRleFrameIntoWithDictionarySet(joined, output, dictionary_set);
+}
+
+pub fn decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeRawOrRleFrameIntoWithDictionarySetExactSize(joined, output, dictionary_set, expected_output_len);
 }
 
 pub fn decodedRawOrRleFrameChunksSizeWithDictionarySet(chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
@@ -1232,6 +1242,8 @@ pub const decodeNativeFrameChunksAppendWithDictionary = decodeRawOrRleFrameChunk
 pub const decodeNativeFrameChunksAppendExactSizeWithDictionary = decodeRawOrRleFrameChunksAppendExactSizeWithDictionary;
 pub const decodeNativeFrameChunksAppendLimitedWithDictionary = decodeRawOrRleFrameChunksAppendLimitedWithDictionary;
 pub const decodeNativeFrameChunksIntoWithDictionary = decodeRawOrRleFrameChunksIntoWithDictionary;
+pub const decodeNativeFrameChunksIntoExactSizeWithDictionary = decodeRawOrRleFrameChunksIntoExactSizeWithDictionary;
+pub const decodeNativeFrameChunksIntoWithDictionaryExactSize = decodeRawOrRleFrameChunksIntoExactSizeWithDictionary;
 pub const decodedNativeFrameChunksSizeWithDictionary = decodedRawOrRleFrameChunksSizeWithDictionary;
 pub const decodedNativeFrameChunksSizeLimitedWithDictionary = decodedRawOrRleFrameChunksSizeLimitedWithDictionary;
 pub const decodeNativeFrameChunksAllocWithDictionarySet = decodeRawOrRleFrameChunksAllocWithDictionarySet;
@@ -1241,6 +1253,8 @@ pub const decodeNativeFrameChunksAppendWithDictionarySet = decodeRawOrRleFrameCh
 pub const decodeNativeFrameChunksAppendExactSizeWithDictionarySet = decodeRawOrRleFrameChunksAppendExactSizeWithDictionarySet;
 pub const decodeNativeFrameChunksAppendLimitedWithDictionarySet = decodeRawOrRleFrameChunksAppendLimitedWithDictionarySet;
 pub const decodeNativeFrameChunksIntoWithDictionarySet = decodeRawOrRleFrameChunksIntoWithDictionarySet;
+pub const decodeNativeFrameChunksIntoExactSizeWithDictionarySet = decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet;
+pub const decodeNativeFrameChunksIntoWithDictionarySetExactSize = decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet;
 pub const decodedNativeFrameChunksSizeWithDictionarySet = decodedRawOrRleFrameChunksSizeWithDictionarySet;
 pub const decodedNativeFrameChunksSizeLimitedWithDictionarySet = decodedRawOrRleFrameChunksSizeLimitedWithDictionarySet;
 pub const decodeNativeConcatenatedFrameAlloc = decodeRawOrRleFrameAlloc;
@@ -2341,6 +2355,11 @@ pub const NativeFrameDecoder = struct {
         return try decodeRawOrRleFrameChunksIntoWithDictionary(chunks, compressed_scratch, output, dictionary);
     }
 
+    pub fn decodeChunksIntoSliceWithDictionaryExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameChunksIntoExactSizeWithDictionary(chunks, compressed_scratch, output, dictionary, expected_output_len);
+    }
+
     pub fn decodedChunksSizeWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error!usize {
         _ = self;
         return try decodedRawOrRleFrameChunksSizeWithDictionary(chunks, compressed_scratch, dictionary);
@@ -2421,6 +2440,11 @@ pub const NativeFrameDecoder = struct {
     pub fn decodeChunksIntoSliceWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameChunksIntoWithDictionarySet(chunks, compressed_scratch, output, dictionary_set);
+    }
+
+    pub fn decodeChunksIntoSliceWithDictionarySetExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet(chunks, compressed_scratch, output, dictionary_set, expected_output_len);
     }
 
     pub fn decodedChunksSizeWithDictionarySet(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
