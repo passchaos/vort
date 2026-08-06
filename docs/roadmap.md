@@ -1745,3 +1745,9 @@ architecture blindly.
   limit to eight. A compressed command-block-switch frame now declares five
   command block types and walks through the fifth type, with matching Zig and
   Node-backed CLI differential coverage.
+
+- Added five-block-type coverage for Brotli literal and distance block
+  switching. The compressed literal-switch smoke walks to the fifth literal block
+  type, while the distance-switch smoke walks to the fifth distance block type
+  and selects its distance tree. Both frames are covered by Zig tests and the
+  Node-backed CLI differential smoke.

@@ -190,6 +190,17 @@ def write_literal_block_switch_three_types_context_map(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # IMTF = false
 
 
+def write_literal_block_switch_five_types_context_map(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 1, 2)  # simple context-map prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 0, 3)
+    write_bits(bits, 4, 3)
+    for index in range(320):
+        write_bits(bits, 1 if index >= 256 else 0, 1)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
 def write_distance_block_switch_context_map(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # RLEMAX = 0
     write_bits(bits, 1, 2)  # simple context-map prefix
@@ -211,6 +222,17 @@ def write_distance_block_switch_three_types_context_map(bits: list[int]) -> None
     for index in range(12):
         tree_index = 1 if index == 4 else 2 if index == 8 else 0
         write_three_symbol_context_map_code(bits, tree_index)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
+def write_distance_block_switch_five_types_context_map(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 1, 2)  # simple context-map prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 0, 3)
+    write_bits(bits, 4, 3)
+    for index in range(20):
+        write_bits(bits, 1 if index == 16 else 0, 1)
     write_bits(bits, 0, 1)  # IMTF = false
 
 
@@ -606,6 +628,30 @@ def write_literal_block_switch_three_types_abc_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 64, 0)
 
 
+def write_literal_block_switch_five_types_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 5)
+    write_simple_single_symbol_prefix(bits, 7, 1)
+    write_simple_single_symbol_prefix(bits, 26, 0)
+    write_bits(bits, 0, 2)  # first literal block count = 1
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 0, 4)  # NDIRECT
+    for _ in range(5):
+        write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 5)
+    write_literal_block_switch_five_types_context_map(bits)
+    write_block_type_count(bits, 1)
+
+    write_simple_single_symbol_prefix(bits, 256, ord("a"))
+    write_simple_single_symbol_prefix(bits, 256, ord("b"))
+    write_simple_single_symbol_prefix(bits, 256, ord("c"))
+    write_simple_single_symbol_prefix(bits, 256, ord("d"))
+    write_simple_single_symbol_prefix(bits, 256, ord("e"))
+    write_simple_single_symbol_prefix(bits, 704, 40)
+    write_simple_single_symbol_prefix(bits, 64, 0)
+
+
 def write_distance_block_switch_abcabab_header(bits: list[int]) -> None:
     write_block_type_count(bits, 1)
     write_block_type_count(bits, 1)
@@ -662,6 +708,38 @@ def write_distance_block_switch_three_types_abcababbb_header(bits: list[int]) ->
 
     write_simple_single_symbol_prefix(bits, 67, 18)
     write_simple_single_symbol_prefix(bits, 67, 17)
+    write_simple_single_symbol_prefix(bits, 67, 16)
+
+
+def write_distance_block_switch_five_types_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 5)
+    write_simple_single_symbol_prefix(bits, 7, 1)
+    write_simple_single_symbol_prefix(bits, 26, 0)
+    write_bits(bits, 0, 2)  # first distance block count = 1
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 3, 4)  # NDIRECT = 3
+    write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 5)
+    write_distance_block_switch_five_types_context_map(bits)
+
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 2, 2)  # NSYM = 3
+    write_bits(bits, ord("a"), 8)
+    write_bits(bits, ord("b"), 8)
+    write_bits(bits, ord("c"), 8)
+
+    write_bits(bits, 1, 2)  # simple insert-copy prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 152, 10)
+    write_bits(bits, 128, 10)
+
+    write_simple_single_symbol_prefix(bits, 67, 18)
+    write_simple_single_symbol_prefix(bits, 67, 17)
+    write_simple_single_symbol_prefix(bits, 67, 16)
+    write_simple_single_symbol_prefix(bits, 67, 18)
     write_simple_single_symbol_prefix(bits, 67, 16)
 
 
@@ -949,6 +1027,19 @@ def literal_block_switch_three_types_abc_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def literal_block_switch_five_types_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 4, 16)  # MLEN - 1
+    write_literal_block_switch_five_types_header(bits)
+    for _ in range(4):
+        write_bits(bits, 0, 2)  # next literal block count = 1
+    return bits_to_bytes(bits)
+
+
 def distance_block_switch_abcabab_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -982,6 +1073,24 @@ def distance_block_switch_three_types_abcababbb_frame() -> bytes:
     write_bits(bits, 0, 2)  # next distance block count = 1
     write_bits(bits, 0, 1)  # command 128
     write_bits(bits, 0, 2)  # next distance block count = 1
+    return bits_to_bytes(bits)
+
+
+def distance_block_switch_five_types_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 12, 16)  # MLEN - 1
+    write_distance_block_switch_five_types_header(bits)
+    write_bits(bits, 1, 1)  # command 152
+    write_bits(bits, 0, 1)  # a
+    write_bits(bits, 1, 2)  # b
+    write_bits(bits, 3, 2)  # c
+    for _ in range(4):
+        write_bits(bits, 0, 1)  # command 128
+        write_bits(bits, 0, 2)  # next distance block count = 1
     return bits_to_bytes(bits)
 
 
@@ -1033,8 +1142,10 @@ def main() -> int:
         "command-switch-five-types": (command_switch_five_types_aaaab_frame(), b"aaaaaaaaaaaab"),
         "literal-block-switch": (literal_block_switch_ab_frame(), b"ab"),
         "literal-block-switch-three-types": (literal_block_switch_three_types_abc_frame(), b"abc"),
+        "literal-block-switch-five-types": (literal_block_switch_five_types_frame(), b"aaaae"),
         "distance-block-switch": (distance_block_switch_abcabab_frame(), b"abcabab"),
         "distance-block-switch-three-types": (distance_block_switch_three_types_abcababbb_frame(), b"abcababbb"),
+        "distance-block-switch-five-types": (distance_block_switch_five_types_frame(), b"abcabcabcabbb"),
     }
 
     with tempfile.TemporaryDirectory(prefix="vort-br-literal-") as td:
