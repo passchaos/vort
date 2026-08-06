@@ -1664,3 +1664,15 @@ architecture blindly.
   trees, computes LSB6/MSB6 context IDs from recent output bytes, and covers a
   context-selected literal tree in both Zig tests and the Node-backed CLI
   differential smoke.
+
+- Extended the minimal Brotli compressed decode path with insert-and-copy block
+  switching for the two-command-block-type shape. The header parser now reads the
+  command block type/count trees and the initial command block count, while the
+  command stream switches command prefix trees when the current count reaches
+  zero. Zig tests and the Node-backed CLI differential smoke cover the switch.
+
+- Extended the minimal Brotli compressed decode path with insert-and-copy block
+  switching for the two-command-block-type shape. The parser now reads the
+  command block type/count prefix trees and initial block count, the decoder
+  switches command trees when the block count reaches zero, and the behavior is
+  covered by both Zig tests and the Node-backed CLI differential smoke.
