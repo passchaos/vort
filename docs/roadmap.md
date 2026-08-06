@@ -1619,3 +1619,8 @@ architecture blindly.
   literal-only compressed streams, decodes them through the Vort CLI and Node's
   Brotli decoder, and checks output-limit failures so the new compressed wire
   shape is validated outside the internal unit tests.
+
+- Extended the minimal Brotli compressed decode path with direct-distance copy
+  support. The first copy slice handles explicit direct distance symbols such as
+  distance 1, performs overlapping output-buffer copies, and is covered by both
+  a synthetic unit test and the Node-backed literal CLI differential smoke.

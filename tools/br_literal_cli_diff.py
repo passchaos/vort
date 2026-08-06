@@ -69,6 +69,21 @@ def write_literal_hello_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 64, 0)
 
 
+def write_copy_a_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 1, 4)  # NDIRECT = 1
+    write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+
+    write_simple_single_symbol_prefix(bits, 256, ord("a"))
+    write_simple_single_symbol_prefix(bits, 704, 138)
+    write_simple_single_symbol_prefix(bits, 65, 16)
+
+
 def literal_only_hello_frame(final: bool) -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -91,6 +106,17 @@ def literal_only_hello_frame(final: bool) -> bytes:
         # Final empty meta-block.
         write_bits(bits, 1, 1)
         write_bits(bits, 1, 1)
+    return bits_to_bytes(bits)
+
+
+def direct_copy_a_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 4, 16)  # MLEN - 1
+    write_copy_a_header(bits)
     return bits_to_bytes(bits)
 
 
@@ -121,24 +147,25 @@ def main() -> int:
     cli = Path(sys.argv[1]).resolve()
     root = Path(__file__).resolve().parents[1]
     cases = {
-        "final": literal_only_hello_frame(True),
-        "nonfinal": literal_only_hello_frame(False),
+        "final": (literal_only_hello_frame(True), b"hello"),
+        "nonfinal": (literal_only_hello_frame(False), b"hello"),
+        "copy": (direct_copy_a_frame(), b"aaaaa"),
     }
 
     with tempfile.TemporaryDirectory(prefix="vort-br-literal-") as td:
         tmp = Path(td)
         checked = 0
-        for name, frame in cases.items():
+        for name, (frame, expected) in cases.items():
             path = tmp / f"{name}.br"
             out = tmp / f"{name}.out"
             path.write_bytes(frame)
-            run([str(cli), "size-br-file", str(path), "5"], root)
-            run([str(cli), "decode-br-file-to", str(path), str(out), "5"], root)
-            if out.read_bytes() != b"hello":
+            run([str(cli), "size-br-file", str(path), str(len(expected))], root)
+            run([str(cli), "decode-br-file-to", str(path), str(out), str(len(expected))], root)
+            if out.read_bytes() != expected:
                 raise AssertionError(f"vort decode mismatch for {name}")
-            if node_decode(path) != b"hello":
+            if node_decode(path) != expected:
                 raise AssertionError(f"node decode mismatch for {name}")
-            run([str(cli), "decode-br-file-to", str(path), str(out), "4"], root, expect_ok=False)
+            run([str(cli), "decode-br-file-to", str(path), str(out), str(len(expected) - 1)], root, expect_ok=False)
             checked += 1
 
     print(f"br_literal_cli_diff=ok cases={checked}")

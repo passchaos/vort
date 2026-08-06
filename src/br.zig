@@ -362,7 +362,14 @@ fn processMinimalCompressedMetaBlock(reader: *bitstream.BitReader, output: []u8,
         if (written == meta_block_len) {
             return written;
         }
-        if (lengths.copy_len != 0 or !lengths.distance_symbol_zero) return error.UnsupportedBrotliFeature;
+        const distance = try readMinimalDistance(&header, reader, lengths);
+        if (distance == 0 or distance > written) return error.InvalidMatch;
+        if (lengths.copy_len > meta_block_len - written) return error.CorruptFrame;
+        var copy_index: usize = 0;
+        while (copy_index < lengths.copy_len) : (copy_index += 1) {
+            output[written] = output[written - distance];
+            written += 1;
+        }
     }
     try consumeZeroPaddingToByte(reader);
     return written;
@@ -383,9 +390,20 @@ fn skipMinimalCompressedMetaBlock(reader: *bitstream.BitReader, meta_block_len: 
         if (written == meta_block_len) {
             return;
         }
-        if (lengths.copy_len != 0 or !lengths.distance_symbol_zero) return error.UnsupportedBrotliFeature;
+        _ = try readMinimalDistance(&header, reader, lengths);
+        if (lengths.copy_len > meta_block_len - written) return error.CorruptFrame;
+        written += lengths.copy_len;
     }
     try consumeZeroPaddingToByte(reader);
+}
+
+fn readMinimalDistance(header: *const MinimalCompressedHeader, reader: *bitstream.BitReader, lengths: InsertCopyLengths) Error!usize {
+    if (lengths.distance_symbol_zero) return error.UnsupportedBrotliFeature;
+    const symbol = try header.distance.decode(reader);
+    if (symbol < 16) return error.UnsupportedBrotliFeature;
+    const direct_index = symbol - 16;
+    if (direct_index >= header.ndirect) return error.UnsupportedBrotliFeature;
+    return @as(usize, direct_index) + 1;
 }
 
 const InsertCopyCodeRanges = struct {
@@ -873,6 +891,25 @@ test "br minimal compressed stream can precede stored metablocks" {
     try std.testing.expectEqualSlices(u8, "hello!", decoded);
 }
 
+test "br minimal compressed stream decodes direct-distance copy" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 4, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForCopy(std.testing.allocator, &writer);
+    // Insert-copy and literal prefixes are single-symbol. Command 138 inserts
+    // one literal and copies four bytes; distance symbol 16 is direct distance 1.
+
+    try std.testing.expectEqual(@as(usize, 5), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "aaaaa", decoded);
+}
+
 test "br stored stream rejects unsupported compressed blocks and trailing data" {
     try std.testing.expectError(error.TruncatedFrame, decodeStreamAlloc(std.testing.allocator, &[_]u8{ 0x00, 0x00 }));
     try std.testing.expectError(error.TrailingData, decodedStreamSize(&[_]u8{ 0x06, 0x00 }));
@@ -1307,6 +1344,20 @@ fn writeMinimalCompressedHeaderForHello(allocator: std.mem.Allocator, writer: *B
 
     try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 40);
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
+fn writeMinimalCompressedHeaderForCopy(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 1, 4); // NDIRECT = 1
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESL
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'a');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 138);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 65, 16);
 }
 
 fn writeBlockTypeCount(allocator: std.mem.Allocator, writer: *BitWriter, value: u16) Error!void {
