@@ -1528,3 +1528,10 @@ architecture blindly.
   output limits and trailing-data checks, and exposes root/CLI smoke APIs. This
   is intentionally a first compatibility slice, not full Brotli Huffman/LZ77
   support yet.
+
+- Added a dependency-free Snappy raw block module. `src/snappy.zig` covers the
+  raw block varint length header, literal tags, copy1/copy2/copy4 decode,
+  decoded-size preflight, output limits, caller-owned output, allocator-returning
+  helpers, and a literal-compatible encoder. The CLI and
+  `run-snappy-block-cli-probe` cover hex and file workflows without depending on
+  a system Snappy library. Framed Snappy streams remain a follow-up format slice.

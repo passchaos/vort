@@ -705,6 +705,69 @@ pub fn main(init: std.process.Init) !void {
         const written = try vort.lz4DecodeBlockIntoSlice(block, decoded, decoded_len);
         if (written != decoded_len) return error.SizeMismatch;
         try printDecoded(stdout, "lz4_block", block.len, decoded);
+    } else if (std.mem.eql(u8, command, "size-snappy-block-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const block = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(block);
+        const decoded_len = if (max_output_len) |limit|
+            try vort.snappyDecodedBlockSizeLimited(block, limit)
+        else
+            try vort.snappyDecodedBlockSize(block);
+        try stdout.print("snappy_block_compressed_bytes={d} decoded_bytes={d}\n", .{ block.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "encode-snappy-block-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const payload = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(payload);
+        const encoded = try vort.snappyEncodeBlockAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "decode-snappy-block-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const block = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(block);
+        const decoded_len = if (max_output_len) |limit|
+            try vort.snappyDecodedBlockSizeLimited(block, limit)
+        else
+            try vort.snappyDecodedBlockSize(block);
+        const decoded = try init.gpa.alloc(u8, decoded_len);
+        defer init.gpa.free(decoded);
+        const written = try vort.snappyDecodeBlockInto(block, decoded);
+        if (written != decoded_len) return error.SizeMismatch;
+        try printDecoded(stdout, "snappy_block", block.len, decoded);
+    } else if (std.mem.eql(u8, command, "encode-snappy-block-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(payload);
+        const encoded = try vort.snappyEncodeBlockAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("snappy_block_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ encoded.len, payload.len, output_path });
+    } else if (std.mem.eql(u8, command, "decode-snappy-block-file-to")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const block = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(block);
+        const decoded = if (max_output_len) |limit|
+            try vort.snappyDecodeBlockAllocLimited(init.gpa, block, limit)
+        else
+            try vort.snappyDecodeBlockAlloc(init.gpa, block);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("snappy_block_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ block.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "size-snappy-block-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const block = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(block);
+        const decoded_len = if (max_output_len) |limit|
+            try vort.snappyDecodedBlockSizeLimited(block, limit)
+        else
+            try vort.snappyDecodedBlockSize(block);
+        try stdout.print("snappy_block_compressed_bytes={d} decoded_bytes={d}\n", .{ block.len, decoded_len });
     } else if (std.mem.eql(u8, command, "size-lz4-block-prefix-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const prefix_hex = args.next() orelse return error.MissingHexInput;
@@ -1459,6 +1522,18 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode LZ4 block
         \\  decode-lz4-block-hex [hex] [max_output]
         \\                              Decode LZ4 block
+        \\  size-snappy-block-hex [hex] [max_output]
+        \\                              Preflight Snappy raw block decoded size
+        \\  encode-snappy-block-hex [hex]
+        \\                              Encode Snappy raw block
+        \\  decode-snappy-block-hex [hex] [max_output]
+        \\                              Decode Snappy raw block
+        \\  encode-snappy-block-file <in> <out>
+        \\                              Encode file bytes as a Snappy raw block
+        \\  decode-snappy-block-file-to <in> <out> [max_output]
+        \\                              Decode Snappy raw block file to output
+        \\  size-snappy-block-file [path] [max_output]
+        \\                              Preflight Snappy raw block file decoded size
         \\  size-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
         \\                              Preflight LZ4 block decoded size with prefix history
         \\  encode-lz4-block-prefix-hex [hex] [prefix_hex]

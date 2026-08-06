@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+import binascii
+import os
+import pathlib
+import subprocess
+import sys
+import tempfile
+
+
+PAYLOADS = [
+    b"",
+    b"hello",
+    b"abcabcabcabc" * 16,
+    bytes((i * 37 + 11) % 251 for i in range(1024)),
+]
+
+KNOWN_BLOCKS = [
+    ("hello-literal", "051068656c6c6f", b"hello"),
+    ("copy1", "0c086162631503", b"abcabcabcabc"),
+    ("copy2", "0500610e0100", b"aaaaa"),
+    ("copy4", "05007a0f01000000", b"zzzzz"),
+]
+
+
+def run(args, cwd, expect_ok=True):
+    result = subprocess.run(
+        args,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if expect_ok and result.returncode != 0:
+        raise RuntimeError(
+            f"command failed: {' '.join(args)}\nstdout={result.stdout.decode(errors='replace')}\nstderr={result.stderr.decode(errors='replace')}"
+        )
+    if not expect_ok and result.returncode == 0:
+        raise RuntimeError(f"command unexpectedly succeeded: {' '.join(args)}")
+    return result
+
+
+def parse_hex(stdout):
+    return bytes.fromhex(stdout.decode().strip())
+
+
+def main():
+    if len(sys.argv) != 2:
+        raise SystemExit("usage: snappy_block_cli_probe.py <vort-cli>")
+    cli = pathlib.Path(sys.argv[1]).resolve()
+    root = pathlib.Path(__file__).resolve().parents[1]
+
+    checked = 0
+    for payload in PAYLOADS:
+        payload_hex = binascii.hexlify(payload).decode()
+        encoded = parse_hex(run([str(cli), "encode-snappy-block-hex", payload_hex], root).stdout)
+        size = run([str(cli), "size-snappy-block-hex", encoded.hex(), str(len(payload))], root).stdout.decode()
+        if f"decoded_bytes={len(payload)}" not in size:
+            raise RuntimeError(f"bad size output: {size}")
+        decoded = run([str(cli), "decode-snappy-block-hex", encoded.hex(), str(len(payload))], root).stdout
+        if f"decoded_bytes={len(payload)}".encode() not in decoded:
+            raise RuntimeError(f"bad decode output: {decoded!r}")
+        if len(payload) > 0:
+            run([str(cli), "decode-snappy-block-hex", encoded.hex(), str(len(payload) - 1)], root, expect_ok=False)
+        checked += 1
+
+    for name, block_hex, payload in KNOWN_BLOCKS:
+        output = run([str(cli), "decode-snappy-block-hex", block_hex, str(len(payload))], root).stdout
+        if f"decoded_bytes={len(payload)}".encode() not in output:
+            raise RuntimeError(f"known block {name} decoded with unexpected output: {output!r}")
+        checked += 1
+
+    with tempfile.TemporaryDirectory(prefix="vort-snappy-") as td:
+        tmp = pathlib.Path(td)
+        for i, payload in enumerate(PAYLOADS):
+            src = tmp / f"case-{i}.bin"
+            block = tmp / f"case-{i}.snappy-block"
+            out = tmp / f"case-{i}.out"
+            src.write_bytes(payload)
+            run([str(cli), "encode-snappy-block-file", str(src), str(block)], root)
+            run([str(cli), "size-snappy-block-file", str(block), str(len(payload))], root)
+            run([str(cli), "decode-snappy-block-file-to", str(block), str(out), str(len(payload))], root)
+            if out.read_bytes() != payload:
+                raise RuntimeError(f"file roundtrip mismatch for case {i}")
+            if len(payload) > 0:
+                run(
+                    [str(cli), "decode-snappy-block-file-to", str(block), str(out), str(len(payload) - 1)],
+                    root,
+                    expect_ok=False,
+                )
+            checked += 1
+
+    print(f"snappy_block_cli_probe=ok cases={checked}")
+
+
+if __name__ == "__main__":
+    os.environ.setdefault("LC_ALL", "C")
+    main()

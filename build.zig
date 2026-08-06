@@ -795,6 +795,11 @@ pub fn build(b: *std.Build) void {
     const br_stored_cli_diff_step = b.step("run-br-stored-cli-diff", "Run black-box smoke for dependency-free Brotli stored streams against Node Brotli");
     br_stored_cli_diff_step.dependOn(&br_stored_cli_diff.step);
 
+    const snappy_block_cli_probe = b.addSystemCommand(&.{ "python3", "tools/snappy_block_cli_probe.py" });
+    snappy_block_cli_probe.addArtifactArg(cli_exe);
+    const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks");
+    snappy_block_cli_probe_step.dependOn(&snappy_block_cli_probe.step);
+
     const zstd_native_cli_diff = b.addSystemCommand(&.{ "python3", "tools/zstd_native_cli_diff.py" });
     zstd_native_cli_diff.addArtifactArg(cli_exe);
     const zstd_native_cli_diff_step = b.step("run-zstd-native-cli-diff", "Run black-box smoke for native-subset zstd frames against system zstd CLI");
@@ -2041,6 +2046,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(br_stored_cli_diff_step);
+    ci_smoke_step.dependOn(snappy_block_cli_probe_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_step);

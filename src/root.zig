@@ -10,6 +10,7 @@ pub const deflate = @import("deflate.zig");
 pub const png = @import("png.zig");
 const png_exports = @import("root_exports/png.zig");
 pub const br = @import("br.zig");
+pub const snappy = @import("snappy.zig");
 pub const bitstream = @import("bitstream.zig");
 pub const huffman = @import("huffman.zig");
 pub const lz77 = @import("lz77.zig");
@@ -50,6 +51,17 @@ pub const brDecodeStreamAppendLimited = br.decodeStreamAppendLimited;
 pub const brDecodeStreamInto = br.decodeStreamInto;
 pub const brDecodedStreamSize = br.decodedStreamSize;
 pub const brDecodedStreamSizeLimited = br.decodedStreamSizeLimited;
+
+pub const snappyEncodeBlockAlloc = snappy.encodeBlockAlloc;
+pub const snappyEncodeBlockAppend = snappy.encodeBlockAppend;
+pub const snappyEncodeBlockInto = snappy.encodeBlockInto;
+pub const snappyDecodeBlockAlloc = snappy.decodeBlockAlloc;
+pub const snappyDecodeBlockAllocLimited = snappy.decodeBlockAllocLimited;
+pub const snappyDecodeBlockAppend = snappy.decodeBlockAppend;
+pub const snappyDecodeBlockAppendLimited = snappy.decodeBlockAppendLimited;
+pub const snappyDecodeBlockInto = snappy.decodeBlockInto;
+pub const snappyDecodedBlockSize = snappy.decodedBlockSize;
+pub const snappyDecodedBlockSizeLimited = snappy.decodedBlockSizeLimited;
 
 pub const lz4EncodeFrameAlloc = lz4.encodeFrameAlloc;
 pub const lz4EncodeFrameWithLevelAlloc = lz4.encodeFrameWithLevelAlloc;
@@ -1234,6 +1246,17 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brDecodedStreamSize;
     _ = brDecodedStreamSizeLimited;
 
+    _ = snappyEncodeBlockAlloc;
+    _ = snappyEncodeBlockAppend;
+    _ = snappyEncodeBlockInto;
+    _ = snappyDecodeBlockAlloc;
+    _ = snappyDecodeBlockAllocLimited;
+    _ = snappyDecodeBlockAppend;
+    _ = snappyDecodeBlockAppendLimited;
+    _ = snappyDecodeBlockInto;
+    _ = snappyDecodedBlockSize;
+    _ = snappyDecodedBlockSizeLimited;
+
     _ = lz4EncodeFrameAlloc;
     _ = lz4EncodeFrameWithLevelAlloc;
     _ = lz4EncodeFrameWithOptionsAlloc;
@@ -1805,6 +1828,24 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySetExactSize;
     _ = zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet;
     _ = zstdDecodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet;
+}
+
+test "root snappy raw block helpers round trip" {
+    const encoded = try snappyEncodeBlockAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(encoded);
+
+    try std.testing.expectEqual(@as(usize, 5), try snappyDecodedBlockSize(encoded));
+    try std.testing.expectError(error.OutputLimitExceeded, snappyDecodedBlockSizeLimited(encoded, 4));
+
+    var decoded: [5]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, decoded.len), try snappyDecodeBlockInto(encoded, &decoded));
+    try std.testing.expectEqualSlices(u8, "hello", &decoded);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(@as(usize, 5), try snappyDecodeBlockAppend(std.testing.allocator, &appended, encoded));
+    try std.testing.expectEqualSlices(u8, "prefix:hello", appended.items);
 }
 
 test "root lz4 lib frame options round trip" {
