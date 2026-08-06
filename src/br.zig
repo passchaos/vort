@@ -213,9 +213,16 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
         const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
         if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
         const meta_block_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
-        if (is_last) return error.UnsupportedBrotliFeature;
+        if (is_last) {
+            const decoded = try processMinimalCompressedMetaBlock(&reader, output[written..], meta_block_len);
+            written += decoded;
+            try ensureZeroPaddingAndEnd(reader);
+            return written;
+        }
         const is_uncompressed = try reader.readBits(u1, 1) == 1;
-        if (!is_uncompressed) return error.UnsupportedBrotliFeature;
+        if (!is_uncompressed) {
+            return error.UnsupportedBrotliFeature;
+        }
         try consumeZeroPaddingToByte(&reader);
         if (output.len - written < meta_block_len) return error.OutputTooSmall;
         try reader.readAlignedBytes(output[written..][0..meta_block_len]);
@@ -255,12 +262,18 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
         const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
         if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
         const meta_block_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
-        if (is_last) return error.UnsupportedBrotliFeature;
-        const is_uncompressed = try reader.readBits(u1, 1) == 1;
-        if (!is_uncompressed) return error.UnsupportedBrotliFeature;
-        try consumeZeroPaddingToByte(&reader);
         total = std.math.add(usize, total, meta_block_len) catch return error.IntegerOverflow;
         if (total > max_output_len) return error.OutputLimitExceeded;
+        if (is_last) {
+            try skipMinimalCompressedMetaBlock(&reader, meta_block_len);
+            try ensureZeroPaddingAndEnd(reader);
+            return total;
+        }
+        const is_uncompressed = try reader.readBits(u1, 1) == 1;
+        if (!is_uncompressed) {
+            return error.UnsupportedBrotliFeature;
+        }
+        try consumeZeroPaddingToByte(&reader);
         if (reader.byte_index > stream.len or stream.len - reader.byte_index < meta_block_len) return error.TruncatedFrame;
         reader.byte_index += meta_block_len;
     }
@@ -323,6 +336,52 @@ fn readInsertCopyLengths(symbol: u16, reader: *bitstream.BitReader) Error!Insert
         .copy_len = copy,
         .distance_symbol_zero = symbol < 128,
     };
+}
+
+fn processMinimalCompressedMetaBlock(reader: *bitstream.BitReader, output: []u8, meta_block_len: usize) Error!usize {
+    if (output.len < meta_block_len) return error.OutputTooSmall;
+    const header = try readMinimalCompressedHeader(reader);
+    var written: usize = 0;
+    while (written < meta_block_len) {
+        const command_symbol = try header.insert_copy.decode(reader);
+        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_len - written) return error.CorruptFrame;
+        var i: usize = 0;
+        while (i < lengths.insert_len) : (i += 1) {
+            const literal = try header.literal.decode(reader);
+            if (literal > 0xff) return error.InvalidHuffmanCode;
+            output[written] = @intCast(literal);
+            written += 1;
+        }
+        if (written == meta_block_len) {
+            try consumeZeroPaddingToByte(reader);
+            return written;
+        }
+        if (lengths.copy_len != 0 or !lengths.distance_symbol_zero) return error.UnsupportedBrotliFeature;
+    }
+    try consumeZeroPaddingToByte(reader);
+    return written;
+}
+
+fn skipMinimalCompressedMetaBlock(reader: *bitstream.BitReader, meta_block_len: usize) Error!void {
+    const header = try readMinimalCompressedHeader(reader);
+    var written: usize = 0;
+    while (written < meta_block_len) {
+        const command_symbol = try header.insert_copy.decode(reader);
+        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_len - written) return error.CorruptFrame;
+        var i: usize = 0;
+        while (i < lengths.insert_len) : (i += 1) {
+            _ = try header.literal.decode(reader);
+            written += 1;
+        }
+        if (written == meta_block_len) {
+            try consumeZeroPaddingToByte(reader);
+            return;
+        }
+        if (lengths.copy_len != 0 or !lengths.distance_symbol_zero) return error.UnsupportedBrotliFeature;
+    }
+    try consumeZeroPaddingToByte(reader);
 }
 
 const InsertCopyCodeRanges = struct {
@@ -748,6 +807,31 @@ test "br stored stream decodes multiple uncompressed meta-blocks" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "br minimal compressed stream decodes literal-only final metablock" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 4, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForHello(std.testing.allocator, &writer);
+    // Insert-copy prefix is a single symbol (40), so no command bits are
+    // emitted. The literal tree is canonical by sorted symbol order:
+    // e=00, h=01, l=10, o=11, stored LSB-first.
+    try writer.writeBits(std.testing.allocator, 2, 2); // h
+    try writer.writeBits(std.testing.allocator, 0, 2); // e
+    try writer.writeBits(std.testing.allocator, 1, 2); // l
+    try writer.writeBits(std.testing.allocator, 1, 2); // l
+    try writer.writeBits(std.testing.allocator, 3, 2); // o
+
+    try std.testing.expectEqual(@as(usize, 5), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "hello", decoded);
+}
+
 test "br stored stream rejects unsupported compressed blocks and trailing data" {
     try std.testing.expectError(error.TruncatedFrame, decodeStreamAlloc(std.testing.allocator, &[_]u8{ 0x00, 0x00 }));
     try std.testing.expectError(error.TrailingData, decodedStreamSize(&[_]u8{ 0x06, 0x00 }));
@@ -1160,6 +1244,28 @@ fn writeCodeLengthCodeLength(allocator: std.mem.Allocator, writer: *BitWriter, l
         5 => try writer.writeBits(allocator, 0b1111, 4),
         else => return error.InvalidHuffmanCode,
     }
+}
+
+fn writeMinimalCompressedHeaderForHello(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESL
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 3, 2); // NSYM = 4
+    try writer.writeBits(allocator, 'h', alphabetBits(256));
+    try writer.writeBits(allocator, 'e', alphabetBits(256));
+    try writer.writeBits(allocator, 'l', alphabetBits(256));
+    try writer.writeBits(allocator, 'o', alphabetBits(256));
+    try writer.writeBits(allocator, 0, 1); // tree-select
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 40);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 16, 0);
 }
 
 fn writeBlockTypeCount(allocator: std.mem.Allocator, writer: *BitWriter, value: u16) Error!void {

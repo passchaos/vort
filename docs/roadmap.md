@@ -1603,3 +1603,9 @@ architecture blindly.
   insert/copy extra-bit reads, high-range length families, and the implicit
   distance-zero marker for symbols below 128. This is the next command-stream
   primitive needed before literal-only compressed meta-block decoding.
+
+- Added the first Brotli compressed data decode slice: a final single-tree
+  literal-only meta-block whose command inserts exactly `MLEN` bytes, allowing
+  the copy length to be ignored per RFC 7932. This validates the interaction
+  between the minimal compressed header parser, insert-and-copy lengths, and
+  literal prefix-code decoding without claiming full copy/distance support.
