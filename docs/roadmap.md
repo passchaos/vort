@@ -1472,3 +1472,14 @@ architecture blindly.
   bpp=3 Average throughput moved from about `1258` to `2319` MiB/s, while the
   real Kodak-trio repeat3 median moved from the Paeth-only `1116.66` to
   `1218.78` MiB/s (`+9.1%`).
+
+- Split PNG metadata, Adam7 placement, and scanline reconstruction into the new
+  `src/png.zig` module, leaving `src/deflate.zig` to alias the public PNG
+  surface while keeping zlib/DEFLATE orchestration there. This removes roughly
+  600 lines of PNG-specific helpers from the already-large deflate module and
+  roots PNG primitives directly through `root.png`/root-level aliases. The same
+  change extends fixed-bpp Average reconstruction to common bpp=2/4/6/8 rows by
+  retaining the previous reconstructed pixel in registers; bpp=1 stays on the
+  generic path because the fixed-bpp variant was not a robust win locally. The
+  latest local ReleaseFast `run-png-scanline-bench-gate` passed with Average
+  bpp2/4/6/8 rows around `1666.61` / `2614.60` / `2629.03` / `2658.92` MiB/s.
