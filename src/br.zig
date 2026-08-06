@@ -71,10 +71,10 @@ const MinimalCompressedHeader = struct {
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 const max_context_map_alphabet_size = 256 + 16;
 const max_literal_block_types = 2;
-const max_literal_context_trees = 2;
+const max_literal_context_trees = 4;
 const max_command_block_types = 2;
 const max_distance_block_types = 2;
-const max_distance_context_trees = 2;
+const max_distance_context_trees = 4;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 
 fn BlockSwitchState(comptime max_block_types: usize) type {
@@ -413,7 +413,7 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
     var distance_context_map: [max_distance_block_types * 4]u8 = @splat(0);
     try readContextMap(reader, distance_context_map[0..(@as(usize, nbltypes_d) * 4)], ntrees_d);
 
-    var literal_trees: [max_literal_context_trees]PrefixCode(256) = .{ .{}, .{} };
+    var literal_trees: [max_literal_context_trees]PrefixCode(256) = @splat(.{});
     literal_trees[0] = try readPrefixCode(256, reader);
     var literal_tree_index: u16 = 1;
     while (literal_tree_index < ntrees_l) : (literal_tree_index += 1) {
@@ -427,7 +427,7 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
         insert_copy_trees[command_tree_index] = try readPrefixCode(704, reader);
     }
 
-    var distance_trees: [max_distance_context_trees]PrefixCode(max_distance_alphabet_size) = .{ .{}, .{} };
+    var distance_trees: [max_distance_context_trees]PrefixCode(max_distance_alphabet_size) = @splat(.{});
     distance_trees[0] = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
     var distance_tree_index: u16 = 1;
     while (distance_tree_index < ntrees_d) : (distance_tree_index += 1) {
@@ -1472,6 +1472,23 @@ test "br minimal compressed stream selects literal context tree through IMTF map
     try std.testing.expectEqualSlices(u8, "aba", decoded);
 }
 
+test "br minimal compressed stream selects third literal context tree" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 2, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForLiteralContextThreeTrees(std.testing.allocator, &writer);
+
+    try std.testing.expectEqual(@as(usize, 3), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "abc", decoded);
+}
+
 test "br minimal compressed stream switches command block tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -1693,12 +1710,12 @@ test "br literal context helpers cover LSB6 and MSB6 modes" {
         .literal_context_modes = @splat(0),
         .literal_block = .{},
         .literal_context_map = @splat(0),
-        .literal_trees = .{ .{}, .{} },
+        .literal_trees = @splat(.{}),
         .command_block = .{},
         .insert_copy_trees = .{ .{}, .{} },
         .distance_block = .{},
         .distance_context_map = @splat(0),
-        .distance_trees = .{ .{}, .{} },
+        .distance_trees = @splat(.{}),
     };
     try std.testing.expectEqual(@as(usize, 0), literalContext(&header, "", 0));
     try std.testing.expectEqual(@as(usize, 0x23), literalContext(&header, "abc", 3));
@@ -2212,6 +2229,25 @@ fn writeMinimalCompressedHeaderForLiteralContextImtf(allocator: std.mem.Allocato
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForLiteralContextThreeTrees(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // literal context mode = LSB6
+    try writeBlockTypeCount(allocator, writer, 3); // NTREESL
+    try writeLiteralContextMapForAb(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'a');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'b');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'c');
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 24);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
 fn writeMinimalCompressedHeaderForCommandSwitch(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 2); // NBLTYPESI
@@ -2345,6 +2381,30 @@ fn writeLiteralContextMapForAImtf(allocator: std.mem.Allocator, writer: *BitWrit
         try writer.writeBits(allocator, raw_index, 1);
     }
     try writer.writeBits(allocator, 1, 1); // IMTF = true
+}
+
+fn writeLiteralContextMapForAb(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 2, 2); // NSYM = 3
+    try writer.writeBits(allocator, 0, alphabetBits(3));
+    try writer.writeBits(allocator, 1, alphabetBits(3));
+    try writer.writeBits(allocator, 2, alphabetBits(3));
+    var i: usize = 0;
+    while (i < 64) : (i += 1) {
+        const tree_index: u2 = if (i == ('a' & 0x3f)) 1 else if (i == ('b' & 0x3f)) 2 else 0;
+        try writeThreeSymbolContextMapCode(allocator, writer, tree_index);
+    }
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeThreeSymbolContextMapCode(allocator: std.mem.Allocator, writer: *BitWriter, symbol: u2) Error!void {
+    switch (symbol) {
+        0 => try writer.writeBits(allocator, 0, 1),
+        1 => try writer.writeBits(allocator, 1, 2),
+        2 => try writer.writeBits(allocator, 3, 2),
+        else => return error.InvalidHuffmanCode,
+    }
 }
 
 fn writeLiteralBlockSwitchContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {

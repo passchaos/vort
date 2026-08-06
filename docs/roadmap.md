@@ -1697,3 +1697,9 @@ architecture blindly.
   of rejecting them, and a compressed literal-context frame proves the restored
   tree index is used by both decoded-size preflight and output decode. The
   Node-backed Brotli CLI differential smoke covers the same wire frame.
+
+- Expanded the minimal Brotli compressed header to keep up to four literal and
+  distance context trees instead of rejecting tree groups above two. A compressed
+  literal-context frame now selects the third literal tree through a non-trivial
+  context map, and the Node-backed CLI differential smoke validates the same
+  wire frame.
