@@ -422,10 +422,40 @@ fn readMinimalDistance(
         return distance;
     }
     const direct_index = symbol - 16;
-    if (direct_index >= header.ndirect) return error.UnsupportedBrotliFeature;
-    const distance = @as(usize, direct_index) + 1;
+    const distance = if (direct_index < header.ndirect)
+        @as(usize, direct_index) + 1
+    else
+        try readRegularDistance(header, reader, symbol);
     pushLastDistance(last_distances, distance);
     return distance;
+}
+
+fn readRegularDistance(header: *const MinimalCompressedHeader, reader: *bitstream.BitReader, symbol: u16) Error!usize {
+    const xcode = @as(usize, symbol) - @as(usize, header.ndirect) - 16;
+    const npostfix: usize = header.npostfix;
+    const ndistbits_value = 1 + (xcode >> @intCast(npostfix + 1));
+    if (ndistbits_value > 24) return error.CorruptFrame;
+    const ndistbits: u5 = @intCast(ndistbits_value);
+    const dextra = if (ndistbits == 0) 0 else try reader.readBits(u32, ndistbits);
+    return try resolveRegularDistance(header.npostfix, header.ndirect, symbol, dextra);
+}
+
+fn resolveRegularDistance(npostfix: u2, ndirect: u16, symbol: u16, dextra: usize) Error!usize {
+    if (symbol < 16 + @as(usize, ndirect)) return error.InvalidHuffmanCode;
+    const xcode = @as(usize, symbol) - @as(usize, ndirect) - 16;
+    const npostfix_usize: usize = npostfix;
+    const ndistbits = 1 + (xcode >> @intCast(npostfix_usize + 1));
+    if (ndistbits > 24) return error.CorruptFrame;
+
+    const hcode = xcode >> @intCast(npostfix_usize);
+    const postfix_mask = (@as(usize, 1) << @intCast(npostfix_usize)) - 1;
+    const lcode = xcode & postfix_mask;
+    const offset = ((@as(usize, 2) + (hcode & 1)) << @intCast(ndistbits)) - 4;
+    const base_with_extra = std.math.add(usize, offset, dextra) catch return error.IntegerOverflow;
+    const shifted = base_with_extra << @intCast(npostfix_usize);
+    const with_postfix = std.math.add(usize, shifted, lcode) catch return error.IntegerOverflow;
+    const with_direct = std.math.add(usize, with_postfix, ndirect) catch return error.IntegerOverflow;
+    return std.math.add(usize, with_direct, 1) catch return error.IntegerOverflow;
 }
 
 fn resolveShortDistance(symbol: u16, last_distances: *const [4]usize) Error!usize {
@@ -1046,6 +1076,28 @@ test "br minimal compressed stream keeps short distances across metablocks" {
     try std.testing.expectEqualSlices(u8, "aaaaa", decoded);
 }
 
+test "br minimal compressed stream decodes regular-distance copy" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 4, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForRegularDistance(std.testing.allocator, &writer);
+    // The single command inserts "ab" and copies three bytes. Distance symbol
+    // 17 with NPOSTFIX=1, NDIRECT=0, and dextra=0 resolves to distance 2.
+    try writer.writeBits(std.testing.allocator, 0, 1); // a
+    try writer.writeBits(std.testing.allocator, 1, 1); // b
+    try writer.writeBits(std.testing.allocator, 0, 1); // dextra
+
+    try std.testing.expectEqual(@as(usize, 5), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "ababa", decoded);
+}
+
 test "br stored stream rejects unsupported compressed blocks and trailing data" {
     try std.testing.expectError(error.TruncatedFrame, decodeStreamAlloc(std.testing.allocator, &[_]u8{ 0x00, 0x00 }));
     try std.testing.expectError(error.TrailingData, decodedStreamSize(&[_]u8{ 0x06, 0x00 }));
@@ -1210,6 +1262,13 @@ test "br short distance resolver covers RFC table" {
     const small_last = [_]usize{ 16, 15, 2, 1 };
     try std.testing.expectError(error.InvalidMatch, resolveShortDistance(4, &small_last));
     try std.testing.expectError(error.InvalidMatch, resolveShortDistance(12, &small_last));
+}
+
+test "br regular distance resolver covers postfix and extra bits" {
+    try std.testing.expectEqual(@as(usize, 2), try resolveRegularDistance(1, 0, 17, 0));
+    try std.testing.expectEqual(@as(usize, 3), try resolveRegularDistance(0, 1, 17, 1));
+    try std.testing.expectEqual(@as(usize, 18), try resolveRegularDistance(2, 4, 25, 1));
+    try std.testing.expectError(error.InvalidHuffmanCode, resolveRegularDistance(0, 4, 19, 0));
 }
 
 test "br simple prefix code decodes three-symbol canonical tree" {
@@ -1547,6 +1606,28 @@ fn writeMinimalCompressedHeaderForShortDistance(allocator: std.mem.Allocator, wr
     try writer.writeBits(allocator, 1, 2); // NSYM = 2
     try writer.writeBits(allocator, 16, alphabetBits(65));
     try writer.writeBits(allocator, 5, alphabetBits(65));
+}
+
+fn writeMinimalCompressedHeaderForRegularDistance(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 1, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESL
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 'a', alphabetBits(256));
+    try writer.writeBits(allocator, 'b', alphabetBits(256));
+
+    try writer.writeBits(allocator, 1, 2); // simple insert-copy prefix
+    try writer.writeBits(allocator, 0, 2); // NSYM = 1
+    try writer.writeBits(allocator, 145, alphabetBits(704));
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 112, 17);
 }
 
 fn writeBlockTypeCount(allocator: std.mem.Allocator, writer: *BitWriter, value: u16) Error!void {

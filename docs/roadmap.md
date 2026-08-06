@@ -1637,3 +1637,9 @@ architecture blindly.
   second-last distance deltas with invalid zero/negative rejection, and covers
   the new short-distance copy shape in both Zig tests and the Node-backed CLI
   differential smoke.
+
+- Extended the minimal Brotli compressed decode path with regular distance
+  symbols (`16 + NDIRECT` and above). The decoder now reads distance extra bits,
+  applies the RFC 7932 `NPOSTFIX` / `NDIRECT` formula, updates the recent-distance
+  ring for regular matches, and covers a postfix-bearing regular-distance frame
+  in both Zig tests and the Node-backed CLI differential smoke.
