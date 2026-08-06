@@ -1735,3 +1735,8 @@ architecture blindly.
   forcing `UnsupportedBrotliFeature`. A compressed UTF8-context frame copies with
   distance three and then decodes another context-selected literal, covered by
   Zig tests and the Node-backed CLI differential smoke.
+
+- Raised the minimal Brotli literal and distance context-tree retention limit to
+  eight. A compressed UTF8 literal-context frame now declares five literal trees
+  and selects the fifth tree through context ID 56, with matching Zig and
+  Node-backed CLI differential coverage.
