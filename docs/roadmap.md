@@ -1521,3 +1521,10 @@ architecture blindly.
   System `libzstd`/`liblz4` compatibility facades remain available behind
   `-Dsystem-codecs=true`, so downstreams can opt into external differentials
   without making system libraries a core package dependency.
+
+- Added a dependency-free Brotli `br` bootstrap module for stored/uncompressed
+  streams. `src/br.zig` emits RFC-valid WBITS=16 streams with uncompressed
+  meta-blocks plus final empty terminators, decodes the same stored subset with
+  output limits and trailing-data checks, and exposes root/CLI smoke APIs. This
+  is intentionally a first compatibility slice, not full Brotli Huffman/LZ77
+  support yet.

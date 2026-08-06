@@ -19,6 +19,7 @@ pub const Error = error{
     InvalidHuffmanCode,
     UnsupportedDeflateFeature,
     UnsupportedZstdFeature,
+    UnsupportedBrotliFeature,
     InvalidMatch,
     InvalidDynamicBlockHeader,
     InvalidBlockPlan,

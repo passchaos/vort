@@ -9,6 +9,7 @@ pub const fuzz = @import("fuzz.zig");
 pub const deflate = @import("deflate.zig");
 pub const png = @import("png.zig");
 const png_exports = @import("root_exports/png.zig");
+pub const br = @import("br.zig");
 pub const bitstream = @import("bitstream.zig");
 pub const huffman = @import("huffman.zig");
 pub const lz77 = @import("lz77.zig");
@@ -38,6 +39,17 @@ pub const crc32cSlice16 = checksum.crc32cSlice16;
 pub const crc32cSlice32 = checksum.crc32cSlice32;
 pub const crc32cBest = checksum.crc32cBest;
 pub const crc32cCombine = checksum.crc32cCombine;
+
+pub const brEncodeStoredStreamAlloc = br.encodeStoredStreamAlloc;
+pub const brEncodeStoredStreamAppend = br.encodeStoredStreamAppend;
+pub const brEncodeStoredStreamInto = br.encodeStoredStreamInto;
+pub const brDecodeStreamAlloc = br.decodeStreamAlloc;
+pub const brDecodeStreamAllocLimited = br.decodeStreamAllocLimited;
+pub const brDecodeStreamAppend = br.decodeStreamAppend;
+pub const brDecodeStreamAppendLimited = br.decodeStreamAppendLimited;
+pub const brDecodeStreamInto = br.decodeStreamInto;
+pub const brDecodedStreamSize = br.decodedStreamSize;
+pub const brDecodedStreamSizeLimited = br.decodedStreamSizeLimited;
 
 pub const lz4EncodeFrameAlloc = lz4.encodeFrameAlloc;
 pub const lz4EncodeFrameWithLevelAlloc = lz4.encodeFrameWithLevelAlloc;
@@ -1210,6 +1222,17 @@ test "root exports lz4 and zstd codec helpers" {
     _ = decodeDictionaryPatch;
     _ = decodeDictionaryPatchInto;
     _ = decodeDictionaryPatchAlloc;
+
+    _ = brEncodeStoredStreamAlloc;
+    _ = brEncodeStoredStreamAppend;
+    _ = brEncodeStoredStreamInto;
+    _ = brDecodeStreamAlloc;
+    _ = brDecodeStreamAllocLimited;
+    _ = brDecodeStreamAppend;
+    _ = brDecodeStreamAppendLimited;
+    _ = brDecodeStreamInto;
+    _ = brDecodedStreamSize;
+    _ = brDecodedStreamSizeLimited;
 
     _ = lz4EncodeFrameAlloc;
     _ = lz4EncodeFrameWithLevelAlloc;

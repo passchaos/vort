@@ -96,6 +96,22 @@ pub fn main(init: std.process.Init) !void {
             std.mem.eql(u8, payload, decoded),
             vort.crc32(decoded),
         });
+    } else if (std.mem.eql(u8, command, "encode-br-stored-hex")) {
+        const payload = args.next() orelse "";
+        const encoded = try vort.brEncodeStoredStreamAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "decode-br-hex")) {
+        const hex = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.brDecodeStreamAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.brDecodeStreamAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try printDecoded(stdout, "br", compressed.len, decoded);
     } else if (std.mem.eql(u8, command, "encode-raw-fixed-hex")) {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());
@@ -1372,6 +1388,9 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\compatibility formats:
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
+        \\  encode-br-stored-hex [text] Encode text as dependency-free Brotli stored-stream hex
+        \\  decode-br-hex [hex] [max_output]
+        \\                              Decode dependency-free Brotli stored-stream hex
         \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only] [checksum] [content_size]
         \\                              Encode text as dependency-free native-subset Zstandard hex
         \\  encode-zstd-native-bytes-hex [hex] [auto|raw_or_rle|literal_only] [checksum] [content_size]

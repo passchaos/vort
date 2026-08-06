@@ -55,6 +55,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
+- dependency-free Brotli `br` stored/uncompressed stream encode/decode bootstrap surface;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, frame-index CRC composition, range CRC summaries, caller-owned and batch range decode APIs, and bounded streaming APIs;
 - LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training, match-coverage, patch-codec, native dictionary-patch frame, self-contained dictionary streams, native LDM reference frame, and dictionary-/LDM-aware native best-frame prototypes, long-distance match scanner, LDM-aware block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
 
@@ -119,6 +120,8 @@ zig build run -- encode-vort-sidecar-ldm-file README.md /tmp/readme-ldm.vort /tm
 zig build run -- decode-vort-sidecar-range-file /tmp/readme-ldm.vort /tmp/readme-ldm.vidx /tmp/readme-ldm.range 32 64
 zig build run -- zlib-store-roundtrip "hello vort"
 zig build run -- gzip-store-roundtrip "hello vort"
+zig build run -- encode-br-stored-hex "hello vort"
+zig build run -- decode-br-hex 40001068656c6c6f03 5
 zig build run -- zlib-fixed-roundtrip "hello vort"
 zig build run -- gzip-fixed-roundtrip "hello vort"
 zig build run -- decode-raw-hex cb48cdc9c90700
