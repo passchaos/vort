@@ -1592,3 +1592,9 @@ architecture blindly.
 - Added the Brotli block-type-count variable-length reader used by `NBLTYPESL`,
   `NBLTYPESI`, and `NBLTYPESD` in compressed meta-block headers. Boundary tests
   cover the full RFC range from 1 to 256 and truncated selector handling.
+
+- Added a minimal Brotli compressed meta-block header parser for the single block
+  type / single tree shape. It reads `NBLTYPESL/I/D`, `NPOSTFIX`, `NDIRECT`,
+  literal context mode, `NTREESL/D`, and the literal/insert-copy/distance prefix
+  trees, while explicitly rejecting context-map and multi-block-type shapes until
+  those parser branches are implemented.

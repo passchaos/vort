@@ -54,6 +54,15 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
     };
 }
 
+const MinimalCompressedHeader = struct {
+    npostfix: u2,
+    ndirect: u16,
+    literal_context_mode: u2,
+    literal: PrefixCode(256),
+    insert_copy: PrefixCode(704),
+    distance: PrefixCode(16),
+};
+
 pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return try encodeStoredStreamWithOptionsAlloc(allocator, input, .{});
 }
@@ -264,6 +273,36 @@ fn readBlockTypeCount(reader: *bitstream.BitReader) Error!u16 {
 
     const extra = try reader.readBits(u16, selector);
     return (@as(u16, 1) << selector) + 1 + extra;
+}
+
+fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompressedHeader {
+    const nbltypes_l = try readBlockTypeCount(reader);
+    if (nbltypes_l != 1) return error.UnsupportedBrotliFeature;
+    const nbltypes_i = try readBlockTypeCount(reader);
+    if (nbltypes_i != 1) return error.UnsupportedBrotliFeature;
+    const nbltypes_d = try readBlockTypeCount(reader);
+    if (nbltypes_d != 1) return error.UnsupportedBrotliFeature;
+
+    const npostfix = try reader.readBits(u2, 2);
+    const ndirect_high = try reader.readBits(u4, 4);
+    const ndirect: u16 = @as(u16, ndirect_high) << npostfix;
+    if (ndirect > 120) return error.CorruptFrame;
+
+    const literal_context_mode = try reader.readBits(u2, 2);
+
+    const ntrees_l = try readBlockTypeCount(reader);
+    if (ntrees_l != 1) return error.UnsupportedBrotliFeature;
+    const ntrees_d = try readBlockTypeCount(reader);
+    if (ntrees_d != 1) return error.UnsupportedBrotliFeature;
+
+    return .{
+        .npostfix = npostfix,
+        .ndirect = ndirect,
+        .literal_context_mode = literal_context_mode,
+        .literal = try readPrefixCode(256, reader),
+        .insert_copy = try readPrefixCode(704, reader),
+        .distance = try readPrefixCode(16, reader),
+    };
 }
 
 fn readPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader) Error!PrefixCode(alphabet_size) {
@@ -667,6 +706,64 @@ test "br block type count reader covers RFC boundaries" {
     try std.testing.expectError(error.TruncatedFrame, readBlockTypeCount(&truncated));
 }
 
+test "br minimal compressed header parser reads single-tree shape" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NBLTYPESD
+    try writer.writeBits(std.testing.allocator, 1, 2); // NPOSTFIX
+    try writer.writeBits(std.testing.allocator, 3, 4); // NDIRECT high bits -> 6
+    try writer.writeBits(std.testing.allocator, 2, 2); // literal context mode
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NTREESL
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NTREESD
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 256, 'A');
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 704, 0);
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 16, 0);
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    const header = try readMinimalCompressedHeader(&reader);
+    try std.testing.expectEqual(@as(u2, 1), header.npostfix);
+    try std.testing.expectEqual(@as(u16, 6), header.ndirect);
+    try std.testing.expectEqual(@as(u2, 2), header.literal_context_mode);
+    try std.testing.expectEqual(@as(u16, 'A'), try header.literal.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 0), try header.insert_copy.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 0), try header.distance.decode(&reader));
+}
+
+test "br minimal compressed header parser rejects unsupported maps and accepts ndirect boundary" {
+    var multi_literal_tree: std.ArrayList(u8) = .empty;
+    defer multi_literal_tree.deinit(std.testing.allocator);
+    var multi_writer = BitWriter{ .out = &multi_literal_tree };
+    try writeBlockTypeCount(std.testing.allocator, &multi_writer, 1);
+    try writeBlockTypeCount(std.testing.allocator, &multi_writer, 1);
+    try writeBlockTypeCount(std.testing.allocator, &multi_writer, 1);
+    try multi_writer.writeBits(std.testing.allocator, 0, 2);
+    try multi_writer.writeBits(std.testing.allocator, 0, 4);
+    try multi_writer.writeBits(std.testing.allocator, 0, 2);
+    try writeBlockTypeCount(std.testing.allocator, &multi_writer, 2); // NTREESL requires context map.
+    var multi_reader = bitstream.BitReader.init(multi_literal_tree.items);
+    try std.testing.expectError(error.UnsupportedBrotliFeature, readMinimalCompressedHeader(&multi_reader));
+
+    var bad_ndirect: std.ArrayList(u8) = .empty;
+    defer bad_ndirect.deinit(std.testing.allocator);
+    var bad_writer = BitWriter{ .out = &bad_ndirect };
+    try writeBlockTypeCount(std.testing.allocator, &bad_writer, 1);
+    try writeBlockTypeCount(std.testing.allocator, &bad_writer, 1);
+    try writeBlockTypeCount(std.testing.allocator, &bad_writer, 1);
+    try bad_writer.writeBits(std.testing.allocator, 3, 2); // NPOSTFIX
+    try bad_writer.writeBits(std.testing.allocator, 15, 4); // NDIRECT = 120 is valid.
+    try bad_writer.writeBits(std.testing.allocator, 0, 2);
+    try writeBlockTypeCount(std.testing.allocator, &bad_writer, 1);
+    try writeBlockTypeCount(std.testing.allocator, &bad_writer, 1);
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &bad_writer, 256, 0);
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &bad_writer, 704, 0);
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &bad_writer, 16, 0);
+    var valid_reader = bitstream.BitReader.init(bad_ndirect.items);
+    try std.testing.expectEqual(@as(u16, 120), (try readMinimalCompressedHeader(&valid_reader)).ndirect);
+}
+
 test "br simple prefix code decodes three-symbol canonical tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -943,6 +1040,18 @@ fn writeBlockTypeCount(allocator: std.mem.Allocator, writer: *BitWriter, value: 
         }
     }
     return error.InvalidBlockPlan;
+}
+
+fn writeSimpleSingleSymbolPrefix(
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    comptime alphabet_size: usize,
+    symbol: usize,
+) Error!void {
+    if (symbol >= alphabet_size) return error.InvalidHuffmanCode;
+    try writer.writeBits(allocator, 1, 2); // simple prefix code
+    try writer.writeBits(allocator, 0, 2); // NSYM = 1
+    try writer.writeBits(allocator, symbol, alphabetBits(alphabet_size));
 }
 
 fn writeCodeLengthSymbol(
