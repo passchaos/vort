@@ -4278,6 +4278,46 @@ test "root native dictionary set APIs resolve concatenated frame dictionaries" {
     ));
 }
 
+test "root exports png primitives" {
+    // The low-level PNG helpers live in src/png.zig, while root-level aliases
+    // keep the public API stable for callers that imported them before the
+    // module split. Exercise both metadata and scanline reconstruction here so
+    // future refactors cannot accidentally leave only the deflate-owned PNG
+    // zlib wrappers exported.
+    comptime {
+        _ = png;
+        _ = PngFilterMethod;
+        _ = PngColorType;
+        _ = PngImageInfo;
+        _ = PngZlibDecodeBufferSizes;
+        _ = PngAdam7PassInfo;
+        _ = PngAdam7Info;
+    }
+
+    const info = try pngImageInfo(2, 1, 8, .truecolor);
+    try std.testing.expectEqual(PngColorType.truecolor, info.color_type);
+    try std.testing.expectEqual(@as(usize, 6), info.row_len);
+    try std.testing.expectEqual(@as(usize, 3), info.bytes_per_pixel);
+    const sizes = try pngZlibDecodeBufferSizes(info);
+    try std.testing.expectEqual(@as(usize, 7), sizes.zlib_scratch_len);
+    try std.testing.expectEqual(@as(usize, 6), sizes.image_output_len);
+
+    const filtered = [_]u8{ 1, 2, 3, 4, 5, 6 };
+    var reconstructed: [filtered.len]u8 = undefined;
+    try std.testing.expectEqual(
+        filtered.len,
+        try reconstructPngScanline(@intFromEnum(PngFilterMethod.none), &filtered, null, info.bytes_per_pixel, &reconstructed),
+    );
+    try std.testing.expectEqualSlices(u8, &filtered, &reconstructed);
+
+    const adam7 = try pngAdam7Info(1, 1, 8, .grayscale);
+    const adam7_sizes = pngAdam7DecodeBufferSizes(adam7);
+    try std.testing.expectEqual(@as(usize, 2), adam7_sizes.zlib_scratch_len);
+    var image: [1]u8 = undefined;
+    try placePngAdam7Row(adam7, adam7.passes[0], 0, &.{0x7b}, &image);
+    try std.testing.expectEqual(@as(u8, 0x7b), image[0]);
+}
+
 test "root exports chunked compatibility decode helpers" {
     // Keep the README/API-sketch split-input helpers tied to root exports. These
     // references are intentionally compile-time only: codec behavior is covered
