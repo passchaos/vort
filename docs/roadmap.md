@@ -1722,3 +1722,9 @@ architecture blindly.
   and output decode, while UTF8 mode remains explicitly unsupported. A compressed
   literal-context frame exercises signed context ID 8 and is covered by Zig tests
   plus the Node-backed CLI differential smoke.
+
+- Added Brotli UTF8 literal context mode support. Literal context selection now
+  implements the RFC `Lut0[p1] | Lut1[p2]` behavior for mode 2 in both
+  decoded-size preflight and output decode. A compressed literal-context frame
+  exercises UTF8 context ID 56 and is covered by Zig tests plus the Node-backed
+  CLI differential smoke.
