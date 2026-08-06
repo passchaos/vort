@@ -1671,6 +1671,13 @@ architecture blindly.
   command stream switches command prefix trees when the current count reaches
   zero. Zig tests and the Node-backed CLI differential smoke cover the switch.
 
+- Extended the minimal Brotli compressed decode path with literal block
+  switching for the two-literal-block-type shape. The parser now reads the
+  literal block type/count trees and initial block count, preserves per-block
+  literal context modes and context-map slices, and switches literal prefix tree
+  selection when the literal block count reaches zero. Zig tests and the
+  Node-backed CLI differential smoke cover the switch.
+
 - Extended the minimal Brotli compressed decode path with insert-and-copy block
   switching for the two-command-block-type shape. The parser now reads the
   command block type/count prefix trees and initial block count, the decoder
