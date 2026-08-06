@@ -16,6 +16,7 @@ PAYLOADS = [
     b"hello vort brotli stored stream\n" * 8,
     bytes((i * 37 + 11) & 0xFF for i in range(4096)),
 ]
+WINDOW_BITS = [10, 16, 24]
 
 
 def run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -46,32 +47,35 @@ def main() -> int:
     cli = args.cli.resolve()
     with tempfile.TemporaryDirectory(prefix="vort-br-stored-") as td:
         tmp = Path(td)
+        cases = 0
         for index, payload in enumerate(PAYLOADS):
             src = tmp / f"case-{index}.bin"
-            br = tmp / f"case-{index}.br"
-            out = tmp / f"case-{index}.out"
             src.write_bytes(payload)
-            run([str(cli), "encode-br-stored-file", str(src), str(br)], root)
-            run([str(cli), "size-br-file", str(br), str(len(payload))], root)
-            run([str(cli), "decode-br-file-to", str(br), str(out), str(len(payload))], root)
-            decoded = out.read_bytes()
-            if decoded != payload:
-                raise AssertionError(f"vort decode mismatch case={index}")
-            node_decoded = node_decode(br)
-            if node_decoded != payload:
-                raise AssertionError(f"node decode mismatch case={index}")
+            for window_bits in WINDOW_BITS:
+                br = tmp / f"case-{index}-w{window_bits}.br"
+                out = tmp / f"case-{index}-w{window_bits}.out"
+                run([str(cli), "encode-br-stored-file", str(src), str(br), str(window_bits)], root)
+                run([str(cli), "size-br-file", str(br), str(len(payload))], root)
+                run([str(cli), "decode-br-file-to", str(br), str(out), str(len(payload))], root)
+                decoded = out.read_bytes()
+                if decoded != payload:
+                    raise AssertionError(f"vort decode mismatch case={index} window_bits={window_bits}")
+                node_decoded = node_decode(br)
+                if node_decoded != payload:
+                    raise AssertionError(f"node decode mismatch case={index} window_bits={window_bits}")
 
-            too_small = subprocess.run(
-                [str(cli), "decode-br-file-to", str(br), str(out), str(max(0, len(payload) - 1))],
-                cwd=root,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            if payload and too_small.returncode == 0:
-                raise AssertionError(f"expected output limit failure case={index}")
+                too_small = subprocess.run(
+                    [str(cli), "decode-br-file-to", str(br), str(out), str(max(0, len(payload) - 1))],
+                    cwd=root,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                if payload and too_small.returncode == 0:
+                    raise AssertionError(f"expected output limit failure case={index} window_bits={window_bits}")
+                cases += 1
 
-    print(f"br_stored_cli_diff=ok cases={len(PAYLOADS)}")
+    print(f"br_stored_cli_diff=ok cases={cases}")
     return 0
 
 

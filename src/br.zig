@@ -6,7 +6,11 @@ pub const Error = core.Error || std.mem.Allocator.Error;
 
 pub const max_uncompressed_meta_block_len: usize = 1 << 24;
 
-const default_wbits_pattern: u1 = 0; // WBITS=16, RFC 7932 section 9.1.
+pub const default_window_bits: u5 = 16;
+
+pub const StoredStreamOptions = struct {
+    window_bits: u5 = default_window_bits,
+};
 
 const BitWriter = struct {
     out: *std.ArrayList(u8),
@@ -35,15 +39,23 @@ const BitWriter = struct {
 };
 
 pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return try encodeStoredStreamWithOptionsAlloc(allocator, input, .{});
+}
+
+pub fn encodeStoredStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: StoredStreamOptions) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
-    try encodeStoredStreamAppend(allocator, &out, input);
+    try encodeStoredStreamWithOptionsAppend(allocator, &out, input, options);
     return out.toOwnedSlice(allocator);
 }
 
 pub fn encodeStoredStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
+    try encodeStoredStreamWithOptionsAppend(allocator, out, input, .{});
+}
+
+pub fn encodeStoredStreamWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: StoredStreamOptions) Error!void {
     var writer = BitWriter{ .out = out };
-    try writer.writeBits(allocator, default_wbits_pattern, 1);
+    try writeWindowBits(allocator, &writer, options.window_bits);
 
     var offset: usize = 0;
     while (offset < input.len) {
@@ -60,8 +72,12 @@ pub fn encodeStoredStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
 }
 
 pub fn encodeStoredStreamInto(input: []const u8, output: []u8) Error!usize {
+    return try encodeStoredStreamWithOptionsInto(input, output, .{});
+}
+
+pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
     var fba = std.heap.FixedBufferAllocator.init(output);
-    const encoded = try encodeStoredStreamAlloc(fba.allocator(), input);
+    const encoded = try encodeStoredStreamWithOptionsAlloc(fba.allocator(), input, options);
     return encoded.len;
 }
 
@@ -196,11 +212,42 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
 }
 
 fn readWindowBits(reader: *bitstream.BitReader) Error!void {
-    // This first Brotli slice emits WBITS=16 with the one-bit zero code. The
-    // stored decoder deliberately rejects other window encodings until the
-    // broader Brotli parser is implemented.
+    _ = try readWindowBitsValue(reader);
+}
+
+fn readWindowBitsValue(reader: *bitstream.BitReader) Error!u5 {
     const first = try reader.readBits(u1, 1);
-    if (first != 0) return error.UnsupportedBrotliFeature;
+    if (first == 0) return 16;
+    const low3 = try reader.readBits(u3, 3);
+    if (low3 != 0) return @as(u5, low3) + 17;
+
+    const tail = try reader.readBits(u3, 3);
+    return switch (tail) {
+        0 => 17,
+        1 => error.CorruptFrame,
+        else => @as(u5, tail) + 8,
+    };
+}
+
+fn writeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits: u5) Error!void {
+    switch (window_bits) {
+        16 => try writer.writeBits(allocator, 0, 1),
+        18...24 => {
+            try writer.writeBits(allocator, 1, 1);
+            try writer.writeBits(allocator, @as(u64, window_bits - 17), 3);
+        },
+        17 => {
+            try writer.writeBits(allocator, 1, 1);
+            try writer.writeBits(allocator, 0, 3);
+            try writer.writeBits(allocator, 0, 3);
+        },
+        10...15 => {
+            try writer.writeBits(allocator, 1, 1);
+            try writer.writeBits(allocator, 0, 3);
+            try writer.writeBits(allocator, @as(u64, window_bits - 8), 3);
+        },
+        else => return error.InvalidBlockPlan,
+    }
 }
 
 fn consumeZeroPaddingToByte(reader: *bitstream.BitReader) Error!void {
@@ -239,11 +286,22 @@ test "br stored stream round trips hello with known bytes" {
     try std.testing.expectEqualSlices(u8, "hello", &out);
 }
 
+test "br stored stream supports all RFC window bits" {
+    inline for (.{ 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24 }) |bits| {
+        const encoded = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, "window", .{ .window_bits = bits });
+        defer std.testing.allocator.free(encoded);
+        try std.testing.expectEqual(@as(usize, 6), try decodedStreamSize(encoded));
+        const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, "window", decoded);
+    }
+}
+
 test "br stored stream decodes multiple uncompressed meta-blocks" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
     var writer = BitWriter{ .out = &encoded };
-    try writer.writeBits(std.testing.allocator, default_wbits_pattern, 1);
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
     try writeUncompressedMetaBlock(std.testing.allocator, &writer, "first ");
     try writeUncompressedMetaBlock(std.testing.allocator, &writer, "second");
     try writer.writeBits(std.testing.allocator, 1, 1);

@@ -1563,3 +1563,9 @@ architecture blindly.
   framed encodes. The Snappy report now carries reusable raw/framed rows and the
   gate requires their encoded sizes to match the one-shot rows, keeping the
   reusable path covered without letting it drift from public one-shot behavior.
+
+- Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
+  window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
+  root and CLI encode paths can now select a legal stored-stream window size,
+  and the Node-backed `run-br-stored-cli-diff` smoke covers representative
+  `10/16/24` encodings for empty, text, repeated, and binary payloads.
