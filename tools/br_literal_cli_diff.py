@@ -102,6 +102,28 @@ def write_last_distance_a_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 65, 16)
 
 
+def write_short_distance_a_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 1, 4)  # NDIRECT = 1
+    write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+
+    write_simple_single_symbol_prefix(bits, 256, ord("a"))
+    write_bits(bits, 1, 2)  # simple insert-copy prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 136, 10)
+    write_bits(bits, 128, 10)
+
+    write_bits(bits, 1, 2)  # simple distance prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 16, 7)
+    write_bits(bits, 5, 7)
+
+
 def literal_only_hello_frame(final: bool) -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -151,6 +173,43 @@ def last_distance_a_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def short_distance_a_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 4, 16)  # MLEN - 1
+    write_short_distance_a_header(bits)
+    write_bits(bits, 1, 1)  # command 136
+    write_bits(bits, 1, 1)  # distance 16
+    write_bits(bits, 0, 1)  # command 128
+    write_bits(bits, 0, 1)  # distance 5
+    return bits_to_bytes(bits)
+
+
+def cross_block_short_distance_a_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+
+    write_bits(bits, 0, 1)  # ISLAST = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 2, 16)  # MLEN - 1
+    write_bits(bits, 0, 1)  # ISUNCOMPRESSED = false
+    write_short_distance_a_header(bits)
+    write_bits(bits, 1, 1)  # command 136
+    write_bits(bits, 1, 1)  # distance 16
+
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 1, 16)  # MLEN - 1
+    write_short_distance_a_header(bits)
+    write_bits(bits, 0, 1)  # command 128
+    write_bits(bits, 0, 1)  # distance 5
+    return bits_to_bytes(bits)
+
+
 def run(cmd: list[str], cwd: Path, expect_ok: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(cmd, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if expect_ok and result.returncode != 0:
@@ -182,6 +241,8 @@ def main() -> int:
         "nonfinal": (literal_only_hello_frame(False), b"hello"),
         "copy": (direct_copy_a_frame(), b"aaaaa"),
         "last-distance": (last_distance_a_frame(), b"aaaaa"),
+        "short-distance": (short_distance_a_frame(), b"aaaaa"),
+        "cross-block-short-distance": (cross_block_short_distance_a_frame(), b"aaaaa"),
     }
 
     with tempfile.TemporaryDirectory(prefix="vort-br-literal-") as td:

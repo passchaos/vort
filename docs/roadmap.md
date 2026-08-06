@@ -1630,3 +1630,10 @@ architecture blindly.
   for explicit direct distances, and implicit distance-zero commands can reuse
   the most recent distance. The Node-backed literal CLI differential smoke now
   covers this shape without relying on system codec libraries for Vort support.
+
+- Extended the minimal Brotli compressed decode path with RFC 7932 distance
+  short-code support for symbols `1...15`. The decoder now keeps the recent
+  distance ring at stream scope across compressed meta-blocks, resolves last /
+  second-last distance deltas with invalid zero/negative rejection, and covers
+  the new short-distance copy shape in both Zig tests and the Node-backed CLI
+  differential smoke.
