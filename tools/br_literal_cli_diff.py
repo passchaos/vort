@@ -22,6 +22,19 @@ def write_bits(bits: list[int], value: int, count: int) -> None:
         bits.append((value >> i) & 1)
 
 
+def write_uncompressed_meta_block(bits: list[int], data: bytes) -> None:
+    if not data:
+        raise ValueError("empty uncompressed meta-block")
+    write_bits(bits, 0, 1)  # ISLAST = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, len(data) - 1, 16)
+    write_bits(bits, 1, 1)  # ISUNCOMPRESSED
+    while len(bits) % 8 != 0:
+        write_bits(bits, 0, 1)
+    for byte in data:
+        write_bits(bits, byte, 8)
+
+
 def write_block_type_count(bits: list[int], value: int) -> None:
     if value == 1:
         write_bits(bits, 0, 1)
@@ -441,6 +454,23 @@ def write_literal_context_aba_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 256, ord("a"))
     write_simple_single_symbol_prefix(bits, 256, ord("b"))
     write_simple_single_symbol_prefix(bits, 704, 24)
+    write_simple_single_symbol_prefix(bits, 64, 0)
+
+
+def write_literal_context_after_stored_a_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 0, 4)  # NDIRECT
+    write_bits(bits, 0, 2)  # literal context mode = LSB6
+    write_block_type_count(bits, 2)
+    write_literal_context_map_for_a(bits)
+    write_block_type_count(bits, 1)
+
+    write_simple_single_symbol_prefix(bits, 256, 0)
+    write_simple_single_symbol_prefix(bits, 256, ord("b"))
+    write_simple_single_symbol_prefix(bits, 704, 8)
     write_simple_single_symbol_prefix(bits, 64, 0)
 
 
@@ -972,6 +1002,18 @@ def literal_context_aba_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def stored_then_literal_context_ab_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_uncompressed_meta_block(bits, b"a")
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 0, 16)  # MLEN - 1
+    write_literal_context_after_stored_a_header(bits)
+    return bits_to_bytes(bits)
+
+
 def literal_context_imtf_aba_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -1240,6 +1282,7 @@ def main() -> int:
         "distance-context": (distance_context_ab_frame(), b"ababa"),
         "distance-context-five-trees": (distance_context_five_trees_ab_frame(), b"ababa"),
         "literal-context": (literal_context_aba_frame(), b"aba"),
+        "stored-then-literal-context": (stored_then_literal_context_ab_frame(), b"ab"),
         "literal-context-imtf": (literal_context_imtf_aba_frame(), b"aba"),
         "literal-context-utf8": (literal_context_utf8_aba_frame(), b"aba"),
         "utf8-context-after-distance-three-copy": (utf8_context_after_distance_three_copy_frame(), b"abcabc"),

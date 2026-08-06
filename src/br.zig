@@ -122,6 +122,11 @@ const LiteralHistory = struct {
         self.known = true;
     }
 
+    fn pushSlice(self: *LiteralHistory, bytes: []const u8) void {
+        const keep = @min(bytes.len, self.tail.len);
+        for (bytes[bytes.len - keep ..]) |value| self.push(value);
+    }
+
     fn copy(self: *LiteralHistory, distance: usize, len: usize) void {
         if (!self.known or len == 0) return;
         if (distance == 0 or distance > self.tail_len) {
@@ -352,8 +357,8 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
         }
         try consumeZeroPaddingToByte(&reader);
         if (reader.byte_index > stream.len or stream.len - reader.byte_index < meta_block_len) return error.TruncatedFrame;
+        literal_history.pushSlice(stream[reader.byte_index..][0..meta_block_len]);
         reader.byte_index += meta_block_len;
-        if (meta_block_len != 0) literal_history.markUnknown();
     }
 }
 
@@ -1357,6 +1362,25 @@ test "br minimal compressed stream can precede stored metablocks" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "hello!", decoded);
+}
+
+test "br stored metablock history feeds following compressed literal context" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writeUncompressedMetaBlock(std.testing.allocator, &writer, "a");
+
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 0, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForLiteralContextAfterStoredA(std.testing.allocator, &writer);
+
+    try std.testing.expectEqual(@as(usize, 2), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "ab", decoded);
 }
 
 test "br minimal compressed stream decodes direct-distance copy" {
@@ -2560,6 +2584,24 @@ fn writeMinimalCompressedHeaderForLiteralContext(allocator: std.mem.Allocator, w
     try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'b');
 
     try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 24);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
+fn writeMinimalCompressedHeaderForLiteralContextAfterStoredA(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // literal context mode = LSB6
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESL
+    try writeLiteralContextMapForA(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 0);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'b');
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 8);
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 

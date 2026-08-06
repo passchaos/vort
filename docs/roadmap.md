@@ -1761,3 +1761,9 @@ architecture blindly.
   bytes. A compressed context-selected literal frame now copies with distance 33
   and then decodes another literal using the copied history, keeping preflight in
   sync with output decode for a wider short-copy class.
+
+- Preserved Brotli decoded-size preflight literal history across uncompressed
+  meta-blocks. The preflight path now feeds skipped stored payload bytes into the
+  recent literal history, so a following compressed meta-block can use stored
+  bytes for context-selected literal decoding. A stored-then-compressed
+  differential frame covers the behavior.
