@@ -132,6 +132,17 @@ def write_utf8_literal_context_map_for_context63(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # IMTF = false
 
 
+def write_literal_context_map_for_b(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 1, 2)  # simple context-map prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 0, 1)
+    write_bits(bits, 1, 1)
+    for context in range(64):
+        write_bits(bits, 1 if context == (ord("b") & 0x3F) else 0, 1)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
 def write_utf8_literal_context_map_for_fifth_tree(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # RLEMAX = 0
     write_bits(bits, 1, 2)  # simple context-map prefix
@@ -490,6 +501,34 @@ def write_utf8_context_after_distance_three_copy_header(bits: list[int]) -> None
     write_bits(bits, 8, 10)
 
     write_simple_single_symbol_prefix(bits, 67, 18)
+
+
+def write_context_after_distance_thirty_three_copy_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 3, 2)  # NPOSTFIX
+    write_bits(bits, 5, 4)  # NDIRECT = 40
+    write_bits(bits, 0, 2)  # literal context mode = LSB6
+    write_block_type_count(bits, 2)
+    write_literal_context_map_for_b(bits)
+    write_block_type_count(bits, 1)
+
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, ord("a"), 8)
+    write_bits(bits, ord("b"), 8)
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, ord("a"), 8)
+    write_bits(bits, ord("c"), 8)
+
+    write_bits(bits, 1, 2)  # simple insert-copy prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 280, 10)
+    write_bits(bits, 8, 10)
+
+    write_simple_single_symbol_prefix(bits, 440, 48)
 
 
 def write_literal_context_five_trees_aba_header(bits: list[int]) -> None:
@@ -970,6 +1009,25 @@ def utf8_context_after_distance_three_copy_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def context_after_distance_thirty_three_copy_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 35, 16)  # MLEN - 1
+    write_context_after_distance_thirty_three_copy_header(bits)
+    write_bits(bits, 1, 1)  # command 280
+    write_bits(bits, 7, 3)  # insert length 33
+    write_bits(bits, 0, 1)  # a
+    write_bits(bits, 1, 1)  # b
+    for _ in range(31):
+        write_bits(bits, 0, 1)  # a
+    write_bits(bits, 0, 1)  # command 8
+    write_bits(bits, 1, 1)  # c
+    return bits_to_bytes(bits)
+
+
 def literal_context_five_trees_aba_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -1185,6 +1243,10 @@ def main() -> int:
         "literal-context-imtf": (literal_context_imtf_aba_frame(), b"aba"),
         "literal-context-utf8": (literal_context_utf8_aba_frame(), b"aba"),
         "utf8-context-after-distance-three-copy": (utf8_context_after_distance_three_copy_frame(), b"abcabc"),
+        "context-after-distance-thirty-three-copy": (
+            context_after_distance_thirty_three_copy_frame(),
+            b"ab" + (b"a" * 32) + b"bc",
+        ),
         "literal-context-five-trees": (literal_context_five_trees_aba_frame(), b"aba"),
         "literal-context-signed": (literal_context_signed_frame(), bytes([1, ord("b"), 1])),
         "literal-context-three-trees": (literal_context_three_trees_abc_frame(), b"abc"),

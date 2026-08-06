@@ -1756,3 +1756,8 @@ architecture blindly.
   distance context map can now be proven to select tree index four for copy-length
   context one (`copy_len = 3`), with both Zig tests and the Node-backed CLI
   differential smoke decoding the same frame.
+
+- Expanded Brotli decoded-size preflight's recent literal history window to 64
+  bytes. A compressed context-selected literal frame now copies with distance 33
+  and then decodes another literal using the copied history, keeping preflight in
+  sync with output decode for a wider short-copy class.
