@@ -1767,3 +1767,8 @@ architecture blindly.
   recent literal history, so a following compressed meta-block can use stored
   bytes for context-selected literal decoding. A stored-then-compressed
   differential frame covers the behavior.
+
+- Added compressed-frame coverage for Brotli complex literal prefix codes. A
+  literal-only frame now uses a complex prefix-code header for its literal tree
+  and is decoded by both the Zig unit tests and the Node-backed CLI differential
+  smoke, proving complex prefix parsing works in the actual meta-block pipeline.
