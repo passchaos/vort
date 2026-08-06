@@ -96,6 +96,8 @@ const InsertCopyLengths = struct {
 
 const LiteralHistory = struct {
     previous: [2]u8 = .{ 0, 0 },
+    tail: [32]u8 = @splat(0),
+    tail_len: usize = 0,
     known: bool = true,
 
     fn context(self: *const LiteralHistory, header: *const MinimalCompressedHeader) Error!usize {
@@ -110,29 +112,32 @@ const LiteralHistory = struct {
     fn push(self: *LiteralHistory, value: u8) void {
         self.previous[0] = self.previous[1];
         self.previous[1] = value;
+        if (self.tail_len < self.tail.len) {
+            self.tail[self.tail_len] = value;
+            self.tail_len += 1;
+        } else {
+            std.mem.copyForwards(u8, self.tail[0 .. self.tail.len - 1], self.tail[1..]);
+            self.tail[self.tail.len - 1] = value;
+        }
         self.known = true;
     }
 
     fn copy(self: *LiteralHistory, distance: usize, len: usize) void {
         if (!self.known or len == 0) return;
-        switch (distance) {
-            1 => {
-                // Repeating the last byte leaves both recent bytes equal once
-                // at least two bytes are copied.
-                if (len >= 2) self.previous[0] = self.previous[1];
-            },
-            2 => {
-                var i: usize = 0;
-                while (i < len) : (i += 1) {
-                    self.push(self.previous[0]);
-                }
-            },
-            else => self.known = false,
+        if (distance == 0 or distance > self.tail_len) {
+            self.known = false;
+            return;
+        }
+        var i: usize = 0;
+        while (i < len) : (i += 1) {
+            const source_index = self.tail_len - distance;
+            self.push(self.tail[source_index]);
         }
     }
 
     fn markUnknown(self: *LiteralHistory) void {
         self.known = false;
+        self.tail_len = 0;
     }
 };
 
@@ -1546,6 +1551,27 @@ test "br minimal compressed stream selects literal context tree through UTF8 mod
     try std.testing.expectEqualSlices(u8, "aba", decoded);
 }
 
+test "br minimal compressed stream keeps UTF8 literal context after distance-three copy" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 5, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForUtf8ContextAfterDistanceThreeCopy(std.testing.allocator, &writer);
+    try writer.writeBits(std.testing.allocator, 1, 1); // command 152
+    try writer.writeBits(std.testing.allocator, 0, 1); // a
+    try writer.writeBits(std.testing.allocator, 1, 1); // b
+    try writer.writeBits(std.testing.allocator, 0, 1); // command 8
+
+    try std.testing.expectEqual(@as(usize, 6), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "abcabc", decoded);
+}
+
 test "br minimal compressed stream selects literal context tree through signed mode" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -2411,6 +2437,31 @@ fn writeMinimalCompressedHeaderForLiteralContextUtf8(allocator: std.mem.Allocato
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForUtf8ContextAfterDistanceThreeCopy(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 3, 4); // NDIRECT = 3
+    try writer.writeBits(allocator, 2, 2); // literal context mode = UTF8
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESL
+    try writeUtf8LiteralContextMapForContext63(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 'a', alphabetBits(256));
+    try writer.writeBits(allocator, 'b', alphabetBits(256));
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'c');
+
+    try writer.writeBits(allocator, 1, 2); // simple insert-copy prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 152, alphabetBits(704));
+    try writer.writeBits(allocator, 8, alphabetBits(704));
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 67, 18);
+}
+
 fn writeMinimalCompressedHeaderForLiteralContextSigned(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -2670,6 +2721,19 @@ fn writeUtf8LiteralContextMapForA(allocator: std.mem.Allocator, writer: *BitWrit
     var i: usize = 0;
     while (i < 64) : (i += 1) {
         try writer.writeBits(allocator, if (i == 56) 1 else 0, 1);
+    }
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeUtf8LiteralContextMapForContext63(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 0, alphabetBits(2));
+    try writer.writeBits(allocator, 1, alphabetBits(2));
+    var i: usize = 0;
+    while (i < 64) : (i += 1) {
+        try writer.writeBits(allocator, if (i == 63) 1 else 0, 1);
     }
     try writer.writeBits(allocator, 0, 1); // IMTF = false
 }

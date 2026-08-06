@@ -1728,3 +1728,10 @@ architecture blindly.
   decoded-size preflight and output decode. A compressed literal-context frame
   exercises UTF8 context ID 56 and is covered by Zig tests plus the Node-backed
   CLI differential smoke.
+
+- Improved Brotli decoded-size preflight literal history simulation. The
+  preflight path now keeps a small recent-byte tail so short backward copies with
+  distances beyond two can still feed later literal context selection instead of
+  forcing `UnsupportedBrotliFeature`. A compressed UTF8-context frame copies with
+  distance three and then decodes another context-selected literal, covered by
+  Zig tests and the Node-backed CLI differential smoke.
