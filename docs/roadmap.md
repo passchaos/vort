@@ -1624,3 +1624,9 @@ architecture blindly.
   support. The first copy slice handles explicit direct distance symbols such as
   distance 1, performs overlapping output-buffer copies, and is covered by both
   a synthetic unit test and the Node-backed literal CLI differential smoke.
+
+- Extended the minimal Brotli compressed decode path with last-distance reuse.
+  Decode and decoded-size preflight now maintain the Brotli last-distance ring
+  for explicit direct distances, and implicit distance-zero commands can reuse
+  the most recent distance. The Node-backed literal CLI differential smoke now
+  covers this shape without relying on system codec libraries for Vort support.
