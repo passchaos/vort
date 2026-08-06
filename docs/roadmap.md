@@ -1650,3 +1650,10 @@ architecture blindly.
   unused prefix trees while the current decoder continues using the first tree.
   Zig tests and the Node-backed CLI differential smoke cover an RLE-all-zero
   context-map frame.
+
+- Extended the minimal Brotli compressed decode path with non-trivial distance
+  context-map selection for the single distance block type shape. The decoder
+  now preserves the four distance context-map entries, supports up to two
+  distance prefix trees in the current minimal header shape, selects the distance
+  tree from copy-length context IDs, and covers the context-1/tree-1 path in both
+  Zig tests and the Node-backed CLI differential smoke.
