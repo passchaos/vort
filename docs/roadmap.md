@@ -1709,3 +1709,10 @@ architecture blindly.
   two. A compressed literal-block-switch frame now walks through three literal
   block types and selects the third block's literal tree, with the same frame
   covered by the Node-backed CLI differential smoke.
+
+- Added three-block-type coverage for Brotli command and distance block
+  switching. The compressed command-switch smoke now walks command block types
+  0/1/2 and the distance-switch smoke walks distance block types 0/1/2 with
+  distinct distance trees, proving the widened block-type capacity is exercised
+  beyond literal blocks. Both frames are covered by Zig tests and the Node-backed
+  CLI differential smoke.
