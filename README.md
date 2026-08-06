@@ -56,7 +56,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   Vort;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free Brotli `br` stored/uncompressed stream encode/decode bootstrap surface;
-- dependency-free Snappy raw block full decode plus greedy match raw/framed encode with decoded-size preflight, bounded allocation, masked CRC-32C validation, and skippable framed chunks;
+- dependency-free Snappy raw block full decode plus greedy match raw/framed encode with reusable encoder state, decoded-size preflight, bounded allocation, masked CRC-32C validation, and skippable framed chunks;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, frame-index CRC composition, range CRC summaries, caller-owned and batch range decode APIs, and bounded streaming APIs;
 - LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training, match-coverage, patch-codec, native dictionary-patch frame, self-contained dictionary streams, native LDM reference frame, and dictionary-/LDM-aware native best-frame prototypes, long-distance match scanner, LDM-aware block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
 

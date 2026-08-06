@@ -1557,3 +1557,9 @@ architecture blindly.
   repetitive, and incompressible payloads. The gate enforces the full row matrix,
   positive throughput/timing fields, consistent iterations, framed-vs-raw
   overhead sanity, and repeated-payload ratio wins.
+
+- Added a reusable Snappy encoder state (`SnappyEncoder`) so applications can
+  reuse the hash table and framed-stream block scratch across repeated raw and
+  framed encodes. The Snappy report now carries reusable raw/framed rows and the
+  gate requires their encoded sizes to match the one-shot rows, keeping the
+  reusable path covered without letting it drift from public one-shot behavior.

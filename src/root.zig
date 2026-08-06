@@ -58,6 +58,7 @@ pub const snappyEncodeBlockInto = snappy.encodeBlockInto;
 pub const snappyEncodeFrameAlloc = snappy.encodeFrameAlloc;
 pub const snappyEncodeFrameAppend = snappy.encodeFrameAppend;
 pub const snappyEncodeFrameInto = snappy.encodeFrameInto;
+pub const SnappyEncoder = snappy.Encoder;
 pub const snappyDecodeBlockAlloc = snappy.decodeBlockAlloc;
 pub const snappyDecodeBlockAllocLimited = snappy.decodeBlockAllocLimited;
 pub const snappyDecodeBlockAppend = snappy.decodeBlockAppend;
@@ -1262,6 +1263,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = snappyEncodeFrameAlloc;
     _ = snappyEncodeFrameAppend;
     _ = snappyEncodeFrameInto;
+    _ = SnappyEncoder;
     _ = snappyDecodeBlockAlloc;
     _ = snappyDecodeBlockAllocLimited;
     _ = snappyDecodeBlockAppend;
@@ -1884,6 +1886,24 @@ test "root snappy framed stream helpers round trip" {
     try appended.appendSlice(std.testing.allocator, "prefix:");
     try std.testing.expectEqual(@as(usize, 5), try snappyDecodeFrameAppend(std.testing.allocator, &appended, encoded));
     try std.testing.expectEqualSlices(u8, "prefix:hello", appended.items);
+}
+
+test "root snappy reusable encoder round trip" {
+    var encoder = SnappyEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+
+    const payload = "root reusable snappy payload " ** 128;
+    const block = try encoder.encodeBlockAlloc(payload);
+    defer std.testing.allocator.free(block);
+    const decoded_block = try snappyDecodeBlockAlloc(std.testing.allocator, block);
+    defer std.testing.allocator.free(decoded_block);
+    try std.testing.expectEqualSlices(u8, payload, decoded_block);
+
+    const frame = try encoder.encodeFrameAlloc(payload);
+    defer std.testing.allocator.free(frame);
+    const decoded_frame = try snappyDecodeFrameAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(decoded_frame);
+    try std.testing.expectEqualSlices(u8, payload, decoded_frame);
 }
 
 test "root lz4 lib frame options round trip" {

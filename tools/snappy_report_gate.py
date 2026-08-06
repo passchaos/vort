@@ -23,7 +23,7 @@ EXPECTED_COLUMNS = [
     "decode_mib_s",
     "checksum",
 ]
-EXPECTED_MODES = {"raw_block", "framed"}
+EXPECTED_MODES = {"raw_block", "framed", "raw_block_reusable", "framed_reusable"}
 EXPECTED_CASES = {"tiny", "text", "structured", "repetitive", "incompressible"}
 
 
@@ -110,8 +110,14 @@ def main() -> int:
     for case in EXPECTED_CASES:
         raw = rows_by_key[("raw_block", case)]
         framed = rows_by_key[("framed", case)]
+        raw_reusable = rows_by_key[("raw_block_reusable", case)]
+        framed_reusable = rows_by_key[("framed_reusable", case)]
         if int(framed["encoded_bytes"]) < int(raw["encoded_bytes"]):
             raise AssertionError(f"framed row unexpectedly smaller than raw row: raw={raw} framed={framed}")
+        if int(raw_reusable["encoded_bytes"]) != int(raw["encoded_bytes"]):
+            raise AssertionError(f"reusable raw size drift: raw={raw} reusable={raw_reusable}")
+        if int(framed_reusable["encoded_bytes"]) != int(framed["encoded_bytes"]):
+            raise AssertionError(f"reusable framed size drift: framed={framed} reusable={framed_reusable}")
 
     print(f"snappy_report_gate=ok rows={len(rows)} iterations={expected_iterations}")
     return 0

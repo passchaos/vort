@@ -4,6 +4,8 @@ const vort = @import("vort");
 const Mode = enum {
     raw_block,
     framed,
+    raw_block_reusable,
+    framed_reusable,
 };
 
 const incompressible_payload = incompressiblePayload();
@@ -51,6 +53,8 @@ pub fn main(init: std.process.Init) !void {
     for (&cases) |case| {
         try rows.append(init.gpa, try row(init.io, init.gpa, .raw_block, case, options.iterations));
         try rows.append(init.gpa, try row(init.io, init.gpa, .framed, case, options.iterations));
+        try rows.append(init.gpa, try row(init.io, init.gpa, .raw_block_reusable, case, options.iterations));
+        try rows.append(init.gpa, try row(init.io, init.gpa, .framed_reusable, case, options.iterations));
     }
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
@@ -83,15 +87,20 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
 }
 
 fn row(io: std.Io, allocator: std.mem.Allocator, mode: Mode, case: Case, iterations: usize) !Row {
+    var encoder = vort.SnappyEncoder.init(allocator);
+    defer encoder.deinit();
+
     const encoded = switch (mode) {
         .raw_block => try vort.snappyEncodeBlockAlloc(allocator, case.payload),
         .framed => try vort.snappyEncodeFrameAlloc(allocator, case.payload),
+        .raw_block_reusable => try encoder.encodeBlockAlloc(case.payload),
+        .framed_reusable => try encoder.encodeFrameAlloc(case.payload),
     };
     defer allocator.free(encoded);
 
     const decoded = switch (mode) {
-        .raw_block => try vort.snappyDecodeBlockAlloc(allocator, encoded),
-        .framed => try vort.snappyDecodeFrameAlloc(allocator, encoded),
+        .raw_block, .raw_block_reusable => try vort.snappyDecodeBlockAlloc(allocator, encoded),
+        .framed, .framed_reusable => try vort.snappyDecodeFrameAlloc(allocator, encoded),
     };
     defer allocator.free(decoded);
     if (!std.mem.eql(u8, case.payload, decoded)) return error.SizeMismatch;
@@ -102,6 +111,8 @@ fn row(io: std.Io, allocator: std.mem.Allocator, mode: Mode, case: Case, iterati
         const iteration_encoded = switch (mode) {
             .raw_block => try vort.snappyEncodeBlockAlloc(allocator, case.payload),
             .framed => try vort.snappyEncodeFrameAlloc(allocator, case.payload),
+            .raw_block_reusable => try encoder.encodeBlockAlloc(case.payload),
+            .framed_reusable => try encoder.encodeFrameAlloc(case.payload),
         };
         encode_checksum +%= vort.crc32(iteration_encoded);
         allocator.free(iteration_encoded);
@@ -112,8 +123,8 @@ fn row(io: std.Io, allocator: std.mem.Allocator, mode: Mode, case: Case, iterati
     const decode_start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
         const iteration_decoded = switch (mode) {
-            .raw_block => try vort.snappyDecodeBlockAlloc(allocator, encoded),
-            .framed => try vort.snappyDecodeFrameAlloc(allocator, encoded),
+            .raw_block, .raw_block_reusable => try vort.snappyDecodeBlockAlloc(allocator, encoded),
+            .framed, .framed_reusable => try vort.snappyDecodeFrameAlloc(allocator, encoded),
         };
         decode_checksum +%= vort.crc32(iteration_decoded);
         allocator.free(iteration_decoded);
@@ -151,6 +162,8 @@ fn modeName(mode: Mode) []const u8 {
     return switch (mode) {
         .raw_block => "raw_block",
         .framed => "framed",
+        .raw_block_reusable => "raw_block_reusable",
+        .framed_reusable => "framed_reusable",
     };
 }
 

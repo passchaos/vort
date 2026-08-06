@@ -31,14 +31,77 @@ pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![
 }
 
 pub fn encodeBlockAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
+    if (input.len < min_match_len) return try encodeBlockAppendWithTable(allocator, out, input, &.{});
+    const table = try allocator.alloc(u32, hash_table_len);
+    defer allocator.free(table);
+    try encodeBlockAppendWithTable(allocator, out, input, table);
+}
+
+pub const Encoder = struct {
+    allocator: std.mem.Allocator,
+    table: []u32 = &.{},
+    block_scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) Encoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *Encoder) void {
+        if (self.table.len != 0) self.allocator.free(self.table);
+        self.block_scratch.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn encodeBlockAlloc(self: *Encoder, input: []const u8) Error![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        try self.encodeBlockAppend(&out, input);
+        return out.toOwnedSlice(self.allocator);
+    }
+
+    pub fn encodeBlockAppend(self: *Encoder, out: *std.ArrayList(u8), input: []const u8) Error!void {
+        const table = if (input.len >= min_match_len) try self.ensureTable() else self.table;
+        try encodeBlockAppendWithTable(self.allocator, out, input, table);
+    }
+
+    pub fn encodeFrameAlloc(self: *Encoder, input: []const u8) Error![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        try self.encodeFrameAppend(&out, input);
+        return out.toOwnedSlice(self.allocator);
+    }
+
+    pub fn encodeFrameAppend(self: *Encoder, out: *std.ArrayList(u8), input: []const u8) Error!void {
+        try writeChunk(self.allocator, out, stream_identifier_chunk_type, stream_identifier_payload);
+        var offset: usize = 0;
+        while (offset < input.len) {
+            const chunk_len = @min(input.len - offset, max_uncompressed_chunk_len);
+            const chunk = input[offset..][0..chunk_len];
+            self.block_scratch.clearRetainingCapacity();
+            try self.encodeBlockAppend(&self.block_scratch, chunk);
+            if (self.block_scratch.items.len < chunk.len) {
+                try writeCheckedChunk(self.allocator, out, compressed_data_chunk_type, chunk, self.block_scratch.items);
+            } else {
+                try writeCheckedChunk(self.allocator, out, uncompressed_data_chunk_type, chunk, chunk);
+            }
+            offset += chunk_len;
+        }
+    }
+
+    fn ensureTable(self: *Encoder) Error![]u32 {
+        if (self.table.len == 0) self.table = try self.allocator.alloc(u32, hash_table_len);
+        return self.table;
+    }
+};
+
+fn encodeBlockAppendWithTable(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, table: []u32) Error!void {
     try writeVarint(allocator, out, input.len);
     if (input.len < min_match_len) {
         try emitLiteral(allocator, out, input);
         return;
     }
 
-    const table = try allocator.alloc(u32, hash_table_len);
-    defer allocator.free(table);
+    if (table.len < hash_table_len) return error.InputTooSmall;
     @memset(table, invalid_pos);
 
     var ip: usize = 0;
@@ -81,20 +144,9 @@ pub fn encodeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![
 }
 
 pub fn encodeFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
-    try writeChunk(allocator, out, stream_identifier_chunk_type, stream_identifier_payload);
-    var offset: usize = 0;
-    while (offset < input.len) {
-        const chunk_len = @min(input.len - offset, max_uncompressed_chunk_len);
-        const chunk = input[offset..][0..chunk_len];
-        const compressed = try encodeBlockAlloc(allocator, chunk);
-        defer allocator.free(compressed);
-        if (compressed.len < chunk.len) {
-            try writeCheckedChunk(allocator, out, compressed_data_chunk_type, chunk, compressed);
-        } else {
-            try writeCheckedChunk(allocator, out, uncompressed_data_chunk_type, chunk, chunk);
-        }
-        offset += chunk_len;
-    }
+    var encoder = Encoder.init(allocator);
+    defer encoder.deinit();
+    try encoder.encodeFrameAppend(out, input);
 }
 
 pub fn encodeFrameInto(input: []const u8, output: []u8) Error!usize {
@@ -569,6 +621,30 @@ test "snappy raw block round trips repeated payload with copy tokens" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expectError(error.OutputLimitExceeded, decodedBlockSizeLimited(encoded, payload.len - 1));
+}
+
+test "snappy reusable encoder matches one-shot block and frame output" {
+    const payload = "snappy reusable encoder payload " ** 256;
+    var encoder = Encoder.init(std.testing.allocator);
+    defer encoder.deinit();
+
+    const block = try encoder.encodeBlockAlloc(payload);
+    defer std.testing.allocator.free(block);
+    const one_shot_block = try encodeBlockAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(one_shot_block);
+    try std.testing.expectEqualSlices(u8, one_shot_block, block);
+
+    const frame = try encoder.encodeFrameAlloc(payload);
+    defer std.testing.allocator.free(frame);
+    const one_shot_frame = try encodeFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(one_shot_frame);
+    try std.testing.expectEqualSlices(u8, one_shot_frame, frame);
+
+    const second_block = try encoder.encodeBlockAlloc("second payload second payload second payload");
+    defer std.testing.allocator.free(second_block);
+    const decoded = try decodeBlockAlloc(std.testing.allocator, second_block);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "second payload second payload second payload", decoded);
 }
 
 test "snappy raw block decodes copy1 copy2 and copy4 forms" {
