@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("core.zig");
 const bitstream = @import("bitstream.zig");
+const huffman = @import("huffman.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -38,6 +39,20 @@ const BitWriter = struct {
         try self.out.appendSlice(allocator, bytes);
     }
 };
+
+pub fn PrefixCode(comptime alphabet_size: usize) type {
+    return struct {
+        single_symbol: ?u16 = null,
+        table: huffman.HuffmanTable(alphabet_size) = .{},
+
+        const Self = @This();
+
+        pub fn decode(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+            if (self.single_symbol) |symbol| return symbol;
+            return try self.table.decodeValue(reader);
+        }
+    };
+}
 
 pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return try encodeStoredStreamWithOptionsAlloc(allocator, input, .{});
@@ -240,6 +255,59 @@ fn readWindowBits(reader: *bitstream.BitReader) Error!void {
     _ = try readWindowBitsValue(reader);
 }
 
+fn readPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader) Error!PrefixCode(alphabet_size) {
+    const kind = try reader.readBits(u2, 2);
+    if (kind != 1) return error.UnsupportedBrotliFeature;
+
+    const nsym = @as(usize, try reader.readBits(u2, 2)) + 1;
+    const alphabet_bits = alphabetBits(alphabet_size);
+    var symbols: [4]u16 = undefined;
+    for (0..nsym) |i| {
+        const symbol = try reader.readBits(u16, alphabet_bits);
+        if (symbol >= alphabet_size) return error.InvalidHuffmanCode;
+        for (symbols[0..i]) |previous| {
+            if (previous == symbol) return error.InvalidHuffmanCode;
+        }
+        symbols[i] = symbol;
+    }
+
+    var lengths: [alphabet_size]u4 = @splat(0);
+    switch (nsym) {
+        1 => return .{ .single_symbol = symbols[0] },
+        2 => {
+            lengths[symbols[0]] = 1;
+            lengths[symbols[1]] = 1;
+        },
+        3 => {
+            lengths[symbols[0]] = 1;
+            lengths[symbols[1]] = 2;
+            lengths[symbols[2]] = 2;
+        },
+        4 => {
+            const tree_select = try reader.readBits(u1, 1);
+            if (tree_select == 0) {
+                for (symbols) |symbol| lengths[symbol] = 2;
+            } else {
+                lengths[symbols[0]] = 1;
+                lengths[symbols[1]] = 2;
+                lengths[symbols[2]] = 3;
+                lengths[symbols[3]] = 3;
+            }
+        },
+        else => unreachable,
+    }
+
+    return .{ .table = try huffman.HuffmanTable(alphabet_size).init(&lengths) };
+}
+
+fn alphabetBits(comptime alphabet_size: usize) u6 {
+    if (alphabet_size <= 1) return 0;
+    var bits: u6 = 0;
+    var value: usize = alphabet_size - 1;
+    while (value != 0) : (value >>= 1) bits += 1;
+    return bits;
+}
+
 fn readWindowBitsValue(reader: *bitstream.BitReader) Error!u5 {
     const first = try reader.readBits(u1, 1);
     if (first == 0) return 16;
@@ -383,4 +451,99 @@ test "br stored stream rejects malformed metadata meta-blocks" {
     var truncated = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, "", .{ .metadata = "metadata" });
     defer std.testing.allocator.free(truncated);
     try std.testing.expectError(error.TruncatedFrame, decodedStreamSize(truncated[0 .. truncated.len - 1]));
+}
+
+test "br simple prefix code decodes single symbol without consuming data bits" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writer.writeBits(std.testing.allocator, 1, 2); // simple prefix code.
+    try writer.writeBits(std.testing.allocator, 0, 2); // NSYM = 1.
+    try writer.writeBits(std.testing.allocator, 5, alphabetBits(8));
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    const prefix = try readPrefixCode(8, &reader);
+    const before = reader.bitPosition();
+    try std.testing.expectEqual(@as(u16, 5), try prefix.decode(&reader));
+    try std.testing.expectEqual(before, reader.bitPosition());
+}
+
+test "br simple prefix code decodes three-symbol canonical tree" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writer.writeBits(std.testing.allocator, 1, 2); // simple prefix code.
+    try writer.writeBits(std.testing.allocator, 2, 2); // NSYM = 3.
+    try writer.writeBits(std.testing.allocator, 5, alphabetBits(8));
+    try writer.writeBits(std.testing.allocator, 2, alphabetBits(8));
+    try writer.writeBits(std.testing.allocator, 7, alphabetBits(8));
+    try writer.writeBits(std.testing.allocator, 0, 1); // symbol 5, length 1, canonical code 0.
+    try writer.writeBits(std.testing.allocator, 1, 2); // symbol 2, length 2, canonical code 10 -> stored 01.
+    try writer.writeBits(std.testing.allocator, 3, 2); // symbol 7, length 2, canonical code 11.
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    const prefix = try readPrefixCode(8, &reader);
+    try std.testing.expectEqual(@as(u16, 5), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 2), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 7), try prefix.decode(&reader));
+}
+
+test "br simple prefix code decodes four-symbol tree variants" {
+    inline for (.{ 0, 1 }) |tree_select| {
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(std.testing.allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writer.writeBits(std.testing.allocator, 1, 2); // simple prefix code.
+        try writer.writeBits(std.testing.allocator, 3, 2); // NSYM = 4.
+        try writer.writeBits(std.testing.allocator, 1, alphabetBits(8));
+        try writer.writeBits(std.testing.allocator, 2, alphabetBits(8));
+        try writer.writeBits(std.testing.allocator, 3, alphabetBits(8));
+        try writer.writeBits(std.testing.allocator, 4, alphabetBits(8));
+        try writer.writeBits(std.testing.allocator, tree_select, 1);
+
+        if (tree_select == 0) {
+            // Four 2-bit codes assigned by sorted symbol order: 00, 01, 10, 11.
+            try writer.writeBits(std.testing.allocator, 0, 2);
+            try writer.writeBits(std.testing.allocator, 2, 2);
+            try writer.writeBits(std.testing.allocator, 1, 2);
+            try writer.writeBits(std.testing.allocator, 3, 2);
+        } else {
+            // Lengths in representation order are 1,2,3,3.
+            try writer.writeBits(std.testing.allocator, 0, 1);
+            try writer.writeBits(std.testing.allocator, 1, 2);
+            try writer.writeBits(std.testing.allocator, 3, 3);
+            try writer.writeBits(std.testing.allocator, 7, 3);
+        }
+
+        var reader = bitstream.BitReader.init(encoded.items);
+        const prefix = try readPrefixCode(8, &reader);
+        try std.testing.expectEqual(@as(u16, 1), try prefix.decode(&reader));
+        try std.testing.expectEqual(@as(u16, 2), try prefix.decode(&reader));
+        try std.testing.expectEqual(@as(u16, 3), try prefix.decode(&reader));
+        try std.testing.expectEqual(@as(u16, 4), try prefix.decode(&reader));
+    }
+}
+
+test "br simple prefix code rejects invalid symbol lists" {
+    var duplicate: std.ArrayList(u8) = .empty;
+    defer duplicate.deinit(std.testing.allocator);
+    var duplicate_writer = BitWriter{ .out = &duplicate };
+    try duplicate_writer.writeBits(std.testing.allocator, 1, 2);
+    try duplicate_writer.writeBits(std.testing.allocator, 1, 2); // NSYM = 2.
+    try duplicate_writer.writeBits(std.testing.allocator, 3, alphabetBits(8));
+    try duplicate_writer.writeBits(std.testing.allocator, 3, alphabetBits(8));
+    var duplicate_reader = bitstream.BitReader.init(duplicate.items);
+    try std.testing.expectError(error.InvalidHuffmanCode, readPrefixCode(8, &duplicate_reader));
+
+    var out_of_range: std.ArrayList(u8) = .empty;
+    defer out_of_range.deinit(std.testing.allocator);
+    var out_of_range_writer = BitWriter{ .out = &out_of_range };
+    try out_of_range_writer.writeBits(std.testing.allocator, 1, 2);
+    try out_of_range_writer.writeBits(std.testing.allocator, 0, 2); // NSYM = 1.
+    try out_of_range_writer.writeBits(std.testing.allocator, 7, alphabetBits(7));
+    var out_of_range_reader = bitstream.BitReader.init(out_of_range.items);
+    try std.testing.expectError(error.InvalidHuffmanCode, readPrefixCode(7, &out_of_range_reader));
+
+    var complex = bitstream.BitReader.init(&[_]u8{0});
+    try std.testing.expectError(error.UnsupportedBrotliFeature, readPrefixCode(8, &complex));
 }
