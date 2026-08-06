@@ -74,6 +74,17 @@ def write_distance_context_map_copy3(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # IMTF = false
 
 
+def write_literal_context_map_for_a(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 1, 2)  # simple context-map prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 0, 1)
+    write_bits(bits, 1, 1)
+    for context in range(64):
+        write_bits(bits, 1 if context == (ord("a") & 0x3F) else 0, 1)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
 def write_literal_hello_header(bits: list[int]) -> None:
     write_block_type_count(bits, 1)
     write_block_type_count(bits, 1)
@@ -217,6 +228,23 @@ def write_distance_context_ab_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 66, 17)
 
 
+def write_literal_context_aba_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 0, 4)  # NDIRECT
+    write_bits(bits, 0, 2)  # literal context mode = LSB6
+    write_block_type_count(bits, 2)
+    write_literal_context_map_for_a(bits)
+    write_block_type_count(bits, 1)
+
+    write_simple_single_symbol_prefix(bits, 256, ord("a"))
+    write_simple_single_symbol_prefix(bits, 256, ord("b"))
+    write_simple_single_symbol_prefix(bits, 704, 24)
+    write_simple_single_symbol_prefix(bits, 64, 0)
+
+
 def literal_only_hello_frame(final: bool) -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -346,6 +374,17 @@ def distance_context_ab_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def literal_context_aba_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 2, 16)  # MLEN - 1
+    write_literal_context_aba_header(bits)
+    return bits_to_bytes(bits)
+
+
 def run(cmd: list[str], cwd: Path, expect_ok: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(cmd, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if expect_ok and result.returncode != 0:
@@ -382,6 +421,7 @@ def main() -> int:
         "cross-block-short-distance": (cross_block_short_distance_a_frame(), b"aaaaa"),
         "regular-distance": (regular_distance_ab_frame(), b"ababa"),
         "distance-context": (distance_context_ab_frame(), b"ababa"),
+        "literal-context": (literal_context_aba_frame(), b"aba"),
     }
 
     with tempfile.TemporaryDirectory(prefix="vort-br-literal-") as td:

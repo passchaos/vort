@@ -58,7 +58,8 @@ const MinimalCompressedHeader = struct {
     npostfix: u2,
     ndirect: u16,
     literal_context_mode: u2,
-    literal: PrefixCode(256),
+    literal_context_map: [64]u8,
+    literal_trees: [max_literal_context_trees]PrefixCode(256),
     insert_copy: PrefixCode(704),
     distance_context_map: [4]u8,
     distance_trees: [max_distance_context_trees]PrefixCode(max_distance_alphabet_size),
@@ -66,6 +67,7 @@ const MinimalCompressedHeader = struct {
 
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 const max_context_map_alphabet_size = 256 + 16;
+const max_literal_context_trees = 2;
 const max_distance_context_trees = 2;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 
@@ -73,6 +75,48 @@ const InsertCopyLengths = struct {
     insert_len: usize,
     copy_len: usize,
     distance_symbol_zero: bool,
+};
+
+const LiteralHistory = struct {
+    previous: [2]u8 = .{ 0, 0 },
+    known: bool = true,
+
+    fn context(self: *const LiteralHistory, header: *const MinimalCompressedHeader) Error!usize {
+        if (!self.known) return error.UnsupportedBrotliFeature;
+        return switch (header.literal_context_mode) {
+            0 => self.previous[1] & 0x3f,
+            1 => self.previous[1] >> 2,
+            else => error.UnsupportedBrotliFeature,
+        };
+    }
+
+    fn push(self: *LiteralHistory, value: u8) void {
+        self.previous[0] = self.previous[1];
+        self.previous[1] = value;
+        self.known = true;
+    }
+
+    fn copy(self: *LiteralHistory, distance: usize, len: usize) void {
+        if (!self.known or len == 0) return;
+        switch (distance) {
+            1 => {
+                // Repeating the last byte leaves both recent bytes equal once
+                // at least two bytes are copied.
+                if (len >= 2) self.previous[0] = self.previous[1];
+            },
+            2 => {
+                var i: usize = 0;
+                while (i < len) : (i += 1) {
+                    self.push(self.previous[0]);
+                }
+            },
+            else => self.known = false,
+        }
+    }
+
+    fn markUnknown(self: *LiteralHistory) void {
+        self.known = false;
+    }
 };
 
 pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
@@ -246,6 +290,7 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
     try readWindowBits(&reader);
     var total: usize = 0;
     var last_distances = initial_last_distances;
+    var literal_history = LiteralHistory{};
     while (true) {
         const is_last = try reader.readBits(u1, 1) == 1;
         if (is_last) {
@@ -274,18 +319,19 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
         total = std.math.add(usize, total, meta_block_len) catch return error.IntegerOverflow;
         if (total > max_output_len) return error.OutputLimitExceeded;
         if (is_last) {
-            try skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances);
+            try skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history);
             try ensureZeroPaddingAndEnd(reader);
             return total;
         }
         const is_uncompressed = try reader.readBits(u1, 1) == 1;
         if (!is_uncompressed) {
-            try skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances);
+            try skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history);
             continue;
         }
         try consumeZeroPaddingToByte(&reader);
         if (reader.byte_index > stream.len or stream.len - reader.byte_index < meta_block_len) return error.TruncatedFrame;
         reader.byte_index += meta_block_len;
+        if (meta_block_len != 0) literal_history.markUnknown();
     }
 }
 
@@ -321,16 +367,19 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
     const literal_context_mode = try reader.readBits(u2, 2);
 
     const ntrees_l = try readBlockTypeCount(reader);
-    try readZeroContextMap(reader, @as(usize, nbltypes_l) * 64, ntrees_l);
+    if (ntrees_l > max_literal_context_trees) return error.UnsupportedBrotliFeature;
+    var literal_context_map: [64]u8 = @splat(0);
+    try readContextMap(reader, literal_context_map[0..], ntrees_l);
     const ntrees_d = try readBlockTypeCount(reader);
     if (ntrees_d > max_distance_context_trees) return error.UnsupportedBrotliFeature;
     var distance_context_map: [4]u8 = @splat(0);
     try readContextMap(reader, distance_context_map[0..], ntrees_d);
 
-    const literal = try readPrefixCode(256, reader);
+    var literal_trees: [max_literal_context_trees]PrefixCode(256) = .{ .{}, .{} };
+    literal_trees[0] = try readPrefixCode(256, reader);
     var literal_tree_index: u16 = 1;
     while (literal_tree_index < ntrees_l) : (literal_tree_index += 1) {
-        _ = try readPrefixCode(256, reader);
+        literal_trees[literal_tree_index] = try readPrefixCode(256, reader);
     }
 
     const insert_copy = try readPrefixCode(704, reader);
@@ -346,7 +395,8 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
         .npostfix = npostfix,
         .ndirect = ndirect,
         .literal_context_mode = literal_context_mode,
-        .literal = literal,
+        .literal_context_map = literal_context_map,
+        .literal_trees = literal_trees,
         .insert_copy = insert_copy,
         .distance_context_map = distance_context_map,
         .distance_trees = distance_trees,
@@ -428,7 +478,10 @@ fn processMinimalCompressedMetaBlock(
         if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
-            const literal = try header.literal.decode(reader);
+            const context = literalContext(&header, output, written.*);
+            const tree_index = header.literal_context_map[context];
+            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+            const literal = try header.literal_trees[tree_index].decode(reader);
             if (literal > 0xff) return error.InvalidHuffmanCode;
             output[written.*] = @intCast(literal);
             written.* += 1;
@@ -452,6 +505,7 @@ fn skipMinimalCompressedMetaBlock(
     start_written: usize,
     meta_block_len: usize,
     last_distances: *[4]usize,
+    literal_history: *LiteralHistory,
 ) Error!void {
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
     const header = try readMinimalCompressedHeader(reader);
@@ -462,7 +516,12 @@ fn skipMinimalCompressedMetaBlock(
         if (lengths.insert_len > meta_block_end - written) return error.CorruptFrame;
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
-            _ = try header.literal.decode(reader);
+            const context = try literal_history.context(&header);
+            const tree_index = header.literal_context_map[context];
+            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+            const literal = try header.literal_trees[tree_index].decode(reader);
+            if (literal > 0xff) return error.InvalidHuffmanCode;
+            literal_history.push(@intCast(literal));
             written += 1;
         }
         if (written == meta_block_end) {
@@ -471,8 +530,18 @@ fn skipMinimalCompressedMetaBlock(
         const distance = try readMinimalDistance(&header, reader, lengths, last_distances);
         if (distance == 0 or distance > written) return error.InvalidMatch;
         if (lengths.copy_len > meta_block_end - written) return error.CorruptFrame;
+        literal_history.copy(distance, lengths.copy_len);
         written += lengths.copy_len;
     }
+}
+
+fn literalContext(header: *const MinimalCompressedHeader, output: []const u8, written: usize) usize {
+    const previous = if (written == 0) 0 else output[written - 1];
+    return switch (header.literal_context_mode) {
+        0 => previous & 0x3f,
+        1 => previous >> 2,
+        else => 0,
+    };
 }
 
 fn readMinimalDistance(
@@ -1217,6 +1286,26 @@ test "br minimal compressed stream selects distance context tree" {
     try std.testing.expectEqualSlices(u8, "ababa", decoded);
 }
 
+test "br minimal compressed stream selects literal context tree" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 2, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForLiteralContext(std.testing.allocator, &writer);
+    // Command 24 inserts three literals. LSB6 context after literal 'a' is 33,
+    // which maps to tree 1 for literal 'b'. Tree 0 cannot decode 'b', so this
+    // proves the map selection path.
+
+    try std.testing.expectEqual(@as(usize, 3), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "aba", decoded);
+}
+
 test "br stored stream rejects unsupported compressed blocks and trailing data" {
     try std.testing.expectError(error.TruncatedFrame, decodeStreamAlloc(std.testing.allocator, &[_]u8{ 0x00, 0x00 }));
     try std.testing.expectError(error.TrailingData, decodedStreamSize(&[_]u8{ 0x06, 0x00 }));
@@ -1291,27 +1380,12 @@ test "br minimal compressed header parser reads single-tree shape" {
     try std.testing.expectEqual(@as(u2, 1), header.npostfix);
     try std.testing.expectEqual(@as(u16, 6), header.ndirect);
     try std.testing.expectEqual(@as(u2, 2), header.literal_context_mode);
-    try std.testing.expectEqual(@as(u16, 'A'), try header.literal.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 'A'), try header.literal_trees[0].decode(&reader));
     try std.testing.expectEqual(@as(u16, 0), try header.insert_copy.decode(&reader));
     try std.testing.expectEqual(@as(u16, 0), try header.distance_trees[0].decode(&reader));
 }
 
-test "br minimal compressed header parser rejects nonzero context maps and accepts ndirect boundary" {
-    var nonzero_context_map: std.ArrayList(u8) = .empty;
-    defer nonzero_context_map.deinit(std.testing.allocator);
-    var multi_writer = BitWriter{ .out = &nonzero_context_map };
-    try writeBlockTypeCount(std.testing.allocator, &multi_writer, 1);
-    try writeBlockTypeCount(std.testing.allocator, &multi_writer, 1);
-    try writeBlockTypeCount(std.testing.allocator, &multi_writer, 1);
-    try multi_writer.writeBits(std.testing.allocator, 0, 2);
-    try multi_writer.writeBits(std.testing.allocator, 0, 4);
-    try multi_writer.writeBits(std.testing.allocator, 0, 2);
-    try writeBlockTypeCount(std.testing.allocator, &multi_writer, 2); // NTREESL
-    try multi_writer.writeBits(std.testing.allocator, 0, 1); // RLEMAX = 0
-    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &multi_writer, 2, 1);
-    var multi_reader = bitstream.BitReader.init(nonzero_context_map.items);
-    try std.testing.expectError(error.UnsupportedBrotliFeature, readMinimalCompressedHeader(&multi_reader));
-
+test "br minimal compressed header parser accepts ndirect boundary" {
     var bad_ndirect: std.ArrayList(u8) = .empty;
     defer bad_ndirect.deinit(std.testing.allocator);
     var bad_writer = BitWriter{ .out = &bad_ndirect };
@@ -1328,6 +1402,18 @@ test "br minimal compressed header parser rejects nonzero context maps and accep
     try writeSimpleSingleSymbolPrefix(std.testing.allocator, &bad_writer, 520, 0);
     var valid_reader = bitstream.BitReader.init(bad_ndirect.items);
     try std.testing.expectEqual(@as(u16, 120), (try readMinimalCompressedHeader(&valid_reader)).ndirect);
+}
+
+test "br context map reader rejects inverse move-to-front maps" {
+    var imtf_context_map: std.ArrayList(u8) = .empty;
+    defer imtf_context_map.deinit(std.testing.allocator);
+    var multi_writer = BitWriter{ .out = &imtf_context_map };
+    try multi_writer.writeBits(std.testing.allocator, 0, 1); // RLEMAX = 0
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &multi_writer, 2, 0);
+    try multi_writer.writeBits(std.testing.allocator, 1, 1); // IMTF is still unsupported.
+    var multi_reader = bitstream.BitReader.init(imtf_context_map.items);
+    var context_map: [2]u8 = @splat(0);
+    try std.testing.expectError(error.UnsupportedBrotliFeature, readContextMap(&multi_reader, &context_map, 2));
 }
 
 test "br zero context map reader accepts plain and RLE all-zero maps" {
@@ -1366,6 +1452,23 @@ test "br distance context map reader preserves nonzero tree indexes" {
     var reader = bitstream.BitReader.init(encoded.items);
     try readContextMap(&reader, &context_map, 2);
     try std.testing.expectEqualSlices(u8, &.{ 0, 1, 0, 0 }, &context_map);
+}
+
+test "br literal context helpers cover LSB6 and MSB6 modes" {
+    var header = MinimalCompressedHeader{
+        .npostfix = 0,
+        .ndirect = 0,
+        .literal_context_mode = 0,
+        .literal_context_map = @splat(0),
+        .literal_trees = .{ .{}, .{} },
+        .insert_copy = .{},
+        .distance_context_map = @splat(0),
+        .distance_trees = .{ .{}, .{} },
+    };
+    try std.testing.expectEqual(@as(usize, 0), literalContext(&header, "", 0));
+    try std.testing.expectEqual(@as(usize, 0x23), literalContext(&header, "abc", 3));
+    header.literal_context_mode = 1;
+    try std.testing.expectEqual(@as(usize, 0x18), literalContext(&header, "abc", 3));
 }
 
 test "br insert-copy length decoder covers basic and extra-bit ranges" {
@@ -1838,6 +1941,24 @@ fn writeMinimalCompressedHeaderForDistanceContext(allocator: std.mem.Allocator, 
     try writeSimpleSingleSymbolPrefix(allocator, writer, 66, 17);
 }
 
+fn writeMinimalCompressedHeaderForLiteralContext(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // literal context mode = LSB6
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESL
+    try writeLiteralContextMapForA(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'a');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'b');
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 24);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
 fn writeBlockTypeCount(allocator: std.mem.Allocator, writer: *BitWriter, value: u16) Error!void {
     if (value == 0 or value > 256) return error.InvalidBlockPlan;
     if (value == 1) return try writer.writeBits(allocator, 0, 1);
@@ -1866,6 +1987,19 @@ fn writeDistanceContextMapForCopyLenThree(allocator: std.mem.Allocator, writer: 
     try writer.writeBits(allocator, 1, 1);
     try writer.writeBits(allocator, 0, 1);
     try writer.writeBits(allocator, 0, 1);
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeLiteralContextMapForA(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 0, alphabetBits(2));
+    try writer.writeBits(allocator, 1, alphabetBits(2));
+    var i: usize = 0;
+    while (i < 64) : (i += 1) {
+        try writer.writeBits(allocator, if (i == ('a' & 0x3f)) 1 else 0, 1);
+    }
     try writer.writeBits(allocator, 0, 1); // IMTF = false
 }
 

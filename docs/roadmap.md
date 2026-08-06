@@ -1657,3 +1657,10 @@ architecture blindly.
   distance prefix trees in the current minimal header shape, selects the distance
   tree from copy-length context IDs, and covers the context-1/tree-1 path in both
   Zig tests and the Node-backed CLI differential smoke.
+
+- Extended the minimal Brotli compressed decode path with non-trivial literal
+  context-map selection for the single literal block type shape. The decoder now
+  preserves 64 literal context-map entries, supports up to two literal prefix
+  trees, computes LSB6/MSB6 context IDs from recent output bytes, and covers a
+  context-selected literal tree in both Zig tests and the Node-backed CLI
+  differential smoke.
