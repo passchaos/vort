@@ -1683,3 +1683,11 @@ architecture blindly.
   command block type/count prefix trees and initial block count, the decoder
   switches command trees when the block count reaches zero, and the behavior is
   covered by both Zig tests and the Node-backed CLI differential smoke.
+
+- Extended the minimal Brotli compressed decode path with distance block
+  switching for the two-distance-block-type shape. The parser now reads distance
+  block type/count prefix trees and initial block count, preserves per-distance
+  block context-map slices, and switches distance prefix tree selection only
+  when an explicit distance symbol is decoded. Zig tests and the Node-backed CLI
+  differential smoke cover a frame whose second copy requires the switched
+  distance tree.
