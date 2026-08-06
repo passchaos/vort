@@ -1598,3 +1598,8 @@ architecture blindly.
   literal context mode, `NTREESL/D`, and the literal/insert-copy/distance prefix
   trees, while explicitly rejecting context-map and multi-block-type shapes until
   those parser branches are implemented.
+
+- Added Brotli insert-and-copy length decoding for symbols `0...703`, including
+  insert/copy extra-bit reads, high-range length families, and the implicit
+  distance-zero marker for symbols below 128. This is the next command-stream
+  primitive needed before literal-only compressed meta-block decoding.

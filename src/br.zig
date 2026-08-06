@@ -63,6 +63,12 @@ const MinimalCompressedHeader = struct {
     distance: PrefixCode(16),
 };
 
+const InsertCopyLengths = struct {
+    insert_len: usize,
+    copy_len: usize,
+    distance_symbol_zero: bool,
+};
+
 pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return try encodeStoredStreamWithOptionsAlloc(allocator, input, .{});
 }
@@ -302,6 +308,95 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
         .literal = try readPrefixCode(256, reader),
         .insert_copy = try readPrefixCode(704, reader),
         .distance = try readPrefixCode(16, reader),
+    };
+}
+
+fn readInsertCopyLengths(symbol: u16, reader: *bitstream.BitReader) Error!InsertCopyLengths {
+    if (symbol >= 704) return error.InvalidHuffmanCode;
+    const ranges = insertCopyCodeRanges(symbol);
+    const insert_code = ranges.insert_base + ((symbol >> 3) & 0x7);
+    const copy_code = ranges.copy_base + (symbol & 0x7);
+    const insert = try readInsertLength(insert_code, reader);
+    const copy = try readCopyLength(copy_code, reader);
+    return .{
+        .insert_len = insert,
+        .copy_len = copy,
+        .distance_symbol_zero = symbol < 128,
+    };
+}
+
+const InsertCopyCodeRanges = struct {
+    insert_base: u16,
+    copy_base: u16,
+};
+
+fn insertCopyCodeRanges(symbol: u16) InsertCopyCodeRanges {
+    if (symbol < 64) return .{ .insert_base = 0, .copy_base = 0 };
+    if (symbol < 128) return .{ .insert_base = 0, .copy_base = 8 };
+    if (symbol < 192) return .{ .insert_base = 0, .copy_base = 0 };
+    if (symbol < 256) return .{ .insert_base = 0, .copy_base = 8 };
+    if (symbol < 320) return .{ .insert_base = 8, .copy_base = 0 };
+    if (symbol < 384) return .{ .insert_base = 8, .copy_base = 8 };
+    if (symbol < 448) return .{ .insert_base = 0, .copy_base = 16 };
+    if (symbol < 512) return .{ .insert_base = 16, .copy_base = 0 };
+    if (symbol < 576) return .{ .insert_base = 8, .copy_base = 16 };
+    if (symbol < 640) return .{ .insert_base = 16, .copy_base = 8 };
+    return .{ .insert_base = 16, .copy_base = 16 };
+}
+
+const LengthSpec = struct {
+    base: usize,
+    extra_bits: u5,
+};
+
+fn readInsertLength(code: u16, reader: *bitstream.BitReader) Error!usize {
+    const spec = insertLengthSpec(code);
+    const extra = if (spec.extra_bits == 0) 0 else try reader.readBits(u32, spec.extra_bits);
+    return spec.base + extra;
+}
+
+fn readCopyLength(code: u16, reader: *bitstream.BitReader) Error!usize {
+    const spec = copyLengthSpec(code);
+    const extra = if (spec.extra_bits == 0) 0 else try reader.readBits(u32, spec.extra_bits);
+    return spec.base + extra;
+}
+
+fn insertLengthSpec(code: u16) LengthSpec {
+    return switch (code) {
+        0...5 => .{ .base = code, .extra_bits = 0 },
+        6...7 => .{ .base = 6 + (@as(usize, code - 6) << 1), .extra_bits = 1 },
+        8...9 => .{ .base = 10 + (@as(usize, code - 8) << 2), .extra_bits = 2 },
+        10...11 => .{ .base = 18 + (@as(usize, code - 10) << 3), .extra_bits = 3 },
+        12...13 => .{ .base = 34 + (@as(usize, code - 12) << 4), .extra_bits = 4 },
+        14...15 => .{ .base = 66 + (@as(usize, code - 14) << 5), .extra_bits = 5 },
+        16 => .{ .base = 130, .extra_bits = 6 },
+        17 => .{ .base = 194, .extra_bits = 7 },
+        18 => .{ .base = 322, .extra_bits = 8 },
+        19 => .{ .base = 578, .extra_bits = 9 },
+        20 => .{ .base = 1090, .extra_bits = 10 },
+        21 => .{ .base = 2114, .extra_bits = 12 },
+        22 => .{ .base = 6210, .extra_bits = 14 },
+        23 => .{ .base = 22594, .extra_bits = 24 },
+        else => unreachable,
+    };
+}
+
+fn copyLengthSpec(code: u16) LengthSpec {
+    return switch (code) {
+        0...7 => .{ .base = 2 + code, .extra_bits = 0 },
+        8...9 => .{ .base = 10 + (@as(usize, code - 8) << 1), .extra_bits = 1 },
+        10...11 => .{ .base = 14 + (@as(usize, code - 10) << 2), .extra_bits = 2 },
+        12...13 => .{ .base = 22 + (@as(usize, code - 12) << 3), .extra_bits = 3 },
+        14...15 => .{ .base = 38 + (@as(usize, code - 14) << 4), .extra_bits = 4 },
+        16 => .{ .base = 70, .extra_bits = 5 },
+        17 => .{ .base = 102, .extra_bits = 5 },
+        18 => .{ .base = 134, .extra_bits = 6 },
+        19 => .{ .base = 198, .extra_bits = 7 },
+        20 => .{ .base = 326, .extra_bits = 8 },
+        21 => .{ .base = 582, .extra_bits = 9 },
+        22 => .{ .base = 1094, .extra_bits = 10 },
+        23 => .{ .base = 2118, .extra_bits = 24 },
+        else => unreachable,
     };
 }
 
@@ -762,6 +857,49 @@ test "br minimal compressed header parser rejects unsupported maps and accepts n
     try writeSimpleSingleSymbolPrefix(std.testing.allocator, &bad_writer, 16, 0);
     var valid_reader = bitstream.BitReader.init(bad_ndirect.items);
     try std.testing.expectEqual(@as(u16, 120), (try readMinimalCompressedHeader(&valid_reader)).ndirect);
+}
+
+test "br insert-copy length decoder covers basic and extra-bit ranges" {
+    var empty_reader = bitstream.BitReader.init(&.{});
+    const zero = try readInsertCopyLengths(0, &empty_reader);
+    try std.testing.expectEqual(@as(usize, 0), zero.insert_len);
+    try std.testing.expectEqual(@as(usize, 2), zero.copy_len);
+    try std.testing.expect(zero.distance_symbol_zero);
+
+    var insert_extra_reader = bitstream.BitReader.init(&.{0b0000_0001});
+    const insert_extra = try readInsertCopyLengths(6 << 3, &insert_extra_reader);
+    try std.testing.expectEqual(@as(usize, 7), insert_extra.insert_len);
+    try std.testing.expectEqual(@as(usize, 2), insert_extra.copy_len);
+    try std.testing.expect(insert_extra.distance_symbol_zero);
+
+    var copy_extra_reader = bitstream.BitReader.init(&.{0b0000_0001});
+    const copy_extra = try readInsertCopyLengths(64 + 0, &copy_extra_reader);
+    try std.testing.expectEqual(@as(usize, 0), copy_extra.insert_len);
+    try std.testing.expectEqual(@as(usize, 11), copy_extra.copy_len);
+    try std.testing.expect(copy_extra.distance_symbol_zero);
+
+    var explicit_distance_reader = bitstream.BitReader.init(&.{0});
+    const explicit_distance = try readInsertCopyLengths(128, &explicit_distance_reader);
+    try std.testing.expectEqual(@as(usize, 0), explicit_distance.insert_len);
+    try std.testing.expectEqual(@as(usize, 2), explicit_distance.copy_len);
+    try std.testing.expect(!explicit_distance.distance_symbol_zero);
+}
+
+test "br insert-copy length decoder handles high range extra bits" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writer.writeBits(std.testing.allocator, 3, 10); // insert code 20 extra => 1093.
+    try writer.writeBits(std.testing.allocator, 17, 10); // copy code 22 extra => 1111.
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    const lengths = try readInsertCopyLengths(640 + (4 << 3) + 6, &reader);
+    try std.testing.expectEqual(@as(usize, 1093), lengths.insert_len);
+    try std.testing.expectEqual(@as(usize, 1111), lengths.copy_len);
+    try std.testing.expect(!lengths.distance_symbol_zero);
+
+    var invalid_reader = bitstream.BitReader.init(&.{});
+    try std.testing.expectError(error.InvalidHuffmanCode, readInsertCopyLengths(704, &invalid_reader));
 }
 
 test "br simple prefix code decodes three-symbol canonical tree" {
