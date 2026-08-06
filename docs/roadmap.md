@@ -1703,3 +1703,9 @@ architecture blindly.
   literal-context frame now selects the third literal tree through a non-trivial
   context map, and the Node-backed CLI differential smoke validates the same
   wire frame.
+
+- Expanded the minimal Brotli compressed header to keep up to four literal,
+  command, and distance block types instead of rejecting block-type groups above
+  two. A compressed literal-block-switch frame now walks through three literal
+  block types and selects the third block's literal tree, with the same frame
+  covered by the Node-backed CLI differential smoke.

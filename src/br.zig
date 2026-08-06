@@ -70,10 +70,10 @@ const MinimalCompressedHeader = struct {
 
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 const max_context_map_alphabet_size = 256 + 16;
-const max_literal_block_types = 2;
+const max_literal_block_types = 4;
 const max_literal_context_trees = 4;
-const max_command_block_types = 2;
-const max_distance_block_types = 2;
+const max_command_block_types = 4;
+const max_distance_block_types = 4;
 const max_distance_context_trees = 4;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 
@@ -420,7 +420,7 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
         literal_trees[literal_tree_index] = try readPrefixCode(256, reader);
     }
 
-    var insert_copy_trees: [max_command_block_types]PrefixCode(704) = .{ .{}, .{} };
+    var insert_copy_trees: [max_command_block_types]PrefixCode(704) = @splat(.{});
     insert_copy_trees[0] = try readPrefixCode(704, reader);
     var command_tree_index: u16 = 1;
     while (command_tree_index < nbltypes_i) : (command_tree_index += 1) {
@@ -1523,6 +1523,25 @@ test "br minimal compressed stream switches literal block tree" {
     try std.testing.expectEqualSlices(u8, "ab", decoded);
 }
 
+test "br minimal compressed stream switches third literal block tree" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 2, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForLiteralBlockSwitchThreeTypes(std.testing.allocator, &writer);
+    try writer.writeBits(std.testing.allocator, 0, 2); // next literal block count = 1
+    try writer.writeBits(std.testing.allocator, 0, 2); // next literal block count = 1
+
+    try std.testing.expectEqual(@as(usize, 3), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "abc", decoded);
+}
+
 test "br minimal compressed stream switches distance block tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -1712,7 +1731,7 @@ test "br literal context helpers cover LSB6 and MSB6 modes" {
         .literal_context_map = @splat(0),
         .literal_trees = @splat(.{}),
         .command_block = .{},
-        .insert_copy_trees = .{ .{}, .{} },
+        .insert_copy_trees = @splat(.{}),
         .distance_block = .{},
         .distance_context_map = @splat(0),
         .distance_trees = @splat(.{}),
@@ -2296,6 +2315,29 @@ fn writeMinimalCompressedHeaderForLiteralBlockSwitch(allocator: std.mem.Allocato
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForLiteralBlockSwitchThreeTypes(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 3); // NBLTYPESL
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 5, 1); // next literal block type
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 26, 0); // block count code
+    try writer.writeBits(allocator, 0, 2); // first literal block count = 1
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // literal context mode for block type 0
+    try writer.writeBits(allocator, 0, 2); // literal context mode for block type 1
+    try writer.writeBits(allocator, 0, 2); // literal context mode for block type 2
+    try writeBlockTypeCount(allocator, writer, 3); // NTREESL
+    try writeLiteralBlockSwitchThreeTypesContextMap(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'a');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'b');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'c');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 24);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
 fn writeMinimalCompressedHeaderForDistanceBlockSwitch(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -2416,6 +2458,21 @@ fn writeLiteralBlockSwitchContextMap(allocator: std.mem.Allocator, writer: *BitW
     var i: usize = 0;
     while (i < 128) : (i += 1) {
         try writer.writeBits(allocator, if (i >= 64) 1 else 0, 1);
+    }
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeLiteralBlockSwitchThreeTypesContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 2, 2); // NSYM = 3
+    try writer.writeBits(allocator, 0, alphabetBits(3));
+    try writer.writeBits(allocator, 1, alphabetBits(3));
+    try writer.writeBits(allocator, 2, alphabetBits(3));
+    var i: usize = 0;
+    while (i < 192) : (i += 1) {
+        const tree_index: u2 = @intCast(i / 64);
+        try writeThreeSymbolContextMapCode(allocator, writer, tree_index);
     }
     try writer.writeBits(allocator, 0, 1); // IMTF = false
 }

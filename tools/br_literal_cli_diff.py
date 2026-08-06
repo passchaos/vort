@@ -134,6 +134,18 @@ def write_literal_block_switch_context_map(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # IMTF = false
 
 
+def write_literal_block_switch_three_types_context_map(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 1, 2)  # simple context-map prefix
+    write_bits(bits, 2, 2)  # NSYM = 3
+    write_bits(bits, 0, 2)
+    write_bits(bits, 1, 2)
+    write_bits(bits, 2, 2)
+    for index in range(192):
+        write_three_symbol_context_map_code(bits, index // 64)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
 def write_distance_block_switch_context_map(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # RLEMAX = 0
     write_bits(bits, 1, 2)  # simple context-map prefix
@@ -384,6 +396,29 @@ def write_literal_block_switch_ab_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 64, 0)
 
 
+def write_literal_block_switch_three_types_abc_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 3)
+    write_simple_single_symbol_prefix(bits, 5, 1)
+    write_simple_single_symbol_prefix(bits, 26, 0)
+    write_bits(bits, 0, 2)  # first literal block count = 1
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 0, 4)  # NDIRECT
+    write_bits(bits, 0, 2)  # literal context mode, block type 0
+    write_bits(bits, 0, 2)  # literal context mode, block type 1
+    write_bits(bits, 0, 2)  # literal context mode, block type 2
+    write_block_type_count(bits, 3)
+    write_literal_block_switch_three_types_context_map(bits)
+    write_block_type_count(bits, 1)
+
+    write_simple_single_symbol_prefix(bits, 256, ord("a"))
+    write_simple_single_symbol_prefix(bits, 256, ord("b"))
+    write_simple_single_symbol_prefix(bits, 256, ord("c"))
+    write_simple_single_symbol_prefix(bits, 704, 24)
+    write_simple_single_symbol_prefix(bits, 64, 0)
+
+
 def write_distance_block_switch_abcabab_header(bits: list[int]) -> None:
     write_block_type_count(bits, 1)
     write_block_type_count(bits, 1)
@@ -600,6 +635,19 @@ def literal_block_switch_ab_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def literal_block_switch_three_types_abc_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 2, 16)  # MLEN - 1
+    write_literal_block_switch_three_types_abc_header(bits)
+    write_bits(bits, 0, 2)  # next literal block count = 1
+    write_bits(bits, 0, 2)  # next literal block count = 1
+    return bits_to_bytes(bits)
+
+
 def distance_block_switch_abcabab_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -658,6 +706,7 @@ def main() -> int:
         "literal-context-three-trees": (literal_context_three_trees_abc_frame(), b"abc"),
         "command-switch": (command_switch_aaab_frame(), b"aaab"),
         "literal-block-switch": (literal_block_switch_ab_frame(), b"ab"),
+        "literal-block-switch-three-types": (literal_block_switch_three_types_abc_frame(), b"abc"),
         "distance-block-switch": (distance_block_switch_abcabab_frame(), b"abcabab"),
     }
 
