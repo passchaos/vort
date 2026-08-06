@@ -112,6 +112,38 @@ pub fn main(init: std.process.Init) !void {
             try vort.brDecodeStreamAlloc(init.gpa, compressed);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "br", compressed.len, decoded);
+    } else if (std.mem.eql(u8, command, "encode-br-stored-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(payload);
+        const encoded = try vort.brEncodeStoredStreamAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = encoded });
+        try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ encoded.len, payload.len, output_path });
+    } else if (std.mem.eql(u8, command, "decode-br-file-to")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const output_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded = if (max_output_len) |limit|
+            try vort.brDecodeStreamAllocLimited(init.gpa, compressed, limit)
+        else
+            try vort.brDecodeStreamAlloc(init.gpa, compressed);
+        defer init.gpa.free(decoded);
+        try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
+        try stdout.print("br_compressed_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, decoded.len, output_path });
+    } else if (std.mem.eql(u8, command, "size-br-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const max_output_len = try parseOptionalLimit(args.next());
+        const compressed = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(compressed);
+        const decoded_len = if (max_output_len) |limit|
+            try vort.brDecodedStreamSizeLimited(compressed, limit)
+        else
+            try vort.brDecodedStreamSize(compressed);
+        try stdout.print("br_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
     } else if (std.mem.eql(u8, command, "encode-raw-fixed-hex")) {
         const payload = args.next() orelse "";
         const options = parseCompressionOptions(args.next());
@@ -1391,6 +1423,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\  encode-br-stored-hex [text] Encode text as dependency-free Brotli stored-stream hex
         \\  decode-br-hex [hex] [max_output]
         \\                              Decode dependency-free Brotli stored-stream hex
+        \\  encode-br-stored-file <in> <out>
+        \\                              Encode file bytes as dependency-free Brotli stored stream
+        \\  decode-br-file-to <in> <out> [max_output]
+        \\                              Decode dependency-free Brotli stored stream file
+        \\  size-br-file <path> [max_output]
+        \\                              Preflight dependency-free Brotli stored stream decoded size
         \\  encode-zstd-native-hex [text] [auto|raw_or_rle|literal_only] [checksum] [content_size]
         \\                              Encode text as dependency-free native-subset Zstandard hex
         \\  encode-zstd-native-bytes-hex [hex] [auto|raw_or_rle|literal_only] [checksum] [content_size]
