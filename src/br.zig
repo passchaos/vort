@@ -10,6 +10,7 @@ pub const default_window_bits: u5 = 16;
 
 pub const StoredStreamOptions = struct {
     window_bits: u5 = default_window_bits,
+    metadata: []const u8 = "",
 };
 
 const BitWriter = struct {
@@ -56,6 +57,7 @@ pub fn encodeStoredStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
 pub fn encodeStoredStreamWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: StoredStreamOptions) Error!void {
     var writer = BitWriter{ .out = out };
     try writeWindowBits(allocator, &writer, options.window_bits);
+    if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, options.metadata);
 
     var offset: usize = 0;
     while (offset < input.len) {
@@ -103,6 +105,23 @@ fn writeUncompressedMetaBlock(allocator: std.mem.Allocator, writer: *BitWriter, 
     try writer.writeBits(allocator, 1, 1); // ISUNCOMPRESSED.
     writer.alignToByte();
     try writer.writeAlignedBytes(allocator, block);
+}
+
+fn writeMetadataMetaBlock(allocator: std.mem.Allocator, writer: *BitWriter, metadata: []const u8) Error!void {
+    if (metadata.len > 0x1_0000) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, 0, 1); // ISLAST = false.
+    try writer.writeBits(allocator, 0b11, 2); // MNIBBLES = 0.
+    try writer.writeBits(allocator, 0, 1); // reserved.
+    if (metadata.len == 0) {
+        try writer.writeBits(allocator, 0, 2); // MSKIPBYTES = 0.
+    } else {
+        const len_minus_one = metadata.len - 1;
+        const mskipbytes: usize = if (len_minus_one <= 0xff) 1 else 2;
+        try writer.writeBits(allocator, @intCast(mskipbytes), 2);
+        try writer.writeBits(allocator, @intCast(len_minus_one), @intCast(mskipbytes * 8));
+    }
+    writer.alignToByte();
+    try writer.writeAlignedBytes(allocator, metadata);
 }
 
 pub fn decodeStreamAlloc(allocator: std.mem.Allocator, stream: []const u8) Error![]u8 {
@@ -157,7 +176,10 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
             0b10 => 6,
             0b11 => 0,
         };
-        if (mnibbles == 0) return error.UnsupportedBrotliFeature;
+        if (mnibbles == 0) {
+            try skipMetadataMetaBlock(&reader);
+            continue;
+        }
         const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
         if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
         const meta_block_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
@@ -196,7 +218,10 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
             0b10 => 6,
             0b11 => 0,
         };
-        if (mnibbles == 0) return error.UnsupportedBrotliFeature;
+        if (mnibbles == 0) {
+            try skipMetadataMetaBlock(&reader);
+            continue;
+        }
         const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
         if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
         const meta_block_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
@@ -257,6 +282,21 @@ fn consumeZeroPaddingToByte(reader: *bitstream.BitReader) Error!void {
     if (padding != 0) return error.CorruptFrame;
 }
 
+fn skipMetadataMetaBlock(reader: *bitstream.BitReader) Error!void {
+    const reserved = try reader.readBits(u1, 1);
+    if (reserved != 0) return error.CorruptFrame;
+    const mskipbytes = try reader.readBits(u2, 2);
+    var metadata_len: usize = 0;
+    if (mskipbytes != 0) {
+        const len_minus_one = try reader.readBits(u32, @intCast(@as(usize, mskipbytes) * 8));
+        if (mskipbytes > 1 and ((len_minus_one >> @intCast((@as(usize, mskipbytes) - 1) * 8)) & 0xff) == 0) return error.CorruptFrame;
+        metadata_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
+    }
+    try consumeZeroPaddingToByte(reader);
+    if (reader.byte_index > reader.input.len or reader.input.len - reader.byte_index < metadata_len) return error.TruncatedFrame;
+    reader.byte_index += metadata_len;
+}
+
 fn ensureZeroPaddingAndEnd(reader: bitstream.BitReader) Error!void {
     var copy = reader;
     try consumeZeroPaddingToByte(&copy);
@@ -297,6 +337,15 @@ test "br stored stream supports all RFC window bits" {
     }
 }
 
+test "br stored stream skips metadata meta-blocks" {
+    const encoded = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, "payload", .{ .metadata = "vort-metadata" });
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(@as(usize, 7), try decodedStreamSize(encoded));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "payload", decoded);
+}
+
 test "br stored stream decodes multiple uncompressed meta-blocks" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -318,4 +367,20 @@ test "br stored stream rejects unsupported compressed blocks and trailing data" 
     try std.testing.expectError(error.TruncatedFrame, decodeStreamAlloc(std.testing.allocator, &[_]u8{ 0x00, 0x00 }));
     try std.testing.expectError(error.TrailingData, decodedStreamSize(&[_]u8{ 0x06, 0x00 }));
     try std.testing.expectError(error.TruncatedFrame, decodedStreamSize(&[_]u8{ 0x40, 0x00, 0x10, 'h' }));
+}
+
+test "br stored stream rejects malformed metadata meta-blocks" {
+    var reserved_bad: std.ArrayList(u8) = .empty;
+    defer reserved_bad.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &reserved_bad };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLAST = false.
+    try writer.writeBits(std.testing.allocator, 0b11, 2); // MNIBBLES = 0.
+    try writer.writeBits(std.testing.allocator, 1, 1); // reserved, invalid.
+    try writer.writeBits(std.testing.allocator, 0, 2);
+    try std.testing.expectError(error.CorruptFrame, decodedStreamSize(reserved_bad.items));
+
+    var truncated = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, "", .{ .metadata = "metadata" });
+    defer std.testing.allocator.free(truncated);
+    try std.testing.expectError(error.TruncatedFrame, decodedStreamSize(truncated[0 .. truncated.len - 1]));
 }

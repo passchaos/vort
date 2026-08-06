@@ -17,6 +17,10 @@ PAYLOADS = [
     bytes((i * 37 + 11) & 0xFF for i in range(4096)),
 ]
 WINDOW_BITS = [10, 16, 24]
+METADATA_CASES = {
+    1: "vort-meta",
+    2: "stored-stream-metadata",
+}
 
 
 def run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -54,7 +58,10 @@ def main() -> int:
             for window_bits in WINDOW_BITS:
                 br = tmp / f"case-{index}-w{window_bits}.br"
                 out = tmp / f"case-{index}-w{window_bits}.out"
-                run([str(cli), "encode-br-stored-file", str(src), str(br), str(window_bits)], root)
+                cmd = [str(cli), "encode-br-stored-file", str(src), str(br), str(window_bits)]
+                if index in METADATA_CASES:
+                    cmd.append(METADATA_CASES[index])
+                run(cmd, root)
                 run([str(cli), "size-br-file", str(br), str(len(payload))], root)
                 run([str(cli), "decode-br-file-to", str(br), str(out), str(len(payload))], root)
                 decoded = out.read_bytes()

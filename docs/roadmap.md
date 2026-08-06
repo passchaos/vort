@@ -1569,3 +1569,9 @@ architecture blindly.
   root and CLI encode paths can now select a legal stored-stream window size,
   and the Node-backed `run-br-stored-cli-diff` smoke covers representative
   `10/16/24` encodings for empty, text, repeated, and binary payloads.
+
+- Added Brotli metadata meta-block handling to the stored-stream slice. Encoders
+  can attach metadata bytes that do not contribute to decoded output, while the
+  decoder and size preflight now skip legal `MNIBBLES=0` metadata blocks and
+  reject malformed reserved bits, truncated metadata, and non-minimal skip
+  lengths. The Node-backed stored-stream smoke covers metadata-bearing streams.

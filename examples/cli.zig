@@ -98,7 +98,7 @@ pub fn main(init: std.process.Init) !void {
         });
     } else if (std.mem.eql(u8, command, "encode-br-stored-hex")) {
         const payload = args.next() orelse "";
-        const options = try parseBrotliStoredOptions(args.next());
+        const options = try parseBrotliStoredOptions(args.next(), args.next());
         const encoded = try vort.brEncodeStoredStreamWithOptionsAlloc(init.gpa, payload, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
@@ -116,7 +116,7 @@ pub fn main(init: std.process.Init) !void {
     } else if (std.mem.eql(u8, command, "encode-br-stored-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
-        const options = try parseBrotliStoredOptions(args.next());
+        const options = try parseBrotliStoredOptions(args.next(), args.next());
         const payload = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(payload);
         const encoded = try vort.brEncodeStoredStreamWithOptionsAlloc(init.gpa, payload, options);
@@ -1548,11 +1548,11 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\compatibility formats:
         \\  zlib-store-roundtrip [text] Encode/decode zlib-wrapped stored deflate
         \\  gzip-store-roundtrip [text] Encode/decode gzip-wrapped stored deflate
-        \\  encode-br-stored-hex [text] [window_bits]
+        \\  encode-br-stored-hex [text] [window_bits] [metadata]
         \\                              Encode text as dependency-free Brotli stored-stream hex
         \\  decode-br-hex [hex] [max_output]
         \\                              Decode dependency-free Brotli stored-stream hex
-        \\  encode-br-stored-file <in> <out> [window_bits]
+        \\  encode-br-stored-file <in> <out> [window_bits] [metadata]
         \\                              Encode file bytes as dependency-free Brotli stored stream
         \\  decode-br-file-to <in> <out> [max_output]
         \\                              Decode dependency-free Brotli stored stream file
@@ -2344,11 +2344,11 @@ fn parseOptionalLimit(text: ?[]const u8) !?usize {
     return try std.fmt.parseInt(usize, value, 10);
 }
 
-fn parseBrotliStoredOptions(text: ?[]const u8) !vort.BrotliStoredStreamOptions {
-    const value = text orelse return .{};
+fn parseBrotliStoredOptions(window_bits_text: ?[]const u8, metadata: ?[]const u8) !vort.BrotliStoredStreamOptions {
+    const value = window_bits_text orelse return .{ .metadata = metadata orelse "" };
     const window_bits = try std.fmt.parseInt(u5, value, 10);
     if (window_bits < 10 or window_bits > 24) return error.InvalidBlockPlan;
-    return .{ .window_bits = window_bits };
+    return .{ .window_bits = window_bits, .metadata = metadata orelse "" };
 }
 
 fn parseOptionalMemberIndex(text: ?[]const u8) !usize {
