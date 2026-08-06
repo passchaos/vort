@@ -289,10 +289,7 @@ fn parsePngFilterMethod(filter: u8) Error!PngFilterMethod {
 }
 
 fn pngPaethPredictor(left: u8, up: u8, up_left: u8) u8 {
-    if (comptime builtin.target.cpu.arch == .x86_64) {
-        return pngPaethPredictorStbi(left, up, up_left);
-    }
-    return pngPaethPredictorReference(left, up, up_left);
+    return pngPaethPredictorStbi(left, up, up_left);
 }
 
 fn pngPaethPredictorReference(left: u8, up: u8, up_left: u8) u8 {
@@ -516,30 +513,18 @@ fn reconstructPngPaethScanline(filtered: []const u8, previous: ?[]const u8, byte
 
 fn reconstructPngPaethFixedBppScanline(comptime bytes_per_pixel: usize, filtered: []const u8, previous: ?[]const u8, output: []u8) void {
     if (previous) |prev| {
-        if (comptime builtin.target.cpu.arch == .x86_64) {
-            return reconstructPngPaethFixedBppScanlineX86(bytes_per_pixel, filtered, prev, output);
-        }
-        const prefix = @min(bytes_per_pixel, filtered.len);
-        var i: usize = 0;
-        while (i < prefix) : (i += 1) output[i] = filtered[i] +% prev[i];
-        while (i + bytes_per_pixel <= filtered.len) : (i += bytes_per_pixel) {
-            inline for (0..bytes_per_pixel) |lane| {
-                output[i + lane] = filtered[i + lane] +% pngPaethPredictor(output[i + lane - bytes_per_pixel], prev[i + lane], prev[i + lane - bytes_per_pixel]);
-            }
-        }
-        while (i < filtered.len) : (i += 1) {
-            output[i] = filtered[i] +% pngPaethPredictor(output[i - bytes_per_pixel], prev[i], prev[i - bytes_per_pixel]);
-        }
+        return reconstructPngPaethFixedBppScanlineFast(bytes_per_pixel, filtered, prev, output);
     } else {
         reconstructPngSubScanline(filtered, bytes_per_pixel, output);
     }
 }
 
-fn reconstructPngPaethFixedBppScanlineX86(comptime bytes_per_pixel: usize, filtered: []const u8, previous: []const u8, output: []u8) void {
+fn reconstructPngPaethFixedBppScanlineFast(comptime bytes_per_pixel: usize, filtered: []const u8, previous: []const u8, output: []u8) void {
     // Keep the previous reconstructed pixel (`left`) and previous-row pixel
-    // (`up_left`) in the i16 representation consumed by the x86 stb predictor.
-    // This mirrors image-png's scalar x86 kernel and removes one output reload
-    // plus two u8->i16 extensions per channel from the dependency-heavy loop.
+    // (`up_left`) in the i16 representation consumed by the threshold Paeth
+    // predictor. This mirrors image-png's scalar kernel shape and removes one
+    // output reload plus two u8->i16 extensions per channel from the
+    // dependency-heavy loop on every target.
     var left: [bytes_per_pixel]i16 = @splat(0);
     var up_left: [bytes_per_pixel]i16 = @splat(0);
     var i: usize = 0;
@@ -565,8 +550,10 @@ fn reconstructPngPaethFixedBppScanlineX86(comptime bytes_per_pixel: usize, filte
 fn reconstructPngSubScanline(filtered: []const u8, bytes_per_pixel: usize, output: []u8) void {
     switch (bytes_per_pixel) {
         1 => return reconstructPngSubBpp1Scanline(filtered, output),
+        2 => return reconstructPngSubFixedBppScanline(2, filtered, output),
         3 => return reconstructPngSubBpp3Scanline(filtered, output),
         4 => return reconstructPngSubFixedBppScanline(4, filtered, output),
+        6 => return reconstructPngSubFixedBppScanline(6, filtered, output),
         8 => return reconstructPngSubFixedBppScanline(8, filtered, output),
         else => {},
     }
@@ -610,15 +597,22 @@ fn reconstructPngSubBpp3Scanline(filtered: []const u8, output: []u8) void {
 }
 
 fn reconstructPngSubFixedBppScanline(comptime bytes_per_pixel: usize, filtered: []const u8, output: []u8) void {
-    const prefix = @min(bytes_per_pixel, filtered.len);
-    copyPossiblyAliasedBytes(output[0..prefix], filtered[0..prefix]);
-    var i: usize = prefix;
+    // Keep one prefix-sum accumulator per channel. This removes the hot
+    // output[i - bpp] reload used by the generic Sub recurrence and is stable
+    // for the common 16-bit grayscale, RGBA, 16-bit RGB, and 16-bit RGBA rows.
+    var left: [bytes_per_pixel]u8 = @splat(0);
+    var i: usize = 0;
     while (i + bytes_per_pixel <= filtered.len) : (i += bytes_per_pixel) {
-        const raw: @Vector(bytes_per_pixel, u8) = filtered[i..][0..bytes_per_pixel].*;
-        const left: @Vector(bytes_per_pixel, u8) = output[i - bytes_per_pixel ..][0..bytes_per_pixel].*;
-        output[i..][0..bytes_per_pixel].* = raw +% left;
+        inline for (0..bytes_per_pixel) |channel| {
+            left[channel] +%= filtered[i + channel];
+            output[i + channel] = left[channel];
+        }
     }
-    while (i < filtered.len) : (i += 1) output[i] = filtered[i] +% output[i - bytes_per_pixel];
+    while (i < filtered.len) : (i += 1) {
+        const channel = i % bytes_per_pixel;
+        left[channel] +%= filtered[i];
+        output[i] = left[channel];
+    }
 }
 
 fn reconstructPngSubBpp1Scanline(filtered: []const u8, output: []u8) void {

@@ -34,7 +34,7 @@ architecture blindly.
 - [x] Architecture-specific IEEE CRC32 dispatch plan and safety gates.
 - [x] x86 PCLMUL candidate reporting for future IEEE CRC32 dispatch.
 - [x] ARM CRC32 feature reporting for future IEEE CRC32 dispatch.
-- [x] Architecture-specific IEEE CRC32 implementation / dispatch.
+- [x] Architecture-specific IEEE CRC32 implementation / dispatch on validated targets.
 - [x] Differential checksum smoke against Zig std reference implementations.
 - [x] Differential checksum tests against Python zlib and local/system gzip wrapper trailers.
 - [x] Python zlib differential smoke covers malformed zlib/gzip wrapper cases
@@ -1490,3 +1490,20 @@ architecture blindly.
   re-export shape, but the source-of-truth mapping and root drift test now live
   in a nested exports module instead of growing the root file directly. This is
   the first root-export modularization slice after the PNG primitive split.
+
+- Made PNG scanline reconstruction faster and the focused scanline gate more
+  robust on a clean checkout. The benchmark writer now creates artifact parent
+  directories before writing `zig-out/vort-png-scanline-bench.csv`. Paeth fixed
+  bpp rows use the image-png/stb threshold predictor and stateful per-channel
+  loop on every architecture instead of only x86_64, restoring the aarch64
+  bpp=3 gate margin. Sub fixed bpp=2/4/6/8 rows now keep per-channel prefix sums
+  in registers, removing the prior left-neighbor output reload. Local
+  ReleaseFast `run-png-scanline-bench-gate` passed with Sub bpp=2/4/6/8 around
+  `3161.27` / `4977.06` / `5444.98` / `5484.38` MiB/s and Paeth bpp=3/4/6/8
+  around `809.03` / `935.57` / `966.00` / `1065.70` MiB/s.
+
+- Re-aligned IEEE CRC-32 dispatch reporting on AArch64 with the actually
+  validated implementation. ARM CRC32 feature detection remains visible through
+  `arm_crc32`, but `bestCrc32Dispatch` stays on the portable slice-by-32 path
+  until the Zig 0.16 AArch64 inline-asm path is validated across targets, so
+  `zig build test` is not blocked by an unvalidated hardware candidate.

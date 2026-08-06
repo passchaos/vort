@@ -1,18 +1,20 @@
 # Checksum dispatch plan
 
 Vort dispatches IEEE CRC-32 to a portable slice-by-32 implementation by default.
-Architecture-specific paths are available for ARMv8 (CRC32 instructions) and x86
-(PCLMULQDQ folding), with the ARM path enabled for dispatch when the CPU feature
-is detected. The x86 PCLMUL path is implemented but not yet enabled for dispatch
-pending differential validation.
+Architecture-specific candidates are tracked for ARMv8 (CRC32 instructions) and
+x86 (PCLMULQDQ folding), but dispatch only enables paths that are validated on
+the active Zig/toolchain combination. ARM feature availability is reported, while
+IEEE CRC-32 dispatch stays on slice-by-32 until the AArch64 inline-asm path is
+validated. The x86 PCLMUL path is implemented and selected when its feature is
+available and its differential tests pass.
 
 Current status:
 
 - Adler-32: scalar zlib-compatible path.
 - IEEE CRC-32: scalar, slice-by-4, slice-by-8, slice-by-16, and slice-by-32 portable paths;
-  best dispatch selects slice-by-32 on portable/x86 builds, hardware on ARMv8 with CRC feature.
-- ARMv8 CRC32 hardware path enabled for dispatch (IEEE CRC-32 natively).
-- x86 PCLMULQDQ folding path implemented, not yet validated for dispatch.
+  best dispatch selects slice-by-32 unless a validated hardware path is active.
+- ARMv8 CRC32 feature reporting is present, but IEEE CRC-32 hardware dispatch is disabled pending Zig 0.16 AArch64 inline-asm validation.
+- x86 PCLMULQDQ folding path implemented and independently tested before dispatch.
 - CRC-32C: scalar, portable slice-by-8 and slice-by-16 fallbacks, and x86
   SSE4.2 hardware path when available.
 

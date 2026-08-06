@@ -613,16 +613,15 @@ pub fn cpuFeatureReport() CpuFeatureReport {
     } else if (builtin.cpu.arch == .aarch64) {
         const aarch64 = std.Target.aarch64;
         report.arm_crc32 = aarch64.featureSetHas(builtin.cpu.features, .crc);
-        // ARM CRC32 instructions compute IEEE CRC-32 natively.
-        report.ieee_crc32_uses_hardware = report.arm_crc32;
+        // The ARM CRC32 instruction path remains a reported candidate until
+        // its inline-asm shape is validated on Zig 0.16 across Apple/Linux
+        // AArch64 targets. Dispatch stays on the portable slice-by-32 path.
+        report.ieee_crc32_uses_hardware = false;
     }
     return report;
 }
 
 pub fn bestCrc32Dispatch() Crc32Dispatch {
-    if (builtin.cpu.arch == .aarch64) {
-        if (cpuFeatureReport().arm_crc32) return .hardware;
-    }
     if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
         if (cpuFeatureReport().x86_pclmul) return .hardware;
     }
@@ -732,71 +731,6 @@ pub fn crc32Slice32(input: []const u8) u32 {
     return Crc32Slice32.hash(input);
 }
 
-// ARMv8 CRC32 hardware path for IEEE CRC-32.
-// ARM CRC32 instructions compute the IEEE polynomial natively, unlike x86.
-pub fn crc32HardwareArm(input: []const u8) u32 {
-    if (!(builtin.cpu.arch == .aarch64)) return crc32Slice16(input);
-    if (!cpuFeatureReport().arm_crc32) return crc32Slice16(input);
-    var crc: u32 = 0xffff_ffff;
-    var index: usize = 0;
-    // Process 8-byte chunks with crc32x (64-bit) instruction.
-    while (index + 8 <= input.len) : (index += 8) {
-        const value = std.mem.readInt(u64, input[index..][0..8], .little);
-        crc = crc32IeeeArm64(crc, value);
-    }
-    // Process 4-byte chunks with crc32w (32-bit) instruction.
-    if (index + 4 <= input.len) {
-        const value = std.mem.readInt(u32, input[index..][0..4], .little);
-        crc = crc32IeeeArm32(crc, value);
-        index += 4;
-    }
-    // Process remaining bytes with crc32h (16-bit) and crc32b (8-bit).
-    while (index + 2 <= input.len) : (index += 2) {
-        const value = std.mem.readInt(u16, input[index..][0..2], .little);
-        crc = crc32IeeeArm16(crc, value);
-    }
-    if (index < input.len) {
-        crc = crc32IeeeArm8(crc, input[index]);
-    }
-    return ~crc;
-}
-
-fn crc32IeeeArm64(acc: u32, value: u64) u32 {
-    var result = acc;
-    asm volatile ("crc32cx %w[result], %w[result], %[value]"
-        : [result] "+r" (result),
-        : [value] "r" (value),
-    );
-    return result;
-}
-
-fn crc32IeeeArm32(acc: u32, value: u32) u32 {
-    var result = acc;
-    asm volatile ("crc32cw %w[result], %w[result], %w[value]"
-        : [result] "+r" (result),
-        : [value] "r" (value),
-    );
-    return result;
-}
-
-fn crc32IeeeArm16(acc: u32, value: u16) u32 {
-    var result = acc;
-    asm volatile ("crc32ch %w[result], %w[result], %w[value]"
-        : [result] "+r" (result),
-        : [value] "r" (value),
-    );
-    return result;
-}
-
-fn crc32IeeeArm8(acc: u32, value: u8) u32 {
-    var result = acc;
-    asm volatile ("crc32cb %w[result], %w[result], %w[value]"
-        : [result] "+r" (result),
-        : [value] "r" (value),
-    );
-    return result;
-}
-
 // x86 PCLMULQDQ folding for reflected IEEE CRC-32. Constants follow the
 // standard four-lane Intel folding algorithm and are independently checked
 // against the scalar/slicing implementations below.
@@ -894,7 +828,7 @@ inline fn pclmul128(a: u128, b: u128, comptime immediate: u8) u128 {
 
 pub fn crc32Hardware(input: []const u8) u32 {
     if (builtin.cpu.arch == .aarch64) {
-        return crc32HardwareArm(input);
+        return crc32Slice32(input);
     }
     if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
         return crc32HardwareX86(input);
@@ -1268,9 +1202,7 @@ test "CRC-32 best dispatch matches scalar" {
     const input = "dispatch checksum" ** 31;
     try std.testing.expectEqual(crc32(input), crc32Best(input));
     const report = cpuFeatureReport();
-    if ((builtin.cpu.arch == .aarch64 and report.arm_crc32) or
-        ((builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) and report.x86_pclmul))
-    {
+    if ((builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) and report.x86_pclmul) {
         try std.testing.expectEqual(Crc32Dispatch.hardware, bestCrc32Dispatch());
     } else {
         try std.testing.expectEqual(Crc32Dispatch.slice32, bestCrc32Dispatch());
@@ -1281,7 +1213,7 @@ test "CPU feature report selects validated IEEE CRC32 hardware paths" {
     const report = cpuFeatureReport();
     if (report.ieee_crc32_pclmul_candidate) try std.testing.expect(report.x86_pclmul);
     if (builtin.cpu.arch == .aarch64) {
-        try std.testing.expectEqual(report.arm_crc32, report.ieee_crc32_uses_hardware);
+        try std.testing.expect(!report.ieee_crc32_uses_hardware);
     } else if (builtin.cpu.arch == .x86_64 or builtin.cpu.arch == .x86) {
         try std.testing.expectEqual(report.x86_pclmul, report.ieee_crc32_uses_hardware);
     } else {

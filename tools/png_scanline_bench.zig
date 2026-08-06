@@ -81,7 +81,13 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
-    if (csv_path) |path| try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
+    if (csv_path) |path| try writeArtifact(init.io, path, csv.written());
+}
+
+fn writeArtifact(io: std.Io, path: []const u8, bytes: []const u8) !void {
+    const cwd = std.Io.Dir.cwd();
+    if (std.fs.path.dirname(path)) |dir| try cwd.createDirPath(io, dir);
+    try cwd.writeFile(io, .{ .sub_path = path, .data = bytes });
 }
 
 fn runCase(init: std.process.Init, bpp: usize, filter: Filter) !Row {
