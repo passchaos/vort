@@ -795,6 +795,21 @@ pub fn build(b: *std.Build) void {
     const br_stored_cli_diff_step = b.step("run-br-stored-cli-diff", "Run black-box smoke for dependency-free Brotli stored streams against Node Brotli");
     br_stored_cli_diff_step.dependOn(&br_stored_cli_diff.step);
 
+    const br_stored_corpus_exe = b.addExecutable(.{
+        .name = "vort-br-stored-corpus",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br_stored_corpus.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_br_stored_corpus = b.addRunArtifact(br_stored_corpus_exe);
+    const br_stored_corpus_step = b.step("run-br-stored-corpus", "Run dependency-free Brotli stored stream corpus smoke");
+    br_stored_corpus_step.dependOn(&run_br_stored_corpus.step);
+
     const snappy_block_cli_probe = b.addSystemCommand(&.{ "python3", "tools/snappy_block_cli_probe.py" });
     snappy_block_cli_probe.addArtifactArg(cli_exe);
     const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks and framed streams");
@@ -2051,6 +2066,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&sidecar_verify_report_exe.step);
     check_step.dependOn(&file_corpus_report_exe.step);
     check_step.dependOn(&cpu_features_exe.step);
+    check_step.dependOn(&br_stored_corpus_exe.step);
     check_step.dependOn(&zstd_native_frame_probe_exe.step);
     check_step.dependOn(&zstd_native_dictionary_probe_exe.step);
     check_step.dependOn(&lz4_native_dictionary_probe_exe.step);
@@ -2078,6 +2094,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(br_stored_cli_diff_step);
+    ci_smoke_step.dependOn(br_stored_corpus_step);
     ci_smoke_step.dependOn(snappy_block_cli_probe_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);

@@ -1575,3 +1575,9 @@ architecture blindly.
   decoder and size preflight now skip legal `MNIBBLES=0` metadata blocks and
   reject malformed reserved bits, truncated metadata, and non-minimal skip
   lengths. The Node-backed stored-stream smoke covers metadata-bearing streams.
+
+- Added `run-br-stored-corpus`, a pure Zig Brotli stored-stream corpus smoke
+  that covers round-trip, decoded-size preflight, caller-owned decode,
+  append decode, output limits, WBITS variants, metadata-bearing streams, and
+  representative corrupt/truncated/trailing cases. This complements the
+  Node-backed differential smoke with library-level API coverage.

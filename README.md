@@ -123,6 +123,7 @@ zig build run -- zlib-store-roundtrip "hello vort"
 zig build run -- gzip-store-roundtrip "hello vort"
 zig build run -- encode-br-stored-hex "hello vort" 16 metadata
 zig build run -- decode-br-hex 40001068656c6c6f03 5
+zig build run-br-stored-corpus
 zig build run -- zlib-fixed-roundtrip "hello vort"
 zig build run -- gzip-fixed-roundtrip "hello vort"
 zig build run -- decode-raw-hex cb48cdc9c90700
