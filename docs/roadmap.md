@@ -1588,3 +1588,7 @@ architecture blindly.
   out-of-range symbols, and now supports complex prefix-code headers with the
   code-length alphabet plus repeat-16/repeat-17 expansion, including chained
   repeat-count modification for consecutive repeat symbols.
+
+- Added the Brotli block-type-count variable-length reader used by `NBLTYPESL`,
+  `NBLTYPESI`, and `NBLTYPESD` in compressed meta-block headers. Boundary tests
+  cover the full RFC range from 1 to 256 and truncated selector handling.

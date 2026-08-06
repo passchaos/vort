@@ -255,6 +255,17 @@ fn readWindowBits(reader: *bitstream.BitReader) Error!void {
     _ = try readWindowBitsValue(reader);
 }
 
+fn readBlockTypeCount(reader: *bitstream.BitReader) Error!u16 {
+    const first = try reader.readBits(u1, 1);
+    if (first == 0) return 1;
+
+    const selector = try reader.readBits(u3, 3);
+    if (selector == 0) return 2;
+
+    const extra = try reader.readBits(u16, selector);
+    return (@as(u16, 1) << selector) + 1 + extra;
+}
+
 fn readPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader) Error!PrefixCode(alphabet_size) {
     const kind = try reader.readBits(u2, 2);
     if (kind != 1) return try readComplexPrefixCode(alphabet_size, reader, kind);
@@ -640,6 +651,22 @@ test "br simple prefix code decodes single symbol without consuming data bits" {
     try std.testing.expectEqual(before, reader.bitPosition());
 }
 
+test "br block type count reader covers RFC boundaries" {
+    const cases = [_]u16{ 1, 2, 3, 4, 5, 8, 9, 16, 17, 32, 33, 64, 65, 128, 129, 256 };
+    inline for (cases) |value| {
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(std.testing.allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeBlockTypeCount(std.testing.allocator, &writer, value);
+
+        var reader = bitstream.BitReader.init(encoded.items);
+        try std.testing.expectEqual(@as(u16, value), try readBlockTypeCount(&reader));
+    }
+
+    var truncated = bitstream.BitReader.init(&.{});
+    try std.testing.expectError(error.TruncatedFrame, readBlockTypeCount(&truncated));
+}
+
 test "br simple prefix code decodes three-symbol canonical tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -898,6 +925,24 @@ fn writeCodeLengthCodeLength(allocator: std.mem.Allocator, writer: *BitWriter, l
         5 => try writer.writeBits(allocator, 0b1111, 4),
         else => return error.InvalidHuffmanCode,
     }
+}
+
+fn writeBlockTypeCount(allocator: std.mem.Allocator, writer: *BitWriter, value: u16) Error!void {
+    if (value == 0 or value > 256) return error.InvalidBlockPlan;
+    if (value == 1) return try writer.writeBits(allocator, 0, 1);
+    try writer.writeBits(allocator, 1, 1);
+    if (value == 2) return try writer.writeBits(allocator, 0, 3);
+    var selector: u4 = 1;
+    while (selector < 8) : (selector += 1) {
+        const min = (@as(u16, 1) << selector) + 1;
+        const max = min + ((@as(u16, 1) << selector) - 1);
+        if (value >= min and value <= max) {
+            try writer.writeBits(allocator, selector, 3);
+            try writer.writeBits(allocator, value - min, selector);
+            return;
+        }
+    }
+    return error.InvalidBlockPlan;
 }
 
 fn writeCodeLengthSymbol(
