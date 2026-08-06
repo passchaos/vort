@@ -536,6 +536,32 @@ def write_command_switch_three_types_aaabbbc_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 65, 16)
 
 
+def write_command_switch_five_types_aaaab_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 5)
+    write_simple_single_symbol_prefix(bits, 7, 1)
+    write_simple_single_symbol_prefix(bits, 26, 0)
+    write_bits(bits, 0, 2)  # first command block count = 1
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 1, 4)  # NDIRECT = 1
+    write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, ord("a"), 8)
+    write_bits(bits, ord("b"), 8)
+
+    write_simple_single_symbol_prefix(bits, 704, 136)
+    write_simple_single_symbol_prefix(bits, 704, 136)
+    write_simple_single_symbol_prefix(bits, 704, 136)
+    write_simple_single_symbol_prefix(bits, 704, 136)
+    write_simple_single_symbol_prefix(bits, 704, 8)
+    write_simple_single_symbol_prefix(bits, 65, 16)
+
+
 def write_literal_block_switch_ab_header(bits: list[int]) -> None:
     write_block_type_count(bits, 2)
     write_simple_single_symbol_prefix(bits, 4, 1)
@@ -879,6 +905,26 @@ def command_switch_three_types_aaabbbc_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def command_switch_five_types_aaaab_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 12, 16)  # MLEN - 1
+    write_command_switch_five_types_aaaab_header(bits)
+    write_bits(bits, 0, 1)  # a
+    write_bits(bits, 0, 2)  # next command block count = 1
+    write_bits(bits, 0, 1)  # a
+    write_bits(bits, 0, 2)  # next command block count = 1
+    write_bits(bits, 0, 1)  # a
+    write_bits(bits, 0, 2)  # next command block count = 1
+    write_bits(bits, 0, 1)  # a
+    write_bits(bits, 0, 2)  # next command block count = 1
+    write_bits(bits, 1, 1)  # b
+    return bits_to_bytes(bits)
+
+
 def literal_block_switch_ab_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -984,6 +1030,7 @@ def main() -> int:
         "literal-context-three-trees": (literal_context_three_trees_abc_frame(), b"abc"),
         "command-switch": (command_switch_aaab_frame(), b"aaab"),
         "command-switch-three-types": (command_switch_three_types_aaabbbc_frame(), b"aaabbbc"),
+        "command-switch-five-types": (command_switch_five_types_aaaab_frame(), b"aaaaaaaaaaaab"),
         "literal-block-switch": (literal_block_switch_ab_frame(), b"ab"),
         "literal-block-switch-three-types": (literal_block_switch_three_types_abc_frame(), b"abc"),
         "distance-block-switch": (distance_block_switch_abcabab_frame(), b"abcabab"),

@@ -1740,3 +1740,8 @@ architecture blindly.
   eight. A compressed UTF8 literal-context frame now declares five literal trees
   and selects the fifth tree through context ID 56, with matching Zig and
   Node-backed CLI differential coverage.
+
+- Raised the minimal Brotli literal, command, and distance block-type retention
+  limit to eight. A compressed command-block-switch frame now declares five
+  command block types and walks through the fifth type, with matching Zig and
+  Node-backed CLI differential coverage.
