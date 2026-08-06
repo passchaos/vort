@@ -221,7 +221,9 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
         }
         const is_uncompressed = try reader.readBits(u1, 1) == 1;
         if (!is_uncompressed) {
-            return error.UnsupportedBrotliFeature;
+            const decoded = try processMinimalCompressedMetaBlock(&reader, output[written..], meta_block_len);
+            written += decoded;
+            continue;
         }
         try consumeZeroPaddingToByte(&reader);
         if (output.len - written < meta_block_len) return error.OutputTooSmall;
@@ -271,7 +273,8 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
         }
         const is_uncompressed = try reader.readBits(u1, 1) == 1;
         if (!is_uncompressed) {
-            return error.UnsupportedBrotliFeature;
+            try skipMinimalCompressedMetaBlock(&reader, meta_block_len);
+            continue;
         }
         try consumeZeroPaddingToByte(&reader);
         if (reader.byte_index > stream.len or stream.len - reader.byte_index < meta_block_len) return error.TruncatedFrame;
@@ -354,7 +357,6 @@ fn processMinimalCompressedMetaBlock(reader: *bitstream.BitReader, output: []u8,
             written += 1;
         }
         if (written == meta_block_len) {
-            try consumeZeroPaddingToByte(reader);
             return written;
         }
         if (lengths.copy_len != 0 or !lengths.distance_symbol_zero) return error.UnsupportedBrotliFeature;
@@ -376,7 +378,6 @@ fn skipMinimalCompressedMetaBlock(reader: *bitstream.BitReader, meta_block_len: 
             written += 1;
         }
         if (written == meta_block_len) {
-            try consumeZeroPaddingToByte(reader);
             return;
         }
         if (lengths.copy_len != 0 or !lengths.distance_symbol_zero) return error.UnsupportedBrotliFeature;
@@ -830,6 +831,32 @@ test "br minimal compressed stream decodes literal-only final metablock" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "hello", decoded);
+}
+
+test "br minimal compressed stream can precede stored metablocks" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLAST = false.
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 4, 16); // MLEN - 1
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISUNCOMPRESSED = false
+    try writeMinimalCompressedHeaderForHello(std.testing.allocator, &writer);
+    try writer.writeBits(std.testing.allocator, 2, 2); // h
+    try writer.writeBits(std.testing.allocator, 0, 2); // e
+    try writer.writeBits(std.testing.allocator, 1, 2); // l
+    try writer.writeBits(std.testing.allocator, 1, 2); // l
+    try writer.writeBits(std.testing.allocator, 3, 2); // o
+
+    try writeUncompressedMetaBlock(std.testing.allocator, &writer, "!");
+    try writer.writeBits(std.testing.allocator, 1, 1);
+    try writer.writeBits(std.testing.allocator, 1, 1);
+
+    try std.testing.expectEqual(@as(usize, 6), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "hello!", decoded);
 }
 
 test "br stored stream rejects unsupported compressed blocks and trailing data" {

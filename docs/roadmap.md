@@ -1609,3 +1609,7 @@ architecture blindly.
   the copy length to be ignored per RFC 7932. This validates the interaction
   between the minimal compressed header parser, insert-and-copy lengths, and
   literal prefix-code decoding without claiming full copy/distance support.
+
+- Extended the minimal Brotli literal-only compressed decode path to non-final
+  meta-blocks, so a supported compressed literal-only block can now be followed
+  by stored/meta/final-empty blocks in the same stream.
