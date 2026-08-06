@@ -2,10 +2,12 @@ const std = @import("std");
 const core = @import("core.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
+const build_options = @import("vort_build_options");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
 pub const default_compression_level: c_int = 10;
+pub const system_codecs_enabled = build_options.enable_system_codecs;
 
 const frame_magic = [_]u8{ 0x04, 0x22, 0x4d, 0x18 };
 const frame_magic_u32: u32 = 0x184d2204;
@@ -55,9 +57,21 @@ pub const LibFrameOptions = struct {
     block_mode: BlockMode = .linked,
 };
 
-extern fn LZ4F_compressFrameBound(srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
-extern fn LZ4F_compressFrame(dstBuffer: *anyopaque, dstCapacity: usize, srcBuffer: *const anyopaque, srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
-extern fn LZ4F_isError(code: usize) c_uint;
+const system = if (system_codecs_enabled) struct {
+    extern fn LZ4F_compressFrameBound(srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
+    extern fn LZ4F_compressFrame(dstBuffer: *anyopaque, dstCapacity: usize, srcBuffer: *const anyopaque, srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
+    extern fn LZ4F_isError(code: usize) c_uint;
+} else struct {
+    fn LZ4F_compressFrameBound(_: usize, _: ?*const Lz4Preferences) usize {
+        return 0;
+    }
+    fn LZ4F_compressFrame(_: *anyopaque, _: usize, _: *const anyopaque, _: usize, _: ?*const Lz4Preferences) usize {
+        return 1;
+    }
+    fn LZ4F_isError(_: usize) c_uint {
+        return 1;
+    }
+};
 const Match = struct {
     start: usize = 0,
     len: usize = 0,
@@ -325,6 +339,16 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     level: c_int,
     options: LibFrameOptions,
 ) Error![]u8 {
+    if (!system_codecs_enabled) {
+        return try encodePureFrameWithOptionsAlloc(allocator, input, .{
+            .include_content_size = options.include_content_size,
+            .content_checksum = options.content_checksum,
+            .block_checksum = options.block_checksum,
+            .block_size_id = options.block_size_id,
+            .block_mode = options.block_mode,
+        });
+    }
+
     var preferences = Lz4Preferences{
         .frameInfo = .{
             .blockSizeID = @intFromEnum(options.block_size_id),
@@ -338,12 +362,12 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         },
         .compressionLevel = level,
     };
-    const bound = LZ4F_compressFrameBound(input.len, &preferences);
-    if (LZ4F_isError(bound) != 0) return error.CorruptFrame;
+    const bound = system.LZ4F_compressFrameBound(input.len, &preferences);
+    if (system.LZ4F_isError(bound) != 0) return error.CorruptFrame;
     var out = try allocator.alloc(u8, bound);
     errdefer allocator.free(out);
-    const written = LZ4F_compressFrame(@ptrCast(out.ptr), out.len, @ptrCast(input.ptr), input.len, &preferences);
-    if (LZ4F_isError(written) != 0) return error.CorruptFrame;
+    const written = system.LZ4F_compressFrame(@ptrCast(out.ptr), out.len, @ptrCast(input.ptr), input.len, &preferences);
+    if (system.LZ4F_isError(written) != 0) return error.CorruptFrame;
     if (allocator.remap(out, written)) |shrunk| return shrunk;
     const exact = try allocator.dupe(u8, out[0..written]);
     allocator.free(out);
@@ -5431,7 +5455,7 @@ fn checkedUsizeToU64(value: usize) Error!u64 {
     return std.math.cast(u64, value) orelse error.IntegerOverflow;
 }
 
-test "lz4 lib frame encoder round trips and compresses repetitive payloads" {
+test "lz4 frame encoder round trips and compresses repetitive payloads" {
     const repeated = "payload payload payload payload payload payload payload payload";
     const encoded = try encodeFrameAlloc(std.testing.allocator, repeated);
     defer std.testing.allocator.free(encoded);
@@ -5460,8 +5484,10 @@ test "lz4 lib frame encoder round trips and compresses repetitive payloads" {
         },
     );
     defer std.testing.allocator.free(no_content_fields);
-    try std.testing.expectEqual(@as(u8, 0x60), no_content_fields[4]);
-    try std.testing.expectEqual(@as(u8, 0x40), no_content_fields[5]);
+    if (system_codecs_enabled) {
+        try std.testing.expectEqual(@as(u8, 0x60), no_content_fields[4]);
+        try std.testing.expectEqual(@as(u8, 0x40), no_content_fields[5]);
+    }
     const no_content_decoded = try decodeFrameAlloc(std.testing.allocator, no_content_fields);
     defer std.testing.allocator.free(no_content_decoded);
     try std.testing.expectEqualSlices(u8, repeated, no_content_decoded);
@@ -5469,6 +5495,8 @@ test "lz4 lib frame encoder round trips and compresses repetitive payloads" {
 }
 
 test "lz4 native decoder covers liblz4 generated corpus shapes" {
+    if (!system_codecs_enabled) return;
+
     var sequential: [5000]u8 = undefined;
     for (&sequential, 0..) |*byte, i| byte.* = @intCast(i % 251);
 

@@ -1514,3 +1514,10 @@ architecture blindly.
   `run-png-scanline-bench-gate` now runs with `--repeat 3` and requires
   `--min-repeat 3`, reducing false throughput failures from transient CPU load
   while keeping Debug smoke checks fast.
+
+- Removed mandatory system codec linkage from the default build. Vort now
+  builds without `libzstd` or `liblz4` installed; the public one-shot zstd/LZ4
+  frame facades default to existing pure Zig native/pure implementations.
+  System `libzstd`/`liblz4` compatibility facades remain available behind
+  `-Dsystem-codecs=true`, so downstreams can opt into external differentials
+  without making system libraries a core package dependency.

@@ -3,23 +3,33 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const enable_system_codecs = b.option(bool, "system-codecs", "Enable system libzstd/liblz4-backed compatibility facades") orelse false;
+
+    const vort_options = b.addOptions();
+    vort_options.addOption(bool, "enable_system_codecs", enable_system_codecs);
 
     const vort_mod = b.addModule("vort", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
-    vort_mod.linkSystemLibrary("zstd", .{});
-    vort_mod.linkSystemLibrary("lz4", .{});
-    vort_mod.linkSystemLibrary("c", .{});
+    vort_mod.addOptions("vort_build_options", vort_options);
+    if (enable_system_codecs) {
+        vort_mod.linkSystemLibrary("zstd", .{});
+        vort_mod.linkSystemLibrary("lz4", .{});
+        vort_mod.linkSystemLibrary("c", .{});
+    }
     const vort_mod_releasefast = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = .ReleaseFast,
     });
-    vort_mod_releasefast.linkSystemLibrary("zstd", .{});
-    vort_mod_releasefast.linkSystemLibrary("lz4", .{});
-    vort_mod_releasefast.linkSystemLibrary("c", .{});
+    vort_mod_releasefast.addOptions("vort_build_options", vort_options);
+    if (enable_system_codecs) {
+        vort_mod_releasefast.linkSystemLibrary("zstd", .{});
+        vort_mod_releasefast.linkSystemLibrary("lz4", .{});
+        vort_mod_releasefast.linkSystemLibrary("c", .{});
+    }
 
     const lib = b.addLibrary(.{
         .name = "vort",
@@ -32,9 +42,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    tests_mod.linkSystemLibrary("zstd", .{});
-    tests_mod.linkSystemLibrary("lz4", .{});
-    tests_mod.linkSystemLibrary("c", .{});
+    tests_mod.addOptions("vort_build_options", vort_options);
+    if (enable_system_codecs) {
+        tests_mod.linkSystemLibrary("zstd", .{});
+        tests_mod.linkSystemLibrary("lz4", .{});
+        tests_mod.linkSystemLibrary("c", .{});
+    }
 
     const tests = b.addTest(.{
         .name = "vort-tests",

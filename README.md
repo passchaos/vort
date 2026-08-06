@@ -12,7 +12,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
 - storage/network-oriented CRC-32C/Castagnoli;
 - portable slice-by-4/slice-by-8/slice-by-16 IEEE CRC-32, slice-by-32 IEEE CRC-32, and slice-by-8/slice-by-16/slice-by-32 CRC-32C fast paths, checksum dispatch reporting, and Adler-32/CRC-32/CRC-32C combine helpers for block/parallel checksum composition;
 - shared progress/error/frame metadata types;
-- liblz4-backed LZ4 frame encoding plus pure Zig LZ4 frame/block
+- pure Zig LZ4 frame/block
   decode/fallback encode with skippable/concatenated stream handling,
   optional content-size/checksum/block-checksum/Dictionary_ID fields,
   configurable frame block sizes, linked-block history encoding, encoded-block bounds, decoded-size
@@ -22,7 +22,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   iterators, reusable raw-block decoder, and
   caller-owned encode/decode-into/append plus reusable
   scratch encoder/decoder APIs,
-  libzstd-backed Zstandard frame encode/bounded/caller-owned decode with header
+  pure Zig native Zstandard frame encode/bounded/caller-owned decode with header
   options and decoded-size preflight, a
   dependency-free raw/RLE, literal-only compressed-block, single-/four-stream
   and treeless repeat Huffman-literals, minimal RLE-sequence, mixed
@@ -70,6 +70,7 @@ artifacts rather than only existing as manual commands.
 ```sh
 zig build test
 zig build check
+zig build -Dsystem-codecs=true check  # optional libzstd/liblz4 compatibility facades
 zig build -Doptimize=ReleaseFast ci-smoke
 zig build run -- --help
 zig build run -- checksum "hello vort"

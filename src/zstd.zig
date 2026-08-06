@@ -3,10 +3,12 @@ const core = @import("core.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
 const huffman = @import("huffman.zig");
+const build_options = @import("vort_build_options");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
 pub const default_compression_level: c_int = 1;
+pub const system_codecs_enabled = build_options.enable_system_codecs;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
 const frame_magic_u32: u32 = 0xfd2fb528;
@@ -80,16 +82,49 @@ const of_bits = [_]u8{
     24, 25, 26, 27, 28, 29, 30, 31,
 };
 
-extern fn ZSTD_compressBound(srcSize: usize) usize;
-extern fn ZSTD_compress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize, compressionLevel: c_int) usize;
-extern fn ZSTD_createCCtx() ?*anyopaque;
-extern fn ZSTD_freeCCtx(cctx: ?*anyopaque) usize;
-extern fn ZSTD_CCtx_setParameter(cctx: *anyopaque, param: c_int, value: c_int) usize;
-extern fn ZSTD_compress2(cctx: *anyopaque, dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize) usize;
-extern fn ZSTD_getFrameContentSize(src: *const anyopaque, srcSize: usize) c_ulonglong;
-extern fn ZSTD_decompressBound(src: *const anyopaque, srcSize: usize) c_ulonglong;
-extern fn ZSTD_decompress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, compressedSize: usize) usize;
-extern fn ZSTD_isError(code: usize) c_uint;
+const system = if (system_codecs_enabled) struct {
+    extern fn ZSTD_compressBound(srcSize: usize) usize;
+    extern fn ZSTD_compress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize, compressionLevel: c_int) usize;
+    extern fn ZSTD_createCCtx() ?*anyopaque;
+    extern fn ZSTD_freeCCtx(cctx: ?*anyopaque) usize;
+    extern fn ZSTD_CCtx_setParameter(cctx: *anyopaque, param: c_int, value: c_int) usize;
+    extern fn ZSTD_compress2(cctx: *anyopaque, dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize) usize;
+    extern fn ZSTD_getFrameContentSize(src: *const anyopaque, srcSize: usize) c_ulonglong;
+    extern fn ZSTD_decompressBound(src: *const anyopaque, srcSize: usize) c_ulonglong;
+    extern fn ZSTD_decompress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, compressedSize: usize) usize;
+    extern fn ZSTD_isError(code: usize) c_uint;
+} else struct {
+    fn ZSTD_compressBound(_: usize) usize {
+        return 0;
+    }
+    fn ZSTD_compress(_: *anyopaque, _: usize, _: *const anyopaque, _: usize, _: c_int) usize {
+        return 1;
+    }
+    fn ZSTD_createCCtx() ?*anyopaque {
+        return null;
+    }
+    fn ZSTD_freeCCtx(_: ?*anyopaque) usize {
+        return 0;
+    }
+    fn ZSTD_CCtx_setParameter(_: *anyopaque, _: c_int, _: c_int) usize {
+        return 1;
+    }
+    fn ZSTD_compress2(_: *anyopaque, _: *anyopaque, _: usize, _: *const anyopaque, _: usize) usize {
+        return 1;
+    }
+    fn ZSTD_getFrameContentSize(_: *const anyopaque, _: usize) c_ulonglong {
+        return zstd_content_size_error;
+    }
+    fn ZSTD_decompressBound(_: *const anyopaque, _: usize) c_ulonglong {
+        return zstd_content_size_error;
+    }
+    fn ZSTD_decompress(_: *anyopaque, _: usize, _: *const anyopaque, _: usize) usize {
+        return 1;
+    }
+    fn ZSTD_isError(_: usize) c_uint {
+        return 1;
+    }
+};
 
 const zstd_content_size_unknown = std.math.maxInt(c_ulonglong);
 const zstd_content_size_error = std.math.maxInt(c_ulonglong) - 1;
@@ -361,22 +396,23 @@ pub fn decodeFrameAllocLimited(allocator: std.mem.Allocator, frame: []const u8, 
 }
 
 pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
-    const content_size = ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
+    if (!system_codecs_enabled) return try decodeNativeFrameInto(frame, output);
+    const content_size = system.ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
     if (content_size == zstd_content_size_error) return error.CorruptFrame;
     if (content_size != zstd_content_size_unknown) {
         const decoded_len = try checkedU64ToUsize(content_size);
         if (output.len < decoded_len) return error.OutputTooSmall;
-        const written = ZSTD_decompress(@ptrCast(output.ptr), output.len, @ptrCast(frame.ptr), frame.len);
-        if (ZSTD_isError(written) != 0) return error.CorruptFrame;
+        const written = system.ZSTD_decompress(@ptrCast(output.ptr), output.len, @ptrCast(frame.ptr), frame.len);
+        if (system.ZSTD_isError(written) != 0) return error.CorruptFrame;
         if (written != decoded_len) return error.SizeMismatch;
         return written;
     }
 
-    const bound = ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
+    const bound = system.ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
     if (bound == zstd_content_size_error) return error.UnsupportedZstdFeature;
     const capacity = try checkedU64ToUsize(bound);
-    const written = ZSTD_decompress(@ptrCast(output.ptr), output.len, @ptrCast(frame.ptr), frame.len);
-    if (ZSTD_isError(written) != 0) {
+    const written = system.ZSTD_decompress(@ptrCast(output.ptr), output.len, @ptrCast(frame.ptr), frame.len);
+    if (system.ZSTD_isError(written) != 0) {
         // The bound is intentionally conservative when the frame omits content
         // size. A caller buffer smaller than the bound might still be large
         // enough, so only classify an actual libzstd failure as OutputTooSmall
@@ -393,12 +429,13 @@ pub fn decodedFrameSize(frame: []const u8) Error!usize {
 }
 
 pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {
-    const content_size = ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
+    if (!system_codecs_enabled) return try decodedNativeFrameSizeLimited(frame, max_output_len);
+    const content_size = system.ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
     if (content_size == zstd_content_size_error) return error.CorruptFrame;
     const decoded_len = if (content_size != zstd_content_size_unknown)
         try checkedU64ToUsize(content_size)
     else blk: {
-        const bound = ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
+        const bound = system.ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
         if (bound == zstd_content_size_error) return error.UnsupportedZstdFeature;
         break :blk try checkedU64ToUsize(bound);
     };
@@ -450,7 +487,13 @@ fn emitDictionaryId(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dicti
 }
 
 fn decodeFrameAllocWithLimit(allocator: std.mem.Allocator, frame: []const u8, max_output_len: ?usize) Error![]u8 {
-    const content_size = ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
+    if (!system_codecs_enabled) {
+        return if (max_output_len) |limit|
+            try decodeNativeFrameAllocLimited(allocator, frame, limit)
+        else
+            try decodeNativeFrameAlloc(allocator, frame);
+    }
+    const content_size = system.ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
     if (content_size == zstd_content_size_error) return error.CorruptFrame;
     if (content_size != zstd_content_size_unknown) {
         const decoded_len = try checkedU64ToUsize(content_size);
@@ -459,13 +502,13 @@ fn decodeFrameAllocWithLimit(allocator: std.mem.Allocator, frame: []const u8, ma
         }
         const out = try allocator.alloc(u8, decoded_len);
         errdefer allocator.free(out);
-        const written = ZSTD_decompress(@ptrCast(out.ptr), out.len, @ptrCast(frame.ptr), frame.len);
-        if (ZSTD_isError(written) != 0) return error.CorruptFrame;
+        const written = system.ZSTD_decompress(@ptrCast(out.ptr), out.len, @ptrCast(frame.ptr), frame.len);
+        if (system.ZSTD_isError(written) != 0) return error.CorruptFrame;
         if (written != decoded_len) return error.SizeMismatch;
         return out;
     }
 
-    const bound = ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
+    const bound = system.ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
     if (bound != zstd_content_size_error) {
         const bound_capacity = try checkedU64ToUsize(bound);
         const capacity = if (max_output_len) |limit| @min(bound_capacity, limit) else bound_capacity;
@@ -474,8 +517,8 @@ fn decodeFrameAllocWithLimit(allocator: std.mem.Allocator, frame: []const u8, ma
         }
         const out = try allocator.alloc(u8, capacity);
         errdefer allocator.free(out);
-        const written = ZSTD_decompress(@ptrCast(out.ptr), out.len, @ptrCast(frame.ptr), frame.len);
-        if (ZSTD_isError(written) != 0) {
+        const written = system.ZSTD_decompress(@ptrCast(out.ptr), out.len, @ptrCast(frame.ptr), frame.len);
+        if (system.ZSTD_isError(written) != 0) {
             if (max_output_len != null and bound_capacity > capacity) return error.OutputLimitExceeded;
             return error.CorruptFrame;
         }
@@ -2795,24 +2838,32 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     level: c_int,
     options: LibFrameOptions,
 ) Error![]u8 {
-    const bound = ZSTD_compressBound(input.len);
-    if (ZSTD_isError(bound) != 0) return error.CorruptFrame;
+    if (!system_codecs_enabled) {
+        const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, .{
+            .content_checksum = options.content_checksum,
+            .include_content_size = options.include_content_size,
+        });
+        return result.frame;
+    }
+
+    const bound = system.ZSTD_compressBound(input.len);
+    if (system.ZSTD_isError(bound) != 0) return error.CorruptFrame;
     var out = try allocator.alloc(u8, bound);
     errdefer allocator.free(out);
 
-    const cctx = ZSTD_createCCtx() orelse return error.OutOfMemory;
-    defer _ = ZSTD_freeCCtx(cctx);
+    const cctx = system.ZSTD_createCCtx() orelse return error.OutOfMemory;
+    defer _ = system.ZSTD_freeCCtx(cctx);
 
     // Use the advanced one-shot API only when callers need frame policy
-    // control. The default options preserve the historical ZSTD_compress()
+    // control. The default options preserve the historical system.ZSTD_compress()
     // behavior while allowing downstream containers such as MCAP to avoid
     // duplicating metadata they already carry at the format layer.
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, zstd_c_compression_level, level)) != 0) return error.CorruptFrame;
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, zstd_c_content_size_flag, if (options.include_content_size) 1 else 0)) != 0) return error.CorruptFrame;
-    if (ZSTD_isError(ZSTD_CCtx_setParameter(cctx, zstd_c_checksum_flag, if (options.content_checksum) 1 else 0)) != 0) return error.CorruptFrame;
+    if (system.ZSTD_isError(system.ZSTD_CCtx_setParameter(cctx, zstd_c_compression_level, level)) != 0) return error.CorruptFrame;
+    if (system.ZSTD_isError(system.ZSTD_CCtx_setParameter(cctx, zstd_c_content_size_flag, if (options.include_content_size) 1 else 0)) != 0) return error.CorruptFrame;
+    if (system.ZSTD_isError(system.ZSTD_CCtx_setParameter(cctx, zstd_c_checksum_flag, if (options.content_checksum) 1 else 0)) != 0) return error.CorruptFrame;
 
-    const written = ZSTD_compress2(cctx, @ptrCast(out.ptr), out.len, @ptrCast(input.ptr), input.len);
-    if (ZSTD_isError(written) != 0) return error.CorruptFrame;
+    const written = system.ZSTD_compress2(cctx, @ptrCast(out.ptr), out.len, @ptrCast(input.ptr), input.len);
+    if (system.ZSTD_isError(written) != 0) return error.CorruptFrame;
     if (allocator.remap(out, written)) |shrunk| return shrunk;
     const exact = try allocator.dupe(u8, out[0..written]);
     allocator.free(out);
@@ -9137,7 +9188,7 @@ fn checkedU64ToU32(value: u64) Error!u32 {
     return std.math.cast(u32, value) orelse error.IntegerOverflow;
 }
 
-test "zstd lib encoder round trips and compresses repeated payloads" {
+test "zstd frame encoder round trips and compresses repeated payloads" {
     const payload = "zstd payload zstd payload zstd payload zstd payload";
     const encoded = try encodeFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
@@ -9148,6 +9199,8 @@ test "zstd lib encoder round trips and compresses repeated payloads" {
 }
 
 test "zstd lib encoder frame options omit content size" {
+    if (!system_codecs_enabled) return;
+
     const payload = "zstd lib frame options payload" ** 8;
     const encoded = try encodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .include_content_size = false,
@@ -9155,7 +9208,7 @@ test "zstd lib encoder frame options omit content size" {
     });
     defer std.testing.allocator.free(encoded);
 
-    try std.testing.expectEqual(zstd_content_size_unknown, ZSTD_getFrameContentSize(@ptrCast(encoded.ptr), encoded.len));
+    try std.testing.expectEqual(zstd_content_size_unknown, system.ZSTD_getFrameContentSize(@ptrCast(encoded.ptr), encoded.len));
 
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
@@ -9163,10 +9216,12 @@ test "zstd lib encoder frame options omit content size" {
 
     const default_encoded = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, default_compression_level, .{});
     defer std.testing.allocator.free(default_encoded);
-    try std.testing.expectEqual(@as(c_ulonglong, payload.len), ZSTD_getFrameContentSize(@ptrCast(default_encoded.ptr), default_encoded.len));
+    try std.testing.expectEqual(@as(c_ulonglong, payload.len), system.ZSTD_getFrameContentSize(@ptrCast(default_encoded.ptr), default_encoded.len));
 }
 
 test "zstd lib decoder enforces allocation limits" {
+    if (!system_codecs_enabled) return;
+
     const payload = "zstd limited decode payload" ** 8;
 
     const known_size = try encodeFrameAlloc(std.testing.allocator, payload);
@@ -10465,6 +10520,8 @@ test "zstd native decoder reads mixed FSE tables in serialized order" {
 }
 
 test "zstd native decoder covers libzstd generated corpus shapes" {
+    if (!system_codecs_enabled) return;
+
     var sequential: [5000]u8 = undefined;
     for (&sequential, 0..) |*byte, i| byte.* = @intCast(i % 251);
 
