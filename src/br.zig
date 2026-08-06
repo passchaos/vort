@@ -100,11 +100,11 @@ const LiteralHistory = struct {
 
     fn context(self: *const LiteralHistory, header: *const MinimalCompressedHeader) Error!usize {
         if (!self.known) return error.UnsupportedBrotliFeature;
-        return switch (header.literal_context_modes[header.literal_block.current_type]) {
-            0 => self.previous[1] & 0x3f,
-            1 => self.previous[1] >> 2,
-            else => error.UnsupportedBrotliFeature,
-        };
+        return try literalContextFromMode(
+            header.literal_context_modes[header.literal_block.current_type],
+            self.previous[1],
+            self.previous[0],
+        );
     }
 
     fn push(self: *LiteralHistory, value: u8) void {
@@ -580,7 +580,7 @@ fn processMinimalCompressedMetaBlock(
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
             try ensureLiteralBlock(&header, reader);
-            const context = literalContext(&header, output, written.*);
+            const context = try literalContext(&header, output, written.*);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
             const literal = try header.literal_trees[tree_index].decode(reader);
@@ -674,12 +674,31 @@ fn switchBlock(comptime max_block_types: usize, block: *BlockSwitchState(max_blo
     block.remaining = try readBlockLength(&block.length_tree, reader);
 }
 
-fn literalContext(header: *const MinimalCompressedHeader, output: []const u8, written: usize) usize {
+fn literalContext(header: *const MinimalCompressedHeader, output: []const u8, written: usize) Error!usize {
     const previous = if (written == 0) 0 else output[written - 1];
-    return switch (header.literal_context_modes[header.literal_block.current_type]) {
+    const second_previous = if (written < 2) 0 else output[written - 2];
+    return try literalContextFromMode(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
+}
+
+fn literalContextFromMode(mode: u2, previous: u8, second_previous: u8) Error!usize {
+    return switch (mode) {
         0 => previous & 0x3f,
         1 => previous >> 2,
-        else => 0,
+        2 => error.UnsupportedBrotliFeature,
+        3 => (signedContextBucket(previous) << 3) | signedContextBucket(second_previous),
+    };
+}
+
+fn signedContextBucket(value: u8) usize {
+    return switch (value) {
+        0 => 0,
+        1...15 => 1,
+        16...63 => 2,
+        64...127 => 3,
+        128...191 => 4,
+        192...239 => 5,
+        240...254 => 6,
+        255 => 7,
     };
 }
 
@@ -1472,6 +1491,23 @@ test "br minimal compressed stream selects literal context tree through IMTF map
     try std.testing.expectEqualSlices(u8, "aba", decoded);
 }
 
+test "br minimal compressed stream selects literal context tree through signed mode" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 2, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForLiteralContextSigned(std.testing.allocator, &writer);
+
+    try std.testing.expectEqual(@as(usize, 3), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &.{ 1, 'b', 1 }, decoded);
+}
+
 test "br minimal compressed stream selects third literal context tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -1783,10 +1819,15 @@ test "br literal context helpers cover LSB6 and MSB6 modes" {
         .distance_context_map = @splat(0),
         .distance_trees = @splat(.{}),
     };
-    try std.testing.expectEqual(@as(usize, 0), literalContext(&header, "", 0));
-    try std.testing.expectEqual(@as(usize, 0x23), literalContext(&header, "abc", 3));
+    try std.testing.expectEqual(@as(usize, 0), try literalContext(&header, "", 0));
+    try std.testing.expectEqual(@as(usize, 0x23), try literalContext(&header, "abc", 3));
     header.literal_context_modes[0] = 1;
-    try std.testing.expectEqual(@as(usize, 0x18), literalContext(&header, "abc", 3));
+    try std.testing.expectEqual(@as(usize, 0x18), try literalContext(&header, "abc", 3));
+    header.literal_context_modes[0] = 2;
+    try std.testing.expectError(error.UnsupportedBrotliFeature, literalContext(&header, "abc", 3));
+    header.literal_context_modes[0] = 3;
+    try std.testing.expectEqual(@as(usize, 25), try literalContext(&header, &.{ 1, 64 }, 2));
+    try std.testing.expectEqual(@as(usize, 63), try literalContextFromMode(3, 255, 255));
 }
 
 test "br insert-copy length decoder covers basic and extra-bit ranges" {
@@ -2295,6 +2336,24 @@ fn writeMinimalCompressedHeaderForLiteralContextImtf(allocator: std.mem.Allocato
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForLiteralContextSigned(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 3, 2); // literal context mode = Signed
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESL
+    try writeSignedLiteralContextMapForOneAfterZero(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 1);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'b');
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 24);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
 fn writeMinimalCompressedHeaderForLiteralContextThreeTrees(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -2525,6 +2584,19 @@ fn writeLiteralContextMapForAImtf(allocator: std.mem.Allocator, writer: *BitWrit
         try writer.writeBits(allocator, raw_index, 1);
     }
     try writer.writeBits(allocator, 1, 1); // IMTF = true
+}
+
+fn writeSignedLiteralContextMapForOneAfterZero(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 0, alphabetBits(2));
+    try writer.writeBits(allocator, 1, alphabetBits(2));
+    var i: usize = 0;
+    while (i < 64) : (i += 1) {
+        try writer.writeBits(allocator, if (i == 8) 1 else 0, 1);
+    }
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
 }
 
 fn writeLiteralContextMapForAb(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {

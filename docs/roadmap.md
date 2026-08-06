@@ -1716,3 +1716,9 @@ architecture blindly.
   distinct distance trees, proving the widened block-type capacity is exercised
   beyond literal blocks. Both frames are covered by Zig tests and the Node-backed
   CLI differential smoke.
+
+- Added Brotli Signed literal context mode support. Literal context selection now
+  uses the RFC `Lut2` bucket formula for mode 3 in both decoded-size preflight
+  and output decode, while UTF8 mode remains explicitly unsupported. A compressed
+  literal-context frame exercises signed context ID 8 and is covered by Zig tests
+  plus the Node-backed CLI differential smoke.
