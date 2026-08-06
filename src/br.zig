@@ -257,7 +257,7 @@ fn readWindowBits(reader: *bitstream.BitReader) Error!void {
 
 fn readPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader) Error!PrefixCode(alphabet_size) {
     const kind = try reader.readBits(u2, 2);
-    if (kind != 1) return error.UnsupportedBrotliFeature;
+    if (kind != 1) return try readComplexPrefixCode(alphabet_size, reader, kind);
 
     const nsym = @as(usize, try reader.readBits(u2, 2)) + 1;
     const alphabet_bits = alphabetBits(alphabet_size);
@@ -298,6 +298,130 @@ fn readPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader) E
     }
 
     return .{ .table = try huffman.HuffmanTable(alphabet_size).init(&lengths) };
+}
+
+const code_length_alphabet_size = 18;
+const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+
+fn readComplexPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2) Error!PrefixCode(alphabet_size) {
+    if (hskip == 1) return error.CorruptFrame;
+
+    var code_length_lengths: [code_length_alphabet_size]u4 = @splat(0);
+    var code_length_space: i32 = 32;
+    var code_length_nonzero: usize = 0;
+    var code_length_index: usize = if (hskip == 0) 0 else hskip;
+    while (code_length_index < code_length_order.len) : (code_length_index += 1) {
+        const length = try readCodeLengthCodeLength(reader);
+        const symbol = code_length_order[code_length_index];
+        code_length_lengths[symbol] = length;
+        if (length != 0) {
+            code_length_nonzero += 1;
+            code_length_space -= @intCast(@as(u32, 32) >> length);
+            if (code_length_space < 0) return error.InvalidHuffmanCode;
+            if (code_length_space == 0) {
+                if (code_length_nonzero < 2) return error.InvalidHuffmanCode;
+                break;
+            }
+        }
+    }
+    if (code_length_nonzero == 0) return error.InvalidHuffmanCode;
+    if (code_length_space != 0 and code_length_index == code_length_order.len) {
+        if (code_length_nonzero != 1) return error.InvalidHuffmanCode;
+    } else if (code_length_space != 0) {
+        return error.InvalidHuffmanCode;
+    }
+
+    const code_length_prefix = if (code_length_nonzero == 1)
+        singleSymbolPrefixCode(code_length_alphabet_size, &code_length_lengths)
+    else
+        PrefixCode(code_length_alphabet_size){ .table = try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths) };
+
+    var lengths: [alphabet_size]u4 = @splat(0);
+    var index: usize = 0;
+    var space: i32 = 32768;
+    var last_nonzero_length: u4 = 8;
+    var previous_repeat_symbol: ?u16 = null;
+    var last_symbol: ?u16 = null;
+    while (index < alphabet_size and space > 0) {
+        const symbol = try code_length_prefix.decode(reader);
+        switch (symbol) {
+            0 => {
+                lengths[index] = 0;
+                index += 1;
+                previous_repeat_symbol = null;
+            },
+            1...15 => {
+                const length: u4 = @intCast(symbol);
+                lengths[index] = length;
+                index += 1;
+                last_nonzero_length = length;
+                space -= @intCast(@as(u32, 32768) >> length);
+                if (space < 0) return error.InvalidHuffmanCode;
+                previous_repeat_symbol = null;
+            },
+            16 => {
+                if (previous_repeat_symbol == 16) return error.UnsupportedBrotliFeature;
+                const repeat = @as(usize, try reader.readBits(u2, 2)) + 3;
+                try repeatCodeLength(alphabet_size, &lengths, &index, last_nonzero_length, repeat, &space);
+                previous_repeat_symbol = 16;
+            },
+            17 => {
+                if (previous_repeat_symbol == 17) return error.UnsupportedBrotliFeature;
+                const repeat = @as(usize, try reader.readBits(u3, 3)) + 3;
+                try repeatCodeLength(alphabet_size, &lengths, &index, 0, repeat, &space);
+                previous_repeat_symbol = 17;
+            },
+            else => return error.InvalidHuffmanCode,
+        }
+        last_symbol = symbol;
+    }
+    if (space != 0) return error.InvalidHuffmanCode;
+    if (last_symbol == null or last_symbol.? == 0 or last_symbol.? == 17) return error.InvalidHuffmanCode;
+
+    var active: usize = 0;
+    for (lengths) |length| {
+        if (length != 0) active += 1;
+    }
+    if (active < 2) return error.InvalidHuffmanCode;
+    return .{ .table = try huffman.HuffmanTable(alphabet_size).init(&lengths) };
+}
+
+fn readCodeLengthCodeLength(reader: *bitstream.BitReader) Error!u4 {
+    const first = try reader.readBits(u1, 1);
+    const second = try reader.readBits(u1, 1);
+    if (first == 0) return if (second == 0) 0 else 3;
+    if (second == 0) return 4;
+    const third = try reader.readBits(u1, 1);
+    if (third == 0) return 2;
+    const fourth = try reader.readBits(u1, 1);
+    return if (fourth == 0) 1 else 5;
+}
+
+fn singleSymbolPrefixCode(comptime alphabet_size: usize, lengths: *const [alphabet_size]u4) PrefixCode(alphabet_size) {
+    for (lengths, 0..) |length, symbol| {
+        if (length != 0) return .{ .single_symbol = @intCast(symbol) };
+    }
+    unreachable;
+}
+
+fn repeatCodeLength(
+    comptime alphabet_size: usize,
+    lengths: *[alphabet_size]u4,
+    index: *usize,
+    length: u4,
+    repeat: usize,
+    space: *i32,
+) Error!void {
+    if (index.* > alphabet_size or alphabet_size - index.* < repeat) return error.InvalidHuffmanCode;
+    var i: usize = 0;
+    while (i < repeat) : (i += 1) {
+        lengths[index.*] = length;
+        index.* += 1;
+        if (length != 0) {
+            space.* -= @intCast(@as(u32, 32768) >> length);
+            if (space.* < 0) return error.InvalidHuffmanCode;
+        }
+    }
 }
 
 fn alphabetBits(comptime alphabet_size: usize) u6 {
@@ -544,6 +668,127 @@ test "br simple prefix code rejects invalid symbol lists" {
     var out_of_range_reader = bitstream.BitReader.init(out_of_range.items);
     try std.testing.expectError(error.InvalidHuffmanCode, readPrefixCode(7, &out_of_range_reader));
 
-    var complex = bitstream.BitReader.init(&[_]u8{0});
-    try std.testing.expectError(error.UnsupportedBrotliFeature, readPrefixCode(8, &complex));
+    var truncated_complex = bitstream.BitReader.init(&[_]u8{0});
+    try std.testing.expectError(error.TruncatedFrame, readPrefixCode(8, &truncated_complex));
+}
+
+test "br complex prefix code decodes direct length sequence" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writer.writeBits(std.testing.allocator, 0, 2); // HSKIP = 0, complex code.
+
+    var cl_lengths: [code_length_alphabet_size]u4 = @splat(0);
+    cl_lengths[0] = 2;
+    cl_lengths[1] = 2;
+    cl_lengths[2] = 2;
+    cl_lengths[3] = 2;
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 2); // symbol 1
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 2); // symbol 2
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 2); // symbol 3
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 4
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 2); // symbol 0
+
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 1);
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 2);
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 3);
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 3);
+    try writer.writeBits(std.testing.allocator, 0, 1); // symbol 0, code 0
+    try writer.writeBits(std.testing.allocator, 1, 2); // symbol 1, code 10 -> stored 01
+    try writer.writeBits(std.testing.allocator, 3, 3); // symbol 2, code 110 -> stored 011
+    try writer.writeBits(std.testing.allocator, 7, 3); // symbol 3, code 111
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    const prefix = try readPrefixCode(4, &reader);
+    try std.testing.expectEqual(@as(u16, 0), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 1), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 2), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 3), try prefix.decode(&reader));
+}
+
+test "br complex prefix code supports zero repeats" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writer.writeBits(std.testing.allocator, 0, 2); // HSKIP = 0, complex code.
+
+    var cl_lengths: [code_length_alphabet_size]u4 = @splat(0);
+    cl_lengths[1] = 1;
+    cl_lengths[17] = 1;
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 1); // symbol 1
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 2
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 3
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 4
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 0
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 5
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 1); // symbol 17
+
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 17);
+    try writer.writeBits(std.testing.allocator, 1, 3); // repeat 4 zeros.
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 1);
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 1);
+    try writer.writeBits(std.testing.allocator, 0, 1);
+    try writer.writeBits(std.testing.allocator, 1, 1);
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    const prefix = try readPrefixCode(6, &reader);
+    try std.testing.expectEqual(@as(u16, 4), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 5), try prefix.decode(&reader));
+}
+
+test "br complex prefix code supports repeat previous length" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writer.writeBits(std.testing.allocator, 0, 2); // HSKIP = 0, complex code.
+
+    var cl_lengths: [code_length_alphabet_size]u4 = @splat(0);
+    cl_lengths[2] = 1;
+    cl_lengths[16] = 1;
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 1
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 1); // symbol 2
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 3
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 4
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 0
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 5
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 17
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 6
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 1); // symbol 16
+
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 2);
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 16);
+    try writer.writeBits(std.testing.allocator, 0, 2); // repeat previous length 3 times.
+    try writer.writeBits(std.testing.allocator, 0, 2);
+    try writer.writeBits(std.testing.allocator, 2, 2);
+    try writer.writeBits(std.testing.allocator, 1, 2);
+    try writer.writeBits(std.testing.allocator, 3, 2);
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    const prefix = try readPrefixCode(4, &reader);
+    try std.testing.expectEqual(@as(u16, 0), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 1), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 2), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 3), try prefix.decode(&reader));
+}
+
+fn writeCodeLengthCodeLength(allocator: std.mem.Allocator, writer: *BitWriter, length: u4) Error!void {
+    switch (length) {
+        0 => try writer.writeBits(allocator, 0b00, 2),
+        1 => try writer.writeBits(allocator, 0b0111, 4),
+        2 => try writer.writeBits(allocator, 0b011, 3),
+        3 => try writer.writeBits(allocator, 0b10, 2),
+        4 => try writer.writeBits(allocator, 0b01, 2),
+        5 => try writer.writeBits(allocator, 0b1111, 4),
+        else => return error.InvalidHuffmanCode,
+    }
+}
+
+fn writeCodeLengthSymbol(
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    lengths: *const [code_length_alphabet_size]u4,
+    symbol: usize,
+) Error!void {
+    const encoder = try huffman.HuffmanTable(code_length_alphabet_size).Encoder.init(lengths);
+    try writer.writeBits(allocator, encoder.codes[symbol], encoder.bits[symbol]);
 }

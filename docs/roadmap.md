@@ -1582,8 +1582,9 @@ architecture blindly.
   representative corrupt/truncated/trailing cases. This complements the
   Node-backed differential smoke with library-level API coverage.
 
-- Added the first Brotli compressed-block prerequisite: simple prefix-code
-  parsing backed by the shared canonical Huffman table. The implementation reads
-  RFC 7932 simple prefix codes for one to four symbols, rejects duplicate or
-  out-of-range symbols, and leaves complex prefix codes explicitly unsupported
-  until the full compressed metablock parser is ready.
+- Added the first Brotli compressed-block prerequisite: prefix-code parsing
+  backed by the shared canonical Huffman table. The implementation reads RFC
+  7932 simple prefix codes for one to four symbols, rejects duplicate or
+  out-of-range symbols, and now supports complex prefix-code headers with the
+  code-length alphabet plus repeat-16/repeat-17 expansion for non-chained repeat
+  runs.
