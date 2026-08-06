@@ -1483,3 +1483,10 @@ architecture blindly.
   generic path because the fixed-bpp variant was not a robust win locally. The
   latest local ReleaseFast `run-png-scanline-bench-gate` passed with Average
   bpp2/4/6/8 rows around `1666.61` / `2614.60` / `2629.03` / `2658.92` MiB/s.
+
+- Moved the root-level PNG export ledger and its public API smoke into
+  `src/root_exports/png.zig`. `src/root.zig` still spells explicit compatibility
+  aliases because Zig 0.16 does not support the old top-level `usingnamespace`
+  re-export shape, but the source-of-truth mapping and root drift test now live
+  in a nested exports module instead of growing the root file directly. This is
+  the first root-export modularization slice after the PNG primitive split.
