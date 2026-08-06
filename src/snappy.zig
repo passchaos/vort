@@ -6,6 +6,12 @@ pub const Error = core.Error || std.mem.Allocator.Error;
 
 pub const max_uncompressed_chunk_len: usize = 64 * 1024;
 
+const min_match_len = 4;
+const hash_bits = 15;
+const hash_table_len = 1 << hash_bits;
+const invalid_pos = std.math.maxInt(u32);
+const max_copy2_offset = std.math.maxInt(u16);
+const max_copy4_offset = std.math.maxInt(u32);
 const stream_identifier_chunk_type: u8 = 0xff;
 const compressed_data_chunk_type: u8 = 0x00;
 const uncompressed_data_chunk_type: u8 = 0x01;
@@ -26,7 +32,39 @@ pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![
 
 pub fn encodeBlockAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
     try writeVarint(allocator, out, input.len);
-    try emitLiteral(allocator, out, input);
+    if (input.len < min_match_len) {
+        try emitLiteral(allocator, out, input);
+        return;
+    }
+
+    const table = try allocator.alloc(u32, hash_table_len);
+    defer allocator.free(table);
+    @memset(table, invalid_pos);
+
+    var ip: usize = 0;
+    var literal_start: usize = 0;
+    while (ip + min_match_len <= input.len) {
+        const h = hash4(input[ip..][0..4]);
+        const candidate_pos = table[h];
+        table[h] = @intCast(ip);
+
+        if (candidate_pos != invalid_pos) {
+            const candidate: usize = candidate_pos;
+            const offset = ip - candidate;
+            if (offset != 0 and offset <= max_copy4_offset and equal4(input[candidate..][0..4], input[ip..][0..4])) {
+                const match_len = countMatch(input, candidate, ip);
+                try emitLiteral(allocator, out, input[literal_start..ip]);
+                try emitCopy(allocator, out, offset, match_len);
+                ip += match_len;
+                literal_start = ip;
+                continue;
+            }
+        }
+
+        ip += 1;
+    }
+
+    try emitLiteral(allocator, out, input[literal_start..]);
 }
 
 pub fn encodeBlockInto(input: []const u8, output: []u8) Error!usize {
@@ -47,7 +85,14 @@ pub fn encodeFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), 
     var offset: usize = 0;
     while (offset < input.len) {
         const chunk_len = @min(input.len - offset, max_uncompressed_chunk_len);
-        try writeCheckedChunk(allocator, out, uncompressed_data_chunk_type, input[offset..][0..chunk_len]);
+        const chunk = input[offset..][0..chunk_len];
+        const compressed = try encodeBlockAlloc(allocator, chunk);
+        defer allocator.free(compressed);
+        if (compressed.len < chunk.len) {
+            try writeCheckedChunk(allocator, out, compressed_data_chunk_type, chunk, compressed);
+        } else {
+            try writeCheckedChunk(allocator, out, uncompressed_data_chunk_type, chunk, chunk);
+        }
         offset += chunk_len;
     }
 }
@@ -377,11 +422,17 @@ fn writeChunk(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunk_type:
     try out.appendSlice(allocator, payload);
 }
 
-fn writeCheckedChunk(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunk_type: u8, payload: []const u8) Error!void {
+fn writeCheckedChunk(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunk_type: u8,
+    plain: []const u8,
+    payload: []const u8,
+) Error!void {
     var checked: std.ArrayList(u8) = .empty;
     defer checked.deinit(allocator);
     var checksum_bytes: [4]u8 = undefined;
-    std.mem.writeInt(u32, &checksum_bytes, maskedCrc32c(payload), .little);
+    std.mem.writeInt(u32, &checksum_bytes, maskedCrc32c(plain), .little);
     try checked.appendSlice(allocator, &checksum_bytes);
     try checked.appendSlice(allocator, payload);
     try writeChunk(allocator, out, chunk_type, checked.items);
@@ -443,6 +494,42 @@ fn emitLiteral(allocator: std.mem.Allocator, out: *std.ArrayList(u8), literal: [
     try out.appendSlice(allocator, literal);
 }
 
+fn emitCopy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), offset: usize, len: usize) Error!void {
+    if (offset == 0 or offset > max_copy4_offset) return error.InvalidMatch;
+    var remaining = len;
+    while (remaining > 0) {
+        const chunk: usize = @min(remaining, @as(usize, 60));
+        if (offset <= max_copy2_offset) {
+            try out.append(allocator, @as(u8, @intCast((chunk - 1) << 2)) | 0x02);
+            try out.append(allocator, @intCast(offset & 0xff));
+            try out.append(allocator, @intCast((offset >> 8) & 0xff));
+        } else {
+            try out.append(allocator, @as(u8, @intCast((chunk - 1) << 2)) | 0x03);
+            var offset_bytes: [4]u8 = undefined;
+            std.mem.writeInt(u32, &offset_bytes, @intCast(offset), .little);
+            try out.appendSlice(allocator, &offset_bytes);
+        }
+        remaining -= chunk;
+    }
+}
+
+fn hash4(bytes: *const [4]u8) usize {
+    const value = std.mem.readInt(u32, bytes, .little);
+    return @intCast((value *% 0x1e35_a7bd) >> (32 - hash_bits));
+}
+
+fn equal4(a: *const [4]u8, b: *const [4]u8) bool {
+    return std.mem.readInt(u32, a, .little) == std.mem.readInt(u32, b, .little);
+}
+
+fn countMatch(input: []const u8, candidate: usize, ip: usize) usize {
+    var len: usize = min_match_len;
+    while (ip + len < input.len and input[candidate + len] == input[ip + len]) {
+        len += 1;
+    }
+    return len;
+}
+
 fn validateCopy(written: usize, decoded_len: usize, offset_raw: anytype, len: usize) Error!void {
     const offset: usize = @intCast(offset_raw);
     if (offset == 0 or offset > written) return error.InvalidMatch;
@@ -476,6 +563,7 @@ test "snappy raw block round trips repeated payload with copy tokens" {
     const payload = "abcabcabcabcabcabc" ** 16;
     const encoded = try encodeBlockAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len < payload.len);
     try std.testing.expectEqual(payload.len, try decodedBlockSize(encoded));
     const decoded = try decodeBlockAllocLimited(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
@@ -532,6 +620,8 @@ test "snappy framed stream round trips and enforces output limits" {
     const payload = "snappy frame payload" ** 1024;
     const encoded = try encodeFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len < payload.len);
+    try std.testing.expectEqual(compressed_data_chunk_type, encoded[10]);
     try std.testing.expectEqual(payload.len, try decodedFrameSize(encoded));
     try std.testing.expectError(error.OutputLimitExceeded, decodedFrameSizeLimited(encoded, payload.len - 1));
     const decoded = try decodeFrameAllocLimited(std.testing.allocator, encoded, payload.len);

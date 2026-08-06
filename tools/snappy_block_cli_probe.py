@@ -15,6 +15,8 @@ PAYLOADS = [
     bytes((i * 37 + 11) % 251 for i in range(1024)),
 ]
 
+COMPRESSIBLE_PAYLOAD_INDEX = 2
+
 KNOWN_BLOCKS = [
     ("hello-literal", "051068656c6c6f", b"hello"),
     ("copy1", "0c086162631503", b"abcabcabcabc"),
@@ -91,9 +93,11 @@ def main():
     root = pathlib.Path(__file__).resolve().parents[1]
 
     checked = 0
-    for payload in PAYLOADS:
+    for index, payload in enumerate(PAYLOADS):
         payload_hex = binascii.hexlify(payload).decode()
         encoded = parse_hex(run([str(cli), "encode-snappy-block-hex", payload_hex], root).stdout)
+        if index == COMPRESSIBLE_PAYLOAD_INDEX and len(encoded) >= len(payload):
+            raise RuntimeError(f"compressible raw block did not shrink: encoded={len(encoded)} plain={len(payload)}")
         size = run([str(cli), "size-snappy-block-hex", encoded.hex(), str(len(payload))], root).stdout.decode()
         if f"decoded_bytes={len(payload)}" not in size:
             raise RuntimeError(f"bad size output: {size}")
@@ -110,9 +114,13 @@ def main():
             raise RuntimeError(f"known block {name} decoded with unexpected output: {output!r}")
         checked += 1
 
-    for payload in PAYLOADS:
+    for index, payload in enumerate(PAYLOADS):
         payload_hex = binascii.hexlify(payload).decode()
         encoded = parse_hex(run([str(cli), "encode-snappy-frame-hex", payload_hex], root).stdout)
+        if index == COMPRESSIBLE_PAYLOAD_INDEX and len(encoded) >= len(payload):
+            raise RuntimeError(f"compressible frame did not shrink: encoded={len(encoded)} plain={len(payload)}")
+        if index == COMPRESSIBLE_PAYLOAD_INDEX and encoded[10] != 0x00:
+            raise RuntimeError(f"compressible frame did not use compressed chunk: type={encoded[10]}")
         size = run([str(cli), "size-snappy-frame-hex", encoded.hex(), str(len(payload))], root).stdout.decode()
         if f"decoded_bytes={len(payload)}" not in size:
             raise RuntimeError(f"bad frame size output: {size}")

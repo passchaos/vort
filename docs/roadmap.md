@@ -1543,3 +1543,10 @@ architecture blindly.
   allocator-returning helpers through root/CLI APIs. The existing
   `run-snappy-block-cli-probe` gate now covers both raw-block and framed-stream
   hex/file workflows plus malformed checksum handling.
+
+- Upgraded the dependency-free Snappy encoder from literal-only output to a
+  greedy hash-table match encoder. Repeated raw blocks now emit copy tokens, and
+  framed streams choose compressed chunks only when they beat uncompressed
+  chunks. Unit tests and the CLI probe both assert that a repeated payload
+  shrinks, so ratio regressions are covered by regular validation instead of
+  relying only on round-trip correctness.
