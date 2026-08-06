@@ -795,6 +795,11 @@ pub fn build(b: *std.Build) void {
     const br_stored_cli_diff_step = b.step("run-br-stored-cli-diff", "Run black-box smoke for dependency-free Brotli stored streams against Node Brotli");
     br_stored_cli_diff_step.dependOn(&br_stored_cli_diff.step);
 
+    const br_literal_cli_diff = b.addSystemCommand(&.{ "python3", "tools/br_literal_cli_diff.py" });
+    br_literal_cli_diff.addArtifactArg(cli_exe);
+    const br_literal_cli_diff_step = b.step("run-br-literal-cli-diff", "Run black-box smoke for minimal dependency-free Brotli literal blocks against Node Brotli");
+    br_literal_cli_diff_step.dependOn(&br_literal_cli_diff.step);
+
     const br_stored_corpus_exe = b.addExecutable(.{
         .name = "vort-br-stored-corpus",
         .root_module = b.createModule(.{
@@ -2094,6 +2099,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zlib_relaxed_report_gate_step);
     ci_smoke_step.dependOn(gzip_cli_diff_step);
     ci_smoke_step.dependOn(br_stored_cli_diff_step);
+    ci_smoke_step.dependOn(br_literal_cli_diff_step);
     ci_smoke_step.dependOn(br_stored_corpus_step);
     ci_smoke_step.dependOn(snappy_block_cli_probe_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);

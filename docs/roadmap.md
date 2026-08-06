@@ -1613,3 +1613,9 @@ architecture blindly.
 - Extended the minimal Brotli literal-only compressed decode path to non-final
   meta-blocks, so a supported compressed literal-only block can now be followed
   by stored/meta/final-empty blocks in the same stream.
+
+- Added `run-br-literal-cli-diff`, a Node-backed black-box smoke for the minimal
+  Brotli literal-only compressed path. The gate generates final and non-final
+  literal-only compressed streams, decodes them through the Vort CLI and Node's
+  Brotli decoder, and checks output-limit failures so the new compressed wire
+  shape is validated outside the internal unit tests.

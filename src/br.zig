@@ -60,8 +60,10 @@ const MinimalCompressedHeader = struct {
     literal_context_mode: u2,
     literal: PrefixCode(256),
     insert_copy: PrefixCode(704),
-    distance: PrefixCode(16),
+    distance: PrefixCode(max_distance_alphabet_size),
 };
+
+const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 
 const InsertCopyLengths = struct {
     insert_len: usize,
@@ -309,6 +311,7 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
     const ndirect_high = try reader.readBits(u4, 4);
     const ndirect: u16 = @as(u16, ndirect_high) << npostfix;
     if (ndirect > 120) return error.CorruptFrame;
+    const distance_alphabet_size: usize = 16 + @as(usize, ndirect) + (@as(usize, 48) << npostfix);
 
     const literal_context_mode = try reader.readBits(u2, 2);
 
@@ -323,7 +326,7 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
         .literal_context_mode = literal_context_mode,
         .literal = try readPrefixCode(256, reader),
         .insert_copy = try readPrefixCode(704, reader),
-        .distance = try readPrefixCode(16, reader),
+        .distance = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader),
     };
 }
 
@@ -461,11 +464,16 @@ fn copyLengthSpec(code: u16) LengthSpec {
 }
 
 fn readPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader) Error!PrefixCode(alphabet_size) {
+    return try readPrefixCodeRuntime(alphabet_size, alphabet_size, reader);
+}
+
+fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader) Error!PrefixCode(max_alphabet_size) {
+    if (alphabet_size == 0 or alphabet_size > max_alphabet_size) return error.CorruptFrame;
     const kind = try reader.readBits(u2, 2);
-    if (kind != 1) return try readComplexPrefixCode(alphabet_size, reader, kind);
+    if (kind != 1) return try readComplexPrefixCodeRuntime(max_alphabet_size, alphabet_size, reader, kind);
 
     const nsym = @as(usize, try reader.readBits(u2, 2)) + 1;
-    const alphabet_bits = alphabetBits(alphabet_size);
+    const alphabet_bits = alphabetBitsRuntime(alphabet_size);
     var symbols: [4]u16 = undefined;
     for (0..nsym) |i| {
         const symbol = try reader.readBits(u16, alphabet_bits);
@@ -476,7 +484,7 @@ fn readPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader) E
         symbols[i] = symbol;
     }
 
-    var lengths: [alphabet_size]u4 = @splat(0);
+    var lengths: [max_alphabet_size]u4 = @splat(0);
     switch (nsym) {
         1 => return .{ .single_symbol = symbols[0] },
         2 => {
@@ -502,13 +510,13 @@ fn readPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader) E
         else => unreachable,
     }
 
-    return .{ .table = try huffman.HuffmanTable(alphabet_size).init(&lengths) };
+    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).init(&lengths) };
 }
 
 const code_length_alphabet_size = 18;
 const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
-fn readComplexPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2) Error!PrefixCode(alphabet_size) {
+fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2) Error!PrefixCode(max_alphabet_size) {
     if (hskip == 1) return error.CorruptFrame;
 
     var code_length_lengths: [code_length_alphabet_size]u4 = @splat(0);
@@ -541,7 +549,7 @@ fn readComplexPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitRe
     else
         PrefixCode(code_length_alphabet_size){ .table = try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths) };
 
-    var lengths: [alphabet_size]u4 = @splat(0);
+    var lengths: [max_alphabet_size]u4 = @splat(0);
     var index: usize = 0;
     var space: i32 = 32768;
     var last_nonzero_length: u4 = 8;
@@ -553,12 +561,12 @@ fn readComplexPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitRe
         const symbol = try code_length_prefix.decode(reader);
         switch (symbol) {
             0 => {
-                try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
                 lengths[index] = 0;
                 index += 1;
             },
             1...15 => {
-                try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
                 const length: u4 = @intCast(symbol);
                 lengths[index] = length;
                 index += 1;
@@ -571,14 +579,14 @@ fn readComplexPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitRe
                 if (previous_repeat_symbol == 16) {
                     pending_repeat_count = 4 * (pending_repeat_count - 2) + repeat;
                 } else {
-                    try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
                     pending_repeat_count = repeat;
                     pending_repeat_length = last_nonzero_length;
                 }
                 previous_repeat_symbol = 16;
                 try validatePendingRepeat(alphabet_size, index, pending_repeat_length, pending_repeat_count, space);
                 if (pendingRepeatCompletesSpace(pending_repeat_length, pending_repeat_count, space)) {
-                    try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
                 }
             },
             17 => {
@@ -586,7 +594,7 @@ fn readComplexPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitRe
                 if (previous_repeat_symbol == 17) {
                     pending_repeat_count = 8 * (pending_repeat_count - 2) + repeat;
                 } else {
-                    try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
                     pending_repeat_count = repeat;
                     pending_repeat_length = 0;
                 }
@@ -597,16 +605,16 @@ fn readComplexPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitRe
         }
         last_symbol = symbol;
     }
-    try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
     if (space != 0) return error.InvalidHuffmanCode;
     if (last_symbol == null or last_symbol.? == 0 or last_symbol.? == 17) return error.InvalidHuffmanCode;
 
     var active: usize = 0;
-    for (lengths) |length| {
+    for (lengths[0..alphabet_size]) |length| {
         if (length != 0) active += 1;
     }
     if (active < 2) return error.InvalidHuffmanCode;
-    return .{ .table = try huffman.HuffmanTable(alphabet_size).init(&lengths) };
+    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).init(&lengths) };
 }
 
 fn readCodeLengthCodeLength(reader: *bitstream.BitReader) Error!u4 {
@@ -628,8 +636,9 @@ fn singleSymbolPrefixCode(comptime alphabet_size: usize, lengths: *const [alphab
 }
 
 fn repeatCodeLength(
-    comptime alphabet_size: usize,
-    lengths: *[alphabet_size]u4,
+    alphabet_size: usize,
+    comptime max_alphabet_size: usize,
+    lengths: *[max_alphabet_size]u4,
     index: *usize,
     length: u4,
     repeat: usize,
@@ -648,8 +657,9 @@ fn repeatCodeLength(
 }
 
 fn flushPendingRepeat(
-    comptime alphabet_size: usize,
-    lengths: *[alphabet_size]u4,
+    alphabet_size: usize,
+    comptime max_alphabet_size: usize,
+    lengths: *[max_alphabet_size]u4,
     index: *usize,
     previous_repeat_symbol: *?u16,
     pending_repeat_count: *usize,
@@ -657,13 +667,13 @@ fn flushPendingRepeat(
     space: *i32,
 ) Error!void {
     if (previous_repeat_symbol.* == null) return;
-    try repeatCodeLength(alphabet_size, lengths, index, pending_repeat_length.*, pending_repeat_count.*, space);
+    try repeatCodeLength(alphabet_size, max_alphabet_size, lengths, index, pending_repeat_length.*, pending_repeat_count.*, space);
     previous_repeat_symbol.* = null;
     pending_repeat_count.* = 0;
     pending_repeat_length.* = 0;
 }
 
-fn validatePendingRepeat(comptime alphabet_size: usize, index: usize, length: u4, count: usize, space: i32) Error!void {
+fn validatePendingRepeat(alphabet_size: usize, index: usize, length: u4, count: usize, space: i32) Error!void {
     if (index > alphabet_size or alphabet_size - index < count) return error.InvalidHuffmanCode;
     if (length != 0) {
         const contribution: i32 = @intCast(count * (@as(usize, 32768) >> length));
@@ -678,6 +688,10 @@ fn pendingRepeatCompletesSpace(length: u4, count: usize, space: i32) bool {
 }
 
 fn alphabetBits(comptime alphabet_size: usize) u6 {
+    return alphabetBitsRuntime(alphabet_size);
+}
+
+fn alphabetBitsRuntime(alphabet_size: usize) u6 {
     if (alphabet_size <= 1) return 0;
     var bits: u6 = 0;
     var value: usize = alphabet_size - 1;
@@ -926,7 +940,7 @@ test "br minimal compressed header parser reads single-tree shape" {
     try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NTREESD
     try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 256, 'A');
     try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 704, 0);
-    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 16, 0);
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 118, 0);
 
     var reader = bitstream.BitReader.init(encoded.items);
     const header = try readMinimalCompressedHeader(&reader);
@@ -965,7 +979,7 @@ test "br minimal compressed header parser rejects unsupported maps and accepts n
     try writeBlockTypeCount(std.testing.allocator, &bad_writer, 1);
     try writeSimpleSingleSymbolPrefix(std.testing.allocator, &bad_writer, 256, 0);
     try writeSimpleSingleSymbolPrefix(std.testing.allocator, &bad_writer, 704, 0);
-    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &bad_writer, 16, 0);
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &bad_writer, 520, 0);
     var valid_reader = bitstream.BitReader.init(bad_ndirect.items);
     try std.testing.expectEqual(@as(u16, 120), (try readMinimalCompressedHeader(&valid_reader)).ndirect);
 }
@@ -1292,7 +1306,7 @@ fn writeMinimalCompressedHeaderForHello(allocator: std.mem.Allocator, writer: *B
     try writer.writeBits(allocator, 0, 1); // tree-select
 
     try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 40);
-    try writeSimpleSingleSymbolPrefix(allocator, writer, 16, 0);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
 fn writeBlockTypeCount(allocator: std.mem.Allocator, writer: *BitWriter, value: u16) Error!void {
