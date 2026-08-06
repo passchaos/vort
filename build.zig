@@ -1256,6 +1256,37 @@ pub fn build(b: *std.Build) void {
     const native_library_bench_gate_step = b.step("run-native-library-bench-gate", "Validate native LZ4/Zstd public library benchmark CSV");
     native_library_bench_gate_step.dependOn(&native_library_bench_gate.step);
 
+    const snappy_report_exe = b.addExecutable(.{
+        .name = "vort-snappy-report",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/snappy_report.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_snappy_report = b.addRunArtifact(snappy_report_exe);
+    if (b.args) |args| run_snappy_report.addArgs(args);
+    const snappy_report_step = b.step("run-snappy-report", "Report dependency-free Snappy raw/framed ratio and throughput");
+    snappy_report_step.dependOn(&run_snappy_report.step);
+
+    const run_snappy_report_csv = b.addRunArtifact(snappy_report_exe);
+    run_snappy_report_csv.addArgs(&.{ "--iterations", "25", "--csv", "zig-out/vort-snappy-report.csv" });
+    const snappy_report_csv_step = b.step("run-snappy-report-csv", "Write dependency-free Snappy raw/framed report CSV");
+    snappy_report_csv_step.dependOn(&run_snappy_report_csv.step);
+
+    const snappy_report_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/snappy_report_gate.py",
+        "--csv",
+        "zig-out/vort-snappy-report.csv",
+    });
+    snappy_report_gate.step.dependOn(snappy_report_csv_step);
+    const snappy_report_gate_step = b.step("run-snappy-report-gate", "Validate dependency-free Snappy raw/framed report CSV");
+    snappy_report_gate_step.dependOn(&snappy_report_gate.step);
+
     const run_native_library_bench_path_csv = b.addRunArtifact(native_library_bench_exe);
     run_native_library_bench_path_csv.addArgs(&.{
         "--iterations",
@@ -2007,6 +2038,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&dictionary_report_exe.step);
     check_step.dependOn(&native_dictionary_report_exe.step);
     check_step.dependOn(&native_library_bench_exe.step);
+    check_step.dependOn(&snappy_report_exe.step);
     check_step.dependOn(&dictionary_deflate_report_exe.step);
     check_step.dependOn(&dictionary_decode_bench_exe.step);
     check_step.dependOn(&level_report_exe.step);
@@ -2050,6 +2082,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_step);
+    ci_smoke_step.dependOn(snappy_report_gate_step);
     ci_smoke_step.dependOn(header_inspect_smoke_step);
     ci_smoke_step.dependOn(header_inspect_dashboard_step);
     ci_smoke_step.dependOn(zlib_family_diff_step);

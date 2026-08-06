@@ -1550,3 +1550,10 @@ architecture blindly.
   chunks. Unit tests and the CLI probe both assert that a repeated payload
   shrinks, so ratio regressions are covered by regular validation instead of
   relying only on round-trip correctness.
+
+- Added `run-snappy-report-gate`, a focused Snappy raw/framed ratio and
+  throughput CSV gate. The report records input bytes, encoded bytes, ratio,
+  encode/decode timings, and checksums across tiny, text, structured,
+  repetitive, and incompressible payloads. The gate enforces the full row matrix,
+  positive throughput/timing fields, consistent iterations, framed-vs-raw
+  overhead sanity, and repeated-payload ratio wins.

@@ -237,6 +237,7 @@ zig build run -- decode-snappy-frame-hex ff060000734e6150705901090000bb1f1c19686
 zig build run -- encode-snappy-frame-file README.md /tmp/vort-readme.sz
 zig build run -- decode-snappy-frame-file-to /tmp/vort-readme.sz /tmp/vort-readme-snappy-frame.out 1048576
 zig build run-snappy-block-cli-probe
+zig build run-snappy-report-gate
 zig build run -- encode-zstd-native-bytes-hex 68656c6c6f auto true true
 zig build run -- encode-zstd-native-file-hex README.md literal_only true true
 zig build run -- encode-zstd-native-file README.md /tmp/vort-readme.zst literal_only true true
