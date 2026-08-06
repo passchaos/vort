@@ -1751,3 +1751,8 @@ architecture blindly.
   type, while the distance-switch smoke walks to the fifth distance block type
   and selects its distance tree. Both frames are covered by Zig tests and the
   Node-backed CLI differential smoke.
+
+- Added fifth-distance-context-tree coverage for Brotli compressed decode. The
+  distance context map can now be proven to select tree index four for copy-length
+  context one (`copy_len = 3`), with both Zig tests and the Node-backed CLI
+  differential smoke decoding the same frame.
