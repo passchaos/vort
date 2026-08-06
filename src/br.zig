@@ -341,40 +341,58 @@ fn readComplexPrefixCode(comptime alphabet_size: usize, reader: *bitstream.BitRe
     var space: i32 = 32768;
     var last_nonzero_length: u4 = 8;
     var previous_repeat_symbol: ?u16 = null;
+    var pending_repeat_count: usize = 0;
+    var pending_repeat_length: u4 = 0;
     var last_symbol: ?u16 = null;
     while (index < alphabet_size and space > 0) {
         const symbol = try code_length_prefix.decode(reader);
         switch (symbol) {
             0 => {
+                try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
                 lengths[index] = 0;
                 index += 1;
-                previous_repeat_symbol = null;
             },
             1...15 => {
+                try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
                 const length: u4 = @intCast(symbol);
                 lengths[index] = length;
                 index += 1;
                 last_nonzero_length = length;
                 space -= @intCast(@as(u32, 32768) >> length);
                 if (space < 0) return error.InvalidHuffmanCode;
-                previous_repeat_symbol = null;
             },
             16 => {
-                if (previous_repeat_symbol == 16) return error.UnsupportedBrotliFeature;
                 const repeat = @as(usize, try reader.readBits(u2, 2)) + 3;
-                try repeatCodeLength(alphabet_size, &lengths, &index, last_nonzero_length, repeat, &space);
+                if (previous_repeat_symbol == 16) {
+                    pending_repeat_count = 4 * (pending_repeat_count - 2) + repeat;
+                } else {
+                    try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                    pending_repeat_count = repeat;
+                    pending_repeat_length = last_nonzero_length;
+                }
                 previous_repeat_symbol = 16;
+                try validatePendingRepeat(alphabet_size, index, pending_repeat_length, pending_repeat_count, space);
+                if (pendingRepeatCompletesSpace(pending_repeat_length, pending_repeat_count, space)) {
+                    try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                }
             },
             17 => {
-                if (previous_repeat_symbol == 17) return error.UnsupportedBrotliFeature;
                 const repeat = @as(usize, try reader.readBits(u3, 3)) + 3;
-                try repeatCodeLength(alphabet_size, &lengths, &index, 0, repeat, &space);
+                if (previous_repeat_symbol == 17) {
+                    pending_repeat_count = 8 * (pending_repeat_count - 2) + repeat;
+                } else {
+                    try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                    pending_repeat_count = repeat;
+                    pending_repeat_length = 0;
+                }
                 previous_repeat_symbol = 17;
+                try validatePendingRepeat(alphabet_size, index, pending_repeat_length, pending_repeat_count, space);
             },
             else => return error.InvalidHuffmanCode,
         }
         last_symbol = symbol;
     }
+    try flushPendingRepeat(alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
     if (space != 0) return error.InvalidHuffmanCode;
     if (last_symbol == null or last_symbol.? == 0 or last_symbol.? == 17) return error.InvalidHuffmanCode;
 
@@ -422,6 +440,36 @@ fn repeatCodeLength(
             if (space.* < 0) return error.InvalidHuffmanCode;
         }
     }
+}
+
+fn flushPendingRepeat(
+    comptime alphabet_size: usize,
+    lengths: *[alphabet_size]u4,
+    index: *usize,
+    previous_repeat_symbol: *?u16,
+    pending_repeat_count: *usize,
+    pending_repeat_length: *u4,
+    space: *i32,
+) Error!void {
+    if (previous_repeat_symbol.* == null) return;
+    try repeatCodeLength(alphabet_size, lengths, index, pending_repeat_length.*, pending_repeat_count.*, space);
+    previous_repeat_symbol.* = null;
+    pending_repeat_count.* = 0;
+    pending_repeat_length.* = 0;
+}
+
+fn validatePendingRepeat(comptime alphabet_size: usize, index: usize, length: u4, count: usize, space: i32) Error!void {
+    if (index > alphabet_size or alphabet_size - index < count) return error.InvalidHuffmanCode;
+    if (length != 0) {
+        const contribution: i32 = @intCast(count * (@as(usize, 32768) >> length));
+        if (contribution > space) return error.InvalidHuffmanCode;
+    }
+}
+
+fn pendingRepeatCompletesSpace(length: u4, count: usize, space: i32) bool {
+    if (length == 0) return false;
+    const contribution: i32 = @intCast(count * (@as(usize, 32768) >> length));
+    return contribution == space;
 }
 
 fn alphabetBits(comptime alphabet_size: usize) u6 {
@@ -765,6 +813,75 @@ test "br complex prefix code supports repeat previous length" {
 
     var reader = bitstream.BitReader.init(encoded.items);
     const prefix = try readPrefixCode(4, &reader);
+    try std.testing.expectEqual(@as(u16, 0), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 1), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 2), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 3), try prefix.decode(&reader));
+}
+
+test "br complex prefix code supports chained zero repeats" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writer.writeBits(std.testing.allocator, 0, 2); // HSKIP = 0, complex code.
+
+    var cl_lengths: [code_length_alphabet_size]u4 = @splat(0);
+    cl_lengths[1] = 1;
+    cl_lengths[17] = 1;
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 1); // symbol 1
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 2
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 3
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 4
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 0
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 5
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 1); // symbol 17
+
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 17);
+    try writer.writeBits(std.testing.allocator, 0, 3); // repeat 3 zeros.
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 17);
+    try writer.writeBits(std.testing.allocator, 1, 3); // chained repeat: 8*(3-2)+4 = 12 zeros.
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 1);
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 1);
+    try writer.writeBits(std.testing.allocator, 0, 1);
+    try writer.writeBits(std.testing.allocator, 1, 1);
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    const prefix = try readPrefixCode(17, &reader);
+    try std.testing.expectEqual(@as(u16, 12), try prefix.decode(&reader));
+    try std.testing.expectEqual(@as(u16, 13), try prefix.decode(&reader));
+}
+
+test "br complex prefix code supports chained previous-length repeats" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writer.writeBits(std.testing.allocator, 0, 2); // HSKIP = 0, complex code.
+
+    var cl_lengths: [code_length_alphabet_size]u4 = @splat(0);
+    cl_lengths[4] = 1;
+    cl_lengths[16] = 1;
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 1
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 2
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 3
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 1); // symbol 4
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 0
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 5
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 17
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 0); // symbol 6
+    try writeCodeLengthCodeLength(std.testing.allocator, &writer, 1); // symbol 16
+
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 4);
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 16);
+    try writer.writeBits(std.testing.allocator, 2, 2); // repeat previous length 5 times.
+    try writeCodeLengthSymbol(std.testing.allocator, &writer, &cl_lengths, 16);
+    try writer.writeBits(std.testing.allocator, 0, 2); // chained repeat: 4*(5-2)+3 = 15 repeats.
+    try writer.writeBits(std.testing.allocator, 0, 4);
+    try writer.writeBits(std.testing.allocator, 8, 4);
+    try writer.writeBits(std.testing.allocator, 4, 4);
+    try writer.writeBits(std.testing.allocator, 12, 4);
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    const prefix = try readPrefixCode(16, &reader);
     try std.testing.expectEqual(@as(u16, 0), try prefix.decode(&reader));
     try std.testing.expectEqual(@as(u16, 1), try prefix.decode(&reader));
     try std.testing.expectEqual(@as(u16, 2), try prefix.decode(&reader));

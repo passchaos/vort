@@ -1586,5 +1586,5 @@ architecture blindly.
   backed by the shared canonical Huffman table. The implementation reads RFC
   7932 simple prefix codes for one to four symbols, rejects duplicate or
   out-of-range symbols, and now supports complex prefix-code headers with the
-  code-length alphabet plus repeat-16/repeat-17 expansion for non-chained repeat
-  runs.
+  code-length alphabet plus repeat-16/repeat-17 expansion, including chained
+  repeat-count modification for consecutive repeat symbols.
