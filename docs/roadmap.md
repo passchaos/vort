@@ -1507,3 +1507,10 @@ architecture blindly.
   `arm_crc32`, but `bestCrc32Dispatch` stays on the portable slice-by-32 path
   until the Zig 0.16 AArch64 inline-asm path is validated across targets, so
   `zig build test` is not blocked by an unvalidated hardware candidate.
+
+- Made the focused PNG scanline reconstruction gate repeat-aware. The benchmark
+  now accepts `--repeat`, records a `repeat` CSV column, and reports the median
+  elapsed row for each filter/bpp case. ReleaseFast
+  `run-png-scanline-bench-gate` now runs with `--repeat 3` and requires
+  `--min-repeat 3`, reducing false throughput failures from transient CPU load
+  while keeping Debug smoke checks fast.

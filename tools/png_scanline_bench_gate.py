@@ -14,6 +14,7 @@ EXPECTED_COLUMNS = {
     "stage",
     "bpp",
     "iterations",
+    "repeat",
     "input_bytes",
     "output_bytes",
     "elapsed_ns",
@@ -63,10 +64,11 @@ def positive_float(row: dict[str, str], key: str) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, default=Path("zig-out/vort-png-scanline-bench.csv"))
+    parser.add_argument("--min-repeat", type=int, default=1)
     parser.add_argument(
         "--enforce-throughput",
         action="store_true",
-        help="enforce ReleaseFast throughput floors for optimized Up/Average/Paeth rows",
+        help="enforce ReleaseFast throughput floors for optimized scanline rows",
     )
     args = parser.parse_args()
 
@@ -104,6 +106,9 @@ def main() -> int:
         if not all(positive_int(row, field) for field in ("iterations", "input_bytes", "output_bytes", "elapsed_ns", "checksum")):
             print(f"png_scanline_bench_gate=bad_int row={row}", file=sys.stderr)
             return 1
+        if not positive_int(row, "repeat") or int(row["repeat"]) < args.min_repeat:
+            print(f"png_scanline_bench_gate=bad_repeat min_repeat={args.min_repeat} row={row}", file=sys.stderr)
+            return 1
         if row["input_bytes"] != row["output_bytes"]:
             print(f"png_scanline_bench_gate=io_mismatch row={row}", file=sys.stderr)
             return 1
@@ -115,7 +120,7 @@ def main() -> int:
             print(f"png_scanline_bench_gate=throughput_regression key={key} floor={floor} row={row}", file=sys.stderr)
             return 1
 
-    print(f"png_scanline_bench_gate=ok stages={len(stages)} bpp={len(bpps)} rows={len(rows)}")
+    print(f"png_scanline_bench_gate=ok stages={len(stages)} bpp={len(bpps)} rows={len(rows)} min_repeat={args.min_repeat}")
     return 0
 
 

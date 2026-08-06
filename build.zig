@@ -448,6 +448,7 @@ pub fn build(b: *std.Build) void {
     });
     const run_png_scanline_bench_csv = b.addRunArtifact(png_scanline_bench_exe);
     run_png_scanline_bench_csv.addArgs(&.{ "--csv", "zig-out/vort-png-scanline-bench.csv" });
+    if (optimize == .ReleaseFast) run_png_scanline_bench_csv.addArgs(&.{ "--repeat", "3" });
     const png_scanline_bench_csv_step = b.step("run-png-scanline-bench-csv", "Write focused PNG scanline reconstruction benchmark CSV");
     png_scanline_bench_csv_step.dependOn(&run_png_scanline_bench_csv.step);
 
@@ -457,7 +458,7 @@ pub fn build(b: *std.Build) void {
         "--csv",
         "zig-out/vort-png-scanline-bench.csv",
     });
-    if (optimize == .ReleaseFast) png_scanline_bench_gate.addArg("--enforce-throughput");
+    if (optimize == .ReleaseFast) png_scanline_bench_gate.addArgs(&.{ "--enforce-throughput", "--min-repeat", "3" });
     png_scanline_bench_gate.step.dependOn(png_scanline_bench_csv_step);
     const png_scanline_bench_gate_step = b.step("run-png-scanline-bench-gate", "Validate focused PNG scanline reconstruction benchmark CSV");
     png_scanline_bench_gate_step.dependOn(&png_scanline_bench_gate.step);

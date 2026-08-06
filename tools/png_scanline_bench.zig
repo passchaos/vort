@@ -30,6 +30,7 @@ const Row = struct {
     stage: []const u8,
     bpp: usize,
     iterations: usize,
+    repeat: usize,
     input_bytes: usize,
     output_bytes: usize,
     elapsed_ns: i128,
@@ -43,9 +44,15 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
 
     var csv_path: ?[]const u8 = null;
+    var repeat: usize = 1;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--csv")) {
             csv_path = args.next() orelse return error.MissingReportPath;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--repeat")) {
+            repeat = try std.fmt.parseInt(usize, args.next() orelse return error.MissingReportPath, 10);
+            if (repeat == 0) return error.InvalidBlockPlan;
             continue;
         }
         return error.UnknownArgument;
@@ -53,25 +60,27 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("stage,bpp,iterations,input_bytes,output_bytes,elapsed_ns,output_mib_per_s,checksum\n");
+    try csv.writer.writeAll("stage,bpp,iterations,repeat,input_bytes,output_bytes,elapsed_ns,output_mib_per_s,checksum\n");
 
     for (bpp_cases) |bpp| {
         for (filters) |filter| {
-            const row = try runCase(init, bpp, filter);
-            try csv.writer.print("{s},{d},{d},{d},{d},{d},{d:.2},{d}\n", .{
+            const row = try runCaseRepeated(init, bpp, filter, repeat);
+            try csv.writer.print("{s},{d},{d},{d},{d},{d},{d},{d:.2},{d}\n", .{
                 row.stage,
                 row.bpp,
                 row.iterations,
+                row.repeat,
                 row.input_bytes,
                 row.output_bytes,
                 row.elapsed_ns,
                 row.output_mib_per_s,
                 row.checksum,
             });
-            std.debug.print("png scanline bench: stage={s} bpp={d} iterations={d} input_bytes={d} output_bytes={d} elapsed_ns={d} output_mib_per_s={d:.2} checksum={d}\n", .{
+            std.debug.print("png scanline bench: stage={s} bpp={d} iterations={d} repeat={d} input_bytes={d} output_bytes={d} elapsed_ns={d} output_mib_per_s={d:.2} checksum={d}\n", .{
                 row.stage,
                 row.bpp,
                 row.iterations,
+                row.repeat,
                 row.input_bytes,
                 row.output_bytes,
                 row.elapsed_ns,
@@ -90,7 +99,19 @@ fn writeArtifact(io: std.Io, path: []const u8, bytes: []const u8) !void {
     try cwd.writeFile(io, .{ .sub_path = path, .data = bytes });
 }
 
-fn runCase(init: std.process.Init, bpp: usize, filter: Filter) !Row {
+fn runCaseRepeated(init: std.process.Init, bpp: usize, filter: Filter, repeat: usize) !Row {
+    const rows = try init.gpa.alloc(Row, repeat);
+    defer init.gpa.free(rows);
+    for (rows) |*row| row.* = try runCase(init, bpp, filter, repeat);
+    std.mem.sort(Row, rows, {}, struct {
+        fn lessThan(_: void, lhs: Row, rhs: Row) bool {
+            return lhs.elapsed_ns < rhs.elapsed_ns;
+        }
+    }.lessThan);
+    return rows[repeat / 2];
+}
+
+fn runCase(init: std.process.Init, bpp: usize, filter: Filter, repeat: usize) !Row {
     const row_len = row_pixels * bpp;
     const total_len = row_len * rows_per_case;
     const image = try init.gpa.alloc(u8, total_len);
@@ -123,6 +144,7 @@ fn runCase(init: std.process.Init, bpp: usize, filter: Filter) !Row {
         .stage = filter.label(),
         .bpp = bpp,
         .iterations = iterations,
+        .repeat = repeat,
         .input_bytes = filtered.len * iterations,
         .output_bytes = output.len * iterations,
         .elapsed_ns = elapsed_ns,
