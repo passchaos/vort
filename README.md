@@ -56,7 +56,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   Vort;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free Brotli `br` stored/uncompressed stream encode/decode bootstrap surface;
-- dependency-free Snappy raw block full decode plus literal-compatible encode with decoded-size preflight and bounded allocation;
+- dependency-free Snappy raw block full decode plus literal-compatible raw/framed encode with decoded-size preflight, bounded allocation, masked CRC-32C validation, and skippable framed chunks;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, frame-index CRC composition, range CRC summaries, caller-owned and batch range decode APIs, and bounded streaming APIs;
 - LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training, match-coverage, patch-codec, native dictionary-patch frame, self-contained dictionary streams, native LDM reference frame, and dictionary-/LDM-aware native best-frame prototypes, long-distance match scanner, LDM-aware block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
 
@@ -232,6 +232,10 @@ zig build run -- encode-snappy-block-hex 68656c6c6f
 zig build run -- decode-snappy-block-hex 051068656c6c6f 5
 zig build run -- encode-snappy-block-file README.md /tmp/vort-readme.snappy-block
 zig build run -- decode-snappy-block-file-to /tmp/vort-readme.snappy-block /tmp/vort-readme-snappy.out 1048576
+zig build run -- encode-snappy-frame-hex 68656c6c6f
+zig build run -- decode-snappy-frame-hex ff060000734e6150705901090000bb1f1c1968656c6c6f 5
+zig build run -- encode-snappy-frame-file README.md /tmp/vort-readme.sz
+zig build run -- decode-snappy-frame-file-to /tmp/vort-readme.sz /tmp/vort-readme-snappy-frame.out 1048576
 zig build run-snappy-block-cli-probe
 zig build run -- encode-zstd-native-bytes-hex 68656c6c6f auto true true
 zig build run -- encode-zstd-native-file-hex README.md literal_only true true

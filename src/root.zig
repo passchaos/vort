@@ -55,6 +55,9 @@ pub const brDecodedStreamSizeLimited = br.decodedStreamSizeLimited;
 pub const snappyEncodeBlockAlloc = snappy.encodeBlockAlloc;
 pub const snappyEncodeBlockAppend = snappy.encodeBlockAppend;
 pub const snappyEncodeBlockInto = snappy.encodeBlockInto;
+pub const snappyEncodeFrameAlloc = snappy.encodeFrameAlloc;
+pub const snappyEncodeFrameAppend = snappy.encodeFrameAppend;
+pub const snappyEncodeFrameInto = snappy.encodeFrameInto;
 pub const snappyDecodeBlockAlloc = snappy.decodeBlockAlloc;
 pub const snappyDecodeBlockAllocLimited = snappy.decodeBlockAllocLimited;
 pub const snappyDecodeBlockAppend = snappy.decodeBlockAppend;
@@ -62,6 +65,13 @@ pub const snappyDecodeBlockAppendLimited = snappy.decodeBlockAppendLimited;
 pub const snappyDecodeBlockInto = snappy.decodeBlockInto;
 pub const snappyDecodedBlockSize = snappy.decodedBlockSize;
 pub const snappyDecodedBlockSizeLimited = snappy.decodedBlockSizeLimited;
+pub const snappyDecodeFrameAlloc = snappy.decodeFrameAlloc;
+pub const snappyDecodeFrameAllocLimited = snappy.decodeFrameAllocLimited;
+pub const snappyDecodeFrameAppend = snappy.decodeFrameAppend;
+pub const snappyDecodeFrameAppendLimited = snappy.decodeFrameAppendLimited;
+pub const snappyDecodeFrameInto = snappy.decodeFrameInto;
+pub const snappyDecodedFrameSize = snappy.decodedFrameSize;
+pub const snappyDecodedFrameSizeLimited = snappy.decodedFrameSizeLimited;
 
 pub const lz4EncodeFrameAlloc = lz4.encodeFrameAlloc;
 pub const lz4EncodeFrameWithLevelAlloc = lz4.encodeFrameWithLevelAlloc;
@@ -1249,6 +1259,9 @@ test "root exports lz4 and zstd codec helpers" {
     _ = snappyEncodeBlockAlloc;
     _ = snappyEncodeBlockAppend;
     _ = snappyEncodeBlockInto;
+    _ = snappyEncodeFrameAlloc;
+    _ = snappyEncodeFrameAppend;
+    _ = snappyEncodeFrameInto;
     _ = snappyDecodeBlockAlloc;
     _ = snappyDecodeBlockAllocLimited;
     _ = snappyDecodeBlockAppend;
@@ -1256,6 +1269,13 @@ test "root exports lz4 and zstd codec helpers" {
     _ = snappyDecodeBlockInto;
     _ = snappyDecodedBlockSize;
     _ = snappyDecodedBlockSizeLimited;
+    _ = snappyDecodeFrameAlloc;
+    _ = snappyDecodeFrameAllocLimited;
+    _ = snappyDecodeFrameAppend;
+    _ = snappyDecodeFrameAppendLimited;
+    _ = snappyDecodeFrameInto;
+    _ = snappyDecodedFrameSize;
+    _ = snappyDecodedFrameSizeLimited;
 
     _ = lz4EncodeFrameAlloc;
     _ = lz4EncodeFrameWithLevelAlloc;
@@ -1845,6 +1865,24 @@ test "root snappy raw block helpers round trip" {
     defer appended.deinit(std.testing.allocator);
     try appended.appendSlice(std.testing.allocator, "prefix:");
     try std.testing.expectEqual(@as(usize, 5), try snappyDecodeBlockAppend(std.testing.allocator, &appended, encoded));
+    try std.testing.expectEqualSlices(u8, "prefix:hello", appended.items);
+}
+
+test "root snappy framed stream helpers round trip" {
+    const encoded = try snappyEncodeFrameAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(encoded);
+
+    try std.testing.expectEqual(@as(usize, 5), try snappyDecodedFrameSize(encoded));
+    try std.testing.expectError(error.OutputLimitExceeded, snappyDecodedFrameSizeLimited(encoded, 4));
+
+    var decoded: [5]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, decoded.len), try snappyDecodeFrameInto(encoded, &decoded));
+    try std.testing.expectEqualSlices(u8, "hello", &decoded);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(@as(usize, 5), try snappyDecodeFrameAppend(std.testing.allocator, &appended, encoded));
     try std.testing.expectEqualSlices(u8, "prefix:hello", appended.items);
 }
 

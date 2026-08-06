@@ -20,6 +20,7 @@ pub const Error = error{
     UnsupportedDeflateFeature,
     UnsupportedZstdFeature,
     UnsupportedBrotliFeature,
+    UnsupportedSnappyFeature,
     InvalidMatch,
     InvalidDynamicBlockHeader,
     InvalidBlockPlan,

@@ -797,7 +797,7 @@ pub fn build(b: *std.Build) void {
 
     const snappy_block_cli_probe = b.addSystemCommand(&.{ "python3", "tools/snappy_block_cli_probe.py" });
     snappy_block_cli_probe.addArtifactArg(cli_exe);
-    const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks");
+    const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks and framed streams");
     snappy_block_cli_probe_step.dependOn(&snappy_block_cli_probe.step);
 
     const zstd_native_cli_diff = b.addSystemCommand(&.{ "python3", "tools/zstd_native_cli_diff.py" });

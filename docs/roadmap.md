@@ -1535,3 +1535,11 @@ architecture blindly.
   helpers, and a literal-compatible encoder. The CLI and
   `run-snappy-block-cli-probe` cover hex and file workflows without depending on
   a system Snappy library. Framed Snappy streams remain a follow-up format slice.
+
+- Extended the dependency-free Snappy module to framed streams. The frame path
+  writes the stream identifier plus checked uncompressed chunks, decodes
+  compressed and uncompressed chunks, validates masked CRC-32C, skips skippable
+  chunks, and exposes size preflight, output limits, caller-owned output, and
+  allocator-returning helpers through root/CLI APIs. The existing
+  `run-snappy-block-cli-probe` gate now covers both raw-block and framed-stream
+  hex/file workflows plus malformed checksum handling.
