@@ -1643,3 +1643,10 @@ architecture blindly.
   applies the RFC 7932 `NPOSTFIX` / `NDIRECT` formula, updates the recent-distance
   ring for regular matches, and covers a postfix-bearing regular-distance frame
   in both Zig tests and the Node-backed CLI differential smoke.
+
+- Extended the minimal Brotli compressed header parser with trivial context-map
+  support. Literal and distance tree groups may now declare multiple trees when
+  the encoded context maps resolve entirely to tree 0; the parser consumes the
+  unused prefix trees while the current decoder continues using the first tree.
+  Zig tests and the Node-backed CLI differential smoke cover an RLE-all-zero
+  context-map frame.

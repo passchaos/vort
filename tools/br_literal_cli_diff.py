@@ -49,6 +49,18 @@ def write_simple_single_symbol_prefix(bits: list[int], alphabet_size: int, symbo
     write_bits(bits, symbol, alphabet_bits)
 
 
+def write_zero_context_map_rle(bits: list[int], context_map_size: int, ntrees: int, rlemax: int) -> None:
+    if ntrees < 2 or rlemax <= 0 or context_map_size < (1 << rlemax):
+        raise ValueError((context_map_size, ntrees, rlemax))
+    if context_map_size >= (1 << (rlemax + 1)):
+        raise ValueError((context_map_size, ntrees, rlemax))
+    write_bits(bits, 1, 1)  # use RLE for zeros
+    write_bits(bits, rlemax - 1, 4)
+    write_simple_single_symbol_prefix(bits, ntrees + rlemax, rlemax)
+    write_bits(bits, context_map_size - (1 << rlemax), rlemax)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
 def write_literal_hello_header(bits: list[int]) -> None:
     write_block_type_count(bits, 1)
     write_block_type_count(bits, 1)
@@ -66,6 +78,31 @@ def write_literal_hello_header(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # tree-select
 
     write_simple_single_symbol_prefix(bits, 704, 40)
+    write_simple_single_symbol_prefix(bits, 64, 0)
+
+
+def write_literal_hello_trivial_context_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 0, 4)  # NDIRECT
+    write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 2)
+    write_zero_context_map_rle(bits, 64, 2, 6)
+    write_block_type_count(bits, 2)
+    write_zero_context_map_rle(bits, 4, 2, 2)
+
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 3, 2)  # NSYM = 4
+    for symbol in b"helo":
+        write_bits(bits, symbol, 8)
+    write_bits(bits, 0, 1)  # tree-select
+    write_simple_single_symbol_prefix(bits, 256, 0)
+
+    write_simple_single_symbol_prefix(bits, 704, 40)
+
+    write_simple_single_symbol_prefix(bits, 64, 0)
     write_simple_single_symbol_prefix(bits, 64, 0)
 
 
@@ -168,6 +205,22 @@ def literal_only_hello_frame(final: bool) -> bytes:
         # Final empty meta-block.
         write_bits(bits, 1, 1)
         write_bits(bits, 1, 1)
+    return bits_to_bytes(bits)
+
+
+def trivial_context_hello_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 4, 16)  # MLEN - 1
+    write_literal_hello_trivial_context_header(bits)
+    write_bits(bits, 2, 2)  # h
+    write_bits(bits, 0, 2)  # e
+    write_bits(bits, 1, 2)  # l
+    write_bits(bits, 1, 2)  # l
+    write_bits(bits, 3, 2)  # o
     return bits_to_bytes(bits)
 
 
@@ -275,6 +328,7 @@ def main() -> int:
     cases = {
         "final": (literal_only_hello_frame(True), b"hello"),
         "nonfinal": (literal_only_hello_frame(False), b"hello"),
+        "trivial-context": (trivial_context_hello_frame(), b"hello"),
         "copy": (direct_copy_a_frame(), b"aaaaa"),
         "last-distance": (last_distance_a_frame(), b"aaaaa"),
         "short-distance": (short_distance_a_frame(), b"aaaaa"),

@@ -64,6 +64,7 @@ const MinimalCompressedHeader = struct {
 };
 
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
+const max_context_map_alphabet_size = 256 + 16;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 
 const InsertCopyLengths = struct {
@@ -318,18 +319,61 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
     const literal_context_mode = try reader.readBits(u2, 2);
 
     const ntrees_l = try readBlockTypeCount(reader);
-    if (ntrees_l != 1) return error.UnsupportedBrotliFeature;
+    try readZeroContextMap(reader, @as(usize, nbltypes_l) * 64, ntrees_l);
     const ntrees_d = try readBlockTypeCount(reader);
-    if (ntrees_d != 1) return error.UnsupportedBrotliFeature;
+    try readZeroContextMap(reader, @as(usize, nbltypes_d) * 4, ntrees_d);
+
+    const literal = try readPrefixCode(256, reader);
+    var literal_tree_index: u16 = 1;
+    while (literal_tree_index < ntrees_l) : (literal_tree_index += 1) {
+        _ = try readPrefixCode(256, reader);
+    }
+
+    const insert_copy = try readPrefixCode(704, reader);
+
+    const distance = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
+    var distance_tree_index: u16 = 1;
+    while (distance_tree_index < ntrees_d) : (distance_tree_index += 1) {
+        _ = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
+    }
 
     return .{
         .npostfix = npostfix,
         .ndirect = ndirect,
         .literal_context_mode = literal_context_mode,
-        .literal = try readPrefixCode(256, reader),
-        .insert_copy = try readPrefixCode(704, reader),
-        .distance = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader),
+        .literal = literal,
+        .insert_copy = insert_copy,
+        .distance = distance,
     };
+}
+
+fn readZeroContextMap(reader: *bitstream.BitReader, context_map_size: usize, ntrees: u16) Error!void {
+    if (ntrees == 0) return error.CorruptFrame;
+    if (ntrees == 1) return;
+
+    const use_rle_for_zeros = try reader.readBits(u1, 1);
+    const max_run_length_prefix: u5 = if (use_rle_for_zeros == 0) 0 else @as(u5, try reader.readBits(u4, 4)) + 1;
+    const alphabet_size = @as(usize, ntrees) + max_run_length_prefix;
+    const prefix = try readPrefixCodeRuntime(max_context_map_alphabet_size, alphabet_size, reader);
+
+    var written: usize = 0;
+    while (written < context_map_size) {
+        const code = try prefix.decode(reader);
+        if (code == 0) {
+            written += 1;
+            continue;
+        }
+        if (code <= max_run_length_prefix) {
+            const run_extra = try reader.readBits(usize, @intCast(code));
+            const run_len = (@as(usize, 1) << @intCast(code)) + run_extra;
+            if (run_len > context_map_size - written) return error.CorruptFrame;
+            written += run_len;
+            continue;
+        }
+        return error.UnsupportedBrotliFeature;
+    }
+
+    _ = try reader.readBits(u1, 1); // IMTF; an all-zero map remains all zero.
 }
 
 fn readInsertCopyLengths(symbol: u16, reader: *bitstream.BitReader) Error!InsertCopyLengths {
@@ -955,6 +999,28 @@ test "br minimal compressed stream decodes literal-only final metablock" {
     try std.testing.expectEqualSlices(u8, "hello", decoded);
 }
 
+test "br minimal compressed stream decodes trivial context maps" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 4, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForHelloWithContextMaps(std.testing.allocator, &writer);
+    try writer.writeBits(std.testing.allocator, 2, 2); // h
+    try writer.writeBits(std.testing.allocator, 0, 2); // e
+    try writer.writeBits(std.testing.allocator, 1, 2); // l
+    try writer.writeBits(std.testing.allocator, 1, 2); // l
+    try writer.writeBits(std.testing.allocator, 3, 2); // o
+
+    try std.testing.expectEqual(@as(usize, 5), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "hello", decoded);
+}
+
 test "br minimal compressed stream can precede stored metablocks" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -1177,18 +1243,20 @@ test "br minimal compressed header parser reads single-tree shape" {
     try std.testing.expectEqual(@as(u16, 0), try header.distance.decode(&reader));
 }
 
-test "br minimal compressed header parser rejects unsupported maps and accepts ndirect boundary" {
-    var multi_literal_tree: std.ArrayList(u8) = .empty;
-    defer multi_literal_tree.deinit(std.testing.allocator);
-    var multi_writer = BitWriter{ .out = &multi_literal_tree };
+test "br minimal compressed header parser rejects nonzero context maps and accepts ndirect boundary" {
+    var nonzero_context_map: std.ArrayList(u8) = .empty;
+    defer nonzero_context_map.deinit(std.testing.allocator);
+    var multi_writer = BitWriter{ .out = &nonzero_context_map };
     try writeBlockTypeCount(std.testing.allocator, &multi_writer, 1);
     try writeBlockTypeCount(std.testing.allocator, &multi_writer, 1);
     try writeBlockTypeCount(std.testing.allocator, &multi_writer, 1);
     try multi_writer.writeBits(std.testing.allocator, 0, 2);
     try multi_writer.writeBits(std.testing.allocator, 0, 4);
     try multi_writer.writeBits(std.testing.allocator, 0, 2);
-    try writeBlockTypeCount(std.testing.allocator, &multi_writer, 2); // NTREESL requires context map.
-    var multi_reader = bitstream.BitReader.init(multi_literal_tree.items);
+    try writeBlockTypeCount(std.testing.allocator, &multi_writer, 2); // NTREESL
+    try multi_writer.writeBits(std.testing.allocator, 0, 1); // RLEMAX = 0
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &multi_writer, 2, 1);
+    var multi_reader = bitstream.BitReader.init(nonzero_context_map.items);
     try std.testing.expectError(error.UnsupportedBrotliFeature, readMinimalCompressedHeader(&multi_reader));
 
     var bad_ndirect: std.ArrayList(u8) = .empty;
@@ -1207,6 +1275,32 @@ test "br minimal compressed header parser rejects unsupported maps and accepts n
     try writeSimpleSingleSymbolPrefix(std.testing.allocator, &bad_writer, 520, 0);
     var valid_reader = bitstream.BitReader.init(bad_ndirect.items);
     try std.testing.expectEqual(@as(u16, 120), (try readMinimalCompressedHeader(&valid_reader)).ndirect);
+}
+
+test "br zero context map reader accepts plain and RLE all-zero maps" {
+    var plain: std.ArrayList(u8) = .empty;
+    defer plain.deinit(std.testing.allocator);
+    var plain_writer = BitWriter{ .out = &plain };
+    try plain_writer.writeBits(std.testing.allocator, 0, 1); // RLEMAX = 0
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &plain_writer, 2, 0);
+    try plain_writer.writeBits(std.testing.allocator, 0, 1); // IMTF = false
+    var plain_reader = bitstream.BitReader.init(plain.items);
+    try readZeroContextMap(&plain_reader, 64, 2);
+
+    var rle: std.ArrayList(u8) = .empty;
+    defer rle.deinit(std.testing.allocator);
+    var rle_writer = BitWriter{ .out = &rle };
+    try writeZeroContextMapRle(std.testing.allocator, &rle_writer, 64, 2, 6);
+    var rle_reader = bitstream.BitReader.init(rle.items);
+    try readZeroContextMap(&rle_reader, 64, 2);
+
+    var nonzero: std.ArrayList(u8) = .empty;
+    defer nonzero.deinit(std.testing.allocator);
+    var nonzero_writer = BitWriter{ .out = &nonzero };
+    try nonzero_writer.writeBits(std.testing.allocator, 0, 1);
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &nonzero_writer, 2, 1);
+    var nonzero_reader = bitstream.BitReader.init(nonzero.items);
+    try std.testing.expectError(error.UnsupportedBrotliFeature, readZeroContextMap(&nonzero_reader, 64, 2));
 }
 
 test "br insert-copy length decoder covers basic and extra-bit ranges" {
@@ -1553,6 +1647,33 @@ fn writeMinimalCompressedHeaderForHello(allocator: std.mem.Allocator, writer: *B
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForHelloWithContextMaps(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESL
+    try writeZeroContextMapRle(allocator, writer, 64, 2, 6);
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESD
+    try writeZeroContextMapRle(allocator, writer, 4, 2, 2);
+
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 3, 2); // NSYM = 4
+    try writer.writeBits(allocator, 'h', alphabetBits(256));
+    try writer.writeBits(allocator, 'e', alphabetBits(256));
+    try writer.writeBits(allocator, 'l', alphabetBits(256));
+    try writer.writeBits(allocator, 'o', alphabetBits(256));
+    try writer.writeBits(allocator, 0, 1); // tree-select
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 0); // unused literal tree
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 40);
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0); // unused distance tree
+}
+
 fn writeMinimalCompressedHeaderForCopy(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -1646,6 +1767,23 @@ fn writeBlockTypeCount(allocator: std.mem.Allocator, writer: *BitWriter, value: 
         }
     }
     return error.InvalidBlockPlan;
+}
+
+fn writeZeroContextMapRle(
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    context_map_size: usize,
+    comptime ntrees: u16,
+    comptime rlemax: u4,
+) Error!void {
+    if (ntrees < 2 or rlemax == 0 or rlemax > 16) return error.InvalidBlockPlan;
+    if (context_map_size < (@as(usize, 1) << rlemax)) return error.InvalidBlockPlan;
+    if (context_map_size >= (@as(usize, 1) << @intCast(@as(usize, rlemax) + 1))) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, 1, 1); // use RLE for zeros
+    try writer.writeBits(allocator, rlemax - 1, 4);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, @as(usize, ntrees) + rlemax, rlemax);
+    try writer.writeBits(allocator, context_map_size - (@as(usize, 1) << rlemax), @intCast(rlemax));
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
 }
 
 fn writeSimpleSingleSymbolPrefix(
