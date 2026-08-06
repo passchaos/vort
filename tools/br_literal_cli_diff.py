@@ -85,6 +85,18 @@ def write_literal_context_map_for_a(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # IMTF = false
 
 
+def write_literal_context_map_for_a_imtf(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 1, 2)  # simple context-map prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 0, 1)
+    write_bits(bits, 1, 1)
+    target = ord("a") & 0x3F
+    for context in range(64):
+        write_bits(bits, 1 if context in (target, target + 1) else 0, 1)
+    write_bits(bits, 1, 1)  # IMTF = true
+
+
 def write_literal_block_switch_context_map(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # RLEMAX = 0
     write_bits(bits, 1, 2)  # simple context-map prefix
@@ -259,6 +271,23 @@ def write_literal_context_aba_header(bits: list[int]) -> None:
     write_bits(bits, 0, 2)  # literal context mode = LSB6
     write_block_type_count(bits, 2)
     write_literal_context_map_for_a(bits)
+    write_block_type_count(bits, 1)
+
+    write_simple_single_symbol_prefix(bits, 256, ord("a"))
+    write_simple_single_symbol_prefix(bits, 256, ord("b"))
+    write_simple_single_symbol_prefix(bits, 704, 24)
+    write_simple_single_symbol_prefix(bits, 64, 0)
+
+
+def write_literal_context_imtf_aba_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 0, 4)  # NDIRECT
+    write_bits(bits, 0, 2)  # literal context mode = LSB6
+    write_block_type_count(bits, 2)
+    write_literal_context_map_for_a_imtf(bits)
     write_block_type_count(bits, 1)
 
     write_simple_single_symbol_prefix(bits, 256, ord("a"))
@@ -480,6 +509,17 @@ def literal_context_aba_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def literal_context_imtf_aba_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 2, 16)  # MLEN - 1
+    write_literal_context_imtf_aba_header(bits)
+    return bits_to_bytes(bits)
+
+
 def command_switch_aaab_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -559,6 +599,7 @@ def main() -> int:
         "regular-distance": (regular_distance_ab_frame(), b"ababa"),
         "distance-context": (distance_context_ab_frame(), b"ababa"),
         "literal-context": (literal_context_aba_frame(), b"aba"),
+        "literal-context-imtf": (literal_context_imtf_aba_frame(), b"aba"),
         "command-switch": (command_switch_aaab_frame(), b"aaab"),
         "literal-block-switch": (literal_block_switch_ab_frame(), b"ab"),
         "distance-block-switch": (distance_block_switch_abcabab_frame(), b"abcabab"),

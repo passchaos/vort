@@ -528,7 +528,25 @@ fn readContextMap(reader: *bitstream.BitReader, context_map: []u8, ntrees: u16) 
     }
 
     const imtf = try reader.readBits(u1, 1);
-    if (imtf != 0) return error.UnsupportedBrotliFeature;
+    if (imtf != 0) applyInverseMoveToFront(context_map);
+}
+
+fn applyInverseMoveToFront(context_map: []u8) void {
+    var mtf: [256]u8 = undefined;
+    for (&mtf, 0..) |*value, i| value.* = @intCast(i);
+
+    for (context_map) |*entry| {
+        const index = entry.*;
+        const value = mtf[index];
+        if (index != 0) {
+            var i: usize = index;
+            while (i > 0) : (i -= 1) {
+                mtf[i] = mtf[i - 1];
+            }
+            mtf[0] = value;
+        }
+        entry.* = value;
+    }
 }
 
 fn readInsertCopyLengths(symbol: u16, reader: *bitstream.BitReader) Error!InsertCopyLengths {
@@ -1437,6 +1455,23 @@ test "br minimal compressed stream selects literal context tree" {
     try std.testing.expectEqualSlices(u8, "aba", decoded);
 }
 
+test "br minimal compressed stream selects literal context tree through IMTF map" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 2, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForLiteralContextImtf(std.testing.allocator, &writer);
+
+    try std.testing.expectEqual(@as(usize, 3), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "aba", decoded);
+}
+
 test "br minimal compressed stream switches command block tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -1592,16 +1627,25 @@ test "br minimal compressed header parser accepts ndirect boundary" {
     try std.testing.expectEqual(@as(u16, 120), (try readMinimalCompressedHeader(&valid_reader)).ndirect);
 }
 
-test "br context map reader rejects inverse move-to-front maps" {
+test "br context map reader applies inverse move-to-front maps" {
     var imtf_context_map: std.ArrayList(u8) = .empty;
     defer imtf_context_map.deinit(std.testing.allocator);
     var multi_writer = BitWriter{ .out = &imtf_context_map };
     try multi_writer.writeBits(std.testing.allocator, 0, 1); // RLEMAX = 0
-    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &multi_writer, 2, 0);
-    try multi_writer.writeBits(std.testing.allocator, 1, 1); // IMTF is still unsupported.
+    try multi_writer.writeBits(std.testing.allocator, 1, 2); // simple context-map prefix
+    try multi_writer.writeBits(std.testing.allocator, 2, 2); // NSYM = 3
+    try multi_writer.writeBits(std.testing.allocator, 0, alphabetBits(3));
+    try multi_writer.writeBits(std.testing.allocator, 1, alphabetBits(3));
+    try multi_writer.writeBits(std.testing.allocator, 2, alphabetBits(3));
+    try multi_writer.writeBits(std.testing.allocator, 1, 2); // raw MTF index 1
+    try multi_writer.writeBits(std.testing.allocator, 1, 2); // raw MTF index 1
+    try multi_writer.writeBits(std.testing.allocator, 0, 1); // raw MTF index 0
+    try multi_writer.writeBits(std.testing.allocator, 3, 2); // raw MTF index 2
+    try multi_writer.writeBits(std.testing.allocator, 1, 1); // IMTF = true
     var multi_reader = bitstream.BitReader.init(imtf_context_map.items);
-    var context_map: [2]u8 = @splat(0);
-    try std.testing.expectError(error.UnsupportedBrotliFeature, readContextMap(&multi_reader, &context_map, 2));
+    var context_map: [4]u8 = @splat(0);
+    try readContextMap(&multi_reader, &context_map, 3);
+    try std.testing.expectEqualSlices(u8, &.{ 1, 0, 0, 2 }, &context_map);
 }
 
 test "br zero context map reader accepts plain and RLE all-zero maps" {
@@ -2150,6 +2194,24 @@ fn writeMinimalCompressedHeaderForLiteralContext(allocator: std.mem.Allocator, w
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForLiteralContextImtf(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // literal context mode = LSB6
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESL
+    try writeLiteralContextMapForAImtf(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'a');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'b');
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 24);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
 fn writeMinimalCompressedHeaderForCommandSwitch(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 2); // NBLTYPESI
@@ -2269,6 +2331,20 @@ fn writeLiteralContextMapForA(allocator: std.mem.Allocator, writer: *BitWriter) 
         try writer.writeBits(allocator, if (i == ('a' & 0x3f)) 1 else 0, 1);
     }
     try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeLiteralContextMapForAImtf(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 0, alphabetBits(2));
+    try writer.writeBits(allocator, 1, alphabetBits(2));
+    var i: usize = 0;
+    while (i < 64) : (i += 1) {
+        const raw_index: u1 = if (i == ('a' & 0x3f) or i == ('a' & 0x3f) + 1) 1 else 0;
+        try writer.writeBits(allocator, raw_index, 1);
+    }
+    try writer.writeBits(allocator, 1, 1); // IMTF = true
 }
 
 fn writeLiteralBlockSwitchContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {

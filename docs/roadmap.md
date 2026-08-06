@@ -1691,3 +1691,9 @@ architecture blindly.
   when an explicit distance symbol is decoded. Zig tests and the Node-backed CLI
   differential smoke cover a frame whose second copy requires the switched
   distance tree.
+
+- Extended the Brotli context-map reader with inverse move-to-front (`IMTF`)
+  decoding. The same pure Zig parser now handles non-trivial IMTF maps instead
+  of rejecting them, and a compressed literal-context frame proves the restored
+  tree index is used by both decoded-size preflight and output decode. The
+  Node-backed Brotli CLI differential smoke covers the same wire frame.
