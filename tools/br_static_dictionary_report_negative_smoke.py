@@ -13,19 +13,22 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SMOKE = ROOT / "tools" / "br_static_dictionary_report_smoke.py"
+REQUIRED = ROOT / "tools" / "br_static_dictionary_required_coverage.json"
 
-BASE_ENTRIES = [
-    {"transform": 0, "copy_len": 5, "word_index": 43, "word_bytes": 5, "word": "words"},
-    {"transform": 0, "copy_len": 10, "word_index": 205, "word_bytes": 10, "word": "dictionary"},
-    {"transform": 0, "copy_len": 10, "word_index": 240, "word_bytes": 10, "word": "number of "},
-    {"transform": 0, "copy_len": 11, "word_index": 452, "word_bytes": 11, "word": "one of the "},
-    {"transform": 0, "copy_len": 16, "word_index": 52, "word_bytes": 16, "word": "large number of "},
-    {"transform": 1, "copy_len": 10, "word_index": 205, "word_bytes": 11, "word": "dictionary "},
-    {"transform": 6, "copy_len": 7, "word_index": 170, "word_bytes": 8, "word": " release"},
-    {"transform": 9, "copy_len": 7, "word_index": 37, "word_bytes": 7, "word": "History"},
-    {"transform": 12, "copy_len": 5, "word_index": 44, "word_bytes": 4, "word": "game"},
-    {"transform": 12, "copy_len": 7, "word_index": 1767, "word_bytes": 6, "word": "one an"},
-]
+
+def load_required_entries() -> list[dict[str, Any]]:
+    payload = json.loads(REQUIRED.read_text())
+    entries = payload["entries"]
+    return [
+        {
+            "transform": entry["transform"],
+            "copy_len": entry["copy_len"],
+            "word_index": entry["word_index"],
+            "word_bytes": len(entry["word"].encode()),
+            "word": entry["word"],
+        }
+        for entry in entries
+    ]
 
 
 def report(entries: list[dict[str, Any]]) -> dict[str, Any]:
@@ -90,17 +93,18 @@ def main() -> int:
     parser.add_argument("--summary", type=Path)
     args = parser.parse_args()
 
+    base_entries = load_required_entries()
     rows = []
-    rows.append(case("missing_required_tuple", report(BASE_ENTRIES[:-1]), "missing required coverage rows"))
+    rows.append(case("missing_required_tuple", report(base_entries[:-1]), "missing required coverage rows"))
 
-    duplicate_entries = BASE_ENTRIES + [dict(BASE_ENTRIES[0])]
+    duplicate_entries = base_entries + [dict(base_entries[0])]
     rows.append(case("duplicate_key", report(duplicate_entries), "duplicate key"))
 
-    bad_word_bytes = [dict(entry) for entry in BASE_ENTRIES]
+    bad_word_bytes = [dict(entry) for entry in base_entries]
     bad_word_bytes[0]["word_bytes"] = 999
     rows.append(case("word_bytes_mismatch", report(bad_word_bytes), "word_bytes mismatch"))
 
-    bad_entry_count = report(BASE_ENTRIES)
+    bad_entry_count = report(base_entries)
     bad_entry_count["entry_count"] = 999
     rows.append(case("entry_count_mismatch", bad_entry_count, "entry_count does not match"))
 

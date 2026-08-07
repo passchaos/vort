@@ -777,6 +777,36 @@ Example:
 }
 ```
 
+## `vort.br_static_dictionary_required_coverage`
+
+Consumed by:
+
+```sh
+zig build run-br-static-dictionary-report-smoke
+python3 tools/br_static_dictionary_report_smoke.py --required tools/br_static_dictionary_required_coverage.json
+```
+
+This schema stores the representative Brotli static-dictionary tuples that the
+coverage smoke must find in the generated report. Keeping these tuples in data
+lets coverage requirements grow without editing the smoke script.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_required_coverage",
+  "schema_version": 1,
+  "entries": [
+    {
+      "transform": 0,
+      "copy_len": 16,
+      "word_index": 52,
+      "word": "large number of "
+    }
+  ]
+}
+```
+
 ## `vort.br_static_dictionary_report`
 
 Produced by:

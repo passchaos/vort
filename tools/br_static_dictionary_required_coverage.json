@@ -1,0 +1,16 @@
+{
+  "schema": "vort.br_static_dictionary_required_coverage",
+  "schema_version": 1,
+  "entries": [
+    { "transform": 0, "copy_len": 5, "word_index": 43, "word": "words" },
+    { "transform": 0, "copy_len": 10, "word_index": 205, "word": "dictionary" },
+    { "transform": 0, "copy_len": 10, "word_index": 240, "word": "number of " },
+    { "transform": 0, "copy_len": 11, "word_index": 452, "word": "one of the " },
+    { "transform": 0, "copy_len": 16, "word_index": 52, "word": "large number of " },
+    { "transform": 1, "copy_len": 10, "word_index": 205, "word": "dictionary " },
+    { "transform": 6, "copy_len": 7, "word_index": 170, "word": " release" },
+    { "transform": 9, "copy_len": 7, "word_index": 37, "word": "History" },
+    { "transform": 12, "copy_len": 5, "word_index": 44, "word": "game" },
+    { "transform": 12, "copy_len": 7, "word_index": 1767, "word": "one an" }
+  ]
+}

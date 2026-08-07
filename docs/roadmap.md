@@ -1909,3 +1909,8 @@ architecture blindly.
 - Strengthened the Brotli static-dictionary report smoke with the 16-byte
   `large number of ` phrase tuple so the longer retained phrase bucket cannot
   silently regress.
+
+- Moved the Brotli static-dictionary report smoke's required coverage tuples into
+  `tools/br_static_dictionary_required_coverage.json`, documented the new schema,
+  and made both positive and negative smoke tests read the same config so future
+  coverage growth no longer requires editing tuple lists in multiple scripts.

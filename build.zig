@@ -830,6 +830,8 @@ pub fn build(b: *std.Build) void {
         "zig-out/vort-br-static-dictionary-report.json",
         "--markdown",
         "zig-out/vort-br-static-dictionary-report.md",
+        "--required",
+        "tools/br_static_dictionary_required_coverage.json",
     });
     br_static_dictionary_report_smoke.step.dependOn(br_static_dictionary_report_dashboard_step);
     const br_static_dictionary_report_smoke_step = b.step("run-br-static-dictionary-report-smoke", "Validate Brotli static dictionary coverage artifacts");
