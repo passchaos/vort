@@ -3187,6 +3187,8 @@ fn checkChunkedFrameLibraryApis(allocator: std.mem.Allocator, payload: []const u
     const reusable_exact_written = try decoder.decodeChunksIntoSliceExactSize(&chunks, join, into, payload.len);
     try expect(reusable_exact_written == payload.len);
     try expectEqualSlices(payload, into[0..reusable_exact_written]);
+    try expectError(error.OutputTooSmall, decoder.decodeChunksIntoSliceExactSize(&chunks, join, into[0 .. into.len - 1], payload.len));
+    if (payload.len != 0) try expectError(error.SizeMismatch, decoder.decodeChunksIntoSliceExactSize(&chunks, join, into, payload.len - 1));
 
     const reusable_into = try allocator.alloc(u8, payload.len);
     defer allocator.free(reusable_into);
