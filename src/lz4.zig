@@ -29,7 +29,7 @@ pub const native_dictionary_window_len: usize = max_block_history_len;
 const good_match_len = 64;
 const lazy_extra_gain = 1;
 
-pub const LibFrameOptions = struct {
+pub const FrameOptions = struct {
     include_content_size: bool = true,
     content_checksum: bool = true,
     block_checksum: bool = false,
@@ -290,7 +290,7 @@ pub fn encodeFrameWithLevelAlloc(allocator: std.mem.Allocator, input: []const u8
     return try encodeFrameWithLevelAndOptionsAlloc(allocator, input, level, .{});
 }
 
-pub fn encodeFrameWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: LibFrameOptions) Error![]u8 {
+pub fn encodeFrameWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: FrameOptions) Error![]u8 {
     return try encodeFrameWithLevelAndOptionsAlloc(allocator, input, default_compression_level, options);
 }
 
@@ -298,12 +298,12 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
     level: c_int,
-    options: LibFrameOptions,
+    options: FrameOptions,
 ) Error![]u8 {
     return try encodePureFrameWithOptionsAlloc(allocator, input, nativeFrameOptionsForLevel(level, options));
 }
 
-fn nativeFrameOptionsForLevel(level: c_int, options: LibFrameOptions) NativeFrameOptions {
+fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) NativeFrameOptions {
     return .{
         .include_content_size = options.include_content_size,
         .content_checksum = options.content_checksum,
@@ -5457,7 +5457,7 @@ test "lz4 pure Zig facade generated corpus shapes" {
         ("a" ** 100 ++ "b" ** 100 ++ "c" ** 100) ** 20,
     };
     const levels = [_]c_int{ 0, 4, default_compression_level };
-    const option_sets = [_]LibFrameOptions{
+    const option_sets = [_]FrameOptions{
         .{},
         .{ .include_content_size = false },
         .{ .content_checksum = false, .block_checksum = true, .block_size_id = .max64kb },

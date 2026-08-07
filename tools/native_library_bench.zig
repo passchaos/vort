@@ -335,7 +335,7 @@ fn lz4IncrementalFallbackRow(io: std.Io, allocator: std.mem.Allocator, case: Cas
 }
 
 fn lz4LibDecodeRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
-    const options: vort.Lz4LibFrameOptions = .{
+    const options: vort.Lz4FrameOptions = .{
         .include_content_size = true,
         .content_checksum = true,
         .block_checksum = false,
@@ -381,7 +381,7 @@ fn zstdOneShotRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iteratio
 }
 
 fn zstdLibDecodeRow(io: std.Io, allocator: std.mem.Allocator, case: Case, iterations: usize) !Row {
-    const options: vort.ZstdLibFrameOptions = .{ .include_content_size = true, .content_checksum = false };
+    const options: vort.ZstdFrameOptions = .{ .include_content_size = true, .content_checksum = false };
     const encoded = try vort.zstdEncodeFrameWithOptionsAlloc(allocator, case.payload, options);
     defer allocator.free(encoded);
     const decoded = try allocator.alloc(u8, case.payload.len);
@@ -533,7 +533,7 @@ fn lz4LibGeneratedRow(
 ) !Row {
     const payload = lib_generated_payload;
     const case: Case = .{ .name = case_name, .payload = payload };
-    const options: vort.Lz4LibFrameOptions = .{
+    const options: vort.Lz4FrameOptions = .{
         .include_content_size = include_content_size,
         .content_checksum = true,
         .block_checksum = block_checksum,
@@ -561,7 +561,7 @@ fn zstdLibGeneratedRow(
 ) !Row {
     const payload = lib_generated_payload;
     const case: Case = .{ .name = case_name, .payload = payload };
-    const options: vort.ZstdLibFrameOptions = .{
+    const options: vort.ZstdFrameOptions = .{
         .include_content_size = include_content_size,
         .content_checksum = content_checksum,
     };
@@ -1303,7 +1303,7 @@ fn timeEncodeLz4Lib(
     io: std.Io,
     allocator: std.mem.Allocator,
     payload: []const u8,
-    options: vort.Lz4LibFrameOptions,
+    options: vort.Lz4FrameOptions,
     iterations: usize,
 ) !TimeResult {
     var checksum: u64 = 0;
@@ -1353,7 +1353,7 @@ fn timeEncodeZstdLib(
     io: std.Io,
     allocator: std.mem.Allocator,
     payload: []const u8,
-    options: vort.ZstdLibFrameOptions,
+    options: vort.ZstdFrameOptions,
     iterations: usize,
 ) !TimeResult {
     var checksum: u64 = 0;

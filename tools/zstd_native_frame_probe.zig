@@ -2688,7 +2688,7 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         .{ .payload = high_entropy_multiblock, .min_blocks = 3 },
     };
     const levels = [_]c_int{ 1, 9, 19 };
-    const option_sets = [_]vort.ZstdLibFrameOptions{
+    const option_sets = [_]vort.ZstdFrameOptions{
         .{},
         .{ .include_content_size = false },
         .{ .include_content_size = false, .content_checksum = true },
@@ -2709,7 +2709,7 @@ fn checkLibZstdGeneratedLibraryFrame(
     allocator: std.mem.Allocator,
     payload: []const u8,
     level: c_int,
-    options: vort.ZstdLibFrameOptions,
+    options: vort.ZstdFrameOptions,
     min_blocks: usize,
 ) !usize {
     const encoded = try vort.zstdEncodeFrameWithLevelAndOptionsAlloc(allocator, payload, level, options);

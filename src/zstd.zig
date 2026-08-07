@@ -83,7 +83,7 @@ const of_bits = [_]u8{
 const StdZstdLiteralsSection = std.compress.zstd.Decompress.LiteralsSection;
 const StdZstdHuffmanTree = StdZstdLiteralsSection.HuffmanTree;
 
-pub const LibFrameOptions = struct {
+pub const FrameOptions = struct {
     include_content_size: bool = true,
     content_checksum: bool = false,
 };
@@ -2675,7 +2675,7 @@ pub fn encodeFrameWithLevelAlloc(allocator: std.mem.Allocator, input: []const u8
     return try encodeFrameWithLevelAndOptionsAlloc(allocator, input, level, .{});
 }
 
-pub fn encodeFrameWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: LibFrameOptions) Error![]u8 {
+pub fn encodeFrameWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: FrameOptions) Error![]u8 {
     return try encodeFrameWithLevelAndOptionsAlloc(allocator, input, default_compression_level, options);
 }
 
@@ -2683,13 +2683,13 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
     level: c_int,
-    options: LibFrameOptions,
+    options: FrameOptions,
 ) Error![]u8 {
     const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, nativeFrameOptionsForLevel(level, options));
     return result.frame;
 }
 
-fn nativeFrameOptionsForLevel(level: c_int, options: LibFrameOptions) NativeFrameOptions {
+fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) NativeFrameOptions {
     var native_options: NativeFrameOptions = .{
         .content_checksum = options.content_checksum,
         .include_content_size = options.include_content_size,
@@ -9029,7 +9029,7 @@ test "zstd frame encoder round trips and compresses repeated payloads" {
 }
 
 test "zstd frame options omit content size through pure Zig facade" {
-    const payload = "zstd lib frame options payload" ** 8;
+    const payload = "zstd frame options payload" ** 8;
     const encoded = try encodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .include_content_size = false,
         .content_checksum = true,
@@ -10363,7 +10363,7 @@ test "zstd pure Zig facade generated corpus shapes" {
         json_unit ** 8,
         ("a" ** 64 ++ "b" ** 64 ++ "c" ** 64) ** 2,
     };
-    const option_sets = [_]LibFrameOptions{
+    const option_sets = [_]FrameOptions{
         .{},
         .{ .include_content_size = false },
         .{ .content_checksum = true },

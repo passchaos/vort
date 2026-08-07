@@ -90,7 +90,7 @@ pub const lz4EncodedSkippableFrameBound = lz4.encodedSkippableFrameBound;
 pub const lz4EncodeSkippableFrameAlloc = lz4.encodeSkippableFrameAlloc;
 pub const lz4EncodeSkippableFrameAppend = lz4.encodeSkippableFrameAppend;
 pub const lz4EncodeSkippableFrameIntoSlice = lz4.encodeSkippableFrameIntoSlice;
-pub const Lz4LibFrameOptions = lz4.LibFrameOptions;
+pub const Lz4FrameOptions = lz4.FrameOptions;
 pub const Lz4NativeFrameOptions = lz4.NativeFrameOptions;
 pub const lz4NativeMaxChainDepth = lz4.native_max_chain_depth;
 pub const Lz4NativeFrameHeader = lz4.NativeFrameHeader;
@@ -412,7 +412,7 @@ pub const zstdDecodeFrameAllocLimited = zstd.decodeFrameAllocLimited;
 pub const zstdDecodeFrameInto = zstd.decodeFrameInto;
 pub const zstdDecodedFrameSize = zstd.decodedFrameSize;
 pub const zstdDecodedFrameSizeLimited = zstd.decodedFrameSizeLimited;
-pub const ZstdLibFrameOptions = zstd.LibFrameOptions;
+pub const ZstdFrameOptions = zstd.FrameOptions;
 pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
 pub const zstdEncodeRawOrRleFrameWithOptionsAlloc = zstd.encodeRawOrRleFrameWithOptionsAlloc;
 pub const zstdEncodeRawOrRleFrameAppend = zstd.encodeRawOrRleFrameAppend;
@@ -1299,7 +1299,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4EncodeSkippableFrameAlloc;
     _ = lz4EncodeSkippableFrameAppend;
     _ = lz4EncodeSkippableFrameIntoSlice;
-    _ = Lz4LibFrameOptions;
+    _ = Lz4FrameOptions;
     _ = Lz4NativeFrameOptions;
     _ = lz4NativeMaxChainDepth;
     _ = Lz4NativeFrameHeader;
@@ -1615,7 +1615,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeFrameInto;
     _ = zstdDecodedFrameSize;
     _ = zstdDecodedFrameSizeLimited;
-    _ = ZstdLibFrameOptions;
+    _ = ZstdFrameOptions;
     _ = zstdEncodeRawOrRleFrameAlloc;
     _ = zstdEncodeRawOrRleFrameWithOptionsAlloc;
     _ = zstdEncodeRawOrRleFrameAppend;
@@ -1914,8 +1914,8 @@ test "root snappy reusable encoder round trip" {
     try std.testing.expectEqualSlices(u8, payload, decoded_frame);
 }
 
-test "root lz4 lib frame options round trip" {
-    const payload = "root lz4 lib frame options payload" ** 2;
+test "root lz4 frame options round trip" {
+    const payload = "root lz4 frame options payload" ** 2;
     const encoded = try lz4EncodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .include_content_size = false,
         .content_checksum = false,
@@ -2036,8 +2036,8 @@ test "root lz4 lib frame options round trip" {
     try std.testing.expectEqualSlices(u8, "payload", prefix_depth_decoded);
 }
 
-test "root zstd lib frame options round trip" {
-    const payload = "root zstd lib frame options payload" ** 4;
+test "root zstd frame options round trip" {
+    const payload = "root zstd frame options payload" ** 4;
     const encoded = try zstdEncodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, zstd.default_compression_level, .{
         .include_content_size = false,
         .content_checksum = true,

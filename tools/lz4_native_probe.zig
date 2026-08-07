@@ -1641,7 +1641,7 @@ fn checkLibLz4GeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         .{ .name = "liblz4-randomish", .payload = &randomish },
     };
     const levels = [_]c_int{ 0, 3, 10 };
-    const option_sets = [_]vort.Lz4LibFrameOptions{
+    const option_sets = [_]vort.Lz4FrameOptions{
         .{},
         .{
             .include_content_size = false,
@@ -1675,7 +1675,7 @@ fn checkLibLz4GeneratedLibraryFrame(
     allocator: std.mem.Allocator,
     case: Case,
     level: c_int,
-    options: vort.Lz4LibFrameOptions,
+    options: vort.Lz4FrameOptions,
 ) !void {
     const frame = try vort.lz4EncodeFrameWithLevelAndOptionsAlloc(allocator, case.payload, level, options);
     defer allocator.free(frame);
