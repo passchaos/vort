@@ -368,6 +368,11 @@ pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!u
             .compressed => {
                 const payload = chunk.payload[4..];
                 const decoded_len = try decodedBlockSize(payload);
+                if (decoded_len > max_uncompressed_chunk_len) return error.CorruptFrame;
+                var decoded: [max_uncompressed_chunk_len]u8 = undefined;
+                const written = try decodeBlockInto(payload, decoded[0..decoded_len]);
+                if (written != decoded_len) return error.SizeMismatch;
+                try verifyMaskedChecksum(decoded[0..decoded_len], std.mem.readInt(u32, chunk.payload[0..4], .little));
                 total = std.math.add(usize, total, decoded_len) catch return error.IntegerOverflow;
             },
         }
@@ -739,4 +744,22 @@ test "snappy framed stream rejects malformed chunks" {
     defer std.testing.allocator.free(corrupt);
     corrupt[14] ^= 0x01;
     try std.testing.expectError(error.ChecksumMismatch, decodedFrameSize(corrupt));
+
+    const known_payload = "abcabcabcabc";
+    const block = [_]u8{ 12, 0x08, 'a', 'b', 'c', 0x15, 3 };
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try writeChunk(std.testing.allocator, &frame, stream_identifier_chunk_type, stream_identifier_payload);
+    var compressed_checked: std.ArrayList(u8) = .empty;
+    defer compressed_checked.deinit(std.testing.allocator);
+    var checksum_bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &checksum_bytes, maskedCrc32c(known_payload), .little);
+    try compressed_checked.appendSlice(std.testing.allocator, &checksum_bytes);
+    try compressed_checked.appendSlice(std.testing.allocator, &block);
+    try writeChunk(std.testing.allocator, &frame, compressed_data_chunk_type, compressed_checked.items);
+    var corrupt_compressed = try std.testing.allocator.dupe(u8, frame.items);
+    defer std.testing.allocator.free(corrupt_compressed);
+    corrupt_compressed[corrupt_compressed.len - 1] ^= 0x01;
+    try std.testing.expectError(error.ChecksumMismatch, decodedFrameSize(corrupt_compressed));
+    try std.testing.expectError(error.ChecksumMismatch, decodeFrameAlloc(std.testing.allocator, corrupt_compressed));
 }

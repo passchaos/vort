@@ -144,6 +144,7 @@ def main():
 
     corrupt = bytearray(compressed_frame)
     corrupt[-1] ^= 0x01
+    run([str(cli), "size-snappy-frame-hex", bytes(corrupt).hex(), str(len(known_payload))], root, expect_ok=False)
     run([str(cli), "decode-snappy-frame-hex", bytes(corrupt).hex(), str(len(known_payload))], root, expect_ok=False)
     checked += 1
 
