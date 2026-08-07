@@ -538,7 +538,9 @@ fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
     const set_exact_written = try vort.zstdDecodeNativeFrameIntoWithDictionarySetExactSize(encoded.frame, &into, dictionary_set, payload.len);
     try expect(set_exact_written == payload.len);
     try expectEqualSlices(payload, &into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameIntoWithDictionarySetExactSize(encoded.frame, into[0 .. into.len - 1], dictionary_set, payload.len));
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoWithDictionarySetExactSize(encoded.frame, &into, dictionary_set, payload.len - 1));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameIntoWithDictionarySetExactSize(encoded.frame, &oversized_into, dictionary_set, payload.len + 1));
 
     const chunks = [_][]const u8{
         encoded.frame[0..@min(encoded.frame.len, 5)],
@@ -555,6 +557,9 @@ fn checkDictionaryMatchEncoding(allocator: std.mem.Allocator) !void {
     const chunk_set_exact_written = try vort.zstdDecodeNativeFrameChunksIntoWithDictionarySetExactSize(&chunks, join, &into, dictionary_set, payload.len);
     try expect(chunk_set_exact_written == payload.len);
     try expectEqualSlices(payload, &into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameChunksIntoWithDictionarySetExactSize(&chunks, join, into[0 .. into.len - 1], dictionary_set, payload.len));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameChunksIntoWithDictionarySetExactSize(&chunks, join, &into, dictionary_set, payload.len - 1));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameChunksIntoWithDictionarySetExactSize(&chunks, join, &oversized_into, dictionary_set, payload.len + 1));
 
     const decoded = try vort.zstdDecodeNativeFrameAllocWithDictionary(allocator, encoded.frame, dict);
     defer allocator.free(decoded);
