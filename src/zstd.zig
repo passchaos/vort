@@ -4649,7 +4649,7 @@ const ReverseBitReader = struct {
 
     fn read(self: *ReverseBitReader, bit_count: u8) Error!usize {
         if (bit_count == 0) return 0;
-        if (bit_count > @bitSizeOf(usize)) return error.UnsupportedZstdFeature;
+        if (bit_count > @bitSizeOf(usize)) return error.CorruptFrame;
         if (bit_count > self.remaining_bits) return error.TruncatedFrame;
         var value: usize = 0;
         var bit = self.remaining_bits;
@@ -11609,6 +11609,11 @@ test "zstd reverse bitstream writer rejects oversized bit fields as corrupt" {
 
     try std.testing.expectError(error.CorruptFrame, writer.addBits(std.testing.allocator, &out, 0, @bitSizeOf(usize) + 1));
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
+}
+
+test "zstd reverse bitstream reader rejects oversized bit fields as corrupt" {
+    var reader = try ReverseBitReader.init(&.{0x01});
+    try std.testing.expectError(error.CorruptFrame, reader.read(@bitSizeOf(usize) + 1));
 }
 
 test "zstd sequence emitter supports compressed FSE literal-length table" {
