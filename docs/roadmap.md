@@ -1892,3 +1892,7 @@ architecture blindly.
   `examples`, `history.`, `one another`, `to another`, and `however, `. This
   extends the table beyond bare identity words into additional punctuation and
   phrase-style transform outputs observed from Node's encoder.
+
+- Added Node quality-5 Brotli phrase entries for `one of the ` and `number of `,
+  extending the static-dictionary subset with two common space-terminated
+  multi-word outputs and differential CLI coverage.

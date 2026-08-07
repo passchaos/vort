@@ -2353,6 +2353,14 @@ def main() -> int:
             node_compress(b"to another", quality=5, lgwin=10),
             b"to another",
         ),
+        "node-static-dictionary-one-of-the-q5-lgwin10": (
+            node_compress(b"one of the ", quality=5, lgwin=10),
+            b"one of the ",
+        ),
+        "node-static-dictionary-number-of-q5-lgwin10": (
+            node_compress(b"number of ", quality=5, lgwin=10),
+            b"number of ",
+        ),
         "node-static-dictionary-however-comma-space-q5-lgwin10": (
             node_compress(b"however, ", quality=5, lgwin=10),
             b"however, ",
