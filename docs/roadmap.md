@@ -1931,3 +1931,8 @@ architecture blindly.
 - Added a `category` field to Brotli static-dictionary required coverage tuples
   (`identity`, `transform`, or `phrase`) and taught the smoke/schema checks to
   reject unknown categories, making coverage intent easier to review.
+
+
+- Extended the Brotli static-dictionary coverage report with category-count
+  summaries for identity, transform, and phrase entries, and taught the report
+  smoke to cross-check the JSON and Markdown counts against the entry rows.

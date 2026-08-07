@@ -35,12 +35,22 @@ def report_entries_from_required(entries: list[dict[str, Any]]) -> list[dict[str
 
 
 def report(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    category_counts = {"identity": 0, "transform": 0, "phrase": 0}
+    for entry in entries:
+        word = entry["word"]
+        if " " in word:
+            category_counts["phrase"] += 1
+        elif entry["transform"] == 0:
+            category_counts["identity"] += 1
+        else:
+            category_counts["transform"] += 1
     return {
         "schema": "vort.br_static_dictionary_report",
         "schema_version": 1,
         "entry_count": len(entries),
         "transform_count": len({entry["transform"] for entry in entries}),
         "length_count": len({entry["copy_len"] for entry in entries}),
+        "category_counts": category_counts,
         "entries": entries,
     }
 

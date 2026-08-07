@@ -114,6 +114,21 @@ def main() -> int:
         raise AssertionError("transform_count mismatch")
     if report.get("length_count") != len(lengths):
         raise AssertionError("length_count mismatch")
+    category_counts = report.get("category_counts")
+    if not isinstance(category_counts, dict):
+        raise AssertionError("category_counts must be an object")
+    identity_count = 0
+    transform_count = 0
+    phrase_count = 0
+    for transform, _, _, word in seen:
+        if " " in word:
+            phrase_count += 1
+        elif transform == 0:
+            identity_count += 1
+        else:
+            transform_count += 1
+    if category_counts.get("identity") != identity_count or category_counts.get("transform") != transform_count or category_counts.get("phrase") != phrase_count:
+        raise AssertionError("category_counts mismatch")
     missing = sorted(required - seen)
     if missing:
         raise AssertionError(f"missing required coverage rows: {missing}")
@@ -129,6 +144,9 @@ def main() -> int:
     markdown = args.markdown.read_text()
     if f"- Entries: {len(entries)}" not in markdown:
         raise AssertionError("Markdown entry count missing")
+    for label, count in (("Identity entries", identity_count), ("Transform entries", transform_count), ("Phrase entries", phrase_count)):
+        if f"- {label}: {count}" not in markdown:
+            raise AssertionError(f"Markdown {label} count missing")
     for transform, copy_len, word_index, word in required:
         row = f"| {transform} | {copy_len} | {word_index} | {len(word.encode())} | `{word}` |"
         if row not in markdown:

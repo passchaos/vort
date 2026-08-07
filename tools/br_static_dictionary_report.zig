@@ -17,6 +17,7 @@ pub fn main(init: std.process.Init) !void {
     try validateEntries(entries);
     const transforms = transformCount(entries);
     const lengths = lengthCount(entries);
+    const categories = categoryCounts(entries);
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
@@ -24,11 +25,11 @@ pub fn main(init: std.process.Init) !void {
 
     var json = std.Io.Writer.Allocating.init(init.gpa);
     defer json.deinit();
-    try writeJson(&json.writer, entries, transforms, lengths);
+    try writeJson(&json.writer, entries, transforms, lengths, categories);
 
     var markdown = std.Io.Writer.Allocating.init(init.gpa);
     defer markdown.deinit();
-    try writeMarkdown(&markdown.writer, entries, transforms, lengths);
+    try writeMarkdown(&markdown.writer, entries, transforms, lengths, categories);
 
     if (options.csv_path) |path| try writeFileCreatingParents(init.io, path, csv.written());
     if (options.json_path) |path| try writeFileCreatingParents(init.io, path, json.written());
@@ -86,10 +87,10 @@ fn writeCsvField(writer: *std.Io.Writer, value: []const u8) !void {
     try writer.writeByte('"');
 }
 
-fn writeJson(writer: *std.Io.Writer, entries: []const vort.br.StaticDictionaryEntry, transforms: usize, lengths: usize) !void {
+fn writeJson(writer: *std.Io.Writer, entries: []const vort.br.StaticDictionaryEntry, transforms: usize, lengths: usize, categories: CategoryCounts) !void {
     try writer.print(
-        "{{\"schema\":\"vort.br_static_dictionary_report\",\"schema_version\":1,\"entry_count\":{d},\"transform_count\":{d},\"length_count\":{d},\"entries\":[",
-        .{ entries.len, transforms, lengths },
+        "{{\"schema\":\"vort.br_static_dictionary_report\",\"schema_version\":1,\"entry_count\":{d},\"transform_count\":{d},\"length_count\":{d},\"category_counts\":{{\"identity\":{d},\"transform\":{d},\"phrase\":{d}}},\"entries\":[",
+        .{ entries.len, transforms, lengths, categories.identity, categories.transform, categories.phrase },
     );
     for (entries, 0..) |entry, i| {
         if (i != 0) try writer.writeByte(',');
@@ -119,9 +120,9 @@ fn writeJsonString(writer: *std.Io.Writer, value: []const u8) !void {
     try writer.writeByte('"');
 }
 
-fn writeMarkdown(writer: *std.Io.Writer, entries: []const vort.br.StaticDictionaryEntry, transforms: usize, lengths: usize) !void {
+fn writeMarkdown(writer: *std.Io.Writer, entries: []const vort.br.StaticDictionaryEntry, transforms: usize, lengths: usize, categories: CategoryCounts) !void {
     try writer.writeAll("# Brotli static dictionary subset\n\n");
-    try writer.print("- Entries: {d}\n- Distinct transforms: {d}\n- Distinct lengths: {d}\n\n", .{ entries.len, transforms, lengths });
+    try writer.print("- Entries: {d}\n- Distinct transforms: {d}\n- Distinct lengths: {d}\n- Identity entries: {d}\n- Transform entries: {d}\n- Phrase entries: {d}\n\n", .{ entries.len, transforms, lengths, categories.identity, categories.transform, categories.phrase });
     try writer.writeAll("| Transform | Copy length | Word index | Bytes | Word |\n");
     try writer.writeAll("| ---: | ---: | ---: | ---: | --- |\n");
     for (entries) |entry| {
@@ -151,6 +152,26 @@ fn validateEntries(entries: []const vort.br.StaticDictionaryEntry) !void {
             }
         }
     }
+}
+
+const CategoryCounts = struct {
+    identity: usize = 0,
+    transform: usize = 0,
+    phrase: usize = 0,
+};
+
+fn categoryCounts(entries: []const vort.br.StaticDictionaryEntry) CategoryCounts {
+    var counts: CategoryCounts = .{};
+    for (entries) |entry| {
+        if (std.mem.indexOfScalar(u8, entry.word, ' ') != null) {
+            counts.phrase += 1;
+        } else if (entry.transform == 0) {
+            counts.identity += 1;
+        } else {
+            counts.transform += 1;
+        }
+    }
+    return counts;
 }
 
 fn transformCount(entries: []const vort.br.StaticDictionaryEntry) usize {

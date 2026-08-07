@@ -38,6 +38,7 @@
         "entry_count": "int",
         "transform_count": "int",
         "length_count": "int",
+        "category_counts": "dict",
         "entries": "list"
       },
       "item_collection": "entries",

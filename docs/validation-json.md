@@ -835,6 +835,11 @@ Example:
   "entry_count": 2,
   "transform_count": 2,
   "length_count": 1,
+  "category_counts": {
+    "identity": 1,
+    "transform": 1,
+    "phrase": 0
+  },
   "entries": [
     {
       "transform": 0,
