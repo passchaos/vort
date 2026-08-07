@@ -47,10 +47,13 @@ def load_required(path: Path, case_source: Path) -> set[tuple[int, int, int, str
         word = entry.get("word")
         reason = entry.get("reason")
         source_case = entry.get("source_case")
+        category = entry.get("category")
         if not isinstance(transform, int) or not isinstance(copy_len, int) or not isinstance(word_index, int) or not isinstance(word, str):
             raise AssertionError(f"required.entries[{index}] fields invalid")
         if not isinstance(reason, str) or not reason or not isinstance(source_case, str) or not source_case:
             raise AssertionError(f"required.entries[{index}] metadata fields invalid")
+        if category not in {"identity", "transform", "phrase"}:
+            raise AssertionError(f"required.entries[{index}] category invalid")
         if source_case not in case_names:
             raise AssertionError(f"required.entries[{index}] source_case {source_case!r} is not present in {case_source}")
         key = (transform, copy_len, word_index, word)

@@ -9,13 +9,21 @@
         "entries": "list"
       },
       "item_collection": "entries",
+      "item_enums": {
+        "category": [
+          "identity",
+          "transform",
+          "phrase"
+        ]
+      },
       "item_fields": {
         "transform": "int",
         "copy_len": "int",
         "word_index": "int",
         "word": "str",
         "reason": "str",
-        "source_case": "str"
+        "source_case": "str",
+        "category": "str"
       }
     },
     "vort.br_static_dictionary_report": {

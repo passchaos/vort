@@ -1927,3 +1927,7 @@ architecture blindly.
 - Taught the Brotli static-dictionary report smoke to verify each required
   coverage tuple's `source_case` against `tools/br_literal_cli_diff.py`, and
   added a negative fixture for stale source-case references.
+
+- Added a `category` field to Brotli static-dictionary required coverage tuples
+  (`identity`, `transform`, or `phrase`) and taught the smoke/schema checks to
+  reject unknown categories, making coverage intent easier to review.

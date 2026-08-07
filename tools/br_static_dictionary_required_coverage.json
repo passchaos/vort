@@ -8,7 +8,8 @@
       "word_index": 43,
       "word": "words",
       "source_case": "synthetic-static-dictionary-identity-words",
-      "reason": "representative identity dictionary tuple"
+      "reason": "representative identity dictionary tuple",
+      "category": "identity"
     },
     {
       "transform": 0,
@@ -16,7 +17,8 @@
       "word_index": 205,
       "word": "dictionary",
       "source_case": "node-static-dictionary-dictionary-about-q5-lgwin10",
-      "reason": "representative identity dictionary tuple"
+      "reason": "representative identity dictionary tuple",
+      "category": "identity"
     },
     {
       "transform": 0,
@@ -24,7 +26,8 @@
       "word_index": 240,
       "word": "number of ",
       "source_case": "node-static-dictionary-number-of-q5-lgwin10",
-      "reason": "representative identity dictionary tuple"
+      "reason": "representative identity dictionary tuple",
+      "category": "phrase"
     },
     {
       "transform": 0,
@@ -32,7 +35,8 @@
       "word_index": 452,
       "word": "one of the ",
       "source_case": "node-static-dictionary-one-of-the-q5-lgwin10",
-      "reason": "representative identity dictionary tuple"
+      "reason": "representative identity dictionary tuple",
+      "category": "phrase"
     },
     {
       "transform": 0,
@@ -40,7 +44,8 @@
       "word_index": 52,
       "word": "large number of ",
       "source_case": "node-static-dictionary-large-number-of-q5-lgwin10",
-      "reason": "representative identity dictionary tuple"
+      "reason": "representative identity dictionary tuple",
+      "category": "phrase"
     },
     {
       "transform": 1,
@@ -48,7 +53,8 @@
       "word_index": 205,
       "word": "dictionary ",
       "source_case": "synthetic-static-dictionary-trailing-space-dictionary",
-      "reason": "representative trailing-space transform tuple"
+      "reason": "representative trailing-space transform tuple",
+      "category": "phrase"
     },
     {
       "transform": 6,
@@ -56,7 +62,8 @@
       "word_index": 170,
       "word": " release",
       "source_case": "synthetic-static-dictionary-leading-space-release",
-      "reason": "representative leading-space transform tuple"
+      "reason": "representative leading-space transform tuple",
+      "category": "phrase"
     },
     {
       "transform": 9,
@@ -64,7 +71,8 @@
       "word_index": 37,
       "word": "History",
       "source_case": "synthetic-static-dictionary-uppercase-first-history",
-      "reason": "representative uppercase-first transform tuple"
+      "reason": "representative uppercase-first transform tuple",
+      "category": "transform"
     },
     {
       "transform": 12,
@@ -72,7 +80,8 @@
       "word_index": 44,
       "word": "game",
       "source_case": "synthetic-static-dictionary-omit-last-one-games",
-      "reason": "representative omit-last transform tuple"
+      "reason": "representative omit-last transform tuple",
+      "category": "transform"
     },
     {
       "transform": 12,
@@ -80,7 +89,8 @@
       "word_index": 1767,
       "word": "one an",
       "source_case": "node-static-dictionary-one-another-q5-lgwin10",
-      "reason": "representative omit-last transform tuple"
+      "reason": "representative omit-last transform tuple",
+      "category": "phrase"
     }
   ]
 }
