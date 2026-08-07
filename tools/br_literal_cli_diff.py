@@ -2215,6 +2215,16 @@ def main() -> int:
         ),
         "node-repeated-q0-lgwin10": (node_compress(b"a" * 32, quality=0, lgwin=10), b"a" * 32),
         "node-binary-q0-lgwin10": (node_compress(bytes(range(16)), quality=0, lgwin=10), bytes(range(16))),
+        "node-text-q1-lgwin10": (
+            node_compress(b"hello brotli hello brotli", quality=1, lgwin=10),
+            b"hello brotli hello brotli",
+        ),
+        "node-abc-q2-lgwin10": (node_compress(b"abc", quality=2, lgwin=10), b"abc"),
+        "node-text-q3-lgwin10": (
+            node_compress(b"hello brotli hello brotli", quality=3, lgwin=10),
+            b"hello brotli hello brotli",
+        ),
+        "node-repeat64-q3-lgwin10": (node_compress(b"abcd" * 16, quality=3, lgwin=10), b"abcd" * 16),
         "final": (literal_only_hello_frame(True), b"hello"),
         "nonfinal": (literal_only_hello_frame(False), b"hello"),
         "trivial-context": (trivial_context_hello_frame(), b"hello"),
