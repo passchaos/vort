@@ -132,7 +132,10 @@ fn encodeBlockAppendWithTable(allocator: std.mem.Allocator, out: *std.ArrayList(
 
 pub fn encodeBlockInto(input: []const u8, output: []u8) Error!usize {
     var fba = std.heap.FixedBufferAllocator.init(output);
-    const encoded = try encodeBlockAlloc(fba.allocator(), input);
+    const encoded = encodeBlockAlloc(fba.allocator(), input) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutputTooSmall,
+        else => |e| return e,
+    };
     return encoded.len;
 }
 
@@ -151,7 +154,10 @@ pub fn encodeFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), 
 
 pub fn encodeFrameInto(input: []const u8, output: []u8) Error!usize {
     var fba = std.heap.FixedBufferAllocator.init(output);
-    const encoded = try encodeFrameAlloc(fba.allocator(), input);
+    const encoded = encodeFrameAlloc(fba.allocator(), input) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutputTooSmall,
+        else => |e| return e,
+    };
     return encoded.len;
 }
 
@@ -619,6 +625,10 @@ test "snappy raw block encodes empty and hello with known bytes" {
     const decoded = try decodeBlockAlloc(std.testing.allocator, hello);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "hello", decoded);
+
+    var too_small: [1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, encodeBlockInto("hello", &too_small));
+    try std.testing.expectError(error.OutputTooSmall, encodeFrameInto("hello", &too_small));
 }
 
 test "snappy raw block round trips repeated payload with copy tokens" {
