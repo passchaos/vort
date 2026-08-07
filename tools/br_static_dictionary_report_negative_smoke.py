@@ -146,6 +146,14 @@ def main() -> int:
     bad_source_case["entries"][0]["source_case"] = "no-such-br-literal-case"
     rows.append(case("missing_source_case", report(base_entries), "source_case", bad_source_case))
 
+    bad_category = {
+        "schema": "vort.br_static_dictionary_required_coverage",
+        "schema_version": 1,
+        "entries": [dict(entry) for entry in required_entries],
+    }
+    bad_category["entries"][0]["category"] = "unknown"
+    rows.append(case("invalid_category", report(base_entries), "category invalid", bad_category))
+
     duplicate_required = {
         "schema": "vort.br_static_dictionary_required_coverage",
         "schema_version": 1,

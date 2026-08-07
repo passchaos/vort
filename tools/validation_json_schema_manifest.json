@@ -83,7 +83,8 @@
           "word_bytes_mismatch",
           "entry_count_mismatch",
           "duplicate_required_tuple",
-          "missing_source_case"
+          "missing_source_case",
+          "invalid_category"
         ]
       },
       "item_fields": {

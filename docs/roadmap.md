@@ -1941,3 +1941,8 @@ architecture blindly.
 - Added a transform/category matrix to the Brotli static-dictionary coverage
   report and smoke checks, so dashboard artifacts show how identity, transform,
   and phrase entries are distributed per transform index.
+
+
+- Extended the Brotli static-dictionary report negative smoke with an
+  `invalid_category` fixture, proving required coverage category values are
+  constrained to the documented `identity` / `transform` / `phrase` set.

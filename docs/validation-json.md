@@ -898,8 +898,8 @@ Example:
   "case_count": 1,
   "cases": [
     {
-      "name": "missing_source_case",
-      "expected_output": "source_case",
+      "name": "invalid_category",
+      "expected_output": "category invalid",
       "returncode": 1,
       "matched": true
     }
