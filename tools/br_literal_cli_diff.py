@@ -957,6 +957,34 @@ def write_context_after_distance_sixty_five_copy_header(bits: list[int]) -> None
     write_simple_single_symbol_prefix(bits, 472, 80)
 
 
+def write_context_after_distance_one_twenty_nine_copy_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 0, 4)  # NDIRECT
+    write_bits(bits, 0, 2)  # literal context mode = LSB6
+    write_block_type_count(bits, 2)
+    write_literal_context_map_for_b(bits)
+    write_block_type_count(bits, 1)
+
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, ord("a"), 8)
+    write_bits(bits, ord("b"), 8)
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, ord("a"), 8)
+    write_bits(bits, ord("c"), 8)
+
+    write_bits(bits, 1, 2)  # simple insert-copy prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 312, 10)
+    write_bits(bits, 8, 10)
+
+    write_simple_single_symbol_prefix(bits, 64, 26)
+
+
 def write_literal_context_five_trees_aba_header(bits: list[int]) -> None:
     write_block_type_count(bits, 1)
     write_block_type_count(bits, 1)
@@ -1809,6 +1837,26 @@ def context_after_distance_sixty_five_copy_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def context_after_distance_one_twenty_nine_copy_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 131, 16)  # MLEN - 1
+    write_context_after_distance_one_twenty_nine_copy_header(bits)
+    write_bits(bits, 1, 1)  # command 312
+    write_bits(bits, 31, 5)  # insert length 129
+    write_bits(bits, 0, 1)  # a
+    write_bits(bits, 1, 1)  # b
+    for _ in range(127):
+        write_bits(bits, 0, 1)  # a
+    write_bits(bits, 4, 6)  # distance 129 extra bits
+    write_bits(bits, 0, 1)  # command 8
+    write_bits(bits, 1, 1)  # c
+    return bits_to_bytes(bits)
+
+
 def literal_context_five_trees_aba_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -2169,6 +2217,10 @@ def main() -> int:
         "context-after-distance-sixty-five-copy": (
             context_after_distance_sixty_five_copy_frame(),
             b"ab" + (b"a" * 64) + b"bc",
+        ),
+        "context-after-distance-one-twenty-nine-copy": (
+            context_after_distance_one_twenty_nine_copy_frame(),
+            b"ab" + (b"a" * 128) + b"bc",
         ),
         "literal-context-five-trees": (literal_context_five_trees_aba_frame(), b"aba"),
         "literal-context-nine-trees": (literal_context_nine_trees_aba_frame(), b"aba"),

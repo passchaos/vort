@@ -1787,8 +1787,10 @@ architecture blindly.
   block length tree while switching literal block types, with matching Zig and
   Node-backed CLI differential coverage.
 
-- Expanded Brotli decoded-size preflight's recent literal history window to 128
-  bytes. A compressed context-selected literal frame now copies with distance 65
-  and then decodes another literal from the copied `b` context, keeping
-  allocator-returning decode preflight aligned with the full-output decode path.
-  Zig tests and the Node-backed CLI differential smoke cover the same frame.
+- Expanded Brotli decoded-size preflight's recent literal history window to 256
+  bytes and switched the preflight tail to a ring buffer so larger tracked
+  histories avoid per-byte sliding copies. Compressed context-selected literal
+  frames now copy with distances 65 and 129 before decoding another literal from
+  the copied `b` context, keeping allocator-returning decode preflight aligned
+  with the full-output decode path. Zig tests and the Node-backed CLI
+  differential smoke cover both frames.
