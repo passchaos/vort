@@ -8083,7 +8083,7 @@ fn emitFseNormalizedCount(
     max_symbol: u8,
     table_log: u8,
 ) Error!void {
-    if (table_log < 5 or table_log > max_fse_compression_table_log) return error.UnsupportedZstdFeature;
+    if (table_log < 5 or table_log > max_fse_compression_table_log) return error.CorruptFrame;
     if (normalized.len != @as(usize, max_symbol) + 1) return error.CorruptFrame;
 
     // FSE normalized-count headers are a small forward bitstream. This mirrors
@@ -8154,7 +8154,7 @@ fn emitFseNormalizedCountFixed(
     max_symbol: u8,
     table_log: u8,
 ) Error!void {
-    if (table_log < 5 or table_log > max_fse_compression_table_log) return error.UnsupportedZstdFeature;
+    if (table_log < 5 or table_log > max_fse_compression_table_log) return error.CorruptFrame;
     if (normalized.len != @as(usize, max_symbol) + 1) return error.CorruptFrame;
     written.* = 0;
 
@@ -11417,6 +11417,21 @@ test "zstd FSE Huffman weight writer rejects invalid weights as corrupt" {
         emitFseCompressedHuffmanWeights(std.testing.allocator, &out, &.{ 1, huffman_weight_symbol_max + 1, 2 }),
     );
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
+}
+
+test "zstd FSE normalized-count writers reject invalid table logs as corrupt" {
+    const normalized = [_]i16{ 1, 31 };
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+    var fixed_out: [16]u8 = undefined;
+    var fixed_written: usize = 0;
+
+    try std.testing.expectError(error.CorruptFrame, emitFseNormalizedCount(std.testing.allocator, &out, &normalized, 1, 4));
+    try std.testing.expectError(error.CorruptFrame, emitFseNormalizedCount(std.testing.allocator, &out, &normalized, 1, max_fse_compression_table_log + 1));
+    try std.testing.expectError(error.CorruptFrame, emitFseNormalizedCountFixed(&fixed_out, &fixed_written, &normalized, 1, 4));
+    try std.testing.expectError(error.CorruptFrame, emitFseNormalizedCountFixed(&fixed_out, &fixed_written, &normalized, 1, max_fse_compression_table_log + 1));
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+    try std.testing.expectEqual(@as(usize, 0), fixed_written);
 }
 
 test "zstd literal-only writer emits FSE Huffman tree for high-byte binary literals" {
