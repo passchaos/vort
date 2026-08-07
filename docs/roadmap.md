@@ -1871,3 +1871,8 @@ architecture blindly.
   entries, emits transform/length/word-index CSV rows, prints aggregate counts,
   and is compiled by `zig build check` plus run by CI smoke so future dictionary
   slices have an auditable manifest.
+
+- Extended `run-br-static-dictionary-report` with JSON and Markdown outputs in
+  addition to CSV. The report now creates parent directories for output paths,
+  emits schema/version metadata in JSON, and keeps the default stdout CSV path
+  for quick terminal inspection.
