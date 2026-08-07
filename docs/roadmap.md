@@ -2034,6 +2034,11 @@ architecture blindly.
   775 frames locally, giving the larger official-dictionary slice a reproducible
   retained artifact path.
 
+- Added the next opt-in `upstream128` slice for local Brotli checkouts. The
+  source-limit 128 candidate pool produced 1063 generated candidates locally and
+  the Node/Vort probe accepted all 1063 frames, extending the reproducible
+  upstream import evidence beyond the first 80 raw dictionary words.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
