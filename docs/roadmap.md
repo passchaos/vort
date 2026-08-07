@@ -2016,6 +2016,12 @@ architecture blindly.
   than the original payload, sorted by byte savings, so high-value dictionary
   imports can be selected directly from the report.
 
+- Promoted the first size-winning Brotli candidate rows into decoder coverage:
+  ` large number of `, ` information`, `  Information`, `large number of  `,
+  and ` government`. These rows came directly from `size_winner_rows` and now
+  have Node quality-5 differential cases, source anchors, and required coverage
+  metadata.
+
 - Extended the Brotli static-dictionary candidate report with an optional
   upstream-source mode. When a local Brotli `common/` checkout is supplied with
   `--source-limit`, the report merges bounded official dictionary raw words into

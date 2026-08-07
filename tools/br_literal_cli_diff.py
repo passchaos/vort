@@ -2421,6 +2421,26 @@ def main() -> int:
             node_compress(b" numbers.", quality=5, lgwin=10),
             b" numbers.",
         ),
+        "node-static-dictionary-leading-space-large-number-of-q5-lgwin10": (
+            node_compress(b" large number of ", quality=5, lgwin=10),
+            b" large number of ",
+        ),
+        "node-static-dictionary-leading-space-information-q5-lgwin10": (
+            node_compress(b" information", quality=5, lgwin=10),
+            b" information",
+        ),
+        "node-static-dictionary-two-leading-spaces-information-q5-lgwin10": (
+            node_compress(b"  Information", quality=5, lgwin=10),
+            b"  Information",
+        ),
+        "node-static-dictionary-large-number-of-two-spaces-q5-lgwin10": (
+            node_compress(b"large number of  ", quality=5, lgwin=10),
+            b"large number of  ",
+        ),
+        "node-static-dictionary-leading-space-government-q5-lgwin10": (
+            node_compress(b" government", quality=5, lgwin=10),
+            b" government",
+        ),
         "node-static-dictionary-children-q5-lgwin10": (
             node_compress(b"children", quality=5, lgwin=10),
             b"children",

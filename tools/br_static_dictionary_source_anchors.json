@@ -545,6 +545,22 @@
       "word_index": 5
     },
     {
+      "copy_len": 12,
+      "raw_word": " Information",
+      "transform": 1,
+      "transform_kind": "affix_identity",
+      "transformed_word": " Information ",
+      "word_index": 285
+    },
+    {
+      "copy_len": 16,
+      "raw_word": "large number of ",
+      "transform": 1,
+      "transform_kind": "affix_identity",
+      "transformed_word": "large number of  ",
+      "word_index": 52
+    },
+    {
       "copy_len": 7,
       "raw_word": "history",
       "transform": 20,
@@ -559,6 +575,14 @@
       "transform_kind": "affix_identity",
       "transformed_word": "english.",
       "word_index": 369
+    },
+    {
+      "copy_len": 12,
+      "raw_word": " Information",
+      "transform": 20,
+      "transform_kind": "affix_identity",
+      "transformed_word": " Information.",
+      "word_index": 285
     },
     {
       "copy_len": 5,
@@ -591,6 +615,78 @@
       "transform_kind": "affix_identity",
       "transformed_word": " english",
       "word_index": 369
+    },
+    {
+      "copy_len": 10,
+      "raw_word": "government",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " government",
+      "word_index": 18
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "information",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " information",
+      "word_index": 5
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "One of the ",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " One of the ",
+      "word_index": 178
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "Information",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " Information",
+      "word_index": 186
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "in order to",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " in order to",
+      "word_index": 189
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "In order to",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " In order to",
+      "word_index": 429
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "one of the ",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " one of the ",
+      "word_index": 452
+    },
+    {
+      "copy_len": 12,
+      "raw_word": " Information",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": "  Information",
+      "word_index": 285
+    },
+    {
+      "copy_len": 16,
+      "raw_word": "large number of ",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " large number of ",
+      "word_index": 52
     },
     {
       "copy_len": 7,
@@ -633,6 +729,14 @@
       "word_index": 5
     },
     {
+      "copy_len": 12,
+      "raw_word": " Information",
+      "transform": 9,
+      "transform_kind": "uppercase_first",
+      "transformed_word": " Information",
+      "word_index": 285
+    },
+    {
       "copy_len": 5,
       "raw_word": "words",
       "transform": 12,
@@ -665,7 +769,7 @@
       "word_index": 614
     }
   ],
-  "entry_count": 83,
+  "entry_count": 96,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

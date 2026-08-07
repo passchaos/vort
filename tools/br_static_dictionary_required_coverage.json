@@ -210,6 +210,51 @@
       "category": "phrase"
     },
     {
+      "transform": 6,
+      "copy_len": 16,
+      "word_index": 52,
+      "word": " large number of ",
+      "source_case": "node-static-dictionary-leading-space-large-number-of-q5-lgwin10",
+      "reason": "size-winning leading-space candidate from Node probe",
+      "category": "phrase"
+    },
+    {
+      "transform": 6,
+      "copy_len": 11,
+      "word_index": 5,
+      "word": " information",
+      "source_case": "node-static-dictionary-leading-space-information-q5-lgwin10",
+      "reason": "size-winning leading-space candidate from Node probe",
+      "category": "phrase"
+    },
+    {
+      "transform": 6,
+      "copy_len": 12,
+      "word_index": 285,
+      "word": "  Information",
+      "source_case": "node-static-dictionary-two-leading-spaces-information-q5-lgwin10",
+      "reason": "size-winning leading-space candidate from Node probe",
+      "category": "phrase"
+    },
+    {
+      "transform": 1,
+      "copy_len": 16,
+      "word_index": 52,
+      "word": "large number of  ",
+      "source_case": "node-static-dictionary-large-number-of-two-spaces-q5-lgwin10",
+      "reason": "size-winning trailing-space candidate from Node probe",
+      "category": "phrase"
+    },
+    {
+      "transform": 6,
+      "copy_len": 10,
+      "word_index": 18,
+      "word": " government",
+      "source_case": "node-static-dictionary-leading-space-government-q5-lgwin10",
+      "reason": "size-winning leading-space candidate from Node probe",
+      "category": "phrase"
+    },
+    {
       "transform": 12,
       "copy_len": 8,
       "word_index": 614,

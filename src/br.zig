@@ -744,17 +744,30 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 1, .copy_len = 7, .word_index = 369, .word = "english " },
     .{ .transform = 1, .copy_len = 10, .word_index = 205, .word = "dictionary " },
     .{ .transform = 1, .copy_len = 11, .word_index = 5, .word = "information " },
+    .{ .transform = 1, .copy_len = 12, .word_index = 285, .word = " Information " },
+    .{ .transform = 1, .copy_len = 16, .word_index = 52, .word = "large number of  " },
     .{ .transform = 20, .copy_len = 7, .word_index = 37, .word = "history." },
     .{ .transform = 20, .copy_len = 7, .word_index = 369, .word = "english." },
+    .{ .transform = 20, .copy_len = 12, .word_index = 285, .word = " Information." },
     .{ .transform = 6, .copy_len = 5, .word_index = 43, .word = " words" },
     .{ .transform = 6, .copy_len = 5, .word_index = 44, .word = " games" },
     .{ .transform = 6, .copy_len = 7, .word_index = 170, .word = " release" },
     .{ .transform = 6, .copy_len = 7, .word_index = 369, .word = " english" },
+    .{ .transform = 6, .copy_len = 10, .word_index = 18, .word = " government" },
+    .{ .transform = 6, .copy_len = 11, .word_index = 5, .word = " information" },
+    .{ .transform = 6, .copy_len = 11, .word_index = 178, .word = " One of the " },
+    .{ .transform = 6, .copy_len = 11, .word_index = 186, .word = " Information" },
+    .{ .transform = 6, .copy_len = 11, .word_index = 189, .word = " in order to" },
+    .{ .transform = 6, .copy_len = 11, .word_index = 429, .word = " In order to" },
+    .{ .transform = 6, .copy_len = 11, .word_index = 452, .word = " one of the " },
+    .{ .transform = 6, .copy_len = 12, .word_index = 285, .word = "  Information" },
+    .{ .transform = 6, .copy_len = 16, .word_index = 52, .word = " large number of " },
     .{ .transform = 9, .copy_len = 7, .word_index = 5, .word = "Content" },
     .{ .transform = 9, .copy_len = 7, .word_index = 37, .word = "History" },
     .{ .transform = 9, .copy_len = 7, .word_index = 369, .word = "English" },
     .{ .transform = 9, .copy_len = 10, .word_index = 205, .word = "Dictionary" },
     .{ .transform = 9, .copy_len = 11, .word_index = 5, .word = "Information" },
+    .{ .transform = 9, .copy_len = 12, .word_index = 285, .word = " Information" },
     .{ .transform = 12, .copy_len = 5, .word_index = 43, .word = "word" },
     .{ .transform = 12, .copy_len = 5, .word_index = 44, .word = "game" },
     .{ .transform = 12, .copy_len = 7, .word_index = 1767, .word = "one an" },
@@ -2361,6 +2374,17 @@ test "br minimal static dictionary numbers identity decodes Node quality-five fr
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0x01, 0x52, 0x86, 0x28, 0x12, 0x1e, 0xb5 }, " numbers ");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8e, 0x84, 0xb7, 0x06 }, "  numbers");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0xe1, 0x52, 0x86, 0x28, 0x12, 0x1e, 0xb5 }, " numbers.");
+}
+
+test "br minimal static dictionary size winners decode Node quality-five frames" {
+    // These entries are the first candidate-probe rows whose Node Brotli frames
+    // are smaller than the original payload. Keep them pinned so size-winning
+    // dictionary coverage remains tied to concrete encoder output.
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x80, 0x00, 0x00, 0x20, 0x01, 0x52, 0x8b, 0x20, 0x53, 0xd6, 0xc6, 0x77, 0x07 }, " large number of ");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x58, 0x00, 0x00, 0x20, 0x01, 0x12, 0xc8, 0x84, 0x54 }, " information");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x60, 0x00, 0x00, 0x20, 0x01, 0x12, 0xc9, 0x04, 0x47, 0x04 }, "  Information");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x80, 0x00, 0x00, 0x20, 0x01, 0x92, 0x83, 0x28, 0x82, 0x4c, 0x59, 0x1b, 0xbe, 0x7a }, "large number of  ");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x50, 0x00, 0x00, 0x20, 0x01, 0x12, 0xc8, 0x04, 0xe5 }, " government");
 }
 
 test "br minimal compressed stream selects literal context tree through signed mode" {
