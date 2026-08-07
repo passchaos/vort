@@ -65,6 +65,32 @@ def checked_chunk(chunk_type, plain, payload):
     return chunk(chunk_type, struct.pack("<I", masked_crc32c(plain)) + payload)
 
 
+def snappy_varint(value):
+    out = bytearray()
+    while value >= 0x80:
+        out.append((value & 0x7F) | 0x80)
+        value >>= 7
+    out.append(value)
+    return bytes(out)
+
+
+def literal_block(data):
+    out = bytearray(snappy_varint(len(data)))
+    length_minus_one = len(data) - 1
+    byte_count = 1
+    tmp = length_minus_one
+    while tmp >= 0x100:
+        byte_count += 1
+        tmp >>= 8
+    out.append((59 + byte_count) << 2)
+    tmp = length_minus_one
+    for _ in range(byte_count):
+        out.append(tmp & 0xFF)
+        tmp >>= 8
+    out.extend(data)
+    return bytes(out)
+
+
 def run(args, cwd, expect_ok=True):
     result = subprocess.run(
         args,
@@ -153,6 +179,12 @@ def main():
         run([str(cli), "size-snappy-frame-hex", reserved.hex(), "0"], root, expect_ok=False)
         run([str(cli), "decode-snappy-frame-hex", reserved.hex(), "0"], root, expect_ok=False)
         checked += 1
+
+    oversized_payload = b"x" * (64 * 1024 + 1)
+    oversized_frame = snappy_identifier() + checked_chunk(0x00, oversized_payload, literal_block(oversized_payload))
+    run([str(cli), "size-snappy-frame-hex", oversized_frame.hex(), str(len(oversized_payload))], root, expect_ok=False)
+    run([str(cli), "decode-snappy-frame-hex", oversized_frame.hex(), str(len(oversized_payload))], root, expect_ok=False)
+    checked += 1
 
     with tempfile.TemporaryDirectory(prefix="vort-snappy-") as td:
         tmp = pathlib.Path(td)

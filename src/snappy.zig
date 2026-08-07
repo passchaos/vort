@@ -338,6 +338,7 @@ pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
             .compressed => {
                 const compressed = chunk.payload[4..];
                 const decoded_len = try decodedBlockSize(compressed);
+                if (decoded_len > max_uncompressed_chunk_len) return error.CorruptFrame;
                 if (output.len - written < decoded_len) return error.OutputTooSmall;
                 const decoded = output[written..][0..decoded_len];
                 const n = try decodeBlockInto(compressed, decoded);
@@ -765,6 +766,28 @@ test "snappy framed stream rejects malformed chunks" {
     try std.testing.expectError(error.ChecksumMismatch, decodedFrameSize(corrupt_compressed));
     try std.testing.expectError(error.ChecksumMismatch, decodeFrameAlloc(std.testing.allocator, corrupt_compressed));
 
+    const oversized_compressed = try oversizedCompressedChunkFrame(std.testing.allocator);
+    defer std.testing.allocator.free(oversized_compressed);
+    try std.testing.expectError(error.CorruptFrame, decodedFrameSize(oversized_compressed));
+    try std.testing.expectError(error.CorruptFrame, decodeFrameAlloc(std.testing.allocator, oversized_compressed));
+
     const unsupported = [_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x02, 0x00, 0x00, 0x00 };
     try std.testing.expectError(error.UnsupportedSnappyFeature, decodeFrameAlloc(std.testing.allocator, &unsupported));
+}
+
+fn oversizedCompressedChunkFrame(allocator: std.mem.Allocator) Error![]u8 {
+    const plain = try allocator.alloc(u8, max_uncompressed_chunk_len + 1);
+    defer allocator.free(plain);
+    @memset(plain, 'x');
+
+    var block: std.ArrayList(u8) = .empty;
+    defer block.deinit(allocator);
+    try writeVarint(allocator, &block, plain.len);
+    try emitLiteral(allocator, &block, plain);
+
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(allocator);
+    try writeChunk(allocator, &frame, stream_identifier_chunk_type, stream_identifier_payload);
+    try writeCheckedChunk(allocator, &frame, compressed_data_chunk_type, plain, block.items);
+    return frame.toOwnedSlice(allocator);
 }
