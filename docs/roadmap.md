@@ -1842,3 +1842,8 @@ architecture blindly.
   Node quality-5 frames for `Dictionary` and `Information` now decode through
   the same preflight/output dictionary path, covering uppercase dictionary words
   that Node emits directly before broader transform-table support lands.
+
+- Added a Brotli static-dictionary trailing-space transform slice for RFC
+  transform index 1. Node-accepted synthetic frames now cover `words `,
+  `games `, `release `, `dictionary `, and `information ` through both
+  preflight and output decode, balancing the earlier leading-space coverage.

@@ -2285,6 +2285,26 @@ def main() -> int:
             bytes.fromhex("e200000004401412a72b00"),
             b" release",
         ),
+        "synthetic-static-dictionary-trailing-space-words": (
+            bytes.fromhex("a200000004400c12e00b"),
+            b"words ",
+        ),
+        "synthetic-static-dictionary-trailing-space-games": (
+            bytes.fromhex("a200000004400c12200c"),
+            b"games ",
+        ),
+        "synthetic-static-dictionary-trailing-space-release": (
+            bytes.fromhex("e200000004401412a22b"),
+            b"release ",
+        ),
+        "synthetic-static-dictionary-trailing-space-dictionary": (
+            bytes.fromhex("4201000004400013a068"),
+            b"dictionary ",
+        ),
+        "synthetic-static-dictionary-trailing-space-information": (
+            bytes.fromhex("6201000004400013e004"),
+            b"information ",
+        ),
         "node-static-dictionary-uppercase-dictionary-q5-lgwin10": (
             node_compress(b"Dictionary", quality=5, lgwin=10),
             b"Dictionary",
