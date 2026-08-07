@@ -1994,3 +1994,8 @@ architecture blindly.
   sweep, and made the default Node probe fail if any probed Node frame is no
   longer accepted by Vort. This keeps the candidate backlog measurable without
   forcing the wider sweep into every smoke path.
+
+- Ran the full generated-candidate Node probe and resolved its remaining five
+  failures by adding the shared ` numbers` identity tuple. The full probe now
+  has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
+  `  numbers`, and ` numbers.` through the same static dictionary address.

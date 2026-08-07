@@ -282,6 +282,14 @@
     },
     {
       "copy_len": 8,
+      "raw_word": " numbers",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " numbers",
+      "word_index": 614
+    },
+    {
+      "copy_len": 8,
       "raw_word": "language",
       "transform": 0,
       "transform_kind": "identity",
@@ -657,7 +665,7 @@
       "word_index": 614
     }
   ],
-  "entry_count": 82,
+  "entry_count": 83,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

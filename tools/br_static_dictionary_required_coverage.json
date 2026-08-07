@@ -201,6 +201,15 @@
       "category": "phrase"
     },
     {
+      "transform": 0,
+      "copy_len": 8,
+      "word_index": 614,
+      "word": " numbers",
+      "source_case": "node-static-dictionary-leading-space-numbers-q5-lgwin10",
+      "reason": "full candidate Node probe identity source tuple shared by numbers affix payloads",
+      "category": "phrase"
+    },
+    {
       "transform": 12,
       "copy_len": 8,
       "word_index": 614,

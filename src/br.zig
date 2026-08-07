@@ -711,6 +711,7 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 8, .word_index = 425, .word = "history." },
     .{ .transform = 0, .copy_len = 8, .word_index = 438, .word = "Examples" },
     .{ .transform = 0, .copy_len = 8, .word_index = 558, .word = "examples" },
+    .{ .transform = 0, .copy_len = 8, .word_index = 614, .word = " numbers" },
     .{ .transform = 0, .copy_len = 8, .word_index = 4, .word = "language" },
     .{ .transform = 0, .copy_len = 8, .word_index = 79, .word = "internet" },
     .{ .transform = 0, .copy_len = 9, .word_index = 5, .word = "available" },
@@ -2349,6 +2350,17 @@ test "br minimal static dictionary candidate identity batch decodes Node quality
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x50, 0x00, 0x00, 0x20, 0x01, 0x10, 0xc0, 0x44, 0x37, 0x06 }, "In order to");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x50, 0x00, 0x00, 0x20, 0x01, 0x10, 0xc0, 0x84, 0xd6, 0x06 }, "One of the ");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x70, 0x00, 0x00, 0x20, 0x09, 0x62, 0xf6, 0x96, 0x83, 0x18, 0xa2, 0x49, 0x59, 0x27, 0xde, 0x37, 0xd9, 0x01 }, "large number of");
+}
+
+test "br minimal static dictionary numbers identity decodes Node quality-five frames" {
+    // Full candidate probing showed that Node reuses the identity ` numbers`
+    // tuple for several transformed candidate payloads (` numbers`, ` numbers `,
+    // `  numbers`, and ` numbers.`). Pin the source tuple directly so future
+    // full-probe runs do not regress on the shared frame prefix.
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x38, 0x00, 0x00, 0x20, 0x01, 0x10, 0x86, 0x84, 0xa7, 0x06 }, " numbers");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0x01, 0x52, 0x86, 0x28, 0x12, 0x1e, 0xb5 }, " numbers ");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8e, 0x84, 0xb7, 0x06 }, "  numbers");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0xe1, 0x52, 0x86, 0x28, 0x12, 0x1e, 0xb5 }, " numbers.");
 }
 
 test "br minimal compressed stream selects literal context tree through signed mode" {
