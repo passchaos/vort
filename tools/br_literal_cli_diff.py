@@ -2181,12 +2181,33 @@ def node_decode(br_path: Path) -> bytes:
     return result.stdout
 
 
+def node_compress(payload: bytes, quality: int, lgwin: int) -> bytes:
+    script = (
+        "const z=require('zlib');"
+        "const payload=Buffer.from(process.argv[1], 'hex');"
+        "const quality=Number(process.argv[2]);"
+        "const lgwin=Number(process.argv[3]);"
+        "const out=z.brotliCompressSync(payload,{params:{"
+        "[z.constants.BROTLI_PARAM_QUALITY]:quality,"
+        "[z.constants.BROTLI_PARAM_LGWIN]:lgwin"
+        "}});"
+        "process.stdout.write(out);"
+    )
+    return subprocess.run(
+        ["node", "-e", script, payload.hex(), str(quality), str(lgwin)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    ).stdout
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit("usage: br_literal_cli_diff.py <vort-cli>")
     cli = Path(sys.argv[1]).resolve()
     root = Path(__file__).resolve().parents[1]
     cases = {
+        "node-empty-q0-lgwin10": (node_compress(b"", quality=0, lgwin=10), b""),
         "final": (literal_only_hello_frame(True), b"hello"),
         "nonfinal": (literal_only_hello_frame(False), b"hello"),
         "trivial-context": (trivial_context_hello_frame(), b"hello"),
