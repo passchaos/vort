@@ -1876,3 +1876,8 @@ architecture blindly.
   addition to CSV. The report now creates parent directories for output paths,
   emits schema/version metadata in JSON, and keeps the default stdout CSV path
   for quick terminal inspection.
+
+- Added `run-br-static-dictionary-report-smoke`, a focused gate for the Brotli
+  static dictionary coverage artifacts. It cross-checks CSV/JSON/Markdown row
+  counts, required transform/word tuples, duplicate keys, byte counts, and now
+  serves as the required dashboard smoke gate for the report artifacts.

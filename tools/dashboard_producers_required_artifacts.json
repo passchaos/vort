@@ -5,21 +5,21 @@
       "name": "vort-br-static-dictionary-report.csv",
       "producer_step": "zig build run-br-static-dictionary-report-dashboard",
       "required_smoke_gate": true,
-      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+      "smoke_gate": "zig build run-br-static-dictionary-report-smoke"
     },
     {
       "expected_format": "json",
       "name": "vort-br-static-dictionary-report.json",
       "producer_step": "zig build run-br-static-dictionary-report-dashboard",
       "required_smoke_gate": true,
-      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+      "smoke_gate": "zig build run-br-static-dictionary-report-smoke"
     },
     {
       "expected_format": "md",
       "name": "vort-br-static-dictionary-report.md",
       "producer_step": "zig build run-br-static-dictionary-report-dashboard",
       "required_smoke_gate": true,
-      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+      "smoke_gate": "zig build run-br-static-dictionary-report-smoke"
     },
     {
       "expected_format": "csv",

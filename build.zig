@@ -821,6 +821,20 @@ pub fn build(b: *std.Build) void {
     const br_static_dictionary_report_dashboard_step = b.step("run-br-static-dictionary-report-dashboard", "Write Brotli static dictionary subset coverage artifacts");
     br_static_dictionary_report_dashboard_step.dependOn(&run_br_static_dictionary_report_dashboard.step);
 
+    const br_static_dictionary_report_smoke = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_report_smoke.py",
+        "--csv",
+        "zig-out/vort-br-static-dictionary-report.csv",
+        "--json",
+        "zig-out/vort-br-static-dictionary-report.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-report.md",
+    });
+    br_static_dictionary_report_smoke.step.dependOn(br_static_dictionary_report_dashboard_step);
+    const br_static_dictionary_report_smoke_step = b.step("run-br-static-dictionary-report-smoke", "Validate Brotli static dictionary coverage artifacts");
+    br_static_dictionary_report_smoke_step.dependOn(&br_static_dictionary_report_smoke.step);
+
     const snappy_block_cli_probe = b.addSystemCommand(&.{ "python3", "tools/snappy_block_cli_probe.py" });
     snappy_block_cli_probe.addArtifactArg(cli_exe);
     const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks and framed streams");
@@ -2110,6 +2124,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_stored_corpus_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_dashboard_step);
+    ci_smoke_step.dependOn(br_static_dictionary_report_smoke_step);
     ci_smoke_step.dependOn(snappy_block_cli_probe_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);

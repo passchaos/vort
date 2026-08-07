@@ -6,15 +6,15 @@
   "artifact_metadata": {
     "vort-br-static-dictionary-report.csv": {
       "expected_format": "csv",
-      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+      "smoke_gate": "zig build run-br-static-dictionary-report-smoke"
     },
     "vort-br-static-dictionary-report.json": {
       "expected_format": "json",
-      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+      "smoke_gate": "zig build run-br-static-dictionary-report-smoke"
     },
     "vort-br-static-dictionary-report.md": {
       "expected_format": "md",
-      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+      "smoke_gate": "zig build run-br-static-dictionary-report-smoke"
     },
     "vort-checksum-bench.csv": {
       "expected_format": "csv",
