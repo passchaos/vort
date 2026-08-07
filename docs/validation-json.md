@@ -874,8 +874,8 @@ Example:
   "case_count": 1,
   "cases": [
     {
-      "name": "word_bytes_mismatch",
-      "expected_output": "word_bytes mismatch",
+      "name": "duplicate_required_tuple",
+      "expected_output": "duplicate required coverage tuple",
       "returncode": 1,
       "matched": true
     }

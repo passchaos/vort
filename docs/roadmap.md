@@ -1914,3 +1914,7 @@ architecture blindly.
   `tools/br_static_dictionary_required_coverage.json`, documented the new schema,
   and made both positive and negative smoke tests read the same config so future
   coverage growth no longer requires editing tuple lists in multiple scripts.
+
+- Extended the Brotli static-dictionary report negative smoke with a duplicate
+  required-coverage tuple fixture, proving the external required coverage config
+  is validated rather than accepted blindly.

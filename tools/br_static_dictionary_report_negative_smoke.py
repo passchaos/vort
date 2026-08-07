@@ -68,9 +68,12 @@ def write_artifacts(root: Path, payload: dict[str, Any]) -> tuple[Path, Path, Pa
     return csv_path, json_path, md_path
 
 
-def run_smoke(csv_path: Path, json_path: Path, md_path: Path) -> subprocess.CompletedProcess[str]:
+def run_smoke(csv_path: Path, json_path: Path, md_path: Path, required_path: Path | None = None) -> subprocess.CompletedProcess[str]:
+    command = ["python3", str(SMOKE), "--csv", str(csv_path), "--json", str(json_path), "--markdown", str(md_path)]
+    if required_path is not None:
+        command.extend(["--required", str(required_path)])
     return subprocess.run(
-        ["python3", str(SMOKE), "--csv", str(csv_path), "--json", str(json_path), "--markdown", str(md_path)],
+        command,
         check=False,
         text=True,
         stdout=subprocess.PIPE,
@@ -78,10 +81,15 @@ def run_smoke(csv_path: Path, json_path: Path, md_path: Path) -> subprocess.Comp
     )
 
 
-def case(name: str, payload: dict[str, Any], expected: str) -> dict[str, object]:
+def case(name: str, payload: dict[str, Any], expected: str, required_payload: dict[str, Any] | None = None) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix=f"vort-br-dict-neg-{name}-") as td:
-        csv_path, json_path, md_path = write_artifacts(Path(td), payload)
-        result = run_smoke(csv_path, json_path, md_path)
+        root = Path(td)
+        csv_path, json_path, md_path = write_artifacts(root, payload)
+        required_path = None
+        if required_payload is not None:
+            required_path = root / "required.json"
+            required_path.write_text(json.dumps(required_payload, indent=2, sort_keys=True) + "\n")
+        result = run_smoke(csv_path, json_path, md_path, required_path)
     matched = result.returncode != 0 and expected in result.stdout
     if not matched:
         raise AssertionError(f"{name} did not fail as expected: rc={result.returncode} output={result.stdout!r}")
@@ -107,6 +115,17 @@ def main() -> int:
     bad_entry_count = report(base_entries)
     bad_entry_count["entry_count"] = 999
     rows.append(case("entry_count_mismatch", bad_entry_count, "entry_count does not match"))
+
+    duplicate_required = {
+        "schema": "vort.br_static_dictionary_required_coverage",
+        "schema_version": 1,
+        "entries": [
+            {"transform": entry["transform"], "copy_len": entry["copy_len"], "word_index": entry["word_index"], "word": entry["word"]}
+            for entry in base_entries
+        ],
+    }
+    duplicate_required["entries"].append(dict(duplicate_required["entries"][0]))
+    rows.append(case("duplicate_required_tuple", report(base_entries), "duplicate required coverage tuple", duplicate_required))
 
     summary = {
         "schema": "vort.br_static_dictionary_report_negative_smoke",
