@@ -1963,3 +1963,10 @@ architecture blindly.
   companion negative smoke now mutates anchors, source rows, generated-order
   expectations, and optional upstream source paths to prove the audit fails on
   drift rather than merely producing a happy-path artifact.
+
+
+- Added a Brotli static-dictionary candidate report that derives not-yet-enabled
+  tuples from the current source anchors and supported transform subset. The
+  retained JSON/Markdown artifacts expose concrete follow-up rows such as
+  trailing-space and uppercase-first candidates, giving future coverage growth a
+  generated backlog instead of another purely manual search pass.

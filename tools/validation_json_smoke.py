@@ -149,6 +149,11 @@ def main() -> int:
         assert dashboard_config_index["schema"] == "vort.dashboard_config_index"
         assert dashboard_config_index["configs"]
         validate_value_against_manifest(dashboard_config_index, schemas_def)
+        br_static_dictionary_candidate_report = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-candidates.json").read_text())
+        assert br_static_dictionary_candidate_report["schema"] == "vort.br_static_dictionary_candidate_report"
+        assert br_static_dictionary_candidate_report["candidate_count"] >= 1
+        assert br_static_dictionary_candidate_report["candidates"]
+        validate_value_against_manifest(br_static_dictionary_candidate_report, schemas_def)
         br_static_dictionary_required = json.loads((ROOT / "tools" / "br_static_dictionary_required_coverage.json").read_text())
         assert br_static_dictionary_required["schema"] == "vort.br_static_dictionary_required_coverage"
         assert br_static_dictionary_required["entries"]
@@ -802,6 +807,7 @@ def main() -> int:
                 ok["schema"],
                 report["schema"],
                 corrupt["schema"],
+                br_static_dictionary_candidate_report["schema"],
                 br_static_dictionary_required["schema"],
                 br_static_dictionary_source_anchors["schema"],
                 br_static_dictionary_source_audit["schema"],

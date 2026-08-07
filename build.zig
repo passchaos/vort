@@ -867,6 +867,30 @@ pub fn build(b: *std.Build) void {
     const br_static_dictionary_source_audit_negative_smoke_step = b.step("run-br-static-dictionary-source-audit-negative-smoke", "Validate Brotli static dictionary source-audit negative cases");
     br_static_dictionary_source_audit_negative_smoke_step.dependOn(&br_static_dictionary_source_audit_negative_smoke.step);
 
+    const br_static_dictionary_candidate_report = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_candidate_report.py",
+        "--json",
+        "zig-out/vort-br-static-dictionary-candidates.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-candidates.md",
+    });
+    if (b.args) |args| br_static_dictionary_candidate_report.addArgs(args);
+    const br_static_dictionary_candidate_report_step = b.step("run-br-static-dictionary-candidate-report", "Report Brotli static dictionary candidate tuples from source anchors");
+    br_static_dictionary_candidate_report_step.dependOn(&br_static_dictionary_candidate_report.step);
+
+    const br_static_dictionary_candidate_report_smoke = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_candidate_report_smoke.py",
+        "--json",
+        "zig-out/vort-br-static-dictionary-candidates.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-candidates.md",
+    });
+    br_static_dictionary_candidate_report_smoke.step.dependOn(br_static_dictionary_candidate_report_step);
+    const br_static_dictionary_candidate_report_smoke_step = b.step("run-br-static-dictionary-candidate-report-smoke", "Validate Brotli static dictionary candidate report artifacts");
+    br_static_dictionary_candidate_report_smoke_step.dependOn(&br_static_dictionary_candidate_report_smoke.step);
+
     const snappy_block_cli_probe = b.addSystemCommand(&.{ "python3", "tools/snappy_block_cli_probe.py" });
     snappy_block_cli_probe.addArtifactArg(cli_exe);
     const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks and framed streams");
@@ -1881,6 +1905,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(png_scratch_report_dashboard_step);
     validation_json_smoke.step.dependOn(br_static_dictionary_source_audit_step);
     validation_json_smoke.step.dependOn(br_static_dictionary_source_audit_negative_smoke_step);
+    validation_json_smoke.step.dependOn(br_static_dictionary_candidate_report_smoke_step);
     const validation_json_smoke_step = b.step("run-validation-json-smoke", "Validate CLI and report JSON schema outputs");
     validation_json_smoke_step.dependOn(&validation_json_smoke.step);
 
@@ -1900,6 +1925,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.step.dependOn(png_scratch_report_dashboard_step);
     validation_json_dashboard.step.dependOn(br_static_dictionary_source_audit_step);
     validation_json_dashboard.step.dependOn(br_static_dictionary_source_audit_negative_smoke_step);
+    validation_json_dashboard.step.dependOn(br_static_dictionary_candidate_report_smoke_step);
     const validation_json_dashboard_step = b.step("run-validation-json-dashboard", "Write validation JSON schema smoke summary to zig-out");
     validation_json_dashboard_step.dependOn(&validation_json_dashboard.step);
 
@@ -1957,6 +1983,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(br_static_dictionary_report_negative_smoke_step);
     dashboard_index.step.dependOn(br_static_dictionary_source_audit_step);
     dashboard_index.step.dependOn(br_static_dictionary_source_audit_negative_smoke_step);
+    dashboard_index.step.dependOn(br_static_dictionary_candidate_report_smoke_step);
     dashboard_index.step.dependOn(deflate_decode_stage_report_dashboard_step);
     dashboard_index.step.dependOn(deflate_extra_bits_bench_gate_step);
     dashboard_index.step.dependOn(deflate_huffman_build_bench_gate_step);
@@ -2168,6 +2195,8 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_static_dictionary_report_negative_smoke_step);
     ci_smoke_step.dependOn(br_static_dictionary_source_audit_step);
     ci_smoke_step.dependOn(br_static_dictionary_source_audit_negative_smoke_step);
+    ci_smoke_step.dependOn(br_static_dictionary_candidate_report_step);
+    ci_smoke_step.dependOn(br_static_dictionary_candidate_report_smoke_step);
     ci_smoke_step.dependOn(snappy_block_cli_probe_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);

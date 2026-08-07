@@ -2,6 +2,39 @@
   "schema": "vort.validation_json_schema_manifest",
   "schema_version": 1,
   "schemas": {
+    "vort.br_static_dictionary_candidate_report": {
+      "count_rules": {
+        "candidate_count": {
+          "collection": "candidates"
+        }
+      },
+      "fields": {
+        "schema": "str",
+        "schema_version": "int",
+        "source_entry_count": "int",
+        "raw_word_count": "int",
+        "transform_count": "int",
+        "candidate_count": "int",
+        "candidates": "list"
+      },
+      "item_collection": "candidates",
+      "item_enums": {
+        "transform_kind": [
+          "identity",
+          "affix_identity",
+          "omit_last_1",
+          "uppercase_first"
+        ]
+      },
+      "item_fields": {
+        "transform": "int",
+        "copy_len": "int",
+        "word_index": "int",
+        "raw_word": "str",
+        "transformed_word": "str",
+        "transform_kind": "str"
+      }
+    },
     "vort.br_static_dictionary_required_coverage": {
       "fields": {
         "schema": "str",
@@ -2741,6 +2774,7 @@
           "vort.dashboard_producers_required_smoke",
           "vort.dashboard_strict_expected_modes",
           "vort.dashboard_strict_smoke",
+          "vort.br_static_dictionary_candidate_report",
           "vort.br_static_dictionary_required_coverage",
           "vort.br_static_dictionary_source_audit",
           "vort.br_static_dictionary_source_audit_negative_smoke",
