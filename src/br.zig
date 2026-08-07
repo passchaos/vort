@@ -668,14 +668,48 @@ fn skipMinimalCompressedMetaBlock(
     }
 }
 
+const MinimalStaticDictionaryEntry = struct {
+    transform: u16,
+    copy_len: usize,
+    word_index: usize,
+    word: []const u8,
+};
+
+const minimal_static_dictionary_entries = [_]MinimalStaticDictionaryEntry{
+    .{ .transform = 0, .copy_len = 5, .word_index = 35, .word = "about" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 43, .word = "words" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 44, .word = "games" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 81, .word = "press" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 107, .word = "quick" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 719, .word = "hello" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 989, .word = "dolor" },
+    .{ .transform = 0, .copy_len = 7, .word_index = 170, .word = "release" },
+    .{ .transform = 0, .copy_len = 10, .word_index = 84, .word = "expression" },
+    .{ .transform = 0, .copy_len = 10, .word_index = 135, .word = "depression" },
+    .{ .transform = 0, .copy_len = 10, .word_index = 205, .word = "dictionary" },
+    .{ .transform = 0, .copy_len = 10, .word_index = 327, .word = "Dictionary" },
+    .{ .transform = 0, .copy_len = 11, .word_index = 5, .word = "information" },
+    .{ .transform = 0, .copy_len = 11, .word_index = 186, .word = "Information" },
+    .{ .transform = 1, .copy_len = 5, .word_index = 43, .word = "words " },
+    .{ .transform = 1, .copy_len = 5, .word_index = 44, .word = "games " },
+    .{ .transform = 1, .copy_len = 7, .word_index = 170, .word = "release " },
+    .{ .transform = 1, .copy_len = 10, .word_index = 205, .word = "dictionary " },
+    .{ .transform = 1, .copy_len = 11, .word_index = 5, .word = "information " },
+    .{ .transform = 6, .copy_len = 5, .word_index = 43, .word = " words" },
+    .{ .transform = 6, .copy_len = 5, .word_index = 44, .word = " games" },
+    .{ .transform = 6, .copy_len = 7, .word_index = 170, .word = " release" },
+    .{ .transform = 12, .copy_len = 5, .word_index = 43, .word = "word" },
+    .{ .transform = 12, .copy_len = 5, .word_index = 44, .word = "game" },
+};
+
 fn minimalStaticDictionaryWord(distance: usize, copy_len: usize, current_output_len: usize) Error![]const u8 {
     // Brotli static-dictionary addresses are relative to the current maximum
     // LZ77 distance, not the raw distance code. In this minimal decoder slice
     // we only enter here while `distance > current_output_len`, so the current
     // output length is the same limit used by RFC 7932 for small streams. The
-    // table below intentionally keeps just the identity-transform words proven
-    // by real Node quality-5 frames; transformed words and late-window
-    // dictionary references remain follow-up work.
+    // table below intentionally keeps just the proven word/transform tuples;
+    // full dictionary bytes, full transform metadata, and late-window dictionary
+    // references remain follow-up work.
     if (distance <= current_output_len) return error.InvalidMatch;
     const address = distance - current_output_len - 1;
     const size_bits = minimalStaticDictionarySizeBits(copy_len) orelse return error.UnsupportedBrotliFeature;
@@ -683,61 +717,10 @@ fn minimalStaticDictionaryWord(distance: usize, copy_len: usize, current_output_
     const word_index = address & mask;
     const transform_index = address >> @intCast(size_bits);
 
-    if (transform_index == 0) {
-        if (minimalStaticDictionaryIdentityWord(copy_len, word_index)) |word| return word;
-    } else if (transform_index == 1) {
-        if (minimalStaticDictionaryTrailingSpaceWord(copy_len, word_index)) |word| return word;
-    } else if (transform_index == 6) {
-        if (minimalStaticDictionaryLeadingSpaceWord(copy_len, word_index)) |word| return word;
-    } else if (transform_index == 12) {
-        if (minimalStaticDictionaryOmitLastOneWord(copy_len, word_index)) |word| return word;
+    for (minimal_static_dictionary_entries) |entry| {
+        if (entry.transform == transform_index and entry.copy_len == copy_len and entry.word_index == word_index) return entry.word;
     }
     return error.UnsupportedBrotliFeature;
-}
-
-fn minimalStaticDictionaryIdentityWord(copy_len: usize, word_index: usize) ?[]const u8 {
-    if (copy_len == 5 and word_index == 35) return "about";
-    if (copy_len == 5 and word_index == 81) return "press";
-    if (copy_len == 5 and word_index == 107) return "quick";
-    if (copy_len == 5 and word_index == 719) return "hello";
-    if (copy_len == 5 and word_index == 989) return "dolor";
-    if (copy_len == 7 and word_index == 170) return "release";
-    if (copy_len == 10 and word_index == 84) return "expression";
-    if (copy_len == 10 and word_index == 135) return "depression";
-    if (copy_len == 10 and word_index == 205) return "dictionary";
-    if (copy_len == 10 and word_index == 327) return "Dictionary";
-    if (copy_len == 11 and word_index == 5) return "information";
-    if (copy_len == 11 and word_index == 186) return "Information";
-    return null;
-}
-
-fn minimalStaticDictionaryTrailingSpaceWord(copy_len: usize, word_index: usize) ?[]const u8 {
-    // RFC transform index 1 applies the identity word with a trailing space.
-    // This mirrors the leading-space slice while keeping the current
-    // hard-coded subset small enough to audit by hand.
-    if (copy_len == 5 and word_index == 43) return "words ";
-    if (copy_len == 5 and word_index == 44) return "games ";
-    if (copy_len == 7 and word_index == 170) return "release ";
-    if (copy_len == 10 and word_index == 205) return "dictionary ";
-    if (copy_len == 11 and word_index == 5) return "information ";
-    return null;
-}
-
-fn minimalStaticDictionaryLeadingSpaceWord(copy_len: usize, word_index: usize) ?[]const u8 {
-    // RFC transform index 6 applies the identity word with a leading space.
-    // Keep the table narrow and evidence-driven until the shared transform
-    // metadata is represented directly.
-    if (copy_len == 5 and word_index == 43) return " words";
-    if (copy_len == 5 and word_index == 44) return " games";
-    if (copy_len == 7 and word_index == 170) return " release";
-    return null;
-}
-
-fn minimalStaticDictionaryOmitLastOneWord(copy_len: usize, word_index: usize) ?[]const u8 {
-    // RFC transform index 12 is the bare `OMIT_LAST_1` transform. Keep this
-    // intentionally tiny until the full transform table is represented in data.
-    if (copy_len == 5 and word_index == 43) return "word";
-    return null;
 }
 
 fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
@@ -2094,6 +2077,42 @@ test "br minimal static dictionary omit-last-one transform decodes Node quality-
         0x19,
     };
     const expected = "wordpress";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary identity words entry decodes Node-accepted frame" {
+    const encoded = [_]u8{
+        0x82, 0x00, 0x00, 0x00, 0x04, 0x40,
+        0x0c, 0x12, 0xd6, 0x03,
+    };
+    const expected = "words";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary identity games entry decodes Node-accepted frame" {
+    const encoded = [_]u8{
+        0x82, 0x00, 0x00, 0x00, 0x04, 0x40,
+        0x0c, 0x12, 0x17, 0x00,
+    };
+    const expected = "games";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary omit-last-one games transform decodes Node-accepted frame" {
+    const encoded = [_]u8{
+        0x62, 0x00, 0x00, 0x00, 0x04, 0x40,
+        0x0c, 0x12, 0x27, 0x0c, 0x00,
+    };
+    const expected = "game";
     try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
     const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
     defer std.testing.allocator.free(decoded);

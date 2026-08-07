@@ -2273,6 +2273,18 @@ def main() -> int:
             node_compress(b"wordpress", quality=5, lgwin=10),
             b"wordpress",
         ),
+        "synthetic-static-dictionary-identity-words": (
+            bytes.fromhex("8200000004400c12d603"),
+            b"words",
+        ),
+        "synthetic-static-dictionary-identity-games": (
+            bytes.fromhex("8200000004400c121700"),
+            b"games",
+        ),
+        "synthetic-static-dictionary-omit-last-one-games": (
+            bytes.fromhex("6200000004400c12270c00"),
+            b"game",
+        ),
         "synthetic-static-dictionary-leading-space-words": (
             bytes.fromhex("a200000004400c12e50b00"),
             b" words",

@@ -1847,3 +1847,9 @@ architecture blindly.
   transform index 1. Node-accepted synthetic frames now cover `words `,
   `games `, `release `, `dictionary `, and `information ` through both
   preflight and output decode, balancing the earlier leading-space coverage.
+
+- Refactored the narrow Brotli static-dictionary support into a small
+  table-driven `(transform, length, word_index)` map instead of separate
+  per-transform branch ladders. The table now also covers `words`, `games`, and
+  `games -> game` (`OMIT_LAST_1`) with Node-accepted synthetic frames, keeping
+  the growing subset easier to audit before importing the full dictionary.
