@@ -16,7 +16,31 @@
         "raw_word_count": "int",
         "transform_count": "int",
         "candidate_count": "int",
+        "kind_rows": "list",
+        "length_rows": "list",
         "candidates": "list"
+      },
+      "collections": {
+        "kind_rows": {
+          "fields": {
+            "transform_kind": "str",
+            "candidate_count": "int"
+          },
+          "enums": {
+            "transform_kind": [
+              "identity",
+              "affix_identity",
+              "omit_last_1",
+              "uppercase_first"
+            ]
+          }
+        },
+        "length_rows": {
+          "fields": {
+            "copy_len": "int",
+            "candidate_count": "int"
+          }
+        }
       },
       "enums": {
         "source_mode": [

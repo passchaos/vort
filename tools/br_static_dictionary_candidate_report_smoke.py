@@ -54,6 +54,10 @@ def main() -> int:
         raise AssertionError("source_entry_count mismatch")
     if report.get("candidate_count") != len(candidates):
         raise AssertionError("candidate_count mismatch")
+    if sum(row["candidate_count"] for row in report.get("kind_rows", [])) != len(candidates):
+        raise AssertionError("kind row candidate counts do not sum to candidate_count")
+    if sum(row["candidate_count"] for row in report.get("length_rows", [])) != len(candidates):
+        raise AssertionError("length row candidate counts do not sum to candidate_count")
     existing = {entry_key(entry) for entry in anchors}
     seen: set[tuple[int, int, int]] = set()
     candidate_words: set[tuple[int, int, int, str]] = set()
@@ -72,7 +76,7 @@ def main() -> int:
         raise AssertionError(f"missing required candidates: {missing}")
 
     markdown = args.markdown.read_text()
-    for text in ("# Brotli static dictionary candidate report", f"- Candidate entries: {len(candidates)}"):
+    for text in ("# Brotli static dictionary candidate report", "## Transform-kind summary", "## Copy-length summary", f"- Candidate entries: {len(candidates)}"):
         if text not in markdown:
             raise AssertionError(f"Markdown missing {text!r}")
     print(f"br_static_dictionary_candidate_report_smoke=ok candidates={len(candidates)}")

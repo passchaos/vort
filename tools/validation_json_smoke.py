@@ -154,6 +154,8 @@ def main() -> int:
         assert br_static_dictionary_candidate_report["source_mode"] == "anchors"
         assert br_static_dictionary_candidate_report["candidate_count"] >= 1
         assert br_static_dictionary_candidate_report["candidates"]
+        assert sum(row["candidate_count"] for row in br_static_dictionary_candidate_report["kind_rows"]) == br_static_dictionary_candidate_report["candidate_count"]
+        assert sum(row["candidate_count"] for row in br_static_dictionary_candidate_report["length_rows"]) == br_static_dictionary_candidate_report["candidate_count"]
         validate_value_against_manifest(br_static_dictionary_candidate_report, schemas_def)
         br_static_dictionary_candidate_upstream = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-candidate-upstream-smoke.json").read_text())
         assert br_static_dictionary_candidate_upstream["schema"] == "vort.br_static_dictionary_candidate_upstream_smoke"

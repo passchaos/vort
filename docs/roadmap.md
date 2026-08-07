@@ -2011,6 +2011,11 @@ architecture blindly.
   the anchor-derived candidate pool, creating a controlled path toward larger
   generated imports.
 
+- Added transform-kind and copy-length summaries to the Brotli candidate report,
+  so anchor and upstream candidate artifacts expose the distribution of affix,
+  uppercase, omit-last, and length buckets before selecting the next import
+  slice.
+
 - Added a portable upstream-mode smoke for the Brotli candidate report. The
   smoke builds a tiny temporary `common/dictionary_inc.h` fixture, proves
   upstream raw words are merged into the candidate pool, and now retains the

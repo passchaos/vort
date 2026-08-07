@@ -792,7 +792,9 @@ derived from the current source anchors and the minimal transform subset already
 understood by Vort. It can also use a local upstream Brotli `common/` checkout
 with a bounded `--source-limit` to include more raw dictionary words in the
 candidate pool. It is a planning artifact for expanding coverage from source
-data rather than hand-picking tuple literals.
+data rather than hand-picking tuple literals. The report includes transform-kind
+and copy-length summaries so generated backlog size is visible without scanning
+every candidate row.
 
 Example:
 
@@ -805,6 +807,18 @@ Example:
   "raw_word_count": 50,
   "transform_count": 6,
   "candidate_count": 1,
+  "kind_rows": [
+    {
+      "transform_kind": "affix_identity",
+      "candidate_count": 1
+    }
+  ],
+  "length_rows": [
+    {
+      "copy_len": 7,
+      "candidate_count": 1
+    }
+  ],
   "candidates": [
     {
       "transform": 1,

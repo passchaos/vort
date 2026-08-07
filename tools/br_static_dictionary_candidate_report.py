@@ -82,6 +82,22 @@ def candidate_entries(anchors: list[dict[str, Any]], raw_words: dict[tuple[int, 
     return candidates
 
 
+
+def kind_rows(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for kind in sorted({candidate["transform_kind"] for candidate in candidates}):
+        items = [candidate for candidate in candidates if candidate["transform_kind"] == kind]
+        rows.append({"transform_kind": kind, "candidate_count": len(items)})
+    return rows
+
+
+def length_rows(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for copy_len in sorted({candidate["copy_len"] for candidate in candidates}):
+        items = [candidate for candidate in candidates if candidate["copy_len"] == copy_len]
+        rows.append({"copy_len": copy_len, "candidate_count": len(items)})
+    return rows
+
 def build_report(anchors: list[dict[str, Any]], raw_words: dict[tuple[int, int], str], candidates: list[dict[str, Any]], source_mode: str) -> dict[str, Any]:
     return {
         "schema": "vort.br_static_dictionary_candidate_report",
@@ -91,6 +107,8 @@ def build_report(anchors: list[dict[str, Any]], raw_words: dict[tuple[int, int],
         "raw_word_count": len(raw_words),
         "transform_count": len(SUPPORTED_TRANSFORMS),
         "candidate_count": len(candidates),
+        "kind_rows": kind_rows(candidates),
+        "length_rows": length_rows(candidates),
         "candidates": candidates,
     }
 
@@ -113,9 +131,29 @@ def write_markdown(path: Path, report: dict[str, Any], limit: int) -> None:
         f"- Candidate entries: {report['candidate_count']}",
         f"- Rows shown: {len(rows)}",
         "",
+        "## Transform-kind summary",
+        "",
+        "| Transform kind | Candidates |",
+        "| --- | ---: |",
+    ]
+    for row in report["kind_rows"]:
+        lines.append(f"| `{row['transform_kind']}` | {row['candidate_count']} |")
+    lines.extend([
+        "",
+        "## Copy-length summary",
+        "",
+        "| Copy length | Candidates |",
+        "| ---: | ---: |",
+    ])
+    for row in report["length_rows"]:
+        lines.append(f"| {row['copy_len']} | {row['candidate_count']} |")
+    lines.extend([
+        "",
+        "## Candidate rows",
+        "",
         "| Transform | Copy length | Word index | Kind | Raw word | Candidate word |",
         "| ---: | ---: | ---: | --- | --- | --- |",
-    ]
+    ])
     for row in rows:
         lines.append(
             f"| {row['transform']} | {row['copy_len']} | {row['word_index']} | `{row['transform_kind']}` | `{row['raw_word']}` | `{row['transformed_word']}` |"
