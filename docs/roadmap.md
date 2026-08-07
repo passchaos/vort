@@ -1794,3 +1794,11 @@ architecture blindly.
   the copied `b` context, keeping allocator-returning decode preflight aligned
   with the full-output decode path. Zig tests and the Node-backed CLI
   differential smoke cover both frames.
+
+- Classified Brotli static-dictionary references as an unsupported feature
+  instead of a corrupt output-history match. A real Node quality-5 frame for
+  `hello brotli hello brotli` starts with a copy from distance 720 before any
+  bytes have been emitted, which is valid only through Brotli's static
+  dictionary. Vort now reports `UnsupportedBrotliFeature` consistently from
+  size preflight and decode, while the Node-backed CLI differential still proves
+  the same bytes are valid Brotli.

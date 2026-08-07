@@ -605,7 +605,8 @@ fn processMinimalCompressedMetaBlock(
             return;
         }
         const distance = try readMinimalDistance(&header, reader, lengths, last_distances);
-        if (distance == 0 or distance > written.*) return error.InvalidMatch;
+        if (distance == 0) return error.InvalidMatch;
+        if (distance > written.*) return error.UnsupportedBrotliFeature;
         if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
         var copy_index: usize = 0;
         while (copy_index < lengths.copy_len) : (copy_index += 1) {
@@ -645,7 +646,8 @@ fn skipMinimalCompressedMetaBlock(
             return;
         }
         const distance = try readMinimalDistance(&header, reader, lengths, last_distances);
-        if (distance == 0 or distance > written) return error.InvalidMatch;
+        if (distance == 0) return error.InvalidMatch;
+        if (distance > written) return error.UnsupportedBrotliFeature;
         if (lengths.copy_len > meta_block_end - written) return error.CorruptFrame;
         literal_history.copy(distance, lengths.copy_len);
         written += lengths.copy_len;
@@ -1857,6 +1859,16 @@ test "br minimal compressed stream keeps literal context after distance-one-twen
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "ab" ++ ("a" ** 127) ++ "abc", decoded);
+}
+
+test "br static dictionary distance reports unsupported feature" {
+    const encoded = [_]u8{
+        0xa1, 0xc0, 0x00, 0x00, 0x20, 0xe0, 0x38, 0xbc,
+        0xde, 0xdd, 0x77, 0x5f, 0x44, 0xa4, 0x1a, 0x24,
+        0x9f, 0x6a, 0x3c, 0xa7, 0x83, 0xd6, 0xc7, 0x00,
+    };
+    try std.testing.expectError(error.UnsupportedBrotliFeature, decodedStreamSizeLimited(&encoded, 25));
+    try std.testing.expectError(error.UnsupportedBrotliFeature, decodeStreamAllocLimited(std.testing.allocator, &encoded, 25));
 }
 
 test "br minimal compressed stream selects literal context tree through signed mode" {
