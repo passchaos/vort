@@ -69,7 +69,27 @@
         "node_decode_successes": "int",
         "vort_decode_successes": "int",
         "vort_decode_failures": "int",
+        "kind_rows": "list",
         "rows": "list"
+      },
+      "collections": {
+        "kind_rows": {
+          "fields": {
+            "transform_kind": "str",
+            "probed_count": "int",
+            "node_decode_successes": "int",
+            "vort_decode_successes": "int",
+            "vort_decode_failures": "int"
+          },
+          "enums": {
+            "transform_kind": [
+              "identity",
+              "affix_identity",
+              "omit_last_1",
+              "uppercase_first"
+            ]
+          }
+        }
       },
       "item_collection": "rows",
       "item_enums": {

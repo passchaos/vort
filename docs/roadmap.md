@@ -2000,6 +2000,11 @@ architecture blindly.
   instead of a magic numeric limit, while the default and wide probes remain
   cheaper checkpoints for routine validation.
 
+- Extended the Brotli Node probe report with transform-kind summary rows, so the
+  default, wide, and full probe artifacts show how many affix, uppercase, and
+  omit-last candidates were exercised and accepted without manually scanning the
+  per-candidate table.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

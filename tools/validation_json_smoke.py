@@ -160,6 +160,8 @@ def main() -> int:
         assert br_static_dictionary_node_probe["all_candidates"] is False
         assert br_static_dictionary_node_probe["probed_count"] >= 1
         assert br_static_dictionary_node_probe["node_decode_successes"] == br_static_dictionary_node_probe["probed_count"]
+        assert br_static_dictionary_node_probe["kind_rows"]
+        assert sum(row["probed_count"] for row in br_static_dictionary_node_probe["kind_rows"]) == br_static_dictionary_node_probe["probed_count"]
         validate_value_against_manifest(br_static_dictionary_node_probe, schemas_def)
         br_static_dictionary_required = json.loads((ROOT / "tools" / "br_static_dictionary_required_coverage.json").read_text())
         assert br_static_dictionary_required["schema"] == "vort.br_static_dictionary_required_coverage"

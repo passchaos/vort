@@ -112,6 +112,23 @@ def probe_candidates(cli: Path, report: dict[str, Any], limit: int, quality: int
     return rows
 
 
+def kind_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    kinds = sorted({row["transform_kind"] for row in rows})
+    summary: list[dict[str, Any]] = []
+    for kind in kinds:
+        kind_items = [row for row in rows if row["transform_kind"] == kind]
+        summary.append(
+            {
+                "transform_kind": kind,
+                "probed_count": len(kind_items),
+                "node_decode_successes": sum(1 for row in kind_items if row["node_ok"]),
+                "vort_decode_successes": sum(1 for row in kind_items if row["vort_ok"]),
+                "vort_decode_failures": sum(1 for row in kind_items if not row["vort_ok"]),
+            }
+        )
+    return summary
+
+
 def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], limit: int, quality: int, lgwin: int) -> dict[str, Any]:
     return {
         "schema": "vort.br_static_dictionary_node_probe",
@@ -126,6 +143,7 @@ def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], l
         "node_decode_successes": sum(1 for row in rows if row["node_ok"]),
         "vort_decode_successes": sum(1 for row in rows if row["vort_ok"]),
         "vort_decode_failures": sum(1 for row in rows if not row["vort_ok"]),
+        "kind_rows": kind_rows(rows),
         "rows": rows,
     }
 
@@ -146,9 +164,22 @@ def write_markdown(path: Path, report: dict[str, Any]) -> None:
         f"- Vort decode successes: {report['vort_decode_successes']}",
         f"- Vort decode failures: {report['vort_decode_failures']}",
         "",
+        "## Transform-kind summary",
+        "",
+        "| Transform kind | Probed | Node OK | Vort OK | Vort failures |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    for row in report["kind_rows"]:
+        lines.append(
+            f"| `{row['transform_kind']}` | {row['probed_count']} | {row['node_decode_successes']} | {row['vort_decode_successes']} | {row['vort_decode_failures']} |"
+        )
+    lines.extend([
+        "",
+        "## Candidate rows",
+        "",
         "| # | Transform | Copy length | Word index | Candidate | Brotli bytes | Classification | Error |",
         "| ---: | ---: | ---: | ---: | --- | ---: | --- | --- |",
-    ]
+    ])
     for row in report["rows"]:
         lines.append(
             f"| {row['index']} | {row['transform']} | {row['copy_len']} | {row['word_index']} | `{row['candidate_word']}` | {row['br_bytes']} | `{row['classification']}` | `{row['error']}` |"

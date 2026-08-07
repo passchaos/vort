@@ -943,7 +943,9 @@ work can distinguish candidates already accepted by the current decoder from
 Node-generated frames that still require new source tuples or transforms. The
 standard build step requires all default probed frames to decode successfully;
 the wide step raises the retained probe prefix to 160 candidates, and the full
-step probes every generated candidate for manual or release-gate sweeps.
+step probes every generated candidate for manual or release-gate sweeps. The
+report also summarizes probed rows by transform kind so coverage gaps can be
+triaged without scanning every candidate row.
 
 Example:
 
@@ -961,6 +963,15 @@ Example:
   "node_decode_successes": 1,
   "vort_decode_successes": 1,
   "vort_decode_failures": 0,
+  "kind_rows": [
+    {
+      "transform_kind": "affix_identity",
+      "probed_count": 1,
+      "node_decode_successes": 1,
+      "vort_decode_successes": 1,
+      "vort_decode_failures": 0
+    }
+  ],
   "rows": [
     {
       "index": 0,
