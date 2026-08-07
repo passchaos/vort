@@ -1923,3 +1923,7 @@ architecture blindly.
 - Added `reason` and `source_case` metadata to each Brotli static-dictionary
   required coverage tuple, and taught the smoke to reject missing metadata so
   required rows explain both why they exist and which case introduced them.
+
+- Taught the Brotli static-dictionary report smoke to verify each required
+  coverage tuple's `source_case` against `tools/br_literal_cli_diff.py`, and
+  added a negative fixture for stale source-case references.

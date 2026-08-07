@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REQUIRED = ROOT / "tools" / "br_static_dictionary_required_coverage.json"
+DEFAULT_CASE_SOURCE = ROOT / "tools" / "br_literal_cli_diff.py"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -20,7 +22,12 @@ def load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
-def load_required(path: Path) -> set[tuple[int, int, int, str]]:
+def load_case_names(path: Path) -> set[str]:
+    text = path.read_text()
+    return set(re.findall(r'"([^"\\]+)": \(', text))
+
+
+def load_required(path: Path, case_source: Path) -> set[tuple[int, int, int, str]]:
     payload = load_json(path)
     if payload.get("schema") != "vort.br_static_dictionary_required_coverage":
         raise AssertionError("unexpected required coverage schema")
@@ -29,6 +36,7 @@ def load_required(path: Path) -> set[tuple[int, int, int, str]]:
     entries = payload.get("entries")
     if not isinstance(entries, list) or not entries:
         raise AssertionError("required coverage entries must be non-empty list")
+    case_names = load_case_names(case_source)
     required: set[tuple[int, int, int, str]] = set()
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
@@ -43,6 +51,8 @@ def load_required(path: Path) -> set[tuple[int, int, int, str]]:
             raise AssertionError(f"required.entries[{index}] fields invalid")
         if not isinstance(reason, str) or not reason or not isinstance(source_case, str) or not source_case:
             raise AssertionError(f"required.entries[{index}] metadata fields invalid")
+        if source_case not in case_names:
+            raise AssertionError(f"required.entries[{index}] source_case {source_case!r} is not present in {case_source}")
         key = (transform, copy_len, word_index, word)
         if key in required:
             raise AssertionError(f"duplicate required coverage tuple {key}")
@@ -56,6 +66,7 @@ def main() -> int:
     parser.add_argument("--json", required=True, type=Path)
     parser.add_argument("--markdown", required=True, type=Path)
     parser.add_argument("--required", type=Path, default=DEFAULT_REQUIRED)
+    parser.add_argument("--case-source", type=Path, default=DEFAULT_CASE_SOURCE)
     args = parser.parse_args()
 
     report = load_json(args.json)
@@ -69,7 +80,7 @@ def main() -> int:
     if report.get("entry_count") != len(entries):
         raise AssertionError("entry_count does not match entries length")
 
-    required = load_required(args.required)
+    required = load_required(args.required, args.case_source)
     seen: set[tuple[int, int, int, str]] = set()
     keys: set[tuple[int, int, int]] = set()
     transforms: set[int] = set()

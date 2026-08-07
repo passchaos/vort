@@ -876,8 +876,8 @@ Example:
   "case_count": 1,
   "cases": [
     {
-      "name": "duplicate_required_tuple",
-      "expected_output": "duplicate required coverage tuple",
+      "name": "missing_source_case",
+      "expected_output": "source_case",
       "returncode": 1,
       "matched": true
     }

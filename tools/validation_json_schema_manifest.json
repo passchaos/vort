@@ -61,7 +61,8 @@
           "duplicate_key",
           "word_bytes_mismatch",
           "entry_count_mismatch",
-          "duplicate_required_tuple"
+          "duplicate_required_tuple",
+          "missing_source_case"
         ]
       },
       "item_fields": {

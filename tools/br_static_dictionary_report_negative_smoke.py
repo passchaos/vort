@@ -16,9 +16,12 @@ SMOKE = ROOT / "tools" / "br_static_dictionary_report_smoke.py"
 REQUIRED = ROOT / "tools" / "br_static_dictionary_required_coverage.json"
 
 
-def load_required_entries() -> list[dict[str, Any]]:
+def load_required_config_entries() -> list[dict[str, Any]]:
     payload = json.loads(REQUIRED.read_text())
-    entries = payload["entries"]
+    return [dict(entry) for entry in payload["entries"]]
+
+
+def report_entries_from_required(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
             "transform": entry["transform"],
@@ -101,7 +104,8 @@ def main() -> int:
     parser.add_argument("--summary", type=Path)
     args = parser.parse_args()
 
-    base_entries = load_required_entries()
+    required_entries = load_required_config_entries()
+    base_entries = report_entries_from_required(required_entries)
     rows = []
     rows.append(case("missing_required_tuple", report(base_entries[:-1]), "missing required coverage rows"))
 
@@ -116,20 +120,18 @@ def main() -> int:
     bad_entry_count["entry_count"] = 999
     rows.append(case("entry_count_mismatch", bad_entry_count, "entry_count does not match"))
 
+    bad_source_case = {
+        "schema": "vort.br_static_dictionary_required_coverage",
+        "schema_version": 1,
+        "entries": [dict(entry) for entry in required_entries],
+    }
+    bad_source_case["entries"][0]["source_case"] = "no-such-br-literal-case"
+    rows.append(case("missing_source_case", report(base_entries), "source_case", bad_source_case))
+
     duplicate_required = {
         "schema": "vort.br_static_dictionary_required_coverage",
         "schema_version": 1,
-        "entries": [
-            {
-                "transform": entry["transform"],
-                "copy_len": entry["copy_len"],
-                "word_index": entry["word_index"],
-                "word": entry["word"],
-                "reason": entry.get("reason", "test fixture"),
-                "source_case": entry.get("source_case", "test fixture"),
-            }
-            for entry in base_entries
-        ],
+        "entries": [dict(entry) for entry in required_entries],
     }
     duplicate_required["entries"].append(dict(duplicate_required["entries"][0]))
     rows.append(case("duplicate_required_tuple", report(base_entries), "duplicate required coverage tuple", duplicate_required))
