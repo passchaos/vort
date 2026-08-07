@@ -1484,6 +1484,7 @@ fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
     try expectEqualSlices(expected, chunked_appended.items["prefix:".len..]);
     chunked_appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(allocator, &chunked_appended, &chunks, join, dictionary_set, expected.len - 1));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet(allocator, &chunked_appended, &chunks, join, dictionary_set, expected.len + 1));
     try expectError(error.OutputLimitExceeded, vort.zstdDecodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet(allocator, &chunked_appended, &chunks, join, expected.len - 1, dictionary_set));
 
     var reusable_decoder = vort.ZstdNativeFrameDecoder.init(allocator);
@@ -1508,6 +1509,7 @@ fn checkNoSizeDictionarySetDirectOutput(allocator: std.mem.Allocator) !void {
     try expectEqualSlices(expected, reusable_appended.items["prefix:".len..]);
     reusable_appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, reusable_decoder.decodeConcatenatedChunksAppendExactSizeWithDictionarySet(&reusable_appended, &chunks, join, dictionary_set, expected.len - 1));
+    try expectError(error.SizeMismatch, reusable_decoder.decodeConcatenatedChunksAppendExactSizeWithDictionarySet(&reusable_appended, &chunks, join, dictionary_set, expected.len + 1));
     try expectError(error.OutputLimitExceeded, reusable_decoder.decodeConcatenatedChunksAppendLimitedWithDictionarySet(&reusable_appended, &chunks, join, expected.len - 1, dictionary_set));
 
     const missing_set = vort.ZstdNativeDictionarySet.init(&.{first_dict});
