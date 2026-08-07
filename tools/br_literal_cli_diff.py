@@ -212,6 +212,19 @@ def write_distance_context_map_copy3_ninth_tree(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # IMTF = false
 
 
+def write_distance_context_map_copy3_sixteenth_tree(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 1, 2)  # simple context-map prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 0, 4)
+    write_bits(bits, 15, 4)
+    write_bits(bits, 0, 1)
+    write_bits(bits, 1, 1)
+    write_bits(bits, 0, 1)
+    write_bits(bits, 0, 1)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
 def write_literal_context_map_for_a(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # RLEMAX = 0
     write_bits(bits, 1, 2)  # simple context-map prefix
@@ -316,6 +329,17 @@ def write_utf8_literal_context_map_for_ninth_tree(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # IMTF = false
 
 
+def write_utf8_literal_context_map_for_sixteenth_tree(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 1, 2)  # simple context-map prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 0, 4)
+    write_bits(bits, 15, 4)
+    for context in range(64):
+        write_bits(bits, 1 if context == 56 else 0, 1)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
 def write_signed_literal_context_map_for_one_after_zero(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # RLEMAX = 0
     write_bits(bits, 1, 2)  # simple context-map prefix
@@ -398,6 +422,17 @@ def write_literal_block_switch_nine_types_context_map(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # IMTF = false
 
 
+def write_literal_block_switch_sixteen_types_context_map(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 1, 2)  # simple context-map prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 0, 4)
+    write_bits(bits, 15, 4)
+    for index in range(1024):
+        write_bits(bits, 1 if index >= 960 else 0, 1)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
 def write_distance_block_switch_context_map(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # RLEMAX = 0
     write_bits(bits, 1, 2)  # simple context-map prefix
@@ -441,6 +476,17 @@ def write_distance_block_switch_nine_types_context_map(bits: list[int]) -> None:
     write_bits(bits, 8, 4)
     for index in range(36):
         write_bits(bits, 1 if index == 32 else 0, 1)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
+def write_distance_block_switch_sixteen_types_context_map(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 1, 2)  # simple context-map prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 0, 4)
+    write_bits(bits, 15, 4)
+    for index in range(64):
+        write_bits(bits, 1 if index == 60 else 0, 1)
     write_bits(bits, 0, 1)  # IMTF = false
 
 
@@ -673,6 +719,28 @@ def write_distance_context_nine_trees_ab_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 66, 17)
 
 
+def write_distance_context_sixteen_trees_ab_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 2, 4)  # NDIRECT = 2
+    write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 16)
+    write_distance_context_map_copy3_sixteenth_tree(bits)
+
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, ord("a"), 8)
+    write_bits(bits, ord("b"), 8)
+
+    write_simple_single_symbol_prefix(bits, 704, 145)
+    for _ in range(15):
+        write_simple_single_symbol_prefix(bits, 66, 16)
+    write_simple_single_symbol_prefix(bits, 66, 17)
+
+
 def write_literal_context_aba_header(bits: list[int]) -> None:
     write_block_type_count(bits, 1)
     write_block_type_count(bits, 1)
@@ -900,6 +968,25 @@ def write_literal_context_nine_trees_aba_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 64, 0)
 
 
+def write_literal_context_sixteen_trees_aba_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 0, 4)  # NDIRECT
+    write_bits(bits, 2, 2)  # literal context mode = UTF8
+    write_block_type_count(bits, 16)
+    write_utf8_literal_context_map_for_sixteenth_tree(bits)
+    write_block_type_count(bits, 1)
+
+    write_simple_single_symbol_prefix(bits, 256, ord("a"))
+    for _ in range(14):
+        write_simple_single_symbol_prefix(bits, 256, 0)
+    write_simple_single_symbol_prefix(bits, 256, ord("b"))
+    write_simple_single_symbol_prefix(bits, 704, 24)
+    write_simple_single_symbol_prefix(bits, 64, 0)
+
+
 def write_literal_context_signed_header(bits: list[int]) -> None:
     write_block_type_count(bits, 1)
     write_block_type_count(bits, 1)
@@ -1033,6 +1120,30 @@ def write_command_switch_nine_types_aaaaaaaab_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 65, 16)
 
 
+def write_command_switch_sixteen_types_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 16)
+    write_simple_single_symbol_prefix(bits, 18, 1)
+    write_simple_single_symbol_prefix(bits, 26, 0)
+    write_bits(bits, 0, 2)  # first command block count = 1
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 1, 4)  # NDIRECT = 1
+    write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, ord("a"), 8)
+    write_bits(bits, ord("b"), 8)
+
+    for _ in range(15):
+        write_simple_single_symbol_prefix(bits, 704, 136)
+    write_simple_single_symbol_prefix(bits, 704, 8)
+    write_simple_single_symbol_prefix(bits, 65, 16)
+
+
 def write_literal_block_switch_ab_header(bits: list[int]) -> None:
     write_block_type_count(bits, 2)
     write_simple_single_symbol_prefix(bits, 4, 1)
@@ -1143,6 +1254,29 @@ def write_literal_block_switch_nine_types_header(bits: list[int]) -> None:
         write_simple_single_symbol_prefix(bits, 256, 0)
     write_simple_single_symbol_prefix(bits, 256, ord("i"))
     write_simple_single_symbol_prefix(bits, 704, 56)
+    write_simple_single_symbol_prefix(bits, 64, 0)
+
+
+def write_literal_block_switch_sixteen_types_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 16)
+    write_simple_single_symbol_prefix(bits, 18, 1)
+    write_simple_single_symbol_prefix(bits, 26, 0)
+    write_bits(bits, 0, 2)  # first literal block count = 1
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 0, 4)  # NDIRECT
+    for _ in range(16):
+        write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 16)
+    write_literal_block_switch_sixteen_types_context_map(bits)
+    write_block_type_count(bits, 1)
+
+    write_simple_single_symbol_prefix(bits, 256, ord("a"))
+    for _ in range(14):
+        write_simple_single_symbol_prefix(bits, 256, 0)
+    write_simple_single_symbol_prefix(bits, 256, ord("p"))
+    write_simple_single_symbol_prefix(bits, 704, 264)
     write_simple_single_symbol_prefix(bits, 64, 0)
 
 
@@ -1271,6 +1405,37 @@ def write_distance_block_switch_nine_types_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 67, 16)
     write_simple_single_symbol_prefix(bits, 67, 18)
     write_simple_single_symbol_prefix(bits, 67, 16)
+
+
+def write_distance_block_switch_sixteen_types_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 16)
+    write_simple_single_symbol_prefix(bits, 18, 1)
+    write_simple_single_symbol_prefix(bits, 26, 0)
+    write_bits(bits, 0, 2)  # first distance block count = 1
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 3, 4)  # NDIRECT = 3
+    write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 16)
+    write_distance_block_switch_sixteen_types_context_map(bits)
+
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 2, 2)  # NSYM = 3
+    write_bits(bits, ord("a"), 8)
+    write_bits(bits, ord("b"), 8)
+    write_bits(bits, ord("c"), 8)
+
+    write_bits(bits, 1, 2)  # simple insert-copy prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 152, 10)
+    write_bits(bits, 128, 10)
+
+    write_simple_single_symbol_prefix(bits, 67, 18)
+    for _ in range(14):
+        write_simple_single_symbol_prefix(bits, 67, 16)
+    write_simple_single_symbol_prefix(bits, 67, 17)
 
 
 def literal_only_hello_frame(final: bool) -> bytes:
@@ -1455,6 +1620,19 @@ def distance_context_nine_trees_ab_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def distance_context_sixteen_trees_ab_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 4, 16)  # MLEN - 1
+    write_distance_context_sixteen_trees_ab_header(bits)
+    write_bits(bits, 0, 1)  # a
+    write_bits(bits, 1, 1)  # b
+    return bits_to_bytes(bits)
+
+
 def literal_context_aba_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -1606,6 +1784,17 @@ def literal_context_nine_trees_aba_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def literal_context_sixteen_trees_aba_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 2, 16)  # MLEN - 1
+    write_literal_context_sixteen_trees_aba_header(bits)
+    return bits_to_bytes(bits)
+
+
 def literal_context_signed_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -1693,6 +1882,21 @@ def command_switch_nine_types_aaaaaaaab_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def command_switch_sixteen_types_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 45, 16)  # MLEN - 1
+    write_command_switch_sixteen_types_header(bits)
+    for _ in range(15):
+        write_bits(bits, 0, 1)  # a
+        write_bits(bits, 0, 2)  # next command block count = 1
+    write_bits(bits, 1, 1)  # b
+    return bits_to_bytes(bits)
+
+
 def literal_block_switch_ab_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -1753,6 +1957,20 @@ def literal_block_switch_nine_types_frame() -> bytes:
     write_literal_block_switch_nine_types_header(bits)
     write_bits(bits, 1, 1)  # insert length extra bit -> 9
     for _ in range(8):
+        write_bits(bits, 0, 2)  # next literal block count = 1
+    return bits_to_bytes(bits)
+
+
+def literal_block_switch_sixteen_types_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 15, 16)  # MLEN - 1
+    write_literal_block_switch_sixteen_types_header(bits)
+    write_bits(bits, 2, 2)  # insert length extra bits -> 16
+    for _ in range(15):
         write_bits(bits, 0, 2)  # next literal block count = 1
     return bits_to_bytes(bits)
 
@@ -1829,6 +2047,24 @@ def distance_block_switch_nine_types_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def distance_block_switch_sixteen_types_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 34, 16)  # MLEN - 1
+    write_distance_block_switch_sixteen_types_header(bits)
+    write_bits(bits, 1, 1)  # command 152
+    write_bits(bits, 0, 1)  # a
+    write_bits(bits, 1, 2)  # b
+    write_bits(bits, 3, 2)  # c
+    for _ in range(15):
+        write_bits(bits, 0, 1)  # command 128
+        write_bits(bits, 0, 2)  # next distance block count = 1
+    return bits_to_bytes(bits)
+
+
 def run(cmd: list[str], cwd: Path, expect_ok: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(cmd, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if expect_ok and result.returncode != 0:
@@ -1869,6 +2105,7 @@ def main() -> int:
         "distance-context-complex-map": (distance_context_complex_map_ab_frame(), b"ababa"),
         "distance-context-five-trees": (distance_context_five_trees_ab_frame(), b"ababa"),
         "distance-context-nine-trees": (distance_context_nine_trees_ab_frame(), b"ababa"),
+        "distance-context-sixteen-trees": (distance_context_sixteen_trees_ab_frame(), b"ababa"),
         "complex-literal-prefix": (complex_literal_prefix_aba_frame(), b"aba"),
         "complex-command-prefix": (complex_command_prefix_ab_frame(), b"ab"),
         "literal-context": (literal_context_aba_frame(), b"aba"),
@@ -1884,23 +2121,30 @@ def main() -> int:
         ),
         "literal-context-five-trees": (literal_context_five_trees_aba_frame(), b"aba"),
         "literal-context-nine-trees": (literal_context_nine_trees_aba_frame(), b"aba"),
+        "literal-context-sixteen-trees": (literal_context_sixteen_trees_aba_frame(), b"aba"),
         "literal-context-signed": (literal_context_signed_frame(), bytes([1, ord("b"), 1])),
         "literal-context-three-trees": (literal_context_three_trees_abc_frame(), b"abc"),
         "command-switch": (command_switch_aaab_frame(), b"aaab"),
         "command-switch-three-types": (command_switch_three_types_aaabbbc_frame(), b"aaabbbc"),
         "command-switch-five-types": (command_switch_five_types_aaaab_frame(), b"aaaaaaaaaaaab"),
         "command-switch-nine-types": (command_switch_nine_types_aaaaaaaab_frame(), (b"a" * 24) + b"b"),
+        "command-switch-sixteen-types": (command_switch_sixteen_types_frame(), (b"a" * 45) + b"b"),
         "literal-block-switch": (literal_block_switch_ab_frame(), b"ab"),
         "literal-block-switch-complex-length": (literal_block_switch_complex_length_ab_frame(), b"ab"),
         "literal-block-switch-three-types": (literal_block_switch_three_types_abc_frame(), b"abc"),
         "literal-block-switch-five-types": (literal_block_switch_five_types_frame(), b"aaaae"),
         "literal-block-switch-nine-types": (literal_block_switch_nine_types_frame(), b"aaaaaaaai"),
+        "literal-block-switch-sixteen-types": (literal_block_switch_sixteen_types_frame(), b"aaaaaaaaaaaaaaap"),
         "distance-block-switch": (distance_block_switch_abcabab_frame(), b"abcabab"),
         "distance-block-switch-three-types": (distance_block_switch_three_types_abcababbb_frame(), b"abcababbb"),
         "distance-block-switch-five-types": (distance_block_switch_five_types_frame(), b"abcabcabcabbb"),
         "distance-block-switch-nine-types": (
             distance_block_switch_nine_types_frame(),
             b"abcabcabcabcabcabcaaa",
+        ),
+        "distance-block-switch-sixteen-types": (
+            distance_block_switch_sixteen_types_frame(),
+            b"abcabcabcabcabcabcabcabcabcabcabcbc",
         ),
     }
 
