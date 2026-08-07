@@ -2233,6 +2233,10 @@ def main() -> int:
             node_compress(b"hello brotli hello brotli", quality=5, lgwin=10),
             b"hello brotli hello brotli",
         ),
+        "node-static-dictionary-quick-q5-lgwin10": (
+            node_compress(b"the quick brown fox jumps over the lazy dog the quick brown fox", quality=5, lgwin=10),
+            b"the quick brown fox jumps over the lazy dog the quick brown fox",
+        ),
         "node-repeat256-q4-lgwin10": (node_compress(b"abcd" * 64, quality=4, lgwin=10), b"abcd" * 64),
         "node-text-q11-lgwin10": (
             node_compress(b"hello brotli hello brotli", quality=11, lgwin=10),

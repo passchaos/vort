@@ -1802,3 +1802,10 @@ architecture blindly.
   and output decode. The Node-backed CLI differential now treats that frame as a
   successful decode while broader static dictionary words/transforms remain a
   follow-up.
+
+- Extended the narrow Brotli static-dictionary slice with the next real Node
+  quality-5 word. A `the quick brown fox...` frame copies `quick` from static
+  dictionary distance 112 after emitting `the `, and now round-trips through both
+  size preflight and output decode. This keeps the static dictionary support
+  evidence tied to real encoder output while the complete dictionary table is
+  still pending.
