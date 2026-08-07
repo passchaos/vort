@@ -363,21 +363,24 @@ pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!u
             .stream_identifier, .skippable => {},
             .uncompressed => {
                 const payload_len = chunk.payload.len - 4;
+                const next_total = std.math.add(usize, total, payload_len) catch return error.IntegerOverflow;
+                if (next_total > max_output_len) return error.OutputLimitExceeded;
                 try verifyMaskedChecksum(chunk.payload[4..], std.mem.readInt(u32, chunk.payload[0..4], .little));
-                total = std.math.add(usize, total, payload_len) catch return error.IntegerOverflow;
+                total = next_total;
             },
             .compressed => {
                 const payload = chunk.payload[4..];
                 const decoded_len = try decodedBlockSize(payload);
                 if (decoded_len > max_uncompressed_chunk_len) return error.CorruptFrame;
+                const next_total = std.math.add(usize, total, decoded_len) catch return error.IntegerOverflow;
+                if (next_total > max_output_len) return error.OutputLimitExceeded;
                 var decoded: [max_uncompressed_chunk_len]u8 = undefined;
                 const written = try decodeBlockInto(payload, decoded[0..decoded_len]);
                 if (written != decoded_len) return error.SizeMismatch;
                 try verifyMaskedChecksum(decoded[0..decoded_len], std.mem.readInt(u32, chunk.payload[0..4], .little));
-                total = std.math.add(usize, total, decoded_len) catch return error.IntegerOverflow;
+                total = next_total;
             },
         }
-        if (total > max_output_len) return error.OutputLimitExceeded;
     }
     return total;
 }
@@ -768,6 +771,7 @@ test "snappy framed stream rejects malformed chunks" {
     defer std.testing.allocator.free(corrupt);
     corrupt[14] ^= 0x01;
     try std.testing.expectError(error.ChecksumMismatch, decodedFrameSize(corrupt));
+    try std.testing.expectError(error.OutputLimitExceeded, decodedFrameSizeLimited(corrupt, payload.len - 1));
 
     const known_payload = "abcabcabcabc";
     const block = [_]u8{ 12, 0x08, 'a', 'b', 'c', 0x15, 3 };
@@ -785,6 +789,7 @@ test "snappy framed stream rejects malformed chunks" {
     defer std.testing.allocator.free(corrupt_compressed);
     corrupt_compressed[corrupt_compressed.len - 1] ^= 0x01;
     try std.testing.expectError(error.ChecksumMismatch, decodedFrameSize(corrupt_compressed));
+    try std.testing.expectError(error.OutputLimitExceeded, decodedFrameSizeLimited(corrupt_compressed, known_payload.len - 1));
     try std.testing.expectError(error.ChecksumMismatch, decodeFrameAlloc(std.testing.allocator, corrupt_compressed));
 
     const oversized_compressed = try oversizedCompressedChunkFrame(std.testing.allocator);
