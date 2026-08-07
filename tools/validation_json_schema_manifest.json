@@ -35,6 +35,73 @@
         "transform_kind": "str"
       }
     },
+    "vort.br_static_dictionary_node_probe": {
+      "count_rules": {
+        "probed_count": {
+          "collection": "rows"
+        },
+        "node_decode_successes": {
+          "collection": "rows",
+          "field": "node_ok",
+          "equals": true
+        },
+        "vort_decode_successes": {
+          "collection": "rows",
+          "field": "vort_ok",
+          "equals": true
+        },
+        "vort_decode_failures": {
+          "collection": "rows",
+          "field": "vort_ok",
+          "equals": false
+        }
+      },
+      "fields": {
+        "schema": "str",
+        "schema_version": "int",
+        "ok": "bool",
+        "candidate_count": "int",
+        "limit": "int",
+        "quality": "int",
+        "lgwin": "int",
+        "probed_count": "int",
+        "node_decode_successes": "int",
+        "vort_decode_successes": "int",
+        "vort_decode_failures": "int",
+        "rows": "list"
+      },
+      "item_collection": "rows",
+      "item_enums": {
+        "classification": [
+          "vort_accepts_node_frame",
+          "vort_rejects_node_frame",
+          "node_output_mismatch"
+        ],
+        "transform_kind": [
+          "identity",
+          "affix_identity",
+          "omit_last_1",
+          "uppercase_first"
+        ]
+      },
+      "item_fields": {
+        "index": "int",
+        "transform": "int",
+        "copy_len": "int",
+        "word_index": "int",
+        "raw_word": "str",
+        "candidate_word": "str",
+        "transform_kind": "str",
+        "quality": "int",
+        "lgwin": "int",
+        "br_bytes": "int",
+        "br_hex": "str",
+        "node_ok": "bool",
+        "vort_ok": "bool",
+        "classification": "str",
+        "error": "str"
+      }
+    },
     "vort.br_static_dictionary_required_coverage": {
       "fields": {
         "schema": "str",
@@ -2775,6 +2842,7 @@
           "vort.dashboard_strict_expected_modes",
           "vort.dashboard_strict_smoke",
           "vort.br_static_dictionary_candidate_report",
+          "vort.br_static_dictionary_node_probe",
           "vort.br_static_dictionary_required_coverage",
           "vort.br_static_dictionary_source_audit",
           "vort.br_static_dictionary_source_audit_negative_smoke",

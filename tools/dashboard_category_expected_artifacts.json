@@ -2,6 +2,20 @@
   "expected_artifacts": [
     {
       "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe.md",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
       "name": "vort-br-static-dictionary-candidates.md",
       "require_present": true,
       "require_producer_step": true,

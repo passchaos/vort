@@ -925,6 +925,58 @@ Example:
 }
 ```
 
+## `vort.br_static_dictionary_node_probe`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-node-probe
+python3 tools/br_static_dictionary_node_probe.py <vort-cli> --json zig-out/vort-br-static-dictionary-node-probe.json
+```
+
+This schema records a bounded Node-backed probe over generated Brotli
+static-dictionary candidates. For each candidate payload, Node emits a Brotli
+quality-5 frame and Vort attempts to decode that exact frame, so future coverage
+work can distinguish candidates already accepted by the current decoder from
+Node-generated frames that still require new source tuples or transforms.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_node_probe",
+  "schema_version": 1,
+  "ok": true,
+  "candidate_count": 296,
+  "limit": 1,
+  "quality": 5,
+  "lgwin": 10,
+  "probed_count": 1,
+  "node_decode_successes": 1,
+  "vort_decode_successes": 1,
+  "vort_decode_failures": 0,
+  "rows": [
+    {
+      "index": 0,
+      "transform": 1,
+      "copy_len": 5,
+      "word_index": 35,
+      "raw_word": "about",
+      "candidate_word": "about ",
+      "transform_kind": "affix_identity",
+      "quality": 5,
+      "lgwin": 10,
+      "br_bytes": 11,
+      "br_hex": "2114000461626f75742003",
+      "node_ok": true,
+      "vort_ok": true,
+      "classification": "vort_accepts_node_frame",
+      "error": ""
+    }
+  ]
+}
+```
+
 ## `vort.br_static_dictionary_required_coverage`
 
 Consumed by:

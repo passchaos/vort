@@ -12,6 +12,14 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-br-static-dictionary-candidate-report-smoke"
     },
+    "vort-br-static-dictionary-node-probe.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe"
+    },
+    "vort-br-static-dictionary-node-probe.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe"
+    },
     "vort-br-static-dictionary-report-negative-smoke.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-br-static-dictionary-report-negative-smoke"
@@ -438,6 +446,8 @@
   "exact": {
     "vort-br-static-dictionary-candidates.json": "zig build run-br-static-dictionary-candidate-report",
     "vort-br-static-dictionary-candidates.md": "zig build run-br-static-dictionary-candidate-report",
+    "vort-br-static-dictionary-node-probe.json": "zig build run-br-static-dictionary-node-probe",
+    "vort-br-static-dictionary-node-probe.md": "zig build run-br-static-dictionary-node-probe",
     "vort-br-static-dictionary-report-negative-smoke.json": "zig build run-br-static-dictionary-report-negative-smoke",
     "vort-br-static-dictionary-report.csv": "zig build run-br-static-dictionary-report-dashboard",
     "vort-br-static-dictionary-report.json": "zig build run-br-static-dictionary-report-dashboard",
@@ -542,6 +552,7 @@
     "vort-zstd-compare.md": "zig build run-zstd-compare-gate"
   },
   "required_smoke_gates": [
+    "vort-br-static-dictionary-node-probe.json",
     "vort-br-static-dictionary-candidates.json",
     "vort-br-static-dictionary-report-negative-smoke.json",
     "vort-br-static-dictionary-source-audit.json",

@@ -154,6 +154,12 @@ def main() -> int:
         assert br_static_dictionary_candidate_report["candidate_count"] >= 1
         assert br_static_dictionary_candidate_report["candidates"]
         validate_value_against_manifest(br_static_dictionary_candidate_report, schemas_def)
+        br_static_dictionary_node_probe = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-node-probe.json").read_text())
+        assert br_static_dictionary_node_probe["schema"] == "vort.br_static_dictionary_node_probe"
+        assert br_static_dictionary_node_probe["ok"] is True
+        assert br_static_dictionary_node_probe["probed_count"] >= 1
+        assert br_static_dictionary_node_probe["node_decode_successes"] == br_static_dictionary_node_probe["probed_count"]
+        validate_value_against_manifest(br_static_dictionary_node_probe, schemas_def)
         br_static_dictionary_required = json.loads((ROOT / "tools" / "br_static_dictionary_required_coverage.json").read_text())
         assert br_static_dictionary_required["schema"] == "vort.br_static_dictionary_required_coverage"
         assert br_static_dictionary_required["entries"]
@@ -808,6 +814,7 @@ def main() -> int:
                 report["schema"],
                 corrupt["schema"],
                 br_static_dictionary_candidate_report["schema"],
+                br_static_dictionary_node_probe["schema"],
                 br_static_dictionary_required["schema"],
                 br_static_dictionary_source_anchors["schema"],
                 br_static_dictionary_source_audit["schema"],

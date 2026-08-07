@@ -1983,3 +1983,9 @@ architecture blindly.
   words (for example `Through`, `Another`, `Language`, `Government`, and
   `One of the `), so the table now records those actual source tuples along
   with a focused unit batch and required-coverage metadata.
+
+- Added `run-br-static-dictionary-node-probe`, a bounded Node-backed report that
+  compresses generated dictionary-candidate payloads with Brotli quality 5 and
+  checks whether Vort decodes the exact frames. The retained JSON/Markdown
+  artifacts turn candidate triage into machine-readable evidence instead of a
+  one-off shell loop.

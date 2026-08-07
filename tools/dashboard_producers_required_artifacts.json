@@ -1,6 +1,20 @@
 {
   "required_artifacts": [
     {
+      "expected_format": "json",
+      "name": "vort-br-static-dictionary-node-probe.json",
+      "producer_step": "zig build run-br-static-dictionary-node-probe",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-br-static-dictionary-node-probe.md",
+      "producer_step": "zig build run-br-static-dictionary-node-probe",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe"
+    },
+    {
       "expected_format": "md",
       "name": "vort-br-static-dictionary-candidates.md",
       "producer_step": "zig build run-br-static-dictionary-candidate-report",
