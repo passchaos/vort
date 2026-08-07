@@ -846,6 +846,16 @@ pub fn build(b: *std.Build) void {
     const br_static_dictionary_report_negative_smoke_step = b.step("run-br-static-dictionary-report-negative-smoke", "Validate Brotli static dictionary coverage negative cases");
     br_static_dictionary_report_negative_smoke_step.dependOn(&br_static_dictionary_report_negative_smoke.step);
 
+    const br_static_dictionary_source_audit = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_source_audit.py",
+        "--summary",
+        "zig-out/vort-br-static-dictionary-source-audit.json",
+    });
+    if (b.args) |args| br_static_dictionary_source_audit.addArgs(args);
+    const br_static_dictionary_source_audit_step = b.step("run-br-static-dictionary-source-audit", "Validate Brotli static dictionary source anchors");
+    br_static_dictionary_source_audit_step.dependOn(&br_static_dictionary_source_audit.step);
+
     const snappy_block_cli_probe = b.addSystemCommand(&.{ "python3", "tools/snappy_block_cli_probe.py" });
     snappy_block_cli_probe.addArtifactArg(cli_exe);
     const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks and framed streams");
@@ -1858,6 +1868,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(native_allocation_negative_smoke_step);
     validation_json_smoke.step.dependOn(native_codec_probes_dashboard_step);
     validation_json_smoke.step.dependOn(png_scratch_report_dashboard_step);
+    validation_json_smoke.step.dependOn(br_static_dictionary_source_audit_step);
     const validation_json_smoke_step = b.step("run-validation-json-smoke", "Validate CLI and report JSON schema outputs");
     validation_json_smoke_step.dependOn(&validation_json_smoke.step);
 
@@ -1875,6 +1886,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.step.dependOn(native_allocation_negative_smoke_step);
     validation_json_dashboard.step.dependOn(native_codec_probes_dashboard_step);
     validation_json_dashboard.step.dependOn(png_scratch_report_dashboard_step);
+    validation_json_dashboard.step.dependOn(br_static_dictionary_source_audit_step);
     const validation_json_dashboard_step = b.step("run-validation-json-dashboard", "Write validation JSON schema smoke summary to zig-out");
     validation_json_dashboard_step.dependOn(&validation_json_dashboard.step);
 
@@ -1928,6 +1940,9 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(dashboard_category_negative_smoke_step);
     dashboard_index.step.dependOn(header_inspect_dashboard_step);
     dashboard_index.step.dependOn(dashboard_strict_dashboard_step);
+    dashboard_index.step.dependOn(br_static_dictionary_report_dashboard_step);
+    dashboard_index.step.dependOn(br_static_dictionary_report_negative_smoke_step);
+    dashboard_index.step.dependOn(br_static_dictionary_source_audit_step);
     dashboard_index.step.dependOn(deflate_decode_stage_report_dashboard_step);
     dashboard_index.step.dependOn(deflate_extra_bits_bench_gate_step);
     dashboard_index.step.dependOn(deflate_huffman_build_bench_gate_step);
@@ -2137,6 +2152,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_static_dictionary_report_dashboard_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_smoke_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_negative_smoke_step);
+    ci_smoke_step.dependOn(br_static_dictionary_source_audit_step);
     ci_smoke_step.dependOn(snappy_block_cli_probe_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);

@@ -1,7 +1,7 @@
 {
   "schema": "vort.dashboard_config_index",
   "schema_version": 1,
-  "config_count": 9,
+  "config_count": 10,
   "configs": [
     {
       "path": "tools/br_static_dictionary_required_coverage.json",
@@ -9,6 +9,13 @@
       "docs_section": "## `vort.br_static_dictionary_required_coverage`",
       "validation_step": "zig build run-br-static-dictionary-report-smoke",
       "consumer": "tools/br_static_dictionary_report_smoke.py"
+    },
+    {
+      "path": "tools/br_static_dictionary_source_anchors.json",
+      "schema_name": "vort.br_static_dictionary_source_anchors",
+      "docs_section": "## `vort.br_static_dictionary_source_anchors`",
+      "validation_step": "zig build run-br-static-dictionary-source-audit",
+      "consumer": "tools/br_static_dictionary_source_audit.py"
     },
     {
       "path": "tools/dashboard_category_expected_artifacts.json",

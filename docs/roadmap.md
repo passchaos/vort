@@ -1952,3 +1952,10 @@ architecture blindly.
   Unit tests, the Node-backed CLI differential smoke, and the required coverage
   config now pin these identity phrase tuples so the report/dashboard artifacts
   continue to expose phrase growth.
+
+- Added `run-br-static-dictionary-source-audit` and a source-anchor fixture for
+  the retained Brotli static-dictionary subset. The audit ties every supported
+  `(transform, length, word_index)` tuple back to its raw dictionary word and
+  minimal transform kind, and can optionally verify those anchors against a
+  local upstream Brotli `common/dictionary_inc.h` / `common/transform.c` checkout
+  before the project moves from hand-picked tuples to generated dictionary data.

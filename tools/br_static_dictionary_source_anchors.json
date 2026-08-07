@@ -1,0 +1,520 @@
+{
+  "entries": [
+    {
+      "copy_len": 5,
+      "raw_word": "about",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "about",
+      "word_index": 35
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "large",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "large",
+      "word_index": 42
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "words",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "words",
+      "word_index": 43
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "games",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "games",
+      "word_index": 44
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "press",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "press",
+      "word_index": 81
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "other",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "other",
+      "word_index": 101
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "quick",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "quick",
+      "word_index": 107
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "hello",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "hello",
+      "word_index": 719
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "dolor",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "dolor",
+      "word_index": 989
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "system",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "system",
+      "word_index": 6
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "number",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "number",
+      "word_index": 15
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "public",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "public",
+      "word_index": 18
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "history",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "history",
+      "word_index": 37
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "English",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "English",
+      "word_index": 92
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "through",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "through",
+      "word_index": 94
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "another",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "another",
+      "word_index": 154
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "release",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "release",
+      "word_index": 170
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "because",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "because",
+      "word_index": 196
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "between",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "between",
+      "word_index": 202
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "example",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "example",
+      "word_index": 464
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "however",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "however",
+      "word_index": 572
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "of the ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "of the ",
+      "word_index": 1167
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "children",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "children",
+      "word_index": 10
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "American",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "American",
+      "word_index": 355
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "history.",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "history.",
+      "word_index": 425
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "examples",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "examples",
+      "word_index": 558
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "language",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "language",
+      "word_index": 4
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "internet",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "internet",
+      "word_index": 79
+    },
+    {
+      "copy_len": 9,
+      "raw_word": "available",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "available",
+      "word_index": 5
+    },
+    {
+      "copy_len": 9,
+      "raw_word": "important",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "important",
+      "word_index": 55
+    },
+    {
+      "copy_len": 9,
+      "raw_word": "different",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "different",
+      "word_index": 95
+    },
+    {
+      "copy_len": 9,
+      "raw_word": "from the ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "from the ",
+      "word_index": 205
+    },
+    {
+      "copy_len": 9,
+      "raw_word": "those who",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "those who",
+      "word_index": 271
+    },
+    {
+      "copy_len": 9,
+      "raw_word": "however, ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "however, ",
+      "word_index": 592
+    },
+    {
+      "copy_len": 10,
+      "raw_word": "government",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "government",
+      "word_index": 18
+    },
+    {
+      "copy_len": 10,
+      "raw_word": "expression",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "expression",
+      "word_index": 84
+    },
+    {
+      "copy_len": 10,
+      "raw_word": "depression",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "depression",
+      "word_index": 135
+    },
+    {
+      "copy_len": 10,
+      "raw_word": "dictionary",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "dictionary",
+      "word_index": 205
+    },
+    {
+      "copy_len": 10,
+      "raw_word": "number of ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "number of ",
+      "word_index": 240
+    },
+    {
+      "copy_len": 10,
+      "raw_word": "to another",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "to another",
+      "word_index": 608
+    },
+    {
+      "copy_len": 10,
+      "raw_word": "Dictionary",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Dictionary",
+      "word_index": 327
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "information",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "information",
+      "word_index": 5
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "one another",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "one another",
+      "word_index": 162
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "in order to",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "in order to",
+      "word_index": 189
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "one of the ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "one of the ",
+      "word_index": 452
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "Information",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Information",
+      "word_index": 186
+    },
+    {
+      "copy_len": 16,
+      "raw_word": "large number of ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "large number of ",
+      "word_index": 52
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "words",
+      "transform": 1,
+      "transform_kind": "affix_identity",
+      "transformed_word": "words ",
+      "word_index": 43
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "games",
+      "transform": 1,
+      "transform_kind": "affix_identity",
+      "transformed_word": "games ",
+      "word_index": 44
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "release",
+      "transform": 1,
+      "transform_kind": "affix_identity",
+      "transformed_word": "release ",
+      "word_index": 170
+    },
+    {
+      "copy_len": 10,
+      "raw_word": "dictionary",
+      "transform": 1,
+      "transform_kind": "affix_identity",
+      "transformed_word": "dictionary ",
+      "word_index": 205
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "information",
+      "transform": 1,
+      "transform_kind": "affix_identity",
+      "transformed_word": "information ",
+      "word_index": 5
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "history",
+      "transform": 20,
+      "transform_kind": "affix_identity",
+      "transformed_word": "history.",
+      "word_index": 37
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "words",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " words",
+      "word_index": 43
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "games",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " games",
+      "word_index": 44
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "release",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " release",
+      "word_index": 170
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "content",
+      "transform": 9,
+      "transform_kind": "uppercase_first",
+      "transformed_word": "Content",
+      "word_index": 5
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "history",
+      "transform": 9,
+      "transform_kind": "uppercase_first",
+      "transformed_word": "History",
+      "word_index": 37
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "english",
+      "transform": 9,
+      "transform_kind": "uppercase_first",
+      "transformed_word": "English",
+      "word_index": 369
+    },
+    {
+      "copy_len": 10,
+      "raw_word": "dictionary",
+      "transform": 9,
+      "transform_kind": "uppercase_first",
+      "transformed_word": "Dictionary",
+      "word_index": 205
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "information",
+      "transform": 9,
+      "transform_kind": "uppercase_first",
+      "transformed_word": "Information",
+      "word_index": 5
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "words",
+      "transform": 12,
+      "transform_kind": "omit_last_1",
+      "transformed_word": "word",
+      "word_index": 43
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "games",
+      "transform": 12,
+      "transform_kind": "omit_last_1",
+      "transformed_word": "game",
+      "word_index": 44
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "one and",
+      "transform": 12,
+      "transform_kind": "omit_last_1",
+      "transformed_word": "one an",
+      "word_index": 1767
+    }
+  ],
+  "entry_count": 64,
+  "schema": "vort.br_static_dictionary_source_anchors",
+  "schema_version": 1,
+  "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"
+}

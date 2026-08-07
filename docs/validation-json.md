@@ -778,6 +778,80 @@ Example:
 }
 ```
 
+## `vort.br_static_dictionary_source_anchors`
+
+Consumed by:
+
+```sh
+zig build run-br-static-dictionary-source-audit
+python3 tools/br_static_dictionary_source_audit.py --anchors tools/br_static_dictionary_source_anchors.json
+```
+
+This schema ties every retained Brotli static-dictionary tuple to the raw RFC
+dictionary word it came from and the small transform operation currently
+implemented by Vort. The audit script cross-checks these anchors against
+`src/br.zig`; when a local upstream Brotli checkout is available it can also
+verify the raw words and transformed outputs against `common/dictionary_inc.h`
+and `common/transform.c`.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_source_anchors",
+  "schema_version": 1,
+  "entry_count": 1,
+  "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c",
+  "entries": [
+    {
+      "transform": 9,
+      "copy_len": 7,
+      "word_index": 37,
+      "raw_word": "history",
+      "transformed_word": "History",
+      "transform_kind": "uppercase_first"
+    }
+  ]
+}
+```
+
+## `vort.br_static_dictionary_source_audit`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-source-audit
+python3 tools/br_static_dictionary_source_audit.py --summary zig-out/vort-br-static-dictionary-source-audit.json
+```
+
+This schema summarizes the source-anchor audit for the retained Brotli
+static-dictionary subset. It reports whether the Zig decoder table and anchor
+fixture agree, how many transforms and lengths are covered, and whether an
+optional local upstream Brotli source checkout was used for byte-level
+verification.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_source_audit",
+  "schema_version": 1,
+  "ok": true,
+  "entry_count": 64,
+  "anchor_count": 64,
+  "transform_count": 6,
+  "length_count": 8,
+  "operation_counts": {
+    "affix_identity": 9,
+    "identity": 47,
+    "omit_last_1": 3,
+    "uppercase_first": 5
+  },
+  "source_checked": false,
+  "source_dir": ""
+}
+```
+
 ## `vort.br_static_dictionary_required_coverage`
 
 Consumed by:

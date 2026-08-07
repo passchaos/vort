@@ -9,6 +9,13 @@
     },
     {
       "category": "validation",
+      "name": "vort-br-static-dictionary-source-audit.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
       "name": "vort-br-static-dictionary-report.csv",
       "require_present": true,
       "require_producer_step": true,

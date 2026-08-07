@@ -153,6 +153,17 @@ def main() -> int:
         assert br_static_dictionary_required["schema"] == "vort.br_static_dictionary_required_coverage"
         assert br_static_dictionary_required["entries"]
         validate_value_against_manifest(br_static_dictionary_required, schemas_def)
+        br_static_dictionary_source_anchors = json.loads((ROOT / "tools" / "br_static_dictionary_source_anchors.json").read_text())
+        assert br_static_dictionary_source_anchors["schema"] == "vort.br_static_dictionary_source_anchors"
+        assert br_static_dictionary_source_anchors["entry_count"] == len(br_static_dictionary_source_anchors["entries"])
+        assert br_static_dictionary_source_anchors["entry_count"] >= len(br_static_dictionary_required["entries"])
+        validate_value_against_manifest(br_static_dictionary_source_anchors, schemas_def)
+        br_static_dictionary_source_audit = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-source-audit.json").read_text())
+        assert br_static_dictionary_source_audit["schema"] == "vort.br_static_dictionary_source_audit"
+        assert br_static_dictionary_source_audit["ok"] is True
+        assert br_static_dictionary_source_audit["entry_count"] == br_static_dictionary_source_anchors["entry_count"]
+        assert br_static_dictionary_source_audit["anchor_count"] == br_static_dictionary_source_anchors["entry_count"]
+        validate_value_against_manifest(br_static_dictionary_source_audit, schemas_def)
         dashboard_producers = json.loads((ROOT / "tools" / "dashboard_producers.json").read_text())
         assert dashboard_producers["schema"] == "vort.dashboard_producers"
         validate_value_against_manifest(dashboard_producers, schemas_def)
@@ -783,6 +794,8 @@ def main() -> int:
                 report["schema"],
                 corrupt["schema"],
                 br_static_dictionary_required["schema"],
+                br_static_dictionary_source_anchors["schema"],
+                br_static_dictionary_source_audit["schema"],
                 dashboard_strict_modes["schema"],
                 dashboard_strict_reasons["schema"],
                 dashboard_strict["schema"],

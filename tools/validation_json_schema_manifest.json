@@ -26,6 +26,51 @@
         "category": "str"
       }
     },
+    "vort.br_static_dictionary_source_anchors": {
+      "count_rules": {
+        "entry_count": {
+          "collection": "entries"
+        }
+      },
+      "fields": {
+        "schema": "str",
+        "schema_version": "int",
+        "entry_count": "int",
+        "source": "str",
+        "entries": "list"
+      },
+      "item_collection": "entries",
+      "item_enums": {
+        "transform_kind": [
+          "identity",
+          "affix_identity",
+          "omit_last_1",
+          "uppercase_first"
+        ]
+      },
+      "item_fields": {
+        "transform": "int",
+        "copy_len": "int",
+        "word_index": "int",
+        "raw_word": "str",
+        "transformed_word": "str",
+        "transform_kind": "str"
+      }
+    },
+    "vort.br_static_dictionary_source_audit": {
+      "fields": {
+        "schema": "str",
+        "schema_version": "int",
+        "ok": "bool",
+        "entry_count": "int",
+        "anchor_count": "int",
+        "transform_count": "int",
+        "length_count": "int",
+        "operation_counts": "dict",
+        "source_checked": "bool",
+        "source_dir": "str"
+      }
+    },
     "vort.br_static_dictionary_report": {
       "count_rules": {
         "entry_count": {
@@ -2660,6 +2705,8 @@
           "vort.dashboard_strict_expected_modes",
           "vort.dashboard_strict_smoke",
           "vort.br_static_dictionary_required_coverage",
+          "vort.br_static_dictionary_source_audit",
+          "vort.br_static_dictionary_source_anchors",
           "vort.dashboard_strict_validation_reasons",
           "vort.deflate_decode_stage_report",
           "vort.fuzz_corpus_coverage_smoke",

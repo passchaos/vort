@@ -21,6 +21,7 @@ def category_for(path: Path) -> str:
         or "dashboard-category" in name
         or "dashboard-config" in name
         or "huffman-length" in name
+        or "br-static-dictionary" in name
         or "dynamic-plan" in name
         or "native-allocation" in name
         or "deflate-decode-stage" in name
