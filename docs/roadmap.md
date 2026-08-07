@@ -1772,3 +1772,8 @@ architecture blindly.
   literal-only frame now uses a complex prefix-code header for its literal tree
   and is decoded by both the Zig unit tests and the Node-backed CLI differential
   smoke, proving complex prefix parsing works in the actual meta-block pipeline.
+
+- Added compressed-frame coverage for Brotli complex insert/copy prefix codes.
+  A literal-only frame now uses a complex prefix-code header for the command tree
+  while keeping the literal tree simple, and is decoded by both Zig tests and the
+  Node-backed CLI differential smoke.
