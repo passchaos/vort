@@ -6796,7 +6796,7 @@ fn sequenceHuffmanLiteralsSectionLen(
 }
 
 fn huffmanLiteralsHeaderLen(regenerated_size: usize, compressed_size: usize) Error!usize {
-    if (compressed_size == 0) return error.UnsupportedZstdFeature;
+    if (compressed_size == 0) return error.CorruptFrame;
     if (regenerated_size <= 0x3ff and compressed_size <= 0x3ff) return 3;
     if (regenerated_size <= 0x3fff and compressed_size <= 0x3fff) return 4;
     if (regenerated_size <= 0x3ffff and compressed_size <= 0x3ffff) return 5;
@@ -8983,7 +8983,7 @@ fn emitHuffmanLiteralsHeader(
     compressed_size: usize,
     treeless: bool,
 ) Error!void {
-    if (compressed_size == 0) return error.UnsupportedZstdFeature;
+    if (compressed_size == 0) return error.CorruptFrame;
     const kind_bits: u8 = if (treeless) 0x03 else 0x02;
     if (regenerated_size <= 0x3ff and compressed_size <= 0x3ff) {
         const value = regenerated_size | (compressed_size << 10);
@@ -11406,6 +11406,16 @@ test "zstd literal-only writer emits max direct Huffman symbol set" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd Huffman literal headers reject zero compressed size as corrupt" {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+
+    try std.testing.expectError(error.CorruptFrame, huffmanLiteralsHeaderLen(1, 0));
+    try std.testing.expectError(error.CorruptFrame, emitHuffmanLiteralsHeader(std.testing.allocator, &out, 1, 0, false));
+    try std.testing.expectError(error.CorruptFrame, emitHuffmanLiteralsHeader(std.testing.allocator, &out, 1, 0, true));
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
 
 test "zstd FSE Huffman weight writer rejects invalid weights as corrupt" {
