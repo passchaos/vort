@@ -932,6 +932,7 @@ Produced by:
 ```sh
 zig build run-br-static-dictionary-node-probe
 zig build run-br-static-dictionary-node-probe-wide
+zig build run-br-static-dictionary-node-probe-full
 python3 tools/br_static_dictionary_node_probe.py <vort-cli> --json zig-out/vort-br-static-dictionary-node-probe.json
 ```
 
@@ -941,8 +942,8 @@ quality-5 frame and Vort attempts to decode that exact frame, so future coverage
 work can distinguish candidates already accepted by the current decoder from
 Node-generated frames that still require new source tuples or transforms. The
 standard build step requires all default probed frames to decode successfully;
-the wide step raises the retained probe prefix to 160 candidates for manual or
-release-gate sweeps.
+the wide step raises the retained probe prefix to 160 candidates, and the full
+step probes every generated candidate for manual or release-gate sweeps.
 
 Example:
 
@@ -952,6 +953,7 @@ Example:
   "schema_version": 1,
   "ok": true,
   "candidate_count": 296,
+  "all_candidates": false,
   "limit": 1,
   "quality": 5,
   "lgwin": 10,

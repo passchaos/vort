@@ -61,6 +61,7 @@
         "schema_version": "int",
         "ok": "bool",
         "candidate_count": "int",
+        "all_candidates": "bool",
         "limit": "int",
         "quality": "int",
         "lgwin": "int",

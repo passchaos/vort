@@ -1995,6 +1995,11 @@ architecture blindly.
   longer accepted by Vort. This keeps the candidate backlog measurable without
   forcing the wider sweep into every smoke path.
 
+- Added `run-br-static-dictionary-node-probe-full` after the generated candidate
+  set reached a clean full sweep. The full step uses the candidate report count
+  instead of a magic numeric limit, while the default and wide probes remain
+  cheaper checkpoints for routine validation.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

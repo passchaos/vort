@@ -118,6 +118,7 @@ def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], l
         "schema_version": 1,
         "ok": all(row["node_ok"] for row in rows),
         "candidate_count": candidate_report["candidate_count"],
+        "all_candidates": len(rows) == candidate_report["candidate_count"],
         "limit": limit,
         "quality": quality,
         "lgwin": lgwin,
@@ -162,14 +163,16 @@ def main() -> int:
     parser.add_argument("--json", type=Path)
     parser.add_argument("--markdown", type=Path)
     parser.add_argument("--limit", type=int, default=48)
+    parser.add_argument("--all-candidates", action="store_true", help="probe every candidate in the candidate report")
     parser.add_argument("--quality", type=int, default=5)
     parser.add_argument("--lgwin", type=int, default=10)
     parser.add_argument("--require-vort-ok", action="store_true", help="fail if any probed Node frame is not accepted by Vort")
     args = parser.parse_args()
 
     candidate_report = load_candidates(args.candidates)
-    rows = probe_candidates(args.cli.resolve(), candidate_report, args.limit, args.quality, args.lgwin)
-    report = build_report(candidate_report, rows, args.limit, args.quality, args.lgwin)
+    limit = candidate_report["candidate_count"] if args.all_candidates else args.limit
+    rows = probe_candidates(args.cli.resolve(), candidate_report, limit, args.quality, args.lgwin)
+    report = build_report(candidate_report, rows, limit, args.quality, args.lgwin)
     if args.json is not None:
         write_json(args.json, report)
     if args.markdown is not None:

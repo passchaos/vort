@@ -2,6 +2,20 @@
   "required_artifacts": [
     {
       "expected_format": "md",
+      "name": "vort-br-static-dictionary-node-probe-full.md",
+      "producer_step": "zig build run-br-static-dictionary-node-probe-full",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-full"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-br-static-dictionary-node-probe-full.json",
+      "producer_step": "zig build run-br-static-dictionary-node-probe-full",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-full"
+    },
+    {
+      "expected_format": "md",
       "name": "vort-br-static-dictionary-node-probe-wide.md",
       "producer_step": "zig build run-br-static-dictionary-node-probe-wide",
       "required_smoke_gate": false,
