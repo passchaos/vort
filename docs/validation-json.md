@@ -824,13 +824,15 @@ Produced by:
 
 ```sh
 zig build run-br-static-dictionary-candidate-upstream-smoke
-python3 tools/br_static_dictionary_candidate_upstream_smoke.py --summary zig-out/vort-br-static-dictionary-candidate-upstream-smoke.json
+python3 tools/br_static_dictionary_candidate_upstream_smoke.py --summary zig-out/vort-br-static-dictionary-candidate-upstream-smoke.json --json zig-out/vort-br-static-dictionary-candidates-upstream.json
 ```
 
 This schema summarizes a portable smoke for candidate-report upstream mode. The
 smoke creates a tiny temporary Brotli `common/` fixture, asks the candidate
 report to merge a bounded set of raw dictionary words from that fixture, and
-checks that known transformed candidates appear in the generated report.
+checks that known transformed candidates appear in the generated report. The
+build step also retains the generated upstream candidate JSON/Markdown artifacts
+for dashboard review.
 
 Example:
 

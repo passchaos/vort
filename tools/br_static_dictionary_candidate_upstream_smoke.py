@@ -52,6 +52,8 @@ def load_json(path: Path) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--summary", type=Path)
+    parser.add_argument("--json", type=Path)
+    parser.add_argument("--markdown", type=Path)
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory(prefix="vort-br-upstream-candidates-") as td:
@@ -101,6 +103,12 @@ def main() -> int:
         markdown = md_path.read_text()
         if "- Source mode: upstream" not in markdown:
             raise AssertionError("Markdown does not record upstream source mode")
+        if args.json:
+            args.json.parent.mkdir(parents=True, exist_ok=True)
+            args.json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        if args.markdown:
+            args.markdown.parent.mkdir(parents=True, exist_ok=True)
+            args.markdown.write_text(markdown)
 
     summary = {
         "schema": "vort.br_static_dictionary_candidate_upstream_smoke",

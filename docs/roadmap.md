@@ -2013,8 +2013,9 @@ architecture blindly.
 
 - Added a portable upstream-mode smoke for the Brotli candidate report. The
   smoke builds a tiny temporary `common/dictionary_inc.h` fixture, proves
-  upstream raw words are merged into the candidate pool, and records a JSON
-  dashboard artifact so this import path is tested without depending on a local
+  upstream raw words are merged into the candidate pool, and now retains the
+  generated upstream candidate JSON/Markdown artifacts so this import path is
+  both tested and visible in dashboard review without depending on a local
   checkout path.
 
 - Ran the full generated-candidate Node probe and resolved its remaining five

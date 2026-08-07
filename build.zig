@@ -895,6 +895,10 @@ pub fn build(b: *std.Build) void {
         "tools/br_static_dictionary_candidate_upstream_smoke.py",
         "--summary",
         "zig-out/vort-br-static-dictionary-candidate-upstream-smoke.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-candidates-upstream.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-candidates-upstream.md",
     });
     const br_static_dictionary_candidate_upstream_smoke_step = b.step("run-br-static-dictionary-candidate-upstream-smoke", "Validate Brotli candidate report upstream-source mode");
     br_static_dictionary_candidate_upstream_smoke_step.dependOn(&br_static_dictionary_candidate_upstream_smoke.step);
