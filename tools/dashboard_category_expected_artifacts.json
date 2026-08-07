@@ -1,6 +1,27 @@
 {
   "expected_artifacts": [
     {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-report.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-report.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-report.md",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
       "category": "benchmark",
       "name": "vort-checksum-bench.csv",
       "require_present": false,
@@ -31,216 +52,6 @@
     {
       "category": "benchmark",
       "name": "vort-chunked-zlib-bench-report.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-deflate-chunked-huffman-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-deflate-extra-bits-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-deflate-huffman-build-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-deflate-huffman-lookup-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-deflate-match-copy-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-png-streaming-zlib-bench-report-repeat3.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-benchmark-summary-repeat3.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-benchmark-summary.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-decode-bench-repeat3.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-decode-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-encode-bench-repeat3.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-encode-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-block-sweep.md",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-block-sweep.csv",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-block-sweep-releasefast.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-block-sweep-releasefast.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-standard.csv",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-standard.md",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-standard-releasefast.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-standard-releasefast.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-dictionary-corpus-dashboard.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-file-corpus-standard-dashboard.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-level-report.csv",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-level-report.md",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-standard-corpus-dashboard.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "native parallel",
-      "name": "vort-native-parallel-dashboard.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "native parallel",
-      "name": "vort-native-thread-pool-full-dashboard.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "other",
-      "name": "vort-deflate-dynamic-decode-profile.csv",
       "require_present": false,
       "require_producer_step": false,
       "require_smoke_gate": false
@@ -295,6 +106,13 @@
       "require_smoke_gate": true
     },
     {
+      "category": "benchmark",
+      "name": "vort-deflate-chunked-huffman-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "validation",
       "name": "vort-deflate-decode-stage-report-repeat3.csv",
       "require_present": false,
@@ -323,6 +141,41 @@
       "require_smoke_gate": true
     },
     {
+      "category": "other",
+      "name": "vort-deflate-dynamic-decode-profile.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-deflate-extra-bits-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-deflate-huffman-build-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-deflate-huffman-lookup-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-deflate-match-copy-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "validation",
       "name": "vort-deflate-wrapper-fuzz-corpus.json",
       "require_present": true,
@@ -337,8 +190,22 @@
       "require_smoke_gate": true
     },
     {
+      "category": "corpus and ratio",
+      "name": "vort-dictionary-corpus-dashboard.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "validation",
       "name": "vort-dynamic-plan-builtins-report.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "corpus and ratio",
+      "name": "vort-file-corpus-standard-dashboard.md",
       "require_present": false,
       "require_producer_step": false,
       "require_smoke_gate": false
@@ -379,6 +246,20 @@
       "require_smoke_gate": true
     },
     {
+      "category": "corpus and ratio",
+      "name": "vort-level-report.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "corpus and ratio",
+      "name": "vort-level-report.md",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
       "category": "validation",
       "name": "vort-native-allocation-negative-smoke.json",
       "require_present": true,
@@ -407,11 +288,123 @@
       "require_smoke_gate": true
     },
     {
+      "category": "native parallel",
+      "name": "vort-native-parallel-dashboard.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "native parallel",
+      "name": "vort-native-thread-pool-full-dashboard.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-bench-gate.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-bench.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-corpus-bench-gate.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-corpus-bench.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "corpus and ratio",
+      "name": "vort-native-tier-range-corpus-discovery.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-files-bench-gate.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-files-bench.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-png-streaming-zlib-bench-report-repeat3.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "validation",
       "name": "vort-python-zlib-diff-smoke.json",
       "require_present": true,
       "require_producer_step": true,
       "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-benchmark-summary-repeat3.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-benchmark-summary.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-decode-bench-repeat3.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-decode-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-encode-bench-repeat3.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-encode-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
     },
     {
       "category": "validation",
@@ -426,6 +419,13 @@
       "require_present": true,
       "require_producer_step": true,
       "require_smoke_gate": true
+    },
+    {
+      "category": "corpus and ratio",
+      "name": "vort-standard-corpus-dashboard.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
     },
     {
       "category": "validation",
@@ -456,6 +456,34 @@
       "require_smoke_gate": false
     },
     {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-block-sweep-releasefast.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-block-sweep-releasefast.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-block-sweep.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-block-sweep.md",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
       "category": "validation",
       "name": "vort-zstd-compare-gate.json",
       "require_present": true,
@@ -478,52 +506,45 @@
     },
     {
       "category": "benchmark",
-      "name": "vort-native-tier-range-bench-gate.json",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-native-tier-range-files-bench-gate.json",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-native-tier-range-bench.csv",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-native-tier-range-files-bench.csv",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-native-tier-range-corpus-bench-gate.json",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-native-tier-range-corpus-discovery.json",
+      "name": "vort-zstd-compare-standard-releasefast.csv",
       "require_present": false,
       "require_producer_step": false,
       "require_smoke_gate": false
     },
     {
       "category": "benchmark",
-      "name": "vort-native-tier-range-corpus-bench.csv",
+      "name": "vort-zstd-compare-standard-releasefast.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-standard.csv",
       "require_present": true,
       "require_producer_step": true,
       "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-standard.md",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
     }
   ],
   "schema": "vort.dashboard_category_expected_artifacts",

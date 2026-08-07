@@ -4,6 +4,18 @@
     "exact": []
   },
   "artifact_metadata": {
+    "vort-br-static-dictionary-report.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+    },
+    "vort-br-static-dictionary-report.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+    },
+    "vort-br-static-dictionary-report.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+    },
     "vort-checksum-bench.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-checksum-bench-gate"
@@ -192,14 +204,6 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-native-codec-probes-dashboard"
     },
-    "vort-native-tier-range-bench.csv": {
-      "expected_format": "csv",
-      "smoke_gate": "zig build run-native-tier-range-bench-gate"
-    },
-    "vort-native-tier-range-files-bench.csv": {
-      "expected_format": "csv",
-      "smoke_gate": "zig build run-native-tier-range-files-bench-gate"
-    },
     "vort-native-fuzz-corpus-coverage-smoke.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-native-fuzz-corpus-coverage-smoke"
@@ -219,6 +223,34 @@
     "vort-native-thread-pool-full-dashboard.md": {
       "expected_format": "md",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard"
+    },
+    "vort-native-tier-range-bench-gate.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-native-tier-range-bench-gate"
+    },
+    "vort-native-tier-range-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-native-tier-range-bench-gate"
+    },
+    "vort-native-tier-range-corpus-bench-gate.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
+    },
+    "vort-native-tier-range-corpus-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
+    },
+    "vort-native-tier-range-corpus-discovery.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
+    },
+    "vort-native-tier-range-files-bench-gate.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-native-tier-range-files-bench-gate"
+    },
+    "vort-native-tier-range-files-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-native-tier-range-files-bench-gate"
     },
     "vort-png-scanline-bench.csv": {
       "expected_format": "csv",
@@ -312,14 +344,6 @@
       "expected_format": "json",
       "smoke_gate": "zig build run-zstd-compare-block-sweep-gate"
     },
-    "vort-zstd-compare-block-sweep.csv": {
-      "expected_format": "csv",
-      "smoke_gate": "zig build run-zstd-compare-block-sweep-gate"
-    },
-    "vort-zstd-compare-block-sweep.md": {
-      "expected_format": "md",
-      "smoke_gate": "zig build run-zstd-compare-block-sweep-gate"
-    },
     "vort-zstd-compare-block-sweep-releasefast-gate.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-zstd-compare-block-sweep-releasefast-gate"
@@ -331,6 +355,14 @@
     "vort-zstd-compare-block-sweep-releasefast.md": {
       "expected_format": "md",
       "smoke_gate": "zig build run-zstd-compare-block-sweep-releasefast-gate"
+    },
+    "vort-zstd-compare-block-sweep.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-zstd-compare-block-sweep-gate"
+    },
+    "vort-zstd-compare-block-sweep.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-zstd-compare-block-sweep-gate"
     },
     "vort-zstd-compare-gate.json": {
       "expected_format": "json",
@@ -344,14 +376,6 @@
       "expected_format": "json",
       "smoke_gate": "zig build run-zstd-compare-standard-releasefast-gate"
     },
-    "vort-zstd-compare-standard.csv": {
-      "expected_format": "csv",
-      "smoke_gate": "zig build run-zstd-compare-standard-gate"
-    },
-    "vort-zstd-compare-standard.md": {
-      "expected_format": "md",
-      "smoke_gate": "zig build run-zstd-compare-standard-gate"
-    },
     "vort-zstd-compare-standard-releasefast.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build run-zstd-compare-standard-releasefast-gate"
@@ -360,6 +384,14 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-zstd-compare-standard-releasefast-gate"
     },
+    "vort-zstd-compare-standard.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-zstd-compare-standard-gate"
+    },
+    "vort-zstd-compare-standard.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-zstd-compare-standard-gate"
+    },
     "vort-zstd-compare.csv": {
       "expected_format": "csv",
       "smoke_gate": "zig build run-zstd-compare-gate"
@@ -367,26 +399,6 @@
     "vort-zstd-compare.md": {
       "expected_format": "md",
       "smoke_gate": "zig build run-zstd-compare-gate"
-    },
-    "vort-native-tier-range-bench-gate.json": {
-      "expected_format": "json",
-      "smoke_gate": "zig build run-native-tier-range-bench-gate"
-    },
-    "vort-native-tier-range-files-bench-gate.json": {
-      "expected_format": "json",
-      "smoke_gate": "zig build run-native-tier-range-files-bench-gate"
-    },
-    "vort-native-tier-range-corpus-bench.csv": {
-      "expected_format": "csv",
-      "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
-    },
-    "vort-native-tier-range-corpus-bench-gate.json": {
-      "expected_format": "json",
-      "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
-    },
-    "vort-native-tier-range-corpus-discovery.json": {
-      "expected_format": "json",
-      "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
     }
   },
   "contains": [
@@ -404,6 +416,9 @@
     }
   ],
   "exact": {
+    "vort-br-static-dictionary-report.csv": "zig build run-br-static-dictionary-report-dashboard",
+    "vort-br-static-dictionary-report.json": "zig build run-br-static-dictionary-report-dashboard",
+    "vort-br-static-dictionary-report.md": "zig build run-br-static-dictionary-report-dashboard",
     "vort-checksum-bench.csv": "zig build -Doptimize=ReleaseFast run-checksum-bench-gate",
     "vort-chunk-cursor-bench.csv": "zig build run-chunk-cursor-bench-gate",
     "vort-chunked-zlib-bench-report-repeat3.csv": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-gate",
@@ -451,13 +466,18 @@
     "vort-native-allocation-smoke.json": "zig build run-native-allocation-smoke",
     "vort-native-codec-probes.json": "zig build run-native-codec-probes-dashboard",
     "vort-native-codec-probes.md": "zig build run-native-codec-probes-dashboard",
-    "vort-native-tier-range-bench.csv": "zig build run-native-tier-range-bench-gate",
-    "vort-native-tier-range-files-bench.csv": "zig build run-native-tier-range-files-bench-gate",
     "vort-native-fuzz-corpus-coverage-smoke.json": "zig build run-native-fuzz-corpus-coverage-smoke",
     "vort-native-fuzz-corpus.json": "zig build run-native-fuzz-corpus-dashboard",
     "vort-native-fuzz-corpus.md": "zig build run-native-fuzz-corpus-dashboard",
     "vort-native-parallel-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard",
     "vort-native-thread-pool-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard",
+    "vort-native-tier-range-bench-gate.json": "zig build run-native-tier-range-bench-gate",
+    "vort-native-tier-range-bench.csv": "zig build run-native-tier-range-bench-gate",
+    "vort-native-tier-range-corpus-bench-gate.json": "zig build run-native-tier-range-corpus-bench-gate",
+    "vort-native-tier-range-corpus-bench.csv": "zig build run-native-tier-range-corpus-bench-gate",
+    "vort-native-tier-range-corpus-discovery.json": "zig build run-native-tier-range-corpus-bench-gate",
+    "vort-native-tier-range-files-bench-gate.json": "zig build run-native-tier-range-files-bench-gate",
+    "vort-native-tier-range-files-bench.csv": "zig build run-native-tier-range-files-bench-gate",
     "vort-png-scanline-bench.csv": "zig build run-png-scanline-bench-gate",
     "vort-png-scratch-report.json": "zig build run-png-scratch-report-dashboard",
     "vort-png-scratch-report.md": "zig build run-png-scratch-report-dashboard",
@@ -481,27 +501,25 @@
     "vort-zlib-relaxed-report.json": "zig build run-zlib-relaxed-report",
     "vort-zlib-relaxed-report.md": "zig build run-zlib-relaxed-report",
     "vort-zstd-compare-block-sweep-gate.json": "zig build run-zstd-compare-block-sweep-gate",
-    "vort-zstd-compare-block-sweep.csv": "zig build run-zstd-compare-block-sweep-gate",
-    "vort-zstd-compare-block-sweep.md": "zig build run-zstd-compare-block-sweep-gate",
     "vort-zstd-compare-block-sweep-releasefast-gate.json": "zig build run-zstd-compare-block-sweep-releasefast-gate",
     "vort-zstd-compare-block-sweep-releasefast.csv": "zig build run-zstd-compare-block-sweep-releasefast-gate",
     "vort-zstd-compare-block-sweep-releasefast.md": "zig build run-zstd-compare-block-sweep-releasefast-gate",
+    "vort-zstd-compare-block-sweep.csv": "zig build run-zstd-compare-block-sweep-gate",
+    "vort-zstd-compare-block-sweep.md": "zig build run-zstd-compare-block-sweep-gate",
     "vort-zstd-compare-gate.json": "zig build run-zstd-compare-gate",
     "vort-zstd-compare-standard-gate.json": "zig build run-zstd-compare-standard-gate",
     "vort-zstd-compare-standard-releasefast-gate.json": "zig build run-zstd-compare-standard-releasefast-gate",
-    "vort-zstd-compare-standard.csv": "zig build run-zstd-compare-standard-gate",
-    "vort-zstd-compare-standard.md": "zig build run-zstd-compare-standard-gate",
     "vort-zstd-compare-standard-releasefast.csv": "zig build run-zstd-compare-standard-releasefast-gate",
     "vort-zstd-compare-standard-releasefast.md": "zig build run-zstd-compare-standard-releasefast-gate",
+    "vort-zstd-compare-standard.csv": "zig build run-zstd-compare-standard-gate",
+    "vort-zstd-compare-standard.md": "zig build run-zstd-compare-standard-gate",
     "vort-zstd-compare.csv": "zig build run-zstd-compare-gate",
-    "vort-zstd-compare.md": "zig build run-zstd-compare-gate",
-    "vort-native-tier-range-bench-gate.json": "zig build run-native-tier-range-bench-gate",
-    "vort-native-tier-range-files-bench-gate.json": "zig build run-native-tier-range-files-bench-gate",
-    "vort-native-tier-range-corpus-bench.csv": "zig build run-native-tier-range-corpus-bench-gate",
-    "vort-native-tier-range-corpus-bench-gate.json": "zig build run-native-tier-range-corpus-bench-gate",
-    "vort-native-tier-range-corpus-discovery.json": "zig build run-native-tier-range-corpus-bench-gate"
+    "vort-zstd-compare.md": "zig build run-zstd-compare-gate"
   },
   "required_smoke_gates": [
+    "vort-br-static-dictionary-report.csv",
+    "vort-br-static-dictionary-report.json",
+    "vort-br-static-dictionary-report.md",
     "vort-checksum-bench.csv",
     "vort-chunk-cursor-bench.csv",
     "vort-chunked-zlib-bench-report-repeat3.csv",
@@ -536,12 +554,12 @@
     "vort-native-fuzz-corpus.json",
     "vort-native-fuzz-corpus.md",
     "vort-native-tier-range-bench-gate.json",
-    "vort-native-tier-range-files-bench-gate.json",
     "vort-native-tier-range-bench.csv",
-    "vort-native-tier-range-files-bench.csv",
     "vort-native-tier-range-corpus-bench-gate.json",
     "vort-native-tier-range-corpus-bench.csv",
     "vort-native-tier-range-corpus-discovery.json",
+    "vort-native-tier-range-files-bench-gate.json",
+    "vort-native-tier-range-files-bench.csv",
     "vort-png-scanline-bench.csv",
     "vort-png-scratch-report.json",
     "vort-png-scratch-report.md",

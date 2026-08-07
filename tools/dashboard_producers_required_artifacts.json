@@ -2,6 +2,27 @@
   "required_artifacts": [
     {
       "expected_format": "csv",
+      "name": "vort-br-static-dictionary-report.csv",
+      "producer_step": "zig build run-br-static-dictionary-report-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-br-static-dictionary-report.json",
+      "producer_step": "zig build run-br-static-dictionary-report-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-br-static-dictionary-report.md",
+      "producer_step": "zig build run-br-static-dictionary-report-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-br-static-dictionary-report-dashboard"
+    },
+    {
+      "expected_format": "csv",
       "name": "vort-checksum-bench.csv",
       "producer_step": "zig build -Doptimize=ReleaseFast run-checksum-bench-gate",
       "required_smoke_gate": true,
@@ -372,13 +393,6 @@
       "smoke_gate": "zig build run-native-tier-range-bench-gate"
     },
     {
-      "expected_format": "json",
-      "name": "vort-native-tier-range-files-bench-gate.json",
-      "producer_step": "zig build run-native-tier-range-files-bench-gate",
-      "required_smoke_gate": true,
-      "smoke_gate": "zig build run-native-tier-range-files-bench-gate"
-    },
-    {
       "expected_format": "csv",
       "name": "vort-native-tier-range-bench.csv",
       "producer_step": "zig build run-native-tier-range-bench-gate",
@@ -386,15 +400,15 @@
       "smoke_gate": "zig build run-native-tier-range-bench-gate"
     },
     {
-      "expected_format": "csv",
-      "name": "vort-native-tier-range-files-bench.csv",
-      "producer_step": "zig build run-native-tier-range-files-bench-gate",
-      "required_smoke_gate": true,
-      "smoke_gate": "zig build run-native-tier-range-files-bench-gate"
-    },
-    {
       "expected_format": "json",
       "name": "vort-native-tier-range-corpus-bench-gate.json",
+      "producer_step": "zig build run-native-tier-range-corpus-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-native-tier-range-corpus-bench.csv",
       "producer_step": "zig build run-native-tier-range-corpus-bench-gate",
       "required_smoke_gate": true,
       "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
@@ -407,11 +421,18 @@
       "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
     },
     {
-      "expected_format": "csv",
-      "name": "vort-native-tier-range-corpus-bench.csv",
-      "producer_step": "zig build run-native-tier-range-corpus-bench-gate",
+      "expected_format": "json",
+      "name": "vort-native-tier-range-files-bench-gate.json",
+      "producer_step": "zig build run-native-tier-range-files-bench-gate",
       "required_smoke_gate": true,
-      "smoke_gate": "zig build run-native-tier-range-corpus-bench-gate"
+      "smoke_gate": "zig build run-native-tier-range-files-bench-gate"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-native-tier-range-files-bench.csv",
+      "producer_step": "zig build run-native-tier-range-files-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-tier-range-files-bench-gate"
     },
     {
       "expected_format": "csv",
@@ -575,20 +596,6 @@
       "smoke_gate": "zig build run-zstd-compare-block-sweep-gate"
     },
     {
-      "expected_format": "csv",
-      "name": "vort-zstd-compare-block-sweep.csv",
-      "producer_step": "zig build run-zstd-compare-block-sweep-gate",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build run-zstd-compare-block-sweep-gate"
-    },
-    {
-      "expected_format": "md",
-      "name": "vort-zstd-compare-block-sweep.md",
-      "producer_step": "zig build run-zstd-compare-block-sweep-gate",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build run-zstd-compare-block-sweep-gate"
-    },
-    {
       "expected_format": "json",
       "name": "vort-zstd-compare-block-sweep-releasefast-gate.json",
       "producer_step": "zig build run-zstd-compare-block-sweep-releasefast-gate",
@@ -608,6 +615,20 @@
       "producer_step": "zig build run-zstd-compare-block-sweep-releasefast-gate",
       "required_smoke_gate": false,
       "smoke_gate": "zig build run-zstd-compare-block-sweep-releasefast-gate"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-zstd-compare-block-sweep.csv",
+      "producer_step": "zig build run-zstd-compare-block-sweep-gate",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-zstd-compare-block-sweep-gate"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-zstd-compare-block-sweep.md",
+      "producer_step": "zig build run-zstd-compare-block-sweep-gate",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-zstd-compare-block-sweep-gate"
     },
     {
       "expected_format": "json",
@@ -632,20 +653,6 @@
     },
     {
       "expected_format": "csv",
-      "name": "vort-zstd-compare-standard.csv",
-      "producer_step": "zig build run-zstd-compare-standard-gate",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build run-zstd-compare-standard-gate"
-    },
-    {
-      "expected_format": "md",
-      "name": "vort-zstd-compare-standard.md",
-      "producer_step": "zig build run-zstd-compare-standard-gate",
-      "required_smoke_gate": false,
-      "smoke_gate": "zig build run-zstd-compare-standard-gate"
-    },
-    {
-      "expected_format": "csv",
       "name": "vort-zstd-compare-standard-releasefast.csv",
       "producer_step": "zig build run-zstd-compare-standard-releasefast-gate",
       "required_smoke_gate": false,
@@ -657,6 +664,20 @@
       "producer_step": "zig build run-zstd-compare-standard-releasefast-gate",
       "required_smoke_gate": false,
       "smoke_gate": "zig build run-zstd-compare-standard-releasefast-gate"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-zstd-compare-standard.csv",
+      "producer_step": "zig build run-zstd-compare-standard-gate",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-zstd-compare-standard-gate"
+    },
+    {
+      "expected_format": "md",
+      "name": "vort-zstd-compare-standard.md",
+      "producer_step": "zig build run-zstd-compare-standard-gate",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-zstd-compare-standard-gate"
     },
     {
       "expected_format": "csv",
