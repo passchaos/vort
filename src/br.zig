@@ -607,7 +607,7 @@ fn processMinimalCompressedMetaBlock(
         const distance = try readMinimalDistance(&header, reader, lengths, last_distances);
         if (distance == 0) return error.InvalidMatch;
         if (distance > written.*) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len);
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written.*);
             if (word.len > meta_block_end - written.*) return error.CorruptFrame;
             @memcpy(output[written.*..][0..word.len], word);
             written.* += word.len;
@@ -655,7 +655,7 @@ fn skipMinimalCompressedMetaBlock(
         const distance = try readMinimalDistance(&header, reader, lengths, last_distances);
         if (distance == 0) return error.InvalidMatch;
         if (distance > written) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len);
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written);
             if (word.len > meta_block_end - written) return error.CorruptFrame;
             literal_history.pushSlice(word);
             written += word.len;
@@ -668,15 +668,43 @@ fn skipMinimalCompressedMetaBlock(
     }
 }
 
-fn minimalStaticDictionaryWord(distance: usize, copy_len: usize) Error![]const u8 {
-    // Real Node/Brotli quality-5 streams may start by copying "hello" from the
-    // built-in static dictionary before any output history exists. This is the
-    // first narrow compatibility slice; the full static dictionary and
-    // transforms remain a follow-up.
-    if (copy_len == 5 and distance == 720) return "hello";
-    if (copy_len == 5 and distance == 112) return "quick";
-    if (copy_len == 5 and distance == 1002) return "dolor";
+fn minimalStaticDictionaryWord(distance: usize, copy_len: usize, current_output_len: usize) Error![]const u8 {
+    // Brotli static-dictionary addresses are relative to the current maximum
+    // LZ77 distance, not the raw distance code. In this minimal decoder slice
+    // we only enter here while `distance > current_output_len`, so the current
+    // output length is the same limit used by RFC 7932 for small streams. The
+    // table below intentionally keeps just the identity-transform words proven
+    // by real Node quality-5 frames; transformed words and late-window
+    // dictionary references remain follow-up work.
+    if (distance <= current_output_len) return error.InvalidMatch;
+    const address = distance - current_output_len - 1;
+    const size_bits = minimalStaticDictionarySizeBits(copy_len) orelse return error.UnsupportedBrotliFeature;
+    const mask = (@as(usize, 1) << @intCast(size_bits)) - 1;
+    const word_index = address & mask;
+    const transform_index = address >> @intCast(size_bits);
+    if (transform_index != 0) return error.UnsupportedBrotliFeature;
+
+    if (copy_len == 5 and word_index == 35) return "about";
+    if (copy_len == 5 and word_index == 81) return "press";
+    if (copy_len == 5 and word_index == 107) return "quick";
+    if (copy_len == 5 and word_index == 719) return "hello";
+    if (copy_len == 5 and word_index == 989) return "dolor";
+    if (copy_len == 10 and word_index == 205) return "dictionary";
+    if (copy_len == 11 and word_index == 5) return "information";
     return error.UnsupportedBrotliFeature;
+}
+
+fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
+    return switch (copy_len) {
+        4, 5, 8, 9, 10, 11, 12 => 10,
+        6, 7 => 11,
+        13, 14 => 9,
+        15, 18 => 8,
+        16, 17, 19, 20 => 7,
+        21, 22 => 6,
+        23, 24 => 5,
+        else => null,
+    };
 }
 
 fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!u16 {
@@ -1922,6 +1950,55 @@ test "br minimal static dictionary dolor word decodes Node quality-five frame" {
         0x2a, 0x34, 0x3f, 0xf0, 0x97, 0x3b, 0x30,
     };
     const expected = ("Lorem ipsum dolor sit amet, consectetur adipiscing elit. " ** 5)[0..256];
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary about word decodes Node quality-five frame" {
+    const encoded = [_]u8{
+        0xa1, 0x80, 0x00, 0x00, 0x20, 0x01, 0x52,
+        0x83, 0x20, 0x53, 0x93, 0xe5, 0x6d,
+    };
+    const expected = "about information";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary information word decodes Node quality-five frame" {
+    const encoded = [_]u8{
+        0xa1, 0x80, 0x00, 0x00, 0x20, 0x01, 0x52,
+        0x8b, 0x00, 0x53, 0xd2, 0xb5, 0x1c,
+    };
+    const expected = "information about";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary dictionary word decodes Node quality-five frame" {
+    const encoded = [_]u8{
+        0xa1, 0x78, 0x00, 0x00, 0x20, 0x01, 0x52,
+        0x8b, 0x00, 0x53, 0xd7, 0xd6, 0x08, 0x01,
+    };
+    const expected = "dictionary about";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary press stem decodes Node quality-five frame" {
+    const encoded = [_]u8{
+        0xa1, 0x80, 0x00, 0x00, 0x20, 0xb0, 0x01, 0x47,
+        0x1a, 0xfb, 0x34, 0x7c, 0xb5, 0xc9, 0x28, 0x75,
+        0x61, 0xe2, 0xe2, 0xf5, 0x18,
+    };
+    const expected = "compression about";
     try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
     const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
     defer std.testing.allocator.free(decoded);

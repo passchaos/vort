@@ -1814,3 +1814,10 @@ architecture blindly.
   slice. A 256-byte Lorem Ipsum frame copies `dolor` from static dictionary
   distance 1002 after emitting `Lorem ipsum `, and now decodes through the same
   preflight/output path plus the Node-backed CLI differential smoke.
+
+- Reworked the narrow Brotli static-dictionary slice to resolve identity-word
+  addresses relative to the current output length instead of matching only raw
+  distance codes. Real Node quality-5 frames now prove additional dictionary
+  stems/words (`about`, `press`, `dictionary`, and `information`) through both
+  decoded-size preflight and output decode, while transformed dictionary entries
+  remain explicitly unsupported until the full transform table is implemented.

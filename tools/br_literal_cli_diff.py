@@ -2241,6 +2241,22 @@ def main() -> int:
             node_compress((b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 5)[:256], quality=5, lgwin=10),
             (b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 5)[:256],
         ),
+        "node-static-dictionary-about-info-q5-lgwin10": (
+            node_compress(b"about information", quality=5, lgwin=10),
+            b"about information",
+        ),
+        "node-static-dictionary-info-about-q5-lgwin10": (
+            node_compress(b"information about", quality=5, lgwin=10),
+            b"information about",
+        ),
+        "node-static-dictionary-dictionary-about-q5-lgwin10": (
+            node_compress(b"dictionary about", quality=5, lgwin=10),
+            b"dictionary about",
+        ),
+        "node-static-dictionary-press-stem-q5-lgwin10": (
+            node_compress(b"compression about", quality=5, lgwin=10),
+            b"compression about",
+        ),
         "node-repeat256-q4-lgwin10": (node_compress(b"abcd" * 64, quality=4, lgwin=10), b"abcd" * 64),
         "node-text-q11-lgwin10": (
             node_compress(b"hello brotli hello brotli", quality=11, lgwin=10),
