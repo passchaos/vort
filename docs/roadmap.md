@@ -1515,12 +1515,11 @@ architecture blindly.
   `--min-repeat 3`, reducing false throughput failures from transient CPU load
   while keeping Debug smoke checks fast.
 
-- Removed mandatory system codec linkage from the default build. Vort now
-  builds without `libzstd` or `liblz4` installed; the public one-shot zstd/LZ4
-  frame facades default to existing pure Zig native/pure implementations.
-  System `libzstd`/`liblz4` compatibility facades remain available behind
-  `-Dsystem-codecs=true`, so downstreams can opt into external differentials
-  without making system libraries a core package dependency.
+- Removed optional system codec linkage from the library build. Vort no longer
+  exposes `-Dsystem-codecs` or links `libzstd`/`liblz4`; the public one-shot
+  Zstd/LZ4 frame facades always use dependency-free Zig implementations.
+  External zstd/LZ4 tools remain validation inputs for differential probes, not
+  runtime support paths.
 
 - Added a dependency-free Brotli `br` bootstrap module for stored/uncompressed
   streams. `src/br.zig` emits RFC-valid WBITS=16 streams with uncompressed

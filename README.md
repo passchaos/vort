@@ -72,7 +72,6 @@ artifacts rather than only existing as manual commands.
 ```sh
 zig build test
 zig build check
-zig build -Dsystem-codecs=true check  # optional libzstd/liblz4 compatibility facades
 zig build -Doptimize=ReleaseFast ci-smoke
 zig build run -- --help
 zig build run -- checksum "hello vort"

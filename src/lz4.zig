@@ -2,12 +2,10 @@ const std = @import("std");
 const core = @import("core.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
-const build_options = @import("vort_build_options");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
 pub const default_compression_level: c_int = 10;
-pub const system_codecs_enabled = build_options.enable_system_codecs;
 
 const frame_magic = [_]u8{ 0x04, 0x22, 0x4d, 0x18 };
 const frame_magic_u32: u32 = 0x184d2204;
@@ -31,24 +29,6 @@ pub const native_dictionary_window_len: usize = max_block_history_len;
 const good_match_len = 64;
 const lazy_extra_gain = 1;
 
-const Lz4FrameInfo = extern struct {
-    blockSizeID: c_int = 7, // LZ4F_max4MB
-    blockMode: c_int = 0, // LZ4F_blockLinked; better ratio than independent blocks.
-    contentChecksumFlag: c_int = 1,
-    frameType: c_int = 0,
-    contentSize: c_ulonglong = 0,
-    dictID: c_uint = 0,
-    blockChecksumFlag: c_int = 0,
-};
-
-const Lz4Preferences = extern struct {
-    frameInfo: Lz4FrameInfo = .{},
-    compressionLevel: c_int = default_compression_level,
-    autoFlush: c_uint = 0,
-    favorDecSpeed: c_uint = 0,
-    reserved: [3]c_uint = .{ 0, 0, 0 },
-};
-
 pub const LibFrameOptions = struct {
     include_content_size: bool = true,
     content_checksum: bool = true,
@@ -57,21 +37,6 @@ pub const LibFrameOptions = struct {
     block_mode: BlockMode = .linked,
 };
 
-const system = if (system_codecs_enabled) struct {
-    extern fn LZ4F_compressFrameBound(srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
-    extern fn LZ4F_compressFrame(dstBuffer: *anyopaque, dstCapacity: usize, srcBuffer: *const anyopaque, srcSize: usize, preferencesPtr: ?*const Lz4Preferences) usize;
-    extern fn LZ4F_isError(code: usize) c_uint;
-} else struct {
-    fn LZ4F_compressFrameBound(_: usize, _: ?*const Lz4Preferences) usize {
-        return 0;
-    }
-    fn LZ4F_compressFrame(_: *anyopaque, _: usize, _: *const anyopaque, _: usize, _: ?*const Lz4Preferences) usize {
-        return 1;
-    }
-    fn LZ4F_isError(_: usize) c_uint {
-        return 1;
-    }
-};
 const Match = struct {
     start: usize = 0,
     len: usize = 0,
@@ -315,12 +280,8 @@ pub fn encodedNativeFrameBoundWithDictionarySet(input_len: usize, options: Nativ
     return try encodedNativeFrameBoundWithDictionary(input_len, options, dictionary);
 }
 
-/// Encode a complete interoperable LZ4 frame using liblz4's high-compression
-/// frame encoder. The default level starts at LZ4HC_CLEVEL_OPT_MIN (10)
-/// because it closes the C++ reference ratio gap on MCAP chunk workloads while
-/// retaining competitive write time. Vort owns this dependency so downstream
-/// formats such as MCAP can use tuned LZ4 without carrying compression code
-/// themselves.
+/// Encode a complete interoperable LZ4 frame through Vort's dependency-free
+/// pure Zig writer.
 pub fn encodeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return try encodeFrameWithLevelAlloc(allocator, input, default_compression_level);
 }
@@ -339,46 +300,20 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     level: c_int,
     options: LibFrameOptions,
 ) Error![]u8 {
-    if (!system_codecs_enabled) {
-        return try encodePureFrameWithOptionsAlloc(allocator, input, .{
-            .include_content_size = options.include_content_size,
-            .content_checksum = options.content_checksum,
-            .block_checksum = options.block_checksum,
-            .block_size_id = options.block_size_id,
-            .block_mode = options.block_mode,
-        });
-    }
-
-    var preferences = Lz4Preferences{
-        .frameInfo = .{
-            .blockSizeID = @intFromEnum(options.block_size_id),
-            .blockMode = switch (options.block_mode) {
-                .linked => 0,
-                .independent => 1,
-            },
-            .contentChecksumFlag = if (options.content_checksum) 1 else 0,
-            .contentSize = if (options.include_content_size) try checkedUsizeToU64(input.len) else 0,
-            .blockChecksumFlag = if (options.block_checksum) 1 else 0,
-        },
-        .compressionLevel = level,
-    };
-    const bound = system.LZ4F_compressFrameBound(input.len, &preferences);
-    if (system.LZ4F_isError(bound) != 0) return error.CorruptFrame;
-    var out = try allocator.alloc(u8, bound);
-    errdefer allocator.free(out);
-    const written = system.LZ4F_compressFrame(@ptrCast(out.ptr), out.len, @ptrCast(input.ptr), input.len, &preferences);
-    if (system.LZ4F_isError(written) != 0) return error.CorruptFrame;
-    if (allocator.remap(out, written)) |shrunk| return shrunk;
-    const exact = try allocator.dupe(u8, out[0..written]);
-    allocator.free(out);
-    return exact;
+    _ = level;
+    return try encodePureFrameWithOptionsAlloc(allocator, input, .{
+        .include_content_size = options.include_content_size,
+        .content_checksum = options.content_checksum,
+        .block_checksum = options.block_checksum,
+        .block_size_id = options.block_size_id,
+        .block_mode = options.block_mode,
+    });
 }
 
-/// Dependency-free pure Zig LZ4 frame encoder retained for bootstrapping and
-/// differential testing. Blocks use a bounded hash-chain parser with one-byte
-/// lazy matching, linked frames seed the parser from the previous 64 KiB of
-/// decoded history, and all blocks fall back to uncompressed storage when
-/// compression expands the input.
+/// Dependency-free pure Zig LZ4 frame encoder. Blocks use a bounded hash-chain
+/// parser with one-byte lazy matching, linked frames seed the parser from the
+/// previous 64 KiB of decoded history, and all blocks fall back to uncompressed
+/// storage when compression expands the input.
 pub fn encodePureFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return try encodePureFrameWithOptionsAlloc(allocator, input, .{});
 }
@@ -5484,19 +5419,18 @@ test "lz4 frame encoder round trips and compresses repetitive payloads" {
         },
     );
     defer std.testing.allocator.free(no_content_fields);
-    if (system_codecs_enabled) {
-        try std.testing.expectEqual(@as(u8, 0x60), no_content_fields[4]);
-        try std.testing.expectEqual(@as(u8, 0x40), no_content_fields[5]);
-    }
+    const no_content_header = try inspectNativeFrameHeader(no_content_fields);
+    try std.testing.expect(!no_content_header.block_independent);
+    try std.testing.expect(!no_content_header.content_checksum);
+    try std.testing.expectEqual(@as(?u64, null), no_content_header.expected_content_size);
+    try std.testing.expectEqual(@as(usize, 64 * 1024), no_content_header.block_size_max);
     const no_content_decoded = try decodeFrameAlloc(std.testing.allocator, no_content_fields);
     defer std.testing.allocator.free(no_content_decoded);
     try std.testing.expectEqualSlices(u8, repeated, no_content_decoded);
     try std.testing.expectEqual(repeated.len, try decodedFrameSize(no_content_fields));
 }
 
-test "lz4 native decoder covers liblz4 generated corpus shapes" {
-    if (!system_codecs_enabled) return;
-
+test "lz4 pure Zig facade generated corpus shapes" {
     var sequential: [5000]u8 = undefined;
     for (&sequential, 0..) |*byte, i| byte.* = @intCast(i % 251);
 

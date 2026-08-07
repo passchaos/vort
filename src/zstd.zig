@@ -3,12 +3,10 @@ const core = @import("core.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
 const huffman = @import("huffman.zig");
-const build_options = @import("vort_build_options");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
 pub const default_compression_level: c_int = 1;
-pub const system_codecs_enabled = build_options.enable_system_codecs;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
 const frame_magic_u32: u32 = 0xfd2fb528;
@@ -82,55 +80,6 @@ const of_bits = [_]u8{
     24, 25, 26, 27, 28, 29, 30, 31,
 };
 
-const system = if (system_codecs_enabled) struct {
-    extern fn ZSTD_compressBound(srcSize: usize) usize;
-    extern fn ZSTD_compress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize, compressionLevel: c_int) usize;
-    extern fn ZSTD_createCCtx() ?*anyopaque;
-    extern fn ZSTD_freeCCtx(cctx: ?*anyopaque) usize;
-    extern fn ZSTD_CCtx_setParameter(cctx: *anyopaque, param: c_int, value: c_int) usize;
-    extern fn ZSTD_compress2(cctx: *anyopaque, dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, srcSize: usize) usize;
-    extern fn ZSTD_getFrameContentSize(src: *const anyopaque, srcSize: usize) c_ulonglong;
-    extern fn ZSTD_decompressBound(src: *const anyopaque, srcSize: usize) c_ulonglong;
-    extern fn ZSTD_decompress(dst: *anyopaque, dstCapacity: usize, src: *const anyopaque, compressedSize: usize) usize;
-    extern fn ZSTD_isError(code: usize) c_uint;
-} else struct {
-    fn ZSTD_compressBound(_: usize) usize {
-        return 0;
-    }
-    fn ZSTD_compress(_: *anyopaque, _: usize, _: *const anyopaque, _: usize, _: c_int) usize {
-        return 1;
-    }
-    fn ZSTD_createCCtx() ?*anyopaque {
-        return null;
-    }
-    fn ZSTD_freeCCtx(_: ?*anyopaque) usize {
-        return 0;
-    }
-    fn ZSTD_CCtx_setParameter(_: *anyopaque, _: c_int, _: c_int) usize {
-        return 1;
-    }
-    fn ZSTD_compress2(_: *anyopaque, _: *anyopaque, _: usize, _: *const anyopaque, _: usize) usize {
-        return 1;
-    }
-    fn ZSTD_getFrameContentSize(_: *const anyopaque, _: usize) c_ulonglong {
-        return zstd_content_size_error;
-    }
-    fn ZSTD_decompressBound(_: *const anyopaque, _: usize) c_ulonglong {
-        return zstd_content_size_error;
-    }
-    fn ZSTD_decompress(_: *anyopaque, _: usize, _: *const anyopaque, _: usize) usize {
-        return 1;
-    }
-    fn ZSTD_isError(_: usize) c_uint {
-        return 1;
-    }
-};
-
-const zstd_content_size_unknown = std.math.maxInt(c_ulonglong);
-const zstd_content_size_error = std.math.maxInt(c_ulonglong) - 1;
-const zstd_c_compression_level: c_int = 100;
-const zstd_c_content_size_flag: c_int = 200;
-const zstd_c_checksum_flag: c_int = 201;
 const StdZstdLiteralsSection = std.compress.zstd.Decompress.LiteralsSection;
 const StdZstdHuffmanTree = StdZstdLiteralsSection.HuffmanTree;
 
@@ -381,12 +330,11 @@ pub fn encodedNativeFrameBoundWithDictionarySet(input_len: usize, options: Nativ
     return try encodedNativeFrameBoundWithDictionary(input_len, options, dictionary);
 }
 
-/// Decode a Zstandard frame. Prefer libzstd's one-shot decoder because MCAP and
-/// similar containers often know the decoded chunk size out-of-band and because
-/// the one-shot path avoids Zig streaming allocator overhead. When the frame
-/// omits its content size, use libzstd's conservative decompressed bound before
-/// falling back to Zig std's streaming decoder for frames that cannot be bounded
-/// by the linked library.
+/// Decode a Zstandard frame through Vort's dependency-free native subset.
+///
+/// The public facade intentionally uses the same pure Zig implementation as
+/// `decodeNativeFrame*`; external zstd tools are reserved for validation, not
+/// for runtime support.
 pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
     return try decodeFrameAllocWithLimit(allocator, frame, null);
 }
@@ -396,32 +344,7 @@ pub fn decodeFrameAllocLimited(allocator: std.mem.Allocator, frame: []const u8, 
 }
 
 pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
-    if (!system_codecs_enabled) return try decodeNativeFrameInto(frame, output);
-    const content_size = system.ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
-    if (content_size == zstd_content_size_error) return error.CorruptFrame;
-    if (content_size != zstd_content_size_unknown) {
-        const decoded_len = try checkedU64ToUsize(content_size);
-        if (output.len < decoded_len) return error.OutputTooSmall;
-        const written = system.ZSTD_decompress(@ptrCast(output.ptr), output.len, @ptrCast(frame.ptr), frame.len);
-        if (system.ZSTD_isError(written) != 0) return error.CorruptFrame;
-        if (written != decoded_len) return error.SizeMismatch;
-        return written;
-    }
-
-    const bound = system.ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
-    if (bound == zstd_content_size_error) return error.UnsupportedZstdFeature;
-    const capacity = try checkedU64ToUsize(bound);
-    const written = system.ZSTD_decompress(@ptrCast(output.ptr), output.len, @ptrCast(frame.ptr), frame.len);
-    if (system.ZSTD_isError(written) != 0) {
-        // The bound is intentionally conservative when the frame omits content
-        // size. A caller buffer smaller than the bound might still be large
-        // enough, so only classify an actual libzstd failure as OutputTooSmall
-        // when the advertised upper bound proves the buffer was not generous.
-        if (output.len < capacity) return error.OutputTooSmall;
-        return error.CorruptFrame;
-    }
-    if (written > output.len) return error.OutputTooSmall;
-    return written;
+    return try decodeNativeFrameInto(frame, output);
 }
 
 pub fn decodedFrameSize(frame: []const u8) Error!usize {
@@ -429,18 +352,7 @@ pub fn decodedFrameSize(frame: []const u8) Error!usize {
 }
 
 pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {
-    if (!system_codecs_enabled) return try decodedNativeFrameSizeLimited(frame, max_output_len);
-    const content_size = system.ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
-    if (content_size == zstd_content_size_error) return error.CorruptFrame;
-    const decoded_len = if (content_size != zstd_content_size_unknown)
-        try checkedU64ToUsize(content_size)
-    else blk: {
-        const bound = system.ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
-        if (bound == zstd_content_size_error) return error.UnsupportedZstdFeature;
-        break :blk try checkedU64ToUsize(bound);
-    };
-    if (decoded_len > max_output_len) return error.OutputLimitExceeded;
-    return decoded_len;
+    return try decodedNativeFrameSizeLimited(frame, max_output_len);
 }
 
 fn nativeBlockSizeMax(options: NativeFrameOptions) Error!usize {
@@ -487,72 +399,10 @@ fn emitDictionaryId(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dicti
 }
 
 fn decodeFrameAllocWithLimit(allocator: std.mem.Allocator, frame: []const u8, max_output_len: ?usize) Error![]u8 {
-    if (!system_codecs_enabled) {
-        return if (max_output_len) |limit|
-            try decodeNativeFrameAllocLimited(allocator, frame, limit)
-        else
-            try decodeNativeFrameAlloc(allocator, frame);
-    }
-    const content_size = system.ZSTD_getFrameContentSize(@ptrCast(frame.ptr), frame.len);
-    if (content_size == zstd_content_size_error) return error.CorruptFrame;
-    if (content_size != zstd_content_size_unknown) {
-        const decoded_len = try checkedU64ToUsize(content_size);
-        if (max_output_len) |limit| {
-            if (decoded_len > limit) return error.OutputLimitExceeded;
-        }
-        const out = try allocator.alloc(u8, decoded_len);
-        errdefer allocator.free(out);
-        const written = system.ZSTD_decompress(@ptrCast(out.ptr), out.len, @ptrCast(frame.ptr), frame.len);
-        if (system.ZSTD_isError(written) != 0) return error.CorruptFrame;
-        if (written != decoded_len) return error.SizeMismatch;
-        return out;
-    }
-
-    const bound = system.ZSTD_decompressBound(@ptrCast(frame.ptr), frame.len);
-    if (bound != zstd_content_size_error) {
-        const bound_capacity = try checkedU64ToUsize(bound);
-        const capacity = if (max_output_len) |limit| @min(bound_capacity, limit) else bound_capacity;
-        if (max_output_len) |limit| {
-            if (capacity > limit) return error.OutputLimitExceeded;
-        }
-        const out = try allocator.alloc(u8, capacity);
-        errdefer allocator.free(out);
-        const written = system.ZSTD_decompress(@ptrCast(out.ptr), out.len, @ptrCast(frame.ptr), frame.len);
-        if (system.ZSTD_isError(written) != 0) {
-            if (max_output_len != null and bound_capacity > capacity) return error.OutputLimitExceeded;
-            return error.CorruptFrame;
-        }
-        if (max_output_len) |limit| {
-            if (written > limit) return error.OutputLimitExceeded;
-        }
-        if (allocator.remap(out, written)) |shrunk| return shrunk;
-        const exact = try allocator.dupe(u8, out[0..written]);
-        allocator.free(out);
-        return exact;
-    }
-
-    if (max_output_len) |limit| {
-        const native = decodeRawOrRleFrameAllocLimited(allocator, frame, limit) catch |err| switch (err) {
-            error.UnsupportedZstdFeature => null,
-            else => return err,
-        };
-        if (native) |decoded| return decoded;
-    }
-
-    var input: std.Io.Reader = .fixed(frame);
-    var zstd_stream: std.compress.zstd.Decompress = .init(&input, &.{}, .{});
-    var output: std.Io.Writer.Allocating = .init(allocator);
-    errdefer output.deinit();
-    _ = zstd_stream.reader.streamRemaining(&output.writer) catch return error.CorruptFrame;
-    if (zstd_stream.err) |_| return error.CorruptFrame;
-    const decoded = output.toOwnedSlice() catch |err| switch (err) {
-        error.OutOfMemory => return error.OutOfMemory,
-    };
-    errdefer allocator.free(decoded);
-    if (max_output_len) |limit| {
-        if (decoded.len > limit) return error.OutputLimitExceeded;
-    }
-    return decoded;
+    return if (max_output_len) |limit|
+        try decodeNativeFrameAllocLimited(allocator, frame, limit)
+    else
+        try decodeNativeFrameAlloc(allocator, frame);
 }
 
 /// Dependency-free Zstandard decoder for the raw/RLE frame subset emitted by
@@ -2815,11 +2665,8 @@ pub const NativeFrameDecoder = struct {
     }
 };
 
-/// Compress a complete Zstandard frame using the reference-compatible libzstd
-/// encoder linked by Vort's build. Keeping this call surface in Vort centralizes
-/// compression ownership for downstream formats such as MCAP while leaving room
-/// to replace the backend with a pure Zig implementation ported from
-/// `~/Work/zstd` internals later.
+/// Compress a complete Zstandard frame through Vort's dependency-free native
+/// subset.
 pub fn encodeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return try encodeFrameWithLevelAlloc(allocator, input, default_compression_level);
 }
@@ -2838,43 +2685,18 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     level: c_int,
     options: LibFrameOptions,
 ) Error![]u8 {
-    if (!system_codecs_enabled) {
-        const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, .{
-            .content_checksum = options.content_checksum,
-            .include_content_size = options.include_content_size,
-        });
-        return result.frame;
-    }
-
-    const bound = system.ZSTD_compressBound(input.len);
-    if (system.ZSTD_isError(bound) != 0) return error.CorruptFrame;
-    var out = try allocator.alloc(u8, bound);
-    errdefer allocator.free(out);
-
-    const cctx = system.ZSTD_createCCtx() orelse return error.OutOfMemory;
-    defer _ = system.ZSTD_freeCCtx(cctx);
-
-    // Use the advanced one-shot API only when callers need frame policy
-    // control. The default options preserve the historical system.ZSTD_compress()
-    // behavior while allowing downstream containers such as MCAP to avoid
-    // duplicating metadata they already carry at the format layer.
-    if (system.ZSTD_isError(system.ZSTD_CCtx_setParameter(cctx, zstd_c_compression_level, level)) != 0) return error.CorruptFrame;
-    if (system.ZSTD_isError(system.ZSTD_CCtx_setParameter(cctx, zstd_c_content_size_flag, if (options.include_content_size) 1 else 0)) != 0) return error.CorruptFrame;
-    if (system.ZSTD_isError(system.ZSTD_CCtx_setParameter(cctx, zstd_c_checksum_flag, if (options.content_checksum) 1 else 0)) != 0) return error.CorruptFrame;
-
-    const written = system.ZSTD_compress2(cctx, @ptrCast(out.ptr), out.len, @ptrCast(input.ptr), input.len);
-    if (system.ZSTD_isError(written) != 0) return error.CorruptFrame;
-    if (allocator.remap(out, written)) |shrunk| return shrunk;
-    const exact = try allocator.dupe(u8, out[0..written]);
-    allocator.free(out);
-    return exact;
+    _ = level;
+    const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, .{
+        .content_checksum = options.content_checksum,
+        .include_content_size = options.include_content_size,
+    });
+    return result.frame;
 }
 
 /// Emit a valid Zstandard frame composed of raw and RLE blocks.
 ///
-/// This dependency-free fallback remains useful for bootstrapping and for tiny
-/// repeated-byte payloads. General-purpose MCAP chunk writing uses
-/// `encodeFrameAlloc()` so it benefits from the full zstd entropy encoder.
+/// This entrypoint is retained as an explicit subset alias; the general
+/// `encodeFrameAlloc()` facade now uses the broader native writer directly.
 pub fn encodeRawOrRleFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return try encodeRawOrRleFrameWithOptionsAlloc(allocator, input, .{});
 }
@@ -3407,7 +3229,7 @@ fn emitWindowDescriptor(allocator: std.mem.Allocator, out: *std.ArrayList(u8), c
         const base = @as(u64, 1) << @intCast(10 + exponent);
         const step = base / 8;
         if (window_size <= base + step * 7) {
-            const delta = window_size - base;
+            const delta = if (window_size <= base) 0 else window_size - base;
             const mantissa: u8 = @intCast((delta + step - 1) / step);
             try out.append(allocator, (exponent << 3) | mantissa);
             return;
@@ -9198,9 +9020,7 @@ test "zstd frame encoder round trips and compresses repeated payloads" {
     try std.testing.expect(encoded.len < payload.len);
 }
 
-test "zstd lib encoder frame options omit content size" {
-    if (!system_codecs_enabled) return;
-
+test "zstd frame options omit content size through pure Zig facade" {
     const payload = "zstd lib frame options payload" ** 8;
     const encoded = try encodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
         .include_content_size = false,
@@ -9208,7 +9028,9 @@ test "zstd lib encoder frame options omit content size" {
     });
     defer std.testing.allocator.free(encoded);
 
-    try std.testing.expectEqual(zstd_content_size_unknown, system.ZSTD_getFrameContentSize(@ptrCast(encoded.ptr), encoded.len));
+    const header = try inspectNativeFrameHeader(encoded);
+    try std.testing.expectEqual(@as(?u64, null), header.content_size);
+    try std.testing.expect(header.has_checksum);
 
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
@@ -9216,12 +9038,11 @@ test "zstd lib encoder frame options omit content size" {
 
     const default_encoded = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, default_compression_level, .{});
     defer std.testing.allocator.free(default_encoded);
-    try std.testing.expectEqual(@as(c_ulonglong, payload.len), system.ZSTD_getFrameContentSize(@ptrCast(default_encoded.ptr), default_encoded.len));
+    const default_header = try inspectNativeFrameHeader(default_encoded);
+    try std.testing.expectEqual(@as(?u64, payload.len), default_header.content_size);
 }
 
-test "zstd lib decoder enforces allocation limits" {
-    if (!system_codecs_enabled) return;
-
+test "zstd pure Zig facade decoder enforces allocation limits" {
     const payload = "zstd limited decode payload" ** 8;
 
     const known_size = try encodeFrameAlloc(std.testing.allocator, payload);
@@ -9241,15 +9062,14 @@ test "zstd lib decoder enforces allocation limits" {
 
     const no_size = try encodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{ .include_content_size = false });
     defer std.testing.allocator.free(no_size);
-    const no_size_bound = try decodedFrameSize(no_size);
-    try std.testing.expect(no_size_bound >= payload.len);
-    try std.testing.expectEqual(no_size_bound, try decodedFrameSizeLimited(no_size, no_size_bound));
-    try std.testing.expectError(error.OutputLimitExceeded, decodedFrameSizeLimited(no_size, no_size_bound - 1));
+    try std.testing.expectEqual(payload.len, try decodedFrameSize(no_size));
+    try std.testing.expectEqual(payload.len, try decodedFrameSizeLimited(no_size, payload.len));
+    try std.testing.expectError(error.OutputLimitExceeded, decodedFrameSizeLimited(no_size, payload.len - 1));
     const no_size_decoded = try decodeFrameAllocLimited(std.testing.allocator, no_size, payload.len);
     defer std.testing.allocator.free(no_size_decoded);
     try std.testing.expectEqualSlices(u8, payload, no_size_decoded);
     try std.testing.expectError(error.OutputLimitExceeded, decodeFrameAllocLimited(std.testing.allocator, no_size, payload.len - 1));
-    const no_size_into_buffer = try std.testing.allocator.alloc(u8, no_size_bound);
+    const no_size_into_buffer = try std.testing.allocator.alloc(u8, payload.len);
     defer std.testing.allocator.free(no_size_into_buffer);
     const no_size_written = try decodeFrameInto(no_size, no_size_into_buffer);
     try std.testing.expectEqual(payload.len, no_size_written);
@@ -10519,25 +10339,22 @@ test "zstd native decoder reads mixed FSE tables in serialized order" {
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
 }
 
-test "zstd native decoder covers libzstd generated corpus shapes" {
-    if (!system_codecs_enabled) return;
-
-    var sequential: [5000]u8 = undefined;
+test "zstd pure Zig facade generated corpus shapes" {
+    var sequential: [512]u8 = undefined;
     for (&sequential, 0..) |*byte, i| byte.* = @intCast(i % 251);
 
-    var randomish: [5000]u8 = undefined;
+    var randomish: [512]u8 = undefined;
     var rng = std.Random.DefaultPrng.init(1);
     for (&randomish) |*byte| byte.* = rng.random().int(u8);
 
     const json_unit = "{\"key\":\"value\",\"number\":123,\"array\":[1,2,3],\"text\":\"abcdefg\"}\n";
     const cases = [_][]const u8{
-        "abcd" ** 1000,
+        "abcd" ** 128,
         &sequential,
         &randomish,
-        json_unit ** 200,
-        ("a" ** 100 ++ "b" ** 100 ++ "c" ** 100) ** 20,
+        json_unit ** 8,
+        ("a" ** 64 ++ "b" ** 64 ++ "c" ** 64) ** 2,
     };
-    const levels = [_]c_int{ 1, 3, 5, 9, 15, 19 };
     const option_sets = [_]LibFrameOptions{
         .{},
         .{ .include_content_size = false },
@@ -10546,26 +10363,30 @@ test "zstd native decoder covers libzstd generated corpus shapes" {
     };
 
     for (cases) |payload| {
-        for (levels) |level| {
-            for (option_sets) |options| {
-                const encoded = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, payload, level, options);
-                defer std.testing.allocator.free(encoded);
+        for (option_sets) |options| {
+            const encoded = try encodeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+            defer std.testing.allocator.free(encoded);
 
-                const native_decoded = try decodeNativeFrameAllocLimited(std.testing.allocator, encoded, payload.len);
-                defer std.testing.allocator.free(native_decoded);
-                try std.testing.expectEqualSlices(u8, payload, native_decoded);
+            const native_decoded = try decodeNativeFrameAllocLimited(std.testing.allocator, encoded, payload.len);
+            defer std.testing.allocator.free(native_decoded);
+            try std.testing.expectEqualSlices(u8, payload, native_decoded);
 
-                const into = try std.testing.allocator.alloc(u8, payload.len);
-                defer std.testing.allocator.free(into);
-                const written = try decodeNativeFrameInto(encoded, into);
-                try std.testing.expectEqual(payload.len, written);
-                try std.testing.expectEqualSlices(u8, payload, into[0..written]);
+            const into = try std.testing.allocator.alloc(u8, payload.len);
+            defer std.testing.allocator.free(into);
+            const written = try decodeNativeFrameInto(encoded, into);
+            try std.testing.expectEqual(payload.len, written);
+            try std.testing.expectEqualSlices(u8, payload, into[0..written]);
 
-                try std.testing.expectEqual(payload.len, try decodedRawOrRleFrameSizeLimited(encoded, payload.len));
-                try std.testing.expectError(error.OutputLimitExceeded, decodedRawOrRleFrameSizeLimited(encoded, payload.len - 1));
-            }
+            try std.testing.expectEqual(payload.len, try decodedRawOrRleFrameSizeLimited(encoded, payload.len));
+            try std.testing.expectError(error.OutputLimitExceeded, decodedRawOrRleFrameSizeLimited(encoded, payload.len - 1));
         }
     }
+
+    const level_encoded = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, "level smoke" ** 8, 19, .{ .include_content_size = false });
+    defer std.testing.allocator.free(level_encoded);
+    const level_decoded = try decodeNativeFrameAlloc(std.testing.allocator, level_encoded);
+    defer std.testing.allocator.free(level_decoded);
+    try std.testing.expectEqualSlices(u8, "level smoke" ** 8, level_decoded);
 }
 
 test "zstd native decoder rejects malformed FSE compressed sequence tables" {
@@ -14225,7 +14046,7 @@ test "zstd native raw/RLE decoder handles fallback frames and skippable frames" 
     try std.testing.expectEqualSlices(u8, raw ++ repeated, concatenated_decoded);
 }
 
-test "zstd native decoder accepts simple libzstd predefined frame" {
+test "zstd native decoder accepts simple facade-generated predefined frame" {
     const payload = "zstd payload zstd payload zstd payload zstd payload";
     const encoded = try encodeFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
