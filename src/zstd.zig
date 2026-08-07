@@ -7938,7 +7938,7 @@ const ReverseBitstreamWriter = struct {
 
     fn addBits(self: *ReverseBitstreamWriter, allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: usize, bits: u8) Error!void {
         if (bits == 0) return;
-        if (bits > @bitSizeOf(usize)) return error.UnsupportedZstdFeature;
+        if (bits > @bitSizeOf(usize)) return error.CorruptFrame;
         const mask = (@as(usize, 1) << @intCast(bits)) - 1;
         self.accumulator |= (value & mask) << self.bit_count;
         self.bit_count += @intCast(bits);
@@ -11580,6 +11580,15 @@ test "zstd FSE compressed symbol writer rejects short streams as corrupt" {
     try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{}, table));
     try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{1}, table));
     try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{ 1, 1 }, table));
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+}
+
+test "zstd reverse bitstream writer rejects oversized bit fields as corrupt" {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+    var writer: ReverseBitstreamWriter = .{};
+
+    try std.testing.expectError(error.CorruptFrame, writer.addBits(std.testing.allocator, &out, 0, @bitSizeOf(usize) + 1));
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
 
