@@ -1865,3 +1865,9 @@ architecture blindly.
   now cover `Content`, `History`, `English`, `Dictionary`, and `Information`,
   proving transformed uppercase-first output separately from Node's uppercase
   identity entries.
+
+- Added `run-br-static-dictionary-report`, a small coverage report for the
+  current Brotli static-dictionary subset. It validates duplicate/invalid table
+  entries, emits transform/length/word-index CSV rows, prints aggregate counts,
+  and is compiled by `zig build check` plus run by CI smoke so future dictionary
+  slices have an auditable manifest.

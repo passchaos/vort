@@ -668,14 +668,14 @@ fn skipMinimalCompressedMetaBlock(
     }
 }
 
-const MinimalStaticDictionaryEntry = struct {
+pub const StaticDictionaryEntry = struct {
     transform: u16,
     copy_len: usize,
     word_index: usize,
     word: []const u8,
 };
 
-const minimal_static_dictionary_entries = [_]MinimalStaticDictionaryEntry{
+const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 5, .word_index = 35, .word = "about" },
     .{ .transform = 0, .copy_len = 5, .word_index = 43, .word = "words" },
     .{ .transform = 0, .copy_len = 5, .word_index = 44, .word = "games" },
@@ -713,6 +713,10 @@ const minimal_static_dictionary_entries = [_]MinimalStaticDictionaryEntry{
     .{ .transform = 12, .copy_len = 5, .word_index = 44, .word = "game" },
 };
 
+pub fn minimalStaticDictionaryCoverage() []const StaticDictionaryEntry {
+    return &minimal_static_dictionary_entries;
+}
+
 fn minimalStaticDictionaryWord(distance: usize, copy_len: usize, current_output_len: usize) Error![]const u8 {
     // Brotli static-dictionary addresses are relative to the current maximum
     // LZ77 distance, not the raw distance code. In this minimal decoder slice
@@ -734,7 +738,7 @@ fn minimalStaticDictionaryWord(distance: usize, copy_len: usize, current_output_
     return error.UnsupportedBrotliFeature;
 }
 
-fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
+pub fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
     return switch (copy_len) {
         4, 5, 8, 9, 10, 11, 12 => 10,
         6, 7 => 11,
