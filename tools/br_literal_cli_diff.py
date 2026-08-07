@@ -2305,6 +2305,10 @@ def main() -> int:
             node_compress(b"English", quality=5, lgwin=10),
             b"English",
         ),
+        "node-static-dictionary-lowercase-english-q5-lgwin10": (
+            node_compress(b"english", quality=5, lgwin=10),
+            b"english",
+        ),
         "node-static-dictionary-through-q5-lgwin10": (
             node_compress(b"through", quality=5, lgwin=10),
             b"through",
@@ -2328,6 +2332,18 @@ def main() -> int:
         "node-static-dictionary-however-q5-lgwin10": (
             node_compress(b"however", quality=5, lgwin=10),
             b"however",
+        ),
+        "node-static-dictionary-english-space-q5-lgwin10": (
+            node_compress(b"english ", quality=5, lgwin=10),
+            b"english ",
+        ),
+        "node-static-dictionary-leading-space-english-q5-lgwin10": (
+            node_compress(b" english", quality=5, lgwin=10),
+            b" english",
+        ),
+        "node-static-dictionary-english-dot-q5-lgwin10": (
+            node_compress(b"english.", quality=5, lgwin=10),
+            b"english.",
         ),
         "node-static-dictionary-children-q5-lgwin10": (
             node_compress(b"children", quality=5, lgwin=10),

@@ -50,6 +50,42 @@
     {
       "transform": 0,
       "copy_len": 7,
+      "word_index": 369,
+      "word": "english",
+      "source_case": "node-static-dictionary-lowercase-english-q5-lgwin10",
+      "reason": "candidate-report identity tuple from lowercase dictionary source",
+      "category": "identity"
+    },
+    {
+      "transform": 1,
+      "copy_len": 7,
+      "word_index": 369,
+      "word": "english ",
+      "source_case": "node-static-dictionary-english-space-q5-lgwin10",
+      "reason": "candidate-report trailing-space transform tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 6,
+      "copy_len": 7,
+      "word_index": 369,
+      "word": " english",
+      "source_case": "node-static-dictionary-leading-space-english-q5-lgwin10",
+      "reason": "candidate-report leading-space transform tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 20,
+      "copy_len": 7,
+      "word_index": 369,
+      "word": "english.",
+      "source_case": "node-static-dictionary-english-dot-q5-lgwin10",
+      "reason": "candidate-report dot-suffix transform tuple",
+      "category": "transform"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
       "word_index": 1167,
       "word": "of the ",
       "source_case": "node-static-dictionary-of-the-q5-lgwin10",

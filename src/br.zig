@@ -690,6 +690,7 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 6, .word_index = 18, .word = "public" },
     .{ .transform = 0, .copy_len = 7, .word_index = 37, .word = "history" },
     .{ .transform = 0, .copy_len = 7, .word_index = 92, .word = "English" },
+    .{ .transform = 0, .copy_len = 7, .word_index = 369, .word = "english" },
     .{ .transform = 0, .copy_len = 7, .word_index = 94, .word = "through" },
     .{ .transform = 0, .copy_len = 7, .word_index = 154, .word = "another" },
     .{ .transform = 0, .copy_len = 7, .word_index = 170, .word = "release" },
@@ -726,12 +727,15 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 1, .copy_len = 5, .word_index = 43, .word = "words " },
     .{ .transform = 1, .copy_len = 5, .word_index = 44, .word = "games " },
     .{ .transform = 1, .copy_len = 7, .word_index = 170, .word = "release " },
+    .{ .transform = 1, .copy_len = 7, .word_index = 369, .word = "english " },
     .{ .transform = 1, .copy_len = 10, .word_index = 205, .word = "dictionary " },
     .{ .transform = 1, .copy_len = 11, .word_index = 5, .word = "information " },
     .{ .transform = 20, .copy_len = 7, .word_index = 37, .word = "history." },
+    .{ .transform = 20, .copy_len = 7, .word_index = 369, .word = "english." },
     .{ .transform = 6, .copy_len = 5, .word_index = 43, .word = " words" },
     .{ .transform = 6, .copy_len = 5, .word_index = 44, .word = " games" },
     .{ .transform = 6, .copy_len = 7, .word_index = 170, .word = " release" },
+    .{ .transform = 6, .copy_len = 7, .word_index = 369, .word = " english" },
     .{ .transform = 9, .copy_len = 7, .word_index = 5, .word = "Content" },
     .{ .transform = 9, .copy_len = 7, .word_index = 37, .word = "History" },
     .{ .transform = 9, .copy_len = 7, .word_index = 369, .word = "English" },
@@ -2299,6 +2303,16 @@ test "br minimal static dictionary common phrase batch decodes Node quality-five
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0x01, 0x10, 0x87, 0xc4, 0x16, 0x01 }, "from the ");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0x01, 0x10, 0x87, 0x04, 0x37, 0x01 }, "those who");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x50, 0x00, 0x00, 0x20, 0x01, 0x10, 0xc0, 0xc4, 0x36, 0x00 }, "in order to");
+}
+
+test "br minimal static dictionary candidate batch decodes Node quality-five frames" {
+    // These frames come from entries first surfaced by the generated candidate
+    // report. They prove the report can drive real decoder coverage instead of
+    // remaining only a planning artifact.
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x30, 0x00, 0x00, 0x20, 0x01, 0x10, 0x85, 0x04, 0x57, 0x07 }, "english");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x38, 0x00, 0x00, 0x20, 0x01, 0x52, 0x85, 0x28, 0x12, 0x9c, 0x7a }, "english ");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x38, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8d, 0x04, 0x67, 0x07 }, " english");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x38, 0x00, 0x00, 0x20, 0xe1, 0x52, 0x85, 0x28, 0x12, 0x9c, 0x7a }, "english.");
 }
 
 test "br minimal compressed stream selects literal context tree through signed mode" {

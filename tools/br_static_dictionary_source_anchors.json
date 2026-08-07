@@ -114,6 +114,14 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "english",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "english",
+      "word_index": 369
+    },
+    {
+      "copy_len": 7,
       "raw_word": "through",
       "transform": 0,
       "transform_kind": "identity",
@@ -401,6 +409,14 @@
       "word_index": 170
     },
     {
+      "copy_len": 7,
+      "raw_word": "english",
+      "transform": 1,
+      "transform_kind": "affix_identity",
+      "transformed_word": "english ",
+      "word_index": 369
+    },
+    {
       "copy_len": 10,
       "raw_word": "dictionary",
       "transform": 1,
@@ -425,6 +441,14 @@
       "word_index": 37
     },
     {
+      "copy_len": 7,
+      "raw_word": "english",
+      "transform": 20,
+      "transform_kind": "affix_identity",
+      "transformed_word": "english.",
+      "word_index": 369
+    },
+    {
       "copy_len": 5,
       "raw_word": "words",
       "transform": 6,
@@ -447,6 +471,14 @@
       "transform_kind": "affix_identity",
       "transformed_word": " release",
       "word_index": 170
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "english",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " english",
+      "word_index": 369
     },
     {
       "copy_len": 7,
@@ -513,7 +545,7 @@
       "word_index": 1767
     }
   ],
-  "entry_count": 64,
+  "entry_count": 68,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

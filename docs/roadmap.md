@@ -1970,3 +1970,9 @@ architecture blindly.
   retained JSON/Markdown artifacts expose concrete follow-up rows such as
   trailing-space and uppercase-first candidates, giving future coverage growth a
   generated backlog instead of another purely manual search pass.
+
+- Promoted the first candidate-report batch into real Brotli static-dictionary
+  decode coverage. Node quality-5 frames now cover lowercase `english`,
+  `english `, ` english`, and `english.`, with source
+  anchors and required coverage updated so generated candidates feed back into
+  the decoder table.
