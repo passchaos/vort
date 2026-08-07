@@ -1900,3 +1900,7 @@ architecture blindly.
 - Strengthened the Brotli static-dictionary report smoke so required coverage
   now includes representative phrase entries (`number of `, `one of the `) and
   the `one an` omit-last tuple used by Node's `one another` frame.
+
+- Added the Node quality-5 Brotli phrase entry `large number of ` to the static
+  dictionary subset, extending retained phrase coverage into the 16-byte bucket
+  with CLI differential validation.

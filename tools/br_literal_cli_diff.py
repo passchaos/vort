@@ -2361,6 +2361,10 @@ def main() -> int:
             node_compress(b"number of ", quality=5, lgwin=10),
             b"number of ",
         ),
+        "node-static-dictionary-large-number-of-q5-lgwin10": (
+            node_compress(b"large number of ", quality=5, lgwin=10),
+            b"large number of ",
+        ),
         "node-static-dictionary-however-comma-space-q5-lgwin10": (
             node_compress(b"however, ", quality=5, lgwin=10),
             b"however, ",

@@ -677,6 +677,7 @@ pub const StaticDictionaryEntry = struct {
 
 const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 5, .word_index = 35, .word = "about" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 42, .word = "large" },
     .{ .transform = 0, .copy_len = 5, .word_index = 43, .word = "words" },
     .{ .transform = 0, .copy_len = 5, .word_index = 44, .word = "games" },
     .{ .transform = 0, .copy_len = 5, .word_index = 81, .word = "press" },
@@ -717,6 +718,7 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 11, .word_index = 162, .word = "one another" },
     .{ .transform = 0, .copy_len = 11, .word_index = 452, .word = "one of the " },
     .{ .transform = 0, .copy_len = 11, .word_index = 186, .word = "Information" },
+    .{ .transform = 0, .copy_len = 16, .word_index = 52, .word = "large number of " },
     .{ .transform = 1, .copy_len = 5, .word_index = 43, .word = "words " },
     .{ .transform = 1, .copy_len = 5, .word_index = 44, .word = "games " },
     .{ .transform = 1, .copy_len = 7, .word_index = 170, .word = "release " },
