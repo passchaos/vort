@@ -818,6 +818,35 @@ Example:
 }
 ```
 
+## `vort.br_static_dictionary_candidate_upstream_smoke`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-candidate-upstream-smoke
+python3 tools/br_static_dictionary_candidate_upstream_smoke.py --summary zig-out/vort-br-static-dictionary-candidate-upstream-smoke.json
+```
+
+This schema summarizes a portable smoke for candidate-report upstream mode. The
+smoke creates a tiny temporary Brotli `common/` fixture, asks the candidate
+report to merge a bounded set of raw dictionary words from that fixture, and
+checks that known transformed candidates appear in the generated report.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_candidate_upstream_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "source_mode": "upstream",
+  "source_entry_count": 83,
+  "raw_word_count": 71,
+  "candidate_count": 343,
+  "stdout": "br_static_dictionary_candidate_report=ok source_entries=83 raw_words=71 candidates=343"
+}
+```
+
 ## `vort.br_static_dictionary_source_anchors`
 
 Consumed by:

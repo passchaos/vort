@@ -42,6 +42,23 @@
         "transform_kind": "str"
       }
     },
+    "vort.br_static_dictionary_candidate_upstream_smoke": {
+      "fields": {
+        "schema": "str",
+        "schema_version": "int",
+        "ok": "bool",
+        "source_mode": "str",
+        "source_entry_count": "int",
+        "raw_word_count": "int",
+        "candidate_count": "int",
+        "stdout": "str"
+      },
+      "enums": {
+        "source_mode": [
+          "upstream"
+        ]
+      }
+    },
     "vort.br_static_dictionary_node_probe": {
       "count_rules": {
         "probed_count": {
@@ -2870,6 +2887,7 @@
           "vort.dashboard_strict_expected_modes",
           "vort.dashboard_strict_smoke",
           "vort.br_static_dictionary_candidate_report",
+          "vort.br_static_dictionary_candidate_upstream_smoke",
           "vort.br_static_dictionary_node_probe",
           "vort.br_static_dictionary_required_coverage",
           "vort.br_static_dictionary_source_audit",

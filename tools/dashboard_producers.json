@@ -4,6 +4,10 @@
     "exact": []
   },
   "artifact_metadata": {
+    "vort-br-static-dictionary-candidate-upstream-smoke.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-candidate-upstream-smoke"
+    },
     "vort-br-static-dictionary-candidates.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-br-static-dictionary-candidate-report-smoke"
@@ -460,6 +464,7 @@
     }
   ],
   "exact": {
+    "vort-br-static-dictionary-candidate-upstream-smoke.json": "zig build run-br-static-dictionary-candidate-upstream-smoke",
     "vort-br-static-dictionary-candidates.json": "zig build run-br-static-dictionary-candidate-report",
     "vort-br-static-dictionary-candidates.md": "zig build run-br-static-dictionary-candidate-report",
     "vort-br-static-dictionary-node-probe-full.json": "zig build run-br-static-dictionary-node-probe-full",
@@ -572,6 +577,7 @@
     "vort-zstd-compare.md": "zig build run-zstd-compare-gate"
   },
   "required_smoke_gates": [
+    "vort-br-static-dictionary-candidate-upstream-smoke.json",
     "vort-br-static-dictionary-node-probe.json",
     "vort-br-static-dictionary-candidates.json",
     "vort-br-static-dictionary-report-negative-smoke.json",

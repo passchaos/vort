@@ -2011,6 +2011,12 @@ architecture blindly.
   the anchor-derived candidate pool, creating a controlled path toward larger
   generated imports.
 
+- Added a portable upstream-mode smoke for the Brotli candidate report. The
+  smoke builds a tiny temporary `common/dictionary_inc.h` fixture, proves
+  upstream raw words are merged into the candidate pool, and records a JSON
+  dashboard artifact so this import path is tested without depending on a local
+  checkout path.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

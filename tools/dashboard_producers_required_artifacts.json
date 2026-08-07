@@ -1,6 +1,13 @@
 {
   "required_artifacts": [
     {
+      "expected_format": "json",
+      "name": "vort-br-static-dictionary-candidate-upstream-smoke.json",
+      "producer_step": "zig build run-br-static-dictionary-candidate-upstream-smoke",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-br-static-dictionary-candidate-upstream-smoke"
+    },
+    {
       "expected_format": "md",
       "name": "vort-br-static-dictionary-node-probe-full.md",
       "producer_step": "zig build run-br-static-dictionary-node-probe-full",
