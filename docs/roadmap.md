@@ -1976,3 +1976,10 @@ architecture blindly.
   `english `, ` english`, and `english.`, with source
   anchors and required coverage updated so generated candidates feed back into
   the decoder table.
+
+- Extended the same candidate-probe workflow to the remaining short Node
+  quality-5 misses discovered from the generated report. Several requested
+  transformed payloads were encoded by Node as different identity dictionary
+  words (for example `Through`, `Another`, `Language`, `Government`, and
+  `One of the `), so the table now records those actual source tuples along
+  with a focused unit batch and required-coverage metadata.

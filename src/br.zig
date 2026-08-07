@@ -692,26 +692,36 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 7, .word_index = 92, .word = "English" },
     .{ .transform = 0, .copy_len = 7, .word_index = 369, .word = "english" },
     .{ .transform = 0, .copy_len = 7, .word_index = 94, .word = "through" },
+    .{ .transform = 0, .copy_len = 7, .word_index = 1525, .word = "Through" },
     .{ .transform = 0, .copy_len = 7, .word_index = 154, .word = "another" },
+    .{ .transform = 0, .copy_len = 7, .word_index = 125, .word = "Another" },
     .{ .transform = 0, .copy_len = 7, .word_index = 170, .word = "release" },
     .{ .transform = 0, .copy_len = 7, .word_index = 196, .word = "because" },
     .{ .transform = 0, .copy_len = 7, .word_index = 202, .word = "between" },
+    .{ .transform = 0, .copy_len = 7, .word_index = 287, .word = "America" },
+    .{ .transform = 0, .copy_len = 7, .word_index = 184, .word = "History" },
+    .{ .transform = 0, .copy_len = 7, .word_index = 122, .word = "express" },
+    .{ .transform = 0, .copy_len = 7, .word_index = 1767, .word = "one and" },
     .{ .transform = 0, .copy_len = 7, .word_index = 464, .word = "example" },
     .{ .transform = 0, .copy_len = 7, .word_index = 572, .word = "however" },
     .{ .transform = 0, .copy_len = 7, .word_index = 1167, .word = "of the " },
     .{ .transform = 0, .copy_len = 8, .word_index = 10, .word = "children" },
+    .{ .transform = 0, .copy_len = 8, .word_index = 65, .word = "Language" },
     .{ .transform = 0, .copy_len = 8, .word_index = 355, .word = "American" },
     .{ .transform = 0, .copy_len = 8, .word_index = 425, .word = "history." },
+    .{ .transform = 0, .copy_len = 8, .word_index = 438, .word = "Examples" },
     .{ .transform = 0, .copy_len = 8, .word_index = 558, .word = "examples" },
     .{ .transform = 0, .copy_len = 8, .word_index = 4, .word = "language" },
     .{ .transform = 0, .copy_len = 8, .word_index = 79, .word = "internet" },
     .{ .transform = 0, .copy_len = 9, .word_index = 5, .word = "available" },
     .{ .transform = 0, .copy_len = 9, .word_index = 55, .word = "important" },
     .{ .transform = 0, .copy_len = 9, .word_index = 95, .word = "different" },
+    .{ .transform = 0, .copy_len = 9, .word_index = 676, .word = " language" },
     .{ .transform = 0, .copy_len = 9, .word_index = 205, .word = "from the " },
     .{ .transform = 0, .copy_len = 9, .word_index = 271, .word = "those who" },
     .{ .transform = 0, .copy_len = 9, .word_index = 592, .word = "however, " },
     .{ .transform = 0, .copy_len = 10, .word_index = 18, .word = "government" },
+    .{ .transform = 0, .copy_len = 10, .word_index = 150, .word = "Government" },
     .{ .transform = 0, .copy_len = 10, .word_index = 84, .word = "expression" },
     .{ .transform = 0, .copy_len = 10, .word_index = 135, .word = "depression" },
     .{ .transform = 0, .copy_len = 10, .word_index = 205, .word = "dictionary" },
@@ -720,9 +730,12 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 10, .word_index = 327, .word = "Dictionary" },
     .{ .transform = 0, .copy_len = 11, .word_index = 5, .word = "information" },
     .{ .transform = 0, .copy_len = 11, .word_index = 162, .word = "one another" },
+    .{ .transform = 0, .copy_len = 11, .word_index = 429, .word = "In order to" },
     .{ .transform = 0, .copy_len = 11, .word_index = 189, .word = "in order to" },
+    .{ .transform = 0, .copy_len = 11, .word_index = 178, .word = "One of the " },
     .{ .transform = 0, .copy_len = 11, .word_index = 452, .word = "one of the " },
     .{ .transform = 0, .copy_len = 11, .word_index = 186, .word = "Information" },
+    .{ .transform = 0, .copy_len = 12, .word_index = 285, .word = " Information" },
     .{ .transform = 0, .copy_len = 16, .word_index = 52, .word = "large number of " },
     .{ .transform = 1, .copy_len = 5, .word_index = 43, .word = "words " },
     .{ .transform = 1, .copy_len = 5, .word_index = 44, .word = "games " },
@@ -744,6 +757,7 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 12, .copy_len = 5, .word_index = 43, .word = "word" },
     .{ .transform = 12, .copy_len = 5, .word_index = 44, .word = "game" },
     .{ .transform = 12, .copy_len = 7, .word_index = 1767, .word = "one an" },
+    .{ .transform = 12, .copy_len = 8, .word_index = 614, .word = " number" },
 };
 
 pub fn minimalStaticDictionaryCoverage() []const StaticDictionaryEntry {
@@ -2313,6 +2327,28 @@ test "br minimal static dictionary candidate batch decodes Node quality-five fra
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x38, 0x00, 0x00, 0x20, 0x01, 0x52, 0x85, 0x28, 0x12, 0x9c, 0x7a }, "english ");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x38, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8d, 0x04, 0x67, 0x07 }, " english");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x38, 0x00, 0x00, 0x20, 0xe1, 0x52, 0x85, 0x28, 0x12, 0x9c, 0x7a }, "english.");
+}
+
+test "br minimal static dictionary candidate identity batch decodes Node quality-five frames" {
+    // Node sometimes chooses a different identity dictionary word than the
+    // transform candidate that motivated the payload. Capturing those frames
+    // keeps the candidate-driven workflow honest: unsupported candidates become
+    // concrete identity-source coverage when that is what the encoder emits.
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x30, 0x00, 0x00, 0x20, 0x01, 0x10, 0x85, 0x04, 0x98, 0x1f }, "Through");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x30, 0x00, 0x00, 0x20, 0x01, 0x10, 0x85, 0x84, 0x16, 0x00 }, "Another");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x30, 0x00, 0x00, 0x20, 0x01, 0x10, 0x85, 0x44, 0xb8, 0x0e }, "one and");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x38, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8d, 0x44, 0xc8, 0x0e }, " one and");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0x01, 0x10, 0x87, 0x84, 0x87, 0x0a }, " language");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x38, 0x00, 0x00, 0x20, 0x01, 0x10, 0x86, 0x04, 0x56, 0x00 }, "Language");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x30, 0x00, 0x00, 0x20, 0x01, 0x10, 0x85, 0x04, 0x37, 0x02 }, "America");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x38, 0x00, 0x00, 0x20, 0xe1, 0x52, 0x85, 0x28, 0x12, 0x1a, 0x3e }, "History.");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x38, 0x00, 0x00, 0x20, 0x01, 0x10, 0x86, 0x44, 0xa7, 0x03 }, "Examples");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x48, 0x00, 0x00, 0x20, 0x01, 0x10, 0xc0, 0x84, 0x46, 0x03 }, "Government");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0x95, 0xf6, 0x56, 0x85, 0x48, 0x12, 0x19, 0x5f }, "expressio");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x58, 0x00, 0x00, 0x20, 0x01, 0x10, 0xc1, 0x04, 0x27, 0x04 }, " Information");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x50, 0x00, 0x00, 0x20, 0x01, 0x10, 0xc0, 0x44, 0x37, 0x06 }, "In order to");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x50, 0x00, 0x00, 0x20, 0x01, 0x10, 0xc0, 0x84, 0xd6, 0x06 }, "One of the ");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x70, 0x00, 0x00, 0x20, 0x09, 0x62, 0xf6, 0x96, 0x83, 0x18, 0xa2, 0x49, 0x59, 0x27, 0xde, 0x37, 0xd9, 0x01 }, "large number of");
 }
 
 test "br minimal compressed stream selects literal context tree through signed mode" {

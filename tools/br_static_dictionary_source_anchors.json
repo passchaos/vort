@@ -130,11 +130,27 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "Through",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Through",
+      "word_index": 1525
+    },
+    {
+      "copy_len": 7,
       "raw_word": "another",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "another",
       "word_index": 154
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Another",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Another",
+      "word_index": 125
     },
     {
       "copy_len": 7,
@@ -159,6 +175,38 @@
       "transform_kind": "identity",
       "transformed_word": "between",
       "word_index": 202
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "America",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "America",
+      "word_index": 287
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "History",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "History",
+      "word_index": 184
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "express",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "express",
+      "word_index": 122
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "one and",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "one and",
+      "word_index": 1767
     },
     {
       "copy_len": 7,
@@ -194,6 +242,14 @@
     },
     {
       "copy_len": 8,
+      "raw_word": "Language",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Language",
+      "word_index": 65
+    },
+    {
+      "copy_len": 8,
       "raw_word": "American",
       "transform": 0,
       "transform_kind": "identity",
@@ -207,6 +263,14 @@
       "transform_kind": "identity",
       "transformed_word": "history.",
       "word_index": 425
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "Examples",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Examples",
+      "word_index": 438
     },
     {
       "copy_len": 8,
@@ -258,6 +322,14 @@
     },
     {
       "copy_len": 9,
+      "raw_word": " language",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " language",
+      "word_index": 676
+    },
+    {
+      "copy_len": 9,
       "raw_word": "from the ",
       "transform": 0,
       "transform_kind": "identity",
@@ -287,6 +359,14 @@
       "transform_kind": "identity",
       "transformed_word": "government",
       "word_index": 18
+    },
+    {
+      "copy_len": 10,
+      "raw_word": "Government",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Government",
+      "word_index": 150
     },
     {
       "copy_len": 10,
@@ -354,11 +434,27 @@
     },
     {
       "copy_len": 11,
+      "raw_word": "In order to",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "In order to",
+      "word_index": 429
+    },
+    {
+      "copy_len": 11,
       "raw_word": "in order to",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "in order to",
       "word_index": 189
+    },
+    {
+      "copy_len": 11,
+      "raw_word": "One of the ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "One of the ",
+      "word_index": 178
     },
     {
       "copy_len": 11,
@@ -375,6 +471,14 @@
       "transform_kind": "identity",
       "transformed_word": "Information",
       "word_index": 186
+    },
+    {
+      "copy_len": 12,
+      "raw_word": " Information",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " Information",
+      "word_index": 285
     },
     {
       "copy_len": 16,
@@ -543,9 +647,17 @@
       "transform_kind": "omit_last_1",
       "transformed_word": "one an",
       "word_index": 1767
+    },
+    {
+      "copy_len": 8,
+      "raw_word": " numbers",
+      "transform": 12,
+      "transform_kind": "omit_last_1",
+      "transformed_word": " number",
+      "word_index": 614
     }
   ],
-  "entry_count": 68,
+  "entry_count": 82,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

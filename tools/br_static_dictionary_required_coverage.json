@@ -86,6 +86,132 @@
     {
       "transform": 0,
       "copy_len": 7,
+      "word_index": 1525,
+      "word": "Through",
+      "source_case": "node-static-dictionary-uppercase-through-q5-lgwin10",
+      "reason": "candidate-probe identity source tuple emitted by Node",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 125,
+      "word": "Another",
+      "source_case": "node-static-dictionary-uppercase-another-q5-lgwin10",
+      "reason": "candidate-probe identity source tuple emitted by Node",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 1767,
+      "word": "one and",
+      "source_case": "node-static-dictionary-one-and-q5-lgwin10",
+      "reason": "candidate-probe identity source tuple emitted by Node",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 287,
+      "word": "America",
+      "source_case": "node-static-dictionary-america-q5-lgwin10",
+      "reason": "candidate-probe identity source tuple emitted by Node",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 184,
+      "word": "History",
+      "source_case": "node-static-dictionary-uppercase-history-dot-q5-lgwin10",
+      "reason": "candidate-probe identity source tuple emitted by Node for the History. payload",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 122,
+      "word": "express",
+      "source_case": "node-static-dictionary-expressio-q5-lgwin10",
+      "reason": "candidate-probe identity source tuple emitted by Node before literal suffix",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 8,
+      "word_index": 65,
+      "word": "Language",
+      "source_case": "node-static-dictionary-uppercase-language-q5-lgwin10",
+      "reason": "candidate-probe identity source tuple emitted by Node",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 8,
+      "word_index": 438,
+      "word": "Examples",
+      "source_case": "node-static-dictionary-uppercase-examples-q5-lgwin10",
+      "reason": "candidate-probe identity source tuple emitted by Node",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 9,
+      "word_index": 676,
+      "word": " language",
+      "source_case": "node-static-dictionary-leading-space-language-q5-lgwin10",
+      "reason": "candidate-probe identity phrase tuple emitted by Node",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 10,
+      "word_index": 150,
+      "word": "Government",
+      "source_case": "node-static-dictionary-uppercase-government-q5-lgwin10",
+      "reason": "candidate-probe identity source tuple emitted by Node",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 11,
+      "word_index": 429,
+      "word": "In order to",
+      "source_case": "node-static-dictionary-uppercase-in-order-to-q5-lgwin10",
+      "reason": "candidate-probe identity phrase tuple emitted by Node",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 11,
+      "word_index": 178,
+      "word": "One of the ",
+      "source_case": "node-static-dictionary-uppercase-one-of-the-q5-lgwin10",
+      "reason": "candidate-probe identity phrase tuple emitted by Node",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 12,
+      "word_index": 285,
+      "word": " Information",
+      "source_case": "node-static-dictionary-leading-space-uppercase-information-q5-lgwin10",
+      "reason": "candidate-probe identity phrase tuple emitted by Node",
+      "category": "phrase"
+    },
+    {
+      "transform": 12,
+      "copy_len": 8,
+      "word_index": 614,
+      "word": " number",
+      "source_case": "node-static-dictionary-large-number-of-no-space-q5-lgwin10",
+      "reason": "candidate-probe omit-last tuple emitted by Node within phrase payload",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
       "word_index": 1167,
       "word": "of the ",
       "source_case": "node-static-dictionary-of-the-q5-lgwin10",

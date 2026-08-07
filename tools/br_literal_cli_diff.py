@@ -2313,9 +2313,17 @@ def main() -> int:
             node_compress(b"through", quality=5, lgwin=10),
             b"through",
         ),
+        "node-static-dictionary-uppercase-through-q5-lgwin10": (
+            node_compress(b"Through", quality=5, lgwin=10),
+            b"Through",
+        ),
         "node-static-dictionary-another-q5-lgwin10": (
             node_compress(b"another", quality=5, lgwin=10),
             b"another",
+        ),
+        "node-static-dictionary-uppercase-another-q5-lgwin10": (
+            node_compress(b"Another", quality=5, lgwin=10),
+            b"Another",
         ),
         "node-static-dictionary-because-q5-lgwin10": (
             node_compress(b"because", quality=5, lgwin=10),
@@ -2344,6 +2352,58 @@ def main() -> int:
         "node-static-dictionary-english-dot-q5-lgwin10": (
             node_compress(b"english.", quality=5, lgwin=10),
             b"english.",
+        ),
+        "node-static-dictionary-one-and-q5-lgwin10": (
+            node_compress(b"one and", quality=5, lgwin=10),
+            b"one and",
+        ),
+        "node-static-dictionary-leading-space-one-and-q5-lgwin10": (
+            node_compress(b" one and", quality=5, lgwin=10),
+            b" one and",
+        ),
+        "node-static-dictionary-leading-space-language-q5-lgwin10": (
+            node_compress(b" language", quality=5, lgwin=10),
+            b" language",
+        ),
+        "node-static-dictionary-uppercase-language-q5-lgwin10": (
+            node_compress(b"Language", quality=5, lgwin=10),
+            b"Language",
+        ),
+        "node-static-dictionary-america-q5-lgwin10": (
+            node_compress(b"America", quality=5, lgwin=10),
+            b"America",
+        ),
+        "node-static-dictionary-uppercase-history-dot-q5-lgwin10": (
+            node_compress(b"History.", quality=5, lgwin=10),
+            b"History.",
+        ),
+        "node-static-dictionary-uppercase-examples-q5-lgwin10": (
+            node_compress(b"Examples", quality=5, lgwin=10),
+            b"Examples",
+        ),
+        "node-static-dictionary-uppercase-government-q5-lgwin10": (
+            node_compress(b"Government", quality=5, lgwin=10),
+            b"Government",
+        ),
+        "node-static-dictionary-expressio-q5-lgwin10": (
+            node_compress(b"expressio", quality=5, lgwin=10),
+            b"expressio",
+        ),
+        "node-static-dictionary-leading-space-uppercase-information-q5-lgwin10": (
+            node_compress(b" Information", quality=5, lgwin=10),
+            b" Information",
+        ),
+        "node-static-dictionary-uppercase-in-order-to-q5-lgwin10": (
+            node_compress(b"In order to", quality=5, lgwin=10),
+            b"In order to",
+        ),
+        "node-static-dictionary-uppercase-one-of-the-q5-lgwin10": (
+            node_compress(b"One of the ", quality=5, lgwin=10),
+            b"One of the ",
+        ),
+        "node-static-dictionary-large-number-of-no-space-q5-lgwin10": (
+            node_compress(b"large number of", quality=5, lgwin=10),
+            b"large number of",
         ),
         "node-static-dictionary-children-q5-lgwin10": (
             node_compress(b"children", quality=5, lgwin=10),
