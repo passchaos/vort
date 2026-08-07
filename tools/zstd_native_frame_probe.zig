@@ -287,6 +287,14 @@ fn checkDirectHuffmanBoundaries(allocator: std.mem.Allocator) !void {
     try expectPrefixedPayload(appended.items, &payload);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, encoded.frame, payload.len - 1));
+
+    var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
+    defer decoder.deinit();
+    const reusable_exact_written = try decoder.decodeIntoSliceExactSize(encoded.frame, &into, payload.len);
+    try expect(reusable_exact_written == payload.len);
+    try expectEqualSlices(&payload, into[0..reusable_exact_written]);
+    try expectError(error.OutputTooSmall, decoder.decodeIntoSliceExactSize(encoded.frame, into[0 .. into.len - 1], payload.len));
+    try expectError(error.SizeMismatch, decoder.decodeIntoSliceExactSize(encoded.frame, &into, payload.len - 1));
 }
 
 fn checkNoSizeCompressedBlockLimits(allocator: std.mem.Allocator) !void {
