@@ -1859,3 +1859,9 @@ architecture blindly.
   dictionary table: `internet`, `language`, `available`, `important`,
   `different`, and `government`. These cover 8/9/10-byte dictionary buckets
   with generated Node frames in the CLI differential smoke.
+
+- Added the first real Brotli `UPPERCASE_FIRST` static-dictionary transform
+  entries (RFC transform index 9) to the table. Node-accepted synthetic frames
+  now cover `Content`, `History`, `English`, `Dictionary`, and `Information`,
+  proving transformed uppercase-first output separately from Node's uppercase
+  identity entries.

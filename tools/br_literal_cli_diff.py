@@ -2341,6 +2341,26 @@ def main() -> int:
             bytes.fromhex("6201000004400013e004"),
             b"information ",
         ),
+        "synthetic-static-dictionary-uppercase-first-content": (
+            bytes.fromhex("c200000004401412680202"),
+            b"Content",
+        ),
+        "synthetic-static-dictionary-uppercase-first-history": (
+            bytes.fromhex("c200000004401412680a02"),
+            b"History",
+        ),
+        "synthetic-static-dictionary-uppercase-first-english": (
+            bytes.fromhex("c200000004401412685d02"),
+            b"English",
+        ),
+        "synthetic-static-dictionary-uppercase-first-dictionary": (
+            bytes.fromhex("2201000004400013a66802"),
+            b"Dictionary",
+        ),
+        "synthetic-static-dictionary-uppercase-first-information": (
+            bytes.fromhex("4201000004400013e60402"),
+            b"Information",
+        ),
         "node-static-dictionary-uppercase-dictionary-q5-lgwin10": (
             node_compress(b"Dictionary", quality=5, lgwin=10),
             b"Dictionary",

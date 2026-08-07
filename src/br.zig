@@ -704,6 +704,11 @@ const minimal_static_dictionary_entries = [_]MinimalStaticDictionaryEntry{
     .{ .transform = 6, .copy_len = 5, .word_index = 43, .word = " words" },
     .{ .transform = 6, .copy_len = 5, .word_index = 44, .word = " games" },
     .{ .transform = 6, .copy_len = 7, .word_index = 170, .word = " release" },
+    .{ .transform = 9, .copy_len = 7, .word_index = 5, .word = "Content" },
+    .{ .transform = 9, .copy_len = 7, .word_index = 37, .word = "History" },
+    .{ .transform = 9, .copy_len = 7, .word_index = 369, .word = "English" },
+    .{ .transform = 9, .copy_len = 10, .word_index = 205, .word = "Dictionary" },
+    .{ .transform = 9, .copy_len = 11, .word_index = 5, .word = "Information" },
     .{ .transform = 12, .copy_len = 5, .word_index = 43, .word = "word" },
     .{ .transform = 12, .copy_len = 5, .word_index = 44, .word = "game" },
 };
