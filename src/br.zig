@@ -1833,6 +1833,25 @@ test "br minimal compressed stream switches literal block tree" {
     try std.testing.expectEqualSlices(u8, "ab", decoded);
 }
 
+test "br minimal compressed stream switches literal block with complex length tree" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 1, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForLiteralBlockSwitchComplexLength(std.testing.allocator, &writer);
+    try writer.writeBits(std.testing.allocator, 0, 1); // block length symbol 0
+    try writer.writeBits(std.testing.allocator, 0, 2); // next literal block count = 1
+
+    try std.testing.expectEqual(@as(usize, 2), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "ab", decoded);
+}
+
 test "br minimal compressed stream switches third literal block tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -2963,6 +2982,28 @@ fn writeMinimalCompressedHeaderForLiteralBlockSwitch(allocator: std.mem.Allocato
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForLiteralBlockSwitchComplexLength(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 2); // NBLTYPESL
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 4, 1); // next literal block type
+    try writeComplexBlockLengthPrefixOne(allocator, writer);
+    try writer.writeBits(allocator, 0, 1); // block length symbol 0
+    try writer.writeBits(allocator, 0, 2); // first literal block count = 1
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // literal context mode for block type 0
+    try writer.writeBits(allocator, 0, 2); // literal context mode for block type 1
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESL
+    try writeLiteralBlockSwitchContextMap(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'a');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'b');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 16);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
 fn writeMinimalCompressedHeaderForLiteralBlockSwitchThreeTypes(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 3); // NBLTYPESL
     try writeSimpleSingleSymbolPrefix(allocator, writer, 5, 1); // next literal block type
@@ -3200,6 +3241,24 @@ fn writeComplexDistancePrefixForDistanceTwo(allocator: std.mem.Allocator, writer
     try writer.writeBits(allocator, 0, 3); // start chained repeat with 3 zeros.
     try writeCodeLengthSymbol(allocator, writer, &cl_lengths, 17);
     try writer.writeBits(allocator, 5, 3); // chained repeat count becomes 16 zeros.
+    try writeCodeLengthSymbol(allocator, writer, &cl_lengths, 1);
+    try writeCodeLengthSymbol(allocator, writer, &cl_lengths, 1);
+}
+
+fn writeComplexBlockLengthPrefixOne(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 2); // HSKIP = 0, complex code.
+
+    var cl_lengths: [code_length_alphabet_size]u4 = @splat(0);
+    cl_lengths[1] = 1;
+    cl_lengths[17] = 1;
+    try writeCodeLengthCodeLength(allocator, writer, 1); // symbol 1
+    try writeCodeLengthCodeLength(allocator, writer, 0); // symbol 2
+    try writeCodeLengthCodeLength(allocator, writer, 0); // symbol 3
+    try writeCodeLengthCodeLength(allocator, writer, 0); // symbol 4
+    try writeCodeLengthCodeLength(allocator, writer, 0); // symbol 0
+    try writeCodeLengthCodeLength(allocator, writer, 0); // symbol 5
+    try writeCodeLengthCodeLength(allocator, writer, 1); // symbol 17
+
     try writeCodeLengthSymbol(allocator, writer, &cl_lengths, 1);
     try writeCodeLengthSymbol(allocator, writer, &cl_lengths, 1);
 }

@@ -1782,3 +1782,8 @@ architecture blindly.
   match-copy frame now keeps literal and command trees simple while using a
   complex prefix-code header for the distance tree, with matching Zig and
   Node-backed CLI differential coverage.
+
+- Added compressed-frame coverage for Brotli complex block-length prefix codes.
+  A literal-block-switch frame now uses a complex prefix-code header for the
+  block length tree while switching literal block types, with matching Zig and
+  Node-backed CLI differential coverage.

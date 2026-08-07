@@ -135,6 +135,20 @@ def write_complex_distance_prefix_for_distance_two(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # code-length symbol 1 for distance 2
 
 
+def write_complex_block_length_prefix_one(bits: list[int]) -> None:
+    write_bits(bits, 0, 2)  # HSKIP = 0, complex code
+    write_code_length_code_length(bits, 1)  # symbol 1
+    write_code_length_code_length(bits, 0)  # symbol 2
+    write_code_length_code_length(bits, 0)  # symbol 3
+    write_code_length_code_length(bits, 0)  # symbol 4
+    write_code_length_code_length(bits, 0)  # symbol 0
+    write_code_length_code_length(bits, 0)  # symbol 5
+    write_code_length_code_length(bits, 1)  # symbol 17
+
+    write_bits(bits, 0, 1)  # code-length symbol 1 for block length symbol 0
+    write_bits(bits, 0, 1)  # code-length symbol 1 for block length symbol 1
+
+
 def write_zero_context_map_rle(bits: list[int], context_map_size: int, ntrees: int, rlemax: int) -> None:
     if ntrees < 2 or rlemax <= 0 or context_map_size < (1 << rlemax):
         raise ValueError((context_map_size, ntrees, rlemax))
@@ -836,6 +850,28 @@ def write_literal_block_switch_ab_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 64, 0)
 
 
+def write_literal_block_switch_complex_length_ab_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 2)
+    write_simple_single_symbol_prefix(bits, 4, 1)
+    write_complex_block_length_prefix_one(bits)
+    write_bits(bits, 0, 1)  # block length symbol 0
+    write_bits(bits, 0, 2)  # first literal block count = 1
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 0, 4)  # NDIRECT
+    write_bits(bits, 0, 2)  # literal context mode, block type 0
+    write_bits(bits, 0, 2)  # literal context mode, block type 1
+    write_block_type_count(bits, 2)
+    write_literal_block_switch_context_map(bits)
+    write_block_type_count(bits, 1)
+
+    write_simple_single_symbol_prefix(bits, 256, ord("a"))
+    write_simple_single_symbol_prefix(bits, 256, ord("b"))
+    write_simple_single_symbol_prefix(bits, 704, 16)
+    write_simple_single_symbol_prefix(bits, 64, 0)
+
+
 def write_literal_block_switch_three_types_abc_header(bits: list[int]) -> None:
     write_block_type_count(bits, 3)
     write_simple_single_symbol_prefix(bits, 5, 1)
@@ -1331,6 +1367,19 @@ def literal_block_switch_ab_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def literal_block_switch_complex_length_ab_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 1, 16)  # MLEN - 1
+    write_literal_block_switch_complex_length_ab_header(bits)
+    write_bits(bits, 0, 1)  # block length symbol 0
+    write_bits(bits, 0, 2)  # next literal block count = 1
+    return bits_to_bytes(bits)
+
+
 def literal_block_switch_three_types_abc_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -1467,6 +1516,7 @@ def main() -> int:
         "command-switch-three-types": (command_switch_three_types_aaabbbc_frame(), b"aaabbbc"),
         "command-switch-five-types": (command_switch_five_types_aaaab_frame(), b"aaaaaaaaaaaab"),
         "literal-block-switch": (literal_block_switch_ab_frame(), b"ab"),
+        "literal-block-switch-complex-length": (literal_block_switch_complex_length_ab_frame(), b"ab"),
         "literal-block-switch-three-types": (literal_block_switch_three_types_abc_frame(), b"abc"),
         "literal-block-switch-five-types": (literal_block_switch_five_types_frame(), b"aaaae"),
         "distance-block-switch": (distance_block_switch_abcabab_frame(), b"abcabab"),
