@@ -675,6 +675,7 @@ fn minimalStaticDictionaryWord(distance: usize, copy_len: usize) Error![]const u
     // transforms remain a follow-up.
     if (copy_len == 5 and distance == 720) return "hello";
     if (copy_len == 5 and distance == 112) return "quick";
+    if (copy_len == 5 and distance == 1002) return "dolor";
     return error.UnsupportedBrotliFeature;
 }
 
@@ -1904,6 +1905,23 @@ test "br minimal static dictionary quick word decodes Node quality-five frame" {
         0xf9, 0x0f, 0xa7, 0x01, 0x0f,
     };
     const expected = "the quick brown fox jumps over the lazy dog the quick brown fox";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary dolor word decodes Node quality-five frame" {
+    const encoded = [_]u8{
+        0xa1, 0xf8, 0x07, 0x00, 0x20, 0xea, 0xa6, 0xd7,
+        0x1b, 0x7e, 0xf1, 0xba, 0xf6, 0x3c, 0xd2, 0x85,
+        0x11, 0x58, 0x55, 0x6c, 0xac, 0x81, 0x46, 0xac,
+        0xeb, 0xe3, 0xb3, 0x0e, 0x13, 0xda, 0x75, 0x13,
+        0xdb, 0x5b, 0x00, 0x25, 0x63, 0x24, 0xdd, 0x10,
+        0x6b, 0x16, 0xc3, 0xf4, 0x3d, 0x18, 0xaf, 0xb6,
+        0x2a, 0x34, 0x3f, 0xf0, 0x97, 0x3b, 0x30,
+    };
+    const expected = ("Lorem ipsum dolor sit amet, consectetur adipiscing elit. " ** 5)[0..256];
     try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
     const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
     defer std.testing.allocator.free(decoded);

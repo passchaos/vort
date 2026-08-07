@@ -2237,6 +2237,10 @@ def main() -> int:
             node_compress(b"the quick brown fox jumps over the lazy dog the quick brown fox", quality=5, lgwin=10),
             b"the quick brown fox jumps over the lazy dog the quick brown fox",
         ),
+        "node-static-dictionary-dolor-q5-lgwin10": (
+            node_compress((b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 5)[:256], quality=5, lgwin=10),
+            (b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 5)[:256],
+        ),
         "node-repeat256-q4-lgwin10": (node_compress(b"abcd" * 64, quality=4, lgwin=10), b"abcd" * 64),
         "node-text-q11-lgwin10": (
             node_compress(b"hello brotli hello brotli", quality=11, lgwin=10),

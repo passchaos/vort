@@ -1809,3 +1809,8 @@ architecture blindly.
   size preflight and output decode. This keeps the static dictionary support
   evidence tied to real encoder output while the complete dictionary table is
   still pending.
+
+- Added another real Node quality-5 static-dictionary word to the narrow Brotli
+  slice. A 256-byte Lorem Ipsum frame copies `dolor` from static dictionary
+  distance 1002 after emitting `Lorem ipsum `, and now decodes through the same
+  preflight/output path plus the Node-backed CLI differential smoke.
