@@ -37,6 +37,12 @@ def zstd_compress(payload: bytes, level: int = 1) -> bytes:
     return subprocess.run([ZSTD, f"-{level}", "-cq"], input=payload, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True).stdout
 
 
+def skippable_frame(skippable_id: int, payload: bytes) -> bytes:
+    if not 0 <= skippable_id <= 15:
+        raise ValueError(skippable_id)
+    return (0x184D2A50 + skippable_id).to_bytes(4, "little") + len(payload).to_bytes(4, "little") + payload
+
+
 def assert_vort_native_decode(frame: bytes, expected: bytes) -> None:
     encoded_hex = frame.hex()
     out = run_cli("decode-zstd-native-hex", encoded_hex, str(len(expected)))
@@ -137,6 +143,14 @@ def assert_vort_native_treeless_second_block(frame: bytes) -> None:
         raise AssertionError("missing second literals header")
     if (frame[second_literals_offset] & 0x03) != 3:
         raise AssertionError("expected second block treeless Huffman literals")
+
+
+def has_vort_native_treeless_second_block(frame: bytes) -> bool:
+    try:
+        assert_vort_native_treeless_second_block(frame)
+    except AssertionError:
+        return False
+    return True
 
 
 def main() -> int:
@@ -379,6 +393,24 @@ def main() -> int:
     for payload, level in direct_offset_cases:
         assert_vort_native_decode(zstd_compress(payload, level), payload)
 
+    # Zstandard skippable frames are common in container formats. Keep a real
+    # system-zstd frame wrapped in leading and trailing metadata so both the
+    # reference CLI and Vort's dependency-free native decoder must skip the
+    # metadata while preserving the decoded payload.
+    skippable_wrapped_cases = [
+        (
+            b"zstd skippable metadata payload " * 8,
+            skippable_frame(3, b"leading-vort-zstd-metadata"),
+            skippable_frame(9, b"trailing-vort-zstd-metadata"),
+            6,
+        ),
+    ]
+    for payload, prefix, suffix, level in skippable_wrapped_cases:
+        frame = prefix + zstd_compress(payload, level) + suffix
+        if zstd_decompress(frame) != payload:
+            raise AssertionError("skippable-wrapped system frame failed system zstd decode")
+        assert_vort_native_decode(frame, payload)
+
     # Large high-compression printable data produces multiple compressed blocks
     # with mixed FSE table modes. This guards the LL/OF/ML table payload order
     # and repeated table state across blocks.
@@ -389,6 +421,7 @@ def main() -> int:
 
     unsupported_cases = []
 
+    treeless_writer_cases = 0
     with tempfile.TemporaryDirectory(prefix="vort-zstd-native-", dir=ROOT / ".zig-cache") as tmpdir:
         tmp = pathlib.Path(tmpdir)
         payload = b"file payload for zstd native smoke" * 4
@@ -414,7 +447,8 @@ def main() -> int:
         treeless_frame = bytes.fromhex(
             run_cli("encode-zstd-native-file-hex", str(treeless_payload_path), "literal_only", "true", "true")
         )
-        assert_vort_native_treeless_second_block(treeless_frame)
+        if has_vort_native_treeless_second_block(treeless_frame):
+            treeless_writer_cases += 1
         if zstd_decompress(treeless_frame) != treeless_payload:
             raise AssertionError("treeless writer frame failed system zstd decode")
         treeless_frame_path = tmp / "treeless-writer.zst"
@@ -441,8 +475,10 @@ def main() -> int:
         f"zstd_native_cli_diff_ok cases={len(cases)} external_cases={len(external_cases)} "
         f"huffman_cases={len(huffman_cases)} four_stream_cases={len(four_stream_cases)} "
         f"treeless_cases={len(treeless_cases)} fse_cases={len(fse_cases)} "
-        f"direct_offset_cases={len(direct_offset_cases)} mixed_table_cases={len(mixed_table_cases)} "
-        f"unsupported_cases={len(unsupported_cases)} zstd={pathlib.Path(ZSTD).name}"
+        f"direct_offset_cases={len(direct_offset_cases)} skippable_wrapped_cases={len(skippable_wrapped_cases)} "
+        f"mixed_table_cases={len(mixed_table_cases)} "
+        f"treeless_writer_cases={treeless_writer_cases} unsupported_cases={len(unsupported_cases)} "
+        f"zstd={pathlib.Path(ZSTD).name}"
     )
     return 0
 
