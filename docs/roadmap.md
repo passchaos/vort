@@ -2018,6 +2018,11 @@ architecture blindly.
   both tested and visible in dashboard review without depending on a local
   checkout path.
 
+- Added `run-br-static-dictionary-node-probe-upstream`, completing the portable
+  upstream-candidate chain. The fixture-derived upstream candidates are now
+  compressed by Node and decoded by Vort, with retained JSON/Markdown probe
+  artifacts proving the generated import path remains executable end to end.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

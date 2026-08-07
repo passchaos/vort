@@ -32,6 +32,14 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-br-static-dictionary-node-probe-full"
     },
+    "vort-br-static-dictionary-node-probe-upstream.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream"
+    },
+    "vort-br-static-dictionary-node-probe-upstream.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream"
+    },
     "vort-br-static-dictionary-node-probe-wide.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-br-static-dictionary-node-probe-wide"
@@ -479,6 +487,8 @@
     "vort-br-static-dictionary-candidates.md": "zig build run-br-static-dictionary-candidate-report",
     "vort-br-static-dictionary-node-probe-full.json": "zig build run-br-static-dictionary-node-probe-full",
     "vort-br-static-dictionary-node-probe-full.md": "zig build run-br-static-dictionary-node-probe-full",
+    "vort-br-static-dictionary-node-probe-upstream.json": "zig build run-br-static-dictionary-node-probe-upstream",
+    "vort-br-static-dictionary-node-probe-upstream.md": "zig build run-br-static-dictionary-node-probe-upstream",
     "vort-br-static-dictionary-node-probe-wide.json": "zig build run-br-static-dictionary-node-probe-wide",
     "vort-br-static-dictionary-node-probe-wide.md": "zig build run-br-static-dictionary-node-probe-wide",
     "vort-br-static-dictionary-node-probe.json": "zig build run-br-static-dictionary-node-probe",

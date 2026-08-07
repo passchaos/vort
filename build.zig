@@ -961,6 +961,25 @@ pub fn build(b: *std.Build) void {
     const br_static_dictionary_node_probe_full_step = b.step("run-br-static-dictionary-node-probe-full", "Probe every Brotli static dictionary candidate against Node and Vort");
     br_static_dictionary_node_probe_full_step.dependOn(&br_static_dictionary_node_probe_full.step);
 
+    const br_static_dictionary_node_probe_upstream = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream.md",
+        "--all-candidates",
+        "--require-vort-ok",
+    });
+    br_static_dictionary_node_probe_upstream.step.dependOn(br_static_dictionary_candidate_upstream_smoke_step);
+    const br_static_dictionary_node_probe_upstream_step = b.step("run-br-static-dictionary-node-probe-upstream", "Probe upstream Brotli static dictionary candidates against Node and Vort");
+    br_static_dictionary_node_probe_upstream_step.dependOn(&br_static_dictionary_node_probe_upstream.step);
+
     const snappy_block_cli_probe = b.addSystemCommand(&.{ "python3", "tools/snappy_block_cli_probe.py" });
     snappy_block_cli_probe.addArtifactArg(cli_exe);
     const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks and framed streams");
