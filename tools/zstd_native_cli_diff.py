@@ -451,6 +451,30 @@ def main() -> int:
             raise AssertionError("vort skippable-concatenated frame failed system zstd decode")
         assert_vort_native_decode(frame, expected)
 
+    # Strengthen the Vort-generated concatenation case with no-content-size
+    # frames that still carry checksums. This keeps the size-preflight and
+    # content-verification paths visible when external containers provide sizes
+    # separately and use skippable metadata between frames.
+    vort_no_size_checksum_skippable_cases = [
+        (
+            b"first vort no-size checksum payload " * 2,
+            b"second vort no-size checksum payload " * 2,
+            skippable_frame(13, b"no-size-checksum-middle-metadata"),
+        ),
+    ]
+    for first_payload, second_payload, metadata in vort_no_size_checksum_skippable_cases:
+        first_frame = bytes.fromhex(
+            run_cli("encode-zstd-native-bytes-hex", first_payload.hex(), "literal_only", "true", "false")
+        )
+        second_frame = bytes.fromhex(
+            run_cli("encode-zstd-native-bytes-hex", second_payload.hex(), "literal_only", "true", "false")
+        )
+        frame = first_frame + metadata + second_frame
+        expected = first_payload + second_payload
+        if zstd_decompress(frame) != expected:
+            raise AssertionError("vort no-size checksum skippable frame failed system zstd decode")
+        assert_vort_native_decode(frame, expected)
+
     # Large high-compression printable data produces multiple compressed blocks
     # with mixed FSE table modes. This guards the LL/OF/ML table payload order
     # and repeated table state across blocks.
@@ -518,6 +542,7 @@ def main() -> int:
         f"direct_offset_cases={len(direct_offset_cases)} skippable_wrapped_cases={len(skippable_wrapped_cases)} "
         f"skippable_concatenated_cases={len(skippable_concatenated_cases)} "
         f"vort_skippable_concatenated_cases={len(vort_skippable_concatenated_cases)} "
+        f"vort_no_size_checksum_skippable_cases={len(vort_no_size_checksum_skippable_cases)} "
         f"mixed_table_cases={len(mixed_table_cases)} "
         f"treeless_writer_cases={treeless_writer_cases} unsupported_cases={len(unsupported_cases)} "
         f"zstd={pathlib.Path(ZSTD).name}"
