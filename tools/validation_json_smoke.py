@@ -152,6 +152,8 @@ def main() -> int:
         br_static_dictionary_candidate_report = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-candidates.json").read_text())
         assert br_static_dictionary_candidate_report["schema"] == "vort.br_static_dictionary_candidate_report"
         assert br_static_dictionary_candidate_report["source_mode"] == "anchors"
+        assert br_static_dictionary_candidate_report["source_limit"] == 0
+        assert br_static_dictionary_candidate_report["upstream_raw_word_count"] == 0
         assert br_static_dictionary_candidate_report["candidate_count"] >= 1
         assert br_static_dictionary_candidate_report["candidates"]
         assert sum(row["candidate_count"] for row in br_static_dictionary_candidate_report["kind_rows"]) == br_static_dictionary_candidate_report["candidate_count"]
@@ -161,6 +163,8 @@ def main() -> int:
         assert br_static_dictionary_candidate_upstream["schema"] == "vort.br_static_dictionary_candidate_upstream_smoke"
         assert br_static_dictionary_candidate_upstream["ok"] is True
         assert br_static_dictionary_candidate_upstream["source_mode"] == "upstream"
+        assert br_static_dictionary_candidate_upstream["source_limit"] == 8
+        assert br_static_dictionary_candidate_upstream["upstream_raw_word_count"] == 8
         validate_value_against_manifest(br_static_dictionary_candidate_upstream, schemas_def)
         br_static_dictionary_node_probe = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-node-probe.json").read_text())
         assert br_static_dictionary_node_probe["schema"] == "vort.br_static_dictionary_node_probe"

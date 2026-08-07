@@ -84,6 +84,8 @@ def main() -> int:
         validate_value_against_manifest(report, load_manifest())
         if report["source_mode"] != "upstream":
             raise AssertionError("upstream smoke report must use upstream source_mode")
+        if report["source_limit"] != 8 or report["upstream_raw_word_count"] != 8:
+            raise AssertionError("upstream smoke source-limit metadata mismatch")
         anchor_raw_word_count = len({(entry["copy_len"], entry["word_index"]) for entry in load_anchors(DEFAULT_ANCHORS)})
         if report["raw_word_count"] < anchor_raw_word_count + 8:
             raise AssertionError("upstream raw words were not merged into candidate pool")
@@ -115,7 +117,10 @@ def main() -> int:
         "schema_version": 1,
         "ok": True,
         "source_mode": report["source_mode"],
+        "source_limit": report["source_limit"],
         "source_entry_count": report["source_entry_count"],
+        "anchor_raw_word_count": report["anchor_raw_word_count"],
+        "upstream_raw_word_count": report["upstream_raw_word_count"],
         "raw_word_count": report["raw_word_count"],
         "candidate_count": report["candidate_count"],
         "stdout": result.stdout.strip(),

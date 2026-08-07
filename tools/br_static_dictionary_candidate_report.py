@@ -82,7 +82,6 @@ def candidate_entries(anchors: list[dict[str, Any]], raw_words: dict[tuple[int, 
     return candidates
 
 
-
 def kind_rows(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for kind in sorted({candidate["transform_kind"] for candidate in candidates}):
@@ -98,12 +97,24 @@ def length_rows(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
         rows.append({"copy_len": copy_len, "candidate_count": len(items)})
     return rows
 
-def build_report(anchors: list[dict[str, Any]], raw_words: dict[tuple[int, int], str], candidates: list[dict[str, Any]], source_mode: str) -> dict[str, Any]:
+
+def build_report(
+    anchors: list[dict[str, Any]],
+    raw_words: dict[tuple[int, int], str],
+    candidates: list[dict[str, Any]],
+    source_mode: str,
+    source_limit: int,
+    upstream_raw_word_count: int,
+) -> dict[str, Any]:
+    anchor_raw_word_count = len(anchor_raw_words(anchors))
     return {
         "schema": "vort.br_static_dictionary_candidate_report",
         "schema_version": 1,
         "source_mode": source_mode,
+        "source_limit": source_limit,
         "source_entry_count": len(anchors),
+        "anchor_raw_word_count": anchor_raw_word_count,
+        "upstream_raw_word_count": upstream_raw_word_count,
         "raw_word_count": len(raw_words),
         "transform_count": len(SUPPORTED_TRANSFORMS),
         "candidate_count": len(candidates),
@@ -125,7 +136,10 @@ def write_markdown(path: Path, report: dict[str, Any], limit: int) -> None:
         "# Brotli static dictionary candidate report",
         "",
         f"- Source mode: {report['source_mode']}",
+        f"- Source limit: {report['source_limit']}",
         f"- Source entries: {report['source_entry_count']}",
+        f"- Anchor raw words: {report['anchor_raw_word_count']}",
+        f"- Upstream raw words: {report['upstream_raw_word_count']}",
         f"- Unique raw words: {report['raw_word_count']}",
         f"- Supported transforms considered: {report['transform_count']}",
         f"- Candidate entries: {report['candidate_count']}",
@@ -177,11 +191,13 @@ def main() -> int:
     anchors = load_anchors(args.anchors)
     raw_words = anchor_raw_words(anchors)
     source_mode = "anchors"
+    upstream_words: dict[tuple[int, int], str] = {}
     if args.brotli_common_dir is not None and args.source_limit > 0:
-        raw_words.update(upstream_raw_words(args.brotli_common_dir, args.source_limit))
+        upstream_words = upstream_raw_words(args.brotli_common_dir, args.source_limit)
+        raw_words.update(upstream_words)
         source_mode = "upstream"
     candidates = candidate_entries(anchors, raw_words)
-    report = build_report(anchors, raw_words, candidates, source_mode)
+    report = build_report(anchors, raw_words, candidates, source_mode, args.source_limit, len(upstream_words))
     if args.json is not None:
         write_json(args.json, report)
     if args.markdown is not None:

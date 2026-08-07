@@ -45,6 +45,8 @@ def main() -> int:
         raise AssertionError("unexpected candidate report schema_version")
     if report.get("source_mode") != "anchors":
         raise AssertionError("default candidate report must use anchors source_mode")
+    if report.get("source_limit") != 0 or report.get("upstream_raw_word_count") != 0:
+        raise AssertionError("default candidate report must not include upstream raw words")
     validate_value_against_manifest(report, load_manifest())
 
     candidates = report.get("candidates")
@@ -52,6 +54,8 @@ def main() -> int:
         raise AssertionError("candidate report must include candidates")
     if report.get("source_entry_count") != len(anchors):
         raise AssertionError("source_entry_count mismatch")
+    if report.get("anchor_raw_word_count") != len({(entry["copy_len"], entry["word_index"]) for entry in anchors}):
+        raise AssertionError("anchor_raw_word_count mismatch")
     if report.get("candidate_count") != len(candidates):
         raise AssertionError("candidate_count mismatch")
     if sum(row["candidate_count"] for row in report.get("kind_rows", [])) != len(candidates):

@@ -2008,8 +2008,8 @@ architecture blindly.
 - Extended the Brotli static-dictionary candidate report with an optional
   upstream-source mode. When a local Brotli `common/` checkout is supplied with
   `--source-limit`, the report merges bounded official dictionary raw words into
-  the anchor-derived candidate pool, creating a controlled path toward larger
-  generated imports.
+  the anchor-derived candidate pool and records source-limit / anchor / upstream
+  raw-word counts, creating a controlled path toward larger generated imports.
 
 - Added transform-kind and copy-length summaries to the Brotli candidate report,
   so anchor and upstream candidate artifacts expose the distribution of affix,
