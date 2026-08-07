@@ -2048,6 +2048,31 @@ test "br minimal compressed stream switches fifth distance block tree" {
     try std.testing.expectEqualSlices(u8, "abcabcabcabbb", decoded);
 }
 
+test "br minimal compressed stream switches ninth distance block tree" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 20, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForDistanceBlockSwitchNineTypes(std.testing.allocator, &writer);
+    try writer.writeBits(std.testing.allocator, 1, 1); // command 152
+    try writer.writeBits(std.testing.allocator, 0, 1); // a
+    try writer.writeBits(std.testing.allocator, 1, 2); // b
+    try writer.writeBits(std.testing.allocator, 3, 2); // c
+    for (0..8) |_| {
+        try writer.writeBits(std.testing.allocator, 0, 1); // command 128
+        try writer.writeBits(std.testing.allocator, 0, 2); // next distance block count = 1
+    }
+
+    try std.testing.expectEqual(@as(usize, 21), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "abcabcabcabcabcabcaaa", decoded);
+}
+
 test "br stored stream rejects unsupported compressed blocks and trailing data" {
     try std.testing.expectError(error.TruncatedFrame, decodeStreamAlloc(std.testing.allocator, &[_]u8{ 0x00, 0x00 }));
     try std.testing.expectError(error.TrailingData, decodedStreamSize(&[_]u8{ 0x06, 0x00 }));
@@ -3357,6 +3382,42 @@ fn writeMinimalCompressedHeaderForDistanceBlockSwitchFiveTypes(allocator: std.me
     try writeSimpleSingleSymbolPrefix(allocator, writer, 67, 16);
 }
 
+fn writeMinimalCompressedHeaderForDistanceBlockSwitchNineTypes(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 9); // NBLTYPESD
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 11, 1); // next distance block type
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 26, 0); // block count code
+    try writer.writeBits(allocator, 0, 2); // first distance block count = 1
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 3, 4); // NDIRECT = 3
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESL
+    try writeBlockTypeCount(allocator, writer, 9); // NTREESD
+    try writeDistanceBlockSwitchNineTypesContextMap(allocator, writer);
+
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 2, 2); // NSYM = 3
+    try writer.writeBits(allocator, 'a', alphabetBits(256));
+    try writer.writeBits(allocator, 'b', alphabetBits(256));
+    try writer.writeBits(allocator, 'c', alphabetBits(256));
+
+    try writer.writeBits(allocator, 1, 2); // simple insert-copy prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 152, alphabetBits(704));
+    try writer.writeBits(allocator, 128, alphabetBits(704));
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 67, 18);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 67, 17);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 67, 16);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 67, 18);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 67, 16);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 67, 18);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 67, 16);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 67, 18);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 67, 16);
+}
+
 fn writeBlockTypeCount(allocator: std.mem.Allocator, writer: *BitWriter, value: u16) Error!void {
     if (value == 0 or value > 256) return error.InvalidBlockPlan;
     if (value == 1) return try writer.writeBits(allocator, 0, 1);
@@ -3721,6 +3782,19 @@ fn writeDistanceBlockSwitchFiveTypesContextMap(allocator: std.mem.Allocator, wri
     var i: usize = 0;
     while (i < 20) : (i += 1) {
         try writer.writeBits(allocator, if (i == 16) 1 else 0, 1);
+    }
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeDistanceBlockSwitchNineTypesContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 0, alphabetBits(9));
+    try writer.writeBits(allocator, 8, alphabetBits(9));
+    var i: usize = 0;
+    while (i < 36) : (i += 1) {
+        try writer.writeBits(allocator, if (i == 32) 1 else 0, 1);
     }
     try writer.writeBits(allocator, 0, 1); // IMTF = false
 }

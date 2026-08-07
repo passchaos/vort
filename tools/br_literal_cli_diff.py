@@ -395,6 +395,17 @@ def write_distance_block_switch_five_types_context_map(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # IMTF = false
 
 
+def write_distance_block_switch_nine_types_context_map(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 1, 2)  # simple context-map prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 0, 4)
+    write_bits(bits, 8, 4)
+    for index in range(36):
+        write_bits(bits, 1 if index == 32 else 0, 1)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
 def write_literal_hello_header(bits: list[int]) -> None:
     write_block_type_count(bits, 1)
     write_block_type_count(bits, 1)
@@ -1133,6 +1144,42 @@ def write_distance_block_switch_five_types_header(bits: list[int]) -> None:
     write_simple_single_symbol_prefix(bits, 67, 16)
 
 
+def write_distance_block_switch_nine_types_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 9)
+    write_simple_single_symbol_prefix(bits, 11, 1)
+    write_simple_single_symbol_prefix(bits, 26, 0)
+    write_bits(bits, 0, 2)  # first distance block count = 1
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 3, 4)  # NDIRECT = 3
+    write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 9)
+    write_distance_block_switch_nine_types_context_map(bits)
+
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 2, 2)  # NSYM = 3
+    write_bits(bits, ord("a"), 8)
+    write_bits(bits, ord("b"), 8)
+    write_bits(bits, ord("c"), 8)
+
+    write_bits(bits, 1, 2)  # simple insert-copy prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, 152, 10)
+    write_bits(bits, 128, 10)
+
+    write_simple_single_symbol_prefix(bits, 67, 18)
+    write_simple_single_symbol_prefix(bits, 67, 17)
+    write_simple_single_symbol_prefix(bits, 67, 16)
+    write_simple_single_symbol_prefix(bits, 67, 18)
+    write_simple_single_symbol_prefix(bits, 67, 16)
+    write_simple_single_symbol_prefix(bits, 67, 18)
+    write_simple_single_symbol_prefix(bits, 67, 16)
+    write_simple_single_symbol_prefix(bits, 67, 18)
+    write_simple_single_symbol_prefix(bits, 67, 16)
+
+
 def literal_only_hello_frame(final: bool) -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -1636,6 +1683,24 @@ def distance_block_switch_five_types_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def distance_block_switch_nine_types_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 20, 16)  # MLEN - 1
+    write_distance_block_switch_nine_types_header(bits)
+    write_bits(bits, 1, 1)  # command 152
+    write_bits(bits, 0, 1)  # a
+    write_bits(bits, 1, 2)  # b
+    write_bits(bits, 3, 2)  # c
+    for _ in range(8):
+        write_bits(bits, 0, 1)  # command 128
+        write_bits(bits, 0, 2)  # next distance block count = 1
+    return bits_to_bytes(bits)
+
+
 def run(cmd: list[str], cwd: Path, expect_ok: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(cmd, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if expect_ok and result.returncode != 0:
@@ -1702,6 +1767,10 @@ def main() -> int:
         "distance-block-switch": (distance_block_switch_abcabab_frame(), b"abcabab"),
         "distance-block-switch-three-types": (distance_block_switch_three_types_abcababbb_frame(), b"abcababbb"),
         "distance-block-switch-five-types": (distance_block_switch_five_types_frame(), b"abcabcabcabbb"),
+        "distance-block-switch-nine-types": (
+            distance_block_switch_nine_types_frame(),
+            b"abcabcabcabcabcabcaaa",
+        ),
     }
 
     with tempfile.TemporaryDirectory(prefix="vort-br-literal-") as td:
