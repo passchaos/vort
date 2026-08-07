@@ -74,6 +74,40 @@
         "source_dir": "str"
       }
     },
+    "vort.br_static_dictionary_source_audit_negative_smoke": {
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "fields": {
+        "schema": "str",
+        "schema_version": "int",
+        "ok": "bool",
+        "case_count": "int",
+        "cases": "list"
+      },
+      "item_collection": "cases",
+      "item_enums": {
+        "name": [
+          "missing_anchor_tuple",
+          "duplicate_anchor_key",
+          "entry_count_mismatch",
+          "raw_word_length_mismatch",
+          "transformed_word_mismatch",
+          "transform_kind_mismatch",
+          "generated_order_mismatch",
+          "source_word_mismatch",
+          "missing_brotli_common"
+        ]
+      },
+      "item_fields": {
+        "name": "str",
+        "expected_output": "str",
+        "returncode": "int",
+        "matched": "bool"
+      }
+    },
     "vort.br_static_dictionary_report": {
       "count_rules": {
         "entry_count": {
@@ -2709,6 +2743,7 @@
           "vort.dashboard_strict_smoke",
           "vort.br_static_dictionary_required_coverage",
           "vort.br_static_dictionary_source_audit",
+          "vort.br_static_dictionary_source_audit_negative_smoke",
           "vort.br_static_dictionary_source_anchors",
           "vort.dashboard_strict_validation_reasons",
           "vort.deflate_decode_stage_report",

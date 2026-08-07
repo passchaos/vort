@@ -855,6 +855,39 @@ Example:
 }
 ```
 
+## `vort.br_static_dictionary_source_audit_negative_smoke`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-source-audit-negative-smoke
+python3 tools/br_static_dictionary_source_audit_negative_smoke.py --summary zig-out/vort-br-static-dictionary-source-audit-negative-smoke.json
+```
+
+This schema summarizes negative fixtures for the Brotli static-dictionary
+source-anchor audit. Each case mutates the anchor fixture, the parsed Zig source,
+or the optional upstream Brotli source path and verifies that the audit fails
+with the expected diagnostic instead of accepting drift silently.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_source_audit_negative_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "cases": [
+    {
+      "name": "generated_order_mismatch",
+      "expected_output": "generated Zig table order/content differs",
+      "returncode": 1,
+      "matched": true
+    }
+  ]
+}
+```
+
 ## `vort.br_static_dictionary_required_coverage`
 
 Consumed by:

@@ -167,6 +167,12 @@ def main() -> int:
         assert br_static_dictionary_source_audit["generated_zig_bytes"] > 0
         assert br_static_dictionary_source_audit["generated_zig_path"].endswith("vort-br-static-dictionary-generated.zig")
         validate_value_against_manifest(br_static_dictionary_source_audit, schemas_def)
+        br_static_dictionary_source_audit_negative = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-source-audit-negative-smoke.json").read_text())
+        assert br_static_dictionary_source_audit_negative["schema"] == "vort.br_static_dictionary_source_audit_negative_smoke"
+        assert br_static_dictionary_source_audit_negative["ok"] is True
+        assert br_static_dictionary_source_audit_negative["case_count"] >= 1
+        assert all(row["matched"] is True for row in br_static_dictionary_source_audit_negative["cases"])
+        validate_value_against_manifest(br_static_dictionary_source_audit_negative, schemas_def)
         dashboard_producers = json.loads((ROOT / "tools" / "dashboard_producers.json").read_text())
         assert dashboard_producers["schema"] == "vort.dashboard_producers"
         validate_value_against_manifest(dashboard_producers, schemas_def)
@@ -799,6 +805,7 @@ def main() -> int:
                 br_static_dictionary_required["schema"],
                 br_static_dictionary_source_anchors["schema"],
                 br_static_dictionary_source_audit["schema"],
+                br_static_dictionary_source_audit_negative["schema"],
                 dashboard_strict_modes["schema"],
                 dashboard_strict_reasons["schema"],
                 dashboard_strict["schema"],

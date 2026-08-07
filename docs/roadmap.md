@@ -1959,4 +1959,7 @@ architecture blindly.
   minimal transform kind, and can optionally verify those anchors against a
   local upstream Brotli `common/dictionary_inc.h` / `common/transform.c` checkout,
   and emits a generated Zig table fragment that must match `src/br.zig` before
-  the project moves from hand-picked tuples to generated dictionary data.
+  the project moves from hand-picked tuples to generated dictionary data. A
+  companion negative smoke now mutates anchors, source rows, generated-order
+  expectations, and optional upstream source paths to prove the audit fails on
+  drift rather than merely producing a happy-path artifact.
