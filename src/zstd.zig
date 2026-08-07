@@ -4994,7 +4994,7 @@ fn resolveSequenceOffset(
         updateRepeatedOffsets(repeated_offsets, offset);
         return offset;
     }
-    if (raw_offset >= repeated_offsets.len) return error.UnsupportedZstdFeature;
+    if (raw_offset >= repeated_offsets.len) return error.CorruptFrame;
     return try useRepeatedOffset(repeated_offsets, raw_offset);
 }
 
@@ -5012,7 +5012,7 @@ fn useRepeatedOffset(repeated_offsets: *[3]usize, index: usize) Error!usize {
             std.mem.swap(usize, &repeated_offsets[0], &repeated_offsets[2]);
             std.mem.swap(usize, &repeated_offsets[1], &repeated_offsets[2]);
         },
-        else => return error.UnsupportedZstdFeature,
+        else => return error.CorruptFrame,
     }
     if (repeated_offsets[0] == 0) return error.InvalidMatch;
     return repeated_offsets[0];
@@ -5046,6 +5046,14 @@ test "zstd native repeat-offset resolver follows selector updates" {
     offsets = .{ 2, 4, 8 };
     try std.testing.expectEqual(@as(usize, 1), try resolveSequenceOffset(1, 1, 1, 0, &offsets));
     try std.testing.expectEqual([3]usize{ 1, 2, 4 }, offsets);
+
+    offsets = initial_repeated_offsets;
+    try std.testing.expectError(error.CorruptFrame, resolveSequenceOffset(2, 1, 1, 0, &offsets));
+    try std.testing.expectEqual(initial_repeated_offsets, offsets);
+
+    offsets = initial_repeated_offsets;
+    try std.testing.expectError(error.CorruptFrame, useRepeatedOffset(&offsets, 3));
+    try std.testing.expectEqual(initial_repeated_offsets, offsets);
 
     offsets = initial_repeated_offsets;
     try std.testing.expectEqual(@as(usize, 5), try resolveSequenceOffset(5, 2, 0, 0, &offsets));
