@@ -1777,3 +1777,8 @@ architecture blindly.
   A literal-only frame now uses a complex prefix-code header for the command tree
   while keeping the literal tree simple, and is decoded by both Zig tests and the
   Node-backed CLI differential smoke.
+
+- Added compressed-frame coverage for Brotli complex distance prefix codes. A
+  match-copy frame now keeps literal and command trees simple while using a
+  complex prefix-code header for the distance tree, with matching Zig and
+  Node-backed CLI differential coverage.
