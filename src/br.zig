@@ -96,7 +96,7 @@ const InsertCopyLengths = struct {
 
 const LiteralHistory = struct {
     previous: [2]u8 = .{ 0, 0 },
-    tail: [64]u8 = @splat(0),
+    tail: [128]u8 = @splat(0),
     tail_len: usize = 0,
     known: bool = true,
 
@@ -1806,6 +1806,31 @@ test "br minimal compressed stream keeps literal context after distance-thirty-t
     try std.testing.expectEqualSlices(u8, "abaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabc", decoded);
 }
 
+test "br minimal compressed stream keeps literal context after distance-sixty-five copy" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 67, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForContextAfterDistanceSixtyFiveCopy(std.testing.allocator, &writer);
+    try writer.writeBits(std.testing.allocator, 1, 1); // command 296
+    try writer.writeBits(std.testing.allocator, 15, 4); // insert length 65
+    try writer.writeBits(std.testing.allocator, 0, 1); // a
+    try writer.writeBits(std.testing.allocator, 1, 1); // b
+    var i: usize = 0;
+    while (i < 63) : (i += 1) try writer.writeBits(std.testing.allocator, 0, 1); // a
+    try writer.writeBits(std.testing.allocator, 0, 1); // command 8
+    try writer.writeBits(std.testing.allocator, 1, 1); // c
+
+    try std.testing.expectEqual(@as(usize, 68), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "ab" ++ ("a" ** 63) ++ "abc", decoded);
+}
+
 test "br minimal compressed stream selects literal context tree through signed mode" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -3092,6 +3117,34 @@ fn writeMinimalCompressedHeaderForContextAfterDistanceThirtyThreeCopy(allocator:
     try writer.writeBits(allocator, 8, alphabetBits(704));
 
     try writeSimpleSingleSymbolPrefix(allocator, writer, 440, 48);
+}
+
+fn writeMinimalCompressedHeaderForContextAfterDistanceSixtyFiveCopy(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 3, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 9, 4); // NDIRECT = 72
+    try writer.writeBits(allocator, 0, 2); // literal context mode = LSB6
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESL
+    try writeLiteralContextMapForB(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 'a', alphabetBits(256));
+    try writer.writeBits(allocator, 'b', alphabetBits(256));
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 'a', alphabetBits(256));
+    try writer.writeBits(allocator, 'c', alphabetBits(256));
+
+    try writer.writeBits(allocator, 1, 2); // simple insert-copy prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 296, alphabetBits(704));
+    try writer.writeBits(allocator, 8, alphabetBits(704));
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 472, 80);
 }
 
 fn writeMinimalCompressedHeaderForLiteralContextFiveTrees(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
