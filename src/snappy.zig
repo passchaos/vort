@@ -756,6 +756,8 @@ test "snappy framed stream rejects malformed chunks" {
     try std.testing.expectError(error.InvalidMagic, decodedFrameSize(&[_]u8{ 0x01, 0x04, 0x00, 0x00, 0, 0, 0, 0 }));
     try std.testing.expectError(error.InvalidMagic, decodedFrameSize(&[_]u8{ 0x80, 0x00, 0x00, 0x00, 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y' }));
     try std.testing.expectError(error.InvalidMagic, decodedFrameSize(&[_]u8{ 0xff, 0x06, 0x00, 0x00, 'b', 'a', 'd', 'b', 'a', 'd' }));
+    try std.testing.expectError(error.TruncatedFrame, decodedFrameSize(&[_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x00, 0x03, 0x00, 0x00, 0, 0, 0 }));
+    try std.testing.expectError(error.TruncatedFrame, decodedFrameSize(&[_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x01, 0x03, 0x00, 0x00, 0, 0, 0 }));
     try std.testing.expectError(error.UnsupportedSnappyFeature, decodedFrameSize(&[_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x02, 0x00, 0x00, 0x00 }));
     try std.testing.expectError(error.UnsupportedSnappyFeature, decodedFrameSize(&[_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x7f, 0x00, 0x00, 0x00 }));
 
@@ -794,6 +796,10 @@ test "snappy framed stream rejects malformed chunks" {
     try std.testing.expectError(error.UnsupportedSnappyFeature, decodeFrameAlloc(std.testing.allocator, &unsupported));
     const skippable_before_identifier = [_]u8{ 0x80, 0x00, 0x00, 0x00, 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y' };
     try std.testing.expectError(error.InvalidMagic, decodeFrameAlloc(std.testing.allocator, &skippable_before_identifier));
+    const truncated_compressed_payload = [_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x00, 0x03, 0x00, 0x00, 0, 0, 0 };
+    try std.testing.expectError(error.TruncatedFrame, decodeFrameAlloc(std.testing.allocator, &truncated_compressed_payload));
+    const truncated_uncompressed_payload = [_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x01, 0x03, 0x00, 0x00, 0, 0, 0 };
+    try std.testing.expectError(error.TruncatedFrame, decodeFrameAlloc(std.testing.allocator, &truncated_uncompressed_payload));
 }
 
 fn oversizedCompressedChunkFrame(allocator: std.mem.Allocator) Error![]u8 {
