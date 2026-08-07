@@ -7263,9 +7263,9 @@ fn buildFseDecodeTableFromNormalized(
     entries: *[max_sequence_fse_table_size]FseTableEntry,
 ) Error!usize {
     const table_len: usize = @as(usize, 1) << @intCast(table_log);
-    if (table_len > entries.len) return error.UnsupportedZstdFeature;
+    if (table_len > entries.len) return error.CorruptFrame;
     var values: [max_fse_compression_symbol + 1]u16 = undefined;
-    if (normalized.len > values.len) return error.UnsupportedZstdFeature;
+    if (normalized.len > values.len) return error.CorruptFrame;
     for (normalized, 0..) |value, i| {
         if (value < -1) return error.CorruptFrame;
         values[i] = if (value == -1) 0 else @intCast(value + 1);
@@ -11439,6 +11439,17 @@ test "zstd FSE compression table rejects invalid parameters as corrupt" {
     try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(&normalized, 1, max_fse_compression_table_log + 1));
     try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(&normalized, max_fse_compression_symbol + 1, 5));
     try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(normalized[0..1], 1, 5));
+}
+
+test "zstd FSE decode table builder rejects oversized inputs as corrupt" {
+    var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
+    var normalized: [max_fse_compression_symbol + 2]i16 = .{0} ** (max_fse_compression_symbol + 2);
+    normalized[0] = 1;
+    normalized[1] = 31;
+
+    const too_large_table_log = std.math.log2_int(usize, max_sequence_fse_table_size) + 1;
+    try std.testing.expectError(error.CorruptFrame, buildFseDecodeTableFromNormalized(normalized[0..2], too_large_table_log, &entries));
+    try std.testing.expectError(error.CorruptFrame, buildFseDecodeTableFromNormalized(&normalized, 5, &entries));
 }
 
 test "zstd literal-only writer emits FSE Huffman tree for high-byte binary literals" {
