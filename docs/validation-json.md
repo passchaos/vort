@@ -820,6 +820,38 @@ Example:
 }
 ```
 
+## `vort.br_static_dictionary_report_negative_smoke`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-report-negative-smoke
+python3 tools/br_static_dictionary_report_negative_smoke.py --summary zig-out/vort-br-static-dictionary-report-negative-smoke.json
+```
+
+This schema summarizes negative fixtures for the Brotli static-dictionary report
+smoke. Each case intentionally corrupts one report invariant and records whether
+the validator failed with the expected diagnostic.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_report_negative_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "cases": [
+    {
+      "name": "word_bytes_mismatch",
+      "expected_output": "word_bytes mismatch",
+      "returncode": 1,
+      "matched": true
+    }
+  ]
+}
+```
+
 ## `vort.dashboard_category_expected_artifacts`
 
 Consumed by:

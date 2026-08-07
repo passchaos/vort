@@ -25,6 +25,35 @@
         "word": "str"
       }
     },
+    "vort.br_static_dictionary_report_negative_smoke": {
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      },
+      "fields": {
+        "schema": "str",
+        "schema_version": "int",
+        "ok": "bool",
+        "case_count": "int",
+        "cases": "list"
+      },
+      "item_collection": "cases",
+      "item_enums": {
+        "name": [
+          "missing_required_tuple",
+          "duplicate_key",
+          "word_bytes_mismatch",
+          "entry_count_mismatch"
+        ]
+      },
+      "item_fields": {
+        "name": "str",
+        "expected_output": "str",
+        "returncode": "int",
+        "matched": "bool"
+      }
+    },
     "vort.dashboard_category_expected_artifacts": {
       "fields": {
         "expected_artifacts": "list",

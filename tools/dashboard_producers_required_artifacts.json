@@ -1,6 +1,13 @@
 {
   "required_artifacts": [
     {
+      "expected_format": "json",
+      "name": "vort-br-static-dictionary-report-negative-smoke.json",
+      "producer_step": "zig build run-br-static-dictionary-report-negative-smoke",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-br-static-dictionary-report-negative-smoke"
+    },
+    {
       "expected_format": "csv",
       "name": "vort-br-static-dictionary-report.csv",
       "producer_step": "zig build run-br-static-dictionary-report-dashboard",
