@@ -37,6 +37,30 @@ def zstd_compress(payload: bytes, level: int = 1) -> bytes:
     return subprocess.run([ZSTD, f"-{level}", "-cq"], input=payload, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True).stdout
 
 
+def zstd_compress_no_content_size_checksum(payload: bytes, level: int = 1) -> bytes:
+    if not ZSTD:
+        raise RuntimeError("zstd missing")
+    frame = subprocess.run(
+        [ZSTD, f"-{level}", "--check", "-cq"],
+        input=payload,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    ).stdout
+    if frame[:4] != bytes.fromhex("28b52ffd"):
+        raise AssertionError("missing zstd magic")
+    descriptor = frame[4]
+    if descriptor & 0x08:
+        raise AssertionError("reserved frame bit set")
+    if not descriptor & 0x04:
+        raise AssertionError("expected checksum flag")
+    if descriptor & 0x20:
+        raise AssertionError("expected non-single-segment frame without content size")
+    if descriptor >> 6 != 0:
+        raise AssertionError("expected no frame content size")
+    return frame
+
+
 def skippable_frame(skippable_id: int, payload: bytes) -> bytes:
     if not 0 <= skippable_id <= 15:
         raise ValueError(skippable_id)
@@ -475,6 +499,29 @@ def main() -> int:
             raise AssertionError("vort no-size checksum skippable frame failed system zstd decode")
         assert_vort_native_decode(frame, expected)
 
+    # System-zstd stdin streams naturally omit content size while retaining
+    # frame checksums. Make that shape explicit so skippable metadata handling
+    # stays covered for externally generated no-size checksum streams too.
+    system_no_size_checksum_skippable_cases = [
+        (
+            b"first system no-size checksum payload " * 2,
+            b"second system no-size checksum payload " * 3,
+            skippable_frame(1, b"leading-system-no-size-checksum-metadata"),
+            skippable_frame(7, b"middle-system-no-size-checksum-metadata"),
+            skippable_frame(14, b"trailing-system-no-size-checksum-metadata"),
+            1,
+            6,
+        ),
+    ]
+    for first_payload, second_payload, prefix, middle, suffix, first_level, second_level in system_no_size_checksum_skippable_cases:
+        first_frame = zstd_compress_no_content_size_checksum(first_payload, first_level)
+        second_frame = zstd_compress_no_content_size_checksum(second_payload, second_level)
+        frame = prefix + first_frame + middle + second_frame + suffix
+        expected = first_payload + second_payload
+        if zstd_decompress(frame) != expected:
+            raise AssertionError("system no-size checksum skippable frame failed system zstd decode")
+        assert_vort_native_decode(frame, expected)
+
     # Large high-compression printable data produces multiple compressed blocks
     # with mixed FSE table modes. This guards the LL/OF/ML table payload order
     # and repeated table state across blocks.
@@ -543,6 +590,7 @@ def main() -> int:
         f"skippable_concatenated_cases={len(skippable_concatenated_cases)} "
         f"vort_skippable_concatenated_cases={len(vort_skippable_concatenated_cases)} "
         f"vort_no_size_checksum_skippable_cases={len(vort_no_size_checksum_skippable_cases)} "
+        f"system_no_size_checksum_skippable_cases={len(system_no_size_checksum_skippable_cases)} "
         f"mixed_table_cases={len(mixed_table_cases)} "
         f"treeless_writer_cases={treeless_writer_cases} unsupported_cases={len(unsupported_cases)} "
         f"zstd={pathlib.Path(ZSTD).name}"
