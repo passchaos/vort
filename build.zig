@@ -875,7 +875,6 @@ pub fn build(b: *std.Build) void {
         "--markdown",
         "zig-out/vort-br-static-dictionary-candidates.md",
     });
-    if (b.args) |args| br_static_dictionary_candidate_report.addArgs(args);
     const br_static_dictionary_candidate_report_step = b.step("run-br-static-dictionary-candidate-report", "Report Brotli static dictionary candidate tuples from source anchors");
     br_static_dictionary_candidate_report_step.dependOn(&br_static_dictionary_candidate_report.step);
 
