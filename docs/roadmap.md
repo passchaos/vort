@@ -1918,3 +1918,8 @@ architecture blindly.
 - Extended the Brotli static-dictionary report negative smoke with a duplicate
   required-coverage tuple fixture, proving the external required coverage config
   is validated rather than accepted blindly.
+
+
+- Added `reason` and `source_case` metadata to each Brotli static-dictionary
+  required coverage tuple, and taught the smoke to reject missing metadata so
+  required rows explain both why they exist and which case introduced them.

@@ -802,7 +802,9 @@ Example:
       "transform": 0,
       "copy_len": 16,
       "word_index": 52,
-      "word": "large number of "
+      "word": "large number of ",
+      "reason": "representative identity dictionary tuple",
+      "source_case": "node-static-dictionary-large-number-of-q5-lgwin10"
     }
   ]
 }

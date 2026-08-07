@@ -13,7 +13,9 @@
         "transform": "int",
         "copy_len": "int",
         "word_index": "int",
-        "word": "str"
+        "word": "str",
+        "reason": "str",
+        "source_case": "str"
       }
     },
     "vort.br_static_dictionary_report": {

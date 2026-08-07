@@ -120,7 +120,14 @@ def main() -> int:
         "schema": "vort.br_static_dictionary_required_coverage",
         "schema_version": 1,
         "entries": [
-            {"transform": entry["transform"], "copy_len": entry["copy_len"], "word_index": entry["word_index"], "word": entry["word"]}
+            {
+                "transform": entry["transform"],
+                "copy_len": entry["copy_len"],
+                "word_index": entry["word_index"],
+                "word": entry["word"],
+                "reason": entry.get("reason", "test fixture"),
+                "source_case": entry.get("source_case", "test fixture"),
+            }
             for entry in base_entries
         ],
     }

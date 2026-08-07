@@ -37,8 +37,12 @@ def load_required(path: Path) -> set[tuple[int, int, int, str]]:
         copy_len = entry.get("copy_len")
         word_index = entry.get("word_index")
         word = entry.get("word")
+        reason = entry.get("reason")
+        source_case = entry.get("source_case")
         if not isinstance(transform, int) or not isinstance(copy_len, int) or not isinstance(word_index, int) or not isinstance(word, str):
             raise AssertionError(f"required.entries[{index}] fields invalid")
+        if not isinstance(reason, str) or not reason or not isinstance(source_case, str) or not source_case:
+            raise AssertionError(f"required.entries[{index}] metadata fields invalid")
         key = (transform, copy_len, word_index, word)
         if key in required:
             raise AssertionError(f"duplicate required coverage tuple {key}")
