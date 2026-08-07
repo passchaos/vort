@@ -2337,6 +2337,26 @@ def main() -> int:
             node_compress(b"American", quality=5, lgwin=10),
             b"American",
         ),
+        "node-static-dictionary-examples-q5-lgwin10": (
+            node_compress(b"examples", quality=5, lgwin=10),
+            b"examples",
+        ),
+        "node-static-dictionary-history-dot-q5-lgwin10": (
+            node_compress(b"history.", quality=5, lgwin=10),
+            b"history.",
+        ),
+        "node-static-dictionary-one-another-q5-lgwin10": (
+            node_compress(b"one another", quality=5, lgwin=10),
+            b"one another",
+        ),
+        "node-static-dictionary-to-another-q5-lgwin10": (
+            node_compress(b"to another", quality=5, lgwin=10),
+            b"to another",
+        ),
+        "node-static-dictionary-however-comma-space-q5-lgwin10": (
+            node_compress(b"however, ", quality=5, lgwin=10),
+            b"however, ",
+        ),
         "node-static-dictionary-expression-q5-lgwin10": (
             node_compress(b"expression", quality=5, lgwin=10),
             b"expression",

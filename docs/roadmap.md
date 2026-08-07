@@ -1887,3 +1887,8 @@ architecture blindly.
   `English`, `through`, `another`, `because`, `between`, `example`, `however`,
   `children`, and `American`. The CLI differential smoke now exercises these
   6/7/8-byte dictionary buckets directly.
+
+- Added another Node quality-5 Brotli static-dictionary batch covering
+  `examples`, `history.`, `one another`, `to another`, and `however, `. This
+  extends the table beyond bare identity words into additional punctuation and
+  phrase-style transform outputs observed from Node's encoder.
