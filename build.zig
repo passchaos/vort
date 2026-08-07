@@ -980,6 +980,51 @@ pub fn build(b: *std.Build) void {
     const br_static_dictionary_node_probe_upstream_step = b.step("run-br-static-dictionary-node-probe-upstream", "Probe upstream Brotli static dictionary candidates against Node and Vort");
     br_static_dictionary_node_probe_upstream_step.dependOn(&br_static_dictionary_node_probe_upstream.step);
 
+    const br_static_dictionary_candidate_report_upstream80 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_candidate_report.py",
+        "--json",
+        "zig-out/vort-br-static-dictionary-candidates-upstream80.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-candidates-upstream80.md",
+        "--source-limit",
+        "80",
+    });
+    if (b.args) |args| br_static_dictionary_candidate_report_upstream80.addArgs(args);
+    const br_static_dictionary_candidate_report_upstream80_step = b.step("run-br-static-dictionary-candidate-report-upstream80", "Report Brotli candidates from a local upstream source-limit 80 slice (pass -- --brotli-common-dir <path>)");
+    br_static_dictionary_candidate_report_upstream80_step.dependOn(&br_static_dictionary_candidate_report_upstream80.step);
+
+    const br_static_dictionary_candidate_report_upstream80_for_probe = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_candidate_report.py",
+        "--json",
+        "zig-out/br-static-dictionary-candidates-upstream80-probe.json",
+        "--markdown",
+        "zig-out/br-static-dictionary-candidates-upstream80-probe.md",
+        "--source-limit",
+        "80",
+    });
+    if (b.args) |args| br_static_dictionary_candidate_report_upstream80_for_probe.addArgs(args);
+
+    const br_static_dictionary_node_probe_upstream80 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream80.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream80.addArgs(&.{
+        "--candidates",
+        "zig-out/br-static-dictionary-candidates-upstream80-probe.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream80.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream80.md",
+        "--all-candidates",
+        "--require-vort-ok",
+    });
+    br_static_dictionary_node_probe_upstream80.step.dependOn(&br_static_dictionary_candidate_report_upstream80_for_probe.step);
+    const br_static_dictionary_node_probe_upstream80_step = b.step("run-br-static-dictionary-node-probe-upstream80", "Probe local upstream source-limit 80 Brotli candidates (pass -- --brotli-common-dir <path>)");
+    br_static_dictionary_node_probe_upstream80_step.dependOn(&br_static_dictionary_node_probe_upstream80.step);
+
     const snappy_block_cli_probe = b.addSystemCommand(&.{ "python3", "tools/snappy_block_cli_probe.py" });
     snappy_block_cli_probe.addArtifactArg(cli_exe);
     const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks and framed streams");

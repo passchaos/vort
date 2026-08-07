@@ -171,6 +171,9 @@ def main() -> int:
     parser.add_argument("--markdown-limit", type=int, default=80)
     args = parser.parse_args()
 
+    if args.source_limit > 0 and args.brotli_common_dir is None:
+        raise SystemExit("--source-limit requires --brotli-common-dir")
+
     anchors = load_anchors(args.anchors)
     raw_words = anchor_raw_words(anchors)
     source_mode = "anchors"

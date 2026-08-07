@@ -2028,6 +2028,12 @@ architecture blindly.
   compressed by Node and decoded by Vort, with retained JSON/Markdown probe
   artifacts proving the generated import path remains executable end to end.
 
+- Added opt-in `upstream80` candidate and Node-probe steps for local Brotli
+  checkouts. With `-- --brotli-common-dir <path>`, the source-limit 80 candidate
+  pool produced 775 generated candidates and the Node/Vort probe accepted all
+  775 frames locally, giving the larger official-dictionary slice a reproducible
+  retained artifact path.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
