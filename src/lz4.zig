@@ -300,14 +300,24 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     level: c_int,
     options: LibFrameOptions,
 ) Error![]u8 {
-    _ = level;
-    return try encodePureFrameWithOptionsAlloc(allocator, input, .{
+    return try encodePureFrameWithOptionsAlloc(allocator, input, nativeFrameOptionsForLevel(level, options));
+}
+
+fn nativeFrameOptionsForLevel(level: c_int, options: LibFrameOptions) NativeFrameOptions {
+    return .{
         .include_content_size = options.include_content_size,
         .content_checksum = options.content_checksum,
         .block_checksum = options.block_checksum,
         .block_size_id = options.block_size_id,
         .block_mode = options.block_mode,
-    });
+        .chain_depth = nativeChainDepthForLevel(level),
+    };
+}
+
+fn nativeChainDepthForLevel(level: c_int) u8 {
+    if (level <= 0) return 0;
+    if (level < default_compression_level) return @intCast(@min(@as(c_int, native_max_chain_depth), level));
+    return native_max_chain_depth;
 }
 
 /// Dependency-free pure Zig LZ4 frame encoder. Blocks use a bounded hash-chain
@@ -5475,6 +5485,31 @@ test "lz4 pure Zig facade generated corpus shapes" {
             }
         }
     }
+}
+
+test "lz4 pure Zig facade maps levels to native chain depth" {
+    try std.testing.expectEqual(@as(u8, 0), nativeChainDepthForLevel(0));
+    try std.testing.expectEqual(@as(u8, 0), nativeChainDepthForLevel(-1));
+    try std.testing.expectEqual(@as(u8, 1), nativeChainDepthForLevel(1));
+    try std.testing.expectEqual(@as(u8, 4), nativeChainDepthForLevel(4));
+    try std.testing.expectEqual(native_max_chain_depth, nativeChainDepthForLevel(default_compression_level));
+    try std.testing.expectEqual(native_max_chain_depth, nativeChainDepthForLevel(default_compression_level + 10));
+
+    const payload = "abcdefabcdefabcdefabcdef" ** 64;
+    const fastest = try encodeFrameWithLevelAlloc(std.testing.allocator, payload, 0);
+    defer std.testing.allocator.free(fastest);
+    const default_encoded = try encodeFrameWithLevelAlloc(std.testing.allocator, payload, default_compression_level);
+    defer std.testing.allocator.free(default_encoded);
+
+    const fastest_summary = try summarizeNativeFrameBlocks(fastest);
+    try std.testing.expectEqual(@as(usize, 0), fastest_summary.compressed_block_count);
+    const default_summary = try summarizeNativeFrameBlocks(default_encoded);
+    try std.testing.expect(default_summary.compressed_block_count > 0);
+    try std.testing.expect(default_encoded.len < fastest.len);
+
+    const decoded = try decodeFrameAlloc(std.testing.allocator, fastest);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "lz4 hash-chain finder reaches deeper long candidates" {

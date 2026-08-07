@@ -2685,12 +2685,20 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     level: c_int,
     options: LibFrameOptions,
 ) Error![]u8 {
-    _ = level;
-    const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, .{
+    const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, nativeFrameOptionsForLevel(level, options));
+    return result.frame;
+}
+
+fn nativeFrameOptionsForLevel(level: c_int, options: LibFrameOptions) NativeFrameOptions {
+    var native_options: NativeFrameOptions = .{
         .content_checksum = options.content_checksum,
         .include_content_size = options.include_content_size,
-    });
-    return result.frame;
+    };
+    if (level <= 0) {
+        native_options.selection = .raw_or_rle;
+        native_options.match_search_budget = 0;
+    }
+    return native_options;
 }
 
 /// Emit a valid Zstandard frame composed of raw and RLE blocks.
@@ -10387,6 +10395,24 @@ test "zstd pure Zig facade generated corpus shapes" {
     const level_decoded = try decodeNativeFrameAlloc(std.testing.allocator, level_encoded);
     defer std.testing.allocator.free(level_decoded);
     try std.testing.expectEqualSlices(u8, "level smoke" ** 8, level_decoded);
+}
+
+test "zstd pure Zig facade maps level zero to fastest native mode" {
+    const payload = "abcabcabcabc" ** 32;
+    const fastest = try encodeFrameWithLevelAlloc(std.testing.allocator, payload, 0);
+    defer std.testing.allocator.free(fastest);
+    const default_encoded = try encodeFrameWithLevelAlloc(std.testing.allocator, payload, default_compression_level);
+    defer std.testing.allocator.free(default_encoded);
+
+    const fastest_summary = try summarizeNativeFrameBlocks(fastest);
+    try std.testing.expectEqual(@as(usize, 0), fastest_summary.compressed_block_count);
+    const default_summary = try summarizeNativeFrameBlocks(default_encoded);
+    try std.testing.expect(default_summary.compressed_block_count > 0);
+    try std.testing.expect(default_encoded.len < fastest.len);
+
+    const decoded = try decodeFrameAlloc(std.testing.allocator, fastest);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "zstd native decoder rejects malformed FSE compressed sequence tables" {
