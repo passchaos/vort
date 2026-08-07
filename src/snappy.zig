@@ -733,6 +733,23 @@ test "snappy framed stream decodes compressed and skippable chunks" {
     try std.testing.expectEqualSlices(u8, "hello hello", decoded);
 }
 
+test "snappy framed stream decodes concatenated streams with repeated identifier" {
+    const first = try encodeFrameAlloc(std.testing.allocator, "hello");
+    defer std.testing.allocator.free(first);
+    const second = try encodeFrameAlloc(std.testing.allocator, "world");
+    defer std.testing.allocator.free(second);
+
+    var concatenated: std.ArrayList(u8) = .empty;
+    defer concatenated.deinit(std.testing.allocator);
+    try concatenated.appendSlice(std.testing.allocator, first);
+    try concatenated.appendSlice(std.testing.allocator, second);
+
+    try std.testing.expectEqual(@as(usize, 10), try decodedFrameSize(concatenated.items));
+    const decoded = try decodeFrameAlloc(std.testing.allocator, concatenated.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "helloworld", decoded);
+}
+
 test "snappy framed stream rejects malformed chunks" {
     try std.testing.expectError(error.TruncatedFrame, decodedFrameSize(&[_]u8{ 0xff, 0x06 }));
     try std.testing.expectError(error.InvalidMagic, decodedFrameSize(&[_]u8{ 0x01, 0x04, 0x00, 0x00, 0, 0, 0, 0 }));

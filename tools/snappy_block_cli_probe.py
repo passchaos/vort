@@ -157,6 +157,17 @@ def main():
             run([str(cli), "decode-snappy-frame-hex", encoded.hex(), str(len(payload) - 1)], root, expect_ok=False)
         checked += 1
 
+    first_frame = parse_hex(run([str(cli), "encode-snappy-frame-hex", b"hello".hex()], root).stdout)
+    second_frame = parse_hex(run([str(cli), "encode-snappy-frame-hex", b"world".hex()], root).stdout)
+    concatenated = first_frame + second_frame
+    size = run([str(cli), "size-snappy-frame-hex", concatenated.hex(), "10"], root).stdout.decode()
+    if "decoded_bytes=10" not in size:
+        raise RuntimeError(f"bad concatenated frame size output: {size}")
+    decoded = run([str(cli), "decode-snappy-frame-hex", concatenated.hex(), "10"], root).stdout
+    if b"decoded_bytes=10" not in decoded:
+        raise RuntimeError(f"bad concatenated frame decode output: {decoded!r}")
+    checked += 1
+
     known_payload = b"abcabcabcabc"
     compressed_frame = (
         snappy_identifier()
