@@ -2225,6 +2225,16 @@ def main() -> int:
             b"hello brotli hello brotli",
         ),
         "node-repeat64-q3-lgwin10": (node_compress(b"abcd" * 16, quality=3, lgwin=10), b"abcd" * 16),
+        "node-text-q4-lgwin10": (
+            node_compress(b"hello brotli hello brotli", quality=4, lgwin=10),
+            b"hello brotli hello brotli",
+        ),
+        "node-repeat256-q4-lgwin10": (node_compress(b"abcd" * 64, quality=4, lgwin=10), b"abcd" * 64),
+        "node-text-q11-lgwin10": (
+            node_compress(b"hello brotli hello brotli", quality=11, lgwin=10),
+            b"hello brotli hello brotli",
+        ),
+        "node-repeat256-q11-lgwin10": (node_compress(b"abcd" * 64, quality=11, lgwin=10), b"abcd" * 64),
         "final": (literal_only_hello_frame(True), b"hello"),
         "nonfinal": (literal_only_hello_frame(False), b"hello"),
         "trivial-context": (trivial_context_hello_frame(), b"hello"),
