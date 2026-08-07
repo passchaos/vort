@@ -1832,3 +1832,8 @@ architecture blindly.
   allowing a real Node quality-5 `wordpress` frame to decode through both
   size preflight and output paths while the broader transform table remains
   intentionally unsupported.
+
+- Added a second Brotli static-dictionary transform slice for RFC transform
+  index 6 (leading-space identity). Node-accepted synthetic frames now cover
+  ` words`, ` games`, and ` release`, giving the preflight/output decoder and
+  CLI differential smoke transform coverage beyond bare omit-last behavior.

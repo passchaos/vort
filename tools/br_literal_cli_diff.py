@@ -2273,6 +2273,18 @@ def main() -> int:
             node_compress(b"wordpress", quality=5, lgwin=10),
             b"wordpress",
         ),
+        "synthetic-static-dictionary-leading-space-words": (
+            bytes.fromhex("a200000004400c12e50b00"),
+            b" words",
+        ),
+        "synthetic-static-dictionary-leading-space-games": (
+            bytes.fromhex("a200000004400c12250c00"),
+            b" games",
+        ),
+        "synthetic-static-dictionary-leading-space-release": (
+            bytes.fromhex("e200000004401412a72b00"),
+            b" release",
+        ),
         "node-repeat256-q4-lgwin10": (node_compress(b"abcd" * 64, quality=4, lgwin=10), b"abcd" * 64),
         "node-text-q11-lgwin10": (
             node_compress(b"hello brotli hello brotli", quality=11, lgwin=10),
