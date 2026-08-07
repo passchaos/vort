@@ -2261,6 +2261,30 @@ def main() -> int:
             node_compress(b"press release", quality=5, lgwin=10),
             b"press release",
         ),
+        "node-static-dictionary-internet-q5-lgwin10": (
+            node_compress(b"internet", quality=5, lgwin=10),
+            b"internet",
+        ),
+        "node-static-dictionary-language-q5-lgwin10": (
+            node_compress(b"language", quality=5, lgwin=10),
+            b"language",
+        ),
+        "node-static-dictionary-available-q5-lgwin10": (
+            node_compress(b"available", quality=5, lgwin=10),
+            b"available",
+        ),
+        "node-static-dictionary-important-q5-lgwin10": (
+            node_compress(b"important", quality=5, lgwin=10),
+            b"important",
+        ),
+        "node-static-dictionary-different-q5-lgwin10": (
+            node_compress(b"different", quality=5, lgwin=10),
+            b"different",
+        ),
+        "node-static-dictionary-government-q5-lgwin10": (
+            node_compress(b"government", quality=5, lgwin=10),
+            b"government",
+        ),
         "node-static-dictionary-expression-q5-lgwin10": (
             node_compress(b"expression", quality=5, lgwin=10),
             b"expression",

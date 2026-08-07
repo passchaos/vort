@@ -1853,3 +1853,9 @@ architecture blindly.
   per-transform branch ladders. The table now also covers `words`, `games`, and
   `games -> game` (`OMIT_LAST_1`) with Node-accepted synthetic frames, keeping
   the growing subset easier to audit before importing the full dictionary.
+
+
+- Added another real Node quality-5 identity-word batch to the Brotli static
+  dictionary table: `internet`, `language`, `available`, `important`,
+  `different`, and `government`. These cover 8/9/10-byte dictionary buckets
+  with generated Node frames in the CLI differential smoke.
