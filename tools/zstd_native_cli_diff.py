@@ -428,6 +428,29 @@ def main() -> int:
             raise AssertionError("skippable-concatenated system frame failed system zstd decode")
         assert_vort_native_decode(frame, expected)
 
+    # Mirror the previous case with Vort-native generated zstd-compatible
+    # frames. This protects the writer+decoder interaction through the reference
+    # CLI when container metadata is inserted between Vort-generated frames.
+    vort_skippable_concatenated_cases = [
+        (
+            b"first vort-native zstd frame payload ",
+            b"second vort-native zstd frame payload ",
+            skippable_frame(11, b"vort-generated-middle-metadata"),
+        ),
+    ]
+    for first_payload, second_payload, metadata in vort_skippable_concatenated_cases:
+        first_frame = bytes.fromhex(
+            run_cli("encode-zstd-native-bytes-hex", first_payload.hex(), "literal_only", "true", "true")
+        )
+        second_frame = bytes.fromhex(
+            run_cli("encode-zstd-native-bytes-hex", second_payload.hex(), "literal_only", "true", "true")
+        )
+        frame = first_frame + metadata + second_frame
+        expected = first_payload + second_payload
+        if zstd_decompress(frame) != expected:
+            raise AssertionError("vort skippable-concatenated frame failed system zstd decode")
+        assert_vort_native_decode(frame, expected)
+
     # Large high-compression printable data produces multiple compressed blocks
     # with mixed FSE table modes. This guards the LL/OF/ML table payload order
     # and repeated table state across blocks.
@@ -494,6 +517,7 @@ def main() -> int:
         f"treeless_cases={len(treeless_cases)} fse_cases={len(fse_cases)} "
         f"direct_offset_cases={len(direct_offset_cases)} skippable_wrapped_cases={len(skippable_wrapped_cases)} "
         f"skippable_concatenated_cases={len(skippable_concatenated_cases)} "
+        f"vort_skippable_concatenated_cases={len(vort_skippable_concatenated_cases)} "
         f"mixed_table_cases={len(mixed_table_cases)} "
         f"treeless_writer_cases={treeless_writer_cases} unsupported_cases={len(unsupported_cases)} "
         f"zstd={pathlib.Path(ZSTD).name}"
