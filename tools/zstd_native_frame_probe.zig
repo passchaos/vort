@@ -287,6 +287,7 @@ fn checkDirectHuffmanBoundaries(allocator: std.mem.Allocator) !void {
     try expectPrefixedPayload(appended.items, &payload);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, encoded.frame, payload.len - 1));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameAppendExactSize(allocator, &appended, encoded.frame, payload.len + 1));
 
     var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
     defer decoder.deinit();
@@ -295,6 +296,15 @@ fn checkDirectHuffmanBoundaries(allocator: std.mem.Allocator) !void {
     try expectEqualSlices(&payload, into[0..reusable_exact_written]);
     try expectError(error.OutputTooSmall, decoder.decodeIntoSliceExactSize(encoded.frame, into[0 .. into.len - 1], payload.len));
     try expectError(error.SizeMismatch, decoder.decodeIntoSliceExactSize(encoded.frame, &into, payload.len - 1));
+    var reusable_appended: std.ArrayList(u8) = .empty;
+    defer reusable_appended.deinit(allocator);
+    try reusable_appended.appendSlice(allocator, "prefix:");
+    const reusable_appended_written = try decoder.decodeAppendExactSize(&reusable_appended, encoded.frame, payload.len);
+    try expect(reusable_appended_written == payload.len);
+    try expectPrefixedPayload(reusable_appended.items, &payload);
+    reusable_appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&reusable_appended, encoded.frame, payload.len - 1));
+    try expectError(error.SizeMismatch, decoder.decodeAppendExactSize(&reusable_appended, encoded.frame, payload.len + 1));
 }
 
 fn checkNoSizeCompressedBlockLimits(allocator: std.mem.Allocator) !void {
