@@ -3640,7 +3640,7 @@ fn decodeLiteralOnlyCompressedBlockIntoBuffer(
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
     try validateSupportedLiteralSection(section);
     if (section.sequence_count != 0) return try decodeRleSequencesCompressedBlockIntoBuffer(block, section, output, written, frame_output_start, dictionary_history, frame_state);
-    if (section.sequence_payload_offset != block.len) return error.UnsupportedZstdFeature;
+    try expectConsumedBlock(section.sequence_payload_offset, block.len);
     try copyLiteralsFromSection(block, section, 0, output, written, section.regenerated_size);
 }
 
@@ -3845,7 +3845,7 @@ fn compressedLiteralOnlyBlockDecodedSize(
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
     try validateSupportedLiteralSection(section);
     if (section.sequence_count == 0) {
-        if (section.sequence_payload_offset != block.len) return error.UnsupportedZstdFeature;
+        try expectConsumedBlock(section.sequence_payload_offset, block.len);
         try validateHuffmanLiteralsConsumed(block, section);
         return section.regenerated_size;
     }
@@ -4778,7 +4778,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     var offset = section.sequence_payload_offset;
     const parsed_spec = try parseSequenceModeSpec(block, &offset, section.sequence_count);
     const spec = try resolveSequenceModeSpec(parsed_spec, frame_state.previous_tables);
-    if (offset != block.len) return error.UnsupportedZstdFeature;
+    try expectConsumedBlock(offset, block.len);
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
     var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
@@ -4819,7 +4819,7 @@ fn rleSequencesCompressedBlockDecodedSize(
     var offset = section.sequence_payload_offset;
     const parsed_spec = try parseSequenceModeSpec(block, &offset, section.sequence_count);
     const spec = try resolveSequenceModeSpec(parsed_spec, frame_state.previous_tables);
-    if (offset != block.len) return error.UnsupportedZstdFeature;
+    try expectConsumedBlock(offset, block.len);
     const bit_reader = try ReverseBitReader.init(block[spec.bitstream_offset..]);
 
     var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
@@ -5196,6 +5196,10 @@ fn checkedAddWithinLimit(current: usize, additional: usize, max: usize) Error!us
     const next = std.math.add(usize, current, additional) catch return error.IntegerOverflow;
     if (next > max) return error.OutputLimitExceeded;
     return next;
+}
+
+fn expectConsumedBlock(offset: usize, block_len: usize) Error!void {
+    if (offset != block_len) return error.CorruptFrame;
 }
 
 fn checkedAdd(a: usize, b: usize) Error!usize {
@@ -10045,13 +10049,16 @@ test "zstd literal-only compressed block rejects malformed sections" {
 
     var trailing_literal_payload: std.ArrayList(u8) = .empty;
     defer trailing_literal_payload.deinit(std.testing.allocator);
-    try emitFrameHeader(std.testing.allocator, &trailing_literal_payload, 3, .{});
+    try emitFrameHeader(std.testing.allocator, &trailing_literal_payload, 3, .{ .content_checksum = false });
     try emitBlockHeader(std.testing.allocator, &trailing_literal_payload, 2, 6, true);
     try trailing_literal_payload.append(std.testing.allocator, 3 << 3);
-    try trailing_literal_payload.appendSlice(std.testing.allocator, "abcd");
-    try trailing_literal_payload.append(std.testing.allocator, 0);
-    try trailing_literal_payload.appendSlice(std.testing.allocator, &checksum);
-    try std.testing.expectError(error.TruncatedFrame, decodeNativeFrameAlloc(std.testing.allocator, trailing_literal_payload.items));
+    try trailing_literal_payload.appendSlice(std.testing.allocator, "abc");
+    try trailing_literal_payload.append(std.testing.allocator, 0); // zero sequences.
+    try trailing_literal_payload.append(std.testing.allocator, 0xff); // trailing compressed-block payload.
+    try std.testing.expectError(error.CorruptFrame, decodeNativeFrameAlloc(std.testing.allocator, trailing_literal_payload.items));
+    var trailing_literal_output: [3]u8 = undefined;
+    try std.testing.expectError(error.CorruptFrame, decodeNativeFrameInto(trailing_literal_payload.items, &trailing_literal_output));
+    try std.testing.expectError(error.CorruptFrame, decodedRawOrRleFrameSize(trailing_literal_payload.items));
 
     var missing_literal_byte: std.ArrayList(u8) = .empty;
     defer missing_literal_byte.deinit(std.testing.allocator);

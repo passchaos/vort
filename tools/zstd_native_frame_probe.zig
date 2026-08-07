@@ -3712,6 +3712,18 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &trailing_sequence_byte));
     checked += 1;
 
+    const trailing_literal_payload_hex = "28b52ffd20033500001861626300ff";
+    var trailing_literal_payload: [trailing_literal_payload_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&trailing_literal_payload, trailing_literal_payload_hex);
+    const trailing_literal_block = try vort.zstdInspectNativeFrameFirstBlock(&trailing_literal_payload);
+    const trailing_literal_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&trailing_literal_payload, trailing_literal_block);
+    try expect(trailing_literal_modes.sequence_count == 0);
+    try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&trailing_literal_payload));
+    var trailing_literal_output: [14]u8 = undefined;
+    try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&trailing_literal_payload, &trailing_literal_output));
+    try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &trailing_literal_payload));
+    checked += 1;
+
     const treeless_without_tree_hex = "28b52ffd200325000033400001";
     var treeless_without_tree: [treeless_without_tree_hex.len / 2]u8 = undefined;
     _ = try std.fmt.hexToBytes(&treeless_without_tree, treeless_without_tree_hex);
