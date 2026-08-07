@@ -2365,6 +2365,22 @@ def main() -> int:
             node_compress(b"large number of ", quality=5, lgwin=10),
             b"large number of ",
         ),
+        "node-static-dictionary-of-the-q5-lgwin10": (
+            node_compress(b"of the ", quality=5, lgwin=10),
+            b"of the ",
+        ),
+        "node-static-dictionary-from-the-q5-lgwin10": (
+            node_compress(b"from the ", quality=5, lgwin=10),
+            b"from the ",
+        ),
+        "node-static-dictionary-those-who-q5-lgwin10": (
+            node_compress(b"those who", quality=5, lgwin=10),
+            b"those who",
+        ),
+        "node-static-dictionary-in-order-to-q5-lgwin10": (
+            node_compress(b"in order to", quality=5, lgwin=10),
+            b"in order to",
+        ),
         "node-static-dictionary-however-comma-space-q5-lgwin10": (
             node_compress(b"however, ", quality=5, lgwin=10),
             b"however, ",

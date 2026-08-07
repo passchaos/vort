@@ -48,6 +48,42 @@
       "category": "phrase"
     },
     {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 1167,
+      "word": "of the ",
+      "source_case": "node-static-dictionary-of-the-q5-lgwin10",
+      "reason": "representative common phrase dictionary tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 9,
+      "word_index": 205,
+      "word": "from the ",
+      "source_case": "node-static-dictionary-from-the-q5-lgwin10",
+      "reason": "representative common phrase dictionary tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 9,
+      "word_index": 271,
+      "word": "those who",
+      "source_case": "node-static-dictionary-those-who-q5-lgwin10",
+      "reason": "representative common phrase dictionary tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 11,
+      "word_index": 189,
+      "word": "in order to",
+      "source_case": "node-static-dictionary-in-order-to-q5-lgwin10",
+      "reason": "representative common phrase dictionary tuple",
+      "category": "phrase"
+    },
+    {
       "transform": 1,
       "copy_len": 10,
       "word_index": 205,

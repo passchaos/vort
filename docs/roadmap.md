@@ -1946,3 +1946,9 @@ architecture blindly.
 - Extended the Brotli static-dictionary report negative smoke with an
   `invalid_category` fixture, proving required coverage category values are
   constrained to the documented `identity` / `transform` / `phrase` set.
+
+- Added another Node quality-5 Brotli common-phrase batch to the static
+  dictionary subset: `of the `, `from the `, `those who`, and `in order to`.
+  Unit tests, the Node-backed CLI differential smoke, and the required coverage
+  config now pin these identity phrase tuples so the report/dashboard artifacts
+  continue to expose phrase growth.

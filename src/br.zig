@@ -697,6 +697,7 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 7, .word_index = 202, .word = "between" },
     .{ .transform = 0, .copy_len = 7, .word_index = 464, .word = "example" },
     .{ .transform = 0, .copy_len = 7, .word_index = 572, .word = "however" },
+    .{ .transform = 0, .copy_len = 7, .word_index = 1167, .word = "of the " },
     .{ .transform = 0, .copy_len = 8, .word_index = 10, .word = "children" },
     .{ .transform = 0, .copy_len = 8, .word_index = 355, .word = "American" },
     .{ .transform = 0, .copy_len = 8, .word_index = 425, .word = "history." },
@@ -706,6 +707,8 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 9, .word_index = 5, .word = "available" },
     .{ .transform = 0, .copy_len = 9, .word_index = 55, .word = "important" },
     .{ .transform = 0, .copy_len = 9, .word_index = 95, .word = "different" },
+    .{ .transform = 0, .copy_len = 9, .word_index = 205, .word = "from the " },
+    .{ .transform = 0, .copy_len = 9, .word_index = 271, .word = "those who" },
     .{ .transform = 0, .copy_len = 9, .word_index = 592, .word = "however, " },
     .{ .transform = 0, .copy_len = 10, .word_index = 18, .word = "government" },
     .{ .transform = 0, .copy_len = 10, .word_index = 84, .word = "expression" },
@@ -716,6 +719,7 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 10, .word_index = 327, .word = "Dictionary" },
     .{ .transform = 0, .copy_len = 11, .word_index = 5, .word = "information" },
     .{ .transform = 0, .copy_len = 11, .word_index = 162, .word = "one another" },
+    .{ .transform = 0, .copy_len = 11, .word_index = 189, .word = "in order to" },
     .{ .transform = 0, .copy_len = 11, .word_index = 452, .word = "one of the " },
     .{ .transform = 0, .copy_len = 11, .word_index = 186, .word = "Information" },
     .{ .transform = 0, .copy_len = 16, .word_index = 52, .word = "large number of " },
@@ -2277,6 +2281,24 @@ test "br minimal static dictionary uppercase information identity decodes Node q
     const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+fn expectBrStaticDictionaryFrame(encoded: []const u8, expected: []const u8) !void {
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary common phrase batch decodes Node quality-five frames" {
+    // These are real Node quality-5 streams that address common phrase entries
+    // from Brotli's static dictionary before any output byte has been emitted.
+    // Keeping them together makes this batch's dictionary-table expansion easy to
+    // audit while the complete RFC dictionary import remains future work.
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x30, 0x00, 0x00, 0x20, 0x01, 0x10, 0x85, 0x04, 0x38, 0x09 }, "of the ");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0x01, 0x10, 0x87, 0xc4, 0x16, 0x01 }, "from the ");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x40, 0x00, 0x00, 0x20, 0x01, 0x10, 0x87, 0x04, 0x37, 0x01 }, "those who");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x50, 0x00, 0x00, 0x20, 0x01, 0x10, 0xc0, 0xc4, 0x36, 0x00 }, "in order to");
 }
 
 test "br minimal compressed stream selects literal context tree through signed mode" {
