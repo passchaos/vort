@@ -4619,17 +4619,17 @@ fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {
 }
 
 fn defaultLiteralLengthSymbol(state: usize) Error!SequenceSymbol {
-    if (state >= default_ll_symbols.len) return error.UnsupportedZstdFeature;
+    if (state >= default_ll_symbols.len) return error.CorruptFrame;
     return default_ll_symbols[state];
 }
 
 fn defaultOffsetSymbol(state: usize) Error!SequenceSymbol {
-    if (state >= default_of_symbols.len) return error.UnsupportedZstdFeature;
+    if (state >= default_of_symbols.len) return error.CorruptFrame;
     return default_of_symbols[state];
 }
 
 fn defaultMatchLengthSymbol(state: usize) Error!SequenceSymbol {
-    if (state >= default_ml_symbols.len) return error.UnsupportedZstdFeature;
+    if (state >= default_ml_symbols.len) return error.CorruptFrame;
     return default_ml_symbols[state];
 }
 
@@ -5016,6 +5016,12 @@ fn useRepeatedOffset(repeated_offsets: *[3]usize, index: usize) Error!usize {
     }
     if (repeated_offsets[0] == 0) return error.InvalidMatch;
     return repeated_offsets[0];
+}
+
+test "zstd native default sequence tables reject invalid states as corrupt" {
+    try std.testing.expectError(error.CorruptFrame, defaultLiteralLengthSymbol(default_ll_symbols.len));
+    try std.testing.expectError(error.CorruptFrame, defaultOffsetSymbol(default_of_symbols.len));
+    try std.testing.expectError(error.CorruptFrame, defaultMatchLengthSymbol(default_ml_symbols.len));
 }
 
 test "zstd native repeat-offset resolver follows selector updates" {
