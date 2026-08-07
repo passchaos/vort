@@ -70,11 +70,11 @@ const MinimalCompressedHeader = struct {
 
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 const max_context_map_alphabet_size = 256 + 16;
-const max_literal_block_types = 8;
-const max_literal_context_trees = 8;
-const max_command_block_types = 8;
-const max_distance_block_types = 8;
-const max_distance_context_trees = 8;
+const max_literal_block_types = 16;
+const max_literal_context_trees = 16;
+const max_command_block_types = 16;
+const max_distance_block_types = 16;
+const max_distance_context_trees = 16;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 
 fn BlockSwitchState(comptime max_block_types: usize) type {
@@ -2046,6 +2046,31 @@ test "br minimal compressed header parser reads single-tree shape" {
     try std.testing.expectEqual(@as(u16, 'A'), try header.literal_trees[0].decode(&reader));
     try std.testing.expectEqual(@as(u16, 0), try header.insert_copy_trees[0].decode(&reader));
     try std.testing.expectEqual(@as(u16, 0), try header.distance_trees[0].decode(&reader));
+}
+
+test "br minimal compressed header parser accepts ninth literal context tree" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NBLTYPESD
+    try writer.writeBits(std.testing.allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(std.testing.allocator, 0, 4); // NDIRECT
+    try writer.writeBits(std.testing.allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(std.testing.allocator, &writer, 9); // NTREESL
+    try writeZeroContextMapRle(std.testing.allocator, &writer, 64, 9, 6);
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NTREESD
+    for (0..9) |symbol| {
+        try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 256, @intCast(symbol));
+    }
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 704, 0);
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 64, 0);
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    const header = try readMinimalCompressedHeader(&reader);
+    try std.testing.expectEqual(@as(u16, 0), try header.literal_trees[0].decode(&reader));
+    try std.testing.expectEqual(@as(u16, 8), try header.literal_trees[8].decode(&reader));
 }
 
 test "br minimal compressed header parser accepts ndirect boundary" {
