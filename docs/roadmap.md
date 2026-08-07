@@ -1881,3 +1881,9 @@ architecture blindly.
   static dictionary coverage artifacts. It cross-checks CSV/JSON/Markdown row
   counts, required transform/word tuples, duplicate keys, byte counts, and now
   serves as the required dashboard smoke gate for the report artifacts.
+
+- Added another real Node quality-5 identity-word batch to the Brotli static
+  dictionary table, covering `system`, `number`, `public`, `history`,
+  `English`, `through`, `another`, `because`, `between`, `example`, `however`,
+  `children`, and `American`. The CLI differential smoke now exercises these
+  6/7/8-byte dictionary buckets directly.

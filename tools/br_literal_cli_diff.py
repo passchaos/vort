@@ -2285,6 +2285,58 @@ def main() -> int:
             node_compress(b"government", quality=5, lgwin=10),
             b"government",
         ),
+        "node-static-dictionary-system-q5-lgwin10": (
+            node_compress(b"system", quality=5, lgwin=10),
+            b"system",
+        ),
+        "node-static-dictionary-number-q5-lgwin10": (
+            node_compress(b"number", quality=5, lgwin=10),
+            b"number",
+        ),
+        "node-static-dictionary-public-q5-lgwin10": (
+            node_compress(b"public", quality=5, lgwin=10),
+            b"public",
+        ),
+        "node-static-dictionary-history-q5-lgwin10": (
+            node_compress(b"history", quality=5, lgwin=10),
+            b"history",
+        ),
+        "node-static-dictionary-english-q5-lgwin10": (
+            node_compress(b"English", quality=5, lgwin=10),
+            b"English",
+        ),
+        "node-static-dictionary-through-q5-lgwin10": (
+            node_compress(b"through", quality=5, lgwin=10),
+            b"through",
+        ),
+        "node-static-dictionary-another-q5-lgwin10": (
+            node_compress(b"another", quality=5, lgwin=10),
+            b"another",
+        ),
+        "node-static-dictionary-because-q5-lgwin10": (
+            node_compress(b"because", quality=5, lgwin=10),
+            b"because",
+        ),
+        "node-static-dictionary-between-q5-lgwin10": (
+            node_compress(b"between", quality=5, lgwin=10),
+            b"between",
+        ),
+        "node-static-dictionary-example-q5-lgwin10": (
+            node_compress(b"example", quality=5, lgwin=10),
+            b"example",
+        ),
+        "node-static-dictionary-however-q5-lgwin10": (
+            node_compress(b"however", quality=5, lgwin=10),
+            b"however",
+        ),
+        "node-static-dictionary-children-q5-lgwin10": (
+            node_compress(b"children", quality=5, lgwin=10),
+            b"children",
+        ),
+        "node-static-dictionary-american-q5-lgwin10": (
+            node_compress(b"American", quality=5, lgwin=10),
+            b"American",
+        ),
         "node-static-dictionary-expression-q5-lgwin10": (
             node_compress(b"expression", quality=5, lgwin=10),
             b"expression",
