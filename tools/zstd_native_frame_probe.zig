@@ -3169,6 +3169,7 @@ fn checkChunkedFrameLibraryApis(allocator: std.mem.Allocator, payload: []const u
     try expectPrefixedPayload(appended.items, payload);
     appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameChunksAppendExactSize(allocator, &appended, &chunks, join, payload.len - 1));
+    try expectError(error.SizeMismatch, vort.zstdDecodeNativeFrameChunksAppendExactSize(allocator, &appended, &chunks, join, payload.len + 1));
 
     var decoder = vort.ZstdNativeFrameDecoder.init(allocator);
     defer decoder.deinit();
@@ -3205,6 +3206,7 @@ fn checkChunkedFrameLibraryApis(allocator: std.mem.Allocator, payload: []const u
     try expectPrefixedPayload(reusable_appended.items, payload);
     reusable_appended.clearRetainingCapacity();
     try expectError(error.SizeMismatch, decoder.decodeChunksAppendExactSize(&reusable_appended, &chunks, join, payload.len - 1));
+    try expectError(error.SizeMismatch, decoder.decodeChunksAppendExactSize(&reusable_appended, &chunks, join, payload.len + 1));
 }
 
 fn checkSplitHeaderIncremental(allocator: std.mem.Allocator) !void {
