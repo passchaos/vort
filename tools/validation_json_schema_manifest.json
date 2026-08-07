@@ -125,9 +125,50 @@
         "vort_decode_failures": "int",
         "kind_rows": "list",
         "size_rows": "list",
+        "size_winner_count": "int",
+        "size_winner_rows": "list",
         "rows": "list"
       },
       "collections": {
+        "size_winner_rows": {
+          "allow_empty": true,
+          "fields": {
+            "index": "int",
+            "transform": "int",
+            "copy_len": "int",
+            "word_index": "int",
+            "raw_word": "str",
+            "candidate_word": "str",
+            "transform_kind": "str",
+            "quality": "int",
+            "lgwin": "int",
+            "payload_bytes": "int",
+            "br_bytes": "int",
+            "size_delta_bytes": "int",
+            "size_class": "str",
+            "br_hex": "str",
+            "node_ok": "bool",
+            "vort_ok": "bool",
+            "classification": "str",
+            "error": "str"
+          },
+          "enums": {
+            "classification": [
+              "vort_accepts_node_frame",
+              "vort_rejects_node_frame",
+              "node_output_mismatch"
+            ],
+            "size_class": [
+              "smaller"
+            ],
+            "transform_kind": [
+              "identity",
+              "affix_identity",
+              "omit_last_1",
+              "uppercase_first"
+            ]
+          }
+        },
         "size_rows": {
           "fields": {
             "size_class": "str",

@@ -2011,6 +2011,11 @@ architecture blindly.
   Vort accepts Node frames, but also whether Node achieved a size win for each
   generated candidate payload.
 
+- Added explicit size-winner rows to the Brotli Node probe report. The JSON and
+  Markdown artifacts now list every candidate whose Node Brotli frame is smaller
+  than the original payload, sorted by byte savings, so high-value dictionary
+  imports can be selected directly from the report.
+
 - Extended the Brotli static-dictionary candidate report with an optional
   upstream-source mode. When a local Brotli `common/` checkout is supplied with
   `--source-limit`, the report merges bounded official dictionary raw words into

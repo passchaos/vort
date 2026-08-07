@@ -149,6 +149,11 @@ def size_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         result.append({"size_class": cls, "probed_count": len(items)})
     return result
 
+
+def size_winner_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    winners = [row for row in rows if row["size_class"] == "smaller"]
+    return sorted(winners, key=lambda row: (row["size_delta_bytes"], row["index"]))
+
 def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], limit: int, quality: int, lgwin: int) -> dict[str, Any]:
     return {
         "schema": "vort.br_static_dictionary_node_probe",
@@ -165,6 +170,8 @@ def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], l
         "vort_decode_failures": sum(1 for row in rows if not row["vort_ok"]),
         "kind_rows": kind_rows(rows),
         "size_rows": size_rows(rows),
+        "size_winner_count": sum(1 for row in rows if row["size_class"] == "smaller"),
+        "size_winner_rows": size_winner_rows(rows),
         "rows": rows,
     }
 
@@ -184,6 +191,7 @@ def write_markdown(path: Path, report: dict[str, Any]) -> None:
         f"- Node decode successes: {report['node_decode_successes']}",
         f"- Vort decode successes: {report['vort_decode_successes']}",
         f"- Vort decode failures: {report['vort_decode_failures']}",
+        f"- Size winners: {report['size_winner_count']}",
         "",
         "## Transform-kind summary",
         "",
@@ -203,6 +211,17 @@ def write_markdown(path: Path, report: dict[str, Any]) -> None:
     ])
     for row in report["size_rows"]:
         lines.append(f"| `{row['size_class']}` | {row['probed_count']} |")
+    lines.extend([
+        "",
+        "## Size winners",
+        "",
+        "| # | Candidate | Payload bytes | Brotli bytes | Delta | Kind |",
+        "| ---: | --- | ---: | ---: | ---: | --- |",
+    ])
+    for row in report["size_winner_rows"]:
+        lines.append(
+            f"| {row['index']} | `{row['candidate_word']}` | {row['payload_bytes']} | {row['br_bytes']} | {row['size_delta_bytes']} | `{row['transform_kind']}` |"
+        )
     lines.extend([
         "",
         "## Candidate rows",

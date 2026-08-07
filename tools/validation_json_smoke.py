@@ -176,6 +176,8 @@ def main() -> int:
         assert br_static_dictionary_node_probe["size_rows"]
         assert sum(row["probed_count"] for row in br_static_dictionary_node_probe["kind_rows"]) == br_static_dictionary_node_probe["probed_count"]
         assert sum(row["probed_count"] for row in br_static_dictionary_node_probe["size_rows"]) == br_static_dictionary_node_probe["probed_count"]
+        assert br_static_dictionary_node_probe["size_winner_count"] == len(br_static_dictionary_node_probe["size_winner_rows"])
+        assert all(row["size_class"] == "smaller" for row in br_static_dictionary_node_probe["size_winner_rows"])
         validate_value_against_manifest(br_static_dictionary_node_probe, schemas_def)
         br_static_dictionary_required = json.loads((ROOT / "tools" / "br_static_dictionary_required_coverage.json").read_text())
         assert br_static_dictionary_required["schema"] == "vort.br_static_dictionary_required_coverage"
