@@ -8312,7 +8312,7 @@ fn buildFseCompressionTable(normalized: []const i16, max_symbol: u8, table_log: 
 }
 
 fn emitFseCompressedSymbols(allocator: std.mem.Allocator, out: *std.ArrayList(u8), symbols: []const u8, table: FseCompressionTable) Error!void {
-    if (symbols.len <= 2) return error.UnsupportedZstdFeature;
+    if (symbols.len <= 2) return error.CorruptFrame;
     var writer: ReverseBitstreamWriter = .{};
     var index = symbols.len;
     var state_1: usize = undefined;
@@ -11526,6 +11526,17 @@ test "zstd sequence emitter supports mixed RLE and predefined tables" {
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(std_decoded);
     try std.testing.expectEqualSlices(u8, &payload, std_decoded);
+}
+
+test "zstd FSE compressed symbol writer rejects short streams as corrupt" {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+    const table: FseCompressionTable = .{};
+
+    try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{}, table));
+    try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{1}, table));
+    try std.testing.expectError(error.CorruptFrame, emitFseCompressedSymbols(std.testing.allocator, &out, &.{ 1, 1 }, table));
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
 
 test "zstd sequence emitter supports compressed FSE literal-length table" {
