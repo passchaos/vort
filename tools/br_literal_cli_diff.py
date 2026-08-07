@@ -2285,6 +2285,14 @@ def main() -> int:
             bytes.fromhex("e200000004401412a72b00"),
             b" release",
         ),
+        "node-static-dictionary-uppercase-dictionary-q5-lgwin10": (
+            node_compress(b"Dictionary", quality=5, lgwin=10),
+            b"Dictionary",
+        ),
+        "node-static-dictionary-uppercase-information-q5-lgwin10": (
+            node_compress(b"Information", quality=5, lgwin=10),
+            b"Information",
+        ),
         "node-repeat256-q4-lgwin10": (node_compress(b"abcd" * 64, quality=4, lgwin=10), b"abcd" * 64),
         "node-text-q11-lgwin10": (
             node_compress(b"hello brotli hello brotli", quality=11, lgwin=10),

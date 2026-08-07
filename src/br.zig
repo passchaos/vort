@@ -703,7 +703,9 @@ fn minimalStaticDictionaryIdentityWord(copy_len: usize, word_index: usize) ?[]co
     if (copy_len == 10 and word_index == 84) return "expression";
     if (copy_len == 10 and word_index == 135) return "depression";
     if (copy_len == 10 and word_index == 205) return "dictionary";
+    if (copy_len == 10 and word_index == 327) return "Dictionary";
     if (copy_len == 11 and word_index == 5) return "information";
+    if (copy_len == 11 and word_index == 186) return "Information";
     return null;
 }
 
@@ -2114,6 +2116,30 @@ test "br minimal static dictionary leading-space release transform decodes Node-
         0x14, 0x12, 0xa7, 0x2b, 0x00,
     };
     const expected = " release";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary uppercase dictionary identity decodes Node quality-five frame" {
+    const encoded = [_]u8{
+        0xa1, 0x48, 0x00, 0x00, 0x20, 0x01,
+        0x10, 0xc0, 0x04, 0x67, 0x09,
+    };
+    const expected = "Dictionary";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary uppercase information identity decodes Node quality-five frame" {
+    const encoded = [_]u8{
+        0xa1, 0x50, 0x00, 0x00, 0x20, 0x01,
+        0x10, 0xc0, 0x84, 0xd6, 0x07,
+    };
+    const expected = "Information";
     try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
     const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
     defer std.testing.allocator.free(decoded);

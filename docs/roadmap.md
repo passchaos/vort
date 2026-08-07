@@ -1837,3 +1837,8 @@ architecture blindly.
   index 6 (leading-space identity). Node-accepted synthetic frames now cover
   ` words`, ` games`, and ` release`, giving the preflight/output decoder and
   CLI differential smoke transform coverage beyond bare omit-last behavior.
+
+- Added uppercase identity entries to the Brotli static-dictionary slice. Real
+  Node quality-5 frames for `Dictionary` and `Information` now decode through
+  the same preflight/output dictionary path, covering uppercase dictionary words
+  that Node emits directly before broader transform-table support lands.
