@@ -1936,3 +1936,8 @@ architecture blindly.
 - Extended the Brotli static-dictionary coverage report with category-count
   summaries for identity, transform, and phrase entries, and taught the report
   smoke to cross-check the JSON and Markdown counts against the entry rows.
+
+
+- Added a transform/category matrix to the Brotli static-dictionary coverage
+  report and smoke checks, so dashboard artifacts show how identity, transform,
+  and phrase entries are distributed per transform index.

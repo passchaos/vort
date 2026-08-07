@@ -19,17 +19,21 @@ pub fn main(init: std.process.Init) !void {
     const lengths = lengthCount(entries);
     const categories = categoryCounts(entries);
 
+    var matrix_rows: std.ArrayList(MatrixRow) = .empty;
+    defer matrix_rows.deinit(init.gpa);
+    try collectMatrixRows(init.gpa, &matrix_rows, entries);
+
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     try writeCsv(&csv.writer, entries);
 
     var json = std.Io.Writer.Allocating.init(init.gpa);
     defer json.deinit();
-    try writeJson(&json.writer, entries, transforms, lengths, categories);
+    try writeJson(&json.writer, entries, transforms, lengths, categories, matrix_rows.items);
 
     var markdown = std.Io.Writer.Allocating.init(init.gpa);
     defer markdown.deinit();
-    try writeMarkdown(&markdown.writer, entries, transforms, lengths, categories);
+    try writeMarkdown(&markdown.writer, entries, transforms, lengths, categories, matrix_rows.items);
 
     if (options.csv_path) |path| try writeFileCreatingParents(init.io, path, csv.written());
     if (options.json_path) |path| try writeFileCreatingParents(init.io, path, json.written());
@@ -87,11 +91,19 @@ fn writeCsvField(writer: *std.Io.Writer, value: []const u8) !void {
     try writer.writeByte('"');
 }
 
-fn writeJson(writer: *std.Io.Writer, entries: []const vort.br.StaticDictionaryEntry, transforms: usize, lengths: usize, categories: CategoryCounts) !void {
+fn writeJson(writer: *std.Io.Writer, entries: []const vort.br.StaticDictionaryEntry, transforms: usize, lengths: usize, categories: CategoryCounts, matrix_rows: []const MatrixRow) !void {
     try writer.print(
-        "{{\"schema\":\"vort.br_static_dictionary_report\",\"schema_version\":1,\"entry_count\":{d},\"transform_count\":{d},\"length_count\":{d},\"category_counts\":{{\"identity\":{d},\"transform\":{d},\"phrase\":{d}}},\"entries\":[",
+        "{{\"schema\":\"vort.br_static_dictionary_report\",\"schema_version\":1,\"entry_count\":{d},\"transform_count\":{d},\"length_count\":{d},\"category_counts\":{{\"identity\":{d},\"transform\":{d},\"phrase\":{d}}},\"matrix_rows\":[",
         .{ entries.len, transforms, lengths, categories.identity, categories.transform, categories.phrase },
     );
+    for (matrix_rows, 0..) |row, i| {
+        if (i != 0) try writer.writeByte(',');
+        try writer.print(
+            "{{\"transform\":{d},\"identity\":{d},\"transform_entries\":{d},\"phrase\":{d},\"total\":{d}}}",
+            .{ row.transform, row.identity, row.transform_entries, row.phrase, row.total() },
+        );
+    }
+    try writer.writeAll("],\"entries\":[");
     for (entries, 0..) |entry, i| {
         if (i != 0) try writer.writeByte(',');
         try writer.print(
@@ -120,9 +132,16 @@ fn writeJsonString(writer: *std.Io.Writer, value: []const u8) !void {
     try writer.writeByte('"');
 }
 
-fn writeMarkdown(writer: *std.Io.Writer, entries: []const vort.br.StaticDictionaryEntry, transforms: usize, lengths: usize, categories: CategoryCounts) !void {
+fn writeMarkdown(writer: *std.Io.Writer, entries: []const vort.br.StaticDictionaryEntry, transforms: usize, lengths: usize, categories: CategoryCounts, matrix_rows: []const MatrixRow) !void {
     try writer.writeAll("# Brotli static dictionary subset\n\n");
     try writer.print("- Entries: {d}\n- Distinct transforms: {d}\n- Distinct lengths: {d}\n- Identity entries: {d}\n- Transform entries: {d}\n- Phrase entries: {d}\n\n", .{ entries.len, transforms, lengths, categories.identity, categories.transform, categories.phrase });
+    try writer.writeAll("| Transform | Identity | Transform entries | Phrase | Total |\n");
+    try writer.writeAll("| ---: | ---: | ---: | ---: | ---: |\n");
+    for (matrix_rows) |row| {
+        try writer.print("| {d} | {d} | {d} | {d} | {d} |\n", .{ row.transform, row.identity, row.transform_entries, row.phrase, row.total() });
+    }
+    try writer.writeByte('\n');
+
     try writer.writeAll("| Transform | Copy length | Word index | Bytes | Word |\n");
     try writer.writeAll("| ---: | ---: | ---: | ---: | --- |\n");
     for (entries) |entry| {
@@ -150,6 +169,41 @@ fn validateEntries(entries: []const vort.br.StaticDictionaryEntry) !void {
             if (entry.transform == other.transform and entry.copy_len == other.copy_len and entry.word_index == other.word_index) {
                 return error.InvalidBlockPlan;
             }
+        }
+    }
+}
+
+const MatrixRow = struct {
+    transform: u16,
+    identity: usize = 0,
+    transform_entries: usize = 0,
+    phrase: usize = 0,
+
+    fn total(self: MatrixRow) usize {
+        return self.identity + self.transform_entries + self.phrase;
+    }
+};
+
+fn collectMatrixRows(allocator: std.mem.Allocator, rows: *std.ArrayList(MatrixRow), entries: []const vort.br.StaticDictionaryEntry) !void {
+    for (entries) |entry| {
+        var index: ?usize = null;
+        for (rows.items, 0..) |row, i| {
+            if (row.transform == entry.transform) {
+                index = i;
+                break;
+            }
+        }
+        if (index == null) {
+            try rows.append(allocator, .{ .transform = entry.transform });
+            index = rows.items.len - 1;
+        }
+        const i = index.?;
+        if (std.mem.indexOfScalar(u8, entry.word, ' ') != null) {
+            rows.items[i].phrase += 1;
+        } else if (entry.transform == 0) {
+            rows.items[i].identity += 1;
+        } else {
+            rows.items[i].transform_entries += 1;
         }
     }
 }

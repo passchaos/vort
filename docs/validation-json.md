@@ -840,6 +840,22 @@ Example:
     "transform": 1,
     "phrase": 0
   },
+  "matrix_rows": [
+    {
+      "transform": 0,
+      "identity": 1,
+      "transform_entries": 0,
+      "phrase": 0,
+      "total": 1
+    },
+    {
+      "transform": 12,
+      "identity": 0,
+      "transform_entries": 1,
+      "phrase": 0,
+      "total": 1
+    }
+  ],
   "entries": [
     {
       "transform": 0,

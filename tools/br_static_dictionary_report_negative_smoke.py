@@ -36,14 +36,21 @@ def report_entries_from_required(entries: list[dict[str, Any]]) -> list[dict[str
 
 def report(entries: list[dict[str, Any]]) -> dict[str, Any]:
     category_counts = {"identity": 0, "transform": 0, "phrase": 0}
+    matrix_by_transform: dict[int, dict[str, int]] = {}
     for entry in entries:
         word = entry["word"]
+        transform = entry["transform"]
+        row = matrix_by_transform.setdefault(transform, {"transform": transform, "identity": 0, "transform_entries": 0, "phrase": 0, "total": 0})
         if " " in word:
             category_counts["phrase"] += 1
-        elif entry["transform"] == 0:
+            row["phrase"] += 1
+        elif transform == 0:
             category_counts["identity"] += 1
+            row["identity"] += 1
         else:
             category_counts["transform"] += 1
+            row["transform_entries"] += 1
+        row["total"] += 1
     return {
         "schema": "vort.br_static_dictionary_report",
         "schema_version": 1,
@@ -51,6 +58,7 @@ def report(entries: list[dict[str, Any]]) -> dict[str, Any]:
         "transform_count": len({entry["transform"] for entry in entries}),
         "length_count": len({entry["copy_len"] for entry in entries}),
         "category_counts": category_counts,
+        "matrix_rows": [matrix_by_transform[key] for key in sorted(matrix_by_transform)],
         "entries": entries,
     }
 

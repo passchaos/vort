@@ -129,6 +129,29 @@ def main() -> int:
             transform_count += 1
     if category_counts.get("identity") != identity_count or category_counts.get("transform") != transform_count or category_counts.get("phrase") != phrase_count:
         raise AssertionError("category_counts mismatch")
+    matrix_rows = report.get("matrix_rows")
+    if not isinstance(matrix_rows, list):
+        raise AssertionError("matrix_rows must be a list")
+    matrix_total = 0
+    matrix_transforms: set[int] = set()
+    for index, row in enumerate(matrix_rows):
+        if not isinstance(row, dict):
+            raise AssertionError(f"matrix_rows[{index}] must be object")
+        transform = row.get("transform")
+        identity = row.get("identity")
+        transform_entries = row.get("transform_entries")
+        phrase = row.get("phrase")
+        total = row.get("total")
+        if not all(isinstance(value, int) for value in (transform, identity, transform_entries, phrase, total)):
+            raise AssertionError(f"matrix_rows[{index}] fields invalid")
+        if identity + transform_entries + phrase != total:
+            raise AssertionError(f"matrix_rows[{index}] total mismatch")
+        matrix_total += total
+        matrix_transforms.add(transform)
+    if matrix_total != len(entries):
+        raise AssertionError("matrix row totals do not match entry count")
+    if matrix_transforms != transforms:
+        raise AssertionError("matrix transforms differ from entry transforms")
     missing = sorted(required - seen)
     if missing:
         raise AssertionError(f"missing required coverage rows: {missing}")
@@ -147,6 +170,10 @@ def main() -> int:
     for label, count in (("Identity entries", identity_count), ("Transform entries", transform_count), ("Phrase entries", phrase_count)):
         if f"- {label}: {count}" not in markdown:
             raise AssertionError(f"Markdown {label} count missing")
+    for row in matrix_rows:
+        markdown_row = f"| {row['transform']} | {row['identity']} | {row['transform_entries']} | {row['phrase']} | {row['total']} |"
+        if markdown_row not in markdown:
+            raise AssertionError(f"Markdown missing matrix row {markdown_row!r}")
     for transform, copy_len, word_index, word in required:
         row = f"| {transform} | {copy_len} | {word_index} | {len(word.encode())} | `{word}` |"
         if row not in markdown:

@@ -39,7 +39,19 @@
         "transform_count": "int",
         "length_count": "int",
         "category_counts": "dict",
+        "matrix_rows": "list",
         "entries": "list"
+      },
+      "collections": {
+        "matrix_rows": {
+          "fields": {
+            "transform": "int",
+            "identity": "int",
+            "transform_entries": "int",
+            "phrase": "int",
+            "total": "int"
+          }
+        }
       },
       "item_collection": "entries",
       "item_fields": {
