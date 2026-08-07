@@ -3568,6 +3568,7 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     _ = try std.fmt.hexToBytes(&raw_before_repeat, raw_before_repeat_hex);
     const raw_block = try vort.zstdInspectNativeFrameFirstBlock(&raw_before_repeat);
     try expect(raw_block.block_type == .raw);
+    try expectLiteralBlockSequenceSummary(&raw_before_repeat, raw_block, .raw);
     const repeat_after_raw_block = try vort.zstdInspectNativeFrameBlockAt(&raw_before_repeat, raw_block.next_header_offset);
     try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&raw_before_repeat, repeat_after_raw_block));
     try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&raw_before_repeat));
@@ -3585,6 +3586,7 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     _ = try std.fmt.hexToBytes(&rle_before_repeat, rle_before_repeat_hex);
     const rle_block = try vort.zstdInspectNativeFrameFirstBlock(&rle_before_repeat);
     try expect(rle_block.block_type == .rle);
+    try expectLiteralBlockSequenceSummary(&rle_before_repeat, rle_block, .rle);
     const repeat_after_rle_block = try vort.zstdInspectNativeFrameBlockAt(&rle_before_repeat, rle_block.next_header_offset);
     try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameBlockSequenceModes(&rle_before_repeat, repeat_after_rle_block));
     try expectError(error.CorruptFrame, vort.zstdDecodedNativeFrameSize(&rle_before_repeat));
@@ -4061,6 +4063,16 @@ fn expectSkippableRepeatBoundaryError(allocator: std.mem.Allocator, stream: []co
     try expectError(error.CorruptFrame, vort.zstdDecodedNativeConcatenatedFrameSize(stream));
     try expectError(error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameInto(stream, output));
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeConcatenatedFrameAlloc(allocator, stream));
+}
+
+fn expectLiteralBlockSequenceSummary(frame: []const u8, block: vort.ZstdNativeFrameBlockHeader, kind: vort.ZstdNativeLiteralsKind) !void {
+    const summary = try vort.zstdInspectNativeFrameBlockSequenceModes(frame, block);
+    try expect(summary.literals_kind == kind);
+    try expect(summary.regenerated_literals_size == block.payload_len);
+    try expect(summary.sequence_count == 0);
+    try expect(summary.literal_length_mode == .predefined);
+    try expect(summary.offset_mode == .predefined);
+    try expect(summary.match_length_mode == .predefined);
 }
 
 fn expect(ok: bool) !void {

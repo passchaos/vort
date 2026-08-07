@@ -5302,8 +5302,8 @@ pub fn inspectNativeFrameFirstBlock(frame: []const u8) Error!NativeFrameBlockHea
 }
 
 pub fn inspectNativeFrameBlockSequenceModes(frame: []const u8, block: NativeFrameBlockHeader) Error!NativeSequenceModeSummary {
-    if (block.block_type != .compressed) return error.UnsupportedZstdFeature;
-    if (block.payload_offset > frame.len or frame.len - block.payload_offset < block.payload_len) return error.TruncatedFrame;
+    try validateNativeFrameBlockPayloadAvailable(frame, block);
+    if (block.block_type != .compressed) return nativeSequenceModeSummaryForLiteralBlock(block);
     var frame_state = try replayNativeFrameBlockInspectState(frame, block.header_offset);
     return try inspectNativeFrameBlockSequenceModesWithState(frame, block, &frame_state);
 }
@@ -5331,8 +5331,8 @@ fn inspectNativeFrameBlockSequenceModesWithState(
     block: NativeFrameBlockHeader,
     frame_state: *SequenceFrameState,
 ) Error!NativeSequenceModeSummary {
-    if (block.block_type != .compressed) return error.UnsupportedZstdFeature;
-    if (block.payload_offset > frame.len or frame.len - block.payload_offset < block.payload_len) return error.TruncatedFrame;
+    try validateNativeFrameBlockPayloadAvailable(frame, block);
+    if (block.block_type != .compressed) return nativeSequenceModeSummaryForLiteralBlock(block);
     const payload = frame[block.payload_offset..][0..block.payload_len];
     const section = try parseLiteralsSection(payload, frame_state);
     if (section.sequence_count == 0) {
@@ -5356,6 +5356,26 @@ fn inspectNativeFrameBlockSequenceModesWithState(
         .literal_length_mode = nativeSequenceTableMode(spec.ll_mode),
         .offset_mode = nativeSequenceTableMode(spec.of_mode),
         .match_length_mode = nativeSequenceTableMode(spec.ml_mode),
+    };
+}
+
+fn validateNativeFrameBlockPayloadAvailable(frame: []const u8, block: NativeFrameBlockHeader) Error!void {
+    const required_payload_len: usize = if (block.block_type == .rle) 1 else block.payload_len;
+    if (block.payload_offset > frame.len or frame.len - block.payload_offset < required_payload_len) return error.TruncatedFrame;
+}
+
+fn nativeSequenceModeSummaryForLiteralBlock(block: NativeFrameBlockHeader) NativeSequenceModeSummary {
+    return .{
+        .literals_kind = switch (block.block_type) {
+            .raw => .raw,
+            .rle => .rle,
+            .compressed => unreachable,
+        },
+        .regenerated_literals_size = block.payload_len,
+        .sequence_count = 0,
+        .literal_length_mode = .predefined,
+        .offset_mode = .predefined,
+        .match_length_mode = .predefined,
     };
 }
 
@@ -9100,6 +9120,13 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     try std.testing.expectEqual(NativeBlockType.raw, first_block.block_type);
     try std.testing.expectEqual(true, first_block.last);
     try std.testing.expectEqual(payload.len, first_block.payload_len);
+    const raw_modes = try inspectNativeFrameBlockSequenceModes(encoded, first_block);
+    try std.testing.expectEqual(NativeLiteralsKind.raw, raw_modes.literals_kind);
+    try std.testing.expectEqual(payload.len, raw_modes.regenerated_literals_size);
+    try std.testing.expectEqual(@as(usize, 0), raw_modes.sequence_count);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, raw_modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, raw_modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, raw_modes.match_length_mode);
     try std.testing.expectEqual((try inspectNativeFrameHeader(encoded)).payload_offset, first_block.header_offset);
     try std.testing.expectEqual(first_block.payload_offset + first_block.payload_len, first_block.next_header_offset);
     const first_block_again = try inspectNativeFrameBlockAt(encoded, first_block.header_offset);
@@ -9214,6 +9241,13 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     try std.testing.expectEqual(NativeBlockType.rle, rle_first_block.block_type);
     try std.testing.expectEqual(repeated.len, rle_first_block.payload_len);
     try std.testing.expectEqual(true, rle_first_block.last);
+    const rle_modes = try inspectNativeFrameBlockSequenceModes(rle_encoded, rle_first_block);
+    try std.testing.expectEqual(NativeLiteralsKind.rle, rle_modes.literals_kind);
+    try std.testing.expectEqual(repeated.len, rle_modes.regenerated_literals_size);
+    try std.testing.expectEqual(@as(usize, 0), rle_modes.sequence_count);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, rle_modes.literal_length_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, rle_modes.offset_mode);
+    try std.testing.expectEqual(NativeSequenceTableMode.predefined, rle_modes.match_length_mode);
     try std.testing.expectEqual(rle_first_block.payload_offset + 1, rle_first_block.next_header_offset);
     const rle_summary = try summarizeNativeFrameBlocks(rle_encoded);
     try std.testing.expectEqual(@as(usize, 1), rle_summary.block_count);
