@@ -7991,7 +7991,7 @@ fn emitFseCompressedHuffmanWeights(allocator: std.mem.Allocator, out: *std.Array
     var counts: [huffman_weight_symbol_max + 1]u32 = .{0} ** (huffman_weight_symbol_max + 1);
     var max_symbol: u8 = 0;
     for (weights) |weight| {
-        if (weight > huffman_weight_symbol_max) return error.UnsupportedZstdFeature;
+        if (weight > huffman_weight_symbol_max) return error.CorruptFrame;
         counts[weight] += 1;
         max_symbol = @max(max_symbol, weight);
     }
@@ -11406,6 +11406,17 @@ test "zstd literal-only writer emits max direct Huffman symbol set" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd FSE Huffman weight writer rejects invalid weights as corrupt" {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+
+    try std.testing.expectError(
+        error.CorruptFrame,
+        emitFseCompressedHuffmanWeights(std.testing.allocator, &out, &.{ 1, huffman_weight_symbol_max + 1, 2 }),
+    );
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
 
 test "zstd literal-only writer emits FSE Huffman tree for high-byte binary literals" {
