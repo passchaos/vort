@@ -2044,6 +2044,11 @@ architecture blindly.
   the Node/Vort probe accepted all 1831 frames, further expanding generated
   upstream import evidence while keeping the larger sweep out of default smoke.
 
+- Added the opt-in `upstream512` slice for local Brotli checkouts. The
+  source-limit 512 candidate pool produced 3367 generated candidates locally and
+  the Node/Vort probe accepted all 3367 frames, doubling the covered official
+  dictionary prefix while keeping the long-running sweep explicit.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
