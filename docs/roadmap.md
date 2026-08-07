@@ -1904,3 +1904,8 @@ architecture blindly.
 - Added the Node quality-5 Brotli phrase entry `large number of ` to the static
   dictionary subset, extending retained phrase coverage into the 16-byte bucket
   with CLI differential validation.
+
+
+- Strengthened the Brotli static-dictionary report smoke with the 16-byte
+  `large number of ` phrase tuple so the longer retained phrase bucket cannot
+  silently regress.
