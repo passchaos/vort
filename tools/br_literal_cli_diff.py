@@ -2229,6 +2229,10 @@ def main() -> int:
             node_compress(b"hello brotli hello brotli", quality=4, lgwin=10),
             b"hello brotli hello brotli",
         ),
+        "node-static-dictionary-q5-lgwin10": (
+            node_compress(b"hello brotli hello brotli", quality=5, lgwin=10),
+            b"hello brotli hello brotli",
+        ),
         "node-repeat256-q4-lgwin10": (node_compress(b"abcd" * 64, quality=4, lgwin=10), b"abcd" * 64),
         "node-text-q11-lgwin10": (
             node_compress(b"hello brotli hello brotli", quality=11, lgwin=10),
@@ -2298,13 +2302,6 @@ def main() -> int:
             b"abcabcabcabcabcabcabcabcabcabcabcbc",
         ),
     }
-    unsupported_cases = {
-        "node-static-dictionary-q5-lgwin10": (
-            node_compress(b"hello brotli hello brotli", quality=5, lgwin=10),
-            b"hello brotli hello brotli",
-            "UnsupportedBrotliFeature",
-        ),
-    }
 
     with tempfile.TemporaryDirectory(prefix="vort-br-literal-") as td:
         tmp = Path(td)
@@ -2321,22 +2318,8 @@ def main() -> int:
                 raise AssertionError(f"node decode mismatch for {name}")
             run([str(cli), "decode-br-file-to", str(path), str(out), str(len(expected) - 1)], root, expect_ok=False)
             checked += 1
-        unsupported_checked = 0
-        for name, (frame, expected, error_name) in unsupported_cases.items():
-            path = tmp / f"{name}.br"
-            out = tmp / f"{name}.out"
-            path.write_bytes(frame)
-            if node_decode(path) != expected:
-                raise AssertionError(f"node decode mismatch for unsupported {name}")
-            size_result = run([str(cli), "size-br-file", str(path), str(len(expected))], root, expect_ok=False)
-            if error_name not in size_result.stderr:
-                raise AssertionError(f"expected {error_name} from size preflight for {name}, got {size_result.stderr!r}")
-            decode_result = run([str(cli), "decode-br-file-to", str(path), str(out), str(len(expected))], root, expect_ok=False)
-            if error_name not in decode_result.stderr:
-                raise AssertionError(f"expected {error_name} from decode for {name}, got {decode_result.stderr!r}")
-            unsupported_checked += 1
 
-    print(f"br_literal_cli_diff=ok cases={checked} unsupported_cases={unsupported_checked}")
+    print(f"br_literal_cli_diff=ok cases={checked}")
     return 0
 
 

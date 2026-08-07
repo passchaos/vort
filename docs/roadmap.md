@@ -1795,10 +1795,10 @@ architecture blindly.
   with the full-output decode path. Zig tests and the Node-backed CLI
   differential smoke cover both frames.
 
-- Classified Brotli static-dictionary references as an unsupported feature
-  instead of a corrupt output-history match. A real Node quality-5 frame for
-  `hello brotli hello brotli` starts with a copy from distance 720 before any
-  bytes have been emitted, which is valid only through Brotli's static
-  dictionary. Vort now reports `UnsupportedBrotliFeature` consistently from
-  size preflight and decode, while the Node-backed CLI differential still proves
-  the same bytes are valid Brotli.
+- Added the first narrow Brotli static-dictionary decode slice. A real Node
+  quality-5 frame for `hello brotli hello brotli` starts with a copy from
+  distance 720 before any bytes have been emitted; Vort now resolves that
+  distance/copy-length pair to the built-in word `hello` in both size preflight
+  and output decode. The Node-backed CLI differential now treats that frame as a
+  successful decode while broader static dictionary words/transforms remain a
+  follow-up.
