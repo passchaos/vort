@@ -689,6 +689,9 @@ fn minimalStaticDictionaryWord(distance: usize, copy_len: usize, current_output_
     if (copy_len == 5 and word_index == 107) return "quick";
     if (copy_len == 5 and word_index == 719) return "hello";
     if (copy_len == 5 and word_index == 989) return "dolor";
+    if (copy_len == 7 and word_index == 170) return "release";
+    if (copy_len == 10 and word_index == 84) return "expression";
+    if (copy_len == 10 and word_index == 135) return "depression";
     if (copy_len == 10 and word_index == 205) return "dictionary";
     if (copy_len == 11 and word_index == 5) return "information";
     return error.UnsupportedBrotliFeature;
@@ -1999,6 +2002,42 @@ test "br minimal static dictionary press stem decodes Node quality-five frame" {
         0x61, 0xe2, 0xe2, 0xf5, 0x18,
     };
     const expected = "compression about";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary release word decodes Node quality-five frame" {
+    const encoded = [_]u8{
+        0xa1, 0x60, 0x00, 0x00, 0x20, 0x01, 0x52,
+        0x83, 0x34, 0x52, 0x98, 0x46, 0x9d, 0x06,
+    };
+    const expected = "press release";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary expression word decodes Node quality-five frame" {
+    const encoded = [_]u8{
+        0xa1, 0x48, 0x00, 0x00, 0x20, 0x01,
+        0x10, 0xc0, 0x04, 0x06, 0x03,
+    };
+    const expected = "expression";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary depression word decodes Node quality-five frame" {
+    const encoded = [_]u8{
+        0xa1, 0x48, 0x00, 0x00, 0x20, 0x01,
+        0x10, 0xc0, 0x84, 0x66, 0x01,
+    };
+    const expected = "depression";
     try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
     const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
     defer std.testing.allocator.free(decoded);

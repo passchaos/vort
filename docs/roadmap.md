@@ -1821,3 +1821,8 @@ architecture blindly.
   stems/words (`about`, `press`, `dictionary`, and `information`) through both
   decoded-size preflight and output decode, while transformed dictionary entries
   remain explicitly unsupported until the full transform table is implemented.
+
+- Added another identity-word batch to the Brotli static-dictionary slice.
+  Node quality-5 frames now cover `release`, `expression`, and `depression`
+  through unit tests and the CLI differential smoke, exercising 7-byte and
+  10-byte dictionary buckets beyond the earlier 5/10/11-byte examples.

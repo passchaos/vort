@@ -2257,6 +2257,18 @@ def main() -> int:
             node_compress(b"compression about", quality=5, lgwin=10),
             b"compression about",
         ),
+        "node-static-dictionary-release-q5-lgwin10": (
+            node_compress(b"press release", quality=5, lgwin=10),
+            b"press release",
+        ),
+        "node-static-dictionary-expression-q5-lgwin10": (
+            node_compress(b"expression", quality=5, lgwin=10),
+            b"expression",
+        ),
+        "node-static-dictionary-depression-q5-lgwin10": (
+            node_compress(b"depression", quality=5, lgwin=10),
+            b"depression",
+        ),
         "node-repeat256-q4-lgwin10": (node_compress(b"abcd" * 64, quality=4, lgwin=10), b"abcd" * 64),
         "node-text-q11-lgwin10": (
             node_compress(b"hello brotli hello brotli", quality=11, lgwin=10),
