@@ -8950,7 +8950,7 @@ fn emitLiteralsHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), kin
     const kind_bits: u8 = switch (kind) {
         .raw => 0,
         .rle => 1,
-        .compressed, .treeless => return error.UnsupportedZstdFeature,
+        .compressed, .treeless => return error.CorruptFrame,
     };
     if (regenerated_size <= 31) {
         try out.append(allocator, kind_bits | @as(u8, @intCast(regenerated_size << 3)));
@@ -11406,6 +11406,15 @@ test "zstd literal-only writer emits max direct Huffman symbol set" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd raw literal header writer rejects compressed kinds as corrupt" {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(std.testing.allocator);
+
+    try std.testing.expectError(error.CorruptFrame, emitLiteralsHeader(std.testing.allocator, &out, .compressed, 1));
+    try std.testing.expectError(error.CorruptFrame, emitLiteralsHeader(std.testing.allocator, &out, .treeless, 1));
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
 
 test "zstd Huffman literal headers reject zero compressed size as corrupt" {
