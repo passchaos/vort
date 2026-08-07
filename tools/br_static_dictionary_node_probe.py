@@ -55,6 +55,15 @@ def load_candidates(path: Path) -> dict[str, Any]:
     return report
 
 
+
+
+def size_class(payload_bytes: int, br_bytes: int) -> str:
+    if br_bytes < payload_bytes:
+        return "smaller"
+    if br_bytes == payload_bytes:
+        return "equal"
+    return "larger"
+
 def decode_with_vort(cli: Path, compressed: bytes, expected: bytes, root: Path) -> tuple[bool, str]:
     with tempfile.TemporaryDirectory(prefix="vort-br-node-probe-") as td:
         tmp = Path(td)
@@ -101,7 +110,10 @@ def probe_candidates(cli: Path, report: dict[str, Any], limit: int, quality: int
                 "transform_kind": candidate["transform_kind"],
                 "quality": quality,
                 "lgwin": lgwin,
+                "payload_bytes": len(expected),
                 "br_bytes": len(compressed),
+                "size_delta_bytes": len(compressed) - len(expected),
+                "size_class": size_class(len(expected), len(compressed)),
                 "br_hex": compressed.hex(),
                 "node_ok": decoded_by_node == expected,
                 "vort_ok": vort_ok,
@@ -129,6 +141,14 @@ def kind_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return summary
 
 
+
+def size_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for cls in ("smaller", "equal", "larger"):
+        items = [row for row in rows if row["size_class"] == cls]
+        result.append({"size_class": cls, "probed_count": len(items)})
+    return result
+
 def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], limit: int, quality: int, lgwin: int) -> dict[str, Any]:
     return {
         "schema": "vort.br_static_dictionary_node_probe",
@@ -144,6 +164,7 @@ def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], l
         "vort_decode_successes": sum(1 for row in rows if row["vort_ok"]),
         "vort_decode_failures": sum(1 for row in rows if not row["vort_ok"]),
         "kind_rows": kind_rows(rows),
+        "size_rows": size_rows(rows),
         "rows": rows,
     }
 
@@ -175,14 +196,23 @@ def write_markdown(path: Path, report: dict[str, Any]) -> None:
         )
     lines.extend([
         "",
+        "## Size summary",
+        "",
+        "| Size class | Probed |",
+        "| --- | ---: |",
+    ])
+    for row in report["size_rows"]:
+        lines.append(f"| `{row['size_class']}` | {row['probed_count']} |")
+    lines.extend([
+        "",
         "## Candidate rows",
         "",
-        "| # | Transform | Copy length | Word index | Candidate | Brotli bytes | Classification | Error |",
-        "| ---: | ---: | ---: | ---: | --- | ---: | --- | --- |",
+        "| # | Transform | Copy length | Word index | Candidate | Payload bytes | Brotli bytes | Size class | Classification | Error |",
+        "| ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | --- | --- |",
     ])
     for row in report["rows"]:
         lines.append(
-            f"| {row['index']} | {row['transform']} | {row['copy_len']} | {row['word_index']} | `{row['candidate_word']}` | {row['br_bytes']} | `{row['classification']}` | `{row['error']}` |"
+            f"| {row['index']} | {row['transform']} | {row['copy_len']} | {row['word_index']} | `{row['candidate_word']}` | {row['payload_bytes']} | {row['br_bytes']} | `{row['size_class']}` | `{row['classification']}` | `{row['error']}` |"
         )
     path.write_text("\n".join(lines) + "\n")
 

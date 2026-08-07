@@ -124,9 +124,23 @@
         "vort_decode_successes": "int",
         "vort_decode_failures": "int",
         "kind_rows": "list",
+        "size_rows": "list",
         "rows": "list"
       },
       "collections": {
+        "size_rows": {
+          "fields": {
+            "size_class": "str",
+            "probed_count": "int"
+          },
+          "enums": {
+            "size_class": [
+              "smaller",
+              "equal",
+              "larger"
+            ]
+          }
+        },
         "kind_rows": {
           "fields": {
             "transform_kind": "str",
@@ -152,6 +166,11 @@
           "vort_rejects_node_frame",
           "node_output_mismatch"
         ],
+        "size_class": [
+          "smaller",
+          "equal",
+          "larger"
+        ],
         "transform_kind": [
           "identity",
           "affix_identity",
@@ -169,7 +188,10 @@
         "transform_kind": "str",
         "quality": "int",
         "lgwin": "int",
+        "payload_bytes": "int",
         "br_bytes": "int",
+        "size_delta_bytes": "int",
+        "size_class": "str",
         "br_hex": "str",
         "node_ok": "bool",
         "vort_ok": "bool",

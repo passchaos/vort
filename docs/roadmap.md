@@ -2005,6 +2005,12 @@ architecture blindly.
   omit-last candidates were exercised and accepted without manually scanning the
   per-candidate table.
 
+- Extended the Brotli Node probe rows with payload/compressed byte counts and a
+  smaller/equal/larger size classification, plus a size summary table in
+  Markdown/JSON. Candidate probe artifacts can now identify not only whether
+  Vort accepts Node frames, but also whether Node achieved a size win for each
+  generated candidate payload.
+
 - Extended the Brotli static-dictionary candidate report with an optional
   upstream-source mode. When a local Brotli `common/` checkout is supplied with
   `--source-limit`, the report merges bounded official dictionary raw words into
