@@ -191,6 +191,11 @@ def main():
         run([str(cli), "decode-snappy-frame-hex", reserved.hex(), "0"], root, expect_ok=False)
         checked += 1
 
+    skippable_before_identifier = chunk(0x80, b"") + snappy_identifier()
+    run([str(cli), "size-snappy-frame-hex", skippable_before_identifier.hex(), "0"], root, expect_ok=False)
+    run([str(cli), "decode-snappy-frame-hex", skippable_before_identifier.hex(), "0"], root, expect_ok=False)
+    checked += 1
+
     oversized_payload = b"x" * (64 * 1024 + 1)
     oversized_frame = snappy_identifier() + checked_chunk(0x00, oversized_payload, literal_block(oversized_payload))
     run([str(cli), "size-snappy-frame-hex", oversized_frame.hex(), str(len(oversized_payload))], root, expect_ok=False)

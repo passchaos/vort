@@ -413,6 +413,7 @@ const FrameChunkIterator = struct {
         const payload = self.frame[self.index..][0..chunk_len];
         self.index += chunk_len;
 
+        if (!self.saw_identifier and chunk_type != stream_identifier_chunk_type) return error.InvalidMagic;
         switch (chunk_type) {
             stream_identifier_chunk_type => {
                 if (!std.mem.eql(u8, payload, stream_identifier_payload)) return error.InvalidMagic;
@@ -753,6 +754,7 @@ test "snappy framed stream decodes concatenated streams with repeated identifier
 test "snappy framed stream rejects malformed chunks" {
     try std.testing.expectError(error.TruncatedFrame, decodedFrameSize(&[_]u8{ 0xff, 0x06 }));
     try std.testing.expectError(error.InvalidMagic, decodedFrameSize(&[_]u8{ 0x01, 0x04, 0x00, 0x00, 0, 0, 0, 0 }));
+    try std.testing.expectError(error.InvalidMagic, decodedFrameSize(&[_]u8{ 0x80, 0x00, 0x00, 0x00, 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y' }));
     try std.testing.expectError(error.InvalidMagic, decodedFrameSize(&[_]u8{ 0xff, 0x06, 0x00, 0x00, 'b', 'a', 'd', 'b', 'a', 'd' }));
     try std.testing.expectError(error.UnsupportedSnappyFeature, decodedFrameSize(&[_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x02, 0x00, 0x00, 0x00 }));
     try std.testing.expectError(error.UnsupportedSnappyFeature, decodedFrameSize(&[_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x7f, 0x00, 0x00, 0x00 }));
@@ -790,6 +792,8 @@ test "snappy framed stream rejects malformed chunks" {
 
     const unsupported = [_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x02, 0x00, 0x00, 0x00 };
     try std.testing.expectError(error.UnsupportedSnappyFeature, decodeFrameAlloc(std.testing.allocator, &unsupported));
+    const skippable_before_identifier = [_]u8{ 0x80, 0x00, 0x00, 0x00, 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y' };
+    try std.testing.expectError(error.InvalidMagic, decodeFrameAlloc(std.testing.allocator, &skippable_before_identifier));
 }
 
 fn oversizedCompressedChunkFrame(allocator: std.mem.Allocator) Error![]u8 {
