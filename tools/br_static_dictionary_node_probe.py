@@ -164,6 +164,7 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=48)
     parser.add_argument("--quality", type=int, default=5)
     parser.add_argument("--lgwin", type=int, default=10)
+    parser.add_argument("--require-vort-ok", action="store_true", help="fail if any probed Node frame is not accepted by Vort")
     args = parser.parse_args()
 
     candidate_report = load_candidates(args.candidates)
@@ -173,12 +174,17 @@ def main() -> int:
         write_json(args.json, report)
     if args.markdown is not None:
         write_markdown(args.markdown, report)
+    status = "ok"
+    returncode = 0
+    if args.require_vort_ok and report["vort_decode_failures"] != 0:
+        status = "fail"
+        returncode = 1
     print(
-        "br_static_dictionary_node_probe=ok "
+        f"br_static_dictionary_node_probe={status} "
         f"probed={report['probed_count']} vort_ok={report['vort_decode_successes']} "
         f"vort_fail={report['vort_decode_failures']}"
     )
-    return 0
+    return returncode
 
 
 if __name__ == "__main__":

@@ -931,6 +931,7 @@ Produced by:
 
 ```sh
 zig build run-br-static-dictionary-node-probe
+zig build run-br-static-dictionary-node-probe-wide
 python3 tools/br_static_dictionary_node_probe.py <vort-cli> --json zig-out/vort-br-static-dictionary-node-probe.json
 ```
 
@@ -938,7 +939,10 @@ This schema records a bounded Node-backed probe over generated Brotli
 static-dictionary candidates. For each candidate payload, Node emits a Brotli
 quality-5 frame and Vort attempts to decode that exact frame, so future coverage
 work can distinguish candidates already accepted by the current decoder from
-Node-generated frames that still require new source tuples or transforms.
+Node-generated frames that still require new source tuples or transforms. The
+standard build step requires all default probed frames to decode successfully;
+the wide step raises the retained probe prefix to 160 candidates for manual or
+release-gate sweeps.
 
 Example:
 

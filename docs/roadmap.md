@@ -1989,3 +1989,8 @@ architecture blindly.
   checks whether Vort decodes the exact frames. The retained JSON/Markdown
   artifacts turn candidate triage into machine-readable evidence instead of a
   one-off shell loop.
+
+- Added `run-br-static-dictionary-node-probe-wide`, an opt-in 160-candidate
+  sweep, and made the default Node probe fail if any probed Node frame is no
+  longer accepted by Vort. This keeps the candidate backlog measurable without
+  forcing the wider sweep into every smoke path.

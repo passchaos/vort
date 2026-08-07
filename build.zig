@@ -902,11 +902,32 @@ pub fn build(b: *std.Build) void {
         "zig-out/vort-br-static-dictionary-node-probe.json",
         "--markdown",
         "zig-out/vort-br-static-dictionary-node-probe.md",
+        "--require-vort-ok",
     });
     if (b.args) |args| br_static_dictionary_node_probe.addArgs(args);
     br_static_dictionary_node_probe.step.dependOn(br_static_dictionary_candidate_report_step);
     const br_static_dictionary_node_probe_step = b.step("run-br-static-dictionary-node-probe", "Probe Brotli static dictionary candidates against Node and Vort");
     br_static_dictionary_node_probe_step.dependOn(&br_static_dictionary_node_probe.step);
+
+    const br_static_dictionary_node_probe_wide = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_wide.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_wide.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-wide.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-wide.md",
+        "--limit",
+        "160",
+        "--require-vort-ok",
+    });
+    br_static_dictionary_node_probe_wide.step.dependOn(br_static_dictionary_candidate_report_step);
+    const br_static_dictionary_node_probe_wide_step = b.step("run-br-static-dictionary-node-probe-wide", "Probe a wider Brotli static dictionary candidate prefix against Node and Vort");
+    br_static_dictionary_node_probe_wide_step.dependOn(&br_static_dictionary_node_probe_wide.step);
 
     const snappy_block_cli_probe = b.addSystemCommand(&.{ "python3", "tools/snappy_block_cli_probe.py" });
     snappy_block_cli_probe.addArtifactArg(cli_exe);
