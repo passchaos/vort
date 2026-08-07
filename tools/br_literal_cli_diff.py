@@ -2208,6 +2208,13 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     cases = {
         "node-empty-q0-lgwin10": (node_compress(b"", quality=0, lgwin=10), b""),
+        "node-single-byte-q0-lgwin10": (node_compress(b"a", quality=0, lgwin=10), b"a"),
+        "node-text-q0-lgwin10": (
+            node_compress(b"hello brotli hello brotli", quality=0, lgwin=10),
+            b"hello brotli hello brotli",
+        ),
+        "node-repeated-q0-lgwin10": (node_compress(b"a" * 32, quality=0, lgwin=10), b"a" * 32),
+        "node-binary-q0-lgwin10": (node_compress(bytes(range(16)), quality=0, lgwin=10), bytes(range(16))),
         "final": (literal_only_hello_frame(True), b"hello"),
         "nonfinal": (literal_only_hello_frame(False), b"hello"),
         "trivial-context": (trivial_context_hello_frame(), b"hello"),
