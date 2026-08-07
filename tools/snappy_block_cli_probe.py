@@ -148,6 +148,12 @@ def main():
     run([str(cli), "decode-snappy-frame-hex", bytes(corrupt).hex(), str(len(known_payload))], root, expect_ok=False)
     checked += 1
 
+    for reserved_type in (0x02, 0x7F):
+        reserved = snappy_identifier() + chunk(reserved_type, b"")
+        run([str(cli), "size-snappy-frame-hex", reserved.hex(), "0"], root, expect_ok=False)
+        run([str(cli), "decode-snappy-frame-hex", reserved.hex(), "0"], root, expect_ok=False)
+        checked += 1
+
     with tempfile.TemporaryDirectory(prefix="vort-snappy-") as td:
         tmp = pathlib.Path(td)
         for i, payload in enumerate(PAYLOADS):

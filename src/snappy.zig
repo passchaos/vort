@@ -736,6 +736,8 @@ test "snappy framed stream rejects malformed chunks" {
     try std.testing.expectError(error.TruncatedFrame, decodedFrameSize(&[_]u8{ 0xff, 0x06 }));
     try std.testing.expectError(error.InvalidMagic, decodedFrameSize(&[_]u8{ 0x01, 0x04, 0x00, 0x00, 0, 0, 0, 0 }));
     try std.testing.expectError(error.InvalidMagic, decodedFrameSize(&[_]u8{ 0xff, 0x06, 0x00, 0x00, 'b', 'a', 'd', 'b', 'a', 'd' }));
+    try std.testing.expectError(error.UnsupportedSnappyFeature, decodedFrameSize(&[_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x02, 0x00, 0x00, 0x00 }));
+    try std.testing.expectError(error.UnsupportedSnappyFeature, decodedFrameSize(&[_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x7f, 0x00, 0x00, 0x00 }));
 
     const payload = "bad checksum";
     const encoded = try encodeFrameAlloc(std.testing.allocator, payload);
@@ -762,4 +764,7 @@ test "snappy framed stream rejects malformed chunks" {
     corrupt_compressed[corrupt_compressed.len - 1] ^= 0x01;
     try std.testing.expectError(error.ChecksumMismatch, decodedFrameSize(corrupt_compressed));
     try std.testing.expectError(error.ChecksumMismatch, decodeFrameAlloc(std.testing.allocator, corrupt_compressed));
+
+    const unsupported = [_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x02, 0x00, 0x00, 0x00 };
+    try std.testing.expectError(error.UnsupportedSnappyFeature, decodeFrameAlloc(std.testing.allocator, &unsupported));
 }
