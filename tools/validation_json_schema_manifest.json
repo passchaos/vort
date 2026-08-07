@@ -2,6 +2,29 @@
   "schema": "vort.validation_json_schema_manifest",
   "schema_version": 1,
   "schemas": {
+    "vort.br_static_dictionary_report": {
+      "count_rules": {
+        "entry_count": {
+          "collection": "entries"
+        }
+      },
+      "fields": {
+        "schema": "str",
+        "schema_version": "int",
+        "entry_count": "int",
+        "transform_count": "int",
+        "length_count": "int",
+        "entries": "list"
+      },
+      "item_collection": "entries",
+      "item_fields": {
+        "transform": "int",
+        "copy_len": "int",
+        "word_index": "int",
+        "word_bytes": "int",
+        "word": "str"
+      }
+    },
     "vort.dashboard_category_expected_artifacts": {
       "fields": {
         "expected_artifacts": "list",

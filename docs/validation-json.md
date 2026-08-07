@@ -777,6 +777,49 @@ Example:
 }
 ```
 
+## `vort.br_static_dictionary_report`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-report-dashboard
+zig build run-br-static-dictionary-report-smoke
+```
+
+This schema describes the retained Brotli static-dictionary subset currently
+implemented by Vort. Each entry identifies a supported RFC transform index, copy
+length, dictionary word index, transformed word byte length, and transformed
+word bytes. The report is intentionally a subset manifest rather than a claim of
+complete Brotli dictionary support.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_report",
+  "schema_version": 1,
+  "entry_count": 2,
+  "transform_count": 2,
+  "length_count": 1,
+  "entries": [
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 43,
+      "word_bytes": 5,
+      "word": "words"
+    },
+    {
+      "transform": 12,
+      "copy_len": 5,
+      "word_index": 43,
+      "word_bytes": 4,
+      "word": "word"
+    }
+  ]
+}
+```
+
 ## `vort.dashboard_category_expected_artifacts`
 
 Consumed by:
