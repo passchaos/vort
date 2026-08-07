@@ -1690,6 +1690,23 @@ test "br minimal compressed stream selects literal context tree through RLE cont
     try std.testing.expectEqualSlices(u8, "aba", decoded);
 }
 
+test "br minimal compressed stream selects literal context tree through complex context map" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 2, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForLiteralContextUtf8ComplexMap(std.testing.allocator, &writer);
+
+    try std.testing.expectEqual(@as(usize, 3), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "aba", decoded);
+}
+
 test "br minimal compressed stream selects fifth literal context tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -2965,6 +2982,24 @@ fn writeMinimalCompressedHeaderForLiteralContextUtf8Rle(allocator: std.mem.Alloc
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForLiteralContextUtf8ComplexMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 2, 2); // literal context mode = UTF8
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESL
+    try writeUtf8LiteralContextMapForAComplexPrefix(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'a');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'b');
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 24);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
 fn writeMinimalCompressedHeaderForUtf8ContextAfterDistanceThreeCopy(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -3650,6 +3685,19 @@ fn writeUtf8LiteralContextMapForARle(allocator: std.mem.Allocator, writer: *BitW
     try writer.writeBits(allocator, 3, 2); // code 7, length 2: tree index 1 for UTF8 context 56
     for (0..7) |_| {
         try writer.writeBits(allocator, 0, 1); // trailing zero contexts
+    }
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeUtf8LiteralContextMapForAComplexPrefix(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 0, 2); // HSKIP = 0, complex context-map prefix
+    for (code_length_order) |symbol| {
+        try writeCodeLengthCodeLength(allocator, writer, if (symbol == 1) 1 else 0);
+    }
+    var i: usize = 0;
+    while (i < 64) : (i += 1) {
+        try writer.writeBits(allocator, if (i == 56) 1 else 0, 1);
     }
     try writer.writeBits(allocator, 0, 1); // IMTF = false
 }

@@ -250,6 +250,16 @@ def write_utf8_literal_context_map_for_a_rle(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # IMTF = false
 
 
+def write_utf8_literal_context_map_for_a_complex_prefix(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 0, 2)  # HSKIP = 0, complex context-map prefix
+    for symbol in (1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15):
+        write_code_length_code_length(bits, 1 if symbol == 1 else 0)
+    for context in range(64):
+        write_bits(bits, 1 if context == 56 else 0, 1)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
 def write_utf8_literal_context_map_for_context63(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # RLEMAX = 0
     write_bits(bits, 1, 2)  # simple context-map prefix
@@ -740,6 +750,23 @@ def write_literal_context_utf8_rle_aba_header(bits: list[int]) -> None:
     write_bits(bits, 2, 2)  # literal context mode = UTF8
     write_block_type_count(bits, 2)
     write_utf8_literal_context_map_for_a_rle(bits)
+    write_block_type_count(bits, 1)
+
+    write_simple_single_symbol_prefix(bits, 256, ord("a"))
+    write_simple_single_symbol_prefix(bits, 256, ord("b"))
+    write_simple_single_symbol_prefix(bits, 704, 24)
+    write_simple_single_symbol_prefix(bits, 64, 0)
+
+
+def write_literal_context_utf8_complex_map_aba_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 0, 4)  # NDIRECT
+    write_bits(bits, 2, 2)  # literal context mode = UTF8
+    write_block_type_count(bits, 2)
+    write_utf8_literal_context_map_for_a_complex_prefix(bits)
     write_block_type_count(bits, 1)
 
     write_simple_single_symbol_prefix(bits, 256, ord("a"))
@@ -1466,6 +1493,17 @@ def literal_context_utf8_rle_aba_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def literal_context_utf8_complex_map_aba_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 2, 16)  # MLEN - 1
+    write_literal_context_utf8_complex_map_aba_header(bits)
+    return bits_to_bytes(bits)
+
+
 def utf8_context_after_distance_three_copy_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -1791,6 +1829,7 @@ def main() -> int:
         "literal-context-imtf": (literal_context_imtf_aba_frame(), b"aba"),
         "literal-context-utf8": (literal_context_utf8_aba_frame(), b"aba"),
         "literal-context-utf8-rle": (literal_context_utf8_rle_aba_frame(), b"aba"),
+        "literal-context-utf8-complex-map": (literal_context_utf8_complex_map_aba_frame(), b"aba"),
         "utf8-context-after-distance-three-copy": (utf8_context_after_distance_three_copy_frame(), b"abcabc"),
         "context-after-distance-thirty-three-copy": (
             context_after_distance_thirty_three_copy_frame(),
