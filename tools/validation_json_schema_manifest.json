@@ -2633,6 +2633,7 @@
           "vort.dashboard_producers_required_smoke",
           "vort.dashboard_strict_expected_modes",
           "vort.dashboard_strict_smoke",
+          "vort.br_static_dictionary_required_coverage",
           "vort.dashboard_strict_validation_reasons",
           "vort.deflate_decode_stage_report",
           "vort.fuzz_corpus_coverage_smoke",

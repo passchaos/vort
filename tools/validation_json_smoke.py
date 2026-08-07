@@ -149,6 +149,10 @@ def main() -> int:
         assert dashboard_config_index["schema"] == "vort.dashboard_config_index"
         assert dashboard_config_index["configs"]
         validate_value_against_manifest(dashboard_config_index, schemas_def)
+        br_static_dictionary_required = json.loads((ROOT / "tools" / "br_static_dictionary_required_coverage.json").read_text())
+        assert br_static_dictionary_required["schema"] == "vort.br_static_dictionary_required_coverage"
+        assert br_static_dictionary_required["entries"]
+        validate_value_against_manifest(br_static_dictionary_required, schemas_def)
         dashboard_producers = json.loads((ROOT / "tools" / "dashboard_producers.json").read_text())
         assert dashboard_producers["schema"] == "vort.dashboard_producers"
         validate_value_against_manifest(dashboard_producers, schemas_def)
@@ -778,6 +782,7 @@ def main() -> int:
                 ok["schema"],
                 report["schema"],
                 corrupt["schema"],
+                br_static_dictionary_required["schema"],
                 dashboard_strict_modes["schema"],
                 dashboard_strict_reasons["schema"],
                 dashboard_strict["schema"],

@@ -1,14 +1,14 @@
 {
   "schema": "vort.dashboard_config_index",
   "schema_version": 1,
-  "config_count": 8,
+  "config_count": 9,
   "configs": [
     {
-      "path": "tools/dashboard_config_index.json",
-      "schema_name": "vort.dashboard_config_index",
-      "docs_section": "## `vort.dashboard_config_index`",
-      "validation_step": "zig build run-dashboard-config-index-smoke",
-      "consumer": "tools/dashboard_config_index_smoke.py"
+      "path": "tools/br_static_dictionary_required_coverage.json",
+      "schema_name": "vort.br_static_dictionary_required_coverage",
+      "docs_section": "## `vort.br_static_dictionary_required_coverage`",
+      "validation_step": "zig build run-br-static-dictionary-report-smoke",
+      "consumer": "tools/br_static_dictionary_report_smoke.py"
     },
     {
       "path": "tools/dashboard_category_expected_artifacts.json",
@@ -16,6 +16,13 @@
       "docs_section": "## `vort.dashboard_category_expected_artifacts`",
       "validation_step": "zig build run-dashboard-category-smoke",
       "consumer": "tools/dashboard_category_smoke.py"
+    },
+    {
+      "path": "tools/dashboard_config_index.json",
+      "schema_name": "vort.dashboard_config_index",
+      "docs_section": "## `vort.dashboard_config_index`",
+      "validation_step": "zig build run-dashboard-config-index-smoke",
+      "consumer": "tools/dashboard_config_index_smoke.py"
     },
     {
       "path": "tools/dashboard_producers.json",
@@ -46,18 +53,18 @@
       "consumer": "tools/dashboard_strict_smoke.py"
     },
     {
-      "path": "tools/header_inspect_required_workflows.json",
-      "schema_name": "vort.header_inspect_required_workflows",
-      "docs_section": "## `vort.header_inspect_required_workflows`",
-      "validation_step": "zig build run-header-inspect-dashboard",
-      "consumer": "tools/header_inspect_smoke.py"
-    },
-    {
       "path": "tools/fuzz_corpus_expected_coverage.json",
       "schema_name": "vort.fuzz_corpus_expected_coverage",
       "docs_section": "## `vort.fuzz_corpus_expected_coverage`",
       "validation_step": "zig build run-fuzz-corpus-coverage-smoke",
       "consumer": "tools/fuzz_corpus_coverage_smoke.py"
+    },
+    {
+      "path": "tools/header_inspect_required_workflows.json",
+      "schema_name": "vort.header_inspect_required_workflows",
+      "docs_section": "## `vort.header_inspect_required_workflows`",
+      "validation_step": "zig build run-header-inspect-dashboard",
+      "consumer": "tools/header_inspect_smoke.py"
     }
   ]
 }

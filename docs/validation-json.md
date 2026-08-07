@@ -628,6 +628,7 @@ Example:
     "vort.validation_report",
     "vort.sidecar_verify_report",
     "vort.sidecar_corrupt_smoke_report",
+    "vort.br_static_dictionary_required_coverage",
     "vort.dashboard_strict_expected_modes",
     "vort.dashboard_strict_validation_reasons",
     "vort.dashboard_strict_smoke",
