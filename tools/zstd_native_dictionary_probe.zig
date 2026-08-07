@@ -1068,6 +1068,23 @@ fn checkReusableDictionaryApis(allocator: std.mem.Allocator) !void {
     const into_written = try decoder.decodeIntoSliceWithDictionary(scratch.frame, &into, dict);
     try expect(into_written == payload.len);
     try expectEqualSlices(payload, &into);
+    const exact_into_written = try decoder.decodeIntoSliceWithDictionaryExactSize(scratch.frame, &into, dict, payload.len);
+    try expect(exact_into_written == payload.len);
+    try expectEqualSlices(payload, &into);
+    try expectError(error.OutputTooSmall, decoder.decodeIntoSliceWithDictionaryExactSize(scratch.frame, into[0 .. into.len - 1], dict, payload.len));
+    try expectError(error.SizeMismatch, decoder.decodeIntoSliceWithDictionaryExactSize(scratch.frame, &into, dict, payload.len - 1));
+    var oversized_into: [payload.len + 1]u8 = undefined;
+    try expectError(error.SizeMismatch, decoder.decodeIntoSliceWithDictionaryExactSize(scratch.frame, &oversized_into, dict, payload.len + 1));
+
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(allocator, "prefix:");
+    const exact_appended_written = try decoder.decodeAppendExactSizeWithDictionary(&appended, scratch.frame, dict, payload.len);
+    try expect(exact_appended_written == payload.len);
+    try expectEqualSlices("prefix:", appended.items[0.."prefix:".len]);
+    try expectEqualSlices(payload, appended.items["prefix:".len..]);
+    appended.clearRetainingCapacity();
+    try expectError(error.SizeMismatch, decoder.decodeAppendExactSizeWithDictionary(&appended, scratch.frame, dict, payload.len - 1));
+    try expectError(error.SizeMismatch, decoder.decodeAppendExactSizeWithDictionary(&appended, scratch.frame, dict, payload.len + 1));
 }
 
 fn checkLaterBlockDictionaryMatch(allocator: std.mem.Allocator) !void {
