@@ -17,10 +17,13 @@ SMOKE = ROOT / "tools" / "br_static_dictionary_report_smoke.py"
 BASE_ENTRIES = [
     {"transform": 0, "copy_len": 5, "word_index": 43, "word_bytes": 5, "word": "words"},
     {"transform": 0, "copy_len": 10, "word_index": 205, "word_bytes": 10, "word": "dictionary"},
+    {"transform": 0, "copy_len": 10, "word_index": 240, "word_bytes": 10, "word": "number of "},
+    {"transform": 0, "copy_len": 11, "word_index": 452, "word_bytes": 11, "word": "one of the "},
     {"transform": 1, "copy_len": 10, "word_index": 205, "word_bytes": 11, "word": "dictionary "},
     {"transform": 6, "copy_len": 7, "word_index": 170, "word_bytes": 8, "word": " release"},
     {"transform": 9, "copy_len": 7, "word_index": 37, "word_bytes": 7, "word": "History"},
     {"transform": 12, "copy_len": 5, "word_index": 44, "word_bytes": 4, "word": "game"},
+    {"transform": 12, "copy_len": 7, "word_index": 1767, "word_bytes": 6, "word": "one an"},
 ]
 
 

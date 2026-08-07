@@ -1896,3 +1896,7 @@ architecture blindly.
 - Added Node quality-5 Brotli phrase entries for `one of the ` and `number of `,
   extending the static-dictionary subset with two common space-terminated
   multi-word outputs and differential CLI coverage.
+
+- Strengthened the Brotli static-dictionary report smoke so required coverage
+  now includes representative phrase entries (`number of `, `one of the `) and
+  the `one an` omit-last tuple used by Node's `one another` frame.

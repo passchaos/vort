@@ -38,10 +38,13 @@ def main() -> int:
     required = {
         (0, 5, 43, "words"),
         (0, 10, 205, "dictionary"),
+        (0, 10, 240, "number of "),
+        (0, 11, 452, "one of the "),
         (1, 10, 205, "dictionary "),
         (6, 7, 170, " release"),
         (9, 7, 37, "History"),
         (12, 5, 44, "game"),
+        (12, 7, 1767, "one an"),
     }
     seen: set[tuple[int, int, int, str]] = set()
     keys: set[tuple[int, int, int]] = set()
