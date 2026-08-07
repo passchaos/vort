@@ -330,8 +330,8 @@ pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
             .stream_identifier, .skippable => {},
             .uncompressed => {
                 const payload = chunk.payload[4..];
-                try verifyMaskedChecksum(payload, std.mem.readInt(u32, chunk.payload[0..4], .little));
                 if (output.len - written < payload.len) return error.OutputTooSmall;
+                try verifyMaskedChecksum(payload, std.mem.readInt(u32, chunk.payload[0..4], .little));
                 @memcpy(output[written..][0..payload.len], payload);
                 written += payload.len;
             },
@@ -800,6 +800,12 @@ test "snappy framed stream rejects malformed chunks" {
     try std.testing.expectError(error.TruncatedFrame, decodeFrameAlloc(std.testing.allocator, &truncated_compressed_payload));
     const truncated_uncompressed_payload = [_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y', 0x01, 0x03, 0x00, 0x00, 0, 0, 0 };
     try std.testing.expectError(error.TruncatedFrame, decodeFrameAlloc(std.testing.allocator, &truncated_uncompressed_payload));
+
+    var small_output_checksum = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(small_output_checksum);
+    small_output_checksum[14] ^= 0x01;
+    var too_small: [payload.len - 1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodeFrameInto(small_output_checksum, &too_small));
 }
 
 fn oversizedCompressedChunkFrame(allocator: std.mem.Allocator) Error![]u8 {
