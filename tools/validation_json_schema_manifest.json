@@ -67,6 +67,9 @@
         "transform_count": "int",
         "length_count": "int",
         "operation_counts": "dict",
+        "generated_table_matches_source": "bool",
+        "generated_zig_bytes": "int",
+        "generated_zig_path": "str",
         "source_checked": "bool",
         "source_dir": "str"
       }

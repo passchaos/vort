@@ -826,9 +826,9 @@ python3 tools/br_static_dictionary_source_audit.py --summary zig-out/vort-br-sta
 
 This schema summarizes the source-anchor audit for the retained Brotli
 static-dictionary subset. It reports whether the Zig decoder table and anchor
-fixture agree, how many transforms and lengths are covered, and whether an
-optional local upstream Brotli source checkout was used for byte-level
-verification.
+fixture agree, whether the generated Zig table matches `src/br.zig`, how many
+transforms and lengths are covered, and whether an optional local upstream
+Brotli source checkout was used for byte-level verification.
 
 Example:
 
@@ -847,6 +847,9 @@ Example:
     "omit_last_1": 3,
     "uppercase_first": 5
   },
+  "generated_table_matches_source": true,
+  "generated_zig_bytes": 5242,
+  "generated_zig_path": "zig-out/vort-br-static-dictionary-generated.zig",
   "source_checked": false,
   "source_dir": ""
 }

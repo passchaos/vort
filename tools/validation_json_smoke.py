@@ -163,6 +163,9 @@ def main() -> int:
         assert br_static_dictionary_source_audit["ok"] is True
         assert br_static_dictionary_source_audit["entry_count"] == br_static_dictionary_source_anchors["entry_count"]
         assert br_static_dictionary_source_audit["anchor_count"] == br_static_dictionary_source_anchors["entry_count"]
+        assert br_static_dictionary_source_audit["generated_table_matches_source"] is True
+        assert br_static_dictionary_source_audit["generated_zig_bytes"] > 0
+        assert br_static_dictionary_source_audit["generated_zig_path"].endswith("vort-br-static-dictionary-generated.zig")
         validate_value_against_manifest(br_static_dictionary_source_audit, schemas_def)
         dashboard_producers = json.loads((ROOT / "tools" / "dashboard_producers.json").read_text())
         assert dashboard_producers["schema"] == "vort.dashboard_producers"

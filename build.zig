@@ -851,6 +851,8 @@ pub fn build(b: *std.Build) void {
         "tools/br_static_dictionary_source_audit.py",
         "--summary",
         "zig-out/vort-br-static-dictionary-source-audit.json",
+        "--generated-zig",
+        "zig-out/vort-br-static-dictionary-generated.zig",
     });
     if (b.args) |args| br_static_dictionary_source_audit.addArgs(args);
     const br_static_dictionary_source_audit_step = b.step("run-br-static-dictionary-source-audit", "Validate Brotli static dictionary source anchors");
