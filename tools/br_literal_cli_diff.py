@@ -174,6 +174,18 @@ def write_distance_context_map_copy3(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # IMTF = false
 
 
+def write_distance_context_map_copy3_complex_prefix(bits: list[int]) -> None:
+    write_bits(bits, 0, 1)  # RLEMAX = 0
+    write_bits(bits, 0, 2)  # HSKIP = 0, complex context-map prefix
+    for symbol in (1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15):
+        write_code_length_code_length(bits, 1 if symbol == 1 else 0)
+    write_bits(bits, 0, 1)
+    write_bits(bits, 1, 1)
+    write_bits(bits, 0, 1)
+    write_bits(bits, 0, 1)
+    write_bits(bits, 0, 1)  # IMTF = false
+
+
 def write_distance_context_map_copy3_fifth_tree(bits: list[int]) -> None:
     write_bits(bits, 0, 1)  # RLEMAX = 0
     write_bits(bits, 1, 2)  # simple context-map prefix
@@ -564,6 +576,27 @@ def write_distance_context_ab_header(bits: list[int]) -> None:
     write_block_type_count(bits, 1)
     write_block_type_count(bits, 2)
     write_distance_context_map_copy3(bits)
+
+    write_bits(bits, 1, 2)  # simple literal prefix
+    write_bits(bits, 1, 2)  # NSYM = 2
+    write_bits(bits, ord("a"), 8)
+    write_bits(bits, ord("b"), 8)
+
+    write_simple_single_symbol_prefix(bits, 704, 145)
+    write_simple_single_symbol_prefix(bits, 66, 16)
+    write_simple_single_symbol_prefix(bits, 66, 17)
+
+
+def write_distance_context_complex_map_ab_header(bits: list[int]) -> None:
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 1)
+    write_bits(bits, 0, 2)  # NPOSTFIX
+    write_bits(bits, 2, 4)  # NDIRECT = 2
+    write_bits(bits, 0, 2)  # literal context mode
+    write_block_type_count(bits, 1)
+    write_block_type_count(bits, 2)
+    write_distance_context_map_copy3_complex_prefix(bits)
 
     write_bits(bits, 1, 2)  # simple literal prefix
     write_bits(bits, 1, 2)  # NSYM = 2
@@ -1369,6 +1402,19 @@ def distance_context_ab_frame() -> bytes:
     return bits_to_bytes(bits)
 
 
+def distance_context_complex_map_ab_frame() -> bytes:
+    bits: list[int] = []
+    write_bits(bits, 0, 1)  # WBITS = 16
+    write_bits(bits, 1, 1)  # ISLAST
+    write_bits(bits, 0, 1)  # ISLASTEMPTY = false
+    write_bits(bits, 0, 2)  # MNIBBLES = 4
+    write_bits(bits, 4, 16)  # MLEN - 1
+    write_distance_context_complex_map_ab_header(bits)
+    write_bits(bits, 0, 1)  # a
+    write_bits(bits, 1, 1)  # b
+    return bits_to_bytes(bits)
+
+
 def complex_distance_prefix_ab_frame() -> bytes:
     bits: list[int] = []
     write_bits(bits, 0, 1)  # WBITS = 16
@@ -1820,6 +1866,7 @@ def main() -> int:
         "regular-distance": (regular_distance_ab_frame(), b"ababa"),
         "complex-distance-prefix": (complex_distance_prefix_ab_frame(), b"ababa"),
         "distance-context": (distance_context_ab_frame(), b"ababa"),
+        "distance-context-complex-map": (distance_context_complex_map_ab_frame(), b"ababa"),
         "distance-context-five-trees": (distance_context_five_trees_ab_frame(), b"ababa"),
         "distance-context-nine-trees": (distance_context_nine_trees_ab_frame(), b"ababa"),
         "complex-literal-prefix": (complex_literal_prefix_aba_frame(), b"aba"),

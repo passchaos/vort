@@ -1521,6 +1521,25 @@ test "br minimal compressed stream selects distance context tree" {
     try std.testing.expectEqualSlices(u8, "ababa", decoded);
 }
 
+test "br minimal compressed stream selects distance context tree through complex context map" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 4, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForDistanceContextComplexMap(std.testing.allocator, &writer);
+    try writer.writeBits(std.testing.allocator, 0, 1); // a
+    try writer.writeBits(std.testing.allocator, 1, 1); // b
+
+    try std.testing.expectEqual(@as(usize, 5), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "ababa", decoded);
+}
+
 test "br minimal compressed stream decodes complex distance prefix tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -2786,6 +2805,28 @@ fn writeMinimalCompressedHeaderForDistanceContext(allocator: std.mem.Allocator, 
     try writeSimpleSingleSymbolPrefix(allocator, writer, 66, 17);
 }
 
+fn writeMinimalCompressedHeaderForDistanceContextComplexMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 2, 4); // NDIRECT = 2
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESL
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESD
+    try writeDistanceContextMapForCopyLenThreeComplexPrefix(allocator, writer);
+
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 'a', alphabetBits(256));
+    try writer.writeBits(allocator, 'b', alphabetBits(256));
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 145);
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 66, 16);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 66, 17);
+}
+
 fn writeMinimalCompressedHeaderForComplexDistancePrefix(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -3512,6 +3553,19 @@ fn writeDistanceContextMapForCopyLenThree(allocator: std.mem.Allocator, writer: 
     try writer.writeBits(allocator, 1, 2); // NSYM = 2
     try writer.writeBits(allocator, 0, alphabetBits(2));
     try writer.writeBits(allocator, 1, alphabetBits(2));
+    try writer.writeBits(allocator, 0, 1);
+    try writer.writeBits(allocator, 1, 1);
+    try writer.writeBits(allocator, 0, 1);
+    try writer.writeBits(allocator, 0, 1);
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeDistanceContextMapForCopyLenThreeComplexPrefix(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 0, 2); // HSKIP = 0, complex context-map prefix
+    for (code_length_order) |symbol| {
+        try writeCodeLengthCodeLength(allocator, writer, if (symbol == 1) 1 else 0);
+    }
     try writer.writeBits(allocator, 0, 1);
     try writer.writeBits(allocator, 1, 1);
     try writer.writeBits(allocator, 0, 1);
