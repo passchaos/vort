@@ -8235,7 +8235,7 @@ fn flushFseNormalizedCountBitsFixed(out: []u8, written: *usize, bit_stream: *u64
 
 fn buildFseCompressionTable(normalized: []const i16, max_symbol: u8, table_log: u8) Error!FseCompressionTable {
     if (normalized.len != @as(usize, max_symbol) + 1) return error.CorruptFrame;
-    if (table_log > max_fse_compression_table_log or max_symbol > max_fse_compression_symbol) return error.UnsupportedZstdFeature;
+    if (table_log > max_fse_compression_table_log or max_symbol > max_fse_compression_symbol) return error.CorruptFrame;
     const table_size: usize = @as(usize, 1) << @intCast(table_log);
     const table_mask = table_size - 1;
     const step = (table_size >> 1) + (table_size >> 3) + 3;
@@ -11432,6 +11432,13 @@ test "zstd FSE normalized-count writers reject invalid table logs as corrupt" {
     try std.testing.expectError(error.CorruptFrame, emitFseNormalizedCountFixed(&fixed_out, &fixed_written, &normalized, 1, max_fse_compression_table_log + 1));
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
     try std.testing.expectEqual(@as(usize, 0), fixed_written);
+}
+
+test "zstd FSE compression table rejects invalid parameters as corrupt" {
+    const normalized = [_]i16{ 1, 31 };
+    try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(&normalized, 1, max_fse_compression_table_log + 1));
+    try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(&normalized, max_fse_compression_symbol + 1, 5));
+    try std.testing.expectError(error.CorruptFrame, buildFseCompressionTable(normalized[0..1], 1, 5));
 }
 
 test "zstd literal-only writer emits FSE Huffman tree for high-byte binary literals" {
