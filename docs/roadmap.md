@@ -2005,6 +2005,12 @@ architecture blindly.
   omit-last candidates were exercised and accepted without manually scanning the
   per-candidate table.
 
+- Extended the Brotli static-dictionary candidate report with an optional
+  upstream-source mode. When a local Brotli `common/` checkout is supplied with
+  `--source-limit`, the report merges bounded official dictionary raw words into
+  the anchor-derived candidate pool, creating a controlled path toward larger
+  generated imports.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

@@ -11,11 +11,18 @@
       "fields": {
         "schema": "str",
         "schema_version": "int",
+        "source_mode": "str",
         "source_entry_count": "int",
         "raw_word_count": "int",
         "transform_count": "int",
         "candidate_count": "int",
         "candidates": "list"
+      },
+      "enums": {
+        "source_mode": [
+          "anchors",
+          "upstream"
+        ]
       },
       "item_collection": "candidates",
       "item_enums": {

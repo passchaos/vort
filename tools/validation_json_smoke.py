@@ -151,6 +151,7 @@ def main() -> int:
         validate_value_against_manifest(dashboard_config_index, schemas_def)
         br_static_dictionary_candidate_report = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-candidates.json").read_text())
         assert br_static_dictionary_candidate_report["schema"] == "vort.br_static_dictionary_candidate_report"
+        assert br_static_dictionary_candidate_report["source_mode"] == "anchors"
         assert br_static_dictionary_candidate_report["candidate_count"] >= 1
         assert br_static_dictionary_candidate_report["candidates"]
         validate_value_against_manifest(br_static_dictionary_candidate_report, schemas_def)

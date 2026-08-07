@@ -43,6 +43,8 @@ def main() -> int:
         raise AssertionError("unexpected candidate report schema")
     if report.get("schema_version") != 1:
         raise AssertionError("unexpected candidate report schema_version")
+    if report.get("source_mode") != "anchors":
+        raise AssertionError("default candidate report must use anchors source_mode")
     validate_value_against_manifest(report, load_manifest())
 
     candidates = report.get("candidates")

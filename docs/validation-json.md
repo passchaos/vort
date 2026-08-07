@@ -789,8 +789,10 @@ zig build run-br-static-dictionary-candidate-report-smoke
 
 This schema reports additional Brotli static-dictionary tuples that can be
 derived from the current source anchors and the minimal transform subset already
-understood by Vort. It is a planning artifact for expanding coverage from
-source data rather than hand-picking tuple literals.
+understood by Vort. It can also use a local upstream Brotli `common/` checkout
+with a bounded `--source-limit` to include more raw dictionary words in the
+candidate pool. It is a planning artifact for expanding coverage from source
+data rather than hand-picking tuple literals.
 
 Example:
 
@@ -798,6 +800,7 @@ Example:
 {
   "schema": "vort.br_static_dictionary_candidate_report",
   "schema_version": 1,
+  "source_mode": "anchors",
   "source_entry_count": 64,
   "raw_word_count": 50,
   "transform_count": 6,

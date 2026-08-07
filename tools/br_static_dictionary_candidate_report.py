@@ -13,10 +13,14 @@ sys.dont_write_bytecode = True
 
 from br_static_dictionary_source_audit import (
     DEFAULT_ANCHORS,
+    OFFSETS_BY_LENGTH,
+    SIZE_BITS_BY_LENGTH,
     SUPPORTED_TRANSFORMS,
     apply_transform,
     entry_key,
     load_anchors,
+    parse_c_integer_array,
+    resolve_common_dir,
 )
 
 
@@ -27,12 +31,36 @@ def transform_kind(transform: int) -> str:
     return operation
 
 
-def candidate_entries(anchors: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    existing = {entry_key(entry) for entry in anchors}
+def anchor_raw_words(anchors: list[dict[str, Any]]) -> dict[tuple[int, int], str]:
     raw_words: dict[tuple[int, int], str] = {}
     for entry in anchors:
         raw_words[(entry["copy_len"], entry["word_index"])] = entry["raw_word"]
+    return raw_words
 
+
+def upstream_raw_words(common_dir: Path, limit: int) -> dict[tuple[int, int], str]:
+    common = resolve_common_dir(common_dir)
+    dictionary_data = parse_c_integer_array((common / "dictionary_inc.h").read_text(), "kBrotliDictionaryData")
+    raw_words: dict[tuple[int, int], str] = {}
+    remaining = limit
+    for copy_len in sorted(SIZE_BITS_BY_LENGTH):
+        count = 1 << SIZE_BITS_BY_LENGTH[copy_len]
+        for word_index in range(count):
+            if remaining == 0:
+                return raw_words
+            offset = OFFSETS_BY_LENGTH[copy_len] + copy_len * word_index
+            raw = bytes(dictionary_data[offset : offset + copy_len])
+            try:
+                raw_word = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            raw_words[(copy_len, word_index)] = raw_word
+            remaining -= 1
+    return raw_words
+
+
+def candidate_entries(anchors: list[dict[str, Any]], raw_words: dict[tuple[int, int], str]) -> list[dict[str, Any]]:
+    existing = {entry_key(entry) for entry in anchors}
     candidates: list[dict[str, Any]] = []
     for copy_len, word_index in sorted(raw_words):
         raw_word = raw_words[(copy_len, word_index)]
@@ -54,12 +82,13 @@ def candidate_entries(anchors: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return candidates
 
 
-def build_report(anchors: list[dict[str, Any]], candidates: list[dict[str, Any]]) -> dict[str, Any]:
+def build_report(anchors: list[dict[str, Any]], raw_words: dict[tuple[int, int], str], candidates: list[dict[str, Any]], source_mode: str) -> dict[str, Any]:
     return {
         "schema": "vort.br_static_dictionary_candidate_report",
         "schema_version": 1,
+        "source_mode": source_mode,
         "source_entry_count": len(anchors),
-        "raw_word_count": len({(entry["copy_len"], entry["word_index"]) for entry in anchors}),
+        "raw_word_count": len(raw_words),
         "transform_count": len(SUPPORTED_TRANSFORMS),
         "candidate_count": len(candidates),
         "candidates": candidates,
@@ -77,6 +106,7 @@ def write_markdown(path: Path, report: dict[str, Any], limit: int) -> None:
     lines = [
         "# Brotli static dictionary candidate report",
         "",
+        f"- Source mode: {report['source_mode']}",
         f"- Source entries: {report['source_entry_count']}",
         f"- Unique raw words: {report['raw_word_count']}",
         f"- Supported transforms considered: {report['transform_count']}",
@@ -96,14 +126,21 @@ def write_markdown(path: Path, report: dict[str, Any], limit: int) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--anchors", type=Path, default=DEFAULT_ANCHORS)
+    parser.add_argument("--brotli-common-dir", type=Path, help="optional Brotli common/ directory or checkout root for upstream raw words")
+    parser.add_argument("--source-limit", type=int, default=0, help="maximum upstream raw words to include when --brotli-common-dir is set; 0 keeps anchor-only mode")
     parser.add_argument("--json", type=Path)
     parser.add_argument("--markdown", type=Path)
     parser.add_argument("--markdown-limit", type=int, default=80)
     args = parser.parse_args()
 
     anchors = load_anchors(args.anchors)
-    candidates = candidate_entries(anchors)
-    report = build_report(anchors, candidates)
+    raw_words = anchor_raw_words(anchors)
+    source_mode = "anchors"
+    if args.brotli_common_dir is not None and args.source_limit > 0:
+        raw_words.update(upstream_raw_words(args.brotli_common_dir, args.source_limit))
+        source_mode = "upstream"
+    candidates = candidate_entries(anchors, raw_words)
+    report = build_report(anchors, raw_words, candidates, source_mode)
     if args.json is not None:
         write_json(args.json, report)
     if args.markdown is not None:
