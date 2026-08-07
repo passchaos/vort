@@ -682,8 +682,16 @@ fn minimalStaticDictionaryWord(distance: usize, copy_len: usize, current_output_
     const mask = (@as(usize, 1) << @intCast(size_bits)) - 1;
     const word_index = address & mask;
     const transform_index = address >> @intCast(size_bits);
-    if (transform_index != 0) return error.UnsupportedBrotliFeature;
 
+    if (transform_index == 0) {
+        if (minimalStaticDictionaryIdentityWord(copy_len, word_index)) |word| return word;
+    } else if (transform_index == 12) {
+        if (minimalStaticDictionaryOmitLastOneWord(copy_len, word_index)) |word| return word;
+    }
+    return error.UnsupportedBrotliFeature;
+}
+
+fn minimalStaticDictionaryIdentityWord(copy_len: usize, word_index: usize) ?[]const u8 {
     if (copy_len == 5 and word_index == 35) return "about";
     if (copy_len == 5 and word_index == 81) return "press";
     if (copy_len == 5 and word_index == 107) return "quick";
@@ -694,7 +702,14 @@ fn minimalStaticDictionaryWord(distance: usize, copy_len: usize, current_output_
     if (copy_len == 10 and word_index == 135) return "depression";
     if (copy_len == 10 and word_index == 205) return "dictionary";
     if (copy_len == 11 and word_index == 5) return "information";
-    return error.UnsupportedBrotliFeature;
+    return null;
+}
+
+fn minimalStaticDictionaryOmitLastOneWord(copy_len: usize, word_index: usize) ?[]const u8 {
+    // RFC transform index 12 is the bare `OMIT_LAST_1` transform. Keep this
+    // intentionally tiny until the full transform table is represented in data.
+    if (copy_len == 5 and word_index == 43) return "word";
+    return null;
 }
 
 fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
@@ -2038,6 +2053,19 @@ test "br minimal static dictionary depression word decodes Node quality-five fra
         0x10, 0xc0, 0x84, 0x66, 0x01,
     };
     const expected = "depression";
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary omit-last-one transform decodes Node quality-five frame" {
+    const encoded = [_]u8{
+        0xa1, 0x40, 0x00, 0x00, 0x20, 0x01,
+        0x10, 0x83, 0x14, 0x76, 0x7e, 0x01,
+        0x19,
+    };
+    const expected = "wordpress";
     try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
     const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
     defer std.testing.allocator.free(decoded);

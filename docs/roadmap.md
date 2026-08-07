@@ -1826,3 +1826,9 @@ architecture blindly.
   Node quality-5 frames now cover `release`, `expression`, and `depression`
   through unit tests and the CLI differential smoke, exercising 7-byte and
   10-byte dictionary buckets beyond the earlier 5/10/11-byte examples.
+
+- Added the first Brotli static-dictionary transform slice. The decoder now
+  recognizes RFC transform index 12 (`OMIT_LAST_1`) for the known `words` stem,
+  allowing a real Node quality-5 `wordpress` frame to decode through both
+  size preflight and output paths while the broader transform table remains
+  intentionally unsupported.
