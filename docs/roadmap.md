@@ -1615,6 +1615,16 @@ architecture blindly.
   schema now records `file_hex_encode_cases`, so raw/zlib/gzip file-to-hex
   coverage is a first-class health gate instead of an unreported assertion.
 
+- Bounded native LZ4/Zstd codec probe runtime for Debug dashboard/CI smoke.
+  Zstd frame lib-generated coverage now uses the raw/RLE compatibility writer
+  for the generated decode/API matrix, while hand-authored frame fixtures retain
+  compressed-block, Huffman, sequence-table, and repeat-mode coverage. The Zstd
+  dictionary probe now keeps the expensive dictionary Huffman/sequence-table
+  writer shapes as fixed fixtures, so the probe still validates dictionary
+  requirement, compressed literals, FSE-Huffman weights, sequence-table inspect,
+  and decode behavior without repeating bootstrap match-planning work on every
+  smoke run.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,
