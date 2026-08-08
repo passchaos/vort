@@ -7,9 +7,14 @@ import argparse
 import csv
 import json
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+sys.dont_write_bytecode = True
+
+from br_static_dictionary_report_smoke import markdown_code
 
 ROOT = Path(__file__).resolve().parents[1]
 SMOKE = ROOT / "tools" / "br_static_dictionary_report_smoke.py"
@@ -84,7 +89,10 @@ def write_artifacts(root: Path, payload: dict[str, Any]) -> tuple[Path, Path, Pa
         "| ---: | ---: | ---: | ---: | --- |",
     ]
     for entry in entries:
-        lines.append(f"| {entry['transform']} | {entry['copy_len']} | {entry['word_index']} | {entry['word_bytes']} | `{entry['word']}` |")
+        lines.append(
+            f"| {entry['transform']} | {entry['copy_len']} | {entry['word_index']} | "
+            f"{entry['word_bytes']} | `{markdown_code(entry['word'])}` |"
+        )
     md_path.write_text("\n".join(lines) + "\n")
     return csv_path, json_path, md_path
 

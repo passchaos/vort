@@ -153,8 +153,20 @@ fn writeMarkdown(writer: *std.Io.Writer, entries: []const vort.br.StaticDictiona
 
 fn writeMarkdownCode(writer: *std.Io.Writer, value: []const u8) !void {
     for (value) |byte| {
-        if (byte == '`' or byte == '\\') try writer.writeByte('\\');
-        try writer.writeByte(byte);
+        // Dictionary words may contain source-code punctuation and line
+        // endings. Keep every report entry on one physical Markdown table row
+        // while preserving an unambiguous, byte-oriented representation.
+        switch (byte) {
+            '`', '\\', '|' => {
+                try writer.writeByte('\\');
+                try writer.writeByte(byte);
+            },
+            '\n' => try writer.writeAll("\\n"),
+            '\r' => try writer.writeAll("\\r"),
+            '\t' => try writer.writeAll("\\t"),
+            0...8, 11...12, 14...0x1f, 0x7f => try writer.print("\\x{x:0>2}", .{byte}),
+            else => try writer.writeByte(byte),
+        }
     }
 }
 

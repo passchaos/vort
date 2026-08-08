@@ -2240,3 +2240,11 @@ architecture blindly.
   7-byte words and three alternate 5-, 6-, and 8-byte addresses selected by
   Node. All 138 unique observed failing frames are source-anchored and
   unit-tested; the reindexed 1024-row window now has no Vort failures.
+
+- Continued upstream8192 with the 31268-32292 candidate window. The initial
+  probe and reindexed tail exposed 65 actual identity tuples: 61 direct
+  7-byte words and four alternate 5-, 6-, and 8-byte addresses selected by
+  Node. All 124 unique observed failing frames are source-anchored and
+  unit-tested; the reindexed 1024-row window now has no Vort failures. Static
+  dictionary Markdown reports now render embedded control bytes as visible
+  escapes, so CRLF-bearing dictionary words remain valid single table rows.

@@ -418,6 +418,14 @@
     },
     {
       "copy_len": 5,
+      "raw_word": "><!--",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "><!--",
+      "word_index": 365
+    },
+    {
+      "copy_len": 5,
       "raw_word": "});\r\n",
       "transform": 0,
       "transform_kind": "identity",
@@ -1671,6 +1679,14 @@
       "transform_kind": "identity",
       "transformed_word": "widget",
       "word_index": 216
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "center",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "center",
+      "word_index": 217
     },
     {
       "copy_len": 6,
@@ -16922,11 +16938,27 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "ub-link",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "ub-link",
+      "word_index": 1504
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Nuclear",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "Nuclear",
       "word_index": 1510
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Women's",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Women's",
+      "word_index": 1513
     },
     {
       "copy_len": 7,
@@ -16938,11 +16970,75 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "<table ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "<table ",
+      "word_index": 1517
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "by many",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "by many",
+      "word_index": 1518
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "sellers",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "sellers",
+      "word_index": 1523
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Through",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "Through",
       "word_index": 1525
+    },
+    {
+      "copy_len": 7,
+      "raw_word": ".cookie",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ".cookie",
+      "word_index": 1526
+    },
+    {
+      "copy_len": 7,
+      "raw_word": " Image(",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " Image(",
+      "word_index": 1527
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "older\">",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "older\">",
+      "word_index": 1528
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "us.js\">",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "us.js\">",
+      "word_index": 1529
+    },
+    {
+      "copy_len": 7,
+      "raw_word": " Since ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " Since ",
+      "word_index": 1530
     },
     {
       "copy_len": 7,
@@ -16954,11 +17050,315 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "(\"DOMCo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "(\"DOMCo",
+      "word_index": 1539
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "to show",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "to show",
+      "word_index": 1546
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "mixture",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "mixture",
+      "word_index": 1551
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "arising",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "arising",
+      "word_index": 1553
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Baptist",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Baptist",
+      "word_index": 1557
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "voting ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "voting ",
+      "word_index": 1558
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "\n\t\tvar ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\n\t\tvar ",
+      "word_index": 1559
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "March 2",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "March 2",
+      "word_index": 1560
+    },
+    {
+      "copy_len": 7,
+      "raw_word": ".remove",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ".remove",
+      "word_index": 1563
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "</head>",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "</head>",
+      "word_index": 1566
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "to work",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "to work",
+      "word_index": 1570
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "erected",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "erected",
+      "word_index": 1573
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "action=",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "action=",
+      "word_index": 1575
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "an area",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "an area",
+      "word_index": 1577
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "== \"htt",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "== \"htt",
+      "word_index": 1578
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "<header",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "<header",
+      "word_index": 1579
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "\n<html>",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\n<html>",
+      "word_index": 1580
+    },
+    {
+      "copy_len": 7,
+      "raw_word": ".custom",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ".custom",
+      "word_index": 1586
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "a means",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "a means",
+      "word_index": 1591
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "\">Mobil",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\">Mobil",
+      "word_index": 1595
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Clement",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Clement",
+      "word_index": 1596
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "s\" id=\"",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "s\" id=\"",
+      "word_index": 1597
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "as high",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "as high",
+      "word_index": 1598
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "is seen",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "is seen",
+      "word_index": 1602
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "implied",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "implied",
+      "word_index": 1603
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "besides",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "besides",
+      "word_index": 1608
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "\"><img ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\"><img ",
+      "word_index": 1611
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "a young",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "a young",
+      "word_index": 1614
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Native ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Native ",
+      "word_index": 1616
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "won the",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "won the",
+      "word_index": 1621
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "(mostly",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "(mostly",
+      "word_index": 1622
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "-bottom",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "-bottom",
+      "word_index": 1625
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Prince ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Prince ",
+      "word_index": 1626
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "induced",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "induced",
+      "word_index": 1635
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Against",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "Against",
       "word_index": 1639
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "k&quot;",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "k&quot;",
+      "word_index": 1641
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "px;\">\r\n",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "px;\">\r\n",
+      "word_index": 1642
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "abandon",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "abandon",
+      "word_index": 1644
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "numeral",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "numeral",
+      "word_index": 1645
     },
     {
       "copy_len": 7,
@@ -16970,11 +17370,115 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "or some",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "or some",
+      "word_index": 1649
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "crowned",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "crowned",
+      "word_index": 1652
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "October",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "October",
+      "word_index": 1655
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "may not",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "may not",
+      "word_index": 1656
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "it. The",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "it. The",
+      "word_index": 1665
+    },
+    {
+      "copy_len": 7,
       "raw_word": "height ",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "height ",
       "word_index": 1668
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "in one ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "in one ",
+      "word_index": 1672
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "=window",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "=window",
+      "word_index": 1673
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "a good ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "a good ",
+      "word_index": 1675
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "reklama",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "reklama",
+      "word_index": 1676
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "to this",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "to this",
+      "word_index": 1678
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "_cookie",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "_cookie",
+      "word_index": 1679
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "panel\">",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "panel\">",
+      "word_index": 1680
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "crushed",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "crushed",
+      "word_index": 1683
     },
     {
       "copy_len": 7,
@@ -17127,6 +17631,14 @@
       "transform_kind": "identity",
       "transformed_word": "Michael ",
       "word_index": 298
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "October ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "October ",
+      "word_index": 305
     },
     {
       "copy_len": 8,
@@ -17351,6 +17863,14 @@
       "transform_kind": "identity",
       "transformed_word": " Project",
       "word_index": 584
+    },
+    {
+      "copy_len": 8,
+      "raw_word": " October",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " October",
+      "word_index": 604
     },
     {
       "copy_len": 8,
@@ -18897,7 +19417,7 @@
       "word_index": 285
     }
   ],
-  "entry_count": 2362,
+  "entry_count": 2427,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

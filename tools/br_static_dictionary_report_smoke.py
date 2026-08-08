@@ -7,8 +7,11 @@ import argparse
 import csv
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
+
+sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REQUIRED = ROOT / "tools" / "br_static_dictionary_required_coverage.json"
@@ -25,6 +28,27 @@ def load_json(path: Path) -> dict[str, Any]:
 def load_case_names(path: Path) -> set[str]:
     text = path.read_text()
     return set(re.findall(r'"([^"\\]+)": \(', text))
+
+
+def markdown_code(value: str) -> str:
+    """Mirror the report's byte-oriented Markdown table escaping."""
+    escaped: list[str] = []
+    for byte in value.encode():
+        if byte in (ord("`"), ord("\\"), ord("|")):
+            escaped.append("\\" + chr(byte))
+        elif byte == ord("\n"):
+            escaped.append("\\n")
+        elif byte == ord("\r"):
+            escaped.append("\\r")
+        elif byte == ord("\t"):
+            escaped.append("\\t")
+        elif byte < 0x20 or byte == 0x7F:
+            escaped.append(f"\\x{byte:02x}")
+        else:
+            escaped.append(bytes([byte]).decode("latin-1"))
+    # The per-byte Latin-1 bridge preserves the original UTF-8 bytes while
+    # returning normal Python text for direct comparison with read_text().
+    return "".join(escaped).encode("latin-1").decode("utf-8")
 
 
 def load_required(path: Path, case_source: Path) -> set[tuple[int, int, int, str]]:
@@ -175,7 +199,7 @@ def main() -> int:
         if markdown_row not in markdown:
             raise AssertionError(f"Markdown missing matrix row {markdown_row!r}")
     for transform, copy_len, word_index, word in required:
-        row = f"| {transform} | {copy_len} | {word_index} | {len(word.encode())} | `{word}` |"
+        row = f"| {transform} | {copy_len} | {word_index} | {len(word.encode())} | `{markdown_code(word)}` |"
         if row not in markdown:
             raise AssertionError(f"Markdown missing row {row!r}")
 
