@@ -1700,6 +1700,11 @@ architecture blindly.
   and stream-iterator APIs now agree on `TruncatedFrame` for this header-length
   boundary.
 
+- Promoted Zstd frame descriptor bit 4 acceptance into the public frame probe.
+  The fixture keeps the true reserved bit 3 rejection separate while proving
+  that the unused neighboring bit can still decode through inspect, size, and
+  caller-owned output APIs like reference decoders.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

@@ -4430,6 +4430,23 @@ fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !u
     try expectNativeHeaderAndStreamError(allocator, &reserved_descriptor_bit, error.CorruptFrame);
     checked += 1;
 
+    const unused_descriptor_bit = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x10, // Unused descriptor bit set; accepted by reference decoders.
+        0x00, // No content size, so the 1 KiB window descriptor follows.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    const unused_header = try vort.zstdInspectNativeFrameHeader(&unused_descriptor_bit);
+    try expect(unused_header.content_size == null);
+    try expect(unused_header.window_size == 1024);
+    try expect(unused_header.payload_offset == 6);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&unused_descriptor_bit, 3)) == 3);
+    var unused_into: [3]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(&unused_descriptor_bit, &unused_into)) == 3);
+    try expectEqualSlices("abc", &unused_into);
+    checked += 1;
+
     // Descriptor advertises a 2-byte Dictionary_ID field but only one byte is
     // present. Keep the window descriptor valid so this specifically covers
     // field-length accounting, not earlier frame-header parsing.
