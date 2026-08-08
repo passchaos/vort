@@ -1617,6 +1617,942 @@
       "word_index": 205
     },
     {
+      "copy_len": 6,
+      "raw_word": "silver",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "silver",
+      "word_index": 208
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "margin",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "margin",
+      "word_index": 209
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "delete",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "delete",
+      "word_index": 210
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Global",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Global",
+      "word_index": 214
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "widget",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "widget",
+      "word_index": 216
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "budget",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "budget",
+      "word_index": 218
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "nowrap",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "nowrap",
+      "word_index": 219
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "credit",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "credit",
+      "word_index": 220
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "engine",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "engine",
+      "word_index": 222
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "safety",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "safety",
+      "word_index": 223
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "spirit",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "spirit",
+      "word_index": 225
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "-style",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "-style",
+      "word_index": 226
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "spread",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "spread",
+      "word_index": 227
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "making",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "making",
+      "word_index": 228
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "russia",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "russia",
+      "word_index": 230
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "please",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "please",
+      "word_index": 231
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Script",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Script",
+      "word_index": 233
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "broken",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "broken",
+      "word_index": 234
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "divide",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "divide",
+      "word_index": 237
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "member",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "member",
+      "word_index": 239
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "-based",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "-based",
+      "word_index": 240
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "theory",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "theory",
+      "word_index": 241
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "config",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "config",
+      "word_index": 242
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "impact",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "impact",
+      "word_index": 247
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "should",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "should",
+      "word_index": 248
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "always",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "always",
+      "word_index": 249
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "list\">",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "list\">",
+      "word_index": 252
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "){var ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "){var ",
+      "word_index": 253
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "prefix",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "prefix",
+      "word_index": 254
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "orange",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "orange",
+      "word_index": 255
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Header",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Header",
+      "word_index": 256
+    },
+    {
+      "copy_len": 6,
+      "raw_word": ".push(",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ".push(",
+      "word_index": 257
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "couple",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "couple",
+      "word_index": 258
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "garden",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "garden",
+      "word_index": 259
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "bridge",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "bridge",
+      "word_index": 260
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "launch",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "launch",
+      "word_index": 261
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Review",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Review",
+      "word_index": 262
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "taking",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "taking",
+      "word_index": 263
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "little",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "little",
+      "word_index": 265
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "dating",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "dating",
+      "word_index": 266
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Button",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Button",
+      "word_index": 267
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "beauty",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "beauty",
+      "word_index": 268
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "forgot",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "forgot",
+      "word_index": 270
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "anchor",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "anchor",
+      "word_index": 272
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "almost",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "almost",
+      "word_index": 273
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Change",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Change",
+      "word_index": 275
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "string",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "string",
+      "word_index": 277
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "reload",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "reload",
+      "word_index": 278
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "income",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "income",
+      "word_index": 280
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Source",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Source",
+      "word_index": 282
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "course",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "course",
+      "word_index": 286
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "island",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "island",
+      "word_index": 288
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "<html ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "<html ",
+      "word_index": 289
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "cookie",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "cookie",
+      "word_index": 290
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "amazon",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "amazon",
+      "word_index": 292
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "modern",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "modern",
+      "word_index": 293
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "advice",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "advice",
+      "word_index": 294
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "in</a>",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "in</a>",
+      "word_index": 295
+    },
+    {
+      "copy_len": 6,
+      "raw_word": ": The ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ": The ",
+      "word_index": 296
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "dialog",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "dialog",
+      "word_index": 297
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "BEGIN ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "BEGIN ",
+      "word_index": 299
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Mexico",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Mexico",
+      "word_index": 300
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "adding",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "adding",
+      "word_index": 304
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "assets",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "assets",
+      "word_index": 306
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Empire",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Empire",
+      "word_index": 307
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "School",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "School",
+      "word_index": 308
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "effort",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "effort",
+      "word_index": 309
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "direct",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "direct",
+      "word_index": 310
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "nearly",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "nearly",
+      "word_index": 311
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "manual",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "manual",
+      "word_index": 312
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Select",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Select",
+      "word_index": 313
+    },
+    {
+      "copy_len": 6,
+      "raw_word": ".\n\nOne",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ".\n\nOne",
+      "word_index": 314
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "awards",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "awards",
+      "word_index": 318
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "handle",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "handle",
+      "word_index": 319
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "import",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "import",
+      "word_index": 320
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "regard",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "regard",
+      "word_index": 322
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "skills",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "skills",
+      "word_index": 323
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "nation",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "nation",
+      "word_index": 324
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Sports",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Sports",
+      "word_index": 325
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "degree",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "degree",
+      "word_index": 326
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "weekly",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "weekly",
+      "word_index": 327
+    },
+    {
+      "copy_len": 6,
+      "raw_word": " (e.g.",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " (e.g.",
+      "word_index": 328
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "behind",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "behind",
+      "word_index": 329
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "doctor",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "doctor",
+      "word_index": 330
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "logged",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "logged",
+      "word_index": 331
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "united",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "united",
+      "word_index": 332
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "</b></",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "</b></",
+      "word_index": 333
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "canada",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "canada",
+      "word_index": 340
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "remain",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "remain",
+      "word_index": 343
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Brazil",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Brazil",
+      "word_index": 344
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "sample",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "sample",
+      "word_index": 345
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "logo\">",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "logo\">",
+      "word_index": 346
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "beyond",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "beyond",
+      "word_index": 347
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "-scale",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "-scale",
+      "word_index": 348
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Footer",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Footer",
+      "word_index": 352
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "camera",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "camera",
+      "word_index": 353
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "_form\"",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "_form\"",
+      "word_index": 355
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\" />\r\n",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\" />\r\n",
+      "word_index": 358
+    },
+    {
+      "copy_len": 6,
+      "raw_word": ".gif\" ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ".gif\" ",
+      "word_index": 359
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "onload",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "onload",
+      "word_index": 360
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "female",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "female",
+      "word_index": 366
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Design",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Design",
+      "word_index": 367
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "text\">",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "text\">",
+      "word_index": 370
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "thanks",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "thanks",
+      "word_index": 372
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "Africa",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Africa",
+      "word_index": 377
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "recent",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "recent",
+      "word_index": 379
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "People",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "People",
+      "word_index": 380
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "<br />",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "<br />",
+      "word_index": 381
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "wonder",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "wonder",
+      "word_index": 382
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "|| {};",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "|| {};",
+      "word_index": 385
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "main\">",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "main\">",
+      "word_index": 386
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "inline",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "inline",
+      "word_index": 387
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "sunday",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "sunday",
+      "word_index": 388
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "wrap\">",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "wrap\">",
+      "word_index": 389
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "census",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "census",
+      "word_index": 391
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "beacon",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "beacon",
+      "word_index": 393
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "150px|",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "150px|",
+      "word_index": 395
+    },
+    {
       "copy_len": 7,
       "raw_word": "history",
       "transform": 0,
@@ -1706,6 +2642,22 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "Mobile ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Mobile ",
+      "word_index": 219
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "return ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "return ",
+      "word_index": 282
+    },
+    {
+      "copy_len": 7,
       "raw_word": "America",
       "transform": 0,
       "transform_kind": "identity",
@@ -1746,11 +2698,27 @@
     },
     {
       "copy_len": 7,
+      "raw_word": " return",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " return",
+      "word_index": 899
+    },
+    {
+      "copy_len": 7,
       "raw_word": " target",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": " target",
       "word_index": 1086
+    },
+    {
+      "copy_len": 7,
+      "raw_word": " center",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " center",
+      "word_index": 1135
     },
     {
       "copy_len": 7,
@@ -1818,6 +2786,30 @@
     },
     {
       "copy_len": 7,
+      "raw_word": " &nbsp;",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " &nbsp;",
+      "word_index": 1418
+    },
+    {
+      "copy_len": 7,
+      "raw_word": " Search",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " Search",
+      "word_index": 1431
+    },
+    {
+      "copy_len": 7,
+      "raw_word": " About ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " About ",
+      "word_index": 1487
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Through",
       "transform": 0,
       "transform_kind": "identity",
@@ -1834,6 +2826,30 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "height ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "height ",
+      "word_index": 1668
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "better ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "better ",
+      "word_index": 1690
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "called ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "called ",
+      "word_index": 1726
+    },
+    {
+      "copy_len": 7,
       "raw_word": "one and",
       "transform": 0,
       "transform_kind": "identity",
@@ -1847,6 +2863,30 @@
       "transform_kind": "identity",
       "transformed_word": "either ",
       "word_index": 1781
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Office ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Office ",
+      "word_index": 1857
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "around ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "around ",
+      "word_index": 1865
+    },
+    {
+      "copy_len": 7,
+      "raw_word": " size=\"",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " size=\"",
+      "word_index": 1925
     },
     {
       "copy_len": 8,
@@ -2217,6 +3257,102 @@
       "word_index": 205
     },
     {
+      "copy_len": 6,
+      "raw_word": "Africa",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " Africa",
+      "word_index": 377
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "recent",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " recent",
+      "word_index": 379
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "People",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " People",
+      "word_index": 380
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "<br />",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " <br />",
+      "word_index": 381
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "wonder",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " wonder",
+      "word_index": 382
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "main\">",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " main\">",
+      "word_index": 386
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "inline",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " inline",
+      "word_index": 387
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "sunday",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " sunday",
+      "word_index": 388
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "wrap\">",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " wrap\">",
+      "word_index": 389
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "census",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " census",
+      "word_index": 391
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "beacon",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " beacon",
+      "word_index": 393
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "150px|",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " 150px|",
+      "word_index": 395
+    },
+    {
       "copy_len": 7,
       "raw_word": "release",
       "transform": 6,
@@ -2409,7 +3545,7 @@
       "word_index": 285
     }
   ],
-  "entry_count": 301,
+  "entry_count": 443,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

@@ -2143,6 +2143,11 @@ architecture blindly.
   identity source words; their observed Node frames are now pinned in unit
   coverage while source anchors keep the imported subset tied to upstream data.
 
+- Continued upstream4096 with the next 1024-row candidate window starting at
+  index 13247. The Node probe exposed 117 more actual identity source tuples,
+  including 7-byte alternatives selected for some 6-byte transformed payloads;
+  those observed frames are now pinned by unit coverage and source anchors.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
