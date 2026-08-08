@@ -3555,21 +3555,24 @@ fn checkMultipleSkippableBetweenDataFrames(allocator: std.mem.Allocator) !void {
     if ((try iterator.next()) != null) return error.ZstdNativeFrameProbeMismatch;
 }
 
-fn checkNonSingleSegmentRleContentSizeFrame(
+fn checkRleContentSizeFrame(
     frame: []const u8,
     comptime expected_len: usize,
     expected_window_size: u64,
+    expected_payload_offset: usize,
     fill_byte: u8,
 ) !void {
     const header = try vort.zstdInspectNativeFrameHeader(frame);
     const content_size = header.content_size orelse return error.ZstdNativeFrameProbeMismatch;
     try expect(content_size == @as(u64, expected_len));
     try expect(header.window_size == expected_window_size);
+    try expect(header.payload_offset == expected_payload_offset);
 
     const first_block = try vort.zstdInspectNativeFrameFirstBlock(frame);
     try expect(first_block.last);
     try expect(first_block.block_type == .rle);
     try expect(first_block.payload_len == expected_len);
+    try expect(first_block.header_offset == expected_payload_offset);
 
     const summary = try vort.zstdSummarizeNativeFrameBlocks(frame);
     try expect(summary.block_count == 1);
@@ -3615,7 +3618,7 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
         0x63, 0x09, 0x00, // Last RLE block, regenerated size 300.
         'x',
     };
-    try checkNonSingleSegmentRleContentSizeFrame(&non_single_segment_2byte_size, 300, 1024, 'x');
+    try checkRleContentSizeFrame(&non_single_segment_2byte_size, 300, 1024, 8, 'x');
     checked += 1;
 
     const non_single_segment_4byte_size = [_]u8{
@@ -3626,7 +3629,7 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
         0x0b, 0x20, 0x00, // Last RLE block, regenerated size 1025.
         'y',
     };
-    try checkNonSingleSegmentRleContentSizeFrame(&non_single_segment_4byte_size, 1025, 1152, 'y');
+    try checkRleContentSizeFrame(&non_single_segment_4byte_size, 1025, 1152, 10, 'y');
     checked += 1;
 
     const non_single_segment_8byte_size = [_]u8{
@@ -3638,7 +3641,18 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
         0x6b, 0x00, 0x00, // Last RLE block, regenerated size 13.
         'z',
     };
-    try checkNonSingleSegmentRleContentSizeFrame(&non_single_segment_8byte_size, 13, 1024, 'z');
+    try checkRleContentSizeFrame(&non_single_segment_8byte_size, 13, 1024, 14, 'z');
+    checked += 1;
+
+    const single_segment_8byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0xe0, // Single-segment frame with 8-byte content-size field.
+        0x0d, 0x00, 0x00, 0x00, // Decoded content size 13, encoded as u64.
+        0x00, 0x00, 0x00, 0x00,
+        0x6b, 0x00, 0x00, // Last RLE block, regenerated size 13.
+        'q',
+    };
+    try checkRleContentSizeFrame(&single_segment_8byte_size, 13, 13, 13, 'q');
     checked += 1;
 
     const no_size_multi_block = [_]u8{
