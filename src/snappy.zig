@@ -23,6 +23,26 @@ const Header = struct {
     index: usize,
 };
 
+pub fn encodedBlockBound(input_len: usize) Error!usize {
+    _ = try checkedUsizeToU32(input_len);
+    var bound = try varintEncodedLen(input_len);
+    if (input_len != 0) {
+        bound = try checkedAdd(bound, try literalHeaderLen(input_len));
+        bound = try checkedAdd(bound, input_len);
+    }
+    return bound;
+}
+
+pub fn encodedFrameBound(input_len: usize) Error!usize {
+    _ = try checkedUsizeToU32(input_len);
+    var bound: usize = 4 + stream_identifier_payload.len; // chunk header + stream identifier.
+    if (input_len == 0) return bound;
+    const chunk_count = (input_len + max_uncompressed_chunk_len - 1) / max_uncompressed_chunk_len;
+    bound = try checkedAdd(bound, input_len);
+    bound = try checkedAdd(bound, try checkedMul(chunk_count, 8)); // chunk header + masked CRC-32C.
+    return bound;
+}
+
 pub fn encodeBlockAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -131,12 +151,12 @@ fn encodeBlockAppendWithTable(allocator: std.mem.Allocator, out: *std.ArrayList(
 }
 
 pub fn encodeBlockInto(input: []const u8, output: []u8) Error!usize {
-    var fba = std.heap.FixedBufferAllocator.init(output);
-    const encoded = encodeBlockAlloc(fba.allocator(), input) catch |err| switch (err) {
-        error.OutOfMemory => return error.OutputTooSmall,
-        else => |e| return e,
-    };
-    return encoded.len;
+    const bound = try encodedBlockBound(input.len);
+    if (output.len < bound) return error.OutputTooSmall;
+    var out = std.ArrayList(u8).initBuffer(output);
+    writeVarintInto(&out, input.len) catch return error.OutputTooSmall;
+    emitLiteralInto(&out, input) catch return error.OutputTooSmall;
+    return out.items.len;
 }
 
 pub fn encodeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
@@ -153,12 +173,18 @@ pub fn encodeFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), 
 }
 
 pub fn encodeFrameInto(input: []const u8, output: []u8) Error!usize {
-    var fba = std.heap.FixedBufferAllocator.init(output);
-    const encoded = encodeFrameAlloc(fba.allocator(), input) catch |err| switch (err) {
-        error.OutOfMemory => return error.OutputTooSmall,
-        else => |e| return e,
-    };
-    return encoded.len;
+    const bound = try encodedFrameBound(input.len);
+    if (output.len < bound) return error.OutputTooSmall;
+    var out = std.ArrayList(u8).initBuffer(output);
+    writeChunkInto(&out, stream_identifier_chunk_type, stream_identifier_payload) catch return error.OutputTooSmall;
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const chunk_len = @min(input.len - offset, max_uncompressed_chunk_len);
+        const chunk = input[offset..][0..chunk_len];
+        writeCheckedChunkInto(&out, uncompressed_data_chunk_type, chunk, chunk) catch return error.OutputTooSmall;
+        offset += chunk_len;
+    }
+    return out.items.len;
 }
 
 pub fn decodeBlockAlloc(allocator: std.mem.Allocator, block: []const u8) Error![]u8 {
@@ -676,6 +702,27 @@ fn writeVarint(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: usi
     try out.append(allocator, @intCast(remaining));
 }
 
+fn writeVarintInto(out: *std.ArrayList(u8), value: usize) Error!void {
+    if (value > std.math.maxInt(u32)) return error.OutputLimitExceeded;
+    var remaining = value;
+    while (remaining >= 0x80) {
+        try out.appendBounded(@as(u8, @intCast(remaining & 0x7f)) | 0x80);
+        remaining >>= 7;
+    }
+    try out.appendBounded(@intCast(remaining));
+}
+
+fn varintEncodedLen(value: usize) Error!usize {
+    if (value > std.math.maxInt(u32)) return error.OutputLimitExceeded;
+    var remaining = value;
+    var len: usize = 1;
+    while (remaining >= 0x80) {
+        remaining >>= 7;
+        len += 1;
+    }
+    return len;
+}
+
 fn writeChunk(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunk_type: u8, payload: []const u8) Error!void {
     if (payload.len > 0x00ff_ffff) return error.OutputLimitExceeded;
     try out.append(allocator, chunk_type);
@@ -683,6 +730,15 @@ fn writeChunk(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunk_type:
     writeU24(&len_bytes, payload.len);
     try out.appendSlice(allocator, &len_bytes);
     try out.appendSlice(allocator, payload);
+}
+
+fn writeChunkInto(out: *std.ArrayList(u8), chunk_type: u8, payload: []const u8) Error!void {
+    if (payload.len > 0x00ff_ffff) return error.OutputLimitExceeded;
+    try out.appendBounded(chunk_type);
+    var len_bytes: [3]u8 = undefined;
+    writeU24(&len_bytes, payload.len);
+    try out.appendSliceBounded(&len_bytes);
+    try out.appendSliceBounded(payload);
 }
 
 fn writeCheckedChunk(
@@ -699,6 +755,18 @@ fn writeCheckedChunk(
     try checked.appendSlice(allocator, &checksum_bytes);
     try checked.appendSlice(allocator, payload);
     try writeChunk(allocator, out, chunk_type, checked.items);
+}
+
+fn writeCheckedChunkInto(out: *std.ArrayList(u8), chunk_type: u8, plain: []const u8, payload: []const u8) Error!void {
+    if (payload.len > 0x00ff_ffff - 4) return error.OutputLimitExceeded;
+    try out.appendBounded(chunk_type);
+    var len_bytes: [3]u8 = undefined;
+    writeU24(&len_bytes, payload.len + 4);
+    try out.appendSliceBounded(&len_bytes);
+    var checksum_bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &checksum_bytes, maskedCrc32c(plain), .little);
+    try out.appendSliceBounded(&checksum_bytes);
+    try out.appendSliceBounded(payload);
 }
 
 fn verifyMaskedChecksum(payload: []const u8, expected: u32) Error!void {
@@ -736,6 +804,17 @@ fn readLiteralLen(tag: u8, block: []const u8, input_index: *usize) Error!usize {
     return std.math.add(usize, len_minus_one, 1) catch error.IntegerOverflow;
 }
 
+fn literalHeaderLen(literal_len: usize) Error!usize {
+    if (literal_len == 0) return 0;
+    const len_minus_one = literal_len - 1;
+    if (len_minus_one < 60) return 1;
+    var byte_count: usize = 1;
+    var tmp = len_minus_one;
+    while (tmp >= 0x100) : (tmp >>= 8) byte_count += 1;
+    if (byte_count > 4) return error.OutputLimitExceeded;
+    return 1 + byte_count;
+}
+
 fn emitLiteral(allocator: std.mem.Allocator, out: *std.ArrayList(u8), literal: []const u8) Error!void {
     if (literal.len == 0) return;
     const len_minus_one = literal.len - 1;
@@ -755,6 +834,27 @@ fn emitLiteral(allocator: std.mem.Allocator, out: *std.ArrayList(u8), literal: [
         }
     }
     try out.appendSlice(allocator, literal);
+}
+
+fn emitLiteralInto(out: *std.ArrayList(u8), literal: []const u8) Error!void {
+    if (literal.len == 0) return;
+    const len_minus_one = literal.len - 1;
+    if (len_minus_one < 60) {
+        try out.appendBounded(@intCast(len_minus_one << 2));
+    } else {
+        var byte_count: usize = 1;
+        var tmp = len_minus_one;
+        while (tmp >= 0x100) : (tmp >>= 8) byte_count += 1;
+        if (byte_count > 4) return error.OutputLimitExceeded;
+        try out.appendBounded(@intCast((59 + byte_count) << 2));
+        tmp = len_minus_one;
+        var i: usize = 0;
+        while (i < byte_count) : (i += 1) {
+            try out.appendBounded(@intCast(tmp & 0xff));
+            tmp >>= 8;
+        }
+    }
+    try out.appendSliceBounded(literal);
 }
 
 fn emitCopy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), offset: usize, len: usize) Error!void {
@@ -808,18 +908,39 @@ fn copyFromHistory(output: []u8, written: usize, offset_raw: anytype, len: usize
     }
 }
 
+fn checkedAdd(a: usize, b: usize) Error!usize {
+    return std.math.add(usize, a, b) catch error.IntegerOverflow;
+}
+
+fn checkedMul(a: usize, b: usize) Error!usize {
+    return std.math.mul(usize, a, b) catch error.IntegerOverflow;
+}
+
+fn checkedUsizeToU32(value: usize) Error!u32 {
+    if (value > std.math.maxInt(u32)) return error.OutputLimitExceeded;
+    return @intCast(value);
+}
+
 test "snappy raw block encodes empty and hello with known bytes" {
     const empty = try encodeBlockAlloc(std.testing.allocator, "");
     defer std.testing.allocator.free(empty);
     try std.testing.expectEqualSlices(u8, &[_]u8{0x00}, empty);
+    try std.testing.expectEqual(empty.len, try encodedBlockBound(0));
     try std.testing.expectEqual(@as(usize, 0), try decodedBlockSize(empty));
 
     const hello = try encodeBlockAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(hello);
+    try std.testing.expect(hello.len <= try encodedBlockBound("hello".len));
     try std.testing.expectEqualSlices(u8, &[_]u8{ 0x05, 0x10, 'h', 'e', 'l', 'l', 'o' }, hello);
     const decoded = try decodeBlockAlloc(std.testing.allocator, hello);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "hello", decoded);
+
+    const block_bound = try encodedBlockBound("hello".len);
+    const bound_out = try std.testing.allocator.alloc(u8, block_bound);
+    defer std.testing.allocator.free(bound_out);
+    try std.testing.expectEqual(hello.len, try encodeBlockInto("hello", bound_out));
+    try std.testing.expectEqualSlices(u8, hello, bound_out[0..hello.len]);
 
     var too_small: [1]u8 = undefined;
     try std.testing.expectError(error.OutputTooSmall, encodeBlockInto("hello", &too_small));
@@ -957,6 +1078,7 @@ test "snappy raw block rejects malformed input" {
 test "snappy framed stream encodes empty identifier only" {
     const encoded = try encodeFrameAlloc(std.testing.allocator, "");
     defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(encoded.len, try encodedFrameBound(0));
     try std.testing.expectEqualSlices(u8, &[_]u8{ 0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y' }, encoded);
     try std.testing.expectEqual(@as(usize, 0), try decodedFrameSize(encoded));
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
@@ -968,6 +1090,7 @@ test "snappy framed stream round trips and enforces output limits" {
     const payload = "snappy frame payload" ** 1024;
     const encoded = try encodeFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len <= try encodedFrameBound(payload.len));
     try std.testing.expect(encoded.len < payload.len);
     try std.testing.expectEqual(compressed_data_chunk_type, encoded[10]);
     try std.testing.expectEqual(payload.len, try decodedFrameSize(encoded));
@@ -975,6 +1098,15 @@ test "snappy framed stream round trips and enforces output limits" {
     const decoded = try decodeFrameAllocLimited(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const frame_bound = try encodedFrameBound(payload.len);
+    const encoded_into = try std.testing.allocator.alloc(u8, frame_bound);
+    defer std.testing.allocator.free(encoded_into);
+    const written = try encodeFrameInto(payload, encoded_into);
+    try std.testing.expect(written <= frame_bound);
+    const into_decoded = try decodeFrameAlloc(std.testing.allocator, encoded_into[0..written]);
+    defer std.testing.allocator.free(into_decoded);
+    try std.testing.expectEqualSlices(u8, payload, into_decoded);
 }
 
 test "snappy framed stream chunked input helpers mirror one-shot decode" {

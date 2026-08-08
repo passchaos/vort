@@ -59,9 +59,11 @@ pub const brDecodedStreamSizeLimited = br.decodedStreamSizeLimited;
 pub const snappyEncodeBlockAlloc = snappy.encodeBlockAlloc;
 pub const snappyEncodeBlockAppend = snappy.encodeBlockAppend;
 pub const snappyEncodeBlockInto = snappy.encodeBlockInto;
+pub const snappyEncodedBlockBound = snappy.encodedBlockBound;
 pub const snappyEncodeFrameAlloc = snappy.encodeFrameAlloc;
 pub const snappyEncodeFrameAppend = snappy.encodeFrameAppend;
 pub const snappyEncodeFrameInto = snappy.encodeFrameInto;
+pub const snappyEncodedFrameBound = snappy.encodedFrameBound;
 pub const SnappyEncoder = snappy.Encoder;
 pub const snappyDecodeBlockAlloc = snappy.decodeBlockAlloc;
 pub const snappyDecodeBlockAllocExactSize = snappy.decodeBlockAllocExactSize;
@@ -1294,9 +1296,11 @@ test "root exports lz4 and zstd codec helpers" {
     _ = snappyEncodeBlockAlloc;
     _ = snappyEncodeBlockAppend;
     _ = snappyEncodeBlockInto;
+    _ = snappyEncodedBlockBound;
     _ = snappyEncodeFrameAlloc;
     _ = snappyEncodeFrameAppend;
     _ = snappyEncodeFrameInto;
+    _ = snappyEncodedFrameBound;
     _ = SnappyEncoder;
     _ = snappyDecodeBlockAlloc;
     _ = snappyDecodeBlockAllocExactSize;
@@ -1916,6 +1920,7 @@ test "root snappy raw block helpers round trip" {
     const encoded = try snappyEncodeBlockAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(encoded);
 
+    try std.testing.expect(encoded.len <= try snappyEncodedBlockBound("hello".len));
     try std.testing.expectEqual(@as(usize, 5), try snappyDecodedBlockSize(encoded));
     try std.testing.expectError(error.OutputLimitExceeded, snappyDecodedBlockSizeLimited(encoded, 4));
 
@@ -1935,12 +1940,20 @@ test "root snappy raw block helpers round trip" {
     const exact = try snappyDecodeBlockAllocExactSize(std.testing.allocator, encoded, 5);
     defer std.testing.allocator.free(exact);
     try std.testing.expectEqualSlices(u8, "hello", exact);
+
+    const block_bound = try snappyEncodedBlockBound("hello".len);
+    const encoded_into = try std.testing.allocator.alloc(u8, block_bound);
+    defer std.testing.allocator.free(encoded_into);
+    const encoded_written = try snappyEncodeBlockInto("hello", encoded_into);
+    try std.testing.expectEqual(encoded.len, encoded_written);
+    try std.testing.expectEqualSlices(u8, encoded, encoded_into[0..encoded_written]);
 }
 
 test "root snappy framed stream helpers round trip" {
     const encoded = try snappyEncodeFrameAlloc(std.testing.allocator, "hello");
     defer std.testing.allocator.free(encoded);
 
+    try std.testing.expect(encoded.len <= try snappyEncodedFrameBound("hello".len));
     try std.testing.expectEqual(@as(usize, 5), try snappyDecodedFrameSize(encoded));
     try std.testing.expectError(error.OutputLimitExceeded, snappyDecodedFrameSizeLimited(encoded, 4));
 
@@ -1961,6 +1974,15 @@ test "root snappy framed stream helpers round trip" {
     const exact = try snappyDecodeFrameAllocExactSize(std.testing.allocator, encoded, 5);
     defer std.testing.allocator.free(exact);
     try std.testing.expectEqualSlices(u8, "hello", exact);
+
+    const frame_bound = try snappyEncodedFrameBound("hello".len);
+    const encoded_into = try std.testing.allocator.alloc(u8, frame_bound);
+    defer std.testing.allocator.free(encoded_into);
+    const encoded_written = try snappyEncodeFrameInto("hello", encoded_into);
+    try std.testing.expect(encoded_written <= frame_bound);
+    var into_decoded: [5]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, into_decoded.len), try snappyDecodeFrameInto(encoded_into[0..encoded_written], &into_decoded));
+    try std.testing.expectEqualSlices(u8, "hello", &into_decoded);
 }
 
 test "root snappy chunked decode helpers round trip" {
