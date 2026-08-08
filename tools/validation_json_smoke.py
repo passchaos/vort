@@ -98,6 +98,7 @@ def main() -> int:
         decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
         native_codec_probes_path = ROOT / "zig-out" / "vort-native-codec-probes.json"
+        zstd_native_summary_path = ROOT / "zig-out" / "vort-zstd-native-stream-summary.json"
         zlib_relaxed_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.json"
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
         native_allocation_smoke_path = ROOT / "zig-out" / "vort-native-allocation-smoke.json"
@@ -310,6 +311,17 @@ def main() -> int:
             assert capabilities_by_name[capability]["ok_probe_count"] == capabilities_by_name[capability]["probe_count"]
             assert capabilities_by_name[capability]["cases"] >= 1
         validate_value_against_manifest(native_codec_probes, schemas_def)
+        zstd_native_summary = json.loads(zstd_native_summary_path.read_text())
+        assert zstd_native_summary["schema"] == "vort.zstd_native_stream_summary"
+        assert zstd_native_summary["schema_version"] == 1
+        assert zstd_native_summary["frame_count"] >= 2
+        assert zstd_native_summary["skippable_frame_count"] >= 1
+        assert zstd_native_summary["block_count"] >= 2
+        assert zstd_native_summary["raw_block_count"] >= 1
+        assert zstd_native_summary["compressed_bytes"] > 0
+        assert zstd_native_summary["payload_bytes"] > 0
+        assert zstd_native_summary["skippable_payload_bytes"] > 0
+        validate_value_against_manifest(zstd_native_summary, schemas_def)
         zlib_relaxed = json.loads(zlib_relaxed_path.read_text())
         assert zlib_relaxed["schema"] == "vort.zlib_relaxed_report"
         assert zlib_relaxed["schema_version"] >= 2
@@ -671,6 +683,7 @@ def main() -> int:
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
         shutil.copyfile(python_zlib_diff_path, root / "vort-python-zlib-diff-smoke.json")
         shutil.copyfile(native_codec_probes_path, root / "vort-native-codec-probes.json")
+        shutil.copyfile(zstd_native_summary_path, root / "vort-zstd-native-stream-summary.json")
 
         run(
             [
@@ -800,6 +813,15 @@ def main() -> int:
         }
         assert dashboard["native_codec_probes_zstd_frame_cases"] == probes_by_label["zstd-native-frame-probe"]["cases"]
         assert dashboard["native_codec_probes_zstd_dictionary_cases"] == probes_by_label["zstd-native-dictionary-probe"]["cases"]
+        assert dashboard["zstd_native_summary_present"] is True
+        assert dashboard["zstd_native_summary_healthy"] is True
+        assert dashboard["zstd_native_summary_frame_count"] == zstd_native_summary["frame_count"]
+        assert dashboard["zstd_native_summary_skippable_frame_count"] == zstd_native_summary["skippable_frame_count"]
+        assert dashboard["zstd_native_summary_block_count"] == zstd_native_summary["block_count"]
+        assert dashboard["zstd_native_summary_raw_block_count"] == zstd_native_summary["raw_block_count"]
+        assert dashboard["zstd_native_summary_compressed_bytes"] == zstd_native_summary["compressed_bytes"]
+        assert dashboard["zstd_native_summary_payload_bytes"] == zstd_native_summary["payload_bytes"]
+        assert dashboard["zstd_native_summary_skippable_payload_bytes"] == zstd_native_summary["skippable_payload_bytes"]
         assert dashboard["native_tier_corpus_discovery_present"] is True
         assert dashboard["native_tier_corpus_discovery_ok"] is True
         assert dashboard["native_tier_corpus_discovery_healthy"] is True

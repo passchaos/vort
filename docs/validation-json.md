@@ -2310,6 +2310,13 @@ Top-level fields:
   `native_codec_probes_total_cases`,
   `native_codec_probes_zstd_frame_cases`,
   `native_codec_probes_zstd_dictionary_cases`
+- `zstd_native_summary_present`, `zstd_native_summary_healthy`,
+  `zstd_native_summary_frame_count`,
+  `zstd_native_summary_skippable_frame_count`,
+  `zstd_native_summary_block_count`, `zstd_native_summary_raw_block_count`,
+  `zstd_native_summary_compressed_bytes`,
+  `zstd_native_summary_payload_bytes`,
+  `zstd_native_summary_skippable_payload_bytes`
 - `artifacts`
 
 Each artifact includes:
@@ -2456,6 +2463,15 @@ Example:
   "native_codec_probes_total_cases": 0,
   "native_codec_probes_zstd_frame_cases": 0,
   "native_codec_probes_zstd_dictionary_cases": 0,
+  "zstd_native_summary_present": false,
+  "zstd_native_summary_healthy": false,
+  "zstd_native_summary_frame_count": 0,
+  "zstd_native_summary_skippable_frame_count": 0,
+  "zstd_native_summary_block_count": 0,
+  "zstd_native_summary_raw_block_count": 0,
+  "zstd_native_summary_compressed_bytes": 0,
+  "zstd_native_summary_payload_bytes": 0,
+  "zstd_native_summary_skippable_payload_bytes": 0,
   "native_tier_range_present": true,
   "native_tier_range_healthy": true,
   "native_tier_range_summary_count": 3,

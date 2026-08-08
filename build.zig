@@ -2823,6 +2823,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(native_allocation_smoke_step);
     validation_json_smoke.step.dependOn(native_allocation_negative_smoke_step);
     validation_json_smoke.step.dependOn(native_codec_probes_dashboard_step);
+    validation_json_smoke.step.dependOn(zstd_native_summary_dashboard_step);
     validation_json_smoke.step.dependOn(png_scratch_report_dashboard_step);
     validation_json_smoke.step.dependOn(br_static_dictionary_source_audit_step);
     validation_json_smoke.step.dependOn(br_static_dictionary_source_audit_negative_smoke_step);
@@ -2845,6 +2846,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.step.dependOn(native_allocation_smoke_step);
     validation_json_dashboard.step.dependOn(native_allocation_negative_smoke_step);
     validation_json_dashboard.step.dependOn(native_codec_probes_dashboard_step);
+    validation_json_dashboard.step.dependOn(zstd_native_summary_dashboard_step);
     validation_json_dashboard.step.dependOn(png_scratch_report_dashboard_step);
     validation_json_dashboard.step.dependOn(br_static_dictionary_source_audit_step);
     validation_json_dashboard.step.dependOn(br_static_dictionary_source_audit_negative_smoke_step);
