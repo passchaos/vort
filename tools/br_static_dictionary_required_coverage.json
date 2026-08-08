@@ -8740,6 +8740,1266 @@
       "source_case": "node-static-dictionary-upstream4096-17343-window",
       "reason": "upstream4096 sixth-window final Node frame tuple",
       "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1179,
+      "word": "\u7b80\u5355",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1185,
+      "word": "\u5220\u9664",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1186,
+      "word": "\u8bc1\u5238",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1187,
+      "word": "\u8282\u76ee",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1188,
+      "word": "\u91cd\u70b9",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1189,
+      "word": "\u6b21\u6578",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1190,
+      "word": "\u591a\u5c11",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1193,
+      "word": "\u627e\u5230",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1197,
+      "word": "\u6700\u4f73",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1198,
+      "word": "\u56de\u7b54",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1199,
+      "word": "\u5929\u4e0b",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1201,
+      "word": "\u73b0\u4ee3",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1202,
+      "word": "\u68c0\u67e5",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1203,
+      "word": "\u6295\u7968",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1204,
+      "word": "\u5c0f\u65f6",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1205,
+      "word": "\u6c92\u6709",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1206,
+      "word": "\u6b63\u5e38",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1207,
+      "word": "\u751a\u81f3",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1208,
+      "word": "\u4ee3\u7406",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1211,
+      "word": "\u590d\u5236",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1212,
+      "word": "\u91d1\u878d",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1213,
+      "word": "\u5e78\u798f",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1216,
+      "word": "\u51c6\u5907",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1218,
+      "word": "\u56de\u5230",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1219,
+      "word": "\u601d\u60f3",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1220,
+      "word": "\u600e\u6837",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1221,
+      "word": "\u534f\u8bae",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1222,
+      "word": "\u8ba4\u8bc1",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1223,
+      "word": "\u6700\u597d",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1224,
+      "word": "\u4ea7\u751f",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1225,
+      "word": "\u6309\u7167",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1226,
+      "word": "\u670d\u88c5",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1227,
+      "word": "\u5e7f\u4e1c",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1229,
+      "word": "\u91c7\u8d2d",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1231,
+      "word": "\u7ec4\u56fe",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1232,
+      "word": "\u9762\u677f",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1233,
+      "word": "\u53c2\u8003",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1234,
+      "word": "\u653f\u6cbb",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1235,
+      "word": "\u5bb9\u6613",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1236,
+      "word": "\u5929\u5730",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1237,
+      "word": "\u52aa\u529b",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1239,
+      "word": "\u5347\u7ea7",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1243,
+      "word": "\u6d41\u884c",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1244,
+      "word": "\u9020\u6210",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1245,
+      "word": "\u6587\u5b57",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1246,
+      "word": "\u97e9\u56fd",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1247,
+      "word": "\u8d38\u6613",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1249,
+      "word": "\u76f8\u95dc",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1251,
+      "word": "\u5f71\u89c6",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1254,
+      "word": "\u5927\u5c0f",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1255,
+      "word": "\u62a5\u9053",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1256,
+      "word": "\u6761\u6b3e",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1258,
+      "word": "\u8bb8\u591a",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1261,
+      "word": "\u4e66\u5e97",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1262,
+      "word": "\u8fde\u63a5",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1263,
+      "word": "\u7acb\u5373",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1264,
+      "word": "\u4e3e\u62a5",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1265,
+      "word": "\u6280\u5de7",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1267,
+      "word": "\u767b\u5165",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1268,
+      "word": "\u4ee5\u6765",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1269,
+      "word": "\u7406\u8bba",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1270,
+      "word": "\u4e8b\u4ef6",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1271,
+      "word": "\u81ea\u7531",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1273,
+      "word": "\u529e\u516c",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1275,
+      "word": "\u771f\u6b63",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1276,
+      "word": "\u4e0d\u9519",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1277,
+      "word": "\u5168\u6587",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1278,
+      "word": "\u5408\u540c",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1279,
+      "word": "\u4ef7\u503c",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1280,
+      "word": "\u522b\u4eba",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1281,
+      "word": "\u76d1\u7763",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1282,
+      "word": "\u5177\u4f53",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1284,
+      "word": "\u56e2\u961f",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1285,
+      "word": "\u521b\u4e1a",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1286,
+      "word": "\u627f\u62c5",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1287,
+      "word": "\u589e\u957f",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1294,
+      "word": "\u80a1\u4efd",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1296,
+      "word": "\u5b9e\u9645",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1298,
+      "word": "\u7ecf\u7406",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1299,
+      "word": "\u751f\u547d",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1300,
+      "word": "\u5ba3\u4f20",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1301,
+      "word": "\u4efb\u52a1",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1303,
+      "word": "\u7279\u8272",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1306,
+      "word": "\u53ea\u80fd",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1308,
+      "word": "\u91cd\u65b0",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1309,
+      "word": "\u5167\u5bb9",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1311,
+      "word": "\u8fd0\u884c",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1312,
+      "word": "\u65e5\u5fd7",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1313,
+      "word": "\u8ce3\u5bb6",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1314,
+      "word": "\u8d85\u8fc7",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1315,
+      "word": "\u571f\u5730",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1317,
+      "word": "\u652f\u4ed8",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1320,
+      "word": "\u676d\u5dde",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1321,
+      "word": "\u6267\u884c",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1322,
+      "word": "\u5236\u9020",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1323,
+      "word": "\u4e4b\u4e00",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1324,
+      "word": "\u63a8\u5e7f",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1326,
+      "word": "\u63cf\u8ff0",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1327,
+      "word": "\u53d8\u5316",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1330,
+      "word": "\u4fdd\u9669",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1332,
+      "word": "\u533b\u7597",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1334,
+      "word": "\u8fc7\u53bb",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1336,
+      "word": "\u6536\u5165",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1338,
+      "word": "\u6742\u5fd7",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1339,
+      "word": "\u7f8e\u4e3d",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1340,
+      "word": "\u6700\u9ad8",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1341,
+      "word": "\u767b\u9646",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1342,
+      "word": "\u672a\u6765",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1345,
+      "word": "\u6559\u7a0b",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1346,
+      "word": "\u7248\u5757",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1348,
+      "word": "\u91cd\u5e86",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1348,
+      "word": " \u91cd\u5e86",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1349,
+      "word": "\u51fa\u552e",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1349,
+      "word": " \u51fa\u552e",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1350,
+      "word": "\u6210\u672c",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1350,
+      "word": " \u6210\u672c",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1351,
+      "word": "\u5f62\u5f0f",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1351,
+      "word": " \u5f62\u5f0f",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1352,
+      "word": "\u571f\u8c46",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1352,
+      "word": " \u571f\u8c46",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1354,
+      "word": "\u4e1c\u65b9",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1354,
+      "word": " \u4e1c\u65b9",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1356,
+      "word": "\u5357\u4eac",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1356,
+      "word": " \u5357\u4eac",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1357,
+      "word": "\u6c42\u804c",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1357,
+      "word": " \u6c42\u804c",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1358,
+      "word": "\u53d6\u5f97",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1358,
+      "word": " \u53d6\u5f97",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1360,
+      "word": "\u76f8\u4fe1",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1360,
+      "word": " \u76f8\u4fe1",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1361,
+      "word": "\u9875\u9762",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1361,
+      "word": " \u9875\u9762",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1363,
+      "word": "\u7f51\u9875",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1363,
+      "word": " \u7f51\u9875",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1364,
+      "word": "\u786e\u5b9a",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1364,
+      "word": " \u786e\u5b9a",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1367,
+      "word": "\u79ef\u6781",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1367,
+      "word": " \u79ef\u6781",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1368,
+      "word": "\u9519\u8bef",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 6,
+      "copy_len": 6,
+      "word_index": 1368,
+      "word": " \u9519\u8bef",
+      "source_case": "node-static-dictionary-upstream4096-18367-window",
+      "reason": "upstream4096 seventh-window final Node frame tuple",
+      "category": "phrase"
     }
   ]
 }
