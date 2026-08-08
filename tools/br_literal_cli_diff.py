@@ -2445,6 +2445,46 @@ def main() -> int:
             node_compress(b" money", quality=5, lgwin=10),
             b" money",
         ),
+        "node-static-dictionary-quot-q5-lgwin10": (
+            node_compress(b"&quot;", quality=5, lgwin=10),
+            b"&quot;",
+        ),
+        "node-static-dictionary-leading-space-quot-q5-lgwin10": (
+            node_compress(b" &quot;", quality=5, lgwin=10),
+            b" &quot;",
+        ),
+        "node-static-dictionary-domain-q5-lgwin10": (
+            node_compress(b"domain", quality=5, lgwin=10),
+            b"domain",
+        ),
+        "node-static-dictionary-leading-space-domain-q5-lgwin10": (
+            node_compress(b" domain", quality=5, lgwin=10),
+            b" domain",
+        ),
+        "node-static-dictionary-common-q5-lgwin10": (
+            node_compress(b"common", quality=5, lgwin=10),
+            b"common",
+        ),
+        "node-static-dictionary-leading-space-common-q5-lgwin10": (
+            node_compress(b" common", quality=5, lgwin=10),
+            b" common",
+        ),
+        "node-static-dictionary-master-q5-lgwin10": (
+            node_compress(b"master", quality=5, lgwin=10),
+            b"master",
+        ),
+        "node-static-dictionary-leading-space-master-q5-lgwin10": (
+            node_compress(b" master", quality=5, lgwin=10),
+            b" master",
+        ),
+        "node-static-dictionary-banner-q5-lgwin10": (
+            node_compress(b"banner", quality=5, lgwin=10),
+            b"banner",
+        ),
+        "node-static-dictionary-leading-space-banner-q5-lgwin10": (
+            node_compress(b" banner", quality=5, lgwin=10),
+            b" banner",
+        ),
         "node-static-dictionary-leading-space-first-q5-lgwin10": (
             node_compress(b" first", quality=5, lgwin=10),
             b" first",

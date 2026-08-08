@@ -415,6 +415,51 @@
       "source_case": "node-static-dictionary-leading-space-money-q5-lgwin10",
       "reason": "upstream2048 window Node frame source tuple emitted after one literal space",
       "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 0,
+      "word": "&quot;",
+      "source_case": "node-static-dictionary-quot-q5-lgwin10",
+      "reason": "upstream2048 tail Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 1,
+      "word": "domain",
+      "source_case": "node-static-dictionary-domain-q5-lgwin10",
+      "reason": "upstream2048 tail Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 2,
+      "word": "common",
+      "source_case": "node-static-dictionary-common-q5-lgwin10",
+      "reason": "upstream2048 tail Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 5,
+      "word": "master",
+      "source_case": "node-static-dictionary-master-q5-lgwin10",
+      "reason": "upstream2048 tail Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 6,
+      "word_index": 8,
+      "word": "banner",
+      "source_case": "node-static-dictionary-banner-q5-lgwin10",
+      "reason": "upstream2048 tail Node frame identity source tuple",
+      "category": "identity"
     }
   ]
 }

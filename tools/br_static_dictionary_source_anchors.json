@@ -138,11 +138,51 @@
     },
     {
       "copy_len": 6,
+      "raw_word": "&quot;",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "&quot;",
+      "word_index": 0
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "domain",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "domain",
+      "word_index": 1
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "common",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "common",
+      "word_index": 2
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "master",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "master",
+      "word_index": 5
+    },
+    {
+      "copy_len": 6,
       "raw_word": "system",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "system",
       "word_index": 6
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "banner",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "banner",
+      "word_index": 8
     },
     {
       "copy_len": 6,
@@ -833,7 +873,7 @@
       "word_index": 614
     }
   ],
-  "entry_count": 104,
+  "entry_count": 109,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

@@ -2120,6 +2120,12 @@ architecture blindly.
   again used a literal leading space plus the identity source tuple `money`; that
   tuple is now anchored and covered by both unit and CLI differential tests.
 
+- Continued the upstream2048 tail probe and promoted the first five 6-byte
+  identity-source misses (`&quot;`, `domain`, `common`, `master`, and `banner`).
+  Their direct and leading-space Node frames now keep the minimal static
+  dictionary aligned with actual encoder output while the full dictionary import
+  remains future work.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

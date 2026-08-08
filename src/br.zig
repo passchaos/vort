@@ -693,7 +693,12 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 5, .word_index = 107, .word = "quick" },
     .{ .transform = 0, .copy_len = 5, .word_index = 719, .word = "hello" },
     .{ .transform = 0, .copy_len = 5, .word_index = 989, .word = "dolor" },
+    .{ .transform = 0, .copy_len = 6, .word_index = 0, .word = "&quot;" },
+    .{ .transform = 0, .copy_len = 6, .word_index = 1, .word = "domain" },
+    .{ .transform = 0, .copy_len = 6, .word_index = 2, .word = "common" },
+    .{ .transform = 0, .copy_len = 6, .word_index = 5, .word = "master" },
     .{ .transform = 0, .copy_len = 6, .word_index = 6, .word = "system" },
+    .{ .transform = 0, .copy_len = 6, .word_index = 8, .word = "banner" },
     .{ .transform = 0, .copy_len = 6, .word_index = 15, .word = "number" },
     .{ .transform = 0, .copy_len = 6, .word_index = 18, .word = "public" },
     .{ .transform = 0, .copy_len = 7, .word_index = 37, .word = "history" },
@@ -2415,6 +2420,23 @@ test "br minimal static dictionary upstream2048 identity money decodes leading-s
     // example where Node uses one literal space plus an identity dictionary
     // word rather than the transform-equivalent leading-space address.
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0xd5 }, " money");
+}
+
+test "br minimal static dictionary upstream2048 identity six-byte tail decodes Node frames" {
+    // The upstream2048 tail probe surfaced early 6-byte identity words. The
+    // leading-space payloads again encode as one literal space plus these
+    // identity source words, so each source tuple is pinned by both direct and
+    // leading-space Node frames when Node emitted both forms.
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x10, 0x84, 0x04, 0x04 }, "&quot;");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x30, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8c, 0x04, 0x14 }, " &quot;");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x10, 0x84, 0x04, 0x14 }, "domain");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x30, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8c, 0x44, 0x04 }, " domain");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x10, 0x84, 0x44, 0x04 }, "common");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x30, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8c, 0x44, 0x14 }, " common");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x10, 0x84, 0x84, 0x14 }, "master");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x30, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8c, 0x84, 0x24 }, " master");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x10, 0x84, 0xc4, 0x04 }, "banner");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x30, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8c, 0xc4, 0x14 }, " banner");
 }
 
 test "br minimal compressed stream selects literal context tree through signed mode" {
