@@ -2086,6 +2086,11 @@ architecture blindly.
   the Node/Vort probe accepted all 3367 frames, doubling the covered official
   dictionary prefix while keeping the long-running sweep explicit.
 
+- Added a lightweight opt-in `upstream1024` candidate-report slice for local
+  Brotli checkouts. The source-limit 1024 report produced 6426 generated
+  candidates locally, exposing the next official-dictionary prefix distribution
+  without immediately requiring the much longer Node/Vort probe.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

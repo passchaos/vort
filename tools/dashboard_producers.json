@@ -16,6 +16,14 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-br-static-dictionary-candidate-upstream-smoke"
     },
+    "vort-br-static-dictionary-candidates-upstream1024.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-candidate-report-upstream1024 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-candidates-upstream1024.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-candidate-report-upstream1024 -- --brotli-common-dir <path>"
+    },
     "vort-br-static-dictionary-candidates-upstream128.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-br-static-dictionary-candidate-report-upstream128 -- --brotli-common-dir <path>"
@@ -547,6 +555,8 @@
     "vort-br-static-dictionary-candidate-upstream-smoke.json": "zig build run-br-static-dictionary-candidate-upstream-smoke",
     "vort-br-static-dictionary-candidates-upstream.json": "zig build run-br-static-dictionary-candidate-upstream-smoke",
     "vort-br-static-dictionary-candidates-upstream.md": "zig build run-br-static-dictionary-candidate-upstream-smoke",
+    "vort-br-static-dictionary-candidates-upstream1024.json": "zig build run-br-static-dictionary-candidate-report-upstream1024 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-candidates-upstream1024.md": "zig build run-br-static-dictionary-candidate-report-upstream1024 -- --brotli-common-dir <path>",
     "vort-br-static-dictionary-candidates-upstream128.json": "zig build run-br-static-dictionary-candidate-report-upstream128 -- --brotli-common-dir <path>",
     "vort-br-static-dictionary-candidates-upstream128.md": "zig build run-br-static-dictionary-candidate-report-upstream128 -- --brotli-common-dir <path>",
     "vort-br-static-dictionary-candidates-upstream256.json": "zig build run-br-static-dictionary-candidate-report-upstream256 -- --brotli-common-dir <path>",

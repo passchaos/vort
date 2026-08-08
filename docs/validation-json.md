@@ -789,6 +789,7 @@ zig build run-br-static-dictionary-candidate-report-upstream80 -- --brotli-commo
 zig build run-br-static-dictionary-candidate-report-upstream128 -- --brotli-common-dir <path>
 zig build run-br-static-dictionary-candidate-report-upstream256 -- --brotli-common-dir <path>
 zig build run-br-static-dictionary-candidate-report-upstream512 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-candidate-report-upstream1024 -- --brotli-common-dir <path>
 ```
 
 This schema reports additional Brotli static-dictionary tuples that can be
@@ -797,8 +798,8 @@ understood by Vort. It can also use a local upstream Brotli `common/` checkout
 with a bounded `--source-limit` to include more raw dictionary words in the
 candidate pool; `run-br-static-dictionary-candidate-report-upstream80` is an
 opt-in retained report for a local source-limit 80 slice, with an analogous
-`upstream128`, `upstream256`, and `upstream512` steps for larger local slices.
-It is a planning artifact for expanding coverage from source
+`upstream128`, `upstream256`, `upstream512`, and `upstream1024` steps for
+larger local slices. It is a planning artifact for expanding coverage from source
 data rather than hand-picking tuple literals. The report includes transform-kind
 and copy-length summaries so generated backlog size is visible without scanning
 every candidate row.

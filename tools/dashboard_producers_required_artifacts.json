@@ -2,6 +2,20 @@
   "required_artifacts": [
     {
       "expected_format": "md",
+      "name": "vort-br-static-dictionary-candidates-upstream1024.md",
+      "producer_step": "zig build run-br-static-dictionary-candidate-report-upstream1024 -- --brotli-common-dir <path>",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-br-static-dictionary-candidate-report-upstream1024 -- --brotli-common-dir <path>"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-br-static-dictionary-candidates-upstream1024.json",
+      "producer_step": "zig build run-br-static-dictionary-candidate-report-upstream1024 -- --brotli-common-dir <path>",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-br-static-dictionary-candidate-report-upstream1024 -- --brotli-common-dir <path>"
+    },
+    {
+      "expected_format": "md",
       "name": "vort-br-static-dictionary-node-probe-upstream512.md",
       "producer_step": "zig build run-br-static-dictionary-node-probe-upstream512 -- --brotli-common-dir <path>",
       "required_smoke_gate": false,
