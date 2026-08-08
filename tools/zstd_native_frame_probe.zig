@@ -3828,6 +3828,28 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(&no_size_multi_block, no_size_multi_into[0..4]));
     checked += 1;
 
+    const no_size_multi_checksum_ok = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x04, // No content size, checksum present; window descriptor follows.
+        0x00, // 1 KiB window.
+        0x10, 0x00, 0x00, // Non-final raw block with two payload bytes.
+        'a',  'b',
+        0x19, 0x00, 0x00, // Final raw block with three more bytes.
+        'c',  'd',  'e',
+        0xeb, 0xc7, 0x8d, 0x0c, // XxHash64 low 32 bits for "abcde".
+    };
+    const no_size_multi_checksum_ok_summary = try vort.zstdSummarizeNativeStream(&no_size_multi_checksum_ok);
+    try expect(no_size_multi_checksum_ok_summary.frame_count == 1);
+    try expect(no_size_multi_checksum_ok_summary.block_count == 2);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&no_size_multi_checksum_ok, 5)) == 5);
+    const no_size_multi_checksum_ok_decoded = try vort.zstdDecodeNativeFrameAllocLimited(allocator, &no_size_multi_checksum_ok, 5);
+    defer allocator.free(no_size_multi_checksum_ok_decoded);
+    try expectEqualSlices("abcde", no_size_multi_checksum_ok_decoded);
+    var no_size_multi_checksum_ok_into: [5]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(&no_size_multi_checksum_ok, &no_size_multi_checksum_ok_into)) == 5);
+    try expectEqualSlices("abcde", &no_size_multi_checksum_ok_into);
+    checked += 1;
+
     const no_size_multi_checksum_mismatch = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
         0x04, // No content size, checksum present; window descriptor follows.
