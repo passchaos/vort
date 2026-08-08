@@ -598,6 +598,8 @@ def write_zstd_native_summary(path: Path, *, healthy: bool = True) -> None:
         "compressed_bytes": 48 if healthy else 0,
         "frame_count": 2 if healthy else 1,
         "skippable_frame_count": 1 if healthy else 0,
+        "checksum_frame_count": 1 if healthy else 0,
+        "dictionary_id_frame_count": 1 if healthy else 0,
         "block_count": 2 if healthy else 1,
         "compressed_block_count": 0,
         "rle_block_count": 0,

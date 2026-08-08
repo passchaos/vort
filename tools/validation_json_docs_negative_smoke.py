@@ -287,6 +287,8 @@ def main() -> int:
                 "zstd_native_summary_healthy": True,
                 "zstd_native_summary_frame_count": 2,
                 "zstd_native_summary_skippable_frame_count": 1,
+                "zstd_native_summary_checksum_frame_count": 1,
+                "zstd_native_summary_dictionary_id_frame_count": 1,
                 "zstd_native_summary_block_count": 2,
                 "zstd_native_summary_raw_block_count": 2,
                 "zstd_native_summary_compressed_bytes": 48,

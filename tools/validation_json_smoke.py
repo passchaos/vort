@@ -316,6 +316,8 @@ def main() -> int:
         assert zstd_native_summary["schema_version"] == 1
         assert zstd_native_summary["frame_count"] >= 2
         assert zstd_native_summary["skippable_frame_count"] >= 1
+        assert zstd_native_summary["checksum_frame_count"] >= 1
+        assert zstd_native_summary["dictionary_id_frame_count"] >= 1
         assert zstd_native_summary["block_count"] >= 2
         assert zstd_native_summary["raw_block_count"] >= 1
         assert zstd_native_summary["compressed_bytes"] > 0
@@ -817,6 +819,8 @@ def main() -> int:
         assert dashboard["zstd_native_summary_healthy"] is True
         assert dashboard["zstd_native_summary_frame_count"] == zstd_native_summary["frame_count"]
         assert dashboard["zstd_native_summary_skippable_frame_count"] == zstd_native_summary["skippable_frame_count"]
+        assert dashboard["zstd_native_summary_checksum_frame_count"] == zstd_native_summary["checksum_frame_count"]
+        assert dashboard["zstd_native_summary_dictionary_id_frame_count"] == zstd_native_summary["dictionary_id_frame_count"]
         assert dashboard["zstd_native_summary_block_count"] == zstd_native_summary["block_count"]
         assert dashboard["zstd_native_summary_raw_block_count"] == zstd_native_summary["raw_block_count"]
         assert dashboard["zstd_native_summary_compressed_bytes"] == zstd_native_summary["compressed_bytes"]

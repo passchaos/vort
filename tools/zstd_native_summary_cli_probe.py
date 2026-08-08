@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-import pathlib
 import json
+import pathlib
 import struct
 import subprocess
 import sys
@@ -31,6 +31,20 @@ def skippable_frame(skippable_id: int, payload: bytes) -> bytes:
     if not 0 <= skippable_id <= 15:
         raise ValueError(skippable_id)
     return struct.pack("<II", 0x184D2A50 + skippable_id, len(payload)) + payload
+
+
+def dictionary_id_raw_frame(dictionary_id: int, payload: bytes) -> bytes:
+    if not 0 < dictionary_id <= 0xFF:
+        raise ValueError(dictionary_id)
+    if len(payload) > 0xFF:
+        raise ValueError("fixture keeps a one-byte content-size field")
+    block_header = (len(payload) << 3) | 1
+    return (
+        b"\x28\xb5\x2f\xfd"
+        + bytes([0x21, dictionary_id, len(payload)])
+        + struct.pack("<I", block_header)[:3]
+        + payload
+    )
 
 
 def require_fields(actual: dict[str, int], expected: dict[str, int], context: str) -> None:
@@ -65,6 +79,8 @@ def main() -> int:
             {
                 "frames": 1,
                 "skippable_frames": 0,
+                "checksum_frames": 0,
+                "dictionary_id_frames": 0,
                 "blocks": 1,
                 "raw_blocks": 1,
                 "rle_blocks": 0,
@@ -80,28 +96,35 @@ def main() -> int:
         assert single_json["compressed_bytes"] == single_summary["zstd_native_compressed_bytes"]
         assert single_json["frame_count"] == single_summary["frames"]
         assert single_json["skippable_frame_count"] == 0
+        assert single_json["checksum_frame_count"] == 0
+        assert single_json["dictionary_id_frame_count"] == 0
         assert single_json["raw_block_count"] == 1
 
-        run_cli(cli, "encode-zstd-native-file", str(second_plain), str(second_frame), "raw_or_rle", "false", "true")
+        run_cli(cli, "encode-zstd-native-file", str(second_plain), str(second_frame), "raw_or_rle", "true", "true")
         skip_a = b"summary metadata a"
         skip_b = b"summary metadata bb"
+        dict_payload = b"abc"
+        dict_frame = dictionary_id_raw_frame(7, dict_payload)
         stream_path.write_bytes(
             first_frame.read_bytes()
             + skippable_frame(3, skip_a)
             + skippable_frame(12, skip_b)
             + second_frame.read_bytes()
+            + dict_frame
         )
         stream_summary = parse_fields(run_cli(cli, "summary-zstd-native-file", str(stream_path)))
         require_fields(
             stream_summary,
             {
-                "frames": 2,
+                "frames": 3,
                 "skippable_frames": 2,
-                "blocks": 2,
-                "raw_blocks": 2,
+                "checksum_frames": 1,
+                "dictionary_id_frames": 1,
+                "blocks": 3,
+                "raw_blocks": 3,
                 "rle_blocks": 0,
                 "compressed_blocks": 0,
-                "payload_bytes": len(first_payload) + len(second_payload),
+                "payload_bytes": len(first_payload) + len(second_payload) + len(dict_payload),
                 "skippable_payload_bytes": len(skip_a) + len(skip_b),
             },
             "concatenated/skippable summary",
@@ -113,6 +136,8 @@ def main() -> int:
         assert stream_json["compressed_bytes"] == stream_summary["zstd_native_compressed_bytes"]
         assert stream_json["frame_count"] == stream_summary["frames"]
         assert stream_json["skippable_frame_count"] == stream_summary["skippable_frames"]
+        assert stream_json["checksum_frame_count"] == stream_summary["checksum_frames"]
+        assert stream_json["dictionary_id_frame_count"] == stream_summary["dictionary_id_frames"]
         assert stream_json["skippable_payload_bytes"] == stream_summary["skippable_payload_bytes"]
 
     print("zstd_native_summary_cli_probe=ok")

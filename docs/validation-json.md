@@ -2161,8 +2161,9 @@ zig build run -- summary-zstd-native-file /tmp/vort-readme.zst json
 ```
 
 This schema is the machine-readable form of the Zstd native stream summary CLI.
-It reports data-frame, skippable-frame, block-type, compressed-payload, and
-skippable-payload counts without decoding the stream payload.
+It reports data-frame, skippable-frame, checksum-frame, Dictionary_ID-frame,
+block-type, compressed-payload, and skippable-payload counts without decoding
+the stream payload.
 
 Example:
 
@@ -2170,14 +2171,16 @@ Example:
 {
   "schema": "vort.zstd_native_stream_summary",
   "schema_version": 1,
-  "compressed_bytes": 48,
-  "frame_count": 2,
+  "compressed_bytes": 64,
+  "frame_count": 3,
   "skippable_frame_count": 1,
-  "block_count": 2,
+  "checksum_frame_count": 1,
+  "dictionary_id_frame_count": 1,
+  "block_count": 3,
   "compressed_block_count": 0,
   "rle_block_count": 0,
-  "raw_block_count": 2,
-  "payload_bytes": 6,
+  "raw_block_count": 3,
+  "payload_bytes": 9,
   "skippable_payload_bytes": 16
 }
 ```
@@ -2315,6 +2318,8 @@ Top-level fields:
 - `zstd_native_summary_present`, `zstd_native_summary_healthy`,
   `zstd_native_summary_frame_count`,
   `zstd_native_summary_skippable_frame_count`,
+  `zstd_native_summary_checksum_frame_count`,
+  `zstd_native_summary_dictionary_id_frame_count`,
   `zstd_native_summary_block_count`, `zstd_native_summary_raw_block_count`,
   `zstd_native_summary_compressed_bytes`,
   `zstd_native_summary_payload_bytes`,
@@ -2469,6 +2474,8 @@ Example:
   "zstd_native_summary_healthy": false,
   "zstd_native_summary_frame_count": 0,
   "zstd_native_summary_skippable_frame_count": 0,
+  "zstd_native_summary_checksum_frame_count": 0,
+  "zstd_native_summary_dictionary_id_frame_count": 0,
   "zstd_native_summary_block_count": 0,
   "zstd_native_summary_raw_block_count": 0,
   "zstd_native_summary_compressed_bytes": 0,

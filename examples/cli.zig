@@ -1902,11 +1902,13 @@ fn printLz4NativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary:
 fn printZstdNativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.ZstdNativeStreamSummary, output_format: HeaderInspectOutputFormat) !void {
     if (output_format == .json) return printZstdNativeSummaryJson(stdout, compressed_len, summary);
     try stdout.print(
-        "zstd_native_compressed_bytes={d} frames={d} skippable_frames={d} blocks={d} compressed_blocks={d} rle_blocks={d} raw_blocks={d} payload_bytes={d} skippable_payload_bytes={d}\n",
+        "zstd_native_compressed_bytes={d} frames={d} skippable_frames={d} checksum_frames={d} dictionary_id_frames={d} blocks={d} compressed_blocks={d} rle_blocks={d} raw_blocks={d} payload_bytes={d} skippable_payload_bytes={d}\n",
         .{
             compressed_len,
             summary.frame_count,
             summary.skippable_frame_count,
+            summary.checksum_frame_count,
+            summary.dictionary_id_frame_count,
             summary.block_count,
             summary.compressed_block_count,
             summary.rle_block_count,
@@ -1919,11 +1921,13 @@ fn printZstdNativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary
 
 fn printZstdNativeSummaryJson(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.ZstdNativeStreamSummary) !void {
     try stdout.print(
-        "{{\"schema\":\"vort.zstd_native_stream_summary\",\"schema_version\":1,\"compressed_bytes\":{d},\"frame_count\":{d},\"skippable_frame_count\":{d},\"block_count\":{d},\"compressed_block_count\":{d},\"rle_block_count\":{d},\"raw_block_count\":{d},\"payload_bytes\":{d},\"skippable_payload_bytes\":{d}}}\n",
+        "{{\"schema\":\"vort.zstd_native_stream_summary\",\"schema_version\":1,\"compressed_bytes\":{d},\"frame_count\":{d},\"skippable_frame_count\":{d},\"checksum_frame_count\":{d},\"dictionary_id_frame_count\":{d},\"block_count\":{d},\"compressed_block_count\":{d},\"rle_block_count\":{d},\"raw_block_count\":{d},\"payload_bytes\":{d},\"skippable_payload_bytes\":{d}}}\n",
         .{
             compressed_len,
             summary.frame_count,
             summary.skippable_frame_count,
+            summary.checksum_frame_count,
+            summary.dictionary_id_frame_count,
             summary.block_count,
             summary.compressed_block_count,
             summary.rle_block_count,

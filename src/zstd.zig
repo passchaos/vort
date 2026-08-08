@@ -3346,6 +3346,8 @@ pub const NativeSkippableFrameHeader = struct {
 pub const NativeStreamSummary = struct {
     frame_count: usize = 0,
     skippable_frame_count: usize = 0,
+    checksum_frame_count: usize = 0,
+    dictionary_id_frame_count: usize = 0,
     block_count: usize = 0,
     raw_block_count: usize = 0,
     rle_block_count: usize = 0,
@@ -5481,6 +5483,8 @@ pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
         if (magic == frame_magic_u32) {
             const frame_start = offset - 4;
             const header = try parseRawOrRleFrameHeaderWithOptions(frames, &offset, true);
+            if (header.has_checksum) summary.checksum_frame_count += 1;
+            if (header.dictionary_id != 0) summary.dictionary_id_frame_count += 1;
             while (true) {
                 const block = try inspectNativeFrameBlockAt(frames[frame_start..], offset - frame_start);
                 summary.block_count += 1;

@@ -1640,9 +1640,10 @@ architecture blindly.
 
 - Added `summary-zstd-native-file` to the CLI smoke surface. It prints the
   existing library-level Zstd native stream summary fields (data frames,
-  skippable frames, block type counts, compressed payload bytes, and skippable
-  payload bytes), matching the LZ4 native summary command and making
-  concatenated/skippable Zstd stream layout visible without decoding. The
+  skippable frames, checksum-bearing frames, Dictionary_ID-bearing frames, block
+  type counts, compressed payload bytes, and skippable payload bytes), matching
+  the LZ4 native summary command and making concatenated/skippable Zstd stream
+  layout visible without decoding. The
   command supports text and `vort.zstd_native_stream_summary` JSON output. The
   new `run-zstd-native-summary-cli-probe` black-box smoke encodes single-frame
   and concatenated/skippable streams through the CLI, checks both text and JSON

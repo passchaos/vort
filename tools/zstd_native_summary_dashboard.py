@@ -24,6 +24,20 @@ def skippable_frame(skippable_id: int, payload: bytes) -> bytes:
     return struct.pack("<II", 0x184D2A50 + skippable_id, len(payload)) + payload
 
 
+def dictionary_id_raw_frame(dictionary_id: int, payload: bytes) -> bytes:
+    if not 0 < dictionary_id <= 0xFF:
+        raise ValueError(dictionary_id)
+    if len(payload) > 0xFF:
+        raise ValueError("fixture keeps a one-byte content-size field")
+    block_header = (len(payload) << 3) | 1
+    return (
+        b"\x28\xb5\x2f\xfd"
+        + bytes([0x21, dictionary_id, len(payload)])
+        + struct.pack("<I", block_header)[:3]
+        + payload
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("cli", type=pathlib.Path)
@@ -45,21 +59,29 @@ def main() -> int:
         first_plain.write_bytes(first_payload)
         second_plain.write_bytes(second_payload)
         run_cli(cli, "encode-zstd-native-file", str(first_plain), str(first_frame), "raw_or_rle", "false", "true")
-        run_cli(cli, "encode-zstd-native-file", str(second_plain), str(second_frame), "raw_or_rle", "false", "true")
+        run_cli(cli, "encode-zstd-native-file", str(second_plain), str(second_frame), "raw_or_rle", "true", "true")
         skip_payload = b"dashboard-zstd-summary"
-        stream_path.write_bytes(first_frame.read_bytes() + skippable_frame(6, skip_payload) + second_frame.read_bytes())
+        dict_payload = b"abc"
+        stream_path.write_bytes(
+            first_frame.read_bytes()
+            + skippable_frame(6, skip_payload)
+            + second_frame.read_bytes()
+            + dictionary_id_raw_frame(7, dict_payload)
+        )
 
         summary = json.loads(run_cli(cli, "summary-zstd-native-file", str(stream_path), "json"))
         if summary.get("schema") != "vort.zstd_native_stream_summary":
             raise AssertionError(f"unexpected summary schema: {summary!r}")
         expected = {
-            "frame_count": 2,
+            "frame_count": 3,
             "skippable_frame_count": 1,
-            "block_count": 2,
-            "raw_block_count": 2,
+            "checksum_frame_count": 1,
+            "dictionary_id_frame_count": 1,
+            "block_count": 3,
+            "raw_block_count": 3,
             "rle_block_count": 0,
             "compressed_block_count": 0,
-            "payload_bytes": len(first_payload) + len(second_payload),
+            "payload_bytes": len(first_payload) + len(second_payload) + len(dict_payload),
             "skippable_payload_bytes": len(skip_payload),
             "compressed_bytes": stream_path.stat().st_size,
         }
