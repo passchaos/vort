@@ -1569,6 +1569,12 @@ architecture blindly.
   using caller-provided compressed scratch, matching the chunked convenience
   shape already available for deflate and LZ4 without adding hidden buffering.
 
+- Added exact-size Snappy decode helpers across raw block, framed stream, and
+  split-input variants. Callers that know the expected output length can now
+  reject size drift before allocation/append and keep existing output buffers
+  unchanged on mismatch, matching the exact-size API shape used by LZ4 and
+  deflate wrapper decoders.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

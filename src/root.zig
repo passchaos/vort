@@ -64,31 +64,43 @@ pub const snappyEncodeFrameAppend = snappy.encodeFrameAppend;
 pub const snappyEncodeFrameInto = snappy.encodeFrameInto;
 pub const SnappyEncoder = snappy.Encoder;
 pub const snappyDecodeBlockAlloc = snappy.decodeBlockAlloc;
+pub const snappyDecodeBlockAllocExactSize = snappy.decodeBlockAllocExactSize;
 pub const snappyDecodeBlockAllocLimited = snappy.decodeBlockAllocLimited;
 pub const snappyDecodeBlockAppend = snappy.decodeBlockAppend;
+pub const snappyDecodeBlockAppendExactSize = snappy.decodeBlockAppendExactSize;
 pub const snappyDecodeBlockAppendLimited = snappy.decodeBlockAppendLimited;
 pub const snappyDecodeBlockInto = snappy.decodeBlockInto;
+pub const snappyDecodeBlockIntoExactSize = snappy.decodeBlockIntoExactSize;
 pub const snappyDecodedBlockSize = snappy.decodedBlockSize;
 pub const snappyDecodedBlockSizeLimited = snappy.decodedBlockSizeLimited;
 pub const snappyDecodeBlockChunksAlloc = snappy.decodeBlockChunksAlloc;
+pub const snappyDecodeBlockChunksAllocExactSize = snappy.decodeBlockChunksAllocExactSize;
 pub const snappyDecodeBlockChunksAllocLimited = snappy.decodeBlockChunksAllocLimited;
 pub const snappyDecodeBlockChunksAppend = snappy.decodeBlockChunksAppend;
+pub const snappyDecodeBlockChunksAppendExactSize = snappy.decodeBlockChunksAppendExactSize;
 pub const snappyDecodeBlockChunksAppendLimited = snappy.decodeBlockChunksAppendLimited;
 pub const snappyDecodeBlockChunksInto = snappy.decodeBlockChunksInto;
+pub const snappyDecodeBlockChunksIntoExactSize = snappy.decodeBlockChunksIntoExactSize;
 pub const snappyDecodedBlockChunksSize = snappy.decodedBlockChunksSize;
 pub const snappyDecodedBlockChunksSizeLimited = snappy.decodedBlockChunksSizeLimited;
 pub const snappyDecodeFrameAlloc = snappy.decodeFrameAlloc;
+pub const snappyDecodeFrameAllocExactSize = snappy.decodeFrameAllocExactSize;
 pub const snappyDecodeFrameAllocLimited = snappy.decodeFrameAllocLimited;
 pub const snappyDecodeFrameAppend = snappy.decodeFrameAppend;
+pub const snappyDecodeFrameAppendExactSize = snappy.decodeFrameAppendExactSize;
 pub const snappyDecodeFrameAppendLimited = snappy.decodeFrameAppendLimited;
 pub const snappyDecodeFrameInto = snappy.decodeFrameInto;
+pub const snappyDecodeFrameIntoExactSize = snappy.decodeFrameIntoExactSize;
 pub const snappyDecodedFrameSize = snappy.decodedFrameSize;
 pub const snappyDecodedFrameSizeLimited = snappy.decodedFrameSizeLimited;
 pub const snappyDecodeFrameChunksAlloc = snappy.decodeFrameChunksAlloc;
+pub const snappyDecodeFrameChunksAllocExactSize = snappy.decodeFrameChunksAllocExactSize;
 pub const snappyDecodeFrameChunksAllocLimited = snappy.decodeFrameChunksAllocLimited;
 pub const snappyDecodeFrameChunksAppend = snappy.decodeFrameChunksAppend;
+pub const snappyDecodeFrameChunksAppendExactSize = snappy.decodeFrameChunksAppendExactSize;
 pub const snappyDecodeFrameChunksAppendLimited = snappy.decodeFrameChunksAppendLimited;
 pub const snappyDecodeFrameChunksInto = snappy.decodeFrameChunksInto;
+pub const snappyDecodeFrameChunksIntoExactSize = snappy.decodeFrameChunksIntoExactSize;
 pub const snappyDecodedFrameChunksSize = snappy.decodedFrameChunksSize;
 pub const snappyDecodedFrameChunksSizeLimited = snappy.decodedFrameChunksSizeLimited;
 
@@ -1287,31 +1299,43 @@ test "root exports lz4 and zstd codec helpers" {
     _ = snappyEncodeFrameInto;
     _ = SnappyEncoder;
     _ = snappyDecodeBlockAlloc;
+    _ = snappyDecodeBlockAllocExactSize;
     _ = snappyDecodeBlockAllocLimited;
     _ = snappyDecodeBlockAppend;
+    _ = snappyDecodeBlockAppendExactSize;
     _ = snappyDecodeBlockAppendLimited;
     _ = snappyDecodeBlockInto;
+    _ = snappyDecodeBlockIntoExactSize;
     _ = snappyDecodedBlockSize;
     _ = snappyDecodedBlockSizeLimited;
     _ = snappyDecodeBlockChunksAlloc;
+    _ = snappyDecodeBlockChunksAllocExactSize;
     _ = snappyDecodeBlockChunksAllocLimited;
     _ = snappyDecodeBlockChunksAppend;
+    _ = snappyDecodeBlockChunksAppendExactSize;
     _ = snappyDecodeBlockChunksAppendLimited;
     _ = snappyDecodeBlockChunksInto;
+    _ = snappyDecodeBlockChunksIntoExactSize;
     _ = snappyDecodedBlockChunksSize;
     _ = snappyDecodedBlockChunksSizeLimited;
     _ = snappyDecodeFrameAlloc;
+    _ = snappyDecodeFrameAllocExactSize;
     _ = snappyDecodeFrameAllocLimited;
     _ = snappyDecodeFrameAppend;
+    _ = snappyDecodeFrameAppendExactSize;
     _ = snappyDecodeFrameAppendLimited;
     _ = snappyDecodeFrameInto;
+    _ = snappyDecodeFrameIntoExactSize;
     _ = snappyDecodedFrameSize;
     _ = snappyDecodedFrameSizeLimited;
     _ = snappyDecodeFrameChunksAlloc;
+    _ = snappyDecodeFrameChunksAllocExactSize;
     _ = snappyDecodeFrameChunksAllocLimited;
     _ = snappyDecodeFrameChunksAppend;
+    _ = snappyDecodeFrameChunksAppendExactSize;
     _ = snappyDecodeFrameChunksAppendLimited;
     _ = snappyDecodeFrameChunksInto;
+    _ = snappyDecodeFrameChunksIntoExactSize;
     _ = snappyDecodedFrameChunksSize;
     _ = snappyDecodedFrameChunksSizeLimited;
 
@@ -1898,12 +1922,19 @@ test "root snappy raw block helpers round trip" {
     var decoded: [5]u8 = undefined;
     try std.testing.expectEqual(@as(usize, decoded.len), try snappyDecodeBlockInto(encoded, &decoded));
     try std.testing.expectEqualSlices(u8, "hello", &decoded);
+    try std.testing.expectEqual(@as(usize, decoded.len), try snappyDecodeBlockIntoExactSize(encoded, &decoded, decoded.len));
+    try std.testing.expectError(error.SizeMismatch, snappyDecodeBlockIntoExactSize(encoded, &decoded, decoded.len - 1));
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(std.testing.allocator);
     try appended.appendSlice(std.testing.allocator, "prefix:");
-    try std.testing.expectEqual(@as(usize, 5), try snappyDecodeBlockAppend(std.testing.allocator, &appended, encoded));
+    try std.testing.expectError(error.SizeMismatch, snappyDecodeBlockAppendExactSize(std.testing.allocator, &appended, encoded, 4));
+    try std.testing.expectEqual(@as(usize, 5), try snappyDecodeBlockAppendExactSize(std.testing.allocator, &appended, encoded, 5));
     try std.testing.expectEqualSlices(u8, "prefix:hello", appended.items);
+
+    const exact = try snappyDecodeBlockAllocExactSize(std.testing.allocator, encoded, 5);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, "hello", exact);
 }
 
 test "root snappy framed stream helpers round trip" {
@@ -1916,12 +1947,20 @@ test "root snappy framed stream helpers round trip" {
     var decoded: [5]u8 = undefined;
     try std.testing.expectEqual(@as(usize, decoded.len), try snappyDecodeFrameInto(encoded, &decoded));
     try std.testing.expectEqualSlices(u8, "hello", &decoded);
+    try std.testing.expectEqual(@as(usize, decoded.len), try snappyDecodeFrameIntoExactSize(encoded, &decoded, decoded.len));
+    var larger_decoded: [6]u8 = undefined;
+    try std.testing.expectError(error.SizeMismatch, snappyDecodeFrameIntoExactSize(encoded, &larger_decoded, larger_decoded.len));
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(std.testing.allocator);
     try appended.appendSlice(std.testing.allocator, "prefix:");
-    try std.testing.expectEqual(@as(usize, 5), try snappyDecodeFrameAppend(std.testing.allocator, &appended, encoded));
+    try std.testing.expectError(error.SizeMismatch, snappyDecodeFrameAppendExactSize(std.testing.allocator, &appended, encoded, 4));
+    try std.testing.expectEqual(@as(usize, 5), try snappyDecodeFrameAppendExactSize(std.testing.allocator, &appended, encoded, 5));
     try std.testing.expectEqualSlices(u8, "prefix:hello", appended.items);
+
+    const exact = try snappyDecodeFrameAllocExactSize(std.testing.allocator, encoded, 5);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, "hello", exact);
 }
 
 test "root snappy chunked decode helpers round trip" {
@@ -1939,6 +1978,10 @@ test "root snappy chunked decode helpers round trip" {
     const block_decoded = try snappyDecodeBlockChunksAllocLimited(std.testing.allocator, &block_chunks, block_scratch, payload.len);
     defer std.testing.allocator.free(block_decoded);
     try std.testing.expectEqualSlices(u8, payload, block_decoded);
+    const block_exact = try snappyDecodeBlockChunksAllocExactSize(std.testing.allocator, &block_chunks, block_scratch, payload.len);
+    defer std.testing.allocator.free(block_exact);
+    try std.testing.expectEqualSlices(u8, payload, block_exact);
+    try std.testing.expectError(error.SizeMismatch, snappyDecodeBlockChunksIntoExactSize(&block_chunks, block_scratch, &block_output, payload.len - 1));
 
     const frame = try snappyEncodeFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(frame);
@@ -1950,11 +1993,14 @@ test "root snappy chunked decode helpers round trip" {
     var frame_output: [payload.len]u8 = undefined;
     try std.testing.expectEqual(payload.len, try snappyDecodeFrameChunksInto(&frame_chunks, frame_scratch, &frame_output));
     try std.testing.expectEqualSlices(u8, payload, &frame_output);
+    try std.testing.expectEqual(payload.len, try snappyDecodeFrameChunksIntoExactSize(&frame_chunks, frame_scratch, &frame_output, payload.len));
+    try std.testing.expectError(error.SizeMismatch, snappyDecodeFrameChunksAllocExactSize(std.testing.allocator, &frame_chunks, frame_scratch, payload.len + 1));
 
     var appended: std.ArrayList(u8) = .empty;
     defer appended.deinit(std.testing.allocator);
     try appended.appendSlice(std.testing.allocator, "prefix:");
-    try std.testing.expectEqual(payload.len, try snappyDecodeFrameChunksAppendLimited(std.testing.allocator, &appended, &frame_chunks, frame_scratch, payload.len));
+    try std.testing.expectError(error.SizeMismatch, snappyDecodeFrameChunksAppendExactSize(std.testing.allocator, &appended, &frame_chunks, frame_scratch, payload.len - 1));
+    try std.testing.expectEqual(payload.len, try snappyDecodeFrameChunksAppendExactSize(std.testing.allocator, &appended, &frame_chunks, frame_scratch, payload.len));
     try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
 }
 
