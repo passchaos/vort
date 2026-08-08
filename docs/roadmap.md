@@ -1599,6 +1599,10 @@ architecture blindly.
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames.
 
+- Added LZ4 raw-block summary helpers and CLI commands, including prefix-history
+  variants. The summary validates block token structure while reporting decoded
+  bytes, literal token/byte counts, and match token/byte counts.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

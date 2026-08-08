@@ -692,6 +692,12 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.lz4DecodedBlockSize(block);
         try stdout.print("lz4_block_compressed_bytes={d} decoded_bytes={d}\n", .{ block.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-lz4-block-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const block = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(block);
+        const summary = try vort.lz4SummarizeBlock(block);
+        try printLz4BlockSummary(stdout, block.len, summary);
     } else if (std.mem.eql(u8, command, "encode-lz4-block-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const payload = try hexToOwnedBytes(init.gpa, hex);
@@ -876,6 +882,15 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.lz4DecodedBlockSizeWithPrefix(block, prefix);
         try stdout.print("lz4_block_prefix_compressed_bytes={d} prefix_bytes={d} decoded_bytes={d}\n", .{ block.len, prefix.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-lz4-block-prefix-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const prefix_hex = args.next() orelse return error.MissingHexInput;
+        const block = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(block);
+        const prefix = try hexToOwnedBytes(init.gpa, prefix_hex);
+        defer init.gpa.free(prefix);
+        const summary = try vort.lz4SummarizeBlockWithPrefix(block, prefix);
+        try printLz4BlockSummary(stdout, block.len, summary);
     } else if (std.mem.eql(u8, command, "encode-lz4-block-prefix-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const prefix_hex = args.next() orelse return error.MissingHexInput;
@@ -1616,6 +1631,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode dependency-free native LZ4 frame to output
         \\  size-lz4-block-hex [hex] [max_output]
         \\                              Preflight LZ4 block decoded size
+        \\  summary-lz4-block-hex [hex]
+        \\                              Summarize LZ4 block literal/match tokens
         \\  encode-lz4-block-hex [hex]
         \\                              Encode LZ4 block
         \\  decode-lz4-block-hex [hex] [max_output]
@@ -1654,6 +1671,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Summarize Snappy framed stream file chunks and decoded bytes
         \\  size-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
         \\                              Preflight LZ4 block decoded size with prefix history
+        \\  summary-lz4-block-prefix-hex [hex] [prefix_hex]
+        \\                              Summarize LZ4 block tokens with prefix history
         \\  encode-lz4-block-prefix-hex [hex] [prefix_hex]
         \\                              Encode LZ4 block with prefix history
         \\  decode-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
@@ -1845,6 +1864,20 @@ fn printLz4NativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary:
             summary.raw_block_count,
             summary.payload_bytes,
             summary.skippable_payload_bytes,
+        },
+    );
+}
+
+fn printLz4BlockSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.Lz4BlockSummary) !void {
+    try stdout.print(
+        "lz4_block_compressed_bytes={d} decoded_bytes={d} literals={d} literal_bytes={d} matches={d} match_bytes={d}\n",
+        .{
+            compressed_len,
+            summary.decoded_bytes,
+            summary.literal_count,
+            summary.literal_bytes,
+            summary.match_count,
+            summary.match_bytes,
         },
     );
 }

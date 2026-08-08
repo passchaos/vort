@@ -373,6 +373,9 @@ fn checkBlockRoundTrip(allocator: std.mem.Allocator, case: Case) !void {
     defer allocator.free(block);
     const decoded_len = try vort.lz4DecodedBlockSize(block);
     if (decoded_len != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    const summary = try vort.lz4SummarizeBlock(block);
+    if (summary.decoded_bytes != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (summary.literal_bytes + summary.match_bytes != case.payload.len) return error.Lz4ProbeSizeMismatch;
     const decoded = try vort.lz4DecodeBlockAlloc(allocator, block, case.payload.len);
     defer allocator.free(decoded);
     try expectPayload(case, decoded);

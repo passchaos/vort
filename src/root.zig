@@ -130,6 +130,7 @@ pub const lz4NativeMaxChainDepth = lz4.native_max_chain_depth;
 pub const Lz4NativeFrameHeader = lz4.NativeFrameHeader;
 pub const Lz4NativeFrameBlockHeader = lz4.NativeFrameBlockHeader;
 pub const Lz4NativeFrameBlockSummary = lz4.NativeFrameBlockSummary;
+pub const Lz4BlockSummary = lz4.BlockSummary;
 pub const Lz4NativeStreamSummary = lz4.NativeStreamSummary;
 pub const Lz4NativeSkippableFrameHeader = lz4.NativeSkippableFrameHeader;
 pub const Lz4NativeFrameBlockIterator = lz4.NativeFrameBlockIterator;
@@ -435,6 +436,10 @@ pub const lz4DecodedBlockSize = lz4.decodedBlockSize;
 pub const lz4DecodedBlockSizeLimited = lz4.decodedBlockSizeLimited;
 pub const lz4DecodedBlockSizeWithPrefix = lz4.decodedBlockSizeWithPrefix;
 pub const lz4DecodedBlockSizeWithPrefixLimited = lz4.decodedBlockSizeWithPrefixLimited;
+pub const lz4SummarizeBlock = lz4.summarizeBlock;
+pub const lz4SummarizeBlockLimited = lz4.summarizeBlockLimited;
+pub const lz4SummarizeBlockWithPrefix = lz4.summarizeBlockWithPrefix;
+pub const lz4SummarizeBlockWithPrefixLimited = lz4.summarizeBlockWithPrefixLimited;
 pub const lz4EncodedBlockBound = lz4.encodedBlockBound;
 
 pub const zstdEncodeFrameAlloc = zstd.encodeFrameAlloc;
@@ -1373,6 +1378,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = Lz4NativeFrameHeader;
     _ = Lz4NativeFrameBlockHeader;
     _ = Lz4NativeFrameBlockSummary;
+    _ = Lz4BlockSummary;
     _ = Lz4NativeStreamSummary;
     _ = Lz4NativeSkippableFrameHeader;
     _ = lz4NativeDictionaryWindowLen;
@@ -1672,6 +1678,10 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4DecodedBlockSizeLimited;
     _ = lz4DecodedBlockSizeWithPrefix;
     _ = lz4DecodedBlockSizeWithPrefixLimited;
+    _ = lz4SummarizeBlock;
+    _ = lz4SummarizeBlockLimited;
+    _ = lz4SummarizeBlockWithPrefix;
+    _ = lz4SummarizeBlockWithPrefixLimited;
     _ = lz4EncodedBlockBound;
 
     _ = zstdEncodeFrameAlloc;

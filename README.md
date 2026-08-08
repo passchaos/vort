@@ -227,8 +227,10 @@ zig build run -- encode-lz4-native-file README.md /tmp/vort-readme.lz4
 zig build run -- summary-lz4-native-file /tmp/vort-readme.lz4
 zig build run -- decode-lz4-native-file-to /tmp/vort-readme.lz4 /tmp/vort-readme-lz4.out 1048576
 zig build run -- encode-lz4-block-hex 61626361626361626361
+zig build run -- summary-lz4-block-hex 336162630300
 zig build run -- decode-lz4-block-hex 336162630300 10
 zig build run -- encode-lz4-block-prefix-hex 6d6e6f706d6e6f70 6162636465666768696a6b6c6d6e6f70
+zig build run -- summary-lz4-block-prefix-hex 040400 6162636465666768696a6b6c6d6e6f70
 zig build run -- decode-lz4-block-prefix-hex 040400 6162636465666768696a6b6c6d6e6f70 8
 zig build run -- encode-snappy-block-hex 68656c6c6f
 zig build run -- decode-snappy-block-hex 051068656c6c6f 5

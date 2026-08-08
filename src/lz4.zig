@@ -3718,6 +3718,14 @@ pub const NativeFrameBlockSummary = struct {
     payload_bytes: usize = 0,
 };
 
+pub const BlockSummary = struct {
+    decoded_bytes: usize = 0,
+    literal_count: usize = 0,
+    literal_bytes: usize = 0,
+    match_count: usize = 0,
+    match_bytes: usize = 0,
+};
+
 pub const NativeSkippableFrameHeader = struct {
     skippable_id: u4,
     payload_offset: usize,
@@ -4181,6 +4189,44 @@ fn compressedBlockDecodedSizeLimitedWithHistory(
         total = try checkedAddWithinLimit(total, match_len, max_output_len);
     }
     return total;
+}
+
+fn summarizeBlockWithHistoryLimited(
+    block: []const u8,
+    initial_len: usize,
+    history_start: usize,
+    max_output_len: usize,
+) Error!BlockSummary {
+    if (history_start > initial_len) return error.InvalidMatch;
+    var offset: usize = 0;
+    var total = initial_len;
+    var summary: BlockSummary = .{};
+    while (offset < block.len) {
+        const token = block[offset];
+        offset += 1;
+        var literal_len: usize = token >> 4;
+        if (literal_len == 15) literal_len = try checkedAdd(literal_len, try readLengthExtension(block, &offset));
+        if (block.len - offset < literal_len) return error.TruncatedFrame;
+        total = try checkedAddWithinLimit(total, literal_len, max_output_len);
+        if (literal_len != 0) {
+            summary.literal_count += 1;
+            summary.literal_bytes = try checkedAdd(summary.literal_bytes, literal_len);
+        }
+        offset += literal_len;
+        if (offset == block.len) break;
+
+        if (block.len - offset < 2) return error.TruncatedFrame;
+        const match_offset = std.mem.readInt(u16, block[offset..][0..2], .little);
+        offset += 2;
+        if (match_offset == 0 or match_offset > total - history_start) return error.InvalidMatch;
+        var match_len: usize = (token & 0x0f) + 4;
+        if ((token & 0x0f) == 15) match_len = try checkedAdd(match_len, try readLengthExtension(block, &offset));
+        total = try checkedAddWithinLimit(total, match_len, max_output_len);
+        summary.match_count += 1;
+        summary.match_bytes = try checkedAdd(summary.match_bytes, match_len);
+    }
+    summary.decoded_bytes = total - initial_len;
+    return summary;
 }
 
 fn descriptorChecksum(descriptor: []const u8) u8 {
@@ -4870,6 +4916,14 @@ pub fn decodedBlockSizeLimited(input: []const u8, max_output_len: usize) Error!u
     return try compressedBlockDecodedSizeLimited(input, 0, max_output_len);
 }
 
+pub fn summarizeBlock(input: []const u8) Error!BlockSummary {
+    return try summarizeBlockLimited(input, std.math.maxInt(usize));
+}
+
+pub fn summarizeBlockLimited(input: []const u8, max_output_len: usize) Error!BlockSummary {
+    return try summarizeBlockWithHistoryLimited(input, 0, 0, max_output_len);
+}
+
 pub fn decodedBlockSizeWithPrefix(input: []const u8, prefix: []const u8) Error!usize {
     return try decodedBlockSizeWithPrefixLimited(input, prefix, std.math.maxInt(usize));
 }
@@ -4882,6 +4936,19 @@ pub fn decodedBlockSizeWithPrefixLimited(input: []const u8, prefix: []const u8, 
         std.math.add(usize, capped_prefix_len, max_output_len) catch return error.IntegerOverflow;
     const total = try compressedBlockDecodedSizeLimitedWithHistory(input, capped_prefix_len, 0, total_limit);
     return total - capped_prefix_len;
+}
+
+pub fn summarizeBlockWithPrefix(input: []const u8, prefix: []const u8) Error!BlockSummary {
+    return try summarizeBlockWithPrefixLimited(input, prefix, std.math.maxInt(usize));
+}
+
+pub fn summarizeBlockWithPrefixLimited(input: []const u8, prefix: []const u8, max_output_len: usize) Error!BlockSummary {
+    const capped_prefix_len = @min(prefix.len, max_block_history_len);
+    const total_limit = if (max_output_len == std.math.maxInt(usize))
+        std.math.maxInt(usize)
+    else
+        std.math.add(usize, capped_prefix_len, max_output_len) catch return error.IntegerOverflow;
+    return try summarizeBlockWithHistoryLimited(input, capped_prefix_len, 0, total_limit);
 }
 
 fn decodeBlockInto(
