@@ -1715,6 +1715,11 @@ architecture blindly.
   checksum validation for frames whose decoded length must be discovered from
   blocks rather than the frame header.
 
+- Promoted the extended two-byte zero `Sequence_Count` compressed-block form into
+  the public Zstd frame probe. The fixture validates block-mode inspection,
+  decoded-size preflight, and caller-owned decode for a legal sequence-free
+  compressed block whose count is not encoded in the single-byte short form.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

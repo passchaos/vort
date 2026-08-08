@@ -4057,6 +4057,27 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_rle_block));
     checked += 1;
 
+    const extended_zero_sequence_count = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x20, // single-segment, no checksum, one-byte content size.
+        0x05,
+        0x25, 0x00, 0x00, // Last compressed block with four payload bytes.
+        0x29, // RLE literals, regenerated size 5.
+        'z',
+        0x80, 0x00, // Two-byte encoding of sequence_count=0.
+    };
+    const extended_zero_block = try vort.zstdInspectNativeFrameFirstBlock(&extended_zero_sequence_count);
+    try expect(extended_zero_block.block_type == .compressed);
+    const extended_zero_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&extended_zero_sequence_count, extended_zero_block);
+    try expect(extended_zero_modes.literals_kind == .rle);
+    try expect(extended_zero_modes.sequence_count == 0);
+    try expect(extended_zero_modes.regenerated_literals_size == 5);
+    try expect((try vort.zstdDecodedNativeFrameSize(&extended_zero_sequence_count)) == 5);
+    var extended_zero_into: [5]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(&extended_zero_sequence_count, &extended_zero_into)) == 5);
+    try expectEqualSlices("zzzzz", &extended_zero_into);
+    checked += 1;
+
     const oversized_raw_block = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
         0x20, // single-segment, no checksum, one-byte content size.
