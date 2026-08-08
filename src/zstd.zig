@@ -3348,6 +3348,8 @@ pub const NativeStreamSummary = struct {
     skippable_frame_count: usize = 0,
     checksum_frame_count: usize = 0,
     dictionary_id_frame_count: usize = 0,
+    content_size_frame_count: usize = 0,
+    declared_content_bytes: u64 = 0,
     block_count: usize = 0,
     raw_block_count: usize = 0,
     rle_block_count: usize = 0,
@@ -5485,6 +5487,10 @@ pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
             const header = try parseRawOrRleFrameHeaderWithOptions(frames, &offset, true);
             if (header.has_checksum) summary.checksum_frame_count += 1;
             if (header.dictionary_id != 0) summary.dictionary_id_frame_count += 1;
+            if (header.content_size) |content_size| {
+                summary.content_size_frame_count += 1;
+                summary.declared_content_bytes = std.math.add(u64, summary.declared_content_bytes, content_size) catch return error.IntegerOverflow;
+            }
             while (true) {
                 const block = try inspectNativeFrameBlockAt(frames[frame_start..], offset - frame_start);
                 summary.block_count += 1;

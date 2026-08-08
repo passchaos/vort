@@ -81,6 +81,8 @@ def main() -> int:
                 "skippable_frames": 0,
                 "checksum_frames": 0,
                 "dictionary_id_frames": 0,
+                "content_size_frames": 1,
+                "declared_content_bytes": len(first_payload),
                 "blocks": 1,
                 "raw_blocks": 1,
                 "rle_blocks": 0,
@@ -98,6 +100,8 @@ def main() -> int:
         assert single_json["skippable_frame_count"] == 0
         assert single_json["checksum_frame_count"] == 0
         assert single_json["dictionary_id_frame_count"] == 0
+        assert single_json["content_size_frame_count"] == 1
+        assert single_json["declared_content_bytes"] == len(first_payload)
         assert single_json["raw_block_count"] == 1
 
         run_cli(cli, "encode-zstd-native-file", str(second_plain), str(second_frame), "raw_or_rle", "true", "true")
@@ -120,6 +124,8 @@ def main() -> int:
                 "skippable_frames": 2,
                 "checksum_frames": 1,
                 "dictionary_id_frames": 1,
+                "content_size_frames": 3,
+                "declared_content_bytes": len(first_payload) + len(second_payload) + len(dict_payload),
                 "blocks": 3,
                 "raw_blocks": 3,
                 "rle_blocks": 0,
@@ -138,6 +144,8 @@ def main() -> int:
         assert stream_json["skippable_frame_count"] == stream_summary["skippable_frames"]
         assert stream_json["checksum_frame_count"] == stream_summary["checksum_frames"]
         assert stream_json["dictionary_id_frame_count"] == stream_summary["dictionary_id_frames"]
+        assert stream_json["content_size_frame_count"] == stream_summary["content_size_frames"]
+        assert stream_json["declared_content_bytes"] == stream_summary["declared_content_bytes"]
         assert stream_json["skippable_payload_bytes"] == stream_summary["skippable_payload_bytes"]
 
     print("zstd_native_summary_cli_probe=ok")

@@ -77,6 +77,8 @@ def main() -> int:
             "skippable_frame_count": 1,
             "checksum_frame_count": 1,
             "dictionary_id_frame_count": 1,
+            "content_size_frame_count": 3,
+            "declared_content_bytes": len(first_payload) + len(second_payload) + len(dict_payload),
             "block_count": 3,
             "raw_block_count": 3,
             "rle_block_count": 0,
