@@ -2132,6 +2132,12 @@ architecture blindly.
   indexes); these Node frames now have source anchors, required coverage, CLI
   differential cases, and direct unit coverage.
 
+- Added opt-in upstream2048 candidate-report and Node/Vort probe build steps,
+  plus dashboard producer/category metadata and validation JSON docs. The
+  incremental windows start at candidate index 6137, where source-limit 2048
+  first diverges from the upstream1024 candidate ordering, and cover through the
+  current 12461-candidate tail with no Vort failures or size winners.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

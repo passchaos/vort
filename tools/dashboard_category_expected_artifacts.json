@@ -2,6 +2,118 @@
   "expected_artifacts": [
     {
       "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-12281-tail.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-12281-tail.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-11257-12281.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-11257-12281.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-10233-11257.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-10233-11257.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-9209-10233.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-9209-10233.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-8185-9209.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-8185-9209.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-7161-8185.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-7161-8185.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-6137-7161.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-6137-7161.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream2048.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream2048.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
       "name": "vort-br-static-dictionary-node-probe-upstream1024-6144-tail.md",
       "require_present": false,
       "require_producer_step": false,
