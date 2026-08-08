@@ -4442,6 +4442,13 @@ fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !u
     try expectNativeHeaderAndStreamError(allocator, &truncated_dictionary_id, error.TruncatedFrame);
     checked += 1;
 
+    const truncated_window_descriptor = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x00, // No content size; a Window_Descriptor byte must follow.
+    };
+    try expectNativeHeaderAndStreamError(allocator, &truncated_window_descriptor, error.TruncatedFrame);
+    checked += 1;
+
     // Content_Size flag 1 requires a 2-byte size field for a non-single-segment
     // frame. Supplying one byte makes the header invalid before block parsing.
     const truncated_content_size = [_]u8{

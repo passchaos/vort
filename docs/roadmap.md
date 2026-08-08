@@ -1695,6 +1695,11 @@ architecture blindly.
   1 KiB descriptor through header inspect, bounded decoded-size preflight, and
   caller-owned decode without adding a large fixture payload.
 
+- Added a malformed no-content-size Zstd frame fixture that ends before the
+  required `Window_Descriptor` byte. The public header, size, decode, summary,
+  and stream-iterator APIs now agree on `TruncatedFrame` for this header-length
+  boundary.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,
