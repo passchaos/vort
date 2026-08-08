@@ -261,6 +261,7 @@ zig build run -- decode-zstd-native-file-to /tmp/vort-readme.zst /tmp/vort-readm
 zig build run -- summary-zstd-native-file /tmp/vort-readme.zst
 zig build run -- size-zstd-native-hex 28b52ffd240529000068656c6c6fa36d9f88 5
 zig build run-zstd-native-cli-diff
+zig build run-zstd-native-summary-cli-probe
 zig build run-zstd-native-probe
 zig build run-zstd-native-frame-probe
 zig build run-zstd-native-dictionary-probe
