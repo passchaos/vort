@@ -1988,10 +1988,8 @@ test "root snappy framed stream helpers round trip" {
     const encoded_into = try std.testing.allocator.alloc(u8, frame_bound);
     defer std.testing.allocator.free(encoded_into);
     const encoded_written = try snappyEncodeFrameInto("hello", encoded_into);
-    try std.testing.expect(encoded_written <= frame_bound);
-    var into_decoded: [5]u8 = undefined;
-    try std.testing.expectEqual(@as(usize, into_decoded.len), try snappyDecodeFrameInto(encoded_into[0..encoded_written], &into_decoded));
-    try std.testing.expectEqualSlices(u8, "hello", &into_decoded);
+    try std.testing.expectEqual(encoded.len, encoded_written);
+    try std.testing.expectEqualSlices(u8, encoded, encoded_into[0..encoded_written]);
 }
 
 test "root snappy chunked decode helpers round trip" {

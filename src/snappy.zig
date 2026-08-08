@@ -50,7 +50,12 @@ pub fn encodedFrameBound(input_len: usize) Error!usize {
     if (input_len == 0) return bound;
     const chunk_count = (input_len + max_uncompressed_chunk_len - 1) / max_uncompressed_chunk_len;
     bound = try checkedAdd(bound, input_len);
+    // `encodeFrameInto` still tries to compress each chunk before deciding
+    // whether to store it. The caller-owned output bound must therefore cover
+    // the raw-block header/tag overhead for a worst-case compressed attempt,
+    // not just the eventual uncompressed fallback chunk.
     bound = try checkedAdd(bound, try checkedMul(chunk_count, 8)); // chunk header + masked CRC-32C.
+    bound = try checkedAdd(bound, try checkedMul(chunk_count, 1 + try literalHeaderLen(max_uncompressed_chunk_len)));
     return bound;
 }
 
@@ -161,12 +166,53 @@ fn encodeBlockAppendWithTable(allocator: std.mem.Allocator, out: *std.ArrayList(
     try emitLiteral(allocator, out, input[literal_start..]);
 }
 
+fn encodeBlockIntoWithTable(out: *std.ArrayList(u8), input: []const u8, table: []u32) Error!void {
+    try writeVarintInto(out, input.len);
+    if (input.len < min_match_len) {
+        try emitLiteralInto(out, input);
+        return;
+    }
+
+    if (table.len < hash_table_len) return error.InputTooSmall;
+    @memset(table, invalid_pos);
+
+    var ip: usize = 0;
+    var literal_start: usize = 0;
+    while (ip + min_match_len <= input.len) {
+        const h = hash4(input[ip..][0..4]);
+        const candidate_pos = table[h];
+        table[h] = @intCast(ip);
+
+        if (candidate_pos != invalid_pos) {
+            const candidate: usize = candidate_pos;
+            const offset = ip - candidate;
+            if (offset != 0 and offset <= max_copy4_offset and equal4(input[candidate..][0..4], input[ip..][0..4])) {
+                const match_len = countMatch(input, candidate, ip);
+                try emitLiteralInto(out, input[literal_start..ip]);
+                try emitCopyInto(out, offset, match_len);
+                ip += match_len;
+                literal_start = ip;
+                continue;
+            }
+        }
+
+        ip += 1;
+    }
+
+    try emitLiteralInto(out, input[literal_start..]);
+}
+
 pub fn encodeBlockInto(input: []const u8, output: []u8) Error!usize {
     const bound = try encodedBlockBound(input.len);
     if (output.len < bound) return error.OutputTooSmall;
     var out = std.ArrayList(u8).initBuffer(output);
-    writeVarintInto(&out, input.len) catch return error.OutputTooSmall;
-    emitLiteralInto(&out, input) catch return error.OutputTooSmall;
+    if (input.len < min_match_len) {
+        try writeVarintInto(&out, input.len);
+        try emitLiteralInto(&out, input);
+    } else {
+        var table: [hash_table_len]u32 = undefined;
+        try encodeBlockIntoWithTable(&out, input, &table);
+    }
     return out.items.len;
 }
 
@@ -187,12 +233,20 @@ pub fn encodeFrameInto(input: []const u8, output: []u8) Error!usize {
     const bound = try encodedFrameBound(input.len);
     if (output.len < bound) return error.OutputTooSmall;
     var out = std.ArrayList(u8).initBuffer(output);
-    writeChunkInto(&out, stream_identifier_chunk_type, stream_identifier_payload) catch return error.OutputTooSmall;
+    try writeChunkInto(&out, stream_identifier_chunk_type, stream_identifier_payload);
+    var table: [hash_table_len]u32 = undefined;
+    var block_scratch_buffer: [try encodedBlockBound(max_uncompressed_chunk_len)]u8 = undefined;
     var offset: usize = 0;
     while (offset < input.len) {
         const chunk_len = @min(input.len - offset, max_uncompressed_chunk_len);
         const chunk = input[offset..][0..chunk_len];
-        writeCheckedChunkInto(&out, uncompressed_data_chunk_type, chunk, chunk) catch return error.OutputTooSmall;
+        var block_scratch = std.ArrayList(u8).initBuffer(&block_scratch_buffer);
+        try encodeBlockIntoWithTable(&block_scratch, chunk, &table);
+        if (block_scratch.items.len < chunk.len) {
+            try writeCheckedChunkInto(&out, compressed_data_chunk_type, chunk, block_scratch.items);
+        } else {
+            try writeCheckedChunkInto(&out, uncompressed_data_chunk_type, chunk, chunk);
+        }
         offset += chunk_len;
     }
     return out.items.len;
@@ -926,6 +980,25 @@ fn emitCopy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), offset: usize
     }
 }
 
+fn emitCopyInto(out: *std.ArrayList(u8), offset: usize, len: usize) Error!void {
+    if (offset == 0 or offset > max_copy4_offset) return error.InvalidMatch;
+    var remaining = len;
+    while (remaining > 0) {
+        const chunk: usize = @min(remaining, @as(usize, 60));
+        if (offset <= max_copy2_offset) {
+            try out.appendBounded(@as(u8, @intCast((chunk - 1) << 2)) | 0x02);
+            try out.appendBounded(@intCast(offset & 0xff));
+            try out.appendBounded(@intCast((offset >> 8) & 0xff));
+        } else {
+            try out.appendBounded(@as(u8, @intCast((chunk - 1) << 2)) | 0x03);
+            var offset_bytes: [4]u8 = undefined;
+            std.mem.writeInt(u32, &offset_bytes, @intCast(offset), .little);
+            try out.appendSliceBounded(&offset_bytes);
+        }
+        remaining -= chunk;
+    }
+}
+
 fn hash4(bytes: *const [4]u8) usize {
     const value = std.mem.readInt(u32, bytes, .little);
     return @intCast((value *% 0x1e35_a7bd) >> (32 - hash_bits));
@@ -1153,10 +1226,8 @@ test "snappy framed stream round trips and enforces output limits" {
     const encoded_into = try std.testing.allocator.alloc(u8, frame_bound);
     defer std.testing.allocator.free(encoded_into);
     const written = try encodeFrameInto(payload, encoded_into);
-    try std.testing.expect(written <= frame_bound);
-    const into_decoded = try decodeFrameAlloc(std.testing.allocator, encoded_into[0..written]);
-    defer std.testing.allocator.free(into_decoded);
-    try std.testing.expectEqualSlices(u8, payload, into_decoded);
+    try std.testing.expectEqual(encoded.len, written);
+    try std.testing.expectEqualSlices(u8, encoded, encoded_into[0..written]);
 }
 
 test "snappy framed stream chunked input helpers mirror one-shot decode" {
